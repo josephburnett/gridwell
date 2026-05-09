@@ -20,6 +20,27 @@ const (
 	Vertical   Direction = "v"
 )
 
+// Side identifies one of a pane's four edges. Used by the input layer
+// to translate a click position into a split orientation + which half
+// the new pane should occupy.
+type Side int
+
+const (
+	SideTop Side = iota
+	SideBottom
+	SideLeft
+	SideRight
+)
+
+// Direction returns the split orientation for a side: top/bottom map to
+// horizontal (top–bottom panes), left/right to vertical (left–right).
+func (s Side) Direction() Direction {
+	if s == SideTop || s == SideBottom {
+		return Horizontal
+	}
+	return Vertical
+}
+
 // Pane is a leaf in the pane tree: one viewport. Path is the descent path
 // (well row ids) from root to the currently-viewed grid. Cx, Cy are the
 // viewport center in cells; Zoom is the pane's zoom multiplier.
@@ -130,6 +151,47 @@ func (t *Tree) Count() int {
 // FocusedPane returns the focused pane, or nil if focus is invalid.
 func (t *Tree) FocusedPane() *Pane { return t.FindPane(t.Focus) }
 
+// SplitOnSide splits the focused pane such that the new pane occupies
+// the requested side, and moves focus to the new pane. The new pane is
+// a clone of the focused pane (same descent path, viewport, file mode
+// state). Useful for "click toward the top → new pane on top, focused".
+//
+// Built on Split: when the new pane should occupy the A (top/left) side,
+// the just-created split's children are swapped so the new pane lands
+// in A.
+func (t *Tree) SplitOnSide(side Side) (*Pane, error) {
+	newP, err := t.Split(side.Direction())
+	if err != nil {
+		return nil, err
+	}
+	if side == SideTop || side == SideLeft {
+		// Tree.Split puts the existing pane in A and the new pane in B.
+		// For "new pane on top/left" we swap them so the new pane is A.
+		split := findParentSplit(&t.Root, newP.ID)
+		if split != nil {
+			split.A, split.B = split.B, split.A
+		}
+	}
+	t.Focus = newP.ID
+	return newP, nil
+}
+
+// findParentSplit returns the *Split whose direct child contains the
+// pane with id targetID, or nil if not found.
+func findParentSplit(n *Node, targetID string) *Split {
+	if n.IsLeaf() {
+		return nil
+	}
+	if (n.Split.A.IsLeaf() && n.Split.A.Pane.ID == targetID) ||
+		(n.Split.B.IsLeaf() && n.Split.B.Pane.ID == targetID) {
+		return n.Split
+	}
+	if s := findParentSplit(&n.Split.A, targetID); s != nil {
+		return s
+	}
+	return findParentSplit(&n.Split.B, targetID)
+}
+
 // Split splits the focused pane along dir at ratio 0.5. The new pane is a
 // clone of the focused pane (same descent path, viewport, zoom). Returns
 // the new pane.
@@ -232,6 +294,84 @@ func anyLeafID(n Node) string {
 		return id
 	}
 	return anyLeafID(n.Split.B)
+}
+
+// CollapseSplit removes one child of the given split, hoisting the
+// surviving child into the split's slot. If dropA is true, the A child
+// (and its subtree) is dropped and B replaces the split; otherwise A
+// replaces it. Returns an error if the split is not in the tree.
+//
+// After collapse, focus moves to some leaf inside the surviving
+// subtree (the previously-focused pane may have been the one removed).
+//
+// Used by the input layer when a right-drag squeezes one side of a
+// divider to zero.
+func (t *Tree) CollapseSplit(s *Split, dropA bool) error {
+	holder := findSplitHolder(&t.Root, s)
+	if holder == nil {
+		return errors.New("split not in tree")
+	}
+	if dropA {
+		*holder = s.B
+	} else {
+		*holder = s.A
+	}
+	t.Focus = anyLeafID(*holder)
+	return nil
+}
+
+// findSplitHolder returns a pointer to the *Node slot whose Split ==
+// target, or nil if not found.
+func findSplitHolder(n *Node, target *Split) *Node {
+	if n.IsLeaf() {
+		return nil
+	}
+	if n.Split == target {
+		return n
+	}
+	if h := findSplitHolder(&n.Split.A, target); h != nil {
+		return h
+	}
+	return findSplitHolder(&n.Split.B, target)
+}
+
+// Swap exchanges the positions of two panes in the tree. After Swap,
+// the pane previously at idA's tree position now sits where idB was,
+// and vice versa. Per-pane state (selection, animation) keyed by pane
+// id travels with the pane content automatically.
+//
+// idA == idB is a no-op (returns nil). Either id missing returns an
+// error and leaves the tree unchanged.
+//
+// Focus is NOT moved by Swap; the caller decides where focus goes
+// after the swap based on the input gesture (e.g., release pane).
+func (t *Tree) Swap(idA, idB string) error {
+	if idA == idB {
+		return nil
+	}
+	holderA := findPaneNode(&t.Root, idA)
+	holderB := findPaneNode(&t.Root, idB)
+	if holderA == nil || holderB == nil {
+		return errors.New("pane not found")
+	}
+	*holderA, *holderB = *holderB, *holderA
+	return nil
+}
+
+// findPaneNode returns a pointer to the *Node slot in the tree that
+// contains the leaf with id targetID, or nil if not found. Used by
+// Swap to exchange positions without rebuilding the tree.
+func findPaneNode(n *Node, targetID string) *Node {
+	if n.IsLeaf() {
+		if n.Pane.ID == targetID {
+			return n
+		}
+		return nil
+	}
+	if hit := findPaneNode(&n.Split.A, targetID); hit != nil {
+		return hit
+	}
+	return findPaneNode(&n.Split.B, targetID)
 }
 
 // SetFocus sets keyboard focus to the given pane id. Returns error if the

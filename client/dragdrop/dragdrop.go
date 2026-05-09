@@ -88,6 +88,48 @@ func IsInEdgeZone(p Pane, x, y, band float64) bool {
 		(p.ScreenY+p.ScreenH)-y < band
 }
 
+// Side identifies one of a pane's four edges. Used by the input layer
+// to translate a click position inside a pane into a split direction
+// + which half the new pane should occupy.
+type Side int
+
+const (
+	SideTop Side = iota
+	SideBottom
+	SideLeft
+	SideRight
+)
+
+// ClosestEdge returns the side of the pane whose edge is nearest to
+// (sx, sy). Computed via min-of-four perpendicular distances. Ties
+// (e.g., the dead center of the pane) resolve to top first, then left,
+// for determinism — the user said the tiebreak doesn't matter.
+//
+// The point need not lie inside the pane; for points outside, the
+// edge they're "outside of" is the nearest one.
+func ClosestEdge(p Pane, sx, sy float64) Side {
+	dt := sy - p.ScreenY
+	db := (p.ScreenY + p.ScreenH) - sy
+	dl := sx - p.ScreenX
+	dr := (p.ScreenX + p.ScreenW) - sx
+	best := Side(SideTop)
+	bestD := dt
+	if db < bestD {
+		bestD = db
+		best = SideBottom
+	}
+	if dl < bestD {
+		bestD = dl
+		best = SideLeft
+	}
+	if dr < bestD {
+		// no need to update bestD here; nothing reads it after.
+		_ = bestD
+		best = SideRight
+	}
+	return best
+}
+
 // FootprintFits reports whether a (w, h)-sized footprint at (x, y) fits
 // inside the pane's framed rectangle. The framed rect is computed from the
 // pane's screen size, zoom, and viewport center. Used by the client to gray

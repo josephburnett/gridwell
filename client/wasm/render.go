@@ -49,6 +49,13 @@ const (
 	menuItemHeight   = 28
 	menuWidth        = 160
 	menuPad          = 8
+
+	// paneBorderPx is the visible thickness of the pane outline. Wide
+	// enough to be a target for right-drag (resize / close) without
+	// dominating the pane's interior. The right-button input layer
+	// uses a slightly larger hit-band than this so users don't have to
+	// pixel-hunt the divider.
+	paneBorderPx = 6.0
 )
 
 // menuItems lists the entries shown in the + popover, in order.
@@ -74,33 +81,21 @@ func (a *App) draw() {
 	a.syncFileOverlayPosition()
 }
 
-// paneRect is a rectangle in screen coordinates.
+// paneRect is a rectangle in screen coordinates. It mirrors pane.Rect
+// so the rest of the wasm code keeps using a local type while the
+// underlying layout is computed by the (testable) pane.Layout helper.
 type paneRect struct {
 	X, Y, W, H float64
 }
 
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.
 func (a *App) layoutPanes() map[string]paneRect {
-	rects := map[string]paneRect{}
-	var walk func(n pane.Node, r paneRect)
-	walk = func(n pane.Node, r paneRect) {
-		if n.IsLeaf() {
-			rects[n.Pane.ID] = r
-			return
-		}
-		s := n.Split
-		if s.Dir == pane.Horizontal {
-			h1 := r.H * s.Ratio
-			walk(s.A, paneRect{X: r.X, Y: r.Y, W: r.W, H: h1})
-			walk(s.B, paneRect{X: r.X, Y: r.Y + h1, W: r.W, H: r.H - h1})
-		} else {
-			w1 := r.W * s.Ratio
-			walk(s.A, paneRect{X: r.X, Y: r.Y, W: w1, H: r.H})
-			walk(s.B, paneRect{X: r.X + w1, Y: r.Y, W: r.W - w1, H: r.H})
-		}
+	src := pane.Layout(a.tree, pane.Rect{X: 0, Y: 0, W: a.width, H: a.height})
+	out := make(map[string]paneRect, len(src))
+	for id, r := range src {
+		out[id] = paneRect{X: r.X, Y: r.Y, W: r.W, H: r.H}
 	}
-	walk(a.tree.Root, paneRect{X: 0, Y: 0, W: a.width, H: a.height})
-	return rects
+	return out
 }
 
 // drawPane draws one pane's contents.
@@ -115,8 +110,13 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		border = colorFocusBorder
 	}
 	a.cctx.Set("strokeStyle", border)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("strokeRect", r.X+0.5, r.Y+0.5, r.W-1, r.H-1)
+	a.cctx.Set("lineWidth", paneBorderPx)
+	// Inset by half the border thickness so the stroke sits inside the
+	// rect (rather than straddling its edge). That way the user can
+	// reliably grab the border with a right-drag without the cursor
+	// going outside the pane.
+	half := paneBorderPx / 2
+	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
 	gid := a.gridIDForPath(p.Path)
 	g, gridOK := a.c.Grid(gid)

@@ -167,6 +167,240 @@ func sliceEqual(a, b []int64) bool {
 	return true
 }
 
+func TestCloneCarriesFileFields(t *testing.T) {
+	src := &Pane{
+		ID:          "p1",
+		Path:        []int64{1, 2},
+		Cx:          3, Cy: 4, Zoom: 5,
+		FileFocus:   42,
+		FileMode:    "text",
+		FileScrollX: 1.5,
+		FileScrollY: 7.25,
+		FileZoom:    1.1,
+	}
+	dst := src.Clone("p2")
+	if dst.FileFocus != 42 || dst.FileMode != "text" {
+		t.Errorf("file focus/mode not cloned: %+v", dst)
+	}
+	if dst.FileScrollX != 1.5 || dst.FileScrollY != 7.25 || dst.FileZoom != 1.1 {
+		t.Errorf("file scroll/zoom not cloned: %+v", dst)
+	}
+	// And changing the source post-clone shouldn't bleed through.
+	src.FileFocus = 99
+	if dst.FileFocus == 99 {
+		t.Error("clone shares FileFocus with source")
+	}
+}
+
+func TestSplitInheritsFileFields(t *testing.T) {
+	tr := NewTree()
+	first := tr.FocusedPane()
+	first.FileFocus = 77
+	first.FileMode = "rendered"
+	first.FileScrollY = 12.5
+	first.FileZoom = 0.85
+
+	newP, err := tr.Split(Horizontal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newP.FileFocus != 77 || newP.FileMode != "rendered" {
+		t.Errorf("file fields not inherited: %+v", newP)
+	}
+	if newP.FileScrollY != 12.5 || newP.FileZoom != 0.85 {
+		t.Errorf("scroll/zoom not inherited: %+v", newP)
+	}
+}
+
+func TestSplitOnSideTopAndBottom(t *testing.T) {
+	cases := []struct {
+		side       Side
+		wantDir    Direction
+		wantAIsNew bool // true = new pane in A, existing in B
+	}{
+		{SideTop, Horizontal, true},
+		{SideBottom, Horizontal, false},
+		{SideLeft, Vertical, true},
+		{SideRight, Vertical, false},
+	}
+	for _, c := range cases {
+		tr := NewTree()
+		first := tr.FocusedPane().ID
+		newP, err := tr.SplitOnSide(c.side)
+		if err != nil {
+			t.Fatalf("side %v: %v", c.side, err)
+		}
+		if tr.Root.Split == nil {
+			t.Fatalf("side %v: root not a split", c.side)
+		}
+		if tr.Root.Split.Dir != c.wantDir {
+			t.Errorf("side %v: dir = %v, want %v", c.side, tr.Root.Split.Dir, c.wantDir)
+		}
+		var aID, bID string
+		if tr.Root.Split.A.IsLeaf() {
+			aID = tr.Root.Split.A.Pane.ID
+		}
+		if tr.Root.Split.B.IsLeaf() {
+			bID = tr.Root.Split.B.Pane.ID
+		}
+		if c.wantAIsNew {
+			if aID != newP.ID {
+				t.Errorf("side %v: A=%q want new=%q", c.side, aID, newP.ID)
+			}
+			if bID != first {
+				t.Errorf("side %v: B=%q want existing=%q", c.side, bID, first)
+			}
+		} else {
+			if aID != first {
+				t.Errorf("side %v: A=%q want existing=%q", c.side, aID, first)
+			}
+			if bID != newP.ID {
+				t.Errorf("side %v: B=%q want new=%q", c.side, bID, newP.ID)
+			}
+		}
+		if tr.Focus != newP.ID {
+			t.Errorf("side %v: focus = %q, want new %q", c.side, tr.Focus, newP.ID)
+		}
+	}
+}
+
+func TestSwapBasic(t *testing.T) {
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	bP, _ := tr.Split(Horizontal)
+	b := bP.ID
+
+	// Pre-swap: A is in slot Split.A, B is in slot Split.B.
+	if tr.Root.Split.A.Pane.ID != a || tr.Root.Split.B.Pane.ID != b {
+		t.Fatalf("pre-swap shape unexpected")
+	}
+	if err := tr.Swap(a, b); err != nil {
+		t.Fatal(err)
+	}
+	if tr.Root.Split.A.Pane.ID != b || tr.Root.Split.B.Pane.ID != a {
+		t.Errorf("post-swap shape: A=%q B=%q", tr.Root.Split.A.Pane.ID, tr.Root.Split.B.Pane.ID)
+	}
+	// Both ids still resolvable.
+	if tr.FindPane(a) == nil || tr.FindPane(b) == nil {
+		t.Error("a pane disappeared after swap")
+	}
+	// Swap does not move focus.
+	if tr.Focus != a {
+		t.Errorf("focus moved after swap: %q want %q", tr.Focus, a)
+	}
+}
+
+func TestSwapSelfNoop(t *testing.T) {
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	if err := tr.Swap(a, a); err != nil {
+		t.Errorf("self-swap returned error: %v", err)
+	}
+}
+
+func TestSwapUnknownIDError(t *testing.T) {
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	_, _ = tr.Split(Horizontal)
+	if err := tr.Swap(a, "ghost"); err == nil {
+		t.Error("expected error for unknown id")
+	}
+}
+
+func TestSwapInDeepTree(t *testing.T) {
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	bP, _ := tr.Split(Horizontal)
+	b := bP.ID
+	_ = tr.SetFocus(b)
+	cP, _ := tr.Split(Vertical)
+	c := cP.ID
+	// Tree shape:
+	//   root: H (A=a, B=split V (A=b, B=c))
+	if err := tr.Swap(a, c); err != nil {
+		t.Fatal(err)
+	}
+	// After swap a↔c: root.A should be c, and the inner V's B should be a.
+	if tr.Root.Split.A.Pane.ID != c {
+		t.Errorf("root.A = %q, want %q", tr.Root.Split.A.Pane.ID, c)
+	}
+	innerB := tr.Root.Split.B
+	if innerB.IsLeaf() || innerB.Split.B.Pane.ID != a {
+		t.Errorf("inner.B = %v, want pane %q", innerB, a)
+	}
+	// b stayed in place inside the inner split's A.
+	if innerB.Split.A.Pane.ID != b {
+		t.Errorf("inner.A = %q, want %q", innerB.Split.A.Pane.ID, b)
+	}
+}
+
+func TestCollapseSplitDropA(t *testing.T) {
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	bP, _ := tr.Split(Horizontal)
+	b := bP.ID
+	if err := tr.CollapseSplit(tr.Root.Split, true); err != nil {
+		t.Fatal(err)
+	}
+	if tr.Count() != 1 {
+		t.Errorf("count = %d, want 1", tr.Count())
+	}
+	if tr.FindPane(b) == nil {
+		t.Error("surviving pane b missing")
+	}
+	if tr.FindPane(a) != nil {
+		t.Error("dropped pane a still present")
+	}
+	if tr.Focus != b {
+		t.Errorf("focus = %q, want %q", tr.Focus, b)
+	}
+}
+
+func TestCollapseSplitDropB(t *testing.T) {
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	bP, _ := tr.Split(Horizontal)
+	b := bP.ID
+	if err := tr.CollapseSplit(tr.Root.Split, false); err != nil {
+		t.Fatal(err)
+	}
+	if tr.FindPane(a) == nil {
+		t.Error("surviving pane a missing")
+	}
+	if tr.FindPane(b) != nil {
+		t.Error("dropped pane b still present")
+	}
+	if tr.Focus != a {
+		t.Errorf("focus = %q, want %q", tr.Focus, a)
+	}
+}
+
+func TestCollapseSplitNested(t *testing.T) {
+	// root: H (A=a, B=split V (A=b, B=c))
+	tr := NewTree()
+	a := tr.FocusedPane().ID
+	bP, _ := tr.Split(Horizontal)
+	b := bP.ID
+	tr.SetFocus(b)
+	cP, _ := tr.Split(Vertical)
+	c := cP.ID
+
+	// Collapse the OUTER split, dropping A (pane a).
+	// Surviving subtree is the inner V split (still containing b, c).
+	if err := tr.CollapseSplit(tr.Root.Split, true); err != nil {
+		t.Fatal(err)
+	}
+	if tr.Count() != 2 {
+		t.Errorf("count = %d, want 2", tr.Count())
+	}
+	if tr.FindPane(b) == nil || tr.FindPane(c) == nil {
+		t.Error("inner panes lost")
+	}
+	if tr.FindPane(a) != nil {
+		t.Error("pane a still present")
+	}
+}
+
 // TestPropertyAtLeastOnePane runs a random sequence of split/close operations
 // and asserts that the pane count never drops below 1.
 func TestPropertyAtLeastOnePane(t *testing.T) {
