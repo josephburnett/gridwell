@@ -3,6 +3,8 @@
 package main
 
 import (
+	"math"
+
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
 	"github.com/josephburnett/ascent/client/zoomtrans"
@@ -73,7 +75,7 @@ func (a *App) dropTargetAt(sx, sy float64) (*dropTarget, bool) {
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
-			viewRect: rpc.ViewRect{X: n.ViewX, Y: n.ViewY, W: n.W, H: n.H},
+			viewRect: wellChildViewRect(n),
 		}, true
 	}
 
@@ -96,6 +98,28 @@ func (a *App) dropTargetAt(sx, sy float64) (*dropTarget, bool) {
 func nodeCopy(n *rpc.Node) *rpc.Node {
 	c := *n
 	return &c
+}
+
+// wellChildViewRect returns the visible region of a well's child grid
+// in *child cell* coordinates, suitable for the server's locality
+// check on cross-grid moves into / out of the well. The well stores
+// W, H in parent cells; the visible child region is W*PreviewFactor
+// cells wide centered on (ViewX + W/2, ViewY + H/2). A small ±1 pad
+// matches paneViewRect's convention.
+func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
+	pf := int64(zoomtrans.PreviewFactor)
+	visW := well.W * pf
+	visH := well.H * pf
+	centerX := float64(well.ViewX) + float64(well.W)/2
+	centerY := float64(well.ViewY) + float64(well.H)/2
+	leftX := int64(math.Floor(centerX - float64(visW)/2))
+	topY := int64(math.Floor(centerY - float64(visH)/2))
+	return rpc.ViewRect{
+		X: leftX - 1,
+		Y: topY - 1,
+		W: visW + 3,
+		H: visH + 3,
+	}
 }
 
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor

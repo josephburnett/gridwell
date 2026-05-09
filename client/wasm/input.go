@@ -269,7 +269,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.originPaneRect = r
 			a.dragging.srcGridID = n.ChildGridID
 			a.dragging.srcPath = append(append([]int64(nil), p.Path...), n.ID)
-			a.dragging.srcViewRect = rpc.ViewRect{X: n.ViewX, Y: n.ViewY, W: n.W, H: n.H}
+			a.dragging.srcViewRect = wellChildViewRect(n)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
 		}
