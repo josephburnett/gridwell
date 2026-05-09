@@ -16,7 +16,6 @@ import (
 	"github.com/josephburnett/ascent/client/cache"
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
-	"github.com/josephburnett/ascent/client/zoomtrans"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
 
@@ -85,17 +84,45 @@ type App struct {
 
 	// transition is the active descent/ascent zoom animation, if any.
 	transition *paneTransition
+
+	// paneStateStack is the saved (Cx, Cy, Zoom) triple for each pane,
+	// pushed on descent and popped on ascent, so ascent restores the
+	// exact viewport the user was looking at before they descended.
+	// Indexed by pane id; the slice's length matches len(pane.Path).
+	paneStateStack map[string][]paneState
 }
 
-// paneTransition holds the start/end states for a smooth descent or ascent
-// zoom on a single pane.
+// paneState is a captured viewport: viewport center in cells (sub-cell
+// precision) and zoom multiplier.
+type paneState struct {
+	Cx   float64 `json:"cx"`
+	Cy   float64 `json:"cy"`
+	Zoom float64 `json:"zoom"`
+}
+
+// paneTransition is the active per-pane zoom animation. It is a series of
+// segments; each segment carries the path that should be installed when it
+// starts and animates the viewport from `from*` toward `to*` over
+// `durationMs`. Path-switch points (descent / ascent) are segment
+// boundaries; the visual continuity at those boundaries is achieved by
+// setting up calibrated start/end states in zoomtrans.
+//
+// Descent uses two segments: one for the parent zoom-in, then a
+// zero-duration "install" segment that lands on the calibrated child state.
+// Ascent uses two segments: a child zoom-out to the calibrated state, then
+// a parent zoom-out from "well overtakes" back to the saved state.
 type paneTransition struct {
-	paneID     string
-	from       zoomtrans.Endpoints
-	mid        zoomtrans.Endpoints
-	to         zoomtrans.Endpoints
-	startMs    float64
-	durationMs float64
+	paneID          string
+	segments        []transSegment
+	currentSegment  int
+	segmentStartMs  float64
+}
+
+type transSegment struct {
+	path                            []int64
+	fromCx, fromCy, fromZoom        float64
+	toCx, toCy, toZoom              float64
+	durationMs                      float64
 }
 
 // ghost is a transient floating render of a node, positioned in screen
@@ -146,6 +173,7 @@ func main() {
 		selectedNodeID: map[string]int64{},
 		menuHover:      -1,
 		gridLoadFailed: map[int64]bool{},
+		paneStateStack: map[string][]paneState{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -299,15 +327,16 @@ func (a *App) frame() {
 		}
 	}
 	if a.transition != nil {
-		t := anim.Progress(now, a.transition.startMs, a.transition.durationMs)
+		seg := a.transition.segments[a.transition.currentSegment]
+		t := anim.Progress(now, a.transition.segmentStartMs, seg.durationMs)
 		eased := anim.EaseOutCubic(t)
 		if p := a.tree.FindPane(a.transition.paneID); p != nil {
-			p.Cx = anim.Lerp(a.transition.from.Cx, a.transition.mid.Cx, eased)
-			p.Cy = anim.Lerp(a.transition.from.Cy, a.transition.mid.Cy, eased)
-			p.Zoom = anim.LerpExp(a.transition.from.Zoom, a.transition.mid.Zoom, eased)
+			p.Cx = anim.Lerp(seg.fromCx, seg.toCx, eased)
+			p.Cy = anim.Lerp(seg.fromCy, seg.toCy, eased)
+			p.Zoom = anim.LerpExp(seg.fromZoom, seg.toZoom, eased)
 		}
 		if t >= 1 {
-			a.completeTransition()
+			a.advanceTransition(now)
 		} else {
 			a.scheduleFrame()
 		}
@@ -315,8 +344,46 @@ func (a *App) frame() {
 	a.draw()
 }
 
-// completeTransition installs the final pane state from a finished descent
-// or ascent transition, switching the descent path atomically.
+// startTransition installs the given transition and primes the first
+// segment: the pane's path and viewport are set to the segment's start
+// state and the per-frame loop is woken up.
+func (a *App) startTransition(t *paneTransition) {
+	a.transition = t
+	a.applySegmentStart(t.segments[0])
+	t.segmentStartMs = nowMs()
+	a.scheduleFrame()
+}
+
+// applySegmentStart updates the pane's path and viewport to the segment's
+// starting state. Called when a segment begins (including the very first).
+func (a *App) applySegmentStart(seg transSegment) {
+	p := a.tree.FindPane(a.transition.paneID)
+	if p == nil {
+		return
+	}
+	p.Path = seg.path
+	p.Cx = seg.fromCx
+	p.Cy = seg.fromCy
+	p.Zoom = seg.fromZoom
+}
+
+// advanceTransition is called when the current segment finishes. If more
+// segments remain, install the next one's start state and continue;
+// otherwise the transition is complete.
+func (a *App) advanceTransition(now float64) {
+	a.transition.currentSegment++
+	if a.transition.currentSegment >= len(a.transition.segments) {
+		a.completeTransition()
+		return
+	}
+	a.applySegmentStart(a.transition.segments[a.transition.currentSegment])
+	a.transition.segmentStartMs = now
+	a.scheduleFrame()
+}
+
+// completeTransition tears down the active transition once the last
+// segment has finished. Pane state has already been set by the segment
+// machinery; here we just refresh ancillary state and persist.
 func (a *App) completeTransition() {
 	tr := a.transition
 	a.transition = nil
@@ -327,12 +394,7 @@ func (a *App) completeTransition() {
 	if p == nil {
 		return
 	}
-	p.Path = tr.to.Path
-	p.Cx = tr.to.Cx
-	p.Cy = tr.to.Cy
-	p.Zoom = tr.to.Zoom
 	delete(a.selectedNodeID, p.ID)
-	// Clear failure cache so the new leaf grid is fetched fresh.
 	a.gridLoadFailed = map[int64]bool{}
 	a.fetchGrid(a.gridIDForPath(p.Path))
 	a.saveTreeToLocalStorage()
@@ -346,6 +408,25 @@ func (a *App) animationDone() {
 	a.ghost = nil
 	a.hiddenObjectID = ""
 	a.hiddenPaneID = ""
+}
+
+// pushPaneState saves the given state on the stack for paneID. Called when
+// a descent begins so the matching ascent can restore exactly this state.
+func (a *App) pushPaneState(paneID string, s paneState) {
+	a.paneStateStack[paneID] = append(a.paneStateStack[paneID], s)
+}
+
+// popPaneState removes and returns the most recent saved state for paneID,
+// or nil if the stack is empty (e.g. localStorage didn't carry the stack
+// across reload).
+func (a *App) popPaneState(paneID string) *paneState {
+	stack := a.paneStateStack[paneID]
+	if len(stack) == 0 {
+		return nil
+	}
+	last := stack[len(stack)-1]
+	a.paneStateStack[paneID] = stack[:len(stack)-1]
+	return &last
 }
 
 // resetFocusedPaneToRoot clears the focused pane's descent path and viewport
@@ -364,7 +445,7 @@ func (a *App) resetFocusedPaneToRoot() {
 	p.Cx, p.Cy = 0, 0
 	p.Zoom = 1.0
 	delete(a.selectedNodeID, p.ID)
-	// Clear failure cache so the next fetch retries cleanly.
+	delete(a.paneStateStack, p.ID)
 	a.gridLoadFailed = map[int64]bool{}
 	a.fetchGrid(a.user.RootGridID)
 	a.saveTreeToLocalStorage()
@@ -392,29 +473,34 @@ func (a *App) startSSE() {
 	}))
 }
 
-// loadTreeFromLocalStorage restores the saved pane tree if present. Treats a
-// missing or malformed entry as no-op.
+// savedClientState is the JSON shape we persist to localStorage so navigation
+// state (descent paths, saved viewports) survives a page reload.
+type savedClientState struct {
+	Tree  *pane.Tree              `json:"tree"`
+	Focus string                  `json:"focus"`
+	Stack map[string][]paneState  `json:"stack"`
+}
+
+// loadTreeFromLocalStorage restores the saved pane tree (and saved-state
+// stack) if present. Treats a missing or malformed entry as no-op.
 func (a *App) loadTreeFromLocalStorage() {
 	v := a.win.Get("localStorage").Call("getItem", "ascent.tree."+strconv.FormatInt(a.user.UserID, 10))
 	if v.IsNull() || v.IsUndefined() {
 		return
 	}
-	var saved struct {
-		Tree  *pane.Tree `json:"tree"`
-		Focus string     `json:"focus"`
-	}
+	var saved savedClientState
 	if err := json.Unmarshal([]byte(v.String()), &saved); err != nil {
 		return
 	}
 	if saved.Tree == nil {
 		return
 	}
-	// Validate: prune stale paths against known wells. We don't know any
-	// wells yet because we haven't fetched anything; pane validation
-	// happens after each grid fetch.
 	a.tree = saved.Tree
 	if saved.Focus != "" && a.tree.FindPane(saved.Focus) != nil {
 		a.tree.Focus = saved.Focus
+	}
+	if saved.Stack != nil {
+		a.paneStateStack = saved.Stack
 	}
 }
 
@@ -422,10 +508,11 @@ func (a *App) saveTreeToLocalStorage() {
 	if a.user == nil {
 		return
 	}
-	b, err := json.Marshal(struct {
-		Tree  *pane.Tree `json:"tree"`
-		Focus string     `json:"focus"`
-	}{Tree: a.tree, Focus: a.tree.Focus})
+	b, err := json.Marshal(savedClientState{
+		Tree:  a.tree,
+		Focus: a.tree.Focus,
+		Stack: a.paneStateStack,
+	})
 	if err != nil {
 		return
 	}

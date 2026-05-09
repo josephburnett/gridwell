@@ -465,11 +465,16 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// startAscent installs a paneTransition that smoothly zooms out of the
-// current child grid back to the parent grid through the well that the
-// pane descended through. If the parent grid isn't cached, we trigger a
-// fetch and fall back to an instant ascent (rare; happens after losing
-// the cache between renders).
+// totalTransitionMs is the total wall-clock duration of a descent or
+// ascent transition. The same value is used for both so the UX is
+// symmetric in feel.
+const totalTransitionMs = 350.0
+
+// startAscent installs a two-segment transition that smoothly zooms out of
+// the child grid back to the parent grid, restoring the exact viewport the
+// pane was at before its last descent (popped from paneStateStack). If
+// nothing was saved (e.g. localStorage didn't carry the stack across a
+// reload), we fall back to centering on the well at zoom 1.
 func (a *App) startAscent(p *pane.Pane) {
 	if len(p.Path) == 0 {
 		return
@@ -479,28 +484,18 @@ func (a *App) startAscent(p *pane.Pane) {
 	parentGridID := a.gridIDForPath(parentPath)
 	parentGrid, ok := a.c.Grid(parentGridID)
 	if !ok {
-		// We don't have the parent grid cached; fetch and instant-ascend.
-		// On reload the user would otherwise have to wait through the
-		// animation with no visible source, which is worse.
+		// Without the parent grid we can't compute the well's position,
+		// so we can't run the calibrated animation. Fetch and snap.
 		a.fetchGrid(parentGridID)
-		p.Path = parentPath
-		p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
-		delete(a.selectedNodeID, p.ID)
-		a.draw()
-		a.saveTreeToLocalStorage()
+		a.instantAscend(p, parentPath)
 		return
 	}
 	well, ok := parentGrid.Nodes[wellID]
 	if !ok {
-		// The well is gone (CoW or remote delete). Fallback: drop the
-		// last path entry without animation.
-		p.Path = parentPath
-		p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
-		delete(a.selectedNodeID, p.ID)
-		a.draw()
-		a.saveTreeToLocalStorage()
+		a.instantAscend(p, parentPath)
 		return
 	}
+	r := paneRectFor(a, p)
 	from := zoomtrans.Endpoints{
 		Path: append([]int64(nil), p.Path...),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
@@ -509,22 +504,62 @@ func (a *App) startAscent(p *pane.Pane) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY,
 	}
-	r := paneRectFor(a, p)
-	mid, to := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
-	a.transition = &paneTransition{
-		paneID:     p.ID,
-		from:       from,
-		mid:        mid,
-		to:         to,
-		startMs:    nowMs(),
-		durationMs: 350,
+	// Phase 1 (in child coords): from current to the calibrated switch state.
+	mid, switchTo := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
+
+	// Phase 2 (in parent coords): from switchTo back to the saved state.
+	saved := a.popPaneState(p.ID)
+	if saved == nil {
+		// Default fallback: center on the well at zoom 1.
+		saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
 	}
-	a.scheduleFrame()
+
+	// Split the duration proportionally to log-zoom distance so the
+	// perceived speed is uniform across the path swap. If phase 1 has
+	// nothing to do (user didn't move in the child grid), all the time
+	// goes into the parent zoom-out.
+	phase1Dist := math.Abs(math.Log(from.Zoom) - math.Log(mid.Zoom))
+	phase2Dist := math.Abs(math.Log(switchTo.Zoom) - math.Log(saved.Zoom))
+	phase1Ms, phase2Ms := anim.SplitDuration(phase1Dist, phase2Dist, totalTransitionMs)
+
+	a.startTransition(&paneTransition{
+		paneID: p.ID,
+		segments: []transSegment{
+			{
+				path:    from.Path,
+				fromCx:  from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
+				toCx:    mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
+				durationMs: phase1Ms,
+			},
+			{
+				path:    switchTo.Path,
+				fromCx:  switchTo.Cx, fromCy: switchTo.Cy, fromZoom: switchTo.Zoom,
+				toCx:    saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
+				durationMs: phase2Ms,
+			},
+		},
+	})
 }
 
-// startDescent installs a paneTransition that smoothly zooms into the given
-// well over ~350ms.
+// instantAscend is the fallback path when the parent grid isn't cached or
+// the well row vanished. We just drop the last entry of the path; the user
+// can wait for the parent to load and reposition manually.
+func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
+	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
+	p.Path = parentPath
+	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
+	delete(a.selectedNodeID, p.ID)
+	a.draw()
+	a.saveTreeToLocalStorage()
+}
+
+// startDescent pushes the pane's current state onto the saved-state stack
+// and installs a two-segment transition: parent zoom-in, then a
+// zero-duration "land at calibrated child state" segment.
 func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
+	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
+
+	r := paneRectFor(a, p)
 	from := zoomtrans.Endpoints{
 		Path: append([]int64(nil), p.Path...),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
@@ -533,21 +568,28 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY,
 	}
-	r := paneRectFor(a, p)
 	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
-	// Make sure the child grid is being fetched while the animation runs
-	// so it's ready to render the moment we switch.
 	a.fetchGrid(well.ChildGridID)
-	a.transition = &paneTransition{
-		paneID:     p.ID,
-		from:       from,
-		mid:        mid,
-		to:         to,
-		startMs:    nowMs(),
-		durationMs: 350,
-	}
-	a.scheduleFrame()
+
+	a.startTransition(&paneTransition{
+		paneID: p.ID,
+		segments: []transSegment{
+			{
+				path:    from.Path,
+				fromCx:  from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
+				toCx:    mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
+				durationMs: totalTransitionMs,
+			},
+			{
+				path:    to.Path,
+				fromCx:  to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
+				toCx:    to.Cx, toCy: to.Cy, toZoom: to.Zoom,
+				durationMs: 0,
+			},
+		},
+	})
 }
+
 
 // handleMenuItem performs the action for the i'th menu item, with the
 // pane and its rect for context.

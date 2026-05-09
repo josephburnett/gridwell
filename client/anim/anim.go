@@ -73,6 +73,23 @@ func Distance(x1, y1, x2, y2 float64) float64 {
 	return math.Sqrt(dx*dx + dy*dy)
 }
 
+// SplitDuration apportions totalMs between two phases by their relative
+// distances. If both distances are tiny, all the time goes to phase 2.
+//
+// Used by the client's two-phase ascent animation so the perceived speed
+// stays uniform across the path-switch boundary even when one of the
+// phases has nothing to do (e.g. the user didn't move in the child grid
+// before pressing Esc, so phase 1 has zero log-zoom distance).
+func SplitDuration(d1, d2, totalMs float64) (a, b float64) {
+	if d1+d2 < 1e-6 {
+		return 0, totalMs
+	}
+	r := d1 / (d1 + d2)
+	a = totalMs * r
+	b = totalMs - a
+	return
+}
+
 // LerpExp interpolates between from and to in log space at parameter t.
 // Used for zoom transitions: linear interpolation feels visually
 // non-uniform because perceived "zoom level" is logarithmic in scale.

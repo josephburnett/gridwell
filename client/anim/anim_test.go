@@ -103,6 +103,34 @@ func TestDistance(t *testing.T) {
 	}
 }
 
+func TestSplitDuration(t *testing.T) {
+	// Equal distances: 50/50.
+	a, b := SplitDuration(1, 1, 100)
+	if !near(a, 50) || !near(b, 50) {
+		t.Errorf("equal split: a=%v b=%v", a, b)
+	}
+	// Phase 1 dominates: it gets most of the time.
+	a, b = SplitDuration(9, 1, 100)
+	if !near(a, 90) || !near(b, 10) {
+		t.Errorf("9:1 split: a=%v b=%v", a, b)
+	}
+	// Both zero: all time in phase 2.
+	a, b = SplitDuration(0, 0, 100)
+	if a != 0 || b != 100 {
+		t.Errorf("0:0 split: a=%v b=%v", a, b)
+	}
+	// Phase 1 zero: phase 2 gets all.
+	a, b = SplitDuration(0, 1, 100)
+	if !near(a, 0) || !near(b, 100) {
+		t.Errorf("0:1 split: a=%v b=%v", a, b)
+	}
+	// Sum stays equal to totalMs.
+	a, b = SplitDuration(7, 3, 350)
+	if !near(a+b, 350) {
+		t.Errorf("sum drift: a+b=%v want 350", a+b)
+	}
+}
+
 func TestLerpExpEndpointsAndShape(t *testing.T) {
 	// Endpoints exact.
 	if !near(LerpExp(1, 8, 0), 1) {
