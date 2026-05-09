@@ -532,15 +532,17 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 // attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
 // inside pane p to the right navigation gesture.
 //
-//   - In the edge band: ascend (file ascent if file-focused; well ascent
-//     otherwise; AscendAtRoot at the user's root).
+//   - In the edge band (when there's somewhere to ascend to): ascend
+//     (file ascent if file-focused; well ascent otherwise). At the
+//     user's root, the edge band has no meaning — clicks fall through.
 //   - On a well: descend into the well.
 //   - On a markdown file: descend into the file.
 //   - Otherwise: no-op (selection is handled by the bare-click path
 //     in onMouseUp before this is invoked).
 //
-// Edge takes priority over node hits so the user always has a reachable
-// ascent target even when a node sits along the edge.
+// Edge takes priority over node hits when ascent is available, so the
+// user always has a reachable ascent target even when a node sits
+// along the edge.
 //
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
@@ -549,20 +551,12 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
-	if dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
-		switch {
-		case p.FileFocus != 0:
+	if (p.FileFocus != 0 || len(p.Path) > 0) &&
+		dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
+		if p.FileFocus != 0 {
 			a.startFileAscent(p)
-		case len(p.Path) > 0:
+		} else {
 			a.startAscent(p)
-		default:
-			go func() {
-				var resp rpc.AscendAtRootResponse
-				if _, err := postJSON("/rpc/AscendAtRoot", rpc.AscendAtRootRequest{}, &resp); err == nil {
-					a.user.RootGridID = resp.NewRootGridID
-					a.fetchGrid(resp.NewRootGridID)
-				}
-			}()
 		}
 		return true
 	}

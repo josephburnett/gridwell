@@ -100,8 +100,11 @@ func (a *App) textareaCursorRowCol() (int, int) {
 
 // applyURLOnBoot reads window.location, decodes it, and walks the
 // node-id list against the user's grids to set up the focused pane.
-// Stale ids → truncate. After applying, replaceState the (possibly
-// truncated) URL so what's in the bar matches what's on screen.
+// Loose on input: an id that's missing from the current grid is
+// silently skipped — we stay in the same grid and try the next id.
+// This lets URLs like `/g/.../19/9999/15/14/12` (with 9999 invalid)
+// still resolve down to 12. After applying, replaceState the cleaned
+// URL so what's in the bar matches what's on screen.
 func (a *App) applyURLOnBoot() {
 	loc := js.Global().Get("location")
 	raw := loc.Get("pathname").String()
@@ -137,37 +140,42 @@ func (a *App) applyURLOnBoot() {
 		return
 	}
 
-	// Walk the path, fetching each grid as we go. If a node id can't
-	// be resolved (missing from its parent grid), truncate at that
-	// point — silently, no error, just stop.
+	// Walk the path, fetching each grid as we go. An id that's not
+	// in the current grid is skipped (we stay put and try the next id).
+	// A capped well or non-leaf file ends the descent — we stop with
+	// what we've got.
 	gid := rootID
 	resolvedPath := []int64{}
 	var fileNodeID int64
+walk:
 	for i, id := range state.NodeIDs {
+		isLast := i == len(state.NodeIDs)-1
 		// Ensure the current grid is cached (synchronously is impossible
 		// — we have to fetch and wait).
 		if _, ok := a.c.Grid(gid); !ok {
 			if !a.fetchGridSync(gid) {
-				break
+				break walk
 			}
 		}
 		g, _ := a.c.Grid(gid)
 		n, ok := g.Nodes[id]
 		if !ok {
-			break // truncate
+			// Skip unknown id — it might be a stale or bogus entry.
+			// Keep the current grid and continue with the next id.
+			continue
 		}
-		isLast := i == len(state.NodeIDs)-1
 		switch n.Type {
 		case "well":
 			if n.Capped {
-				break
+				// Can't descend through a capped well; stop here.
+				break walk
 			}
 			resolvedPath = append(resolvedPath, id)
 			gid = n.ChildGridID
 		case "file":
 			if !isLast {
-				// File mid-path is nonsense; truncate.
-				break
+				// File mid-path is nonsense; ignore and keep walking.
+				continue
 			}
 			fileNodeID = id
 		}

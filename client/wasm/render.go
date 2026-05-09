@@ -118,10 +118,14 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// Clip content to the inside of the border. The border itself is
 	// painted on top at the end of this function so it always frames
 	// the content cleanly, even if a node or markdown text would
-	// otherwise paint over the edge.
+	// otherwise paint over the edge. At root (no border) the inset is
+	// 0 so content fills the full pane.
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
-	inset := paneBorderPx
+	inset := 0.0
+	if len(p.Path) > 0 || p.FileFocus != 0 {
+		inset = paneBorderPx
+	}
 	a.cctx.Call("rect", r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset)
 	a.cctx.Call("clip")
 
@@ -182,15 +186,19 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.cctx.Call("restore")
 
 	// Border on top so content can paint up to the pane edge without
-	// bleeding visibly into the chrome.
-	border := colorPaneBorder
-	if p.ID == a.tree.Focus {
-		border = colorFocusBorder
+	// bleeding visibly into the chrome. Suppressed at the user's root
+	// (no path, no file focus) — the absence is the cue that there's
+	// nothing to ascend to.
+	if len(p.Path) > 0 || p.FileFocus != 0 {
+		border := colorPaneBorder
+		if p.ID == a.tree.Focus {
+			border = colorFocusBorder
+		}
+		a.cctx.Set("strokeStyle", border)
+		a.cctx.Set("lineWidth", paneBorderPx)
+		half := paneBorderPx / 2
+		a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 	}
-	a.cctx.Set("strokeStyle", border)
-	a.cctx.Set("lineWidth", paneBorderPx)
-	half := paneBorderPx / 2
-	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
 	// In file-focus mode replace the + with a text/rendered toggle; the
 	// menu never opens here.

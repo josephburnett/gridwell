@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/josephburnett/ascent/internal/store"
@@ -74,8 +76,31 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/Subscribe", s.authedSSE(s.subscribe))
 
 	if s.cfg.StaticDir != "" {
-		s.mux.Handle("/", http.FileServer(http.Dir(s.cfg.StaticDir)))
+		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticDir))
 	}
+}
+
+// staticOrSPA serves files from dir, falling back to index.html for any
+// request that isn't an /rpc/* call and doesn't match an on-disk file.
+// This lets the WASM client own URLs like "/g/3/4/5" — direct hits and
+// reloads land on index.html, the client decodes window.location, and
+// hydrates the view.
+func (s *Server) staticOrSPA(dir string) http.Handler {
+	fs := http.FileServer(http.Dir(dir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/rpc/") {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path != "/" {
+			full := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(r.URL.Path, "/")))
+			if info, err := os.Stat(full); err == nil && !info.IsDir() {
+				fs.ServeHTTP(w, r)
+				return
+			}
+		}
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+	})
 }
 
 // userIDKey is the context key for the resolved user id. Unexported to

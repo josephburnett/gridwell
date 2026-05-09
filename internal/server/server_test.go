@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -234,6 +236,65 @@ func TestSubscribeStreamsEvents(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("SSE stream produced no event")
+	}
+}
+
+// TestSPAFallbackForUnknownPaths verifies that arbitrary client-owned URLs
+// (like /g/3/4/5) return index.html so reload doesn't 404. /rpc/* paths
+// should still 404 cleanly when the method is unknown.
+func TestSPAFallbackForUnknownPaths(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	dir := t.TempDir()
+	const indexBody = "<html>index</html>"
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(indexBody), 0o644); err != nil {
+		t.Fatalf("write index.html: %v", err)
+	}
+	const assetBody = "console.log(\"asset\");"
+	if err := os.WriteFile(filepath.Join(dir, "wasm_exec.js"), []byte(assetBody), 0o644); err != nil {
+		t.Fatalf("write asset: %v", err)
+	}
+
+	srv := New(st, Config{StaticDir: dir, SecureCookie: false})
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/", indexBody},
+		{"/g/3", indexBody},
+		{"/g/27/26/25/24/23/22/21/20/19/16/15/14/12", indexBody},
+		{"/wasm_exec.js", assetBody},
+	}
+	for _, tc := range tests {
+		resp, err := http.Get(hs.URL + tc.path)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.path, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Errorf("%s: status %d, want 200", tc.path, resp.StatusCode)
+		}
+		if string(body) != tc.want {
+			t.Errorf("%s: body = %q, want %q", tc.path, body, tc.want)
+		}
+	}
+
+	// Unknown /rpc/* method should 404, not fall back to index.
+	resp, err := http.Get(hs.URL + "/rpc/Bogus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("/rpc/Bogus status = %d, want 404", resp.StatusCode)
 	}
 }
 
