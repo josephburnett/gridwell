@@ -42,24 +42,51 @@ type App struct {
 	width, height float64
 
 	dragging *dragState
+
+	// Per-pane selection: paneID → node id (0 means nothing selected).
+	selectedNodeID map[string]int64
+
+	// Plus-button popover state.
+	menuOpen   bool
+	menuPaneID string
+	menuHover  int // index of hovered menu item, or -1
+
+	// uploadHandler is the active onchange callback bound to the hidden
+	// upload input. We retain it so we can release it before binding a
+	// fresh handler on the next upload, preventing leaks of js.FuncOf.
+	uploadHandler   js.Func
+	uploadHandlerOK bool
 }
 
 // dragState tracks an in-progress drag from a node onto the cursor.
+//
+// `started` is false until the cursor moves more than dragThreshold pixels
+// from the mousedown point, so a bare click (down+up with no movement) can
+// be distinguished from a drag and treated as "select" instead of "move".
 type dragState struct {
 	originPaneID string
 	nodeID       int64
 	cellOffsetX  float64
 	cellOffsetY  float64
+	startScreenX float64
+	startScreenY float64
 	curScreenX   float64
 	curScreenY   float64
 	clone        bool
+	started      bool
 }
+
+// dragThreshold is the cursor-movement distance that turns a press into a
+// drag. Below this, mousedown→mouseup is treated as a click (select).
+const dragThreshold = 4.0
 
 func main() {
 	app = &App{
-		doc: js.Global().Get("document"),
-		win: js.Global().Get("window"),
-		c:   cache.New(),
+		doc:            js.Global().Get("document"),
+		win:            js.Global().Get("window"),
+		c:              cache.New(),
+		selectedNodeID: map[string]int64{},
+		menuHover:      -1,
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
