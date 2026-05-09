@@ -20,6 +20,13 @@ import (
 type Cache struct {
 	mu    sync.Mutex
 	grids map[int64]*Grid
+	blobs map[int64]Blob
+}
+
+// Blob is a cached file body (bytes + mime type) keyed by blob id.
+type Blob struct {
+	Data     []byte
+	MimeType string
 }
 
 // Grid is a cached grid plus its nodes indexed by id for cheap upsert.
@@ -30,7 +37,33 @@ type Grid struct {
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[int64]*Grid{}}
+	return &Cache{grids: map[int64]*Grid{}, blobs: map[int64]Blob{}}
+}
+
+// PutBlob stores a blob. Used after a fresh GetBlob call.
+func (c *Cache) PutBlob(blobID int64, data []byte, mime string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	c.blobs[blobID] = Blob{Data: cp, MimeType: mime}
+}
+
+// Blob returns the cached blob for blobID, or (Blob{}, false) if absent.
+// Bytes are returned by reference; treat as read-only.
+func (c *Cache) Blob(blobID int64) (Blob, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.blobs[blobID]
+	return b, ok
+}
+
+// InvalidateBlob removes a blob from the cache so the next render forces a
+// refetch. Called after the client itself writes new content for the file.
+func (c *Cache) InvalidateBlob(blobID int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.blobs, blobID)
 }
 
 // PutGrid replaces a grid's metadata and node set. Used after a fresh

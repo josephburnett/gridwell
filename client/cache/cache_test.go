@@ -105,3 +105,33 @@ func TestKnownWellIDs(t *testing.T) {
 		t.Errorf("file id 101 should not be in known wells: %v", known)
 	}
 }
+
+func TestBlobPutGetInvalidate(t *testing.T) {
+	c := New()
+	if _, ok := c.Blob(7); ok {
+		t.Fatal("empty cache should not have blob 7")
+	}
+	c.PutBlob(7, []byte("hello"), "text/markdown")
+	b, ok := c.Blob(7)
+	if !ok {
+		t.Fatal("blob 7 missing after put")
+	}
+	if string(b.Data) != "hello" {
+		t.Errorf("blob data = %q, want hello", string(b.Data))
+	}
+	if b.MimeType != "text/markdown" {
+		t.Errorf("blob mime = %q, want text/markdown", b.MimeType)
+	}
+	// PutBlob copies the bytes so caller mutations don't propagate.
+	src := []byte("world")
+	c.PutBlob(8, src, "text/markdown")
+	src[0] = 'X'
+	got, _ := c.Blob(8)
+	if string(got.Data) != "world" {
+		t.Errorf("after mutating source, blob 8 = %q (cache should hold its own copy)", string(got.Data))
+	}
+	c.InvalidateBlob(7)
+	if _, ok := c.Blob(7); ok {
+		t.Error("blob 7 should be gone after invalidate")
+	}
+}

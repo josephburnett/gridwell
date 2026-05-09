@@ -23,12 +23,24 @@ const (
 // Pane is a leaf in the pane tree: one viewport. Path is the descent path
 // (well row ids) from root to the currently-viewed grid. Cx, Cy are the
 // viewport center in cells; Zoom is the pane's zoom multiplier.
+//
+// FileFocus, when nonzero, marks the pane as "descended into" a file node:
+// the pane still sits in the parent grid (Path is unchanged), but the
+// chrome and input semantics switch to file-editing mode. FileMode picks
+// between "text" (raw markdown in a textarea overlay) and "rendered" (the
+// markdown layout rendered into the canvas). FileScrollY is the vertical
+// scroll inside the file's interior in logical pixels; mirrored to the
+// file node's view_y on save.
 type Pane struct {
 	ID   string
 	Path []int64
 	Cx   float64
 	Cy   float64
 	Zoom float64
+
+	FileFocus   int64   `json:"file_focus,omitempty"`
+	FileMode    string  `json:"file_mode,omitempty"`
+	FileScrollY float64 `json:"file_scroll_y,omitempty"`
 }
 
 // Clone returns a deep copy of the pane (including the path slice).

@@ -90,6 +90,24 @@ type App struct {
 	// exact viewport the user was looking at before they descended.
 	// Indexed by pane id; the slice's length matches len(pane.Path).
 	paneStateStack map[string][]paneState
+
+	// fileLastMode remembers, per file node id, the most recent
+	// "text"/"rendered" mode the user left a file in. Used by the parent
+	// grid preview to mirror "however you left it" without needing a
+	// server-side field. Persisted to localStorage along with the tree.
+	fileLastMode map[int64]string
+
+	// fileTextarea is the lazily-created <textarea> element used for
+	// markdown text-mode editing. It is positioned over the focused pane
+	// when pane.FileFocus != 0 and pane.FileMode == "text", and hidden
+	// otherwise. We hold it as a single shared element to avoid creating
+	// fresh DOM nodes on every descent.
+	fileTextarea js.Value
+	// fileTextareaInputCb is the input event listener that mirrors the
+	// textarea's value into a per-frame redraw. Held so we can release
+	// it cleanly if the App is torn down (currently never).
+	fileTextareaInputCb js.Func
+	fileTextareaScrollCb js.Func
 }
 
 // paneState is a captured viewport: viewport center in cells (sub-cell
@@ -116,6 +134,11 @@ type paneTransition struct {
 	segments        []transSegment
 	currentSegment  int
 	segmentStartMs  float64
+	// onComplete, if set, runs after the last segment lands. Used by file
+	// descent to install pane.FileFocus only once the visual transition
+	// has reached the file's footprint at OvertakeZoom (so the toggle
+	// button appearing doesn't pop into view mid-animation).
+	onComplete func()
 }
 
 type transSegment struct {
@@ -174,6 +197,7 @@ func main() {
 		menuHover:      -1,
 		gridLoadFailed: map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
+		fileLastMode:   map[int64]string{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -397,7 +421,11 @@ func (a *App) completeTransition() {
 	delete(a.selectedNodeID, p.ID)
 	a.gridLoadFailed = map[int64]bool{}
 	a.fetchGrid(a.gridIDForPath(p.Path))
+	if tr.onComplete != nil {
+		tr.onComplete()
+	}
 	a.saveTreeToLocalStorage()
+	a.draw()
 }
 
 // animationDone is called when the active animation reaches its target. It
@@ -454,9 +482,12 @@ func (a *App) startSSE() {
 // savedClientState is the JSON shape we persist to localStorage so navigation
 // state (descent paths, saved viewports) survives a page reload.
 type savedClientState struct {
-	Tree  *pane.Tree              `json:"tree"`
-	Focus string                  `json:"focus"`
-	Stack map[string][]paneState  `json:"stack"`
+	Tree  *pane.Tree             `json:"tree"`
+	Focus string                 `json:"focus"`
+	Stack map[string][]paneState `json:"stack"`
+	// FileModes remembers the user's last-used mode per file node id so
+	// previews and re-descent open in the same mode the user left.
+	FileModes map[int64]string `json:"file_modes,omitempty"`
 }
 
 // loadTreeFromLocalStorage restores the saved pane tree (and saved-state
@@ -480,6 +511,9 @@ func (a *App) loadTreeFromLocalStorage() {
 	if saved.Stack != nil {
 		a.paneStateStack = saved.Stack
 	}
+	if saved.FileModes != nil {
+		a.fileLastMode = saved.FileModes
+	}
 }
 
 func (a *App) saveTreeToLocalStorage() {
@@ -487,9 +521,10 @@ func (a *App) saveTreeToLocalStorage() {
 		return
 	}
 	b, err := json.Marshal(savedClientState{
-		Tree:  a.tree,
-		Focus: a.tree.Focus,
-		Stack: a.paneStateStack,
+		Tree:      a.tree,
+		Focus:     a.tree.Focus,
+		Stack:     a.paneStateStack,
+		FileModes: a.fileLastMode,
 	})
 	if err != nil {
 		return

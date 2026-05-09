@@ -82,6 +82,21 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
+	// Inside a focused file the wheel scrolls the file content rather
+	// than zooming. Text mode delegates to the textarea's native scroll
+	// (its own scroll listener mirrors back into pane.FileScrollY); the
+	// rendered mode tracks the scroll on the pane directly.
+	if p.FileFocus != 0 {
+		if p.FileMode == "rendered" {
+			p.FileScrollY += dy
+			if p.FileScrollY < 0 {
+				p.FileScrollY = 0
+			}
+			a.draw()
+			a.saveTreeToLocalStorage()
+		}
+		return nil
+	}
 	// Smooth zoom centered on the cursor: amount scales with deltaY so a
 	// fast scroll covers more range, but capped per event.
 	step := dy / 200.0
@@ -115,6 +130,18 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	button := args[0].Get("button").Int()
 	if button != 0 {
 		// Right click handled by onContextMenu.
+		return nil
+	}
+
+	// In file-focus mode the lower-right button is a text/rendered toggle
+	// rather than the + creation menu.
+	if p.FileFocus != 0 {
+		if pointInPlus(r, sx, sy) {
+			a.onToggleFileMode(p)
+			return nil
+		}
+		// Other clicks while focused on a file fall through to drag-pan or
+		// no-op; we deliberately don't try to interpret cell hits here.
 		return nil
 	}
 
@@ -445,9 +472,12 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
 	if dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
-		if len(p.Path) > 0 {
+		switch {
+		case p.FileFocus != 0:
+			a.startFileAscent(p)
+		case len(p.Path) > 0:
 			a.startAscent(p)
-		} else {
+		default:
 			go func() {
 				var resp rpc.AscendAtRootResponse
 				if _, err := postJSON("/rpc/AscendAtRoot", rpc.AscendAtRootRequest{}, &resp); err == nil {
@@ -460,10 +490,15 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 	}
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	hit := a.nodeAtCell(p, cellX, cellY)
-	if hit == nil || hit.Type != "well" || hit.Capped {
+	if hit == nil {
 		return nil
 	}
-	a.startDescent(p, hit)
+	switch {
+	case hit.Type == "well" && !hit.Capped:
+		a.startDescent(p, hit)
+	case hit.Type == "file" && hit.MimeType == "text/markdown":
+		a.startFileDescent(p, hit)
+	}
 	return nil
 }
 
@@ -648,6 +683,213 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	})
 }
 
+
+// startFileDescent zooms a pane into a markdown file the same way it
+// zooms into a well, then sets pane.FileFocus so the chrome and input
+// switch to file-editing mode. Unlike well descent, the path is not
+// extended (the file lives in the parent grid as a leaf node), so the
+// transition is a single pan-then-zoom segment series in the parent
+// coordinate space.
+func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
+	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
+
+	r := paneRectFor(a, p)
+	from := zoomtrans.Endpoints{
+		Path: append([]int64(nil), p.Path...),
+		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
+	}
+	w := zoomtrans.Well{
+		ID: file.ID, X: file.X, Y: file.Y, W: file.W, H: file.H,
+		ViewX: file.ViewX, ViewY: file.ViewY,
+	}
+	wellCx := float64(file.X) + float64(file.W)/2
+	wellCy := float64(file.Y) + float64(file.H)/2
+	target := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
+	if target < from.Zoom {
+		target = from.Zoom
+	}
+
+	pDist := panDist(wellCx-from.Cx, wellCy-from.Cy, from.Zoom)
+	zDist := zoomDist(from.Zoom, target)
+	panMs, zoomMs := anim.SplitDuration(pDist, zDist, totalTransitionMs)
+
+	// Eagerly fetch the blob so it's likely cached by the time the
+	// transition lands.
+	a.fetchBlob(file.BlobID)
+
+	fileID := file.ID
+	initialScroll := float64(file.ViewY)
+	mode := "rendered"
+	if last, ok := a.fileLastMode[fileID]; ok && last != "" {
+		mode = last
+	}
+	a.startTransition(&paneTransition{
+		paneID: p.ID,
+		segments: []transSegment{
+			{
+				path:   from.Path,
+				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
+				toCx: wellCx, toCy: wellCy, toZoom: from.Zoom,
+				durationMs: panMs,
+			},
+			{
+				path:   from.Path,
+				fromCx: wellCx, fromCy: wellCy, fromZoom: from.Zoom,
+				toCx: wellCx, toCy: wellCy, toZoom: target,
+				durationMs: zoomMs,
+			},
+		},
+		onComplete: func() {
+			fp := a.tree.FindPane(p.ID)
+			if fp == nil {
+				return
+			}
+			fp.FileFocus = fileID
+			fp.FileMode = mode
+			fp.FileScrollY = initialScroll
+			a.refreshFileOverlay()
+		},
+	})
+}
+
+// startFileAscent reverses the file descent: animate zoom-out from the
+// file's footprint back to the saved viewport, then clear FileFocus and
+// save the file's content + scroll.
+func (a *App) startFileAscent(p *pane.Pane) {
+	if p.FileFocus == 0 {
+		return
+	}
+	gid := a.gridIDForPath(p.Path)
+	g, ok := a.c.Grid(gid)
+	if !ok {
+		// Parent grid not cached — give up gracefully.
+		a.exitFileFocusInstant(p)
+		return
+	}
+	file, ok := g.Nodes[p.FileFocus]
+	if !ok {
+		a.exitFileFocusInstant(p)
+		return
+	}
+	r := paneRectFor(a, p)
+	w := zoomtrans.Well{
+		ID: file.ID, X: file.X, Y: file.Y, W: file.W, H: file.H,
+		ViewX: file.ViewX, ViewY: file.ViewY,
+	}
+	wellCx := float64(file.X) + float64(file.W)/2
+	wellCy := float64(file.Y) + float64(file.H)/2
+	overtake := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
+	if overtake > p.Zoom {
+		overtake = p.Zoom
+	}
+
+	saved := a.popPaneState(p.ID)
+	if saved == nil {
+		saved = &paneState{Cx: wellCx, Cy: wellCy, Zoom: 1.0}
+	}
+
+	// Save before transition: capture the editor buffer (if text mode is
+	// active) and post UpdateFileContent + SetNodeViewport. The animation
+	// runs concurrently with the network round-trip; the user doesn't
+	// have to wait.
+	a.saveFileBeforeAscent(p, file)
+
+	zoomOutDist := zoomDist(overtake, saved.Zoom)
+	panBackDist := panDist(saved.Cx-wellCx, saved.Cy-wellCy, saved.Zoom)
+	durations := anim.SplitN([]float64{zoomOutDist, panBackDist}, totalTransitionMs)
+
+	// Persist the mode the user is leaving in so previews and re-descent
+	// honor the "however you left it" rule.
+	if p.FileMode != "" {
+		a.fileLastMode[file.ID] = p.FileMode
+	}
+
+	// Clear FileFocus immediately so the chrome (toggle button, textarea)
+	// goes away as the animation begins; the textarea is removed before
+	// the zoom-out so the user sees the pane retract cleanly.
+	p.FileFocus = 0
+	a.refreshFileOverlay()
+
+	a.startTransition(&paneTransition{
+		paneID: p.ID,
+		segments: []transSegment{
+			{
+				path:   append([]int64(nil), p.Path...),
+				fromCx: wellCx, fromCy: wellCy, fromZoom: p.Zoom,
+				toCx: wellCx, toCy: wellCy, toZoom: saved.Zoom,
+				durationMs: durations[0],
+			},
+			{
+				path:   append([]int64(nil), p.Path...),
+				fromCx: wellCx, fromCy: wellCy, fromZoom: saved.Zoom,
+				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
+				durationMs: durations[1],
+			},
+		},
+	})
+}
+
+// exitFileFocusInstant is the fallback path when the parent grid isn't
+// cached or the file row vanished while we were focused on it. We just
+// clear FileFocus and reset the viewport to whatever was saved.
+func (a *App) exitFileFocusInstant(p *pane.Pane) {
+	saved := a.popPaneState(p.ID)
+	p.FileFocus = 0
+	if saved != nil {
+		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
+	}
+	a.refreshFileOverlay()
+	a.draw()
+	a.saveTreeToLocalStorage()
+}
+
+// saveFileBeforeAscent posts the editor buffer (if text mode is active)
+// and the live scroll position back to the server. Failures are silently
+// dropped; the user will see the local state on next descent and the
+// server state otherwise.
+func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
+	gid := a.gridIDForPath(p.Path)
+	r := paneRectFor(a, p)
+	pscreen := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
+	view := a.paneViewRect(p, pscreen)
+	scrollY := int64(p.FileScrollY + 0.5)
+
+	// Capture the textarea contents (if any) before we tear it down.
+	var buf string
+	hasBuf := false
+	if p.FileMode == "text" {
+		ta := a.fileTextarea
+		if !ta.IsNull() && !ta.IsUndefined() {
+			buf = ta.Get("value").String()
+			hasBuf = true
+		}
+	}
+
+	go func() {
+		// Update content first if the user was editing.
+		if hasBuf {
+			req := rpc.UpdateFileContentRequest{
+				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
+				NodeID: file.ID, Data: []byte(buf),
+			}
+			var resp rpc.NodeResponse
+			if _, err := postJSON("/rpc/UpdateFileContent", req, &resp); err == nil {
+				a.c.PutBlob(resp.Node.BlobID, []byte(buf), "text/markdown")
+			}
+		}
+		// Always update view_y so re-descent restores the scroll.
+		vreq := rpc.SetNodeViewportRequest{
+			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
+			NodeID: file.ID, ViewX: 0, ViewY: scrollY,
+		}
+		var vresp rpc.NodeResponse
+		_, _ = postJSON("/rpc/SetNodeViewport", vreq, &vresp)
+		a.fetchGrid(gid)
+	}()
+}
 
 // handleMenuItem performs the action for the i'th menu item, with the
 // pane and its rect for context.

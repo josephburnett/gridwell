@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/ascent/client/cache"
 	"github.com/josephburnett/ascent/client/dragdrop"
+	"github.com/josephburnett/ascent/client/markdown"
 	"github.com/josephburnett/ascent/client/pane"
 	"github.com/josephburnett/ascent/client/zoomtrans"
 	"github.com/josephburnett/ascent/internal/rpc"
@@ -68,6 +69,9 @@ func (a *App) draw() {
 		a.drawPane(p, r)
 	}
 
+	// Reposition the textarea overlay (if any) so it tracks the focused
+	// pane through resizes and pane-tree edits.
+	a.syncFileOverlayPosition()
 }
 
 // paneRect is a rectangle in screen coordinates.
@@ -168,13 +172,47 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 
 	a.cctx.Call("restore")
 
-	// + button is always available; gives the user an entry point even when
-	// the grid is unreachable (they can still ascend, etc).
-	a.drawPlusButton(p, r)
-
-	if a.menuOpen && a.menuPaneID == p.ID {
-		a.drawMenu(p, r)
+	// In file-focus mode replace the + with a text/rendered toggle; the
+	// menu never opens here.
+	if p.FileFocus != 0 {
+		a.drawFileToggleButton(p, r)
+	} else {
+		// + button is always available; gives the user an entry point
+		// even when the grid is unreachable (they can still ascend, etc).
+		a.drawPlusButton(p, r)
+		if a.menuOpen && a.menuPaneID == p.ID {
+			a.drawMenu(p, r)
+		}
 	}
+}
+
+// drawFileToggleButton paints the lower-right button that switches a
+// file-focused pane between "text" (raw editable source) and "rendered"
+// (canvas markdown layout). Visually mimics the + button so the position
+// and feel are familiar; the glyph swaps in to communicate state.
+func (a *App) drawFileToggleButton(p *pane.Pane, r paneRect) {
+	cx, cy := plusButtonCenter(r)
+	a.cctx.Set("fillStyle", colorPlusBg)
+	a.cctx.Call("beginPath")
+	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
+	a.cctx.Call("fill")
+	a.cctx.Set("strokeStyle", colorPaneBorder)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("stroke")
+
+	// Glyph: short label that names the *target* mode the click switches
+	// to, so the user reads "what will happen if I click this?"
+	label := "txt"
+	if p.FileMode != "rendered" {
+		label = "md"
+	}
+	a.cctx.Set("fillStyle", colorPlusFg)
+	a.cctx.Set("font", "11px ui-monospace")
+	a.cctx.Set("textBaseline", "middle")
+	a.cctx.Set("textAlign", "center")
+	a.cctx.Call("fillText", label, cx, cy)
+	a.cctx.Set("textAlign", "start")
+	a.cctx.Set("textBaseline", "alphabetic")
 }
 
 // drawGridLines paints faint lines at integer cell boundaries within the
@@ -241,6 +279,10 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
 func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
+	if n.Type == "file" && n.MimeType == "text/markdown" {
+		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, selected)
+		return
+	}
 	if n.Type != "well" || n.Capped {
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
@@ -290,6 +332,362 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
 		a.cctx.Set("lineWidth", 1.0)
 	}
+}
+
+// drawMarkdownNode renders a markdown file node at (x, y, w, h) where the
+// scale factor is `parentCellSize / cellPx` (i.e., the parent's zoom).
+//
+// Markdown files share their interior with the surrounding pane: there is
+// no background fill, so the parent grid lines remain visible behind the
+// text. The text itself is drawn on top of the grid; an outline frames the
+// file's footprint so the user can still see where the file boundary is.
+//
+// scrollY is the saved view_y (in logical pixels of the file's interior),
+// or — when the pane is descended into this file — the pane's live
+// FileScrollY. The caller picks which to pass.
+func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
+	scale := parentCellSize / cellPx
+	// Pull the saved scroll from the file node by default; if a pane is
+	// actively descended into this file, prefer its live scroll so the
+	// rendered view tracks the user's wheel events without a round-trip
+	// to the server.
+	scrollY := float64(n.ViewY)
+	mode := "rendered"
+	if last, ok := a.fileLastMode[n.ID]; ok && last != "" {
+		mode = last
+	}
+	if fp := a.paneFocusedOnFile(n.ID); fp != nil {
+		scrollY = fp.FileScrollY
+		if fp.FileMode != "" {
+			mode = fp.FileMode
+		}
+	}
+
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+
+	// When the focused pane is descended into THIS file in text mode,
+	// the textarea overlay renders the editable source. Drawing the
+	// markdown to the canvas behind it would just produce a doubled,
+	// misaligned render, so skip it. We still draw the outline so the
+	// pane chrome is consistent.
+	hideForTextarea := false
+	if fp := a.paneFocusedOnFile(n.ID); fp != nil && fp.FileMode == "text" && fp.ID == a.tree.Focus {
+		hideForTextarea = true
+	}
+	if !hideForTextarea {
+		if blob, ok := a.c.Blob(n.BlobID); ok {
+			drawMarkdownInRect(a.cctx, string(blob.Data), x, y, w, h, scale, scrollY, mode)
+		} else if n.BlobID != 0 {
+			a.fetchBlob(n.BlobID)
+		}
+	} else if _, ok := a.c.Blob(n.BlobID); !ok && n.BlobID != 0 {
+		a.fetchBlob(n.BlobID)
+	}
+
+	a.cctx.Call("restore")
+
+	// Outline: same palette as flat text-file fill so identity-by-color is
+	// preserved. Selected nodes get the gold outline on top.
+	a.cctx.Set("strokeStyle", colorTextLine)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("strokeRect", x, y, w, h)
+	if selected {
+		a.cctx.Set("strokeStyle", colorSelected)
+		a.cctx.Set("lineWidth", 2.0)
+		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
+		a.cctx.Set("lineWidth", 1.0)
+	}
+}
+
+// drawMarkdownInRect lays out and paints `src` (markdown source) into the
+// rectangle (x, y, w, h) at the given `scale` (1.0 = base sizes), starting
+// at vertical scroll offset `scrollY` measured in logical pixels (i.e.,
+// the units the layout would use at scale 1.0). The mode picks between
+// rendered (block layout with headings/bold/etc.) and text (raw source as
+// monospace).
+//
+// The rect's clip is the caller's responsibility.
+func drawMarkdownInRect(c js.Value, src string, x, y, w, h, scale, scrollY float64, mode string) {
+	if mode == "text" {
+		drawMarkdownText(c, src, x, y, w, h, scale, scrollY)
+		return
+	}
+	drawMarkdownRendered(c, src, x, y, w, h, scale, scrollY)
+}
+
+// markdownStyle holds the per-block-kind font/spacing parameters in
+// logical pixels (i.e., before applying scale).
+type markdownStyle struct {
+	bodyPx     float64
+	h1Px       float64
+	h2Px       float64
+	h3Px       float64
+	codePx     float64
+	pad        float64 // logical px gutter at top/left of layout
+	gapAfter   float64 // logical px below each block
+	monospace  string
+	sansSerif  string
+	textColor  string
+	mutedColor string
+	codeBg     string
+	quoteBar   string
+}
+
+func defaultMarkdownStyle() markdownStyle {
+	return markdownStyle{
+		bodyPx:     14,
+		h1Px:       24,
+		h2Px:       19,
+		h3Px:       16,
+		codePx:     13,
+		pad:        6,
+		gapAfter:   4,
+		monospace:  `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
+		sansSerif:  `ui-sans-serif, system-ui, -apple-system, sans-serif`,
+		textColor:  "#d8d9de",
+		mutedColor: "#9ca0ad",
+		codeBg:     "#1c1d24",
+		quoteBar:   "#3a4b5a",
+	}
+}
+
+// blockFontSize returns the font size in logical pixels for a block kind.
+func (s markdownStyle) blockFontSize(k markdown.BlockKind) float64 {
+	switch k {
+	case markdown.BlockHeading1:
+		return s.h1Px
+	case markdown.BlockHeading2:
+		return s.h2Px
+	case markdown.BlockHeading3:
+		return s.h3Px
+	case markdown.BlockCode:
+		return s.codePx
+	}
+	return s.bodyPx
+}
+
+// blockFamily returns the font family for a block kind.
+func (s markdownStyle) blockFamily(k markdown.BlockKind) string {
+	if k == markdown.BlockCode {
+		return s.monospace
+	}
+	return s.sansSerif
+}
+
+// drawMarkdownRendered does block-level layout of `src` and paints it
+// scaled by `scale` into (x, y, w, h), scrolled vertically by scrollY
+// logical pixels (so scrollY=0 shows from the top).
+func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
+	st := defaultMarkdownStyle()
+	blocks := markdown.Parse(src)
+	contentWidthLogical := (w / scale) - 2*st.pad
+	if contentWidthLogical < 8 {
+		contentWidthLogical = 8
+	}
+
+	c.Set("textBaseline", "top")
+	c.Set("fillStyle", st.textColor)
+
+	cursorY := st.pad - scrollY
+	for _, b := range blocks {
+		fontPx := st.blockFontSize(b.Kind)
+		family := st.blockFamily(b.Kind)
+		lineHeight := fontPx * 1.35
+
+		switch b.Kind {
+		case markdown.BlockBlank:
+			cursorY += st.bodyPx * 0.6
+			continue
+		case markdown.BlockCode:
+			// Code block: monospace, optional background tint.
+			text := ""
+			if len(b.Spans) > 0 {
+				text = b.Spans[0].Text
+			}
+			lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+			blockHeight := lineHeight * float64(len(lines))
+			top := cursorY * scale
+			if top+blockHeight*scale > 0 && top < h {
+				c.Set("fillStyle", st.codeBg)
+				c.Call("fillRect", x+st.pad*scale, y+top, contentWidthLogical*scale, blockHeight*scale)
+			}
+			setFont(c, fontPx*scale, family, false, false)
+			c.Set("fillStyle", st.textColor)
+			for _, ln := range lines {
+				yPx := cursorY * scale
+				if yPx+lineHeight*scale > 0 && yPx < h {
+					c.Call("fillText", ln, x+st.pad*scale+4, y+yPx)
+				}
+				cursorY += lineHeight
+			}
+			cursorY += st.gapAfter
+			continue
+		case markdown.BlockBlockquote:
+			// Vertical bar in the gutter; indent text.
+			topLogical := cursorY
+			indent := 12.0
+			lines := wrapInline(c, b.Spans, contentWidthLogical-indent, fontPx, family, scale)
+			blockHeight := lineHeight * float64(len(lines))
+			topPx := topLogical * scale
+			if topPx+blockHeight*scale > 0 && topPx < h {
+				c.Set("fillStyle", st.quoteBar)
+				c.Call("fillRect", x+st.pad*scale, y+topPx, 3*scale, blockHeight*scale)
+			}
+			c.Set("fillStyle", st.mutedColor)
+			drawInlineLines(c, lines, x+(st.pad+indent)*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
+			cursorY += blockHeight + st.gapAfter
+			continue
+		case markdown.BlockListItem:
+			// Bullet, then wrapped inline text.
+			indent := 14.0
+			lines := wrapInline(c, b.Spans, contentWidthLogical-indent, fontPx, family, scale)
+			// Bullet sits on the first line.
+			yPx := cursorY * scale
+			if yPx+lineHeight*scale > 0 && yPx < h {
+				setFont(c, fontPx*scale, family, false, false)
+				c.Set("fillStyle", st.textColor)
+				c.Call("fillText", "•", x+(st.pad+4)*scale, y+yPx)
+			}
+			drawInlineLines(c, lines, x+(st.pad+indent)*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
+			cursorY += lineHeight*float64(len(lines)) + st.gapAfter
+			continue
+		}
+		// Headings and paragraphs.
+		bold := b.Kind == markdown.BlockHeading1 || b.Kind == markdown.BlockHeading2 || b.Kind == markdown.BlockHeading3
+		_ = bold
+		lines := wrapInline(c, b.Spans, contentWidthLogical, fontPx, family, scale)
+		drawInlineLines(c, lines, x+st.pad*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
+		cursorY += lineHeight*float64(len(lines)) + st.gapAfter
+	}
+}
+
+// wrapInline measures the spans and wraps them into lines that fit
+// contentWidthLogical at the given font size. The font is set per-call so
+// measureText reflects the right metrics; scale is applied uniformly so
+// the wrap matches what the caller will paint.
+func wrapInline(c js.Value, spans []markdown.Span, contentWidthLogical, fontPx float64, family string, scale float64) [][]markdown.Span {
+	measure := func(text string, style markdown.SpanStyle) float64 {
+		setFont(c, fontPx*scale, family, style&markdown.StyleBold != 0, style&markdown.StyleItalic != 0)
+		mt := c.Call("measureText", text)
+		// Convert measured pixels back to logical units.
+		return mt.Get("width").Float() / scale
+	}
+	return markdown.Wrap(spans, contentWidthLogical, measure)
+}
+
+// drawInlineLines paints wrapped inline lines starting at logical
+// (xPx, baseTopLogical) with the given lineHeight; clips drawing to (y, h)
+// in screen pixels.
+func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLogical, lineHeight, fontPx float64, family string, scale, h float64) {
+	for li, line := range lines {
+		yLogical := baseTopLogical + float64(li)*lineHeight
+		yPx := yLogical * scale
+		if yPx+lineHeight*scale < 0 || yPx > h {
+			continue
+		}
+		curX := xPx
+		for _, sp := range line {
+			bold := sp.Style&markdown.StyleBold != 0
+			italic := sp.Style&markdown.StyleItalic != 0
+			code := sp.Style&markdown.StyleCode != 0
+			family2 := family
+			if code {
+				family2 = `ui-monospace, "SF Mono", Menlo, Consolas, monospace`
+			}
+			setFont(c, fontPx*scale, family2, bold, italic)
+			if code {
+				c.Set("fillStyle", "#3a4658")
+				w := c.Call("measureText", sp.Text).Get("width").Float()
+				c.Call("fillRect", curX-2, yBase+yPx, w+4, lineHeight*scale)
+			}
+			c.Set("fillStyle", "#d8d9de")
+			c.Call("fillText", sp.Text, curX, yBase+yPx)
+			w := c.Call("measureText", sp.Text).Get("width").Float()
+			curX += w
+		}
+	}
+}
+
+// setFont assembles a CSS font shorthand string and assigns it. Bold/italic
+// are optional; size is in pixels.
+func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
+	style := "normal"
+	if italic {
+		style = "italic"
+	}
+	weight := "normal"
+	if bold {
+		weight = "bold"
+	}
+	// Browsers refuse fonts at 0px; clamp to a tiny minimum so the call doesn't error.
+	if sizePx < 1 {
+		sizePx = 1
+	}
+	c.Set("font", fmt.Sprintf("%s %s %.2fpx %s", style, weight, sizePx, family))
+}
+
+// drawMarkdownText paints `src` as raw monospace text at the same scale
+// the rendered view would use. Used both for the source-mode preview and
+// as a faint backdrop while the textarea overlay is painted on top.
+//
+// `w` is unused for now: text mode does not soft-wrap; long lines are
+// clipped at the right edge by the caller's clip rect.
+func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
+	_ = w
+	st := defaultMarkdownStyle()
+	fontPx := st.codePx
+	lineHeight := fontPx * 1.35
+	setFont(c, fontPx*scale, st.monospace, false, false)
+	c.Set("textBaseline", "top")
+	c.Set("fillStyle", st.textColor)
+	lines := strings.Split(src, "\n")
+	cursorY := st.pad - scrollY
+	for _, ln := range lines {
+		yPx := cursorY * scale
+		if yPx+lineHeight*scale > 0 && yPx < h {
+			c.Call("fillText", ln, x+st.pad*scale, y+yPx)
+		}
+		cursorY += lineHeight
+	}
+}
+
+// paneFocusedOnFile returns any pane currently descended into the given
+// file node id, or nil if none. Used by the renderer to pull the live
+// scroll/mode state instead of the saved view_y.
+func (a *App) paneFocusedOnFile(fileNodeID int64) *pane.Pane {
+	var found *pane.Pane
+	a.tree.Walk(func(p *pane.Pane) {
+		if p.FileFocus == fileNodeID {
+			found = p
+		}
+	})
+	return found
+}
+
+// fetchBlob issues GetBlob for the given blob id and stores the bytes in
+// the cache. Idempotent: a successful previous fetch short-circuits.
+func (a *App) fetchBlob(blobID int64) {
+	if blobID == 0 {
+		return
+	}
+	if _, ok := a.c.Blob(blobID); ok {
+		return
+	}
+	go func() {
+		var resp rpc.GetBlobResponse
+		status, err := postJSON("/rpc/GetBlob", rpc.GetBlobRequest{BlobID: blobID}, &resp)
+		if err != nil || status != 200 {
+			return
+		}
+		a.c.PutBlob(blobID, resp.Data, resp.MimeType)
+		// If the focused pane is waiting on this blob to populate its
+		// text-mode editor, seed the textarea now.
+		a.refreshFileOverlay()
+		a.draw()
+	}()
 }
 
 // drawChildPreview paints the cached child grid's nodes inside a clipped
