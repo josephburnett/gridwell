@@ -97,6 +97,11 @@ func (a *App) layoutPanes() map[string]paneRect {
 }
 
 // drawPane draws one pane's contents.
+//
+// The pane chrome (border, grid lines, + button) is always drawn, even when
+// the target grid hasn't loaded yet. That way the user can see the pane is
+// live and use the + button (or Home key, etc.) to recover from a stale
+// descent path.
 func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	border := colorPaneBorder
 	if p.ID == a.tree.Focus {
@@ -107,13 +112,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.cctx.Call("strokeRect", r.X+0.5, r.Y+0.5, r.W-1, r.H-1)
 
 	gid := a.gridIDForPath(p.Path)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		a.cctx.Set("fillStyle", colorMuted)
-		a.cctx.Set("font", "12px ui-monospace")
-		a.cctx.Call("fillText", fmt.Sprintf("loading grid %d…", gid), r.X+12, r.Y+24)
-		return
-	}
+	g, gridOK := a.c.Grid(gid)
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
@@ -125,32 +124,42 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
 
+	// Grid lines render against background regardless of whether the grid
+	// has loaded — they communicate the coordinate system to the user.
 	a.drawGridLines(pscreen, r)
 
-	cellSize := pscreen.CellPx * pscreen.Zoom
-
-	selected := a.selectedNodeID[p.ID]
-	for _, n := range g.Nodes {
-		left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
-		w := float64(n.W) * cellSize
-		h := float64(n.H) * cellSize
-		if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
-			continue
+	if gridOK {
+		cellSize := pscreen.CellPx * pscreen.Zoom
+		selected := a.selectedNodeID[p.ID]
+		for _, n := range g.Nodes {
+			left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
+			w := float64(n.W) * cellSize
+			h := float64(n.H) * cellSize
+			if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
+				continue
+			}
+			nn := n
+			drawNode(a.cctx, &nn, left, top, w, h, n.ID == selected)
 		}
-		nn := n
-		drawNode(a.cctx, &nn, left, top, w, h, n.ID == selected)
+		a.drawEdgeIndicators(g.Nodes, pscreen, r)
+	} else {
+		// Status line in the upper-left so the user knows what state
+		// we're in and which grid id we're trying to load.
+		msg := fmt.Sprintf("loading grid %d…", gid)
+		if a.gridLoadFailed[gid] {
+			msg = fmt.Sprintf("grid %d unavailable — press Home to reset", gid)
+		}
+		a.cctx.Set("fillStyle", colorMuted)
+		a.cctx.Set("font", "12px ui-monospace")
+		a.cctx.Call("fillText", msg, r.X+12, r.Y+24)
 	}
-
-	// Edges to offscreen content.
-	a.drawEdgeIndicators(g.Nodes, pscreen, r)
 
 	a.cctx.Call("restore")
 
-	// + button — drawn in screen space (after restore so it is not clipped
-	// by the pane's content rect, and so it can extend a touch outside).
+	// + button is always available; gives the user an entry point even when
+	// the grid is unreachable (they can still ascend, etc).
 	a.drawPlusButton(p, r)
 
-	// Menu, if open for this pane. Drawn last so it stacks above everything.
 	if a.menuOpen && a.menuPaneID == p.ID {
 		a.drawMenu(p, r)
 	}

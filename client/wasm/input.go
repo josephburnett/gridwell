@@ -510,6 +510,10 @@ func (a *App) onKeyDown(this js.Value, args []js.Value) any {
 		focused.Zoom *= zoomFactor
 	case "-", "_":
 		focused.Zoom /= zoomFactor
+	case "Home":
+		a.resetFocusedPaneToRoot()
+		args[0].Call("preventDefault")
+		return nil
 	default:
 		return nil
 	}

@@ -56,6 +56,11 @@ type App struct {
 	// fresh handler on the next upload, preventing leaks of js.FuncOf.
 	uploadHandler   js.Func
 	uploadHandlerOK bool
+
+	// gridLoadFailed records grids whose last fetch returned non-200, so
+	// the renderer can show a meaningful message and we don't retry in
+	// a tight loop.
+	gridLoadFailed map[int64]bool
 }
 
 // dragState tracks an in-progress drag from a node onto the cursor.
@@ -87,6 +92,7 @@ func main() {
 		c:              cache.New(),
 		selectedNodeID: map[string]int64{},
 		menuHover:      -1,
+		gridLoadFailed: map[int64]bool{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -182,17 +188,48 @@ func (a *App) resize() {
 	a.cctx.Call("setTransform", dpr, 0, 0, dpr, 0, 0)
 }
 
-// fetchGrid issues GetGrid and stores the result in the cache.
+// fetchGrid issues GetGrid and stores the result in the cache. Failures are
+// recorded so the renderer can surface them and we can avoid re-issuing the
+// same request inside a render loop.
 func (a *App) fetchGrid(id int64) {
+	if a.gridLoadFailed[id] {
+		return
+	}
 	go func() {
 		var resp rpc.GetGridResponse
 		status, err := postJSON("/rpc/GetGrid", rpc.GetGridRequest{GridID: id}, &resp)
 		if err != nil || status != 200 {
+			a.gridLoadFailed[id] = true
+			a.draw()
 			return
 		}
+		delete(a.gridLoadFailed, id)
 		a.c.PutGrid(resp.Grid, resp.Nodes)
 		a.draw()
 	}()
+}
+
+// resetFocusedPaneToRoot clears the focused pane's descent path and viewport
+// and re-fetches the user's current root grid. Bound to the Home key as the
+// user's escape hatch when localStorage holds a path we can no longer
+// resolve.
+func (a *App) resetFocusedPaneToRoot() {
+	if a.user == nil {
+		return
+	}
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	p.Path = nil
+	p.Cx, p.Cy = 0, 0
+	p.Zoom = 1.0
+	delete(a.selectedNodeID, p.ID)
+	// Clear failure cache so the next fetch retries cleanly.
+	a.gridLoadFailed = map[int64]bool{}
+	a.fetchGrid(a.user.RootGridID)
+	a.saveTreeToLocalStorage()
+	a.draw()
 }
 
 // startSSE opens the EventSource for /rpc/Subscribe and applies events to
