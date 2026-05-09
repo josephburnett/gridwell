@@ -14,6 +14,7 @@ import (
 func RunInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	db := resolveDB(fs, "./ascent.db")
+	args = reorderFlagsFirst(args, func(name string) bool { return name == "db" })
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

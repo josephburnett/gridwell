@@ -22,6 +22,9 @@ func RunServe(args []string) int {
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	staticDir := fs.String("static", "./web", "directory of static files served at /")
 	insecure := fs.Bool("insecure", false, "do not set the Secure flag on the session cookie (use only when serving over plain HTTP locally)")
+	args = reorderFlagsFirst(args, func(name string) bool {
+		return name == "db" || name == "addr" || name == "static"
+	})
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

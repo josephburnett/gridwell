@@ -17,6 +17,63 @@ func resolveDB(fs *flag.FlagSet, defaultPath string) *string {
 	return fs.String("db", defaultPath, "path to the SQLite database file")
 }
 
+// reorderFlagsFirst groups all flag tokens to the front of args so that Go's
+// stdlib flag package (which stops at the first non-flag) sees them. This
+// lets users write either "adduser alice --db PATH" or "adduser --db PATH
+// alice"; both produce the same parse.
+//
+// A "flag token" is anything starting with a single or double dash, plus
+// (for non-bool flags) the value that follows. We don't know which flags
+// take values without consulting the FlagSet, so we use a small heuristic:
+// the next token is considered the value iff it doesn't itself start with
+// '-' AND the flag wasn't given as "--name=value".
+func reorderFlagsFirst(args []string, takesValue func(name string) bool) []string {
+	var flagTokens, positional []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if len(a) >= 2 && a[0] == '-' {
+			flagTokens = append(flagTokens, a)
+			if i+1 < len(args) {
+				// Detect "--name=value" form: no separate value follows.
+				name := a
+				for len(name) > 0 && name[0] == '-' {
+					name = name[1:]
+				}
+				if hasEq := containsByte(name, '='); !hasEq {
+					if takesValue(stripDashes(a)) && args[i+1] != "" && args[i+1][0] != '-' {
+						flagTokens = append(flagTokens, args[i+1])
+						i++
+					}
+				}
+			}
+			continue
+		}
+		positional = append(positional, a)
+	}
+	return append(flagTokens, positional...)
+}
+
+func stripDashes(s string) string {
+	for len(s) > 0 && s[0] == '-' {
+		s = s[1:]
+	}
+	if eq := indexByte(s, '='); eq >= 0 {
+		s = s[:eq]
+	}
+	return s
+}
+
+func containsByte(s string, b byte) bool { return indexByte(s, b) >= 0 }
+
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
 // printErr writes to w. Centralized so tests can capture output.
 func printErr(w io.Writer, format string, args ...any) {
 	fmt.Fprintf(w, format, args...)
