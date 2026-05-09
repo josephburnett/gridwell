@@ -40,7 +40,12 @@ type Pane struct {
 
 	FileFocus   int64   `json:"file_focus,omitempty"`
 	FileMode    string  `json:"file_mode,omitempty"`
+	FileScrollX float64 `json:"file_scroll_x,omitempty"`
 	FileScrollY float64 `json:"file_scroll_y,omitempty"`
+	// FileZoom is the rendering scale for file-mode (independent of
+	// parent-grid Zoom). 1.0 means "natural reading size"; the wheel
+	// adjusts this directly when FileFocus != 0.
+	FileZoom float64 `json:"file_zoom,omitempty"`
 }
 
 // Clone returns a deep copy of the pane (including the path slice).

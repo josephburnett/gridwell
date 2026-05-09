@@ -3,6 +3,7 @@
 package main
 
 import (
+	"math"
 	"strconv"
 	"syscall/js"
 
@@ -10,6 +11,10 @@ import (
 	"github.com/josephburnett/ascent/client/pane"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
+
+// pow is math.Pow re-exported with a short name so the wheel-zoom math
+// reads compactly.
+func pow(x, y float64) float64 { return math.Pow(x, y) }
 
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
 // for markdown text-mode editing. It lives in document.body and is
@@ -59,6 +64,55 @@ func (a *App) ensureFileTextarea() {
 		return nil
 	})
 	ta.Call("addEventListener", "scroll", a.fileTextareaScrollCb)
+
+	// Plain wheel inside the textarea uses the browser's native scroll
+	// (so the user gets the scrollbar for free); ctrl+wheel zooms by
+	// adjusting the pane's FileZoom and triggering a refresh, which
+	// rewrites the textarea's font-size.
+	wheelCb := js.FuncOf(func(this js.Value, args []js.Value) any {
+		ev := args[0]
+		if !(ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()) {
+			return nil // let the textarea scroll
+		}
+		ev.Call("preventDefault")
+		p := a.tree.FocusedPane()
+		if p == nil || p.FileFocus == 0 {
+			return nil
+		}
+		dy := ev.Get("deltaY").Float()
+		step := dy / 200.0
+		if step > 0.5 {
+			step = 0.5
+		}
+		if step < -0.5 {
+			step = -0.5
+		}
+		factor := 1.0
+		// Reuse the same exponent shape as the canvas zoom for a unified feel.
+		const fileZoomFactor = 1.1
+		if step > 0 {
+			factor = 1.0 / pow(fileZoomFactor, step*4)
+		} else if step < 0 {
+			factor = pow(fileZoomFactor, -step*4)
+		}
+		old := p.FileZoom
+		if old <= 0 {
+			old = 1.0
+		}
+		z := old * factor
+		if z < fileZoomMin {
+			z = fileZoomMin
+		}
+		if z > fileZoomMax {
+			z = fileZoomMax
+		}
+		p.FileZoom = z
+		a.refreshFileOverlay()
+		a.draw()
+		a.saveTreeToLocalStorage()
+		return nil
+	})
+	ta.Call("addEventListener", "wheel", wheelCb)
 
 	// The textarea covers the whole pane while in text mode, so the
 	// canvas's contextmenu handler never sees right-clicks here. Forward
@@ -111,22 +165,37 @@ func (a *App) refreshFileOverlay() {
 		return
 	}
 	style := ta.Get("style")
-	style.Set("left", strconv.FormatFloat(r.X, 'f', 1, 64)+"px")
+
+	// The textarea has a fixed character column (so the text doesn't
+	// reflow when the pane gets wider) and is centered horizontally
+	// inside the pane. Wider panes get padding on both sides; narrower
+	// panes shrink the column to fit.
+	zoom := p.FileZoom
+	if zoom <= 0 {
+		zoom = 1.0
+	}
+	fontPx := 14.0 * zoom
+	if fontPx < 8 {
+		fontPx = 8
+	}
+	if fontPx > 60 {
+		fontPx = 60
+	}
+	const maxCols = 80
+	// One monospace char ≈ 0.6em, padding 16px on each side (matches
+	// padding: 8px set on creation, plus a visual buffer).
+	colWidth := float64(maxCols)*fontPx*0.6 + 32
+	width := colWidth
+	if width > r.W {
+		width = r.W
+	}
+	left := r.X + (r.W-width)/2
+
+	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
 	style.Set("top", strconv.FormatFloat(r.Y, 'f', 1, 64)+"px")
-	style.Set("width", strconv.FormatFloat(r.W, 'f', 1, 64)+"px")
+	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
 	style.Set("height", strconv.FormatFloat(r.H, 'f', 1, 64)+"px")
 	style.Set("clipPath", textareaClipPath())
-	// Scale font-size with the pane's zoom so an editing session at high
-	// zoom shows readable text without snapping to a different size when
-	// the descent animation lands.
-	scale := p.Zoom
-	if scale < 1 {
-		scale = 1
-	}
-	fontPx := 14.0 * scale
-	if fontPx > 28 {
-		fontPx = 28
-	}
 	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
 	style.Set("display", "block")
 
@@ -185,11 +254,30 @@ func (a *App) syncFileOverlayPosition() {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
+	zoom := p.FileZoom
+	if zoom <= 0 {
+		zoom = 1.0
+	}
+	fontPx := 14.0 * zoom
+	if fontPx < 8 {
+		fontPx = 8
+	}
+	if fontPx > 60 {
+		fontPx = 60
+	}
+	const maxCols = 80
+	colWidth := float64(maxCols)*fontPx*0.6 + 32
+	width := colWidth
+	if width > r.W {
+		width = r.W
+	}
+	left := r.X + (r.W-width)/2
 	style := a.fileTextarea.Get("style")
-	style.Set("left", strconv.FormatFloat(r.X, 'f', 1, 64)+"px")
+	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
 	style.Set("top", strconv.FormatFloat(r.Y, 'f', 1, 64)+"px")
-	style.Set("width", strconv.FormatFloat(r.W, 'f', 1, 64)+"px")
+	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
 	style.Set("height", strconv.FormatFloat(r.H, 'f', 1, 64)+"px")
+	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
 	style.Set("clipPath", textareaClipPath())
 }
 

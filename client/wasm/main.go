@@ -24,7 +24,40 @@ const (
 	zoomMin    = 0.25
 	zoomMax    = 8.0
 	zoomFactor = 1.1
+
+	// fileNaturalContentPx is the logical width of the rendered markdown
+	// canvas at FileZoom=1.0. Picked so a typical desktop pane shows the
+	// content comfortably; previews scale this down to fit the file's
+	// footprint when displayed in the parent grid.
+	fileNaturalContentPx = 800.0
+
+	// fileZoomMin / Max bound the user-controllable zoom range inside
+	// file mode. Wider than the parent grid's range because zoomed-out
+	// markdown (sub-1.0) is useful for an overview, and zoomed-in is
+	// useful for accessibility.
+	fileZoomMin = 0.25
+	fileZoomMax = 6.0
 )
+
+// fileInitialZoom returns the FileZoom that gives the just-descended
+// pane a comfortable reading scale: target width = pane width minus a
+// gentle margin, divided by the natural content width. Capped to 1.0
+// upward so we don't blow up tiny panes' text.
+func fileInitialZoom(paneW, paneH float64) float64 {
+	_ = paneH
+	if paneW <= 0 {
+		return 1.0
+	}
+	margin := 64.0
+	z := (paneW - margin) / fileNaturalContentPx
+	if z < 0.5 {
+		z = 0.5
+	}
+	if z > 1.4 {
+		z = 1.4
+	}
+	return z
+}
 
 // app is the running client. Held in a package-level var so JS callbacks can
 // reach it without closures over reflect.Value.

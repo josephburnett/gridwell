@@ -336,33 +336,49 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	}
 }
 
-// drawMarkdownNode renders a markdown file node at (x, y, w, h) where the
-// scale factor is `parentCellSize / cellPx` (i.e., the parent's zoom).
+// drawMarkdownNode renders a markdown file node at (x, y, w, h).
 //
-// Markdown files share their interior with the surrounding pane: there is
-// no background fill, so the parent grid lines remain visible behind the
-// text. The text itself is drawn on top of the grid; an outline frames the
-// file's footprint so the user can still see where the file boundary is.
+// Two distinct rendering modes:
 //
-// scrollY is the saved view_y (in logical pixels of the file's interior),
-// or — when the pane is descended into this file — the pane's live
-// FileScrollY. The caller picks which to pass.
+//  1. Preview (no pane is descended into this file). Scale is clamped
+//     to <= 1.0 so the rendered text never grows past natural reading
+//     size, regardless of how far the user has zoomed into the parent
+//     grid. A small file appears as a small but readable preview; a
+//     large parent zoom doesn't blow it up.
+//  2. Live file mode (a pane is descended into this file). The scale
+//     is the pane's FileZoom (independent of parent zoom) and the
+//     visible region is taken from FileScrollX/FileScrollY. Wheel
+//     events update those fields directly so navigation is buttery.
+//
+// In both modes the parent grid lines remain visible behind the text
+// (no fill), and an outline marks the footprint.
 func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
-	scale := parentCellSize / cellPx
-	// Pull the saved scroll from the file node by default; if a pane is
-	// actively descended into this file, prefer its live scroll so the
-	// rendered view tracks the user's wheel events without a round-trip
-	// to the server.
-	scrollY := float64(n.ViewY)
 	mode := "rendered"
 	if last, ok := a.fileLastMode[n.ID]; ok && last != "" {
 		mode = last
 	}
-	if fp := a.paneFocusedOnFile(n.ID); fp != nil {
-		scrollY = fp.FileScrollY
+	fp := a.paneFocusedOnFile(n.ID)
+	var scale, scrollX, scrollY float64
+	if fp != nil {
 		if fp.FileMode != "" {
 			mode = fp.FileMode
 		}
+		scale = fp.FileZoom
+		if scale <= 0 {
+			scale = 1.0
+		}
+		scrollX = fp.FileScrollX
+		scrollY = fp.FileScrollY
+	} else {
+		previewScale := w / fileNaturalContentPx
+		if previewScale > 1.0 {
+			previewScale = 1.0
+		}
+		if previewScale < 0.05 {
+			previewScale = 0.05
+		}
+		scale = previewScale
+		scrollY = float64(n.ViewY)
 	}
 
 	a.cctx.Call("save")
@@ -373,15 +389,23 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 	// When the focused pane is descended into THIS file in text mode,
 	// the textarea overlay renders the editable source. Drawing the
 	// markdown to the canvas behind it would just produce a doubled,
-	// misaligned render, so skip it. We still draw the outline so the
-	// pane chrome is consistent.
-	hideForTextarea := false
-	if fp := a.paneFocusedOnFile(n.ID); fp != nil && fp.FileMode == "text" && fp.ID == a.tree.Focus {
-		hideForTextarea = true
-	}
+	// misaligned render, so skip it.
+	hideForTextarea := fp != nil && fp.FileMode == "text" && fp.ID == a.tree.Focus
 	if !hideForTextarea {
 		if blob, ok := a.c.Blob(n.BlobID); ok {
-			drawMarkdownInRect(a.cctx, string(blob.Data), x, y, w, h, scale, scrollY, mode)
+			// Layout width is fixed (no reflow on pane resize / scroll).
+			// In live file mode we use the natural content width so the
+			// rendered markdown stays static like a PDF page; in preview
+			// the file's footprint is the layout width so the text fits
+			// the stone.
+			layoutW := fileNaturalContentPx
+			if fp == nil {
+				layoutW = w / scale
+			}
+			drawMarkdownInRect(a.cctx, string(blob.Data),
+				x-scrollX*scale, y-scrollY*scale,
+				layoutW*scale, h+scrollY*scale, // tall enough that internal cull leaves visible lines alone
+				scale, 0, mode)
 		} else if n.BlobID != 0 {
 			a.fetchBlob(n.BlobID)
 		}
@@ -390,6 +414,7 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 	}
 
 	a.cctx.Call("restore")
+	_ = parentCellSize
 
 	// Outline: same palette as flat text-file fill so identity-by-color is
 	// preserved. Selected nodes get the gold outline on top.

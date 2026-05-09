@@ -82,19 +82,36 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// Inside a focused file the wheel scrolls the file content rather
-	// than zooming. Text mode delegates to the textarea's native scroll
-	// (its own scroll listener mirrors back into pane.FileScrollY); the
-	// rendered mode tracks the scroll on the pane directly.
+	// Inside a focused file the wheel does PDF-style navigation: plain
+	// wheel scrolls vertically, ctrl+wheel zooms around the cursor.
+	// Text mode lets the textarea handle plain wheel natively (so the
+	// browser's scroll bar still works); ctrl+wheel still goes through
+	// us to adjust the textarea's font-size.
 	if p.FileFocus != 0 {
+		ctrl := args[0].Get("ctrlKey").Bool() || args[0].Get("metaKey").Bool()
+		if ctrl {
+			step := dy / 200.0
+			if step > 0.5 {
+				step = 0.5
+			}
+			if step < -0.5 {
+				step = -0.5
+			}
+			factor := math.Pow(zoomFactor, -step*4)
+			a.adjustFileZoom(p, factor, sx, sy)
+			a.draw()
+			a.saveTreeToLocalStorage()
+			return nil
+		}
 		if p.FileMode == "rendered" {
-			p.FileScrollY += dy
+			p.FileScrollY += dy / nonzero(p.FileZoom)
 			if p.FileScrollY < 0 {
 				p.FileScrollY = 0
 			}
 			a.draw()
 			a.saveTreeToLocalStorage()
 		}
+		// Text mode: let the textarea handle plain wheel itself.
 		return nil
 	}
 	// Smooth zoom centered on the cursor: amount scales with deltaY so a
@@ -140,8 +157,18 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.onToggleFileMode(p)
 			return nil
 		}
-		// Other clicks while focused on a file fall through to drag-pan or
-		// no-op; we deliberately don't try to interpret cell hits here.
+		// Rendered mode: drag pans the file content (no textarea over us).
+		// Text mode: the textarea covers the pane and handles drag itself.
+		if p.FileMode == "rendered" {
+			a.dragging = &dragState{
+				originPaneID: p.ID,
+				nodeID:       0,
+				startScreenX: sx,
+				startScreenY: sy,
+				curScreenX:   sx,
+				curScreenY:   sy,
+			}
+		}
 		return nil
 	}
 
@@ -244,12 +271,26 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 	}
 	if d.nodeID == 0 {
-		// Pan the source pane smoothly.
+		// Pan the source pane smoothly. In file-rendered mode the drag
+		// scrolls the file's logical content; in grid mode it pans the
+		// parent-grid view.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			cellSize := cellPx * focused.Zoom
-			focused.Cx -= (sx - d.curScreenX) / cellSize
-			focused.Cy -= (sy - d.curScreenY) / cellSize
+			if focused.FileFocus != 0 && focused.FileMode == "rendered" {
+				z := nonzero(focused.FileZoom)
+				focused.FileScrollX -= (sx - d.curScreenX) / z
+				focused.FileScrollY -= (sy - d.curScreenY) / z
+				if focused.FileScrollY < 0 {
+					focused.FileScrollY = 0
+				}
+				if focused.FileScrollX < 0 {
+					focused.FileScrollX = 0
+				}
+			} else {
+				cellSize := cellPx * focused.Zoom
+				focused.Cx -= (sx - d.curScreenX) / cellSize
+				focused.Cy -= (sy - d.curScreenY) / cellSize
+			}
 		}
 	} else if a.ghost != nil {
 		// Move the ghost: offset cursor by the grab point so the original
@@ -530,18 +571,12 @@ func zoomDist(z1, z2 float64) float64 {
 	return math.Abs(math.Log(z2/z1)) * cellPx * zoomDistFactor
 }
 
-// startAscent installs a multi-segment transition that smoothly zooms out
-// of the child grid back to the parent grid and then un-pans to the
-// viewport the user was at before they descended (popped from
-// paneStateStack). The motion is serialized: zoom first, pan second, so
-// the camera retraces the descent's path-then-zoom in reverse.
-//
-// Phases:
-//   A. (child) From current state → calibrated switch state. Combined
-//      pan+zoom because the user may have moved in the child grid.
-//   B. (parent, post-switch) Zoom out at well center from "well overtakes
-//      view" to the saved zoom.
-//   C. (parent) Pan from well center to the saved (Cx, Cy) at saved zoom.
+// startAscent zooms a pane out of a child grid and back to the parent
+// grid in two concurrent-motion segments: one that finishes the child's
+// trip to the calibrated path-switch state, and one in the parent that
+// pans-and-zooms back to the user's saved viewport in a single motion.
+// Pan and zoom interpolate together within each segment, so they begin
+// and end at the same moment regardless of which has more "distance".
 //
 // If no saved state is available (cleared localStorage, reload), we land
 // on the well at zoom 1.
@@ -580,36 +615,29 @@ func (a *App) startAscent(p *pane.Pane) {
 	}
 
 	// Distances in shared px-equivalent units so SplitN can apportion
-	// time uniformly.
+	// time so each phase moves at a comparable visual speed.
 	childDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
 		zoomDist(from.Zoom, mid.Zoom)
-	parentZoomDist := zoomDist(switchTo.Zoom, saved.Zoom)
-	parentPanDist := panDist(saved.Cx-switchTo.Cx, saved.Cy-switchTo.Cy, saved.Zoom)
-	durations := anim.SplitN([]float64{childDist, parentZoomDist, parentPanDist}, totalTransitionMs)
+	parentDist := panDist(saved.Cx-switchTo.Cx, saved.Cy-switchTo.Cy, saved.Zoom) +
+		zoomDist(switchTo.Zoom, saved.Zoom)
+	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
 
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
-			// Phase A: combined pan+zoom in child to land on calibrated state.
+			// Child grid: combined pan+zoom to land on calibrated state.
 			{
 				path:   from.Path,
 				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
 				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
 				durationMs: durations[0],
 			},
-			// Phase B: switch to parent; zoom out at well center.
+			// Parent grid: combined pan+zoom from well center back to saved.
 			{
 				path:   switchTo.Path,
 				fromCx: switchTo.Cx, fromCy: switchTo.Cy, fromZoom: switchTo.Zoom,
-				toCx: switchTo.Cx, toCy: switchTo.Cy, toZoom: saved.Zoom,
-				durationMs: durations[1],
-			},
-			// Phase C: pan from well center back to saved at saved zoom.
-			{
-				path:   switchTo.Path,
-				fromCx: switchTo.Cx, fromCy: switchTo.Cy, fromZoom: saved.Zoom,
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: durations[2],
+				durationMs: durations[1],
 			},
 		},
 	})
@@ -628,14 +656,14 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 }
 
 // startDescent pushes the pane's current state onto the saved-state stack
-// and installs a serialized pan-then-zoom transition into the well's
-// child grid. Splitting the motion (rather than doing it together) avoids
-// the "whiplash" of a simultaneous diagonal zoom.
+// and installs a single combined-motion transition into the well's
+// child grid. Pan and zoom interpolate together so they finish at the
+// same moment regardless of which has more "distance" — when the well is
+// far from center, the camera moves faster to keep both motions in sync.
 //
 // Phases:
-//   A. Pan in parent at constant Zoom from current to well center.
-//   B. Zoom in parent at well center from current zoom to overtake.
-//   C. Instant install of the calibrated child state.
+//   A. Combined pan+zoom in parent to (wellCenter, OvertakeZoom).
+//   B. Instant install of the calibrated child state.
 func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
@@ -651,28 +679,20 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	a.fetchGrid(well.ChildGridID)
 
-	pDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom)
-	zDist := zoomDist(from.Zoom, mid.Zoom)
-	panMs, zoomMs := anim.SplitDuration(pDist, zDist, totalTransitionMs)
-
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
-			// Phase A: pan to well at constant zoom.
+			// Combined pan+zoom toward well center at OvertakeZoom.
 			{
 				path:   from.Path,
 				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: mid.Cx, toCy: mid.Cy, toZoom: from.Zoom,
-				durationMs: panMs,
-			},
-			// Phase B: zoom in at well center.
-			{
-				path:   from.Path,
-				fromCx: mid.Cx, fromCy: mid.Cy, fromZoom: from.Zoom,
 				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: zoomMs,
+				durationMs: totalTransitionMs,
 			},
-			// Phase C: instant land at calibrated child state.
+			// Instant install of the calibrated child state at the path
+			// switch — visually continuous because of the zoomtrans
+			// calibration: a parent cell at switch == a child preview
+			// cell, and the cell scale matches the new child zoom.
 			{
 				path:   to.Path,
 				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
@@ -684,12 +704,62 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 }
 
 
-// startFileDescent zooms a pane into a markdown file the same way it
-// zooms into a well, then sets pane.FileFocus so the chrome and input
-// switch to file-editing mode. Unlike well descent, the path is not
-// extended (the file lives in the parent grid as a leaf node), so the
-// transition is a single pan-then-zoom segment series in the parent
-// coordinate space.
+// adjustFileZoom multiplies pane.FileZoom by `factor` while keeping the
+// logical point under (sx, sy) anchored to the cursor. Bounded to the
+// fileZoom range. Operates on pane.FileScrollY only (the rendered-mode
+// scroll); text mode mirrors the new zoom into the textarea's font-size
+// in refreshFileOverlay so we don't recompute scroll for it here.
+func (a *App) adjustFileZoom(p *pane.Pane, factor, sx, sy float64) {
+	old := p.FileZoom
+	if old <= 0 {
+		old = 1.0
+	}
+	z := old * factor
+	if z < fileZoomMin {
+		z = fileZoomMin
+	}
+	if z > fileZoomMax {
+		z = fileZoomMax
+	}
+	if z == old {
+		return
+	}
+	// Anchor: keep the cursor's logical point fixed across the zoom.
+	r := paneRectFor(a, p)
+	logicalY := p.FileScrollY + (sy-r.Y)/old
+	logicalX := p.FileScrollX + (sx-r.X)/old
+	p.FileZoom = z
+	p.FileScrollY = logicalY - (sy-r.Y)/z
+	p.FileScrollX = logicalX - (sx-r.X)/z
+	if p.FileScrollY < 0 {
+		p.FileScrollY = 0
+	}
+	if p.FileScrollX < 0 {
+		p.FileScrollX = 0
+	}
+}
+
+// nonzero returns x or 1.0 if x is zero/negative. Saves a guard at every
+// call site that divides by FileZoom.
+func nonzero(x float64) float64 {
+	if x <= 0 {
+		return 1.0
+	}
+	return x
+}
+
+// startFileDescent zooms a pane into a markdown file in a single
+// concurrent pan+zoom motion, then flips to file-editing mode. Unlike
+// well descent, the path is not extended (the file lives in the parent
+// grid as a leaf node), so the transition is one segment in the parent
+// coordinate space; the visual landing is at OvertakeZoom on the file's
+// footprint, after which the file-mode chrome takes over.
+//
+// The post-landing FileZoom is set to a comfortable reading scale,
+// independent of the parent zoom, so the markdown isn't rendered at
+// OvertakeZoom magnification (which produced the "huge" complaint).
+// Yes there is a one-frame scale jump at the path-switch — accepted
+// trade-off for a sane initial reading view.
 func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
@@ -709,10 +779,6 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 		target = from.Zoom
 	}
 
-	pDist := panDist(wellCx-from.Cx, wellCy-from.Cy, from.Zoom)
-	zDist := zoomDist(from.Zoom, target)
-	panMs, zoomMs := anim.SplitDuration(pDist, zDist, totalTransitionMs)
-
 	// Eagerly fetch the blob so it's likely cached by the time the
 	// transition lands.
 	a.fetchBlob(file.BlobID)
@@ -726,17 +792,13 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
+			// Single combined pan+zoom segment: pan to the file center
+			// while simultaneously zooming to the overtake target.
 			{
 				path:   from.Path,
 				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx: wellCx, toCy: wellCy, toZoom: from.Zoom,
-				durationMs: panMs,
-			},
-			{
-				path:   from.Path,
-				fromCx: wellCx, fromCy: wellCy, fromZoom: from.Zoom,
 				toCx: wellCx, toCy: wellCy, toZoom: target,
-				durationMs: zoomMs,
+				durationMs: totalTransitionMs,
 			},
 		},
 		onComplete: func() {
@@ -747,6 +809,8 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 			fp.FileFocus = fileID
 			fp.FileMode = mode
 			fp.FileScrollY = initialScroll
+			fp.FileScrollX = 0
+			fp.FileZoom = fileInitialZoom(r.W, r.H)
 			a.refreshFileOverlay()
 		},
 	})
@@ -794,36 +858,30 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// have to wait.
 	a.saveFileBeforeAscent(p, file)
 
-	zoomOutDist := zoomDist(overtake, saved.Zoom)
-	panBackDist := panDist(saved.Cx-wellCx, saved.Cy-wellCy, saved.Zoom)
-	durations := anim.SplitN([]float64{zoomOutDist, panBackDist}, totalTransitionMs)
-
 	// Persist the mode the user is leaving in so previews and re-descent
 	// honor the "however you left it" rule.
 	if p.FileMode != "" {
 		a.fileLastMode[file.ID] = p.FileMode
 	}
 
-	// Clear FileFocus immediately so the chrome (toggle button, textarea)
-	// goes away as the animation begins; the textarea is removed before
-	// the zoom-out so the user sees the pane retract cleanly.
+	// Reset parent-grid zoom to the overtake value so the animation
+	// begins from "well filling the pane", regardless of how the user
+	// zoomed within the file. Then clear FileFocus so the chrome (toggle
+	// button, textarea) goes away as the animation begins.
+	p.Zoom = overtake
+	p.Cx, p.Cy = wellCx, wellCy
 	p.FileFocus = 0
 	a.refreshFileOverlay()
 
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
+			// Single combined pan+zoom segment back to the saved viewport.
 			{
 				path:   append([]int64(nil), p.Path...),
-				fromCx: wellCx, fromCy: wellCy, fromZoom: p.Zoom,
-				toCx: wellCx, toCy: wellCy, toZoom: saved.Zoom,
-				durationMs: durations[0],
-			},
-			{
-				path:   append([]int64(nil), p.Path...),
-				fromCx: wellCx, fromCy: wellCy, fromZoom: saved.Zoom,
+				fromCx: wellCx, fromCy: wellCy, fromZoom: overtake,
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: durations[1],
+				durationMs: totalTransitionMs,
 			},
 		},
 	})
