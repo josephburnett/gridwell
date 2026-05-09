@@ -87,23 +87,23 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// Inside a focused file the wheel zooms (consistent with outside
-	// file mode, where wheel zooms the parent grid). Scrolling in
-	// rendered mode happens via drag; scrolling in text mode happens via
-	// the textarea's keyboard / native scroll bar.
+	// Inside a focused file the wheel scrolls vertically. The zoom is
+	// fixed for the duration of the visit; combining zoom and scroll on
+	// one gesture mixed badly. Text mode falls through to the textarea
+	// (which gets the wheel event natively) — control reaches here only
+	// for rendered mode where the canvas is on top.
 	if p.FileFocus != 0 {
-		step := dy / 200.0
-		if step > 0.5 {
-			step = 0.5
+		if p.FileMode == "rendered" {
+			z := nonzero(p.FileZoom)
+			p.FileScrollY += dy / z
+			if p.FileScrollY < 0 {
+				p.FileScrollY = 0
+			}
+			a.draw()
+			a.saveTreeToLocalStorage()
 		}
-		if step < -0.5 {
-			step = -0.5
-		}
-		factor := math.Pow(zoomFactor, -step*4)
-		a.adjustFileZoom(p, factor, sx, sy)
-		a.refreshFileOverlay()
-		a.draw()
-		a.saveTreeToLocalStorage()
+		_ = sx
+		_ = sy
 		return nil
 	}
 	// Smooth zoom centered on the cursor: amount scales with deltaY so a
@@ -710,41 +710,6 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	})
 }
 
-
-// adjustFileZoom multiplies pane.FileZoom by `factor` while keeping the
-// logical point under (sx, sy) anchored to the cursor. Bounded to the
-// fileZoom range. Operates on pane.FileScrollY only (the rendered-mode
-// scroll); text mode mirrors the new zoom into the textarea's font-size
-// in refreshFileOverlay so we don't recompute scroll for it here.
-func (a *App) adjustFileZoom(p *pane.Pane, factor, sx, sy float64) {
-	old := p.FileZoom
-	if old <= 0 {
-		old = 1.0
-	}
-	z := old * factor
-	if z < fileZoomMin {
-		z = fileZoomMin
-	}
-	if z > fileZoomMax {
-		z = fileZoomMax
-	}
-	if z == old {
-		return
-	}
-	// Anchor: keep the cursor's logical point fixed across the zoom.
-	r := paneRectFor(a, p)
-	logicalY := p.FileScrollY + (sy-r.Y)/old
-	logicalX := p.FileScrollX + (sx-r.X)/old
-	p.FileZoom = z
-	p.FileScrollY = logicalY - (sy-r.Y)/z
-	p.FileScrollX = logicalX - (sx-r.X)/z
-	if p.FileScrollY < 0 {
-		p.FileScrollY = 0
-	}
-	if p.FileScrollX < 0 {
-		p.FileScrollX = 0
-	}
-}
 
 // nonzero returns x or 1.0 if x is zero/negative. Saves a guard at every
 // call site that divides by FileZoom.

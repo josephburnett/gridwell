@@ -3,7 +3,6 @@
 package main
 
 import (
-	"math"
 	"strconv"
 	"syscall/js"
 
@@ -11,10 +10,6 @@ import (
 	"github.com/josephburnett/ascent/client/pane"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
-
-// pow is math.Pow re-exported with a short name so the wheel-zoom math
-// reads compactly.
-func pow(x, y float64) float64 { return math.Pow(x, y) }
 
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
 // for markdown text-mode editing. It lives in document.body and is
@@ -65,45 +60,9 @@ func (a *App) ensureFileTextarea() {
 	})
 	ta.Call("addEventListener", "scroll", a.fileTextareaScrollCb)
 
-	// Wheel inside the textarea always zooms (matches the rest of the
-	// app where wheel = zoom). Scrolling the textarea is via keyboard
-	// / native scroll bar.
-	wheelCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		ev := args[0]
-		ev.Call("preventDefault")
-		p := a.tree.FocusedPane()
-		if p == nil || p.FileFocus == 0 {
-			return nil
-		}
-		dy := ev.Get("deltaY").Float()
-		step := dy / 200.0
-		if step > 0.5 {
-			step = 0.5
-		}
-		if step < -0.5 {
-			step = -0.5
-		}
-		factor := pow(1.1, -step*4)
-		old := p.FileZoom
-		if old <= 0 {
-			old = 1.0
-		}
-		z := old * factor
-		if z < fileZoomMin {
-			z = fileZoomMin
-		}
-		if z > fileZoomMax {
-			z = fileZoomMax
-		}
-		p.FileZoom = z
-		a.refreshFileOverlay()
-		a.draw()
-		a.saveTreeToLocalStorage()
-		return nil
-	})
-	wheelOpts := js.Global().Get("Object").New()
-	wheelOpts.Set("passive", false)
-	ta.Call("addEventListener", "wheel", wheelCb, wheelOpts)
+	// No wheel listener: text mode uses the textarea's native scroll.
+	// FileZoom is fixed for the visit, so nothing in here needs the
+	// wheel event.
 
 	// The textarea covers the whole pane while in text mode, so canvas
 	// click handlers never see clicks here. Forward edge-zone left
