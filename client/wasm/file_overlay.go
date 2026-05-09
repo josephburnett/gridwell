@@ -331,9 +331,12 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 }
 
 // saveFileFromTextarea posts the textarea's value as the file's new
-// content. Async; we don't block the UI on the round-trip. On success
-// the cached blob is updated so the rendered view reflects the new
-// content immediately.
+// content. The cached blob is updated under the file's *current*
+// BlobID synchronously, so the immediate post-toggle render uses the
+// user's typed content rather than the stale (pre-edit) blob. The
+// RPC then runs async; on completion the cache is also updated under
+// the new (content-hashed) BlobID, and the SSE NodeChanged event
+// repoints the cached node at it.
 func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
 		return
@@ -347,6 +350,12 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	file, ok := g.Nodes[p.FileFocus]
 	if !ok {
 		return
+	}
+	// Bridge: replace the cached blob under the existing BlobID so
+	// renders that read the cached node's blob_id between now and the
+	// RPC round-trip see the user's content.
+	if file.BlobID != 0 {
+		a.c.PutBlob(file.BlobID, []byte(buf), "text/markdown")
 	}
 	r := paneRectFor(a, p)
 	pscreen := dragdrop.Pane{

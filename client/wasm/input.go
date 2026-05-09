@@ -1129,6 +1129,12 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
 			hasBuf = true
 		}
 	}
+	// Bridge: pre-write the cached blob under the file's current
+	// BlobID so the parent-grid preview rendered during the ascent
+	// transition reflects the user's edits, not the pre-edit content.
+	if hasBuf && file.BlobID != 0 {
+		a.c.PutBlob(file.BlobID, []byte(buf), "text/markdown")
+	}
 
 	go func() {
 		// Update content first if the user was editing.
