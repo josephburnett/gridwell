@@ -148,7 +148,11 @@ func (a *App) layoutPanes() map[string]paneRect {
 // descent path.
 func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.previewPaneID = p.ID
-	defer func() { a.previewPaneID = "" }()
+	a.previewPaneRect = r
+	defer func() {
+		a.previewPaneID = ""
+		a.previewPaneRect = paneRect{}
+	}()
 	gid := a.gridIDForPath(p.Path)
 	g, gridOK := a.c.Grid(gid)
 
@@ -369,14 +373,22 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	// Preview cell size: when the well has a stored ViewZoom (the
-	// user's last child-grid zoom), the preview renders child cells
-	// at cellPx × ViewZoom screen pixels — matching what they'd see
-	// if descended. The path-swap is then continuous without any
-	// extra zoom segment. Default (ViewZoom == 0) uses the original
-	// PreviewFactor calibration.
+	// user's last child-grid zoom), the preview is sized so the user's
+	// full visible region in the child grid fits inside the well's
+	// footprint at the current parent zoom. At parentZoom = OvertakeZoom
+	// (the descent path-swap moment) this collapses to cellPx × ViewZoom
+	// — matching the child cell size on the other side of the swap, so
+	// the path-swap stays visually continuous. At smaller parent zooms
+	// the preview cell shrinks proportionally; the descent animation
+	// naturally "zooms in" the well content as the parent zooms in.
+	// Default (ViewZoom == 0) keeps the original PreviewFactor scaling.
 	previewCell := parentCellSize / zoomtrans.PreviewFactor
 	if n.ViewZoom > 0 {
-		previewCell = cellPx * n.ViewZoom
+		w := zoomtrans.Well{X: n.X, Y: n.Y, W: n.W, H: n.H}
+		ot := zoomtrans.OvertakeZoom(w, a.previewPaneRect.W, a.previewPaneRect.H, cellPx)
+		if ot > 0 {
+			previewCell = parentCellSize * n.ViewZoom / ot
+		}
 	}
 
 	a.cctx.Call("save")

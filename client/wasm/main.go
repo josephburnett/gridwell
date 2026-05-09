@@ -113,6 +113,12 @@ type App struct {
 	// pane (a node only hides in its source pane).
 	previewPaneID string
 
+	// previewPaneRect mirrors previewPaneID — the screen rectangle of
+	// the pane being painted. drawNodeWithPreview reads it to compute
+	// OvertakeZoom (which depends on pane dimensions) for the
+	// preview-cell-size formula.
+	previewPaneRect paneRect
+
 	// animation is the current ghost animation, if any (snap-to-target on
 	// drop or snap-back-to-origin on failure).
 	animation *anim.Animation
