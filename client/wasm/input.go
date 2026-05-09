@@ -21,14 +21,16 @@ const (
 	snapBackMs = 220.0
 )
 
-// installCanvasInput attaches mouse and keyboard listeners to the canvas.
+// installCanvasInput attaches mouse listeners to the canvas. Ascent is
+// mouse-only by design — every gesture has a pointer equivalent and the
+// keyboard is reserved for future text-editing modes (e.g., the markdown
+// editor that's still TODO).
 func (a *App) installCanvasInput() {
 	a.canvas.Call("addEventListener", "wheel", js.FuncOf(a.onWheel))
 	a.canvas.Call("addEventListener", "mousedown", js.FuncOf(a.onMouseDown))
 	a.canvas.Call("addEventListener", "mousemove", js.FuncOf(a.onMouseMove))
 	a.canvas.Call("addEventListener", "mouseup", js.FuncOf(a.onMouseUp))
 	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(a.onContextMenu))
-	a.canvas.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
@@ -470,11 +472,44 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 // symmetric in feel.
 const totalTransitionMs = 350.0
 
-// startAscent installs a two-segment transition that smoothly zooms out of
-// the child grid back to the parent grid, restoring the exact viewport the
-// pane was at before its last descent (popped from paneStateStack). If
-// nothing was saved (e.g. localStorage didn't carry the stack across a
-// reload), we fall back to centering on the well at zoom 1.
+// zoomDistFactor scales log-zoom distance to a "perceived px" unit so we
+// can apportion animation time between pan and zoom phases. Tuned so a
+// zoom by factor e ≈ 256 px-equivalent — about four cells. Bigger than
+// pan distances tend to be in practice, so zoom phases get the bulk of
+// the time, which matches the user's intent that the zoom is "the
+// action" and the pan is "the setup".
+const zoomDistFactor = 4.0
+
+// panDist returns the pan motion distance in screen pixels at the given
+// zoom level. dx, dy are in cell units.
+func panDist(dx, dy, zoom float64) float64 {
+	return math.Hypot(dx, dy) * cellPx * zoom
+}
+
+// zoomDist returns the log-zoom distance scaled to the same px-equivalent
+// units as panDist, so they can be compared directly.
+func zoomDist(z1, z2 float64) float64 {
+	if z1 <= 0 || z2 <= 0 {
+		return 0
+	}
+	return math.Abs(math.Log(z2/z1)) * cellPx * zoomDistFactor
+}
+
+// startAscent installs a multi-segment transition that smoothly zooms out
+// of the child grid back to the parent grid and then un-pans to the
+// viewport the user was at before they descended (popped from
+// paneStateStack). The motion is serialized: zoom first, pan second, so
+// the camera retraces the descent's path-then-zoom in reverse.
+//
+// Phases:
+//   A. (child) From current state → calibrated switch state. Combined
+//      pan+zoom because the user may have moved in the child grid.
+//   B. (parent, post-switch) Zoom out at well center from "well overtakes
+//      view" to the saved zoom.
+//   C. (parent) Pan from well center to the saved (Cx, Cy) at saved zoom.
+//
+// If no saved state is available (cleared localStorage, reload), we land
+// on the well at zoom 1.
 func (a *App) startAscent(p *pane.Pane) {
 	if len(p.Path) == 0 {
 		return
@@ -484,8 +519,6 @@ func (a *App) startAscent(p *pane.Pane) {
 	parentGridID := a.gridIDForPath(parentPath)
 	parentGrid, ok := a.c.Grid(parentGridID)
 	if !ok {
-		// Without the parent grid we can't compute the well's position,
-		// so we can't run the calibrated animation. Fetch and snap.
 		a.fetchGrid(parentGridID)
 		a.instantAscend(p, parentPath)
 		return
@@ -504,38 +537,44 @@ func (a *App) startAscent(p *pane.Pane) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY,
 	}
-	// Phase 1 (in child coords): from current to the calibrated switch state.
 	mid, switchTo := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
 
-	// Phase 2 (in parent coords): from switchTo back to the saved state.
 	saved := a.popPaneState(p.ID)
 	if saved == nil {
-		// Default fallback: center on the well at zoom 1.
 		saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
 	}
 
-	// Split the duration proportionally to log-zoom distance so the
-	// perceived speed is uniform across the path swap. If phase 1 has
-	// nothing to do (user didn't move in the child grid), all the time
-	// goes into the parent zoom-out.
-	phase1Dist := math.Abs(math.Log(from.Zoom) - math.Log(mid.Zoom))
-	phase2Dist := math.Abs(math.Log(switchTo.Zoom) - math.Log(saved.Zoom))
-	phase1Ms, phase2Ms := anim.SplitDuration(phase1Dist, phase2Dist, totalTransitionMs)
+	// Distances in shared px-equivalent units so SplitN can apportion
+	// time uniformly.
+	childDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
+		zoomDist(from.Zoom, mid.Zoom)
+	parentZoomDist := zoomDist(switchTo.Zoom, saved.Zoom)
+	parentPanDist := panDist(saved.Cx-switchTo.Cx, saved.Cy-switchTo.Cy, saved.Zoom)
+	durations := anim.SplitN([]float64{childDist, parentZoomDist, parentPanDist}, totalTransitionMs)
 
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
+			// Phase A: combined pan+zoom in child to land on calibrated state.
 			{
-				path:    from.Path,
-				fromCx:  from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx:    mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: phase1Ms,
+				path:   from.Path,
+				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
+				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
+				durationMs: durations[0],
 			},
+			// Phase B: switch to parent; zoom out at well center.
 			{
-				path:    switchTo.Path,
-				fromCx:  switchTo.Cx, fromCy: switchTo.Cy, fromZoom: switchTo.Zoom,
-				toCx:    saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
-				durationMs: phase2Ms,
+				path:   switchTo.Path,
+				fromCx: switchTo.Cx, fromCy: switchTo.Cy, fromZoom: switchTo.Zoom,
+				toCx: switchTo.Cx, toCy: switchTo.Cy, toZoom: saved.Zoom,
+				durationMs: durations[1],
+			},
+			// Phase C: pan from well center back to saved at saved zoom.
+			{
+				path:   switchTo.Path,
+				fromCx: switchTo.Cx, fromCy: switchTo.Cy, fromZoom: saved.Zoom,
+				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
+				durationMs: durations[2],
 			},
 		},
 	})
@@ -554,8 +593,14 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 }
 
 // startDescent pushes the pane's current state onto the saved-state stack
-// and installs a two-segment transition: parent zoom-in, then a
-// zero-duration "land at calibrated child state" segment.
+// and installs a serialized pan-then-zoom transition into the well's
+// child grid. Splitting the motion (rather than doing it together) avoids
+// the "whiplash" of a simultaneous diagonal zoom.
+//
+// Phases:
+//   A. Pan in parent at constant Zoom from current to well center.
+//   B. Zoom in parent at well center from current zoom to overtake.
+//   C. Instant install of the calibrated child state.
 func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
@@ -571,19 +616,32 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	a.fetchGrid(well.ChildGridID)
 
+	pDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom)
+	zDist := zoomDist(from.Zoom, mid.Zoom)
+	panMs, zoomMs := anim.SplitDuration(pDist, zDist, totalTransitionMs)
+
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
+			// Phase A: pan to well at constant zoom.
 			{
-				path:    from.Path,
-				fromCx:  from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
-				toCx:    mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: totalTransitionMs,
+				path:   from.Path,
+				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
+				toCx: mid.Cx, toCy: mid.Cy, toZoom: from.Zoom,
+				durationMs: panMs,
 			},
+			// Phase B: zoom in at well center.
 			{
-				path:    to.Path,
-				fromCx:  to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
-				toCx:    to.Cx, toCy: to.Cy, toZoom: to.Zoom,
+				path:   from.Path,
+				fromCx: mid.Cx, fromCy: mid.Cy, fromZoom: from.Zoom,
+				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
+				durationMs: zoomMs,
+			},
+			// Phase C: instant land at calibrated child state.
+			{
+				path:   to.Path,
+				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
+				toCx: to.Cx, toCy: to.Cy, toZoom: to.Zoom,
 				durationMs: 0,
 			},
 		},
@@ -735,62 +793,6 @@ func mimeFromName(name string) string {
 	return ""
 }
 
-func (a *App) onKeyDown(this js.Value, args []js.Value) any {
-	key := args[0].Get("key").String()
-	focused := a.tree.FocusedPane()
-	if focused == nil {
-		return nil
-	}
-	step := 1.0 / focused.Zoom
-	switch key {
-	case "ArrowLeft", "a", "A":
-		focused.Cx -= step
-	case "ArrowRight", "d", "D":
-		focused.Cx += step
-	case "ArrowUp", "w", "W":
-		focused.Cy -= step
-	case "ArrowDown", "s", "S":
-		focused.Cy += step
-	case "Escape":
-		if a.menuOpen {
-			a.menuOpen = false
-			a.draw()
-			return nil
-		}
-		if len(focused.Path) > 0 {
-			a.startAscent(focused)
-			args[0].Call("preventDefault")
-			return nil
-		}
-		go func() {
-			var resp rpc.AscendAtRootResponse
-			if _, err := postJSON("/rpc/AscendAtRoot", rpc.AscendAtRootRequest{}, &resp); err == nil {
-				a.user.RootGridID = resp.NewRootGridID
-				a.fetchGrid(resp.NewRootGridID)
-			}
-		}()
-	case "+", "=":
-		focused.Zoom *= zoomFactor
-	case "-", "_":
-		focused.Zoom /= zoomFactor
-	case "Home":
-		a.resetFocusedPaneToRoot()
-		args[0].Call("preventDefault")
-		return nil
-	default:
-		return nil
-	}
-	if focused.Zoom < zoomMin {
-		focused.Zoom = zoomMin
-	}
-	if focused.Zoom > zoomMax {
-		focused.Zoom = zoomMax
-	}
-	args[0].Call("preventDefault")
-	a.draw()
-	a.saveTreeToLocalStorage()
-	return nil
-}
 
 // mouseXY returns the click coordinates relative to the canvas.
 func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {

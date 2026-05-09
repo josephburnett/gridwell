@@ -90,6 +90,42 @@ func SplitDuration(d1, d2, totalMs float64) (a, b float64) {
 	return
 }
 
+// SplitN apportions totalMs across an arbitrary number of phases by their
+// relative distances. Phases with sub-epsilon distance get zero time. If
+// every phase has zero distance, the time is divided equally so the
+// caller doesn't end up with a transition that completes instantly.
+//
+// The last phase absorbs floating-point rounding so the returned values
+// always sum to totalMs exactly.
+func SplitN(distances []float64, totalMs float64) []float64 {
+	out := make([]float64, len(distances))
+	if len(distances) == 0 {
+		return out
+	}
+	var sum float64
+	for _, d := range distances {
+		if d > 1e-6 {
+			sum += d
+		}
+	}
+	if sum < 1e-6 {
+		per := totalMs / float64(len(distances))
+		for i := range out {
+			out[i] = per
+		}
+		return out
+	}
+	var allocated float64
+	for i, d := range distances {
+		if d > 1e-6 {
+			out[i] = totalMs * d / sum
+			allocated += out[i]
+		}
+	}
+	out[len(out)-1] += totalMs - allocated
+	return out
+}
+
 // LerpExp interpolates between from and to in log space at parameter t.
 // Used for zoom transitions: linear interpolation feels visually
 // non-uniform because perceived "zoom level" is logarithmic in scale.

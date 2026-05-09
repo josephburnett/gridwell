@@ -21,8 +21,14 @@ const (
 	colorFocusBorder = "#4a6fff"
 	colorGridLine    = "#15171d"
 	colorWellLine    = "#3a4b5a"
-	colorFile        = "#2b1a3a"
-	colorFileLine    = "#5a3a7a"
+	// File colors are keyed off the first half of the MIME type, not the
+	// specific subtype: text/markdown and text/uri-list share one palette,
+	// image/* shares another. The user identifies stones by color; the
+	// preview (when zoomed in enough) reveals the rest.
+	colorTextFill    = "#2b1a3a"
+	colorTextLine    = "#7a5a9a"
+	colorImageFill   = "#1a3a2b"
+	colorImageLine   = "#5a8a6a"
 	colorCapped      = "#15171b"
 	colorLocked      = "#26262a"
 	colorSelected    = "#e3b16f"
@@ -33,7 +39,6 @@ const (
 	colorMenuBg      = "#16181f"
 	colorMenuItem    = "#c8c9ce"
 	colorMenuItemHi  = "#e8e9ee"
-	colorText        = "#c8c9ce"
 	colorMuted       = "#6c6f78"
 )
 
@@ -154,7 +159,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		// we're in and which grid id we're trying to load.
 		msg := fmt.Sprintf("loading grid %d…", gid)
 		if a.gridLoadFailed[gid] {
-			msg = fmt.Sprintf("grid %d unavailable — press Home to reset", gid)
+			msg = fmt.Sprintf("grid %d unavailable", gid)
 		}
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "12px ui-monospace")
@@ -344,30 +349,16 @@ func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
 		c.Set("strokeStyle", colorFocusBorder)
 		c.Set("lineWidth", 1.0)
 		c.Call("strokeRect", x, y, w, h)
-	case n.Type == "file" && n.MimeType == "text/markdown":
-		c.Set("fillStyle", colorFile)
+	case n.Type == "file" && strings.HasPrefix(n.MimeType, "text/"):
+		c.Set("fillStyle", colorTextFill)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorFileLine)
+		c.Set("strokeStyle", colorTextLine)
 		c.Call("strokeRect", x, y, w, h)
-		c.Set("fillStyle", colorText)
-		c.Set("font", "10px ui-monospace")
-		c.Call("fillText", "md", x+4, y+12)
 	case n.Type == "file" && strings.HasPrefix(n.MimeType, "image/"):
-		c.Set("fillStyle", "#1f2229")
+		c.Set("fillStyle", colorImageFill)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorFileLine)
+		c.Set("strokeStyle", colorImageLine)
 		c.Call("strokeRect", x, y, w, h)
-		c.Set("fillStyle", colorText)
-		c.Set("font", "10px ui-monospace")
-		c.Call("fillText", "img", x+4, y+12)
-	case n.Type == "file" && n.MimeType == "text/uri-list":
-		c.Set("fillStyle", "#1d2a1d")
-		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", "#3a5a3a")
-		c.Call("strokeRect", x, y, w, h)
-		c.Set("fillStyle", colorText)
-		c.Set("font", "10px ui-monospace")
-		c.Call("fillText", "url", x+4, y+12)
 	default:
 		c.Set("fillStyle", colorLocked)
 		c.Call("fillRect", x, y, w, h)

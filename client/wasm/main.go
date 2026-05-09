@@ -429,28 +429,6 @@ func (a *App) popPaneState(paneID string) *paneState {
 	return &last
 }
 
-// resetFocusedPaneToRoot clears the focused pane's descent path and viewport
-// and re-fetches the user's current root grid. Bound to the Home key as the
-// user's escape hatch when localStorage holds a path we can no longer
-// resolve.
-func (a *App) resetFocusedPaneToRoot() {
-	if a.user == nil {
-		return
-	}
-	p := a.tree.FocusedPane()
-	if p == nil {
-		return
-	}
-	p.Path = nil
-	p.Cx, p.Cy = 0, 0
-	p.Zoom = 1.0
-	delete(a.selectedNodeID, p.ID)
-	delete(a.paneStateStack, p.ID)
-	a.gridLoadFailed = map[int64]bool{}
-	a.fetchGrid(a.user.RootGridID)
-	a.saveTreeToLocalStorage()
-	a.draw()
-}
 
 // startSSE opens the EventSource for /rpc/Subscribe and applies events to
 // the cache. Reconnects on close after a backoff.

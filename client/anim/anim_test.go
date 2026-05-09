@@ -103,6 +103,43 @@ func TestDistance(t *testing.T) {
 	}
 }
 
+func TestSplitN(t *testing.T) {
+	// Three phases, equal distances → equal times.
+	got := SplitN([]float64{1, 1, 1}, 300)
+	if !near(got[0], 100) || !near(got[1], 100) || !near(got[2], 100) {
+		t.Errorf("equal: %v", got)
+	}
+	// Sums to total exactly.
+	got = SplitN([]float64{2, 3, 5}, 100)
+	sum := 0.0
+	for _, v := range got {
+		sum += v
+	}
+	if !near(sum, 100) {
+		t.Errorf("sum drift: %v", sum)
+	}
+	// Zero distances → zero times for those phases.
+	got = SplitN([]float64{0, 1, 0}, 200)
+	if got[0] != 0 || got[2] != 0 {
+		t.Errorf("zero phase got time: %v", got)
+	}
+	if !near(got[1], 200) {
+		t.Errorf("middle phase: %v", got[1])
+	}
+	// All zero → equal split fallback.
+	got = SplitN([]float64{0, 0, 0}, 90)
+	for _, v := range got {
+		if !near(v, 30) {
+			t.Errorf("equal fallback: %v", got)
+			break
+		}
+	}
+	// Empty input.
+	if got := SplitN(nil, 100); len(got) != 0 {
+		t.Errorf("empty: %v", got)
+	}
+}
+
 func TestSplitDuration(t *testing.T) {
 	// Equal distances: 50/50.
 	a, b := SplitDuration(1, 1, 100)
