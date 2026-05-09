@@ -189,7 +189,9 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 // drawFileToggleButton paints the lower-right button that switches a
 // file-focused pane between "text" (raw editable source) and "rendered"
 // (canvas markdown layout). Visually mimics the + button so the position
-// and feel are familiar; the glyph swaps in to communicate state.
+// and feel are familiar; the glyph hints at the *target* mode using
+// font shape: a typeset serif "A" means clicking renders, a fixed-width
+// monospace "A" means clicking edits as source.
 func (a *App) drawFileToggleButton(p *pane.Pane, r paneRect) {
 	cx, cy := plusButtonCenter(r)
 	a.cctx.Set("fillStyle", colorPlusBg)
@@ -200,17 +202,17 @@ func (a *App) drawFileToggleButton(p *pane.Pane, r paneRect) {
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("stroke")
 
-	// Glyph: short label that names the *target* mode the click switches
-	// to, so the user reads "what will happen if I click this?"
-	label := "txt"
-	if p.FileMode != "rendered" {
-		label = "md"
+	// In text mode, the click goes to rendered → show a serif glyph.
+	// In rendered mode, the click goes to text → show a monospace glyph.
+	font := `italic 18px ui-serif, "Times New Roman", Georgia, serif`
+	if p.FileMode == "rendered" {
+		font = `18px ui-monospace, "SF Mono", Menlo, Consolas, monospace`
 	}
 	a.cctx.Set("fillStyle", colorPlusFg)
-	a.cctx.Set("font", "11px ui-monospace")
+	a.cctx.Set("font", font)
 	a.cctx.Set("textBaseline", "middle")
 	a.cctx.Set("textAlign", "center")
-	a.cctx.Call("fillText", label, cx, cy)
+	a.cctx.Call("fillText", "A", cx, cy+1)
 	a.cctx.Set("textAlign", "start")
 	a.cctx.Set("textBaseline", "alphabetic")
 }

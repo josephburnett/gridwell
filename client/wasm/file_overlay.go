@@ -115,6 +115,7 @@ func (a *App) refreshFileOverlay() {
 	style.Set("top", strconv.FormatFloat(r.Y, 'f', 1, 64)+"px")
 	style.Set("width", strconv.FormatFloat(r.W, 'f', 1, 64)+"px")
 	style.Set("height", strconv.FormatFloat(r.H, 'f', 1, 64)+"px")
+	style.Set("clipPath", textareaClipPath())
 	// Scale font-size with the pane's zoom so an editing session at high
 	// zoom shows readable text without snapping to a different size when
 	// the descent animation lands.
@@ -150,6 +151,19 @@ func (a *App) refreshFileOverlay() {
 	ta.Call("focus")
 }
 
+// textareaClipPath cuts a square out of the bottom-right corner of the
+// textarea overlay so the toggle button (drawn on the canvas) receives
+// clicks instead of being shadowed by the textarea's hit region. The
+// notch is sized to clear the button's circle plus a small margin.
+//
+// Kept in sync by hand with plusButtonInset / plusButtonRadius. Changing
+// either over there should change the constant here too.
+func textareaClipPath() string {
+	const notch = 52 // plusButtonInset(24) + plusButtonRadius(18) + 10 px margin
+	n := strconv.Itoa(notch)
+	return "polygon(0 0, 100% 0, 100% calc(100% - " + n + "px), calc(100% - " + n + "px) calc(100% - " + n + "px), calc(100% - " + n + "px) 100%, 0 100%)"
+}
+
 // syncFileOverlayPosition is the lightweight version of refreshFileOverlay
 // called every draw: it just repositions an already-shown textarea so it
 // continues to track the focused pane through resizes and pane-tree
@@ -176,6 +190,7 @@ func (a *App) syncFileOverlayPosition() {
 	style.Set("top", strconv.FormatFloat(r.Y, 'f', 1, 64)+"px")
 	style.Set("width", strconv.FormatFloat(r.W, 'f', 1, 64)+"px")
 	style.Set("height", strconv.FormatFloat(r.H, 'f', 1, 64)+"px")
+	style.Set("clipPath", textareaClipPath())
 }
 
 // onToggleFileMode flips the focused pane between text and rendered
