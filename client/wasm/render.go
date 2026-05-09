@@ -105,25 +105,17 @@ func (a *App) layoutPanes() map[string]paneRect {
 // live and use the + button (or Home key, etc.) to recover from a stale
 // descent path.
 func (a *App) drawPane(p *pane.Pane, r paneRect) {
-	border := colorPaneBorder
-	if p.ID == a.tree.Focus {
-		border = colorFocusBorder
-	}
-	a.cctx.Set("strokeStyle", border)
-	a.cctx.Set("lineWidth", paneBorderPx)
-	// Inset by half the border thickness so the stroke sits inside the
-	// rect (rather than straddling its edge). That way the user can
-	// reliably grab the border with a right-drag without the cursor
-	// going outside the pane.
-	half := paneBorderPx / 2
-	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
-
 	gid := a.gridIDForPath(p.Path)
 	g, gridOK := a.c.Grid(gid)
 
+	// Clip content to the inside of the border. The border itself is
+	// painted on top at the end of this function so it always frames
+	// the content cleanly, even if a node or markdown text would
+	// otherwise paint over the edge.
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", r.X, r.Y, r.W, r.H)
+	inset := paneBorderPx
+	a.cctx.Call("rect", r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset)
 	a.cctx.Call("clip")
 
 	pscreen := dragdrop.Pane{
@@ -144,7 +136,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		// drawn above).
 		if p.FileFocus != 0 {
 			if file, ok := g.Nodes[p.FileFocus]; ok && file.Type == "file" && file.MimeType == "text/markdown" {
-				a.drawMarkdownNode(&file, r.X, r.Y, r.W, r.H, cellSize, false)
+				a.drawMarkdownInPane(p, &file, r.X, r.Y, r.W, r.H)
 			}
 		} else {
 			for _, n := range g.Nodes {
@@ -181,6 +173,17 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	}
 
 	a.cctx.Call("restore")
+
+	// Border on top so content can paint up to the pane edge without
+	// bleeding visibly into the chrome.
+	border := colorPaneBorder
+	if p.ID == a.tree.Focus {
+		border = colorFocusBorder
+	}
+	a.cctx.Set("strokeStyle", border)
+	a.cctx.Set("lineWidth", paneBorderPx)
+	half := paneBorderPx / 2
+	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
 	// In file-focus mode replace the + with a text/rendered toggle; the
 	// menu never opens here.
@@ -344,6 +347,49 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
 		a.cctx.Set("lineWidth", 1.0)
 	}
+}
+
+// drawMarkdownInPane renders a markdown file as the contents of the
+// pane that is currently descended into it. Uses *that* pane's live
+// FileMode / FileZoom / FileScroll values, so two split panes both
+// looking at the same file can each scroll/zoom independently.
+//
+// Also responsible for skipping the canvas render in text mode for
+// the focused pane (the textarea overlay handles that one). Other
+// panes still render the source as canvas text so the user has
+// continuity in non-focused split siblings.
+func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Node, x, y, w, h float64) {
+	mode := p.FileMode
+	if mode == "" {
+		mode = "rendered"
+	}
+	scale := p.FileZoom
+	if scale <= 0 {
+		scale = 1.0
+	}
+	scrollX := p.FileScrollX
+	scrollY := p.FileScrollY
+
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+
+	hideForTextarea := mode == "text" && p.ID == a.tree.Focus
+	if !hideForTextarea {
+		if blob, ok := a.c.Blob(n.BlobID); ok {
+			drawMarkdownInRect(a.cctx, string(blob.Data),
+				x-scrollX*scale, y-scrollY*scale,
+				fileNaturalContentPx*scale, h+scrollY*scale,
+				scale, 0, mode)
+		} else if n.BlobID != 0 {
+			a.fetchBlob(n.BlobID)
+		}
+	} else if _, ok := a.c.Blob(n.BlobID); !ok && n.BlobID != 0 {
+		a.fetchBlob(n.BlobID)
+	}
+
+	a.cctx.Call("restore")
 }
 
 // drawMarkdownNode renders a markdown file node at (x, y, w, h).

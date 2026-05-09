@@ -178,7 +178,16 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
+	prevFocus := a.tree.Focus
 	_ = a.tree.SetFocus(p.ID)
+	if a.tree.Focus != prevFocus {
+		// Focus moved → file-mode chrome must follow. The textarea
+		// overlay only ever lives over the focused pane, so without
+		// this call a click on a sibling pane in text mode would leave
+		// the textarea stranded.
+		a.refreshFileOverlay()
+		a.draw()
+	}
 	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")
