@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -41,10 +42,18 @@ func RunServe(args []string) int {
 		SecureCookie: !*insecure,
 	})
 
+	// requestCtx is shared by every incoming request via BaseContext. We
+	// cancel it on shutdown so long-running handlers (notably the SSE
+	// Subscribe stream) see their context fire Done() immediately, instead
+	// of blocking Shutdown until its 10s deadline expires.
+	requestCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
+
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -65,7 +74,10 @@ func RunServe(args []string) int {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Cancel in-flight request contexts first; SSE handlers exit
+	// immediately, allowing Shutdown to drain quickly.
+	cancelRequests()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpSrv.Shutdown(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "shutdown: %v\n", err)
