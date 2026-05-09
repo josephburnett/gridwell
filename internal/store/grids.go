@@ -167,31 +167,3 @@ func overlapsExisting(ctx context.Context, q gridReader, gridID, x, y, w, h int6
 	return n > 0, nil
 }
 
-// validatePath verifies that each well_id in p exists, that consecutive wells
-// chain through their child grids correctly (well[i].child_grid_id == grid
-// containing well[i+1]), and that the first well lives in the user's root
-// grid. Returns the final grid id (deepest grid in the path), which is where
-// the editing pane is currently looking.
-//
-// The path is empty for the root grid; in that case it returns user.RootGridID.
-func (s *Store) validatePath(ctx context.Context, q gridReader, userID int64, p rpc.Path) (int64, error) {
-	u, err := s.GetUser(ctx, userID)
-	if err != nil {
-		return 0, err
-	}
-	currentGrid := u.RootGridID
-	for _, wellID := range p.WellIDs {
-		w, err := s.loadNode(ctx, q, wellID)
-		if err != nil {
-			return 0, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
-		}
-		if w.Type != "well" {
-			return 0, fmt.Errorf("%w: node %d is not a well", ErrInvalidPath, wellID)
-		}
-		if w.GridID != currentGrid {
-			return 0, fmt.Errorf("%w: well %d not in grid %d", ErrInvalidPath, wellID, currentGrid)
-		}
-		currentGrid = w.ChildGridID
-	}
-	return currentGrid, nil
-}
