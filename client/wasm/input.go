@@ -256,7 +256,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		if child := a.childTileAtScreen(p, r, n, sx, sy); child != nil {
 			cp := dragdrop.ChildPreviewFor(ps, struct {
 				X, Y, W, H, ViewX, ViewY int64
-			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+				ViewZoom                 float64
+			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY, ViewZoom: n.ViewZoom},
 				zoomtrans.PreviewFactor)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
@@ -755,7 +756,7 @@ func (a *App) startAscent(p *pane.Pane) {
 	}
 	w := zoomtrans.Well{
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY,
+		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
 	mid, switchTo := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
 
@@ -828,7 +829,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	}
 	w := zoomtrans.Well{
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY,
+		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
 	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	a.fetchGrid(well.ChildGridID)
@@ -906,7 +907,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 	}
 	w := zoomtrans.Well{
 		ID: file.ID, X: file.X, Y: file.Y, W: file.W, H: file.H,
-		ViewX: file.ViewX, ViewY: file.ViewY,
+		ViewX: file.ViewX, ViewY: file.ViewY, ViewZoom: file.ViewZoom,
 	}
 	wellCx := float64(file.X) + float64(file.W)/2
 	wellCy := float64(file.Y) + float64(file.H)/2
@@ -974,7 +975,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	r := paneRectFor(a, p)
 	w := zoomtrans.Well{
 		ID: file.ID, X: file.X, Y: file.Y, W: file.W, H: file.H,
-		ViewX: file.ViewX, ViewY: file.ViewY,
+		ViewX: file.ViewX, ViewY: file.ViewY, ViewZoom: file.ViewZoom,
 	}
 	wellCx := float64(file.X) + float64(file.W)/2
 	wellCy := float64(file.Y) + float64(file.H)/2

@@ -129,6 +129,7 @@ func TestChildPreviewRoundTrip(t *testing.T) {
 	}
 	well := struct {
 		X, Y, W, H, ViewX, ViewY int64
+		ViewZoom                 float64
 	}{X: -1, Y: 2, W: 3, H: 4, ViewX: 10, ViewY: -5}
 	cp := ChildPreviewFor(parent, well, 8.0)
 	// previewCell = 64 / 8 = 8 px per child cell.
@@ -156,6 +157,7 @@ func TestChildPreviewCenterAlignsWithViewCenter(t *testing.T) {
 	}
 	well := struct {
 		X, Y, W, H, ViewX, ViewY int64
+		ViewZoom                 float64
 	}{X: 0, Y: 0, W: 4, H: 4, ViewX: 0, ViewY: 0}
 	cp := ChildPreviewFor(parent, well, 8.0)
 	parentCell := parent.CellPx * parent.Zoom

@@ -141,18 +141,25 @@ type ChildPreview struct {
 }
 
 // ChildPreviewFor returns the screen-coord transform for a well's
-// child-grid preview, given the parent pane and the well's footprint
-// and view region (all in parent-grid cells).
+// child-grid preview, given the parent pane and the well's footprint,
+// view region, and stored ViewZoom (all in parent-grid cells; ViewZoom
+// is dimensionless).
 //
-// previewFactor is the cell-size ratio between the parent grid and
-// the child preview — pass zoomtrans.PreviewFactor (8.0). Pulled out
-// as a parameter so this helper stays in the math-only dragdrop
-// package without an import on the client/zoomtrans package.
+// previewFactor is the default cell-size ratio between the parent
+// grid and the child preview when the well has no stored ViewZoom —
+// pass zoomtrans.PreviewFactor (8.0). When the well's ViewZoom is
+// non-zero, the preview cell is cellPx × ViewZoom regardless of
+// parent zoom: the preview matches what the user saw in the well at
+// that zoom.
 func ChildPreviewFor(parent Pane, well struct {
 	X, Y, W, H, ViewX, ViewY int64
+	ViewZoom                 float64
 }, previewFactor float64) ChildPreview {
 	parentCell := parent.CellPx * parent.Zoom
 	previewCell := parentCell / previewFactor
+	if well.ViewZoom > 0 {
+		previewCell = parent.CellPx * well.ViewZoom
+	}
 	wellLeft, wellTop := parent.CellToScreen(float64(well.X), float64(well.Y))
 	wellCenterX := wellLeft + float64(well.W)*parentCell/2
 	wellCenterY := wellTop + float64(well.H)*parentCell/2

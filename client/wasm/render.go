@@ -368,7 +368,16 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
+	// Preview cell size: when the well has a stored ViewZoom (the
+	// user's last child-grid zoom), the preview renders child cells
+	// at cellPx × ViewZoom screen pixels — matching what they'd see
+	// if descended. The path-swap is then continuous without any
+	// extra zoom segment. Default (ViewZoom == 0) uses the original
+	// PreviewFactor calibration.
 	previewCell := parentCellSize / zoomtrans.PreviewFactor
+	if n.ViewZoom > 0 {
+		previewCell = cellPx * n.ViewZoom
+	}
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")

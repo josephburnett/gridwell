@@ -72,7 +72,8 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 		// Well preview math.
 		cp := dragdrop.ChildPreviewFor(ps, struct {
 			X, Y, W, H, ViewX, ViewY int64
-		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+			ViewZoom                 float64
+		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY, ViewZoom: n.ViewZoom},
 			zoomtrans.PreviewFactor)
 		path := append(append([]int64(nil), p.Path...), n.ID)
 		return &dropTarget{
@@ -158,8 +159,9 @@ func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Node, sx, sy
 	}
 	cp := dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H, ViewX, ViewY int64
+		ViewZoom                 float64
 	}{X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY},
+		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom},
 		zoomtrans.PreviewFactor)
 	cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 	// Floor (which cell does the cursor sit in?), handling negatives.
