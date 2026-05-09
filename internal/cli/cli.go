@@ -1,24 +1,24 @@
 // Package cli implements the subcommand dispatch for the ascent binary.
 //
 // Each subcommand returns the process exit code so main.go is a thin shell.
+// The commands share a tiny database-path resolution helper and otherwise
+// live in their own files.
 package cli
 
-import "fmt"
+import (
+	"flag"
+	"fmt"
+	"io"
+)
 
-// RunInit creates the database and schema. Implemented in init.go.
-func RunInit(args []string) int {
-	fmt.Println("init: not yet implemented")
-	return 0
+// resolveDB returns the database path. Default is "./ascent.db" — convenient
+// for development; production users override via --db.
+func resolveDB(fs *flag.FlagSet, defaultPath string) *string {
+	return fs.String("db", defaultPath, "path to the SQLite database file")
 }
 
-// RunAddUser creates a user. Implemented in adduser.go.
-func RunAddUser(args []string) int {
-	fmt.Println("adduser: not yet implemented")
-	return 0
-}
-
-// RunServe starts the HTTP server. Implemented in serve.go.
-func RunServe(args []string) int {
-	fmt.Println("serve: not yet implemented")
-	return 0
+// printErr writes to w. Centralized so tests can capture output.
+func printErr(w io.Writer, format string, args ...any) {
+	fmt.Fprintf(w, format, args...)
+	fmt.Fprintln(w)
 }
