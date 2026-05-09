@@ -20,7 +20,6 @@ const (
 	colorPaneBorder  = "#1f2229"
 	colorFocusBorder = "#4a6fff"
 	colorGridLine    = "#15171d"
-	colorWell        = "#1a2b3a"
 	colorWellLine    = "#3a4b5a"
 	colorFile        = "#2b1a3a"
 	colorFileLine    = "#5a3a7a"
@@ -178,10 +177,23 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 // extreme zoom-out doesn't paint a solid grey wash.
 func (a *App) drawGridLines(ps dragdrop.Pane, r paneRect) {
 	cellSize := ps.CellPx * ps.Zoom
+	originX, originY := ps.CellToScreen(0, 0)
+	drawGridLinesIn(a.cctx, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
+}
+
+// drawGridLinesIn paints faint vertical/horizontal grid lines clipped to
+// (clipX, clipY, clipW, clipH), spaced at cellSize pixels and aligned so
+// integer cell (0, 0) lands at (originX, originY). Used for both the
+// parent grid and well interiors so the visual scale of a well's preview
+// is the same kind of grid the user is already seeing.
+//
+// Sub-4px cell sizes draw nothing (the lines would be a solid wash).
+// Above that, opacity fades up linearly so zoom-in feels like the grid
+// "fades in" rather than appearing abruptly.
+func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, originY float64) {
 	if cellSize < 4 {
 		return
 	}
-	// Alpha fades from 0 at cellSize=4 to 1.0 at cellSize=24.
 	alpha := (cellSize - 4) / 20
 	if alpha > 0.6 {
 		alpha = 0.6
@@ -189,39 +201,40 @@ func (a *App) drawGridLines(ps dragdrop.Pane, r paneRect) {
 	if alpha < 0.05 {
 		return
 	}
-	a.cctx.Set("strokeStyle", colorGridLine)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Set("globalAlpha", alpha)
+	c.Set("strokeStyle", colorGridLine)
+	c.Set("lineWidth", 1.0)
+	c.Set("globalAlpha", alpha)
 
-	leftCell, topCell := ps.ScreenToCell(r.X, r.Y)
-	rightCell, bottomCell := ps.ScreenToCell(r.X+r.W, r.Y+r.H)
+	// Range of integer cell indices whose grid line falls inside the clip.
+	kStartX := int64(math.Ceil((clipX - originX) / cellSize))
+	kEndX := int64(math.Floor((clipX + clipW - originX) / cellSize))
+	kStartY := int64(math.Ceil((clipY - originY) / cellSize))
+	kEndY := int64(math.Floor((clipY + clipH - originY) / cellSize))
 
-	startX := int64(math.Floor(leftCell))
-	endX := int64(math.Ceil(rightCell))
-	startY := int64(math.Floor(topCell))
-	endY := int64(math.Ceil(bottomCell))
-
-	a.cctx.Call("beginPath")
-	for x := startX; x <= endX; x++ {
-		sx, _ := ps.CellToScreen(float64(x), 0)
-		a.cctx.Call("moveTo", math.Floor(sx)+0.5, r.Y)
-		a.cctx.Call("lineTo", math.Floor(sx)+0.5, r.Y+r.H)
+	c.Call("beginPath")
+	for k := kStartX; k <= kEndX; k++ {
+		sx := originX + float64(k)*cellSize
+		c.Call("moveTo", math.Floor(sx)+0.5, clipY)
+		c.Call("lineTo", math.Floor(sx)+0.5, clipY+clipH)
 	}
-	for y := startY; y <= endY; y++ {
-		_, sy := ps.CellToScreen(0, float64(y))
-		a.cctx.Call("moveTo", r.X, math.Floor(sy)+0.5)
-		a.cctx.Call("lineTo", r.X+r.W, math.Floor(sy)+0.5)
+	for k := kStartY; k <= kEndY; k++ {
+		sy := originY + float64(k)*cellSize
+		c.Call("moveTo", clipX, math.Floor(sy)+0.5)
+		c.Call("lineTo", clipX+clipW, math.Floor(sy)+0.5)
 	}
-	a.cctx.Call("stroke")
-	a.cctx.Set("globalAlpha", 1.0)
+	c.Call("stroke")
+	c.Set("globalAlpha", 1.0)
 }
 
 // drawNodeWithPreview is the parent-grid renderer: wells get a one-level
 // preview of their child grid (no recursion), and use the bright blue
 // outline that matches the focused-pane color so wells are easy to spot.
 //
-// If the well's child grid isn't cached yet it's prefetched, and the well
-// renders without a preview until the fetch completes.
+// The well's interior is filled with the same background color as the
+// pane and gets its own grid lines at the child's cell scale. That way
+// the descent zoom never crosses a color or grid-line discontinuity:
+// at the path-switch moment, the well's preview grid is exactly the
+// child grid the user is about to see directly.
 func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
 	if n.Type != "well" || n.Capped {
 		drawNode(a.cctx, n, x, y, w, h, selected)
@@ -232,29 +245,35 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	if !haveChild {
 		a.fetchGrid(n.ChildGridID)
 	}
-	// Background.
-	a.cctx.Set("fillStyle", colorWell)
+	// Background matches the surrounding pane so there's no color jump
+	// when the well's outline crosses the screen edges during descent.
+	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	// Render preview if we have content and the cells are large enough to
-	// matter (sub-pixel cells just look like noise).
 	previewCell := parentCellSize / zoomtrans.PreviewFactor
-	if haveChild && previewCell >= 0.5 {
-		a.cctx.Call("save")
-		a.cctx.Call("beginPath")
-		a.cctx.Call("rect", x, y, w, h)
-		a.cctx.Call("clip")
 
-		// The well's footprint shows previewFactor*W × previewFactor*H
-		// cells of the child centered on (view_x + W/2, view_y + H/2).
-		viewCenterX := float64(n.ViewX) + float64(n.W)/2
-		viewCenterY := float64(n.ViewY) + float64(n.H)/2
-		wellCenterX := x + w/2
-		wellCenterY := y + h/2
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+
+	// Child grid lines inside the well, aligned so child cell (0, 0)
+	// lands at the well's center offset by the well's view region. This
+	// is exactly where the just-after-descent child viewport would put
+	// it, so the lines glide continuously across the path swap.
+	viewCenterX := float64(n.ViewX) + float64(n.W)/2
+	viewCenterY := float64(n.ViewY) + float64(n.H)/2
+	wellCenterX := x + w/2
+	wellCenterY := y + h/2
+	originX := wellCenterX - viewCenterX*previewCell
+	originY := wellCenterY - viewCenterY*previewCell
+	drawGridLinesIn(a.cctx, x, y, w, h, previewCell, originX, originY)
+
+	if haveChild && previewCell >= 0.5 {
 		drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
 			wellCenterX, wellCenterY, previewCell, x, y, w, h)
-		a.cctx.Call("restore")
 	}
+	a.cctx.Call("restore")
 
 	// Outline: bright blue, matching the focused-pane color.
 	a.cctx.Set("strokeStyle", colorFocusBorder)
@@ -320,7 +339,7 @@ func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
 		c.Set("strokeStyle", colorFocusBorder)
 		c.Call("strokeRect", x, y, w, h)
 	case n.Type == "well":
-		c.Set("fillStyle", colorWell)
+		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
 		c.Set("strokeStyle", colorFocusBorder)
 		c.Set("lineWidth", 1.0)

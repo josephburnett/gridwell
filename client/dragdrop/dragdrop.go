@@ -60,6 +60,34 @@ func SnapToCell(c float64) int64 {
 	return int64(c - 0.5)
 }
 
+// EdgeBand returns the suggested edge-band thickness in pixels for the
+// pane: a fixed 80 px on large panes, but never more than 12% of the
+// pane's smaller dimension so the band never swallows a tiny pane.
+//
+// Used by the client to decide whether a right-click is "on the edge"
+// (which means ascend) vs. "in the middle" (which targets a node or
+// is a no-op).
+func EdgeBand(p Pane) float64 {
+	smaller := p.ScreenW
+	if p.ScreenH < smaller {
+		smaller = p.ScreenH
+	}
+	cap := smaller * 0.12
+	if cap < 80 {
+		return cap
+	}
+	return 80
+}
+
+// IsInEdgeZone reports whether (x, y) is within `band` pixels of any
+// edge of pane p.
+func IsInEdgeZone(p Pane, x, y, band float64) bool {
+	return x-p.ScreenX < band ||
+		(p.ScreenX+p.ScreenW)-x < band ||
+		y-p.ScreenY < band ||
+		(p.ScreenY+p.ScreenH)-y < band
+}
+
 // FootprintFits reports whether a (w, h)-sized footprint at (x, y) fits
 // inside the pane's framed rectangle. The framed rect is computed from the
 // pane's screen size, zoom, and viewport center. Used by the client to gray

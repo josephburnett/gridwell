@@ -58,6 +58,46 @@ func TestSnapToCell(t *testing.T) {
 	}
 }
 
+func TestEdgeBand(t *testing.T) {
+	// Big pane: capped at 80 px.
+	big := Pane{ScreenW: 1920, ScreenH: 1080}
+	if got := EdgeBand(big); got != 80 {
+		t.Errorf("EdgeBand big = %v, want 80", got)
+	}
+	// Small pane: 12% of smaller dim.
+	small := Pane{ScreenW: 200, ScreenH: 400}
+	if got := EdgeBand(small); !near(got, 24) {
+		t.Errorf("EdgeBand small = %v, want 24", got)
+	}
+	// Equal-sized: still 12% if under 666.
+	mid := Pane{ScreenW: 500, ScreenH: 500}
+	if got := EdgeBand(mid); !near(got, 60) {
+		t.Errorf("EdgeBand mid = %v, want 60", got)
+	}
+}
+
+func TestIsInEdgeZone(t *testing.T) {
+	p := Pane{ScreenX: 0, ScreenY: 0, ScreenW: 100, ScreenH: 100}
+	cases := []struct {
+		x, y float64
+		want bool
+	}{
+		{50, 50, false},  // dead center: not in edge.
+		{2, 50, true},    // near left edge.
+		{98, 50, true},   // near right edge.
+		{50, 2, true},    // near top edge.
+		{50, 98, true},   // near bottom edge.
+		{20, 20, false},  // inside band.
+		{0, 0, true},     // exact corner.
+		{100, 100, true}, // bottom-right corner.
+	}
+	for _, c := range cases {
+		if got := IsInEdgeZone(p, c.x, c.y, 10); got != c.want {
+			t.Errorf("IsInEdgeZone(%v,%v) = %v, want %v", c.x, c.y, got, c.want)
+		}
+	}
+}
+
 func TestFootprintFits(t *testing.T) {
 	p := Pane{
 		ScreenX: 0, ScreenY: 0, ScreenW: 640, ScreenH: 640,

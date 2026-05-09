@@ -423,11 +423,13 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 	return paneRect{}
 }
 
-// onContextMenu (right click) starts a smooth descent into the well under
-// the cursor. The animation interpolates the pane's (Cx, Cy, Zoom) toward
-// the well's center over ~350ms, then atomically switches the descent path
-// and lands the viewport on the child grid at the calibrated state — so
-// the visual is continuous across the path switch.
+// onContextMenu (right click) drives mouse-only navigation:
+//   - On a well in the inner area: smooth descent into the well.
+//   - In the edge band of the pane: smooth ascent (or AscendAtRoot at top).
+//   - Otherwise: no-op.
+//
+// Edge takes priority over node hits — the user explicitly wants the edge
+// to always ascend so they always have a reachable ascent target.
 func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	sx, sy := mouseXY(args[0], a.canvas)
@@ -436,6 +438,24 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 		return nil
 	}
 	_ = a.tree.SetFocus(p.ID)
+	pscreen := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
+	if dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
+		if len(p.Path) > 0 {
+			a.startAscent(p)
+		} else {
+			go func() {
+				var resp rpc.AscendAtRootResponse
+				if _, err := postJSON("/rpc/AscendAtRoot", rpc.AscendAtRootRequest{}, &resp); err == nil {
+					a.user.RootGridID = resp.NewRootGridID
+					a.fetchGrid(resp.NewRootGridID)
+				}
+			}()
+		}
+		return nil
+	}
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	hit := a.nodeAtCell(p, cellX, cellY)
 	if hit == nil || hit.Type != "well" || hit.Capped {
