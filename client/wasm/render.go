@@ -62,9 +62,6 @@ func (a *App) draw() {
 		a.drawPane(p, r)
 	}
 
-	if a.dragging != nil && a.dragging.started && a.dragging.nodeID != 0 {
-		a.drawDragGhost()
-	}
 }
 
 // paneRect is a rectangle in screen coordinates.
@@ -132,6 +129,12 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		cellSize := pscreen.CellPx * pscreen.Zoom
 		selected := a.selectedNodeID[p.ID]
 		for _, n := range g.Nodes {
+			// Suppress nodes whose object_id is being floated as a ghost
+			// in this pane. Using object_id (not row id) makes this CoW-
+			// stable: forks change the row id but preserve the lineage.
+			if a.hiddenObjectID != "" && a.hiddenPaneID == p.ID && n.ObjectID == a.hiddenObjectID {
+				continue
+			}
 			left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
 			w := float64(n.W) * cellSize
 			h := float64(n.H) * cellSize
@@ -142,6 +145,15 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 			drawNode(a.cctx, &nn, left, top, w, h, n.ID == selected)
 		}
 		a.drawEdgeIndicators(g.Nodes, pscreen, r)
+		// Floating ghost (active drag or animation) belongs to whichever
+		// pane the cursor is currently over. Render it at sub-cell
+		// precision in screen coordinates.
+		if a.ghost != nil && a.ghost.paneID == p.ID {
+			gn := a.ghost.node
+			w := float64(gn.W) * cellSize
+			h := float64(gn.H) * cellSize
+			drawNode(a.cctx, &gn, a.ghost.screenX, a.ghost.screenY, w, h, false)
+		}
 	} else {
 		// Status line in the upper-left so the user knows what state
 		// we're in and which grid id we're trying to load.
@@ -449,14 +461,3 @@ func menuItemAt(r paneRect, x, y float64) int {
 	return idx
 }
 
-// drawDragGhost renders a faint outline at the cursor while dragging.
-func (a *App) drawDragGhost() {
-	a.cctx.Set("strokeStyle", colorFocusBorder)
-	a.cctx.Set("lineWidth", 1.5)
-	a.cctx.Set("globalAlpha", 0.6)
-	x := a.dragging.curScreenX
-	y := a.dragging.curScreenY
-	a.cctx.Call("strokeRect", x-16, y-16, 32, 32)
-	a.cctx.Set("globalAlpha", 1.0)
-	a.cctx.Set("lineWidth", 1.0)
-}

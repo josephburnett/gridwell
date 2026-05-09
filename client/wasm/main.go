@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"syscall/js"
 
+	"github.com/josephburnett/ascent/client/anim"
 	"github.com/josephburnett/ascent/client/cache"
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
@@ -61,6 +62,35 @@ type App struct {
 	// the renderer can show a meaningful message and we don't retry in
 	// a tight loop.
 	gridLoadFailed map[int64]bool
+
+	// ghost is the in-flight visual representation of a node being dragged
+	// or animated to/from somewhere. The dragged node renders here at
+	// sub-cell screen precision instead of at its stored cell position.
+	ghost *ghost
+
+	// hiddenObjectID, when non-empty, suppresses rendering of any cached
+	// node with this object_id. We use object_id (not row id) because CoW
+	// rewrites row ids underneath us; the lineage stays stable.
+	hiddenObjectID string
+	hiddenPaneID   string
+
+	// animation is the current ghost animation, if any (snap-to-target on
+	// drop or snap-back-to-origin on failure).
+	animation *anim.Animation
+
+	// rafScheduled tracks whether we have a pending requestAnimationFrame
+	// callback so we don't queue redundant frames.
+	rafScheduled bool
+}
+
+// ghost is a transient floating render of a node, positioned in screen
+// coordinates within a specific pane. screenX/Y is the top-left corner of
+// the node's footprint at zoom-corrected size.
+type ghost struct {
+	node    rpc.Node
+	paneID  string
+	screenX float64
+	screenY float64
 }
 
 // dragState tracks an in-progress drag from a node onto the cursor.
@@ -68,17 +98,25 @@ type App struct {
 // `started` is false until the cursor moves more than dragThreshold pixels
 // from the mousedown point, so a bare click (down+up with no movement) can
 // be distinguished from a drag and treated as "select" instead of "move".
+//
+// snapshotNode and origin* fields capture where the dragged node started so
+// we can render a smooth ghost at the cursor and animate snap-back to the
+// original position if the drop is rejected.
 type dragState struct {
-	originPaneID string
-	nodeID       int64
-	cellOffsetX  float64
-	cellOffsetY  float64
-	startScreenX float64
-	startScreenY float64
-	curScreenX   float64
-	curScreenY   float64
-	clone        bool
-	started      bool
+	originPaneID   string
+	nodeID         int64
+	cellOffsetX    float64
+	cellOffsetY    float64
+	startScreenX   float64
+	startScreenY   float64
+	curScreenX     float64
+	curScreenY     float64
+	clone          bool
+	started        bool
+	snapshotNode   rpc.Node
+	originScreenX  float64
+	originScreenY  float64
+	originPaneRect paneRect
 }
 
 // dragThreshold is the cursor-movement distance that turns a press into a
@@ -207,6 +245,54 @@ func (a *App) fetchGrid(id int64) {
 		a.c.PutGrid(resp.Grid, resp.Nodes)
 		a.draw()
 	}()
+}
+
+// nowMs returns the current time in milliseconds since the epoch as
+// reported by the browser. Used for animation timing.
+func nowMs() float64 {
+	return js.Global().Get("Date").Call("now").Float()
+}
+
+// scheduleFrame ensures a draw happens on the next animation frame. While
+// dragging or animating, the frame loop continues until the state settles.
+func (a *App) scheduleFrame() {
+	if a.rafScheduled {
+		return
+	}
+	a.rafScheduled = true
+	js.Global().Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.rafScheduled = false
+		a.frame()
+		return nil
+	}))
+}
+
+// frame is the per-tick driver: advance the active animation, request the
+// next frame if motion is still in flight, and repaint.
+func (a *App) frame() {
+	if a.animation != nil {
+		x, y, done := a.animation.At(nowMs())
+		if a.ghost != nil {
+			a.ghost.screenX = x
+			a.ghost.screenY = y
+		}
+		if done {
+			a.animationDone()
+		} else {
+			a.scheduleFrame()
+		}
+	}
+	a.draw()
+}
+
+// animationDone is called when the active animation reaches its target. It
+// clears the ghost and any associated render hides so the cache becomes
+// the source of truth again.
+func (a *App) animationDone() {
+	a.animation = nil
+	a.ghost = nil
+	a.hiddenObjectID = ""
+	a.hiddenPaneID = ""
 }
 
 // resetFocusedPaneToRoot clears the focused pane's descent path and viewport

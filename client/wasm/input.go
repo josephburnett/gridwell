@@ -8,9 +8,16 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/ascent/client/anim"
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
 	"github.com/josephburnett/ascent/internal/rpc"
+)
+
+// Animation durations in milliseconds. Tuned for "stone settling" feel.
+const (
+	snapMs     = 110.0
+	snapBackMs = 220.0
 )
 
 // installCanvasInput attaches mouse and keyboard listeners to the canvas.
@@ -140,7 +147,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	clone := args[0].Get("altKey").Bool()
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		nodeID:       0, // will be set below if click began on a node
+		nodeID:       0,
 		startScreenX: sx,
 		startScreenY: sy,
 		curScreenX:   sx,
@@ -149,8 +156,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	if n != nil {
 		a.dragging.nodeID = n.ID
-		// Save offset between cursor and node origin in cells, so the
-		// drop position keeps the same grab point.
 		ps := dragdrop.Pane{
 			ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 			Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
@@ -158,13 +163,16 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		cx, cy := ps.ScreenToCell(sx, sy)
 		a.dragging.cellOffsetX = cx - float64(n.X)
 		a.dragging.cellOffsetY = cy - float64(n.Y)
+		a.dragging.snapshotNode = *n
+		a.dragging.originScreenX, a.dragging.originScreenY = ps.CellToScreen(float64(n.X), float64(n.Y))
+		a.dragging.originPaneRect = r
 	}
 	return nil
 }
 
 func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
-	// If the menu is open, track hover for highlighting.
+	// Track menu hover regardless of drag state.
 	if a.menuOpen {
 		_, r, ok := a.paneAtScreen(sx, sy)
 		hover := -1
@@ -180,23 +188,70 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		return nil
 	}
 	d := a.dragging
-	// Promote to "started" once we exceed the threshold.
+	// Promote to "started" once cursor has moved past the threshold.
 	if !d.started {
 		dxs := sx - d.startScreenX
 		dys := sy - d.startScreenY
 		if dxs*dxs+dys*dys >= dragThreshold*dragThreshold {
 			d.started = true
+			// On node drag, materialize the ghost; for moves, also hide
+			// the original at its stored position so we don't see two
+			// copies of the same stone.
+			if d.nodeID != 0 {
+				a.ghost = &ghost{
+					node:    d.snapshotNode,
+					paneID:  d.originPaneID,
+					screenX: d.originScreenX,
+					screenY: d.originScreenY,
+				}
+				if !d.clone {
+					a.hiddenObjectID = d.snapshotNode.ObjectID
+					a.hiddenPaneID = d.originPaneID
+				}
+			}
 		} else {
 			return nil
 		}
 	}
 	if d.nodeID == 0 {
-		// Pan the focused pane smoothly.
+		// Pan the source pane smoothly.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
 			cellSize := cellPx * focused.Zoom
 			focused.Cx -= (sx - d.curScreenX) / cellSize
 			focused.Cy -= (sy - d.curScreenY) / cellSize
+		}
+	} else if a.ghost != nil {
+		// Move the ghost: offset cursor by the grab point so the original
+		// click location stays "under the finger" relative to the node.
+		hostPane, hostRect, ok := a.paneAtScreen(sx, sy)
+		if !ok {
+			// Cursor outside any pane — pin the ghost to the source pane
+			// using the source pane's transform.
+			src := a.tree.FindPane(d.originPaneID)
+			if src != nil {
+				ps := dragdrop.Pane{
+					ScreenX: d.originPaneRect.X, ScreenY: d.originPaneRect.Y,
+					ScreenW: d.originPaneRect.W, ScreenH: d.originPaneRect.H,
+					Cx: src.Cx, Cy: src.Cy, Zoom: src.Zoom, CellPx: cellPx,
+				}
+				cx, cy := ps.ScreenToCell(sx, sy)
+				topLeftX, topLeftY := ps.CellToScreen(cx-d.cellOffsetX, cy-d.cellOffsetY)
+				a.ghost.paneID = d.originPaneID
+				a.ghost.screenX = topLeftX
+				a.ghost.screenY = topLeftY
+			}
+		} else {
+			ps := dragdrop.Pane{
+				ScreenX: hostRect.X, ScreenY: hostRect.Y,
+				ScreenW: hostRect.W, ScreenH: hostRect.H,
+				Cx: hostPane.Cx, Cy: hostPane.Cy, Zoom: hostPane.Zoom, CellPx: cellPx,
+			}
+			cx, cy := ps.ScreenToCell(sx, sy)
+			topLeftX, topLeftY := ps.CellToScreen(cx-d.cellOffsetX, cy-d.cellOffsetY)
+			a.ghost.paneID = hostPane.ID
+			a.ghost.screenX = topLeftX
+			a.ghost.screenY = topLeftY
 		}
 	}
 	d.curScreenX = sx
@@ -240,16 +295,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// Node move/clone drag. Resolve drop coordinates in the pane the cursor
-	// is currently over.
-	destPane, destRect, ok := a.paneAtScreen(sx, sy)
-	if !ok {
-		a.draw()
-		return nil
-	}
+	// Node move/clone drag. Resolve the drop pane and snapped drop cell.
 	srcPane := a.tree.FindPane(d.originPaneID)
 	if srcPane == nil {
-		a.draw()
+		a.cancelDragSnapBack(d)
+		return nil
+	}
+	destPane, destRect, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		// Released outside any pane: snap-back.
+		a.cancelDragSnapBack(d)
 		return nil
 	}
 	dpscreen := dragdrop.Pane{
@@ -260,6 +315,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	dropX := dragdrop.SnapToCell(dcx - d.cellOffsetX)
 	dropY := dragdrop.SnapToCell(dcy - d.cellOffsetY)
 
+	// Animate ghost from current position to the snap target in the dest
+	// pane's screen coords.
+	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
+	if a.ghost != nil {
+		// Re-anchor the ghost paneID to the destination pane so the
+		// rendering during animation lives in dest pane coordinates.
+		a.ghost.paneID = destPane.ID
+	}
+	a.startSnap(targetX, targetY, snapMs)
+
 	srcRect := paneRectFor(a, srcPane)
 	srcView := a.paneViewRect(srcPane, dragdrop.Pane{
 		ScreenX: srcRect.X, ScreenY: srcRect.Y, ScreenW: srcRect.W, ScreenH: srcRect.H,
@@ -269,6 +334,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	dstGridID := a.gridIDForPath(destPane.Path)
 
 	go func() {
+		var status int
 		if d.clone {
 			req := rpc.CloneNodeRequest{
 				Path: rpc.Path{WellIDs: srcPane.Path}, ViewRect: srcView,
@@ -277,7 +343,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 				X: dropX, Y: dropY,
 			}
 			var resp rpc.NodeResponse
-			_, _ = postJSON("/rpc/CloneNode", req, &resp)
+			status, _ = postJSON("/rpc/CloneNode", req, &resp)
 		} else {
 			req := rpc.MoveNodeRequest{
 				Path: rpc.Path{WellIDs: srcPane.Path}, ViewRect: srcView,
@@ -286,13 +352,66 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 				X: dropX, Y: dropY,
 			}
 			var resp rpc.MoveNodeResponse
-			_, _ = postJSON("/rpc/MoveNode", req, &resp)
+			status, _ = postJSON("/rpc/MoveNode", req, &resp)
+		}
+		if status != 200 {
+			// Server rejected the drop. Snap the ghost back to origin so
+			// the user sees the stone return rather than vanish.
+			a.snapBackToOrigin(d)
+			return
 		}
 		a.fetchGrid(a.gridIDForPath(srcPane.Path))
 		a.fetchGrid(dstGridID)
 	}()
 	a.draw()
 	return nil
+}
+
+// startSnap animates the active ghost from its current position to (toX, toY)
+// over the given duration. Replaces any prior animation.
+func (a *App) startSnap(toX, toY, duration float64) {
+	if a.ghost == nil {
+		return
+	}
+	a.animation = &anim.Animation{
+		FromX:      a.ghost.screenX,
+		FromY:      a.ghost.screenY,
+		ToX:        toX,
+		ToY:        toY,
+		StartMs:    nowMs(),
+		DurationMs: duration,
+	}
+	a.scheduleFrame()
+}
+
+// cancelDragSnapBack runs the snap-back-to-origin animation when a drop is
+// abandoned (released outside any pane, or the source pane vanished).
+func (a *App) cancelDragSnapBack(d *dragState) {
+	if a.ghost == nil {
+		// Drag never crossed the threshold — nothing to animate.
+		a.draw()
+		return
+	}
+	a.snapBackToOrigin(d)
+}
+
+// snapBackToOrigin starts an animation from the ghost's current position
+// back to the original location of the dragged node. Used both for failed
+// server commits and for drops outside any pane.
+func (a *App) snapBackToOrigin(d *dragState) {
+	if a.ghost == nil {
+		return
+	}
+	a.ghost.paneID = d.originPaneID
+	a.animation = &anim.Animation{
+		FromX:      a.ghost.screenX,
+		FromY:      a.ghost.screenY,
+		ToX:        d.originScreenX,
+		ToY:        d.originScreenY,
+		StartMs:    nowMs(),
+		DurationMs: snapBackMs,
+	}
+	a.scheduleFrame()
 }
 
 func paneRectFor(a *App, p *pane.Pane) paneRect {
