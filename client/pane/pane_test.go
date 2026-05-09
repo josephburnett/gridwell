@@ -264,6 +264,49 @@ func TestSplitOnSideTopAndBottom(t *testing.T) {
 	}
 }
 
+func TestSplitOnSideAtRatio(t *testing.T) {
+	cases := []struct {
+		side  Side
+		ratio float64
+		// What ratio should the resulting Split.Ratio be?
+		// SideTop/SideLeft: new pane in A, so split.Ratio = ratio.
+		// SideBottom/SideRight: new pane in B, so split.Ratio = 1 - ratio.
+		wantSplit float64
+	}{
+		{SideTop, 0.3, 0.3},
+		{SideLeft, 0.4, 0.4},
+		{SideBottom, 0.3, 0.7},
+		{SideRight, 0.25, 0.75},
+		{SideTop, -0.5, 0.0},  // clamps below
+		{SideTop, 1.5, 1.0},   // clamps above
+		{SideBottom, -1.0, 1.0},
+		{SideBottom, 5.0, 0.0},
+	}
+	for _, c := range cases {
+		tr := NewTree()
+		newP, err := tr.SplitOnSideAt(c.side, c.ratio)
+		if err != nil {
+			t.Fatalf("side=%v ratio=%v: %v", c.side, c.ratio, err)
+		}
+		got := tr.Root.Split.Ratio
+		if absDiff(got, c.wantSplit) > 1e-9 {
+			t.Errorf("side=%v ratio=%v: split.Ratio = %v, want %v",
+				c.side, c.ratio, got, c.wantSplit)
+		}
+		if tr.Focus != newP.ID {
+			t.Errorf("side=%v ratio=%v: focus = %q, want new %q",
+				c.side, c.ratio, tr.Focus, newP.ID)
+		}
+	}
+}
+
+func absDiff(a, b float64) float64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}
+
 func TestSwapBasic(t *testing.T) {
 	tr := NewTree()
 	a := tr.FocusedPane().ID

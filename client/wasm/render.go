@@ -76,6 +76,13 @@ func (a *App) draw() {
 		a.drawPane(p, r)
 	}
 
+	// In-flight right-button gesture preview (split line, swap arrow,
+	// red close-warning border). Drawn on top of all panes but below
+	// the textarea overlay (which lives in DOM, not canvas).
+	if a.rightDrag != nil {
+		a.drawRightDragPreview()
+	}
+
 	// Reposition the textarea overlay (if any) so it tracks the focused
 	// pane through resizes and pane-tree edits.
 	a.syncFileOverlayPosition()

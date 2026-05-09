@@ -78,18 +78,34 @@ func (a *App) ensureFileTextarea() {
 	// FileZoom is fixed for the visit, so nothing in here needs the
 	// wheel event.
 
-	// The textarea covers the whole pane while in text mode, so canvas
-	// click handlers never see clicks here. Forward edge-zone left
-	// clicks (mousedown without drag) to ascent so the user retains the
-	// "click any edge to ascend" gesture.
+	// The textarea covers the whole pane in text mode, so canvas click
+	// handlers never see clicks here. Forward two gestures:
+	//   - Edge-zone left mousedown → file ascent (the "click any edge
+	//     to leave the file" gesture).
+	//   - Right mousedown → pane-management gesture, same entry point
+	//     as the canvas listener so split/swap/resize work over the
+	//     textarea.
 	mdCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		ev := args[0]
-		if ev.Get("button").Int() != 0 {
-			return nil
-		}
+		button := ev.Get("button").Int()
 		canvasRect := a.canvas.Call("getBoundingClientRect")
 		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
 		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
+		if button == 2 {
+			ev.Call("preventDefault")
+			if a.transition != nil {
+				return nil
+			}
+			p, r, ok := a.paneAtScreen(sx, sy)
+			if !ok {
+				return nil
+			}
+			a.onRightDown(p, r, sx, sy)
+			return nil
+		}
+		if button != 0 {
+			return nil
+		}
 		p := a.tree.FocusedPane()
 		if p == nil || p.FileFocus == 0 {
 			return nil
@@ -106,6 +122,40 @@ func (a *App) ensureFileTextarea() {
 		return nil
 	})
 	ta.Call("addEventListener", "mousedown", mdCb)
+
+	// Mousemove and mouseup inside the textarea: forward to the
+	// right-button handlers if a right-drag is in flight. Without
+	// this, dragging over the textarea would freeze the gesture.
+	mmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
+		if a.rightDrag == nil {
+			return nil
+		}
+		ev := args[0]
+		canvasRect := a.canvas.Call("getBoundingClientRect")
+		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
+		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
+		// If the right button has been released somewhere we didn't
+		// see, commit the gesture.
+		if buttons := ev.Get("buttons").Int(); buttons&2 == 0 {
+			a.finishRightDrag(sx, sy)
+			return nil
+		}
+		a.onRightMove(sx, sy)
+		return nil
+	})
+	ta.Call("addEventListener", "mousemove", mmCb)
+	muCb := js.FuncOf(func(this js.Value, args []js.Value) any {
+		ev := args[0]
+		if a.rightDrag == nil || ev.Get("button").Int() != 2 {
+			return nil
+		}
+		canvasRect := a.canvas.Call("getBoundingClientRect")
+		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
+		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
+		a.finishRightDrag(sx, sy)
+		return nil
+	})
+	ta.Call("addEventListener", "mouseup", muCb)
 	// Suppress the browser's context menu over the textarea too.
 	cmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")

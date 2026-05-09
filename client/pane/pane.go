@@ -151,29 +151,59 @@ func (t *Tree) Count() int {
 // FocusedPane returns the focused pane, or nil if focus is invalid.
 func (t *Tree) FocusedPane() *Pane { return t.FindPane(t.Focus) }
 
-// SplitOnSide splits the focused pane such that the new pane occupies
-// the requested side, and moves focus to the new pane. The new pane is
-// a clone of the focused pane (same descent path, viewport, file mode
-// state). Useful for "click toward the top → new pane on top, focused".
-//
-// Built on Split: when the new pane should occupy the A (top/left) side,
-// the just-created split's children are swapped so the new pane lands
-// in A.
+// SplitOnSide splits the focused pane 50/50 with the new pane on the
+// requested side, and moves focus to the new pane. Convenience wrapper
+// around SplitOnSideAt.
 func (t *Tree) SplitOnSide(side Side) (*Pane, error) {
+	return t.SplitOnSideAt(side, 0.5)
+}
+
+// SplitOnSideAt splits the focused pane such that the new pane occupies
+// the requested side at the given ratio of the parent split, and moves
+// focus to the new pane. The ratio is interpreted as "fraction of the
+// parent split that the new pane consumes" — so e.g.
+// SplitOnSideAt(SideTop, 0.3) makes the new pane the top 30%.
+//
+// Ratio is clamped to [0, 1]; values at the extremes still produce a
+// valid split (just degenerate), so the caller is responsible for
+// rejecting absurd ratios upstream.
+//
+// New pane inherits the focused pane's path/viewport/file-mode state
+// via Clone.
+func (t *Tree) SplitOnSideAt(side Side, ratio float64) (*Pane, error) {
 	newP, err := t.Split(side.Direction())
 	if err != nil {
 		return nil, err
 	}
+	split := findParentSplit(&t.Root, newP.ID)
+	if split == nil {
+		// Shouldn't happen: Split just inserted one. Bail safely.
+		t.Focus = newP.ID
+		return newP, nil
+	}
 	if side == SideTop || side == SideLeft {
 		// Tree.Split puts the existing pane in A and the new pane in B.
-		// For "new pane on top/left" we swap them so the new pane is A.
-		split := findParentSplit(&t.Root, newP.ID)
-		if split != nil {
-			split.A, split.B = split.B, split.A
-		}
+		// For "new pane on top/left" we swap them so the new pane is A,
+		// and the requested ratio is the new pane's fraction.
+		split.A, split.B = split.B, split.A
+		split.Ratio = clamp01(ratio)
+	} else {
+		// New pane on bottom/right (B side): ratio is its fraction, so
+		// the split's A-fraction is 1 - ratio.
+		split.Ratio = 1 - clamp01(ratio)
 	}
 	t.Focus = newP.ID
 	return newP, nil
+}
+
+func clamp01(x float64) float64 {
+	if x < 0 {
+		return 0
+	}
+	if x > 1 {
+		return 1
+	}
+	return x
 }
 
 // findParentSplit returns the *Split whose direct child contains the

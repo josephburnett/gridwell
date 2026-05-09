@@ -166,6 +166,125 @@ func TestRatioFromCursorZeroContainer(t *testing.T) {
 	}
 }
 
+func TestClassifyRegionLargePane(t *testing.T) {
+	r := Rect{X: 0, Y: 0, W: 100, H: 100}
+	cases := []struct {
+		name   string
+		x, y   float64
+		want   Region
+	}{
+		{"top edge", 50, 5, RegionResizeTop},
+		{"bottom edge", 50, 95, RegionResizeBottom},
+		{"left edge", 5, 50, RegionResizeLeft},
+		{"right edge", 95, 50, RegionResizeRight},
+		{"corner top-left → top (tiebreak)", 5, 5, RegionResizeTop},
+		{"corner bottom-right → bottom", 95, 95, RegionResizeBottom},
+		{"dead center → swap", 50, 50, RegionSwap},
+		{"upper-mid in swap zone", 50, 40, RegionSwap},
+		{"upper-mid below swap → split top", 50, 32, RegionSplitTop},
+		{"split top wide", 30, 25, RegionSplitTop},
+		{"split right", 80, 50, RegionSplitRight},
+		{"split bottom", 50, 70, RegionSplitBottom},
+		{"split left", 20, 50, RegionSplitLeft},
+	}
+	for _, c := range cases {
+		got := ClassifyRegion(r, 10, c.x, c.y)
+		if got != c.want {
+			t.Errorf("%s @(%v,%v): got %v, want %v", c.name, c.x, c.y, got, c.want)
+		}
+	}
+}
+
+func TestClassifyRegionMinimumPaneSize(t *testing.T) {
+	// At exactly 2*bandPx in both dims, the entire interior is resize
+	// zones — there's no inner area for swap or split.
+	r := Rect{X: 0, Y: 0, W: 20, H: 20}
+	band := 10.0
+	// All these points have minD < band except the dead center where
+	// minD == 10 (equal to band), which falls through to center.
+	for _, c := range []struct {
+		x, y float64
+		want Region
+	}{
+		{0, 0, RegionResizeTop},   // tiebreak top wins over left at (0,0)
+		{19, 0, RegionResizeTop},  // tiebreak top wins over right at (19,0)
+		{0, 19, RegionResizeLeft}, // (0,19): left=0 wins over bottom=1
+		{5, 5, RegionResizeTop},
+		{15, 5, RegionResizeTop},
+		{5, 15, RegionResizeBottom},  // (5,15): bottom=5 ties with left=5, bottom wins (checked first)
+		{15, 15, RegionResizeBottom}, // (15,15): bottom=5 ties with right=5, bottom wins
+	} {
+		if got := ClassifyRegion(r, band, c.x, c.y); got != c.want {
+			t.Errorf("@(%v,%v): got %v, want %v", c.x, c.y, got, c.want)
+		}
+	}
+}
+
+func TestClassifyRegionRazorThin(t *testing.T) {
+	// A 20×100 pane has full-width resize-top + resize-bottom. The
+	// strip y∈[10,10] is degenerate (zero-width middle). Anywhere
+	// else → resize.
+	r := Rect{X: 0, Y: 0, W: 100, H: 20}
+	band := 10.0
+	for _, c := range []struct {
+		x, y float64
+		want Region
+	}{
+		{50, 1, RegionResizeTop},
+		{50, 9, RegionResizeTop},
+		{50, 11, RegionResizeBottom},
+		{50, 19, RegionResizeBottom},
+		{1, 5, RegionResizeLeft},
+		{99, 5, RegionResizeRight},
+	} {
+		if got := ClassifyRegion(r, band, c.x, c.y); got != c.want {
+			t.Errorf("@(%v,%v): got %v, want %v", c.x, c.y, got, c.want)
+		}
+	}
+}
+
+func TestClassifyRegionDegradesAt30(t *testing.T) {
+	// At 30×30 the inner area is 10×10 — fully inside the swap zone
+	// (1/3 of 30 = 10..20). No split zone exists at this size.
+	r := Rect{X: 0, Y: 0, W: 30, H: 30}
+	band := 10.0
+	for _, c := range []struct {
+		x, y float64
+		want Region
+	}{
+		{15, 15, RegionSwap},
+		{12, 12, RegionSwap},
+		{18, 18, RegionSwap},
+		{5, 15, RegionResizeLeft},
+		{15, 5, RegionResizeTop},
+	} {
+		if got := ClassifyRegion(r, band, c.x, c.y); got != c.want {
+			t.Errorf("@(%v,%v): got %v, want %v", c.x, c.y, got, c.want)
+		}
+	}
+}
+
+func TestClassifyRegionWithOffset(t *testing.T) {
+	// Pane not at origin; classifier should respect r.X / r.Y.
+	r := Rect{X: 100, Y: 200, W: 60, H: 60}
+	band := 10.0
+	if got := ClassifyRegion(r, band, 130, 230); got != RegionSwap {
+		t.Errorf("center: got %v", got)
+	}
+	if got := ClassifyRegion(r, band, 105, 230); got != RegionResizeLeft {
+		t.Errorf("offset left edge: got %v", got)
+	}
+	if got := ClassifyRegion(r, band, 130, 218); got != RegionSplitTop {
+		t.Errorf("split top: got %v", got)
+	}
+}
+
+func TestClassifyRegionEmptyRect(t *testing.T) {
+	if got := ClassifyRegion(Rect{}, 10, 0, 0); got != RegionNone {
+		t.Errorf("empty rect: got %v", got)
+	}
+}
+
 func TestDividersThicknessDefault(t *testing.T) {
 	tr := NewTree()
 	a := tr.FocusedPane().ID

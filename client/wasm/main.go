@@ -120,12 +120,8 @@ type App struct {
 
 	// rightDrag is the in-flight right-button gesture, if any. Right
 	// button is dedicated to pane management — split, resize, close,
-	// swap. See input.go.
+	// swap. See right_button.go.
 	rightDrag *rightDragState
-
-	// splitAnim is the active "new pane growing out of an edge" tween,
-	// driving the just-created Split's Ratio from 0 (or 1) to 0.5.
-	splitAnim *splitGrowAnimation
 
 	// paneStateStack is the saved (Cx, Cy, Zoom) triple for each pane,
 	// pushed on descent and popped on ascent, so ascent restores the
@@ -196,15 +192,6 @@ type transSegment struct {
 	durationMs                      float64
 }
 
-// splitGrowAnimation tweens a just-created Split's ratio from one
-// boundary (0 or 1) toward 0.5, so the new pane visibly "grows out of"
-// the edge the user clicked. Keeps the split-creation gesture spatial:
-// the user always sees where the new pane comes from.
-type splitGrowAnimation struct {
-	target              *pane.Split
-	fromRatio, toRatio  float64
-	startMs, durationMs float64
-}
 
 // ghost is a transient floating render of a node, positioned in screen
 // coordinates within a specific pane. screenX/Y is the top-left corner of
@@ -417,17 +404,6 @@ func (a *App) frame() {
 		}
 		if t >= 1 {
 			a.advanceTransition(now)
-		} else {
-			a.scheduleFrame()
-		}
-	}
-	if a.splitAnim != nil {
-		t := anim.Progress(now, a.splitAnim.startMs, a.splitAnim.durationMs)
-		eased := anim.EaseOutCubic(t)
-		a.splitAnim.target.Ratio = anim.Lerp(a.splitAnim.fromRatio, a.splitAnim.toRatio, eased)
-		if t >= 1 {
-			a.splitAnim.target.Ratio = a.splitAnim.toRatio
-			a.splitAnim = nil
 		} else {
 			a.scheduleFrame()
 		}

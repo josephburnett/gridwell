@@ -84,6 +84,126 @@ func Dividers(t *Tree, root Rect, bandPx float64) []Divider {
 	return out
 }
 
+// Region identifies which logical sub-area of a pane a (sx, sy) point
+// falls into. Used by the right-button input layer to dispatch swap,
+// split, and resize gestures purely from a hit test.
+//
+// The pane is conceptually divided as follows:
+//
+//   - A `bandPx`-thick frame near each edge: the four resize regions.
+//   - The inner 1/3 × 1/3 of the *whole pane*: the swap region.
+//   - The remaining annular middle, sectorized by closest edge: the
+//     four split regions.
+//
+// At small pane sizes the inner region collapses naturally — when
+// 2*bandPx ≥ W (or H), the entire pane is resize zones, which is the
+// degenerate-degradation behavior we want.
+type Region int
+
+const (
+	RegionNone Region = iota
+	RegionSwap
+	RegionResizeTop
+	RegionResizeBottom
+	RegionResizeLeft
+	RegionResizeRight
+	RegionSplitTop
+	RegionSplitBottom
+	RegionSplitLeft
+	RegionSplitRight
+)
+
+// IsResize / IsSplit / IsSwap test the region category.
+func (r Region) IsResize() bool {
+	return r == RegionResizeTop || r == RegionResizeBottom ||
+		r == RegionResizeLeft || r == RegionResizeRight
+}
+func (r Region) IsSplit() bool {
+	return r == RegionSplitTop || r == RegionSplitBottom ||
+		r == RegionSplitLeft || r == RegionSplitRight
+}
+func (r Region) IsSwap() bool { return r == RegionSwap }
+
+// Side returns the edge side of a resize/split region. Returns
+// SideTop for non-side regions (callers should test IsResize/IsSplit
+// first).
+func (r Region) Side() Side {
+	switch r {
+	case RegionResizeTop, RegionSplitTop:
+		return SideTop
+	case RegionResizeBottom, RegionSplitBottom:
+		return SideBottom
+	case RegionResizeLeft, RegionSplitLeft:
+		return SideLeft
+	case RegionResizeRight, RegionSplitRight:
+		return SideRight
+	}
+	return SideTop
+}
+
+// ClassifyRegion returns the region under (sx, sy) inside pane rect r.
+// Resize zones (within bandPx of any edge) take priority; then the
+// center swap zone (inner 1/3 × 1/3 of the whole pane); then the
+// outer split zone, sectorized by closest edge.
+//
+// Tiebreak when multiple edges are equidistant: top, then bottom,
+// then left, then right (matches dragdrop.ClosestEdge for
+// determinism).
+func ClassifyRegion(r Rect, bandPx, sx, sy float64) Region {
+	if r.W <= 0 || r.H <= 0 {
+		return RegionNone
+	}
+	dt := sy - r.Y
+	db := (r.Y + r.H) - sy
+	dl := sx - r.X
+	dr := (r.X + r.W) - sx
+	// First-wins tiebreak across top/bottom/left/right.
+	minD := dt
+	side := SideTop
+	if db < minD {
+		minD = db
+		side = SideBottom
+	}
+	if dl < minD {
+		minD = dl
+		side = SideLeft
+	}
+	if dr < minD {
+		minD = dr
+		side = SideRight
+	}
+	if minD < bandPx {
+		switch side {
+		case SideTop:
+			return RegionResizeTop
+		case SideBottom:
+			return RegionResizeBottom
+		case SideLeft:
+			return RegionResizeLeft
+		case SideRight:
+			return RegionResizeRight
+		}
+	}
+	// Center swap: inner 1/3 × 1/3 of the whole pane (not of the
+	// post-band area). Naturally collapses to nothing as the pane
+	// shrinks.
+	if sx >= r.X+r.W/3 && sx < r.X+2*r.W/3 &&
+		sy >= r.Y+r.H/3 && sy < r.Y+2*r.H/3 {
+		return RegionSwap
+	}
+	switch side {
+	case SideTop:
+		return RegionSplitTop
+	case SideBottom:
+		return RegionSplitBottom
+	case SideLeft:
+		return RegionSplitLeft
+	case SideRight:
+		return RegionSplitRight
+	}
+	return RegionNone
+}
+
 // RatioFromCursor projects the cursor (sx, sy) onto the divider's
 // axis inside the parent split's container rect, and returns the
 // resulting split ratio in [0, 1]. Useful for live divider drags:
