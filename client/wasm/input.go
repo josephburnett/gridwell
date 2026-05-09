@@ -489,7 +489,8 @@ func (a *App) startAscent(p *pane.Pane) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY,
 	}
-	mid, to := zoomtrans.Ascent(from, w, parentPath)
+	r := paneRectFor(a, p)
+	mid, to := zoomtrans.Ascent(from, w, parentPath, r.W, r.H, cellPx)
 	a.transition = &paneTransition{
 		paneID:     p.ID,
 		from:       from,
@@ -512,7 +513,8 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY,
 	}
-	mid, to := zoomtrans.Descent(from, w)
+	r := paneRectFor(a, p)
+	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	// Make sure the child grid is being fetched while the animation runs
 	// so it's ready to render the moment we switch.
 	a.fetchGrid(well.ChildGridID)

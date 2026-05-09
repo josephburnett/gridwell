@@ -14,6 +14,8 @@
 // preview, longer descent zoom. The same factor governs ascent.
 package zoomtrans
 
+import "math"
+
 // Endpoints describes one end of a transition: the pane state expressed
 // as descent path, viewport center in cells (sub-cell precision), and
 // zoom multiplier.
@@ -36,59 +38,95 @@ type Well struct {
 
 // PreviewFactor is the scale at which a well shows its child grid.
 // One child cell renders at (parent_cell_size / PreviewFactor) pixels
-// inside the well's footprint.
+// inside the well's footprint. Used by the renderer to draw previews;
+// also governs the calibrated zoom at the path-switch moment so that
+// previews and the just-switched-to view render at identical scale.
 const PreviewFactor = 8.0
+
+// OvertakeZoom returns the parent zoom at which the well's footprint
+// exceeds both pane dimensions — the "well has fully consumed the
+// screen, its outline is just past every edge" point. This is the zoom
+// the descent animation aims for, regardless of how zoomed-out the user
+// started: zooming exactly to here fills the smaller dim, and slightly
+// beyond pushes the longer dim's outline off-screen too.
+func OvertakeZoom(w Well, paneW, paneH, cellPx float64) float64 {
+	if w.W <= 0 || w.H <= 0 || cellPx <= 0 {
+		return 1
+	}
+	zw := paneW / (float64(w.W) * cellPx)
+	zh := paneH / (float64(w.H) * cellPx)
+	return math.Max(zw, zh)
+}
 
 // Descent computes the transition endpoints for descending from the
 // given parent state through the given well into the well's child grid.
 //
 // The animation interpolates Cx, Cy, Zoom from `from` to `mid`. At t=1,
 // the pane atomically switches to `to` (which is in the child grid
-// coordinate space). The switch is calibrated to be visually continuous.
-func Descent(from Endpoints, w Well) (mid, to Endpoints) {
+// coordinate space). The switch is calibrated to be visually continuous:
+// at the switch moment, a child cell rendered as a preview (parent_cell
+// / PreviewFactor) matches a child cell rendered native at the new
+// zoom (the to.Zoom).
+//
+// `paneW`, `paneH` are the pixel dimensions of the pane the descent is
+// happening in; `cellPx` is the screen pixel size of one cell at zoom
+// 1.0. These determine the target zoom needed to make the well overtake
+// the pane in both dimensions.
+func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, to Endpoints) {
 	wellCx := float64(w.X) + float64(w.W)/2
 	wellCy := float64(w.Y) + float64(w.H)/2
+	zPTarget := OvertakeZoom(w, paneW, paneH, cellPx)
+	// Make sure the descent always zooms in, even if the user was already
+	// past the overtake zoom.
+	if zPTarget < from.Zoom {
+		zPTarget = from.Zoom
+	}
 	mid = Endpoints{
 		Path: from.Path,
 		Cx:   wellCx,
 		Cy:   wellCy,
-		Zoom: from.Zoom * PreviewFactor,
+		Zoom: zPTarget,
 	}
 	childPath := append(append([]int64(nil), from.Path...), w.ID)
 	to = Endpoints{
 		Path: childPath,
 		// Child grid viewport: center on the well's saved view region.
-		Cx:   float64(w.ViewX) + float64(w.W)/2,
-		Cy:   float64(w.ViewY) + float64(w.H)/2,
-		// Calibrated zoom: at the moment of switch, the parent cell
-		// pixel size is from.Zoom*PreviewFactor*64; the preview cell
-		// is that divided by PreviewFactor, equal to from.Zoom*64.
-		// To match, set child Zoom = from.Zoom.
-		Zoom: from.Zoom,
+		Cx: float64(w.ViewX) + float64(w.W)/2,
+		Cy: float64(w.ViewY) + float64(w.H)/2,
+		// Calibrated zoom for visual continuity at the switch:
+		//   parent cell at switch = cellPx * zPTarget
+		//   preview cell at switch = parent cell / PreviewFactor
+		//   for child cell = preview cell, zoom = zPTarget / PreviewFactor.
+		Zoom: zPTarget / PreviewFactor,
 	}
 	return
 }
 
 // Ascent computes the transition endpoints for ascending from the child
 // grid back into the parent grid, given the parent's well that we
-// descended through.
-//
-// `from` is the current (child-grid) pane state. `mid` is the animated
-// end-of-zoom-out target in child-grid coords. `to` is the state to
-// install after the switch, in the parent grid. The math is the inverse
-// of Descent.
-func Ascent(from Endpoints, w Well, parentPath []int64) (mid, to Endpoints) {
+// descended through. The animation interpolates from `from` to `mid` in
+// child grid coords, then atomically switches to `to` in parent coords.
+// Same calibration rule as Descent, in reverse: at the switch the
+// child's rendered cell size matches the parent's preview cell size.
+func Ascent(from Endpoints, w Well, parentPath []int64, paneW, paneH, cellPx float64) (mid, to Endpoints) {
+	zPTarget := OvertakeZoom(w, paneW, paneH, cellPx)
 	mid = Endpoints{
 		Path: from.Path,
 		Cx:   float64(w.ViewX) + float64(w.W)/2,
 		Cy:   float64(w.ViewY) + float64(w.H)/2,
-		Zoom: from.Zoom / PreviewFactor,
+		Zoom: zPTarget / PreviewFactor,
+	}
+	// Make sure the ascent always zooms out from the user's current state.
+	if mid.Zoom > from.Zoom {
+		mid.Zoom = from.Zoom
 	}
 	to = Endpoints{
 		Path: parentPath,
 		Cx:   float64(w.X) + float64(w.W)/2,
 		Cy:   float64(w.Y) + float64(w.H)/2,
-		Zoom: from.Zoom,
+		// Parent zoom at the switch is PreviewFactor * mid.Zoom — same
+		// continuity rule as Descent.
+		Zoom: mid.Zoom * PreviewFactor,
 	}
 	return
 }
