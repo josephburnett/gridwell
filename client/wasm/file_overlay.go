@@ -42,11 +42,25 @@ func (a *App) ensureFileTextarea() {
 	a.fileTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Just trigger a redraw so the canvas-side preview (if any) stays
 		// in sync. We don't push every keystroke to the server — that
-		// happens on toggle-to-rendered or ascend.
+		// happens on toggle-to-rendered or ascend. URL update is
+		// debounced separately so the cursor position lands in the URL
+		// without flickering on every keystroke.
 		a.draw()
+		a.scheduleURLUpdate()
 		return nil
 	})
 	ta.Call("addEventListener", "input", a.fileTextareaInputCb)
+
+	// Cursor moves without text changes (arrow keys, click placement,
+	// page navigation) also need to refresh the URL — listen for those
+	// via keyup and mouseup; input handles typed changes.
+	cursorCb := js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.scheduleURLUpdate()
+		return nil
+	})
+	ta.Call("addEventListener", "keyup", cursorCb)
+	ta.Call("addEventListener", "mouseup", cursorCb)
+	ta.Call("addEventListener", "select", cursorCb)
 
 	a.fileTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the browser scroll position onto the focused pane so
@@ -263,7 +277,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	a.fileLastMode[p.FileFocus] = p.FileMode
 	a.refreshFileOverlay()
 	a.draw()
-	a.saveTreeToLocalStorage()
+	a.scheduleURLUpdate()
 }
 
 // saveFileFromTextarea posts the textarea's value as the file's new

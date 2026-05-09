@@ -139,6 +139,12 @@ type App struct {
 	// server-side field. Persisted to localStorage along with the tree.
 	fileLastMode map[int64]string
 
+	// urlUpdateScheduled is true when a debounced URL replaceState is
+	// pending. Multiple state changes within the debounce window
+	// coalesce into a single replaceState. Cleared when the timeout
+	// fires.
+	urlUpdateScheduled bool
+
 	// fileTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
 	// when pane.FileFocus != 0 and pane.FileMode == "text", and hidden
@@ -318,15 +324,13 @@ func (a *App) afterLogin() {
 	// Initialize root pane with the user's root grid path (empty).
 	a.tree.FocusedPane().Path = nil
 
-	// Restore pane tree from localStorage if available.
-	a.loadTreeFromLocalStorage()
-
 	// Subscribe to SSE.
 	go a.startSSE()
 
-	// Fetch the root grid.
-	a.fetchGrid(a.user.RootGridID)
-	a.draw()
+	// Apply whatever the URL says (path / viewport / cursor). On a
+	// fresh page load with `/`, this is a no-op aside from fetching
+	// the user's root grid.
+	go a.applyURLOnBoot()
 }
 
 func (a *App) resize() {
@@ -487,7 +491,7 @@ func (a *App) completeTransition() {
 	if tr.onComplete != nil {
 		tr.onComplete()
 	}
-	a.saveTreeToLocalStorage()
+	a.scheduleURLUpdate()
 	a.draw()
 }
 
@@ -542,58 +546,15 @@ func (a *App) startSSE() {
 	}))
 }
 
-// savedClientState is the JSON shape we persist to localStorage so navigation
-// state (descent paths, saved viewports) survives a page reload.
-type savedClientState struct {
-	Tree  *pane.Tree             `json:"tree"`
-	Focus string                 `json:"focus"`
-	Stack map[string][]paneState `json:"stack"`
-	// FileModes remembers the user's last-used mode per file node id so
-	// previews and re-descent open in the same mode the user left.
-	FileModes map[int64]string `json:"file_modes,omitempty"`
-}
-
-// loadTreeFromLocalStorage restores the saved pane tree (and saved-state
-// stack) if present. Treats a missing or malformed entry as no-op.
-func (a *App) loadTreeFromLocalStorage() {
-	v := a.win.Get("localStorage").Call("getItem", "ascent.tree."+strconv.FormatInt(a.user.UserID, 10))
-	if v.IsNull() || v.IsUndefined() {
-		return
-	}
-	var saved savedClientState
-	if err := json.Unmarshal([]byte(v.String()), &saved); err != nil {
-		return
-	}
-	if saved.Tree == nil {
-		return
-	}
-	a.tree = saved.Tree
-	if saved.Focus != "" && a.tree.FindPane(saved.Focus) != nil {
-		a.tree.Focus = saved.Focus
-	}
-	if saved.Stack != nil {
-		a.paneStateStack = saved.Stack
-	}
-	if saved.FileModes != nil {
-		a.fileLastMode = saved.FileModes
-	}
-}
-
-func (a *App) saveTreeToLocalStorage() {
-	if a.user == nil {
-		return
-	}
-	b, err := json.Marshal(savedClientState{
-		Tree:      a.tree,
-		Focus:     a.tree.Focus,
-		Stack:     a.paneStateStack,
-		FileModes: a.fileLastMode,
-	})
-	if err != nil {
-		return
-	}
-	a.win.Get("localStorage").Call("setItem", "ascent.tree."+strconv.FormatInt(a.user.UserID, 10), string(b))
-}
+// (No localStorage persistence.) The full UI state — split layout,
+// per-pane navigation, viewport — is intentionally session-local and
+// rebuilds itself from the URL on reload. The URL captures only the
+// focused pane; the layout (split tree) starts fresh as a single pane.
+//
+// In-memory state that is *not* persisted but does survive within a
+// session: paneStateStack (so within-session ascent restores the
+// exact pre-descent viewport) and fileLastMode (so previews remember
+// the user's last-used mode for a file until reload).
 
 // gridIDForPath walks the pane's descent path and returns the grid id at the
 // leaf. Returns root if the path is empty or stale prefixes don't resolve.

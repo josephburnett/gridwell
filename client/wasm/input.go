@@ -138,7 +138,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 				p.FileScrollY = 0
 			}
 			a.draw()
-			a.saveTreeToLocalStorage()
+			a.scheduleURLUpdate()
 		}
 		_ = sx
 		_ = sy
@@ -163,7 +163,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	}
 	p.Zoom = z
 	a.draw()
-	a.saveTreeToLocalStorage()
+	a.scheduleURLUpdate()
 	return nil
 }
 
@@ -419,7 +419,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		// the edge band kicks off navigation. Selection only applies to
 		// other cases (e.g., clicking an image preview to outline it).
 		if a.attemptDescentOrAscent(focused, r, sx, sy) {
-			a.saveTreeToLocalStorage()
+			a.scheduleURLUpdate()
 			return nil
 		}
 		cellX, cellY := cellAtScreen(focused, r, sx, sy)
@@ -429,13 +429,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			delete(a.selectedNodeID, focused.ID)
 		}
 		a.draw()
-		a.saveTreeToLocalStorage()
+		a.scheduleURLUpdate()
 		return nil
 	}
 
 	// Pan drag end: just persist viewport state.
 	if d.nodeID == 0 {
-		a.saveTreeToLocalStorage()
+		a.scheduleURLUpdate()
 		a.draw()
 		return nil
 	}
@@ -667,20 +667,40 @@ func (a *App) startAscent(p *pane.Pane) {
 	if len(p.Path) == 0 {
 		return
 	}
-	wellID := p.Path[len(p.Path)-1]
-	parentPath := append([]int64(nil), p.Path[:len(p.Path)-1]...)
-	parentGridID := a.gridIDForPath(parentPath)
-	parentGrid, ok := a.c.Grid(parentGridID)
-	if !ok {
-		a.fetchGrid(parentGridID)
-		a.instantAscend(p, parentPath)
+	// Walk back from the leaf looking for the deepest ancestor we can
+	// actually animate from. If a well row is missing or its parent
+	// grid is unreadable, skip past it and try the level above. Falls
+	// back to instant snap-to-root when nothing in the path resolves.
+	level := len(p.Path) - 1
+	var well rpc.Node
+	for ; level >= 0; level-- {
+		parentPath := p.Path[:level]
+		parentGridID := a.gridIDForPath(parentPath)
+		g, ok := a.c.Grid(parentGridID)
+		if !ok {
+			a.fetchGrid(parentGridID)
+			continue
+		}
+		w, ok := g.Nodes[p.Path[level]]
+		if !ok {
+			continue
+		}
+		well = w
+		break
+	}
+	if level < 0 {
+		a.instantAscend(p, nil)
 		return
 	}
-	well, ok := parentGrid.Nodes[wellID]
-	if !ok {
-		a.instantAscend(p, parentPath)
+	if level != len(p.Path)-1 {
+		// We skipped one or more missing levels. The animation math
+		// expects to be ascending out of the leaf grid; jumping mid-
+		// path would render badly. Snap directly to the resolved level
+		// and let the user ascend again from there if they want.
+		a.instantAscend(p, append([]int64(nil), p.Path[:level]...))
 		return
 	}
+	parentPath := append([]int64(nil), p.Path[:level]...)
 	r := paneRectFor(a, p)
 	from := zoomtrans.Endpoints{
 		Path: append([]int64(nil), p.Path...),
@@ -735,7 +755,7 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
 	delete(a.selectedNodeID, p.ID)
 	a.draw()
-	a.saveTreeToLocalStorage()
+	a.scheduleURLUpdate()
 }
 
 // startDescent pushes the pane's current state onto the saved-state stack
@@ -946,7 +966,7 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	}
 	a.refreshFileOverlay()
 	a.draw()
-	a.saveTreeToLocalStorage()
+	a.scheduleURLUpdate()
 }
 
 // saveFileBeforeAscent posts the editor buffer (if text mode is active)
@@ -1285,7 +1305,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		}
 	}
 	a.draw()
-	a.saveTreeToLocalStorage()
+	a.scheduleURLUpdate()
 }
 
 // startSplitOnEdge reads the click position relative to the pane's
