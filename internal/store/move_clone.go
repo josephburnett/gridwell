@@ -97,6 +97,21 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 			dstGrid = srcGrid
 		}
 
+		// Refuse to move a well into itself or one of its descendants.
+		// The dest path is the chain of wells the user descended through
+		// to reach the destination grid; if our well is on that chain,
+		// dropping there would either point the well at its own child
+		// (immediate cycle, well becomes unreachable) or at a descendant
+		// (deeper cycle). Both orphan the well from any path that walks
+		// down from root.
+		if n.Type == "well" {
+			for _, wid := range req.DestPath.WellIDs {
+				if wid == nodeID {
+					return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
+				}
+			}
+		}
+
 		// Overlap check on the destination, excluding the moving node iff
 		// dest is the same grid as src.
 		var excludes []int64

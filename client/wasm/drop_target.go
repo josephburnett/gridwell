@@ -38,7 +38,13 @@ type dropTarget struct {
 // dropTargetAt resolves the cursor at (sx, sy) to a drop target.
 // Returns false when the cursor is over a file-mode pane or off-canvas
 // — neither is a valid drop destination.
-func (a *App) dropTargetAt(sx, sy float64) (*dropTarget, bool) {
+//
+// excludeNodeID, if non-zero, prevents a well at that row id from
+// being treated as a drop-into-well target — used so a user dragging
+// well X around can't accidentally drop X into its own child grid
+// when the cursor is still on top of X. Pass d.nodeID from the
+// dragState; it's a safe no-op when the source isn't a well.
+func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil, false
@@ -56,10 +62,13 @@ func (a *App) dropTargetAt(sx, sy float64) (*dropTarget, bool) {
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
 	// Look for an open well under the cursor — that promotes the
-	// target to the well's child grid.
+	// target to the well's child grid. Skip the promotion when the
+	// well *is* the source being dragged; that would be a drop into
+	// self and creates a parent/child cycle on the server.
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	if n := a.nodeAtCell(p, cellX, cellY); n != nil &&
-		n.Type == "well" && !n.Capped && n.ChildGridID != 0 {
+		n.Type == "well" && !n.Capped && n.ChildGridID != 0 &&
+		n.ID != excludeNodeID {
 		// Well preview math.
 		cp := dragdrop.ChildPreviewFor(ps, struct {
 			X, Y, W, H, ViewX, ViewY int64

@@ -385,7 +385,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// cursor crosses pane boundaries or enters/leaves a well's
 		// preview. Position is computed from cursor − cellOffset ×
 		// displayedCellSize so the grab point stays under the cursor.
-		if t, ok := a.dropTargetAt(sx, sy); ok {
+		if t, ok := a.dropTargetAt(sx, sy, d.nodeID); ok {
 			a.ghost.paneID = t.pane.ID
 			a.ghost.targetCellSize = t.cellSize
 		} else {
@@ -461,7 +461,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// Node move/clone drag. Resolve the drop target — may be the
 	// destination pane's parent grid or, when the cursor is on an open
 	// well, the well's child grid.
-	t, ok := a.dropTargetAt(sx, sy)
+	t, ok := a.dropTargetAt(sx, sy, d.nodeID)
 	if !ok {
 		a.cancelDragSnapBack(d)
 		return nil
