@@ -4,9 +4,17 @@ package main
 
 import (
 	"math"
+	"syscall/js"
 
+	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
+	"github.com/josephburnett/ascent/internal/rpc"
 )
+
+// colorTileResize is the preview outline of an in-flight tile resize.
+// Same blue as active split and swap so the "active gesture" feel is
+// consistent.
+const colorTileResize = "#4a6fff"
 
 // Preview rendering colors.
 const (
@@ -29,7 +37,9 @@ const resizeBandPx = 10.0
 const rightCloseThreshold = 2 * resizeBandPx
 
 // rightDragKind classifies an in-flight right-button gesture. Set on
-// mousedown after region classification; never changes mid-gesture.
+// mousedown; the tile-vs-pane fork is decided by where the cursor
+// landed (over a tile → tile gesture; otherwise → pane gesture). Never
+// changes mid-gesture.
 type rightDragKind int
 
 const (
@@ -37,6 +47,22 @@ const (
 	rightDragSwap
 	rightDragSplit
 	rightDragResize
+	// rightDragTile arms a node-level gesture: bare release toggles
+	// cap/redig (or fill, on an empty well); release after a drag past
+	// dragThreshold commits a corner-anchored resize.
+	rightDragTile
+)
+
+// tileCorner identifies which corner of a tile the cursor was nearest
+// at right-down. That corner follows the cursor during drag-resize;
+// the opposite corner stays anchored.
+type tileCorner int
+
+const (
+	cornerTL tileCorner = iota
+	cornerTR
+	cornerBL
+	cornerBR
 )
 
 // rightDragState carries everything the move and up handlers need to
@@ -59,15 +85,52 @@ type rightDragState struct {
 	targetSplit *pane.Split
 	splitDir    pane.Direction
 	container   paneRect
+
+	// Tile-only.
+	tilePaneID  string
+	tileNode    rpc.Node
+	tileCorner  tileCorner
+	tileStarted bool       // cursor moved past dragThreshold → resize
+	tilePane    *pane.Pane // for path/grid lookups at commit time
+	tilePaneR   paneRect   // pane rect at right-down (for cell mapping)
+	tileNewX    int64
+	tileNewY    int64
+	tileNewW    int64
+	tileNewH    int64
 }
 
-// onRightDown classifies the right-down by region and arms the
-// matching gesture state. No tree edits happen here — those wait for
-// release (split, swap) or the next move tick (resize).
+// onRightDown classifies the right-down and arms the matching gesture
+// state. Tile gestures (cap/redig/fill on bare release; resize on
+// drag) take priority when the cursor is over a node in a grid view.
+// No tree or store edits happen here — those wait for release (or the
+// next move tick, for pane resize).
 //
 // Caller has already verified there's no animation in flight and
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
+	// Tile gesture: only valid in a grid view (not file mode).
+	if p.FileFocus == 0 {
+		cellX, cellY := cellAtScreen(p, r, sx, sy)
+		if n := a.nodeAtCell(p, cellX, cellY); n != nil {
+			a.rightDrag = &rightDragState{
+				kind:       rightDragTile,
+				startX:     sx,
+				startY:     sy,
+				curX:       sx,
+				curY:       sy,
+				tilePaneID: p.ID,
+				tileNode:   *n,
+				tileCorner: tileCornerNearest(n, p, r, sx, sy),
+				tilePane:   p,
+				tilePaneR:  r,
+				tileNewX:   n.X,
+				tileNewY:   n.Y,
+				tileNewW:   n.W,
+				tileNewH:   n.H,
+			}
+			return
+		}
+	}
 	region := pane.ClassifyRegion(paneRectToRect(r), resizeBandPx, sx, sy)
 	switch {
 	case region.IsResize():
@@ -121,9 +184,9 @@ func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
 	}
 }
 
-// onRightMove updates the cursor position and applies live changes
-// (resize is the only gesture that mutates the tree mid-drag; split
-// and swap render previews instead).
+// onRightMove updates the cursor position and applies live changes.
+// Pane-resize is the only gesture that mutates the tree mid-drag;
+// split, swap, and tile-resize render previews and commit on release.
 func (a *App) onRightMove(sx, sy float64) {
 	rd := a.rightDrag
 	if rd == nil {
@@ -131,11 +194,107 @@ func (a *App) onRightMove(sx, sy float64) {
 	}
 	rd.curX = sx
 	rd.curY = sy
-	if rd.kind == rightDragResize {
+	switch rd.kind {
+	case rightDragResize:
 		newRatio := pane.RatioFromCursor(paneRectToRect(rd.container), rd.splitDir, sx, sy)
 		rd.targetSplit.Ratio = newRatio
+	case rightDragTile:
+		dxs := sx - rd.startX
+		dys := sy - rd.startY
+		if !rd.tileStarted && dxs*dxs+dys*dys >= dragThreshold*dragThreshold {
+			rd.tileStarted = true
+		}
+		if rd.tileStarted {
+			rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromCursor(rd, sx, sy)
+		}
 	}
 	a.draw()
+}
+
+// tileCornerNearest reports which corner of the tile is closest to
+// the cursor at right-down. The simple quadrant model (left/right vs.
+// top/bottom of the tile's center) matches user intuition: clicking
+// in the top-left quadrant grabs the TL corner.
+func tileCornerNearest(n *rpc.Node, p *pane.Pane, r paneRect, sx, sy float64) tileCorner {
+	ps := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
+	cx, cy := ps.ScreenToCell(sx, sy)
+	midX := float64(n.X) + float64(n.W)/2
+	midY := float64(n.Y) + float64(n.H)/2
+	left := cx < midX
+	top := cy < midY
+	switch {
+	case top && left:
+		return cornerTL
+	case top && !left:
+		return cornerTR
+	case !top && left:
+		return cornerBL
+	default:
+		return cornerBR
+	}
+}
+
+// tileResizeFromCursor computes the proposed new (X, Y, W, H) given
+// the cursor position. The grabbed corner follows the cursor (snapped
+// to cell boundaries); the opposite corner stays anchored. W/H are
+// clamped to >= 1 so the tile never inverts or collapses.
+func tileResizeFromCursor(rd *rightDragState, sx, sy float64) (int64, int64, int64, int64) {
+	ps := dragdrop.Pane{
+		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
+		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
+		Cx: rd.tilePane.Cx, Cy: rd.tilePane.Cy,
+		Zoom: rd.tilePane.Zoom, CellPx: cellPx,
+	}
+	cx, cy := ps.ScreenToCell(sx, sy)
+	cellX := int64(math.Round(cx))
+	cellY := int64(math.Round(cy))
+	origX := rd.tileNode.X
+	origY := rd.tileNode.Y
+	origW := rd.tileNode.W
+	origH := rd.tileNode.H
+	rightX := origX + origW
+	bottomY := origY + origH
+	var newX, newY, newW, newH int64
+	switch rd.tileCorner {
+	case cornerTL:
+		newX = clampMaxInt(cellX, rightX-1)
+		newY = clampMaxInt(cellY, bottomY-1)
+		newW = rightX - newX
+		newH = bottomY - newY
+	case cornerTR:
+		newX = origX
+		newY = clampMaxInt(cellY, bottomY-1)
+		newW = clampMinInt(cellX-origX, 1)
+		newH = bottomY - newY
+	case cornerBL:
+		newX = clampMaxInt(cellX, rightX-1)
+		newY = origY
+		newW = rightX - newX
+		newH = clampMinInt(cellY-origY, 1)
+	case cornerBR:
+		newX = origX
+		newY = origY
+		newW = clampMinInt(cellX-origX, 1)
+		newH = clampMinInt(cellY-origY, 1)
+	}
+	return newX, newY, newW, newH
+}
+
+func clampMinInt(v, lo int64) int64 {
+	if v < lo {
+		return lo
+	}
+	return v
+}
+
+func clampMaxInt(v, hi int64) int64 {
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // finishRightDrag commits or cancels the in-flight gesture at the
@@ -156,9 +315,113 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitSwap(rd, sx, sy)
 	case rightDragSplit:
 		a.commitSplit(rd, sx, sy)
+	case rightDragTile:
+		a.commitTileGesture(rd, sx, sy)
 	}
 	a.draw()
 	a.scheduleURLUpdate()
+}
+
+// commitTileGesture finishes a tile-targeted right-button gesture.
+// No drag past dragThreshold → bare release: cap/redig (or fill, if
+// the well's child grid is empty in cache) for wells; no-op for files.
+// With drag → corner-anchored resize via ResizeNode.
+func (a *App) commitTileGesture(rd *rightDragState, _, _ float64) {
+	if rd.tileStarted {
+		a.commitTileResize(rd)
+		return
+	}
+	a.commitTileBareClick(rd)
+}
+
+// commitTileBareClick handles right-click without drag on a tile. For
+// wells, toggles cap/redig — or fills the well if its child grid is
+// empty in our cache (per "cap of an empty well is a delete"). Files:
+// no-op.
+func (a *App) commitTileBareClick(rd *rightDragState) {
+	n := rd.tileNode
+	if n.Type != "well" {
+		return
+	}
+	p := a.tree.FindPane(rd.tilePaneID)
+	if p == nil {
+		return
+	}
+	pscreen := dragdrop.Pane{
+		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
+		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
+	view := a.paneViewRect(p, pscreen)
+	gid := a.gridIDForPath(p.Path)
+
+	// "Empty leaf-only" fill: if the well isn't capped and its child
+	// grid is in cache with zero nodes, the bare click fills it
+	// instead of capping. Capped wells always redig (you can't fill a
+	// capped well — first redig, then maybe fill).
+	if !n.Capped {
+		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Nodes) == 0 {
+			go func() {
+				req := rpc.FillWellRequest{
+					Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, NodeID: n.ID,
+				}
+				var resp rpc.FillWellResponse
+				_, _ = postJSON("/rpc/FillWell", req, &resp)
+				a.fetchGrid(gid)
+			}()
+			return
+		}
+	}
+
+	go func() {
+		var resp rpc.NodeResponse
+		if n.Capped {
+			req := rpc.RedigWellRequest{
+				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, NodeID: n.ID,
+			}
+			_, _ = postJSON("/rpc/RedigWell", req, &resp)
+		} else {
+			req := rpc.CapWellRequest{
+				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, NodeID: n.ID,
+			}
+			_, _ = postJSON("/rpc/CapWell", req, &resp)
+		}
+		a.fetchGrid(gid)
+	}()
+}
+
+// commitTileResize commits the proposed (X, Y, W, H) via ResizeNode.
+// If the new size matches the original, no RPC is issued.
+func (a *App) commitTileResize(rd *rightDragState) {
+	n := rd.tileNode
+	if rd.tileNewX == n.X && rd.tileNewY == n.Y && rd.tileNewW == n.W && rd.tileNewH == n.H {
+		return
+	}
+	p := a.tree.FindPane(rd.tilePaneID)
+	if p == nil {
+		return
+	}
+	pscreen := dragdrop.Pane{
+		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
+		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
+	view := a.paneViewRect(p, pscreen)
+	gid := a.gridIDForPath(p.Path)
+	req := rpc.ResizeNodeRequest{
+		Path:     rpc.Path{WellIDs: p.Path},
+		ViewRect: view,
+		NodeID:   n.ID,
+		X:        rd.tileNewX,
+		Y:        rd.tileNewY,
+		W:        rd.tileNewW,
+		H:        rd.tileNewH,
+	}
+	go func() {
+		var resp rpc.NodeResponse
+		_, _ = postJSON("/rpc/ResizeNode", req, &resp)
+		a.fetchGrid(gid)
+	}()
 }
 
 // commitResize applies the final ratio and, if either side is below
@@ -347,7 +610,43 @@ func (a *App) drawRightDragPreview() {
 		a.drawSwapPreview(rd)
 	case rightDragResize:
 		a.drawResizeCloseWarning(rd)
+	case rightDragTile:
+		if rd.tileStarted {
+			a.drawTileResizePreview(rd)
+		}
 	}
+}
+
+// drawTileResizePreview outlines the proposed new footprint in the
+// pane's screen coordinates. The original tile keeps painting in
+// place, so the preview is the new rectangle as a dashed blue stroke.
+func (a *App) drawTileResizePreview(rd *rightDragState) {
+	ps := dragdrop.Pane{
+		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
+		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
+		Cx: rd.tilePane.Cx, Cy: rd.tilePane.Cy,
+		Zoom: rd.tilePane.Zoom, CellPx: cellPx,
+	}
+	left, top := ps.CellToScreen(float64(rd.tileNewX), float64(rd.tileNewY))
+	cellSize := cellPx * rd.tilePane.Zoom
+	w := float64(rd.tileNewW) * cellSize
+	h := float64(rd.tileNewH) * cellSize
+	a.cctx.Set("strokeStyle", colorTileResize)
+	a.cctx.Set("lineWidth", 2.0)
+	a.cctx.Call("setLineDash", jsArray(6, 4))
+	a.cctx.Call("strokeRect", left, top, w, h)
+	a.cctx.Call("setLineDash", jsArray())
+	a.cctx.Set("lineWidth", 1.0)
+}
+
+// jsArray makes a JS array from variadic float64 args. Used to set
+// dash patterns on the canvas 2D context.
+func jsArray(vals ...float64) js.Value {
+	arr := make([]any, len(vals))
+	for i, v := range vals {
+		arr[i] = v
+	}
+	return js.ValueOf(arr)
 }
 
 // drawSplitPreview draws the grey/blue partition line. The line

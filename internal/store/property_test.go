@@ -116,7 +116,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
 			n, err := s.ResizeNode(ctx, u.ID, &rpc.ResizeNodeRequest{
-				Path: pick.path, ViewRect: largeView(), NodeID: pick.id, W: w, H: h,
+				Path: pick.path, ViewRect: largeView(), NodeID: pick.id,
+				X: pick.x, Y: pick.y, W: w, H: h,
 			})
 			if err != nil {
 				if !isBenignPropError(err) {

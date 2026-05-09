@@ -230,8 +230,10 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 	return out, nil
 }
 
-// ResizeNode changes a node's footprint. The new footprint must not overlap
-// any other node in the grid.
+// ResizeNode changes a node's footprint to (X, Y, W, H). The new
+// footprint must not overlap any other node in the grid and must lie
+// inside the request's view rect. The full footprint is updated each
+// call — corner-drag resize uses this to move any corner.
 func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNodeRequest) (*rpc.Node, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
@@ -243,8 +245,13 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 		if err != nil {
 			return err
 		}
-		// Locality: existing footprint must lie inside the framed view.
+		// Locality: existing footprint AND new footprint must each lie
+		// inside the framed view. Existing-side prevents action-at-a-
+		// distance; new-side prevents flinging the tile out of view.
 		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+			return ErrLocality
+		}
+		if !req.ViewRect.Contains(req.X, req.Y, req.W, req.H) {
 			return ErrLocality
 		}
 		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
@@ -262,8 +269,8 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 		nodeID := pre.TargetNodeID
 		events = append(events, pre.Events...)
 
-		// Overlap check, excluding this node.
-		over, err := overlapsExisting(ctx, tx, pre.GridID, n.X, n.Y, req.W, req.H, nodeID)
+		// Overlap check against the new footprint, excluding this node.
+		over, err := overlapsExisting(ctx, tx, pre.GridID, req.X, req.Y, req.W, req.H, nodeID)
 		if err != nil {
 			return err
 		}
@@ -271,8 +278,8 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 			return ErrOverlap
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET w = ?, h = ?, updated_at = ? WHERE id = ?`,
-			req.W, req.H, s.now().Unix(), nodeID); err != nil {
+			`UPDATE nodes SET x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
+			req.X, req.Y, req.W, req.H, s.now().Unix(), nodeID); err != nil {
 			return err
 		}
 		out, err = s.loadNode(ctx, tx, nodeID)

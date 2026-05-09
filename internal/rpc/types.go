@@ -168,8 +168,14 @@ type ResizeNodeRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
 	NodeID   int64    `json:"node_id"`
-	W        int64    `json:"w"`
-	H        int64    `json:"h"`
+	// X, Y, W, H specify the new footprint. The whole footprint is
+	// updated, so callers that only want to change W/H must still send
+	// the existing X, Y. Used by corner-drag resize where any corner
+	// can move with the cursor.
+	X int64 `json:"x"`
+	Y int64 `json:"y"`
+	W int64 `json:"w"`
+	H int64 `json:"h"`
 }
 
 type SetNodeViewportRequest struct {
