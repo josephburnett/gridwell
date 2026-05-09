@@ -122,6 +122,78 @@ func TestClosestEdge(t *testing.T) {
 	}
 }
 
+func TestChildPreviewRoundTrip(t *testing.T) {
+	parent := Pane{
+		ScreenX: 0, ScreenY: 0, ScreenW: 800, ScreenH: 600,
+		Cx: 0, Cy: 0, Zoom: 1.0, CellPx: 64,
+	}
+	well := struct {
+		X, Y, W, H, ViewX, ViewY int64
+	}{X: -1, Y: 2, W: 3, H: 4, ViewX: 10, ViewY: -5}
+	cp := ChildPreviewFor(parent, well, 8.0)
+	// previewCell = 64 / 8 = 8 px per child cell.
+	if !near(cp.CellPx, 8) {
+		t.Errorf("CellPx = %v, want 8", cp.CellPx)
+	}
+	// Round-trip a few child cell coords through the screen mapping.
+	for _, c := range []struct{ cx, cy float64 }{
+		{0, 0}, {10, -5}, {11.5, -4.25}, {-7, 12},
+	} {
+		sx, sy := cp.CellToScreen(c.cx, c.cy)
+		gx, gy := cp.ChildCellAtScreen(sx, sy)
+		if !near(gx, c.cx) || !near(gy, c.cy) {
+			t.Errorf("round trip (%v,%v) -> (%v,%v)", c.cx, c.cy, gx, gy)
+		}
+	}
+}
+
+func TestChildPreviewCenterAlignsWithViewCenter(t *testing.T) {
+	// The preview's view center should land at the well's screen
+	// center — that is the calibration zoomtrans relies on.
+	parent := Pane{
+		ScreenX: 0, ScreenY: 0, ScreenW: 1000, ScreenH: 1000,
+		Cx: 0, Cy: 0, Zoom: 2.0, CellPx: 64,
+	}
+	well := struct {
+		X, Y, W, H, ViewX, ViewY int64
+	}{X: 0, Y: 0, W: 4, H: 4, ViewX: 0, ViewY: 0}
+	cp := ChildPreviewFor(parent, well, 8.0)
+	parentCell := parent.CellPx * parent.Zoom
+	wellCenterX, wellCenterY := parent.CellToScreen(2, 2) // center of 4×4 well at (0,0)
+	_ = parentCell
+	// View center of the well is also (2, 2) in child-cell coords.
+	viewCenterScreenX, viewCenterScreenY := cp.CellToScreen(2, 2)
+	if !near(viewCenterScreenX, wellCenterX) || !near(viewCenterScreenY, wellCenterY) {
+		t.Errorf("view center maps to (%v,%v), want (%v,%v)",
+			viewCenterScreenX, viewCenterScreenY, wellCenterX, wellCenterY)
+	}
+}
+
+func TestNodeContainsCell(t *testing.T) {
+	cases := []struct {
+		x, y, w, h, cx, cy int64
+		want               bool
+	}{
+		{0, 0, 1, 1, 0, 0, true},
+		{0, 0, 1, 1, 1, 0, false},
+		{0, 0, 1, 1, 0, 1, false},
+		{2, 3, 4, 5, 2, 3, true},
+		{2, 3, 4, 5, 5, 7, true},
+		{2, 3, 4, 5, 6, 7, false},
+		{2, 3, 4, 5, 5, 8, false},
+		{-2, -3, 2, 2, -2, -3, true},
+		{-2, -3, 2, 2, -1, -2, true},
+		{-2, -3, 2, 2, 0, -2, false},
+	}
+	for _, c := range cases {
+		got := NodeContainsCell(c.x, c.y, c.w, c.h, c.cx, c.cy)
+		if got != c.want {
+			t.Errorf("NodeContainsCell(%d,%d,%d,%d,%d,%d) = %v, want %v",
+				c.x, c.y, c.w, c.h, c.cx, c.cy, got, c.want)
+		}
+	}
+}
+
 func TestFootprintFits(t *testing.T) {
 	p := Pane{
 		ScreenX: 0, ScreenY: 0, ScreenW: 640, ScreenH: 640,

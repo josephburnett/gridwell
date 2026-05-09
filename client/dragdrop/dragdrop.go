@@ -130,6 +130,59 @@ func ClosestEdge(p Pane, sx, sy float64) Side {
 	return best
 }
 
+// ChildPreview describes a well's child-grid preview as drawn inside
+// its parent grid. Origin is the screen coord of child cell (0, 0)
+// and CellPx is the rendered size of one child cell in screen pixels.
+// Use ChildPreviewFor to compute these from a well's footprint plus
+// the parent pane's transform.
+type ChildPreview struct {
+	OriginX, OriginY float64
+	CellPx           float64
+}
+
+// ChildPreviewFor returns the screen-coord transform for a well's
+// child-grid preview, given the parent pane and the well's footprint
+// and view region (all in parent-grid cells).
+//
+// previewFactor is the cell-size ratio between the parent grid and
+// the child preview — pass zoomtrans.PreviewFactor (8.0). Pulled out
+// as a parameter so this helper stays in the math-only dragdrop
+// package without an import on the client/zoomtrans package.
+func ChildPreviewFor(parent Pane, well struct {
+	X, Y, W, H, ViewX, ViewY int64
+}, previewFactor float64) ChildPreview {
+	parentCell := parent.CellPx * parent.Zoom
+	previewCell := parentCell / previewFactor
+	wellLeft, wellTop := parent.CellToScreen(float64(well.X), float64(well.Y))
+	wellCenterX := wellLeft + float64(well.W)*parentCell/2
+	wellCenterY := wellTop + float64(well.H)*parentCell/2
+	return ChildPreview{
+		OriginX: wellCenterX - (float64(well.ViewX)+float64(well.W)/2)*previewCell,
+		OriginY: wellCenterY - (float64(well.ViewY)+float64(well.H)/2)*previewCell,
+		CellPx:  previewCell,
+	}
+}
+
+// ChildCellAtScreen returns the child-grid cell coordinate (as a
+// float, caller floors/rounds as needed) for a screen point inside
+// the preview.
+func (cp ChildPreview) ChildCellAtScreen(sx, sy float64) (float64, float64) {
+	return (sx - cp.OriginX) / cp.CellPx, (sy - cp.OriginY) / cp.CellPx
+}
+
+// CellToScreen returns the screen coordinate of the top-left corner
+// of child cell (cx, cy) in the preview.
+func (cp ChildPreview) CellToScreen(cx, cy float64) (float64, float64) {
+	return cp.OriginX + cx*cp.CellPx, cp.OriginY + cy*cp.CellPx
+}
+
+// NodeContainsCell reports whether the cell (cx, cy) lies within the
+// rectangle (x, y, w, h). Used to decide whether a cursor's child-cell
+// hits a tile inside a well preview.
+func NodeContainsCell(x, y, w, h, cx, cy int64) bool {
+	return cx >= x && cx < x+w && cy >= y && cy < y+h
+}
+
 // FootprintFits reports whether a (w, h)-sized footprint at (x, y) fits
 // inside the pane's framed rectangle. The framed rect is computed from the
 // pane's screen size, zoom, and viewport center. Used by the client to gray

@@ -77,9 +77,28 @@ const (
 // templateKinds is the palette layout order, left to right.
 var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplUpload}
 
+// ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
+// displayed cell size approaches its target. At 60 fps this gives a
+// time constant of about 120 ms — quick but smooth, matching the
+// "grow/shrink as the cursor enters/exits a well" feel.
+const ghostSizeLerpAlpha = 0.20
+
 // draw repaints the canvas. Cheap to call repeatedly: each repaint clears
 // and redraws every pane fully.
 func (a *App) draw() {
+	if a.ghost != nil {
+		// Lerp displayed size toward target. Snap when close enough so
+		// the ghost doesn't jitter at the destination.
+		ds := a.ghost.displayedCellSize
+		ts := a.ghost.targetCellSize
+		if ts > 0 && math.Abs(ts-ds) > 0.5 {
+			a.ghost.displayedCellSize = ds + (ts-ds)*ghostSizeLerpAlpha
+			a.scheduleFrame()
+		} else if ts > 0 {
+			a.ghost.displayedCellSize = ts
+		}
+	}
+
 	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", 0, 0, a.width, a.height)
 
@@ -128,6 +147,8 @@ func (a *App) layoutPanes() map[string]paneRect {
 // live and use the + button (or Home key, etc.) to recover from a stale
 // descent path.
 func (a *App) drawPane(p *pane.Pane, r paneRect) {
+	a.previewPaneID = p.ID
+	defer func() { a.previewPaneID = "" }()
 	gid := a.gridIDForPath(p.Path)
 	g, gridOK := a.c.Grid(gid)
 
@@ -182,9 +203,13 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 			a.drawEdgeIndicators(g.Nodes, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
 				gn := a.ghost.node
-				w := float64(gn.W) * cellSize
-				h := float64(gn.H) * cellSize
-				a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, cellSize, false)
+				gcs := a.ghost.displayedCellSize
+				if gcs <= 0 {
+					gcs = cellSize
+				}
+				w := float64(gn.W) * gcs
+				h := float64(gn.H) * gcs
+				a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, false)
 			}
 		}
 	} else {
@@ -363,8 +388,12 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	drawGridLinesIn(a.cctx, x, y, w, h, previewCell, originX, originY)
 
 	if haveChild && previewCell >= 0.5 {
+		hide := ""
+		if a.hiddenObjectID != "" && a.hiddenPaneID == a.previewPaneID {
+			hide = a.hiddenObjectID
+		}
 		drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
-			wellCenterX, wellCenterY, previewCell, x, y, w, h)
+			wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
 	}
 	a.cctx.Call("restore")
 
@@ -810,11 +839,19 @@ func (a *App) fetchBlob(blobID int64) {
 //
 // Child wells in the preview render flat (no recursive preview) — that is
 // the "one level only" rule.
+//
+// hiddenObjectID, if non-empty, suppresses any child node with that
+// ObjectID — used so that a tile being dragged out of a well preview
+// disappears from its original spot while the ghost flies.
 func drawChildPreview(c js.Value, child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
+	hiddenObjectID string,
 ) {
 	for _, n := range child.Nodes {
+		if hiddenObjectID != "" && n.ObjectID == hiddenObjectID {
+			continue
+		}
 		nodeScreenX := centerScreenX + (float64(n.X)-centerCellX)*previewCell
 		nodeScreenY := centerScreenY + (float64(n.Y)-centerCellY)*previewCell
 		nodeScreenW := float64(n.W) * previewCell

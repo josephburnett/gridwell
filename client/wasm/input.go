@@ -230,6 +230,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	n := a.nodeAtCell(p, cellX, cellY)
+	parentCell := cellPx * p.Zoom
+	ps := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		nodeID:       0,
@@ -237,13 +242,39 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		startScreenY: sy,
 		curScreenX:   sx,
 		curScreenY:   sy,
+		// Default source = the focused pane's leaf grid; overridden
+		// below if we land on a child preview tile.
+		srcGridID:   a.gridIDForPath(p.Path),
+		srcPath:     append([]int64(nil), p.Path...),
+		srcViewRect: a.paneViewRect(p, ps),
+		srcCellSize: parentCell,
 	}
 	if n != nil {
-		a.dragging.nodeID = n.ID
-		ps := dragdrop.Pane{
-			ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-			Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+		// "Pull out of well" gesture: cursor is on an open well; if a
+		// child preview tile sits at the cursor, treat *that* as the
+		// drag source instead of the well.
+		if child := a.childTileAtScreen(p, r, n, sx, sy); child != nil {
+			cp := dragdrop.ChildPreviewFor(ps, struct {
+				X, Y, W, H, ViewX, ViewY int64
+			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+				zoomtrans.PreviewFactor)
+			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
+			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
+			a.dragging.nodeID = child.ID
+			a.dragging.snapshotNode = *child
+			a.dragging.cellOffsetX = cxF - float64(child.X)
+			a.dragging.cellOffsetY = cyF - float64(child.Y)
+			a.dragging.originScreenX = tlX
+			a.dragging.originScreenY = tlY
+			a.dragging.originPaneRect = r
+			a.dragging.srcGridID = n.ChildGridID
+			a.dragging.srcPath = append(append([]int64(nil), p.Path...), n.ID)
+			a.dragging.srcViewRect = rpc.ViewRect{X: n.ViewX, Y: n.ViewY, W: n.W, H: n.H}
+			a.dragging.srcCellSize = cp.CellPx
+			return nil
 		}
+		// Regular parent-grid drag of the well (or a non-well tile).
+		a.dragging.nodeID = n.ID
 		cx, cy := ps.ScreenToCell(sx, sy)
 		a.dragging.cellOffsetX = cx - float64(n.X)
 		a.dragging.cellOffsetY = cy - float64(n.Y)
@@ -297,11 +328,24 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// copies of the same stone. Template drags also need a
 			// ghost so the synthetic tile follows the cursor.
 			if d.nodeID != 0 || d.isTemplate {
+				size := d.srcCellSize
+				if size <= 0 {
+					// Template drag: srcCellSize wasn't set by the
+					// palette (it lives in screen px, not cells), so
+					// use the focused pane's parent cell size.
+					if src := a.tree.FindPane(d.originPaneID); src != nil {
+						size = cellPx * src.Zoom
+					} else {
+						size = cellPx
+					}
+				}
 				a.ghost = &ghost{
-					node:    d.snapshotNode,
-					paneID:  d.originPaneID,
-					screenX: d.originScreenX,
-					screenY: d.originScreenY,
+					node:              d.snapshotNode,
+					paneID:            d.originPaneID,
+					screenX:           d.originScreenX,
+					screenY:           d.originScreenY,
+					displayedCellSize: size,
+					targetCellSize:    size,
 				}
 				if d.nodeID != 0 && !d.clone {
 					a.hiddenObjectID = d.snapshotNode.ObjectID
@@ -335,39 +379,24 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			}
 		}
 	} else if a.ghost != nil {
-		// Move the ghost: offset cursor by the grab point so the original
-		// click location stays "under the finger" relative to the node.
-		// Template drags use a 0.5-cell offset so the cursor sits on the
-		// center of the synthetic 1×1 tile.
-		hostPane, hostRect, ok := a.paneAtScreen(sx, sy)
-		if !ok {
-			// Cursor outside any pane — pin the ghost to the source pane
-			// using the source pane's transform.
-			src := a.tree.FindPane(d.originPaneID)
-			if src != nil {
-				ps := dragdrop.Pane{
-					ScreenX: d.originPaneRect.X, ScreenY: d.originPaneRect.Y,
-					ScreenW: d.originPaneRect.W, ScreenH: d.originPaneRect.H,
-					Cx: src.Cx, Cy: src.Cy, Zoom: src.Zoom, CellPx: cellPx,
-				}
-				cx, cy := ps.ScreenToCell(sx, sy)
-				topLeftX, topLeftY := ps.CellToScreen(cx-d.cellOffsetX, cy-d.cellOffsetY)
-				a.ghost.paneID = d.originPaneID
-				a.ghost.screenX = topLeftX
-				a.ghost.screenY = topLeftY
-			}
+		// Update ghost target from the cursor's drop target. The
+		// per-frame size lerp in draw() interpolates displayedCellSize
+		// toward targetCellSize so the ghost smoothly resizes when the
+		// cursor crosses pane boundaries or enters/leaves a well's
+		// preview. Position is computed from cursor − cellOffset ×
+		// displayedCellSize so the grab point stays under the cursor.
+		if t, ok := a.dropTargetAt(sx, sy); ok {
+			a.ghost.paneID = t.pane.ID
+			a.ghost.targetCellSize = t.cellSize
 		} else {
-			ps := dragdrop.Pane{
-				ScreenX: hostRect.X, ScreenY: hostRect.Y,
-				ScreenW: hostRect.W, ScreenH: hostRect.H,
-				Cx: hostPane.Cx, Cy: hostPane.Cy, Zoom: hostPane.Zoom, CellPx: cellPx,
-			}
-			cx, cy := ps.ScreenToCell(sx, sy)
-			topLeftX, topLeftY := ps.CellToScreen(cx-d.cellOffsetX, cy-d.cellOffsetY)
-			a.ghost.paneID = hostPane.ID
-			a.ghost.screenX = topLeftX
-			a.ghost.screenY = topLeftY
+			// Off-canvas or over a file-mode pane: hold target = source
+			// size so the ghost glides back to its original scale.
+			a.ghost.paneID = d.originPaneID
+			a.ghost.targetCellSize = d.srcCellSize
 		}
+		size := a.ghost.displayedCellSize
+		a.ghost.screenX = sx - d.cellOffsetX*size
+		a.ghost.screenY = sy - d.cellOffsetY*size
 	}
 	d.curScreenX = sx
 	d.curScreenY = sy
@@ -429,60 +458,63 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// Node move/clone drag. Resolve the drop pane and snapped drop cell.
-	srcPane := a.tree.FindPane(d.originPaneID)
-	if srcPane == nil {
-		a.cancelDragSnapBack(d)
-		return nil
-	}
-	destPane, destRect, ok := a.paneAtScreen(sx, sy)
+	// Node move/clone drag. Resolve the drop target — may be the
+	// destination pane's parent grid or, when the cursor is on an open
+	// well, the well's child grid.
+	t, ok := a.dropTargetAt(sx, sy)
 	if !ok {
-		// Released outside any pane: snap-back.
 		a.cancelDragSnapBack(d)
 		return nil
 	}
-	dpscreen := dragdrop.Pane{
-		ScreenX: destRect.X, ScreenY: destRect.Y, ScreenW: destRect.W, ScreenH: destRect.H,
-		Cx: destPane.Cx, Cy: destPane.Cy, Zoom: destPane.Zoom, CellPx: cellPx,
-	}
-	dcx, dcy := dpscreen.ScreenToCell(sx, sy)
-	dropX := dragdrop.SnapToCell(dcx - d.cellOffsetX)
-	dropY := dragdrop.SnapToCell(dcy - d.cellOffsetY)
+	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 
-	// Animate ghost from current position to the snap target in the dest
-	// pane's screen coords.
-	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
+	// Same-cell-as-source short-circuit: drop where it already is →
+	// no RPC, just snap back to origin (which is the same place).
+	if t.gridID == d.srcGridID && dropX == d.snapshotNode.X && dropY == d.snapshotNode.Y {
+		a.cancelDragSnapBack(d)
+		return nil
+	}
+
+	// Overlap check in the target grid. nodeAtCellInGrid scans the
+	// cached grid; the server enforces the same rule authoritatively
+	// at commit time.
+	if a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil {
+		a.cancelDragSnapBack(d)
+		return nil
+	}
+
+	// Animate ghost to the snapped cell in the target grid's coords.
+	targetX := t.originX + float64(dropX)*t.cellSize
+	targetY := t.originY + float64(dropY)*t.cellSize
 	if a.ghost != nil {
-		// Re-anchor the ghost paneID to the destination pane so the
-		// rendering during animation lives in dest pane coordinates.
-		a.ghost.paneID = destPane.ID
+		a.ghost.paneID = t.pane.ID
+		a.ghost.targetCellSize = t.cellSize
 	}
 	a.startSnap(targetX, targetY, snapMs)
 
-	srcRect := paneRectFor(a, srcPane)
-	srcView := a.paneViewRect(srcPane, dragdrop.Pane{
-		ScreenX: srcRect.X, ScreenY: srcRect.Y, ScreenW: srcRect.W, ScreenH: srcRect.H,
-		Cx: srcPane.Cx, Cy: srcPane.Cy, Zoom: srcPane.Zoom, CellPx: cellPx,
-	})
-	dstView := a.paneViewRect(destPane, dpscreen)
-	dstGridID := a.gridIDForPath(destPane.Path)
+	srcPath := append([]int64(nil), d.srcPath...)
+	dstPath := append([]int64(nil), t.path...)
+	srcView := d.srcViewRect
+	dstView := t.viewRect
+	dstGridID := t.gridID
+	srcGridID := d.srcGridID
 
 	go func() {
 		var status int
 		if d.clone {
 			req := rpc.CloneNodeRequest{
-				Path: rpc.Path{WellIDs: srcPane.Path}, ViewRect: srcView,
+				Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
 				NodeID:     d.nodeID,
-				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: destPane.Path}, DestViewRect: dstView,
+				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
 				X: dropX, Y: dropY,
 			}
 			var resp rpc.NodeResponse
 			status, _ = postJSON("/rpc/CloneNode", req, &resp)
 		} else {
 			req := rpc.MoveNodeRequest{
-				Path: rpc.Path{WellIDs: srcPane.Path}, ViewRect: srcView,
+				Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
 				NodeID:     d.nodeID,
-				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: destPane.Path}, DestViewRect: dstView,
+				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
 				X: dropX, Y: dropY,
 			}
 			var resp rpc.MoveNodeResponse
@@ -494,10 +526,27 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			a.snapBackToOrigin(d)
 			return
 		}
-		a.fetchGrid(a.gridIDForPath(srcPane.Path))
+		a.fetchGrid(srcGridID)
 		a.fetchGrid(dstGridID)
 	}()
 	a.draw()
+	return nil
+}
+
+// nodeAtCellInGrid returns the cached node covering (cellX, cellY) in
+// gridID, or nil. Mirrors nodeAtCell but works against an arbitrary
+// grid id rather than the focused pane's leaf grid.
+func (a *App) nodeAtCellInGrid(gridID, cellX, cellY int64) *rpc.Node {
+	g, ok := a.c.Grid(gridID)
+	if !ok {
+		return nil
+	}
+	for _, n := range g.Nodes {
+		if cellX >= n.X && cellX < n.X+n.W && cellY >= n.Y && cellY < n.Y+n.H {
+			nn := n
+			return &nn
+		}
+	}
 	return nil
 }
 
@@ -531,12 +580,18 @@ func (a *App) cancelDragSnapBack(d *dragState) {
 
 // snapBackToOrigin starts an animation from the ghost's current position
 // back to the original location of the dragged node. Used both for failed
-// server commits and for drops outside any pane.
+// server commits and for drops outside any pane. Position animates on
+// the anim.Animation; the ghost's displayedCellSize is independently
+// lerped toward srcCellSize each frame so the ghost grows or shrinks
+// back to its original size as it returns.
 func (a *App) snapBackToOrigin(d *dragState) {
 	if a.ghost == nil {
 		return
 	}
 	a.ghost.paneID = d.originPaneID
+	if d.srcCellSize > 0 {
+		a.ghost.targetCellSize = d.srcCellSize
+	}
 	a.animation = &anim.Animation{
 		FromX:      a.ghost.screenX,
 		FromY:      a.ghost.screenY,

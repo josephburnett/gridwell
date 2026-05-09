@@ -107,6 +107,12 @@ type App struct {
 	hiddenObjectID string
 	hiddenPaneID   string
 
+	// previewPaneID is the pane currently being painted; set by
+	// drawPane before per-node calls and cleared after. Lets the
+	// child-preview renderer scope the hidden ObjectID to the right
+	// pane (a node only hides in its source pane).
+	previewPaneID string
+
 	// animation is the current ghost animation, if any (snap-to-target on
 	// drop or snap-back-to-origin on failure).
 	animation *anim.Animation
@@ -195,12 +201,20 @@ type transSegment struct {
 
 // ghost is a transient floating render of a node, positioned in screen
 // coordinates within a specific pane. screenX/Y is the top-left corner of
-// the node's footprint at zoom-corrected size.
+// the node's footprint at the rendered cell size.
+//
+// displayedCellSize is the actual rendered size used by the renderer
+// each frame; targetCellSize is what the cursor's current drop target
+// wants. Each frame the displayed value lerps toward target so the
+// ghost smoothly resizes when the cursor crosses pane boundaries or
+// enters/leaves a well's child preview.
 type ghost struct {
-	node    rpc.Node
-	paneID  string
-	screenX float64
-	screenY float64
+	node              rpc.Node
+	paneID            string
+	screenX           float64
+	screenY           float64
+	displayedCellSize float64
+	targetCellSize    float64
 }
 
 // dragState tracks an in-progress drag from a node onto the cursor.
@@ -233,6 +247,16 @@ type dragState struct {
 	// grabbed. Drop creates the node at the snapped cell.
 	isTemplate bool
 	template   templateKind
+
+	// Source-grid info — set at mousedown; same as the focused pane's
+	// grid for parent-grid drags, or the well's child grid for "pull
+	// out of well" drags. Carried separately so the drop commit can
+	// build a MoveNode RPC with the right Path/ViewRect/grid id even
+	// when source and dest are different grids inside the same pane.
+	srcGridID   int64
+	srcPath     []int64
+	srcViewRect rpc.ViewRect
+	srcCellSize float64
 }
 
 // dragThreshold is the cursor-movement distance that turns a press into a
