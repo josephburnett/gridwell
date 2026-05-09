@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -38,7 +39,6 @@ const (
 	colorPlusBgHi    = "#2d3140"
 	colorPlusFg      = "#c8c9ce"
 	colorMenuBg      = "#16181f"
-	colorMenuItem    = "#c8c9ce"
 	colorMenuItemHi  = "#e8e9ee"
 	colorMuted       = "#6c6f78"
 )
@@ -46,9 +46,13 @@ const (
 const (
 	plusButtonRadius = 18
 	plusButtonInset  = 24
-	menuItemHeight   = 28
-	menuWidth        = 160
-	menuPad          = 8
+
+	// Palette tile size clamps. The tile size in the palette tracks the
+	// pane's zoom (so the user sees roughly what they'll get), but is
+	// bounded so the palette stays usable at extreme zoom.
+	paletteMinTilePx = 48.0
+	paletteMaxTilePx = 128.0
+	paletteGapPx     = 8.0
 
 	// paneBorderPx is the visible thickness of the pane outline. Wide
 	// enough to be a target for right-drag (resize / close) without
@@ -58,8 +62,20 @@ const (
 	paneBorderPx = 6.0
 )
 
-// menuItems lists the entries shown in the + popover, in order.
-var menuItems = []string{"well", "markdown", "url", "upload"}
+// templateKind identifies one entry in the creation palette. Order
+// matters: it determines layout in the popover and the indices used
+// by hit-testing.
+type templateKind int
+
+const (
+	tplWell templateKind = iota
+	tplMarkdown
+	tplURL
+	tplUpload
+)
+
+// templateKinds is the palette layout order, left to right.
+var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplUpload}
 
 // draw repaints the canvas. Cheap to call repeatedly: each repaint clears
 // and redraws every pane fully.
@@ -209,7 +225,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		// even when the grid is unreachable (they can still ascend, etc).
 		a.drawPlusButton(p, r)
 		if a.menuOpen && a.menuPaneID == p.ID {
-			a.drawMenu(p, r)
+			a.drawPalette(p, r)
 		}
 	}
 }
@@ -986,57 +1002,158 @@ func (a *App) drawPlusButton(p *pane.Pane, r paneRect) {
 	a.cctx.Set("lineWidth", 1.0)
 }
 
-// menuRect returns the screen-space rectangle the popover menu occupies for
-// a given pane. The menu sits just above the + button.
-func menuRect(r paneRect) (x, y, w, h float64) {
-	w = float64(menuWidth)
-	h = float64(menuPad*2 + menuItemHeight*len(menuItems))
+// paletteTilePx returns the per-tile size in screen pixels for the
+// palette over pane p, clamped to [paletteMinTilePx, paletteMaxTilePx].
+// Tracks the pane's current zoom so the palette tile previews roughly
+// the size of the placed tile, while staying usable at extreme zoom.
+func paletteTilePx(p *pane.Pane) float64 {
+	z := p.Zoom
+	if z <= 0 {
+		z = 1.0
+	}
+	t := cellPx * z
+	if t < paletteMinTilePx {
+		t = paletteMinTilePx
+	}
+	if t > paletteMaxTilePx {
+		t = paletteMaxTilePx
+	}
+	return t
+}
+
+// paletteRect returns the screen-space rectangle the creation palette
+// occupies for a given pane. The popover sits just above the + button,
+// anchored bottom-right (matching the pre-palette menu).
+func paletteRect(p *pane.Pane, r paneRect) (x, y, w, h float64) {
+	tile := paletteTilePx(p)
+	w = float64(len(templateKinds))*tile + float64(len(templateKinds)+1)*paletteGapPx
+	h = tile + 2*paletteGapPx
 	cx, cy := plusButtonCenter(r)
 	x = cx + plusButtonRadius - w
 	y = cy - plusButtonRadius - h - 8
 	return
 }
 
-// drawMenu paints the popover menu of creation options.
-func (a *App) drawMenu(p *pane.Pane, r paneRect) {
-	mx, my, mw, mh := menuRect(r)
+// paletteTileRect returns the screen rect for the i'th template tile
+// inside the palette popover.
+func paletteTileRect(p *pane.Pane, r paneRect, i int) (x, y, w, h float64) {
+	px, py, _, _ := paletteRect(p, r)
+	tile := paletteTilePx(p)
+	x = px + paletteGapPx + float64(i)*(tile+paletteGapPx)
+	y = py + paletteGapPx
+	w = tile
+	h = tile
+	return
+}
+
+// drawPalette paints the creation popover: a background container and
+// a horizontal row of preview tiles, one per templateKind.
+func (a *App) drawPalette(p *pane.Pane, r paneRect) {
+	mx, my, mw, mh := paletteRect(p, r)
 	a.cctx.Set("fillStyle", colorMenuBg)
 	a.cctx.Call("fillRect", mx, my, mw, mh)
 	a.cctx.Set("strokeStyle", colorPaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
-	a.cctx.Set("font", "13px ui-monospace")
-	for i, label := range menuItems {
-		iy := my + float64(menuPad+i*menuItemHeight)
-		// Hover highlight if cursor is over this item.
-		if a.menuHover == i {
-			a.cctx.Set("fillStyle", "#23252d")
-			a.cctx.Call("fillRect", mx+1, iy, mw-2, float64(menuItemHeight))
-		}
-		color := colorMenuItem
-		if a.menuHover == i {
-			color = colorMenuItemHi
-		}
-		a.cctx.Set("fillStyle", color)
-		a.cctx.Call("fillText", label, mx+menuPad+4, iy+18)
+	for i, kind := range templateKinds {
+		tx, ty, tw, th := paletteTileRect(p, r, i)
+		hovered := a.menuHover == i
+		a.drawPaletteTile(kind, tx, ty, tw, th, hovered)
 	}
-	_ = p
 }
 
-// menuItemAt returns the index of the menu item at (x, y), or -1 if outside.
-func menuItemAt(r paneRect, x, y float64) int {
-	mx, my, mw, _ := menuRect(r)
-	if x < mx || x > mx+mw {
-		return -1
+// drawPaletteTile renders one preview tile inside the palette. Each
+// kind paints to roughly match what the user will get when they drop:
+// well = empty well outline, markdown = monospaced text, url = "url"
+// label, upload = arrow glyph.
+func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered bool) {
+	switch kind {
+	case tplWell:
+		a.cctx.Set("fillStyle", colorBg)
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("strokeStyle", colorFocusBorder)
+		a.cctx.Set("lineWidth", 1.0)
+		a.cctx.Call("strokeRect", x, y, w, h)
+	case tplMarkdown:
+		a.cctx.Set("fillStyle", colorTextFill)
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("strokeStyle", colorTextLine)
+		a.cctx.Call("strokeRect", x, y, w, h)
+		a.cctx.Set("fillStyle", colorMenuItemHi)
+		fontPx := w * 0.18
+		if fontPx < 9 {
+			fontPx = 9
+		}
+		if fontPx > 16 {
+			fontPx = 16
+		}
+		a.cctx.Set("font", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px ui-monospace")
+		// A few short lines mimicking text content.
+		a.cctx.Call("fillText", "Aa", x+w*0.18, y+h*0.35)
+		a.cctx.Call("fillText", "bb", x+w*0.18, y+h*0.55)
+		a.cctx.Call("fillText", "cc", x+w*0.18, y+h*0.75)
+	case tplURL:
+		a.cctx.Set("fillStyle", colorTextFill)
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("strokeStyle", colorTextLine)
+		a.cctx.Call("strokeRect", x, y, w, h)
+		a.cctx.Set("fillStyle", colorMenuItemHi)
+		fontPx := w * 0.22
+		if fontPx < 11 {
+			fontPx = 11
+		}
+		if fontPx > 22 {
+			fontPx = 22
+		}
+		a.cctx.Set("font", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px ui-sans-serif")
+		a.cctx.Call("fillText", "url", x+w*0.18, y+h*0.6)
+	case tplUpload:
+		a.cctx.Set("fillStyle", colorImageFill)
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("strokeStyle", colorImageLine)
+		a.cctx.Call("strokeRect", x, y, w, h)
+		// Up arrow centered in the tile.
+		a.cctx.Set("strokeStyle", colorMenuItemHi)
+		a.cctx.Set("lineWidth", 2.0)
+		cx := x + w/2
+		cy := y + h/2
+		armLen := w * 0.22
+		a.cctx.Call("beginPath")
+		a.cctx.Call("moveTo", cx, cy+armLen)
+		a.cctx.Call("lineTo", cx, cy-armLen)
+		a.cctx.Call("moveTo", cx-armLen*0.6, cy-armLen*0.4)
+		a.cctx.Call("lineTo", cx, cy-armLen)
+		a.cctx.Call("lineTo", cx+armLen*0.6, cy-armLen*0.4)
+		a.cctx.Call("stroke")
+		a.cctx.Set("lineWidth", 1.0)
 	}
-	rel := y - (my + menuPad)
-	if rel < 0 {
-		return -1
+	if hovered {
+		a.cctx.Set("strokeStyle", colorSelected)
+		a.cctx.Set("lineWidth", 2.0)
+		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
+		a.cctx.Set("lineWidth", 1.0)
 	}
-	idx := int(rel) / menuItemHeight
-	if idx < 0 || idx >= len(menuItems) {
-		return -1
+}
+
+// paletteTileIndexAt returns the index of the palette tile at (x, y),
+// or -1 if outside any tile (still inside palette gutter, or outside
+// the popover entirely).
+func paletteTileIndexAt(p *pane.Pane, r paneRect, x, y float64) int {
+	for i := range templateKinds {
+		tx, ty, tw, th := paletteTileRect(p, r, i)
+		if x >= tx && x <= tx+tw && y >= ty && y <= ty+th {
+			return i
+		}
 	}
-	return idx
+	return -1
+}
+
+// pointInPalette reports whether (x, y) lies anywhere inside the
+// palette popover (including gutters between tiles). Used to decide
+// whether a click outside the tiles should still be "swallowed" by
+// the palette (keep it open) vs. dismissing it.
+func pointInPalette(p *pane.Pane, r paneRect, x, y float64) bool {
+	mx, my, mw, mh := paletteRect(p, r)
+	return x >= mx && x <= mx+mw && y >= my && y <= my+mh
 }
 

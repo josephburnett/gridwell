@@ -210,14 +210,17 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		a.draw()
 		return nil
 	}
-	// Click anywhere inside the open menu picks an item; clicks elsewhere
-	// dismiss it.
+	// Mousedown inside the palette: starting a template drag if it
+	// landed on a tile, or swallowing the click (keeps the popover
+	// open) if it landed in the gutter. Click outside the popover
+	// dismisses it and falls through to normal interaction.
 	if a.menuOpen && a.menuPaneID == p.ID {
-		idx := menuItemAt(r, sx, sy)
-		if idx >= 0 {
-			a.handleMenuItem(p, r, idx)
-			a.menuOpen = false
-			a.draw()
+		if pointInPalette(p, r, sx, sy) {
+			idx := paletteTileIndexAt(p, r, sx, sy)
+			if idx >= 0 {
+				a.startTemplateDrag(p, r, idx, sx, sy)
+				return nil
+			}
 			return nil
 		}
 		a.menuOpen = false
@@ -227,7 +230,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	n := a.nodeAtCell(p, cellX, cellY)
-	clone := args[0].Get("altKey").Bool()
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		nodeID:       0,
@@ -235,7 +237,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		startScreenY: sy,
 		curScreenX:   sx,
 		curScreenY:   sy,
-		clone:        clone,
 	}
 	if n != nil {
 		a.dragging.nodeID = n.ID
@@ -269,12 +270,12 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		a.onRightMove(sx, sy)
 		return nil
 	}
-	// Track menu hover regardless of drag state.
+	// Track palette hover regardless of drag state.
 	if a.menuOpen {
-		_, r, ok := a.paneAtScreen(sx, sy)
+		p, r, ok := a.paneAtScreen(sx, sy)
 		hover := -1
-		if ok {
-			hover = menuItemAt(r, sx, sy)
+		if ok && p.ID == a.menuPaneID {
+			hover = paletteTileIndexAt(p, r, sx, sy)
 		}
 		if hover != a.menuHover {
 			a.menuHover = hover
@@ -293,15 +294,16 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			d.started = true
 			// On node drag, materialize the ghost; for moves, also hide
 			// the original at its stored position so we don't see two
-			// copies of the same stone.
-			if d.nodeID != 0 {
+			// copies of the same stone. Template drags also need a
+			// ghost so the synthetic tile follows the cursor.
+			if d.nodeID != 0 || d.isTemplate {
 				a.ghost = &ghost{
 					node:    d.snapshotNode,
 					paneID:  d.originPaneID,
 					screenX: d.originScreenX,
 					screenY: d.originScreenY,
 				}
-				if !d.clone {
+				if d.nodeID != 0 && !d.clone {
 					a.hiddenObjectID = d.snapshotNode.ObjectID
 					a.hiddenPaneID = d.originPaneID
 				}
@@ -310,7 +312,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			return nil
 		}
 	}
-	if d.nodeID == 0 {
+	if d.nodeID == 0 && !d.isTemplate {
 		// Pan the source pane smoothly. In file-rendered mode the drag
 		// scrolls the file's logical content; in grid mode it pans the
 		// parent-grid view.
@@ -335,6 +337,8 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	} else if a.ghost != nil {
 		// Move the ghost: offset cursor by the grab point so the original
 		// click location stays "under the finger" relative to the node.
+		// Template drags use a 0.5-cell offset so the cursor sits on the
+		// center of the synthetic 1×1 tile.
 		hostPane, hostRect, ok := a.paneAtScreen(sx, sy)
 		if !ok {
 			// Cursor outside any pane — pin the ghost to the source pane
@@ -408,6 +412,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		}
 		a.draw()
 		a.scheduleURLUpdate()
+		return nil
+	}
+
+	// Template-drag drop: turn the synthetic ghost into a real node by
+	// asking the server to create it at the snapped cell.
+	if d.isTemplate {
+		a.commitTemplateDrop(d, sx, sy)
 		return nil
 	}
 
@@ -989,39 +1000,124 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
 	}()
 }
 
-// handleMenuItem performs the action for the i'th menu item, with the
-// pane and its rect for context.
-func (a *App) handleMenuItem(p *pane.Pane, r paneRect, idx int) {
-	if idx < 0 || idx >= len(menuItems) {
+// startTemplateDrag arms a template drag from the i'th palette tile.
+// The dragState is set up so the existing ghost machinery treats it
+// like a regular node drag (snapshot node + cell offset), but with
+// isTemplate=true so onMouseUp branches to creation instead of move.
+// The palette stays open during the drag — it'll close on commit.
+func (a *App) startTemplateDrag(p *pane.Pane, r paneRect, idx int, sx, sy float64) {
+	if idx < 0 || idx >= len(templateKinds) {
 		return
 	}
-	item := menuItems[idx]
-	switch item {
-	case "well":
-		a.createAtViewportCenter(p, r, "well", "", nil)
-	case "markdown":
-		a.createAtViewportCenter(p, r, "file", "text/markdown", []byte("# untitled\n"))
-	case "url":
+	kind := templateKinds[idx]
+	tx, ty, _, _ := paletteTileRect(p, r, idx)
+	a.dragging = &dragState{
+		originPaneID:   p.ID,
+		isTemplate:     true,
+		template:       kind,
+		startScreenX:   sx,
+		startScreenY:   sy,
+		curScreenX:     sx,
+		curScreenY:     sy,
+		cellOffsetX:    0.5,
+		cellOffsetY:    0.5,
+		snapshotNode:   templateGhostNode(kind),
+		originScreenX:  tx,
+		originScreenY:  ty,
+		originPaneRect: r,
+	}
+}
+
+// templateGhostNode synthesizes a 1×1 rpc.Node matching the kind, so
+// the ghost renderer can paint the in-flight tile using the same
+// drawNode path that a real node would use.
+func templateGhostNode(kind templateKind) rpc.Node {
+	switch kind {
+	case tplWell:
+		return rpc.Node{Type: "well", W: 1, H: 1}
+	case tplMarkdown:
+		return rpc.Node{Type: "file", MimeType: "text/markdown", W: 1, H: 1}
+	case tplURL:
+		return rpc.Node{Type: "file", MimeType: "text/uri-list", W: 1, H: 1}
+	case tplUpload:
+		return rpc.Node{Type: "file", MimeType: "application/octet-stream", W: 1, H: 1}
+	}
+	return rpc.Node{}
+}
+
+// commitTemplateDrop resolves the template drag at release. Off-pane
+// or overlap → snap-back, palette stays open. Valid drop → for url/
+// upload, prompt first; on confirm, fire the create RPC at the
+// snapped cell. On any successful commit, the palette closes.
+func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
+	destPane, destRect, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		a.cancelDragSnapBack(d)
+		return
+	}
+	dpscreen := dragdrop.Pane{
+		ScreenX: destRect.X, ScreenY: destRect.Y, ScreenW: destRect.W, ScreenH: destRect.H,
+		Cx: destPane.Cx, Cy: destPane.Cy, Zoom: destPane.Zoom, CellPx: cellPx,
+	}
+	dcx, dcy := dpscreen.ScreenToCell(sx, sy)
+	dropX := dragdrop.SnapToCell(dcx - d.cellOffsetX)
+	dropY := dragdrop.SnapToCell(dcy - d.cellOffsetY)
+
+	// Bail early if the drop cell would overlap an existing node.
+	if a.nodeAtCell(destPane, dropX, dropY) != nil {
+		a.cancelDragSnapBack(d)
+		return
+	}
+
+	// URL and upload need user input *before* creation. The synthetic
+	// ghost is dismissed, the palette stays open until the user
+	// confirms; a cancel keeps everything as-is.
+	switch d.template {
+	case tplURL:
 		val := js.Global().Call("prompt", "URL:")
+		a.ghost = nil
 		if val.IsNull() || val.IsUndefined() {
+			a.draw()
 			return
 		}
 		s := val.String()
 		if s == "" {
+			a.draw()
 			return
 		}
-		a.createAtViewportCenter(p, r, "file", "text/uri-list", []byte(s))
-	case "upload":
-		a.openUpload(p, r)
+		a.createAtCell(destPane, destRect, "file", "text/uri-list", []byte(s), dropX, dropY)
+		a.menuOpen = false
+		a.draw()
+		return
+	case tplUpload:
+		a.ghost = nil
+		a.openUploadAtCell(destPane, destRect, dropX, dropY)
+		// menuOpen stays as-is until the file picker resolves; the
+		// upload callback closes it on confirm.
+		a.draw()
+		return
 	}
+
+	// Wells and markdown commit immediately. Animate the ghost to
+	// the snap target for a tactile landing.
+	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
+	if a.ghost != nil {
+		a.ghost.paneID = destPane.ID
+	}
+	a.startSnap(targetX, targetY, snapMs)
+
+	switch d.template {
+	case tplWell:
+		a.createAtCell(destPane, destRect, "well", "", nil, dropX, dropY)
+	case tplMarkdown:
+		a.createAtCell(destPane, destRect, "file", "text/markdown", []byte("# untitled\n"), dropX, dropY)
+	}
+	a.menuOpen = false
 }
 
-// createAtViewportCenter creates a node at the (rounded) cell nearest the
-// pane's viewport center. For wells, mime/data are ignored; for files, both
-// are used. The footprint is 1×1.
-func (a *App) createAtViewportCenter(p *pane.Pane, r paneRect, kind, mime string, data []byte) {
-	cellX := dragdrop.SnapToCell(p.Cx)
-	cellY := dragdrop.SnapToCell(p.Cy)
+// createAtCell fires the appropriate Create RPC at a specific cell.
+// Used by template drops; the footprint is always 1×1.
+func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []byte, cellX, cellY int64) {
 	pscreen := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
@@ -1049,15 +1145,15 @@ func (a *App) createAtViewportCenter(p *pane.Pane, r paneRect, kind, mime string
 	}()
 }
 
-// openUpload triggers the hidden <input type="file"> and, on selection,
-// reads the file via FileReader and POSTs CreateFile.
-func (a *App) openUpload(p *pane.Pane, r paneRect) {
+// openUploadAtCell triggers the hidden <input type="file"> and, on
+// selection, reads the file via FileReader and POSTs CreateFile at
+// the chosen cell. The palette closes once the file is confirmed (or
+// stays open if the user cancels the picker).
+func (a *App) openUploadAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
 	input := a.doc.Call("getElementById", "upload-input")
 	if input.IsNull() || input.IsUndefined() {
 		return
 	}
-	// Replace any prior onchange so we don't pile up handlers across
-	// repeated uses.
 	if a.uploadHandlerOK {
 		a.uploadHandler.Release()
 	}
@@ -1072,9 +1168,10 @@ func (a *App) openUpload(p *pane.Pane, r paneRect) {
 		if mime == "" {
 			mime = mimeFromName(name)
 		}
-		go a.uploadFileBytes(p, r, file, mime)
-		// Clear so the same file can be re-selected next time.
+		go a.uploadFileBytesAtCell(p, r, file, mime, cellX, cellY)
 		input.Set("value", "")
+		a.menuOpen = false
+		a.draw()
 		return nil
 	})
 	a.uploadHandlerOK = true
@@ -1082,9 +1179,9 @@ func (a *App) openUpload(p *pane.Pane, r paneRect) {
 	input.Call("click")
 }
 
-// uploadFileBytes reads the JS File object as bytes (via arrayBuffer Promise)
-// and calls CreateFile.
-func (a *App) uploadFileBytes(p *pane.Pane, r paneRect, file js.Value, mime string) {
+// uploadFileBytesAtCell reads the JS File and calls CreateFile at the
+// given cell.
+func (a *App) uploadFileBytesAtCell(p *pane.Pane, r paneRect, file js.Value, mime string, cellX, cellY int64) {
 	buf, err := await(file.Call("arrayBuffer"))
 	if err != nil {
 		return
@@ -1094,8 +1191,6 @@ func (a *App) uploadFileBytes(p *pane.Pane, r paneRect, file js.Value, mime stri
 	data := make([]byte, n)
 	js.CopyBytesToGo(data, u8)
 
-	cellX := dragdrop.SnapToCell(p.Cx)
-	cellY := dragdrop.SnapToCell(p.Cy)
 	pscreen := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,

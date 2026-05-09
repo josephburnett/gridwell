@@ -221,12 +221,18 @@ type dragState struct {
 	startScreenY   float64
 	curScreenX     float64
 	curScreenY     float64
-	clone          bool
+	clone          bool // no binding yet; placeholder for the clone gesture
 	started        bool
 	snapshotNode   rpc.Node
 	originScreenX  float64
 	originScreenY  float64
 	originPaneRect paneRect
+
+	// Template drag from the + palette: nodeID is 0 (no real node yet)
+	// but isTemplate is true and template carries the kind that was
+	// grabbed. Drop creates the node at the snapped cell.
+	isTemplate bool
+	template   templateKind
 }
 
 // dragThreshold is the cursor-movement distance that turns a press into a
