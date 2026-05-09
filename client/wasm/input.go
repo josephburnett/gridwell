@@ -740,6 +740,15 @@ func (a *App) startAscent(p *pane.Pane) {
 	}
 	parentPath := append([]int64(nil), p.Path[:level]...)
 	r := paneRectFor(a, p)
+
+	// Persist the user's current center as the well's view region so
+	// the parent-grid preview reflects where they were when they left.
+	// Mutates `well` in-place and updates the cache; queues the RPC
+	// in a goroutine. Done before calibrating the ascent transition so
+	// the path-swap point matches the user's actual position rather
+	// than snapping back to the well's stored origin.
+	a.saveWellViewBeforeAscent(p, &well, parentPath)
+
 	from := zoomtrans.Endpoints{
 		Path: append([]int64(nil), p.Path...),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
@@ -1005,6 +1014,67 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.refreshFileOverlay()
 	a.draw()
 	a.scheduleURLUpdate()
+}
+
+// saveWellViewBeforeAscent updates `well`'s ViewX/ViewY so its
+// parent-grid preview reflects the user's last position in the child
+// grid. Mutates well in-place (so the local-side ascent transition
+// uses the new values) and patches the cache so the parent's preview
+// renders the new view immediately on path-swap. Posts SetNodeViewport
+// in a goroutine; the server's event will catch up the cache.
+//
+// No-op if the user's current center hasn't moved from the well's
+// stored view (rounded to int cells), so casual ascents don't churn
+// the DB.
+func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath []int64) {
+	newViewX := int64(math.Round(p.Cx)) - well.W/2
+	newViewY := int64(math.Round(p.Cy)) - well.H/2
+	if newViewX == well.ViewX && newViewY == well.ViewY {
+		return
+	}
+	well.ViewX = newViewX
+	well.ViewY = newViewY
+
+	// Update local cache so the parent preview renders the new view
+	// before the SSE event from the server arrives.
+	updated := *well
+	a.c.Apply(rpc.Event{
+		Kind:        rpc.EventNodeChanged,
+		NodeChanged: &rpc.NodeChanged{Node: updated},
+	})
+
+	// Build a parent-grid view rect from the saved parent state (the
+	// state we'll restore on ascent). Falls back to a generous default
+	// if no saved state exists — locality is best-effort here, since
+	// the action is genuinely local to the user's current view.
+	r := paneRectFor(a, p)
+	parentCx, parentCy, parentZoom := 0.0, 0.0, 1.0
+	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
+		ps := stack[len(stack)-1]
+		parentCx, parentCy, parentZoom = ps.Cx, ps.Cy, ps.Zoom
+	}
+	parentCellSize := cellPx * parentZoom
+	visW := r.W / parentCellSize
+	visH := r.H / parentCellSize
+	parentView := rpc.ViewRect{
+		X: int64(parentCx-visW/2) - 1,
+		Y: int64(parentCy-visH/2) - 1,
+		W: int64(visW) + 3,
+		H: int64(visH) + 3,
+	}
+
+	wellID := well.ID
+	go func() {
+		req := rpc.SetNodeViewportRequest{
+			Path:     rpc.Path{WellIDs: append([]int64(nil), parentPath...)},
+			ViewRect: parentView,
+			NodeID:   wellID,
+			ViewX:    newViewX,
+			ViewY:    newViewY,
+		}
+		var resp rpc.NodeResponse
+		_, _ = postJSON("/rpc/SetNodeViewport", req, &resp)
+	}()
 }
 
 // saveFileBeforeAscent posts the editor buffer (if text mode is active)
