@@ -2,9 +2,7 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -140,8 +138,7 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 	}
 
 	// Hash outside the transaction — it's the slow step and pure.
-	sum := sha256.Sum256(req.Data)
-	hash := hex.EncodeToString(sum[:])
+	hash := hashBytes(req.Data)
 
 	var out *rpc.Node
 	var events []rpc.Event
