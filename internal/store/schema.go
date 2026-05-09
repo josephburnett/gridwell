@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
+    view_zoom     REAL NOT NULL DEFAULT 0,
     child_grid_id INTEGER REFERENCES grids(id),
     capped        INTEGER NOT NULL DEFAULT 0,
     mime_type     TEXT,

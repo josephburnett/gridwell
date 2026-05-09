@@ -235,7 +235,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 
 	// Copy each node row, bumping child grid / blob refcounts as needed.
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, object_id, type, x, y, w, h, view_x, view_y,
+		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
 		       created_at, updated_at
 		FROM nodes WHERE grid_id = ?`, oldGridID)
@@ -250,6 +250,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		typ       string
 		x, y, w, h int64
 		viewX, viewY int64
+		viewZoom  float64
 		childGrid sql.NullInt64
 		cappedInt int64
 		mime      sql.NullString
@@ -262,7 +263,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	for rows.Next() {
 		var nc nodeCopy
 		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.typ, &nc.x, &nc.y, &nc.w, &nc.h,
-			&nc.viewX, &nc.viewY, &nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
+			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
 			&nc.ownerID, &nc.groupID, &nc.mode, &nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
@@ -275,11 +276,11 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	remap := make(map[int64]int64, len(copies))
 	for _, nc := range copies {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 				child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY, nc.viewZoom,
 			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.ownerID, nc.groupID, nc.mode,
 			nc.createdAt, now)
 		if err != nil {

@@ -66,11 +66,11 @@ func (s *Store) loadNode(ctx context.Context, q gridReader, nodeID int64) (*rpc.
 		cappedInt   int64
 	)
 	err := q.QueryRowContext(ctx, `
-		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y,
+		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode
 		FROM nodes WHERE id = ?`, nodeID,
 	).Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-		&n.ViewX, &n.ViewY, &childGrid, &cappedInt, &mime, &blob,
+		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob,
 		&n.OwnerID, &n.GroupID, &n.Mode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -93,7 +93,7 @@ func (s *Store) loadNode(ctx context.Context, q gridReader, nodeID int64) (*rpc.
 
 func (s *Store) loadNodesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Node, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y,
+		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode
 		FROM nodes WHERE grid_id = ? ORDER BY id`, gridID)
 	if err != nil {
@@ -110,7 +110,7 @@ func (s *Store) loadNodesInGrid(ctx context.Context, q gridReader, gridID int64)
 			cappedInt int64
 		)
 		if err := rows.Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-			&n.ViewX, &n.ViewY, &childGrid, &cappedInt, &mime, &blob,
+			&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob,
 			&n.OwnerID, &n.GroupID, &n.Mode); err != nil {
 			return nil, err
 		}

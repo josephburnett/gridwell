@@ -242,11 +242,11 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 			cappedInt = 1
 		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 				child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			n.ObjectID, dstGrid, n.Type, req.X, req.Y, n.W, n.H, n.ViewX, n.ViewY,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			n.ObjectID, dstGrid, n.Type, req.X, req.Y, n.W, n.H, n.ViewX, n.ViewY, n.ViewZoom,
 			child, cappedInt, mime, blob, n.OwnerID, n.GroupID, n.Mode, now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)

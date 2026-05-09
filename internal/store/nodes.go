@@ -322,9 +322,12 @@ func (s *Store) SetNodeViewport(ctx context.Context, userID int64, req *rpc.SetN
 			return err
 		}
 		events = append(events, pre.Events...)
+		// view_zoom = 0 is the sentinel "no view set yet" — the client
+		// uses calibrated descent zoom in that case. Older clients (or
+		// callers that don't care about zoom) send 0; we store 0.
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET view_x = ?, view_y = ?, updated_at = ? WHERE id = ?`,
-			req.ViewX, req.ViewY, s.now().Unix(), pre.TargetNodeID); err != nil {
+			`UPDATE nodes SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
+			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), pre.TargetNodeID); err != nil {
 			return err
 		}
 		out, err = s.loadNode(ctx, tx, pre.TargetNodeID)

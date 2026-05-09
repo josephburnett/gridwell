@@ -51,9 +51,10 @@ type Node struct {
 	Y           int64  `json:"y"`
 	W           int64  `json:"w"`
 	H           int64  `json:"h"`
-	ViewX       int64  `json:"view_x"`
-	ViewY       int64  `json:"view_y"`
-	ChildGridID int64  `json:"child_grid_id,omitempty"`
+	ViewX       int64   `json:"view_x"`
+	ViewY       int64   `json:"view_y"`
+	ViewZoom    float64 `json:"view_zoom"`
+	ChildGridID int64   `json:"child_grid_id,omitempty"`
 	Capped      bool   `json:"capped,omitempty"`
 	MimeType    string `json:"mime_type,omitempty"`
 	BlobID      int64  `json:"blob_id,omitempty"`
@@ -184,6 +185,11 @@ type SetNodeViewportRequest struct {
 	NodeID   int64    `json:"node_id"`
 	ViewX    int64    `json:"view_x"`
 	ViewY    int64    `json:"view_y"`
+	// ViewZoom is the zoom the node should be shown at when re-entered
+	// (e.g., re-descending into a well). Persisted alongside ViewX/Y.
+	// Wells use this; files ignore it (their zoom is computed from
+	// the pane size and natural content size on each entry).
+	ViewZoom float64 `json:"view_zoom"`
 }
 
 type CapWellRequest struct {

@@ -806,14 +806,18 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 }
 
 // startDescent pushes the pane's current state onto the saved-state stack
-// and installs a single combined-motion transition into the well's
-// child grid. Pan and zoom interpolate together so they finish at the
-// same moment regardless of which has more "distance" — when the well is
-// far from center, the camera moves faster to keep both motions in sync.
+// and installs a multi-segment transition into the well's child grid.
 //
 // Phases:
 //   A. Combined pan+zoom in parent to (wellCenter, OvertakeZoom).
-//   B. Instant install of the calibrated child state.
+//   B. Atomic install of the calibrated child state at the path swap.
+//   C. (Optional) animate the child to the well's stored ViewZoom so
+//      re-descent lands at the same zoom the user left at. Only fires
+//      when well.ViewZoom > 0; the default for never-entered wells is
+//      0 (calibrated zoom).
+//
+// Total time is split between A and C proportional to motion distance
+// so neither feels rushed. C is zero-length when ViewZoom is unset.
 func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
@@ -829,25 +833,42 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	a.fetchGrid(well.ChildGridID)
 
+	// Final child-grid state: position from well's view (already in `to`),
+	// zoom from stored ViewZoom when set. Falls back to calibrated zoom.
+	final := to
+	if well.ViewZoom > 0 {
+		final.Zoom = well.ViewZoom
+	}
+
+	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
+		zoomDist(from.Zoom, mid.Zoom)
+	childDist := zoomDist(to.Zoom, final.Zoom)
+	var durations []float64
+	if childDist > 0 {
+		durations = anim.SplitN([]float64{parentDist, childDist}, totalTransitionMs)
+	} else {
+		durations = []float64{totalTransitionMs, 0}
+	}
+
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
-			// Combined pan+zoom toward well center at OvertakeZoom.
+			// A: parent pan+zoom toward well center at OvertakeZoom.
 			{
 				path:   from.Path,
 				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
 				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
-				durationMs: totalTransitionMs,
+				durationMs: durations[0],
 			},
-			// Instant install of the calibrated child state at the path
-			// switch — visually continuous because of the zoomtrans
-			// calibration: a parent cell at switch == a child preview
-			// cell, and the cell scale matches the new child zoom.
+			// B+C: install calibrated child state, then animate to
+			// stored ViewZoom. zoomtrans calibration makes the path
+			// swap visually continuous; the inner zoom adjust is
+			// brief.
 			{
 				path:   to.Path,
 				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
-				toCx: to.Cx, toCy: to.Cy, toZoom: to.Zoom,
-				durationMs: 0,
+				toCx: final.Cx, toCy: final.Cy, toZoom: final.Zoom,
+				durationMs: durations[1],
 			},
 		},
 	})
@@ -1029,11 +1050,17 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath []int64) {
 	newViewX := int64(math.Round(p.Cx)) - well.W/2
 	newViewY := int64(math.Round(p.Cy)) - well.H/2
-	if newViewX == well.ViewX && newViewY == well.ViewY {
+	newViewZoom := p.Zoom
+	if newViewZoom <= 0 {
+		newViewZoom = 1.0
+	}
+	if newViewX == well.ViewX && newViewY == well.ViewY &&
+		math.Abs(newViewZoom-well.ViewZoom) < 0.001 {
 		return
 	}
 	well.ViewX = newViewX
 	well.ViewY = newViewY
+	well.ViewZoom = newViewZoom
 
 	// Update local cache so the parent preview renders the new view
 	// before the SSE event from the server arrives.
@@ -1071,6 +1098,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath 
 			NodeID:   wellID,
 			ViewX:    newViewX,
 			ViewY:    newViewY,
+			ViewZoom: newViewZoom,
 		}
 		var resp rpc.NodeResponse
 		_, _ = postJSON("/rpc/SetNodeViewport", req, &resp)
