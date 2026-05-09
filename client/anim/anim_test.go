@@ -102,3 +102,25 @@ func TestDistance(t *testing.T) {
 		t.Errorf("negative origin")
 	}
 }
+
+func TestLerpExpEndpointsAndShape(t *testing.T) {
+	// Endpoints exact.
+	if !near(LerpExp(1, 8, 0), 1) {
+		t.Error("LerpExp at t=0")
+	}
+	if !near(LerpExp(1, 8, 1), 8) {
+		t.Error("LerpExp at t=1")
+	}
+	// Geometric midpoint between 1 and 4 is 2 (sqrt(1*4)).
+	if !near(LerpExp(1, 4, 0.5), 2) {
+		t.Errorf("LerpExp(1,4,0.5)=%v, want 2", LerpExp(1, 4, 0.5))
+	}
+	// Geometric midpoint between 0.25 and 4 is 1.
+	if !near(LerpExp(0.25, 4, 0.5), 1) {
+		t.Errorf("LerpExp(0.25,4,0.5)=%v, want 1", LerpExp(0.25, 4, 0.5))
+	}
+	// Non-positive arg falls back to linear.
+	if !near(LerpExp(0, 10, 0.5), 5) {
+		t.Errorf("fallback linear")
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/ascent/client/cache"
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
+	"github.com/josephburnett/ascent/client/zoomtrans"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
 
@@ -81,6 +82,20 @@ type App struct {
 	// rafScheduled tracks whether we have a pending requestAnimationFrame
 	// callback so we don't queue redundant frames.
 	rafScheduled bool
+
+	// transition is the active descent/ascent zoom animation, if any.
+	transition *paneTransition
+}
+
+// paneTransition holds the start/end states for a smooth descent or ascent
+// zoom on a single pane.
+type paneTransition struct {
+	paneID     string
+	from       zoomtrans.Endpoints
+	mid        zoomtrans.Endpoints
+	to         zoomtrans.Endpoints
+	startMs    float64
+	durationMs float64
 }
 
 // ghost is a transient floating render of a node, positioned in screen
@@ -270,8 +285,9 @@ func (a *App) scheduleFrame() {
 // frame is the per-tick driver: advance the active animation, request the
 // next frame if motion is still in flight, and repaint.
 func (a *App) frame() {
+	now := nowMs()
 	if a.animation != nil {
-		x, y, done := a.animation.At(nowMs())
+		x, y, done := a.animation.At(now)
 		if a.ghost != nil {
 			a.ghost.screenX = x
 			a.ghost.screenY = y
@@ -282,7 +298,44 @@ func (a *App) frame() {
 			a.scheduleFrame()
 		}
 	}
+	if a.transition != nil {
+		t := anim.Progress(now, a.transition.startMs, a.transition.durationMs)
+		eased := anim.EaseOutCubic(t)
+		if p := a.tree.FindPane(a.transition.paneID); p != nil {
+			p.Cx = anim.Lerp(a.transition.from.Cx, a.transition.mid.Cx, eased)
+			p.Cy = anim.Lerp(a.transition.from.Cy, a.transition.mid.Cy, eased)
+			p.Zoom = anim.LerpExp(a.transition.from.Zoom, a.transition.mid.Zoom, eased)
+		}
+		if t >= 1 {
+			a.completeTransition()
+		} else {
+			a.scheduleFrame()
+		}
+	}
 	a.draw()
+}
+
+// completeTransition installs the final pane state from a finished descent
+// or ascent transition, switching the descent path atomically.
+func (a *App) completeTransition() {
+	tr := a.transition
+	a.transition = nil
+	if tr == nil {
+		return
+	}
+	p := a.tree.FindPane(tr.paneID)
+	if p == nil {
+		return
+	}
+	p.Path = tr.to.Path
+	p.Cx = tr.to.Cx
+	p.Cy = tr.to.Cy
+	p.Zoom = tr.to.Zoom
+	delete(a.selectedNodeID, p.ID)
+	// Clear failure cache so the new leaf grid is fetched fresh.
+	a.gridLoadFailed = map[int64]bool{}
+	a.fetchGrid(a.gridIDForPath(p.Path))
+	a.saveTreeToLocalStorage()
 }
 
 // animationDone is called when the active animation reaches its target. It

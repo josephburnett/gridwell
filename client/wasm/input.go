@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/ascent/client/anim"
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
+	"github.com/josephburnett/ascent/client/zoomtrans"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
 
@@ -422,8 +423,11 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 	return paneRect{}
 }
 
-// onContextMenu (right click) descends into the well under the cursor.
-// On empty space or files (not yet supported for descent), it does nothing.
+// onContextMenu (right click) starts a smooth descent into the well under
+// the cursor. The animation interpolates the pane's (Cx, Cy, Zoom) toward
+// the well's center over ~350ms, then atomically switches the descent path
+// and lands the viewport on the child grid at the calibrated state — so
+// the visual is continuous across the path switch.
 func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	sx, sy := mouseXY(args[0], a.canvas)
@@ -437,13 +441,90 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 	if hit == nil || hit.Type != "well" || hit.Capped {
 		return nil
 	}
-	p.Path = append(append([]int64(nil), p.Path...), hit.ID)
-	p.Cx, p.Cy = 0, 0
-	delete(a.selectedNodeID, p.ID)
-	a.fetchGrid(hit.ChildGridID)
-	a.draw()
-	a.saveTreeToLocalStorage()
+	a.startDescent(p, hit)
 	return nil
+}
+
+// startAscent installs a paneTransition that smoothly zooms out of the
+// current child grid back to the parent grid through the well that the
+// pane descended through. If the parent grid isn't cached, we trigger a
+// fetch and fall back to an instant ascent (rare; happens after losing
+// the cache between renders).
+func (a *App) startAscent(p *pane.Pane) {
+	if len(p.Path) == 0 {
+		return
+	}
+	wellID := p.Path[len(p.Path)-1]
+	parentPath := append([]int64(nil), p.Path[:len(p.Path)-1]...)
+	parentGridID := a.gridIDForPath(parentPath)
+	parentGrid, ok := a.c.Grid(parentGridID)
+	if !ok {
+		// We don't have the parent grid cached; fetch and instant-ascend.
+		// On reload the user would otherwise have to wait through the
+		// animation with no visible source, which is worse.
+		a.fetchGrid(parentGridID)
+		p.Path = parentPath
+		p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
+		delete(a.selectedNodeID, p.ID)
+		a.draw()
+		a.saveTreeToLocalStorage()
+		return
+	}
+	well, ok := parentGrid.Nodes[wellID]
+	if !ok {
+		// The well is gone (CoW or remote delete). Fallback: drop the
+		// last path entry without animation.
+		p.Path = parentPath
+		p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
+		delete(a.selectedNodeID, p.ID)
+		a.draw()
+		a.saveTreeToLocalStorage()
+		return
+	}
+	from := zoomtrans.Endpoints{
+		Path: append([]int64(nil), p.Path...),
+		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
+	}
+	w := zoomtrans.Well{
+		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
+		ViewX: well.ViewX, ViewY: well.ViewY,
+	}
+	mid, to := zoomtrans.Ascent(from, w, parentPath)
+	a.transition = &paneTransition{
+		paneID:     p.ID,
+		from:       from,
+		mid:        mid,
+		to:         to,
+		startMs:    nowMs(),
+		durationMs: 350,
+	}
+	a.scheduleFrame()
+}
+
+// startDescent installs a paneTransition that smoothly zooms into the given
+// well over ~350ms.
+func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
+	from := zoomtrans.Endpoints{
+		Path: append([]int64(nil), p.Path...),
+		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
+	}
+	w := zoomtrans.Well{
+		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
+		ViewX: well.ViewX, ViewY: well.ViewY,
+	}
+	mid, to := zoomtrans.Descent(from, w)
+	// Make sure the child grid is being fetched while the animation runs
+	// so it's ready to render the moment we switch.
+	a.fetchGrid(well.ChildGridID)
+	a.transition = &paneTransition{
+		paneID:     p.ID,
+		from:       from,
+		mid:        mid,
+		to:         to,
+		startMs:    nowMs(),
+		durationMs: 350,
+	}
+	a.scheduleFrame()
 }
 
 // handleMenuItem performs the action for the i'th menu item, with the
@@ -613,18 +694,17 @@ func (a *App) onKeyDown(this js.Value, args []js.Value) any {
 			return nil
 		}
 		if len(focused.Path) > 0 {
-			focused.Path = focused.Path[:len(focused.Path)-1]
-			focused.Cx, focused.Cy = 0, 0
-			delete(a.selectedNodeID, focused.ID)
-		} else {
-			go func() {
-				var resp rpc.AscendAtRootResponse
-				if _, err := postJSON("/rpc/AscendAtRoot", rpc.AscendAtRootRequest{}, &resp); err == nil {
-					a.user.RootGridID = resp.NewRootGridID
-					a.fetchGrid(resp.NewRootGridID)
-				}
-			}()
+			a.startAscent(focused)
+			args[0].Call("preventDefault")
+			return nil
 		}
+		go func() {
+			var resp rpc.AscendAtRootResponse
+			if _, err := postJSON("/rpc/AscendAtRoot", rpc.AscendAtRootRequest{}, &resp); err == nil {
+				a.user.RootGridID = resp.NewRootGridID
+				a.fetchGrid(resp.NewRootGridID)
+			}
+		}()
 	case "+", "=":
 		focused.Zoom *= zoomFactor
 	case "-", "_":

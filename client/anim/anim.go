@@ -72,3 +72,16 @@ func Distance(x1, y1, x2, y2 float64) float64 {
 	dx, dy := x2-x1, y2-y1
 	return math.Sqrt(dx*dx + dy*dy)
 }
+
+// LerpExp interpolates between from and to in log space at parameter t.
+// Used for zoom transitions: linear interpolation feels visually
+// non-uniform because perceived "zoom level" is logarithmic in scale.
+//
+// Both from and to must be strictly positive; otherwise the result is the
+// linear interpolation as a fallback.
+func LerpExp(from, to, t float64) float64 {
+	if from <= 0 || to <= 0 {
+		return Lerp(from, to, t)
+	}
+	return from * math.Pow(to/from, t)
+}

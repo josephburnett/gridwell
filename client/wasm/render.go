@@ -8,8 +8,10 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/ascent/client/cache"
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
+	"github.com/josephburnett/ascent/client/zoomtrans"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
 
@@ -129,9 +131,6 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		cellSize := pscreen.CellPx * pscreen.Zoom
 		selected := a.selectedNodeID[p.ID]
 		for _, n := range g.Nodes {
-			// Suppress nodes whose object_id is being floated as a ghost
-			// in this pane. Using object_id (not row id) makes this CoW-
-			// stable: forks change the row id but preserve the lineage.
 			if a.hiddenObjectID != "" && a.hiddenPaneID == p.ID && n.ObjectID == a.hiddenObjectID {
 				continue
 			}
@@ -142,17 +141,14 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 				continue
 			}
 			nn := n
-			drawNode(a.cctx, &nn, left, top, w, h, n.ID == selected)
+			a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected)
 		}
 		a.drawEdgeIndicators(g.Nodes, pscreen, r)
-		// Floating ghost (active drag or animation) belongs to whichever
-		// pane the cursor is currently over. Render it at sub-cell
-		// precision in screen coordinates.
 		if a.ghost != nil && a.ghost.paneID == p.ID {
 			gn := a.ghost.node
 			w := float64(gn.W) * cellSize
 			h := float64(gn.H) * cellSize
-			drawNode(a.cctx, &gn, a.ghost.screenX, a.ghost.screenY, w, h, false)
+			a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, cellSize, false)
 		}
 	} else {
 		// Status line in the upper-left so the user knows what state
@@ -220,8 +216,87 @@ func (a *App) drawGridLines(ps dragdrop.Pane, r paneRect) {
 	a.cctx.Set("globalAlpha", 1.0)
 }
 
+// drawNodeWithPreview is the parent-grid renderer: wells get a one-level
+// preview of their child grid (no recursion), and use the bright blue
+// outline that matches the focused-pane color so wells are easy to spot.
+//
+// If the well's child grid isn't cached yet it's prefetched, and the well
+// renders without a preview until the fetch completes.
+func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
+	if n.Type != "well" || n.Capped {
+		drawNode(a.cctx, n, x, y, w, h, selected)
+		return
+	}
+	// Trigger prefetch if we don't have the child grid yet.
+	child, haveChild := a.c.Grid(n.ChildGridID)
+	if !haveChild {
+		a.fetchGrid(n.ChildGridID)
+	}
+	// Background.
+	a.cctx.Set("fillStyle", colorWell)
+	a.cctx.Call("fillRect", x, y, w, h)
+
+	// Render preview if we have content and the cells are large enough to
+	// matter (sub-pixel cells just look like noise).
+	previewCell := parentCellSize / zoomtrans.PreviewFactor
+	if haveChild && previewCell >= 0.5 {
+		a.cctx.Call("save")
+		a.cctx.Call("beginPath")
+		a.cctx.Call("rect", x, y, w, h)
+		a.cctx.Call("clip")
+
+		// The well's footprint shows previewFactor*W × previewFactor*H
+		// cells of the child centered on (view_x + W/2, view_y + H/2).
+		viewCenterX := float64(n.ViewX) + float64(n.W)/2
+		viewCenterY := float64(n.ViewY) + float64(n.H)/2
+		wellCenterX := x + w/2
+		wellCenterY := y + h/2
+		drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
+			wellCenterX, wellCenterY, previewCell, x, y, w, h)
+		a.cctx.Call("restore")
+	}
+
+	// Outline: bright blue, matching the focused-pane color.
+	a.cctx.Set("strokeStyle", colorFocusBorder)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("strokeRect", x, y, w, h)
+	if selected {
+		a.cctx.Set("strokeStyle", colorSelected)
+		a.cctx.Set("lineWidth", 2.0)
+		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
+		a.cctx.Set("lineWidth", 1.0)
+	}
+}
+
+// drawChildPreview paints the cached child grid's nodes inside a clipped
+// region. Each child cell renders at previewCell pixels. centerCellX/Y is
+// the child cell coordinate that should land at (centerScreenX, centerScreenY).
+//
+// Child wells in the preview render flat (no recursive preview) — that is
+// the "one level only" rule.
+func drawChildPreview(c js.Value, child *cache.Grid,
+	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
+	clipX, clipY, clipW, clipH float64,
+) {
+	for _, n := range child.Nodes {
+		nodeScreenX := centerScreenX + (float64(n.X)-centerCellX)*previewCell
+		nodeScreenY := centerScreenY + (float64(n.Y)-centerCellY)*previewCell
+		nodeScreenW := float64(n.W) * previewCell
+		nodeScreenH := float64(n.H) * previewCell
+		// Cull entries fully outside the clip.
+		if nodeScreenX+nodeScreenW < clipX || nodeScreenY+nodeScreenH < clipY ||
+			nodeScreenX > clipX+clipW || nodeScreenY > clipY+clipH {
+			continue
+		}
+		nn := n
+		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false)
+	}
+}
+
 // drawNode renders one node into the canvas at the given screen rectangle.
-// `selected` highlights the node with a dedicated outline color.
+// `selected` highlights the node with a dedicated outline color. This is
+// the "flat" renderer used for nested previews (no recursion) and for
+// non-well nodes; the parent-grid renderer is drawNodeWithPreview.
 func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
 	switch {
 	case n.Type == "well" && n.Capped:
@@ -234,8 +309,6 @@ func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
 		c.Call("clip")
 		c.Set("strokeStyle", colorWellLine)
 		c.Set("lineWidth", 1.0)
-		// Stripes step every 8 px along the top edge; the line length
-		// reaches the rect's bottom regardless of aspect ratio.
 		span := w + h
 		for i := -h; i < span; i += 8 {
 			c.Call("beginPath")
@@ -244,12 +317,12 @@ func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
 			c.Call("stroke")
 		}
 		c.Call("restore")
-		c.Set("strokeStyle", colorWellLine)
+		c.Set("strokeStyle", colorFocusBorder)
 		c.Call("strokeRect", x, y, w, h)
 	case n.Type == "well":
 		c.Set("fillStyle", colorWell)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorWellLine)
+		c.Set("strokeStyle", colorFocusBorder)
 		c.Set("lineWidth", 1.0)
 		c.Call("strokeRect", x, y, w, h)
 	case n.Type == "file" && n.MimeType == "text/markdown":
