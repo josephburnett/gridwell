@@ -167,8 +167,24 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.onToggleFileMode(p)
 			return nil
 		}
+		// Edge-zone ascent works the same way it does in a grid pane.
+		// In text mode the textarea may be narrower than the pane (it's
+		// capped at ~80 columns and centered), so the bare canvas to the
+		// left/right of the textarea has to handle ascent itself — the
+		// textarea's own mousedown handler only fires on clicks that
+		// actually land on it.
+		pscreen := dragdrop.Pane{
+			ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+			Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+		}
+		if dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
+			a.startFileAscent(p)
+			return nil
+		}
 		// Rendered mode: drag pans the file content (no textarea over us).
-		// Text mode: the textarea covers the pane and handles drag itself.
+		// Text mode: the textarea covers most of the pane and handles drag
+		// itself. Margin clicks (text mode, narrow textarea) fall through
+		// to a no-op.
 		if p.FileMode == "rendered" {
 			a.dragging = &dragState{
 				originPaneID: p.ID,
