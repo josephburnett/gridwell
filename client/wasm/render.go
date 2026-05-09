@@ -138,25 +138,35 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	if gridOK {
 		cellSize := pscreen.CellPx * pscreen.Zoom
 		selected := a.selectedNodeID[p.ID]
-		for _, n := range g.Nodes {
-			if a.hiddenObjectID != "" && a.hiddenPaneID == p.ID && n.ObjectID == a.hiddenObjectID {
-				continue
+		// In live file mode the pane is "inside" the file: skip the
+		// parent-grid node walk and render the focused file at the pane
+		// bounds. The grid lines stay visible behind the text (already
+		// drawn above).
+		if p.FileFocus != 0 {
+			if file, ok := g.Nodes[p.FileFocus]; ok && file.Type == "file" && file.MimeType == "text/markdown" {
+				a.drawMarkdownNode(&file, r.X, r.Y, r.W, r.H, cellSize, false)
 			}
-			left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
-			w := float64(n.W) * cellSize
-			h := float64(n.H) * cellSize
-			if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
-				continue
+		} else {
+			for _, n := range g.Nodes {
+				if a.hiddenObjectID != "" && a.hiddenPaneID == p.ID && n.ObjectID == a.hiddenObjectID {
+					continue
+				}
+				left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
+				w := float64(n.W) * cellSize
+				h := float64(n.H) * cellSize
+				if left+w < r.X || top+h < r.Y || left > r.X+r.W || top > r.Y+r.H {
+					continue
+				}
+				nn := n
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected)
 			}
-			nn := n
-			a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected)
-		}
-		a.drawEdgeIndicators(g.Nodes, pscreen, r)
-		if a.ghost != nil && a.ghost.paneID == p.ID {
-			gn := a.ghost.node
-			w := float64(gn.W) * cellSize
-			h := float64(gn.H) * cellSize
-			a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, cellSize, false)
+			a.drawEdgeIndicators(g.Nodes, pscreen, r)
+			if a.ghost != nil && a.ghost.paneID == p.ID {
+				gn := a.ghost.node
+				w := float64(gn.W) * cellSize
+				h := float64(gn.H) * cellSize
+				a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, cellSize, false)
+			}
 		}
 	} else {
 		// Status line in the upper-left so the user knows what state

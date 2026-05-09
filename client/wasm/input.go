@@ -30,7 +30,12 @@ func (a *App) installCanvasInput() {
 	a.canvas.Call("addEventListener", "mousedown", js.FuncOf(a.onMouseDown))
 	a.canvas.Call("addEventListener", "mousemove", js.FuncOf(a.onMouseMove))
 	a.canvas.Call("addEventListener", "mouseup", js.FuncOf(a.onMouseUp))
-	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(a.onContextMenu))
+	// Suppress the browser's context menu on the canvas without binding
+	// any right-click behavior of our own — input is left-click only.
+	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(func(this js.Value, args []js.Value) any {
+		args[0].Call("preventDefault")
+		return nil
+	}))
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
@@ -82,36 +87,23 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// Inside a focused file the wheel does PDF-style navigation: plain
-	// wheel scrolls vertically, ctrl+wheel zooms around the cursor.
-	// Text mode lets the textarea handle plain wheel natively (so the
-	// browser's scroll bar still works); ctrl+wheel still goes through
-	// us to adjust the textarea's font-size.
+	// Inside a focused file the wheel zooms (consistent with outside
+	// file mode, where wheel zooms the parent grid). Scrolling in
+	// rendered mode happens via drag; scrolling in text mode happens via
+	// the textarea's keyboard / native scroll bar.
 	if p.FileFocus != 0 {
-		ctrl := args[0].Get("ctrlKey").Bool() || args[0].Get("metaKey").Bool()
-		if ctrl {
-			step := dy / 200.0
-			if step > 0.5 {
-				step = 0.5
-			}
-			if step < -0.5 {
-				step = -0.5
-			}
-			factor := math.Pow(zoomFactor, -step*4)
-			a.adjustFileZoom(p, factor, sx, sy)
-			a.draw()
-			a.saveTreeToLocalStorage()
-			return nil
+		step := dy / 200.0
+		if step > 0.5 {
+			step = 0.5
 		}
-		if p.FileMode == "rendered" {
-			p.FileScrollY += dy / nonzero(p.FileZoom)
-			if p.FileScrollY < 0 {
-				p.FileScrollY = 0
-			}
-			a.draw()
-			a.saveTreeToLocalStorage()
+		if step < -0.5 {
+			step = -0.5
 		}
-		// Text mode: let the textarea handle plain wheel itself.
+		factor := math.Pow(zoomFactor, -step*4)
+		a.adjustFileZoom(p, factor, sx, sy)
+		a.refreshFileOverlay()
+		a.draw()
+		a.saveTreeToLocalStorage()
 		return nil
 	}
 	// Smooth zoom centered on the cursor: amount scales with deltaY so a
@@ -339,15 +331,21 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	a.dragging = nil
 	sx, sy := mouseXY(args[0], a.canvas)
 
-	// Bare click (no movement): selection.
+	// Bare click (no movement): navigation.
 	if !d.started {
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {
 			a.draw()
 			return nil
 		}
-		// Use the pane rect as it is now (still the same — no resize).
 		r := paneRectFor(a, focused)
+		// Try descent/ascent first — a click on a well, a file, or in
+		// the edge band kicks off navigation. Selection only applies to
+		// other cases (e.g., clicking an image preview to outline it).
+		if a.attemptDescentOrAscent(focused, r, sx, sy) {
+			a.saveTreeToLocalStorage()
+			return nil
+		}
 		cellX, cellY := cellAtScreen(focused, r, sx, sy)
 		if n := a.nodeAtCell(focused, cellX, cellY); n != nil {
 			a.selectedNodeID[focused.ID] = n.ID
@@ -493,21 +491,22 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 	return paneRect{}
 }
 
-// onContextMenu (right click) drives mouse-only navigation:
-//   - On a well in the inner area: smooth descent into the well.
-//   - In the edge band of the pane: smooth ascent (or AscendAtRoot at top).
-//   - Otherwise: no-op.
+// attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
+// inside pane p to the right navigation gesture.
 //
-// Edge takes priority over node hits — the user explicitly wants the edge
-// to always ascend so they always have a reachable ascent target.
-func (a *App) onContextMenu(this js.Value, args []js.Value) any {
-	args[0].Call("preventDefault")
-	sx, sy := mouseXY(args[0], a.canvas)
-	p, r, ok := a.paneAtScreen(sx, sy)
-	if !ok {
-		return nil
-	}
-	_ = a.tree.SetFocus(p.ID)
+//   - In the edge band: ascend (file ascent if file-focused; well ascent
+//     otherwise; AscendAtRoot at the user's root).
+//   - On a well: descend into the well.
+//   - On a markdown file: descend into the file.
+//   - Otherwise: no-op (selection is handled by the bare-click path
+//     in onMouseUp before this is invoked).
+//
+// Edge takes priority over node hits so the user always has a reachable
+// ascent target even when a node sits along the edge.
+//
+// Returns true if a navigation gesture was performed (caller should skip
+// further interpretation of the click).
+func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) bool {
 	pscreen := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
@@ -527,20 +526,28 @@ func (a *App) onContextMenu(this js.Value, args []js.Value) any {
 				}
 			}()
 		}
-		return nil
+		return true
+	}
+	if p.FileFocus != 0 {
+		// Inside a file, a click that's not on the toggle and not on the
+		// edge isn't navigation — it's either pan-drag (handled in
+		// mousemove) or a non-action click.
+		return false
 	}
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	hit := a.nodeAtCell(p, cellX, cellY)
 	if hit == nil {
-		return nil
+		return false
 	}
 	switch {
 	case hit.Type == "well" && !hit.Capped:
 		a.startDescent(p, hit)
+		return true
 	case hit.Type == "file" && hit.MimeType == "text/markdown":
 		a.startFileDescent(p, hit)
+		return true
 	}
-	return nil
+	return false
 }
 
 // totalTransitionMs is the total wall-clock duration of a descent or

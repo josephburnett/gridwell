@@ -65,15 +65,11 @@ func (a *App) ensureFileTextarea() {
 	})
 	ta.Call("addEventListener", "scroll", a.fileTextareaScrollCb)
 
-	// Plain wheel inside the textarea uses the browser's native scroll
-	// (so the user gets the scrollbar for free); ctrl+wheel zooms by
-	// adjusting the pane's FileZoom and triggering a refresh, which
-	// rewrites the textarea's font-size.
+	// Wheel inside the textarea always zooms (matches the rest of the
+	// app where wheel = zoom). Scrolling the textarea is via keyboard
+	// / native scroll bar.
 	wheelCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		ev := args[0]
-		if !(ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()) {
-			return nil // let the textarea scroll
-		}
 		ev.Call("preventDefault")
 		p := a.tree.FocusedPane()
 		if p == nil || p.FileFocus == 0 {
@@ -87,14 +83,7 @@ func (a *App) ensureFileTextarea() {
 		if step < -0.5 {
 			step = -0.5
 		}
-		factor := 1.0
-		// Reuse the same exponent shape as the canvas zoom for a unified feel.
-		const fileZoomFactor = 1.1
-		if step > 0 {
-			factor = 1.0 / pow(fileZoomFactor, step*4)
-		} else if step < 0 {
-			factor = pow(fileZoomFactor, -step*4)
-		}
+		factor := pow(1.1, -step*4)
 		old := p.FileZoom
 		if old <= 0 {
 			old = 1.0
@@ -112,15 +101,19 @@ func (a *App) ensureFileTextarea() {
 		a.saveTreeToLocalStorage()
 		return nil
 	})
-	ta.Call("addEventListener", "wheel", wheelCb)
+	wheelOpts := js.Global().Get("Object").New()
+	wheelOpts.Set("passive", false)
+	ta.Call("addEventListener", "wheel", wheelCb, wheelOpts)
 
-	// The textarea covers the whole pane while in text mode, so the
-	// canvas's contextmenu handler never sees right-clicks here. Forward
-	// edge-zone right-clicks to ascent so the user retains the
-	// "right-click any edge to ascend" gesture.
-	cmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		args[0].Call("preventDefault")
+	// The textarea covers the whole pane while in text mode, so canvas
+	// click handlers never see clicks here. Forward edge-zone left
+	// clicks (mousedown without drag) to ascent so the user retains the
+	// "click any edge to ascend" gesture.
+	mdCb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		ev := args[0]
+		if ev.Get("button").Int() != 0 {
+			return nil
+		}
 		canvasRect := a.canvas.Call("getBoundingClientRect")
 		sx := ev.Get("clientX").Float() - canvasRect.Get("left").Float()
 		sy := ev.Get("clientY").Float() - canvasRect.Get("top").Float()
@@ -134,8 +127,15 @@ func (a *App) ensureFileTextarea() {
 			Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 		}
 		if dragdrop.IsInEdgeZone(ps, sx, sy, dragdrop.EdgeBand(ps)) {
+			ev.Call("preventDefault")
 			a.startFileAscent(p)
 		}
+		return nil
+	})
+	ta.Call("addEventListener", "mousedown", mdCb)
+	// Suppress the browser's context menu over the textarea too.
+	cmCb := js.FuncOf(func(this js.Value, args []js.Value) any {
+		args[0].Call("preventDefault")
 		return nil
 	})
 	ta.Call("addEventListener", "contextmenu", cmCb)
