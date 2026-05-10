@@ -28,17 +28,27 @@ func (a *App) scheduleFileSave() {
 	js.Global().Call("setTimeout", a.fileSaveCb, fileSaveDebounceMs)
 }
 
+// fileMarginMin is the minimum outer-ring width. Set so the file
+// toggle button (inset 24, radius 18) plus a small gap clears the
+// inner-box even on small panes — that lets us forgo the clipPath
+// notch entirely, so the textarea is always a clean rectangle.
+const fileMarginMin = 50.0
+
 // fileMargin returns the pixel inset between the pane edge and the
-// inner text-area for a file-focused pane. Equal to the edge-zone
-// width so left clicks in the surrounding ring trigger ascent and the
-// textarea (when shown) stays clear of those pixels. The grid-pattern
-// cue lives in this margin.
+// inner text-area for a file-focused pane. Wide enough that the
+// toggle button (drawn in the bottom-right of the pane) sits cleanly
+// in the outer ring, never overlapping the inner-box. Left clicks in
+// this margin trigger ascent; the grid-pattern cue lives here.
 func fileMargin(r paneRect) float64 {
 	ps := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		CellPx: cellPx, Zoom: 1,
 	}
-	return dragdrop.EdgeBand(ps)
+	m := dragdrop.EdgeBand(ps)
+	if m < fileMarginMin {
+		m = fileMarginMin
+	}
+	return m
 }
 
 // fileOvertakeZoom returns the parent zoom at which the file node's
@@ -282,11 +292,7 @@ func (a *App) refreshFileOverlay() {
 	style.Set("top", strconv.FormatFloat(top, 'f', 1, 64)+"px")
 	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
 	style.Set("height", strconv.FormatFloat(height, 'f', 1, 64)+"px")
-	if textareaNeedsClip(p, r) {
-		style.Set("clipPath", textareaClipPath())
-	} else {
-		style.Set("clipPath", "none")
-	}
+	style.Set("clipPath", "none")
 	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
 	style.Set("display", "block")
 
@@ -309,19 +315,6 @@ func (a *App) refreshFileOverlay() {
 		ta.Set("scrollTop", p.FileScrollY)
 	}
 	ta.Call("focus")
-}
-
-// textareaClipPath cuts a square out of the bottom-right corner of the
-// textarea overlay so the toggle button (drawn on the canvas) receives
-// clicks instead of being shadowed by the textarea's hit region. The
-// notch is sized to clear the button's circle plus a small margin.
-//
-// Kept in sync by hand with plusButtonInset / plusButtonRadius. Changing
-// either over there should change the constant here too.
-func textareaClipPath() string {
-	const notch = 52 // plusButtonInset(24) + plusButtonRadius(18) + 10 px margin
-	n := strconv.Itoa(notch)
-	return "polygon(0 0, 100% 0, 100% calc(100% - " + n + "px), calc(100% - " + n + "px) calc(100% - " + n + "px), calc(100% - " + n + "px) 100%, 0 100%)"
 }
 
 // syncFileOverlayPosition is the lightweight version of refreshFileOverlay
@@ -352,11 +345,7 @@ func (a *App) syncFileOverlayPosition() {
 	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
 	style.Set("height", strconv.FormatFloat(height, 'f', 1, 64)+"px")
 	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
-	if textareaNeedsClip(p, r) {
-		style.Set("clipPath", textareaClipPath())
-	} else {
-		style.Set("clipPath", "none")
-	}
+	style.Set("clipPath", "none")
 }
 
 // fileTextareaBox returns the textarea overlay's screen rectangle and
@@ -396,19 +385,6 @@ func fileTextareaBox(p *pane.Pane, r paneRect) (left, top, width, height, fontPx
 	top = innerY
 	height = innerH
 	return
-}
-
-// textareaNeedsClip reports whether the textarea's bottom-right
-// corner overlaps the file toggle button on this pane. When false
-// (typical case: pane is wide enough for the toggle button to live
-// in the outer ring), the clipPath notch is unnecessary and would
-// cause a visible cut.
-func textareaNeedsClip(p *pane.Pane, r paneRect) bool {
-	bx, by := plusButtonCenter(r)
-	left, top, width, height, _ := fileTextareaBox(p, r)
-	right := left + width
-	bottom := top + height
-	return bx-plusButtonRadius < right && by-plusButtonRadius < bottom
 }
 
 // onToggleFileMode flips the focused pane between text and rendered

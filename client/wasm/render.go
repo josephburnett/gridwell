@@ -548,6 +548,13 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 	a.cctx.Call("rect", x, y, w, h)
 	a.cctx.Call("clip")
 
+	// Paint the footprint with the same light-grey background that
+	// live mode uses for its inner-box. Principle: things stay where
+	// the user put them — including colors. The preview is a smaller
+	// copy of the live render, not a different visual treatment.
+	a.cctx.Set("fillStyle", colorFileInnerBg)
+	a.cctx.Call("fillRect", x, y, w, h)
+
 	// When the focused pane is descended into THIS file in text mode,
 	// the textarea overlay renders the editable source. Drawing the
 	// markdown to the canvas behind it would just produce a doubled,
@@ -555,21 +562,12 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 	hideForTextarea := fp != nil && fp.FileMode == "text" && fp.ID == a.tree.Focus
 	if !hideForTextarea {
 		if blob, ok := a.c.Blob(n.BlobID); ok {
-			// Layout width is fixed (no reflow on pane resize / scroll).
-			// In live file mode we use the natural content width so the
-			// rendered markdown stays static like a PDF page; preview
-			// also uses natural width when the user has visited the
-			// file (ViewZoom > 0) so the line wrap matches what the
-			// user just left — preserving visual continuity through
-			// the descent / ascent path swap. Unvisited files fall
-			// back to footprint-fitting width.
-			layoutW := fileNaturalContentPx
-			if fp == nil && n.ViewZoom <= 0 {
-				layoutW = w / scale
-			}
+			// Layout width is fixed at the natural content width so
+			// every preview wraps lines the same way live mode does —
+			// principle of continuity across the path swap.
 			drawMarkdownInRect(a.cctx, string(blob.Data),
 				x-scrollX*scale, y-scrollY*scale,
-				layoutW*scale, h+scrollY*scale, // tall enough that internal cull leaves visible lines alone
+				fileNaturalContentPx*scale, h+scrollY*scale,
 				scale, 0, mode)
 		} else if n.BlobID != 0 {
 			a.fetchBlob(n.BlobID)
