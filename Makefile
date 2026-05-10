@@ -1,18 +1,19 @@
-.PHONY: build wasm test test-cover serve clean
+.PHONY: build bin wasm test test-cover serve clean
 
 BIN := ./ascent
 WASM := ./web/ascent.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
 
-build: $(BIN) wasm
+# `bin` and `wasm` are phony so they always invoke `go build`. Go's
+# build cache makes this fast when nothing changed, but it guarantees
+# we never serve a stale binary or wasm artifact.
+build: bin wasm
 
-$(BIN):
+bin:
 	go build -o $(BIN) ./cmd/ascent
 
-wasm: $(WASM) $(WASM_EXEC)
-
-$(WASM):
+wasm: $(WASM_EXEC)
 	mkdir -p web
 	GOOS=js GOARCH=wasm go build -o $(WASM) ./client/wasm
 
