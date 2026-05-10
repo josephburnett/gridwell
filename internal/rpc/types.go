@@ -192,6 +192,20 @@ type ResizeNodeRequest struct {
 	H int64 `json:"h"`
 }
 
+// SetGridDefaultViewRequest sets a grid's default viewport. The user
+// must have write permission on the grid. Used to remember the user's
+// preferred camera position for the user's root grid (which has no
+// parent node to hang ViewX/Y/Zoom off of).
+type SetGridDefaultViewRequest struct {
+	GridID int64   `json:"grid_id"`
+	Cx     float64 `json:"cx"`
+	Cy     float64 `json:"cy"`
+	Zoom   float64 `json:"zoom"`
+}
+type SetGridDefaultViewResponse struct {
+	Grid Grid `json:"grid"`
+}
+
 type SetNodeViewportRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`

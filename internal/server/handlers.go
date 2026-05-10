@@ -214,6 +214,24 @@ func (s *Server) setNodeViewport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, &rpc.NodeResponse{Node: *n})
 }
 
+func (s *Server) setGridDefaultView(w http.ResponseWriter, r *http.Request) {
+	uid, ok := uidOrError(w, r)
+	if !ok {
+		return
+	}
+	var req rpc.SetGridDefaultViewRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	g, err := s.store.SetGridDefaultView(r.Context(), uid, &req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, &rpc.SetGridDefaultViewResponse{Grid: *g})
+}
+
 func (s *Server) capWell(w http.ResponseWriter, r *http.Request) {
 	uid, ok := uidOrError(w, r)
 	if !ok {

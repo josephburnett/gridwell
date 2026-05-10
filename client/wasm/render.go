@@ -19,6 +19,7 @@ import (
 
 const (
 	colorBg          = "#0c0d11"
+	colorFileInnerBg = "#1c1f26"
 	colorPaneBorder  = "#1f2229"
 	colorFocusBorder = "#4a6fff"
 	colorGridLine    = "#15171d"
@@ -177,18 +178,37 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 
 	// Grid lines render against background regardless of whether the grid
 	// has loaded — they communicate the coordinate system to the user.
-	a.drawGridLines(pscreen, r)
+	// In live file mode the grid lines reflect FileZoom centered on the
+	// pane (the outer ring is the visible "grid" cue), not the parent's
+	// grid coordinates.
+	if p.FileFocus != 0 {
+		fz := p.FileZoom
+		if fz <= 0 {
+			fz = 1.0
+		}
+		fcell := cellPx * fz
+		fox := r.X + r.W/2
+		foy := r.Y + r.H/2
+		drawGridLinesIn(a.cctx, r.X, r.Y, r.W, r.H, fcell, fox, foy)
+	} else {
+		a.drawGridLines(pscreen, r)
+	}
 
 	if gridOK {
 		cellSize := pscreen.CellPx * pscreen.Zoom
 		selected := a.selectedNodeID[p.ID]
 		// In live file mode the pane is "inside" the file: skip the
-		// parent-grid node walk and render the focused file at the pane
-		// bounds. The grid lines stay visible behind the text (already
-		// drawn above).
+		// parent-grid node walk and render the focused file in the
+		// inner box (inset by the file margin so the surrounding grid
+		// pattern is visible). Inner-box bounds match the textarea
+		// exactly so the user's "outside textarea = grid rules"
+		// mental model is consistent.
 		if p.FileFocus != 0 {
+			ix, iy, iw, ih := fileInnerBox(p, r)
+			a.cctx.Set("fillStyle", colorFileInnerBg)
+			a.cctx.Call("fillRect", ix, iy, iw, ih)
 			if file, ok := g.Nodes[p.FileFocus]; ok && file.Type == "file" && file.MimeType == "text/markdown" {
-				a.drawMarkdownInPane(p, &file, r.X, r.Y, r.W, r.H)
+				a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
 			}
 		} else {
 			for _, n := range g.Nodes {
@@ -285,7 +305,7 @@ func (a *App) drawFileToggleButton(p *pane.Pane, r paneRect) {
 	a.cctx.Set("font", font)
 	a.cctx.Set("textBaseline", "middle")
 	a.cctx.Set("textAlign", "center")
-	a.cctx.Call("fillText", "A", cx, cy+1)
+	a.cctx.Call("fillText", "a", cx, cy+1)
 	a.cctx.Set("textAlign", "start")
 	a.cctx.Set("textBaseline", "alphabetic")
 }
@@ -372,23 +392,16 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	// Preview cell size: when the well has a stored ViewZoom (the
-	// user's last child-grid zoom), the preview is sized so the user's
-	// full visible region in the child grid fits inside the well's
-	// footprint at the current parent zoom. At parentZoom = OvertakeZoom
-	// (the descent path-swap moment) this collapses to cellPx × ViewZoom
-	// — matching the child cell size on the other side of the swap, so
-	// the path-swap stays visually continuous. At smaller parent zooms
-	// the preview cell shrinks proportionally; the descent animation
-	// naturally "zooms in" the well content as the parent zooms in.
-	// Default (ViewZoom == 0) keeps the original PreviewFactor scaling.
+	// Preview cell size: ViewZoom is the intrinsic child-cell-per-
+	// parent-cell ratio (dimensionless, window-independent). previewCell
+	// = parentCell × ViewZoom. At parent = OvertakeZoom_now this gives
+	// previewCell = cellPx × OvertakeZoom × ViewZoom = cellPx ×
+	// childZoom_landing, matching the live render — the path-swap is
+	// visually continuous at any window size. Default (ViewZoom == 0)
+	// keeps the legacy PreviewFactor calibration.
 	previewCell := parentCellSize / zoomtrans.PreviewFactor
 	if n.ViewZoom > 0 {
-		w := zoomtrans.Well{X: n.X, Y: n.Y, W: n.W, H: n.H}
-		ot := zoomtrans.OvertakeZoom(w, a.previewPaneRect.W, a.previewPaneRect.H, cellPx)
-		if ot > 0 {
-			previewCell = parentCellSize * n.ViewZoom / ot
-		}
+		previewCell = parentCellSize * n.ViewZoom
 	}
 
 	a.cctx.Call("save")
@@ -507,9 +520,21 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 		scrollX = fp.FileScrollX
 		scrollY = fp.FileScrollY
 	} else {
-		previewScale := w / fileNaturalContentPx
-		if previewScale > 1.0 {
-			previewScale = 1.0
+		// ViewZoom is the intrinsic ratio = FileZoom / FileOvertake_at_save
+		// where FileOvertake is the parent zoom that makes the file's
+		// footprint = inner-box (the meaningful textarea screen rect).
+		// Preview scale = parentZoom × ViewZoom. At parent =
+		// FileOvertake_now this collapses to FileZoom = ViewZoom ×
+		// FileOvertake — matching the live render at the path-swap.
+		// Pane-size independent.
+		// Default (ViewZoom == 0) falls back to footprint-fill.
+		var previewScale float64
+		if n.ViewZoom > 0 && parentCellSize > 0 {
+			parentZoom := parentCellSize / cellPx
+			previewScale = parentZoom * n.ViewZoom
+		}
+		if previewScale <= 0 {
+			previewScale = w / fileNaturalContentPx
 		}
 		if previewScale < 0.05 {
 			previewScale = 0.05
@@ -532,11 +557,14 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 		if blob, ok := a.c.Blob(n.BlobID); ok {
 			// Layout width is fixed (no reflow on pane resize / scroll).
 			// In live file mode we use the natural content width so the
-			// rendered markdown stays static like a PDF page; in preview
-			// the file's footprint is the layout width so the text fits
-			// the stone.
+			// rendered markdown stays static like a PDF page; preview
+			// also uses natural width when the user has visited the
+			// file (ViewZoom > 0) so the line wrap matches what the
+			// user just left — preserving visual continuity through
+			// the descent / ascent path swap. Unvisited files fall
+			// back to footprint-fitting width.
 			layoutW := fileNaturalContentPx
-			if fp == nil {
+			if fp == nil && n.ViewZoom <= 0 {
 				layoutW = w / scale
 			}
 			drawMarkdownInRect(a.cctx, string(blob.Data),
@@ -1147,7 +1175,7 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 		}
 		a.cctx.Set("font", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px ui-monospace")
 		// A few short lines mimicking text content.
-		a.cctx.Call("fillText", "Aa", x+w*0.18, y+h*0.35)
+		a.cctx.Call("fillText", "aa", x+w*0.18, y+h*0.35)
 		a.cctx.Call("fillText", "bb", x+w*0.18, y+h*0.55)
 		a.cctx.Call("fillText", "cc", x+w*0.18, y+h*0.75)
 	case tplURL:

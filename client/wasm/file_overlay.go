@@ -11,6 +11,90 @@ import (
 	"github.com/josephburnett/ascent/internal/rpc"
 )
 
+// fileSaveDebounceMs is the delay between the first keystroke since
+// the last save and the next save fire. Continuous typing therefore
+// saves at most once per this interval; a typing pause longer than
+// this resolves with one final save shortly after the user stops.
+const fileSaveDebounceMs = 600
+
+// scheduleFileSave queues a debounced save of the focused pane's
+// textarea contents. Cheap to call from every keystroke — no-op if a
+// save is already pending.
+func (a *App) scheduleFileSave() {
+	if a.fileSaveScheduled {
+		return
+	}
+	a.fileSaveScheduled = true
+	js.Global().Call("setTimeout", a.fileSaveCb, fileSaveDebounceMs)
+}
+
+// fileMargin returns the pixel inset between the pane edge and the
+// inner text-area for a file-focused pane. Equal to the edge-zone
+// width so left clicks in the surrounding ring trigger ascent and the
+// textarea (when shown) stays clear of those pixels. The grid-pattern
+// cue lives in this margin.
+func fileMargin(r paneRect) float64 {
+	ps := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		CellPx: cellPx, Zoom: 1,
+	}
+	return dragdrop.EdgeBand(ps)
+}
+
+// fileOvertakeZoom returns the parent zoom at which the file node's
+// footprint (W × H cells) exceeds the inner-box dimensions (textarea
+// region) of pane rect r. This is the file-mode analogue of
+// zoomtrans.OvertakeZoom: it's the parent zoom the descent transition
+// targets, so at the path-swap moment the footprint screen size equals
+// the inner-box and content rendered at FileZoom in the textarea matches
+// the preview at parent = FileOvertake.
+//
+// Smaller than the legacy OvertakeZoom (footprint = full pane) by a
+// factor of inner-box-vs-pane — i.e., the preview "zooms in a little
+// more" so it shows only the meaningful textarea content, not the
+// surrounding outer-ring chrome. The "max" choice picks the dimension
+// that needs more zoom to fill, so the other dimension overflows the
+// inner-box and the user sees a center-crop of the textarea content
+// in the preview.
+func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
+	if fileW <= 0 || fileH <= 0 {
+		return 1
+	}
+	m := fileMargin(r)
+	innerW := r.W - 2*m
+	innerH := r.H - 2*m
+	if innerW <= 0 || innerH <= 0 {
+		return 1
+	}
+	zw := innerW / (float64(fileW) * cellPx)
+	zh := innerH / (float64(fileH) * cellPx)
+	if zw > zh {
+		return zw
+	}
+	return zh
+}
+
+// fileInnerBox returns the screen rectangle of a file-focused pane's
+// inner area: the light-grey reading region that the textarea sits on
+// (text mode) or the rendered markdown fills (rendered mode). Bounded
+// horizontally by the 80-column reading width so wide panes don't
+// stretch text to the full pane width. The same rect is used by the
+// canvas painter, the markdown renderer, the textarea positioner, and
+// the click hit-test so the user's "inside vs. outside" mental model
+// is consistent across all three.
+func fileInnerBox(p *pane.Pane, r paneRect) (x, y, w, h float64) {
+	left, top, width, height, _ := fileTextareaBox(p, r)
+	return left, top, width, height
+}
+
+// pointInFileInner reports whether (sx, sy) lies inside the
+// file-focused pane's inner box. Outside the box (but still inside
+// the pane) is the outer ring with grid-style mouse rules.
+func pointInFileInner(p *pane.Pane, r paneRect, sx, sy float64) bool {
+	ix, iy, iw, ih := fileInnerBox(p, r)
+	return sx >= ix && sx < ix+iw && sy >= iy && sy < iy+ih
+}
+
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
 // for markdown text-mode editing. It lives in document.body and is
 // positioned absolutely over the focused pane on demand. The element is
@@ -23,7 +107,7 @@ func (a *App) ensureFileTextarea() {
 	style := ta.Get("style")
 	style.Set("position", "absolute")
 	style.Set("display", "none")
-	style.Set("background", "transparent")
+	style.Set("background", colorFileInnerBg)
 	style.Set("color", "#d8d9de")
 	style.Set("border", "0")
 	style.Set("outline", "none")
@@ -39,12 +123,20 @@ func (a *App) ensureFileTextarea() {
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
 
+	a.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.fileSaveScheduled = false
+		p := a.tree.FocusedPane()
+		if p == nil || p.FileFocus == 0 || p.FileMode != "text" {
+			return nil
+		}
+		a.saveFileFromTextarea(p)
+		return nil
+	})
 	a.fileTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Just trigger a redraw so the canvas-side preview (if any) stays
-		// in sync. We don't push every keystroke to the server — that
-		// happens on toggle-to-rendered or ascend. URL update is
-		// debounced separately so the cursor position lands in the URL
-		// without flickering on every keystroke.
+		// Schedule a debounced auto-save so the canvas preview and
+		// stored blob catch up to the user's edits without waiting
+		// for ascent / toggle. URL update is debounced separately.
+		a.scheduleFileSave()
 		a.draw()
 		a.scheduleURLUpdate()
 		return nil
@@ -111,11 +203,7 @@ func (a *App) ensureFileTextarea() {
 			return nil
 		}
 		r := paneRectFor(a, p)
-		ps := dragdrop.Pane{
-			ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-			Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-		}
-		if dragdrop.IsInEdgeZone(ps, sx, sy, dragdrop.EdgeBand(ps)) {
+		if !pointInFileInner(p, r, sx, sy) {
 			ev.Call("preventDefault")
 			a.startFileAscent(p)
 		}
@@ -188,37 +276,17 @@ func (a *App) refreshFileOverlay() {
 		return
 	}
 	style := ta.Get("style")
-
-	// The textarea has a fixed character column (so the text doesn't
-	// reflow when the pane gets wider) and is centered horizontally
-	// inside the pane. Wider panes get padding on both sides; narrower
-	// panes shrink the column to fit.
-	zoom := p.FileZoom
-	if zoom <= 0 {
-		zoom = 1.0
-	}
-	fontPx := 14.0 * zoom
-	if fontPx < 8 {
-		fontPx = 8
-	}
-	if fontPx > 60 {
-		fontPx = 60
-	}
-	const maxCols = 80
-	// One monospace char ≈ 0.6em, padding 16px on each side (matches
-	// padding: 8px set on creation, plus a visual buffer).
-	colWidth := float64(maxCols)*fontPx*0.6 + 32
-	width := colWidth
-	if width > r.W {
-		width = r.W
-	}
-	left := r.X + (r.W-width)/2
+	left, top, width, height, fontPx := fileTextareaBox(p, r)
 
 	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
-	style.Set("top", strconv.FormatFloat(r.Y, 'f', 1, 64)+"px")
+	style.Set("top", strconv.FormatFloat(top, 'f', 1, 64)+"px")
 	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
-	style.Set("height", strconv.FormatFloat(r.H, 'f', 1, 64)+"px")
-	style.Set("clipPath", textareaClipPath())
+	style.Set("height", strconv.FormatFloat(height, 'f', 1, 64)+"px")
+	if textareaNeedsClip(p, r) {
+		style.Set("clipPath", textareaClipPath())
+	} else {
+		style.Set("clipPath", "none")
+	}
 	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
 	style.Set("display", "block")
 
@@ -277,31 +345,70 @@ func (a *App) syncFileOverlayPosition() {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
+	left, top, width, height, fontPx := fileTextareaBox(p, r)
+	style := a.fileTextarea.Get("style")
+	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
+	style.Set("top", strconv.FormatFloat(top, 'f', 1, 64)+"px")
+	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
+	style.Set("height", strconv.FormatFloat(height, 'f', 1, 64)+"px")
+	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
+	if textareaNeedsClip(p, r) {
+		style.Set("clipPath", textareaClipPath())
+	} else {
+		style.Set("clipPath", "none")
+	}
+}
+
+// fileTextareaBox returns the textarea overlay's screen rectangle and
+// font size for pane p with rect r. Inset by fileMargin so a margin of
+// outer-ring space surrounds the textarea, and width is capped at the
+// 80-column reading width so long files don't stretch full-pane.
+func fileTextareaBox(p *pane.Pane, r paneRect) (left, top, width, height, fontPx float64) {
 	zoom := p.FileZoom
 	if zoom <= 0 {
 		zoom = 1.0
 	}
-	fontPx := 14.0 * zoom
+	fontPx = 14.0 * zoom
 	if fontPx < 8 {
 		fontPx = 8
 	}
 	if fontPx > 60 {
 		fontPx = 60
 	}
+	m := fileMargin(r)
+	innerX := r.X + m
+	innerY := r.Y + m
+	innerW := r.W - 2*m
+	innerH := r.H - 2*m
+	if innerW < 0 {
+		innerW = 0
+	}
+	if innerH < 0 {
+		innerH = 0
+	}
 	const maxCols = 80
 	colWidth := float64(maxCols)*fontPx*0.6 + 32
-	width := colWidth
-	if width > r.W {
-		width = r.W
+	width = colWidth
+	if width > innerW {
+		width = innerW
 	}
-	left := r.X + (r.W-width)/2
-	style := a.fileTextarea.Get("style")
-	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
-	style.Set("top", strconv.FormatFloat(r.Y, 'f', 1, 64)+"px")
-	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
-	style.Set("height", strconv.FormatFloat(r.H, 'f', 1, 64)+"px")
-	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
-	style.Set("clipPath", textareaClipPath())
+	left = innerX + (innerW-width)/2
+	top = innerY
+	height = innerH
+	return
+}
+
+// textareaNeedsClip reports whether the textarea's bottom-right
+// corner overlaps the file toggle button on this pane. When false
+// (typical case: pane is wide enough for the toggle button to live
+// in the outer ring), the clipPath notch is unnecessary and would
+// cause a visible cut.
+func textareaNeedsClip(p *pane.Pane, r paneRect) bool {
+	bx, by := plusButtonCenter(r)
+	left, top, width, height, _ := fileTextareaBox(p, r)
+	right := left + width
+	bottom := top + height
+	return bx-plusButtonRadius < right && by-plusButtonRadius < bottom
 }
 
 // onToggleFileMode flips the focused pane between text and rendered

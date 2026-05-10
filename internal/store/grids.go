@@ -129,6 +129,42 @@ func (s *Store) loadNodesInGrid(ctx context.Context, q gridReader, gridID int64)
 	return out, rows.Err()
 }
 
+// SetGridDefaultView updates the grid's stored default viewport.
+// Requires write permission on the grid. Emits a GridChanged event so
+// any subscribed clients refetch.
+func (s *Store) SetGridDefaultView(ctx context.Context, userID int64, req *rpc.SetGridDefaultViewRequest) (*rpc.Grid, error) {
+	var out *rpc.Grid
+	var events []rpc.Event
+	err := s.withTx(ctx, func(tx *sql.Tx) error {
+		_, write, err := s.permForGrid(ctx, tx, userID, req.GridID)
+		if err != nil {
+			return err
+		}
+		if !write {
+			return ErrPermissionDenied
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE grids SET default_view_cx = ?, default_view_cy = ?, default_zoom = ?
+			 WHERE id = ?`,
+			req.Cx, req.Cy, req.Zoom, req.GridID); err != nil {
+			return err
+		}
+		out, err = s.loadGrid(ctx, tx, req.GridID)
+		if err != nil {
+			return err
+		}
+		events = append(events, rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: req.GridID}})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, ev := range events {
+		s.publish(userID, ev)
+	}
+	return out, nil
+}
+
 // overlapsExisting reports whether the rectangle (x,y,w,h) overlaps any node
 // in the grid except those whose id is in the excludeIDs set.
 //

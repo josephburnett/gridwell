@@ -68,6 +68,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/CloneNode", s.authed(s.cloneNode))
 	s.mux.HandleFunc("/rpc/ResizeNode", s.authed(s.resizeNode))
 	s.mux.HandleFunc("/rpc/SetNodeViewport", s.authed(s.setNodeViewport))
+	s.mux.HandleFunc("/rpc/SetGridDefaultView", s.authed(s.setGridDefaultView))
 	s.mux.HandleFunc("/rpc/CapWell", s.authed(s.capWell))
 	s.mux.HandleFunc("/rpc/RedigWell", s.authed(s.redigWell))
 	s.mux.HandleFunc("/rpc/FillWell", s.authed(s.fillWell))

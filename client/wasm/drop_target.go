@@ -140,22 +140,20 @@ func wellChildViewRect(well *rpc.Node, paneRectW, paneRectH float64) rpc.ViewRec
 }
 
 // wellChildVisibleCells returns (visW, visH): the visible child-cell
-// counts in the well's preview at the given pane size. Mirrors the
-// previewCell formula used by drawNodeWithPreview and ChildPreviewFor
-// so the locality rect always matches what the user can target.
+// counts in the well's preview. Derived from the previewCell formula
+// (parentCell × ViewZoom) — the visible cell count is footprint /
+// previewCell = footprintCells / ViewZoom, which is window-independent
+// once ViewZoom is the intrinsic ratio. Default (ViewZoom == 0) falls
+// back to the PreviewFactor calibration (footprintCells × PreviewFactor
+// child cells visible).
 func wellChildVisibleCells(well *rpc.Node, paneW, paneH float64) (float64, float64) {
+	_, _ = paneW, paneH
 	if well.ViewZoom <= 0 {
 		return float64(well.W) * zoomtrans.PreviewFactor,
 			float64(well.H) * zoomtrans.PreviewFactor
 	}
-	w := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
-	ot := zoomtrans.OvertakeZoom(w, paneW, paneH, cellPx)
-	if ot <= 0 {
-		return float64(well.W) * zoomtrans.PreviewFactor,
-			float64(well.H) * zoomtrans.PreviewFactor
-	}
-	return float64(well.W) * ot / well.ViewZoom,
-		float64(well.H) * ot / well.ViewZoom
+	return float64(well.W) / well.ViewZoom,
+		float64(well.H) / well.ViewZoom
 }
 
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor

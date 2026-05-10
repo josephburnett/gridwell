@@ -11,7 +11,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -72,19 +71,6 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(Schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
-	}
-	// Idempotent column adds for existing DBs created before the
-	// CREATE TABLE statement above grew them. ALTER TABLE returns a
-	// "duplicate column" error if the column is already present;
-	// safe to ignore. New DBs already have the column from Schema.
-	for _, alter := range []string{
-		`ALTER TABLE nodes ADD COLUMN view_zoom REAL NOT NULL DEFAULT 0`,
-	} {
-		if _, err := db.Exec(alter); err != nil &&
-			!strings.Contains(err.Error(), "duplicate column") {
-			db.Close()
-			return nil, fmt.Errorf("migrate %q: %w", alter, err)
-		}
 	}
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		db.Close()

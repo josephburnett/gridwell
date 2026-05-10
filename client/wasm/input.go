@@ -83,16 +83,42 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
 	sx, sy := mouseXY(args[0], a.canvas)
-	p, _, ok := a.paneAtScreen(sx, sy)
+	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil
 	}
-	// Inside a focused file the wheel scrolls vertically. The zoom is
-	// fixed for the duration of the visit; combining zoom and scroll on
-	// one gesture mixed badly. Text mode falls through to the textarea
-	// (which gets the wheel event natively) — control reaches here only
-	// for rendered mode where the canvas is on top.
+	// Inside a focused file the wheel rules differ by region. Outer
+	// ring (the visible grid pattern) zooms FileZoom centered on the
+	// cursor; inner area scrolls (rendered mode) or is handled by the
+	// textarea natively (text mode — those events never reach the
+	// canvas listener).
 	if p.FileFocus != 0 {
+		if !pointInFileInner(p, r, sx, sy) {
+			step := dy / 200.0
+			if step > 0.5 {
+				step = 0.5
+			}
+			if step < -0.5 {
+				step = -0.5
+			}
+			factor := math.Pow(zoomFactor, -step*4)
+			z := p.FileZoom
+			if z <= 0 {
+				z = 1.0
+			}
+			z *= factor
+			if z < zoomMin {
+				z = zoomMin
+			}
+			if z > zoomMax {
+				z = zoomMax
+			}
+			p.FileZoom = z
+			a.refreshFileOverlay()
+			a.draw()
+			a.scheduleURLUpdate()
+			return nil
+		}
 		if p.FileMode == "rendered" {
 			z := nonzero(p.FileZoom)
 			p.FileScrollY += dy / z
@@ -102,8 +128,6 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 			a.draw()
 			a.scheduleURLUpdate()
 		}
-		_ = sx
-		_ = sy
 		return nil
 	}
 	// Smooth zoom centered on the cursor: amount scales with deltaY so a
@@ -126,6 +150,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	p.Zoom = z
 	a.draw()
 	a.scheduleURLUpdate()
+	a.scheduleRootViewSave()
 	return nil
 }
 
@@ -167,17 +192,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.onToggleFileMode(p)
 			return nil
 		}
-		// Edge-zone ascent works the same way it does in a grid pane.
-		// In text mode the textarea may be narrower than the pane (it's
-		// capped at ~80 columns and centered), so the bare canvas to the
-		// left/right of the textarea has to handle ascent itself — the
-		// textarea's own mousedown handler only fires on clicks that
-		// actually land on it.
-		pscreen := dragdrop.Pane{
-			ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-			Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-		}
-		if dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
+		// Anywhere outside the inner box (textarea / rendered area)
+		// is "outer ring" — ascent. The textarea overlay catches
+		// clicks inside in text mode; rendered mode falls through to
+		// pan below.
+		if !pointInFileInner(p, r, sx, sy) {
 			a.startFileAscent(p)
 			return nil
 		}
@@ -455,6 +474,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// Pan drag end: just persist viewport state.
 	if d.nodeID == 0 {
 		a.scheduleURLUpdate()
+		a.scheduleRootViewSave()
 		a.draw()
 		return nil
 	}
@@ -762,7 +782,19 @@ func (a *App) startAscent(p *pane.Pane) {
 
 	saved := a.popPaneState(p.ID)
 	if saved == nil {
-		saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
+		// No in-session saved state (e.g., user reloaded mid-descent
+		// and is now ascending). Fall back to the parent grid's
+		// stored DefaultView when ascending to root, so the user
+		// returns to their preferred viewport rather than a forced
+		// "well center, zoom 1" pose.
+		if level == 0 {
+			if g, ok := a.c.Grid(a.user.RootGridID); ok && g.Meta.DefaultZoom > 0 {
+				saved = &paneState{Cx: g.Meta.DefaultViewCx, Cy: g.Meta.DefaultViewCy, Zoom: g.Meta.DefaultZoom}
+			}
+		}
+		if saved == nil {
+			saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
+		}
 	}
 
 	// Distances in shared px-equivalent units so SplitN can apportion
@@ -888,15 +920,13 @@ func nonzero(x float64) float64 {
 // startFileDescent zooms a pane into a markdown file in a single
 // concurrent pan+zoom motion, then flips to file-editing mode. Unlike
 // well descent, the path is not extended (the file lives in the parent
-// grid as a leaf node), so the transition is one segment in the parent
-// coordinate space; the visual landing is at OvertakeZoom on the file's
-// footprint, after which the file-mode chrome takes over.
-//
-// The post-landing FileZoom is set to a comfortable reading scale,
-// independent of the parent zoom, so the markdown isn't rendered at
-// OvertakeZoom magnification (which produced the "huge" complaint).
-// Yes there is a one-frame scale jump at the path-switch — accepted
-// trade-off for a sane initial reading view.
+// grid as a leaf node) and the meaningful screen area in live mode is
+// the inner box (textarea region), not the full pane — so the descent
+// targets FileOvertake (parent zoom that makes the footprint fit the
+// inner box), one notch further in than the legacy OvertakeZoom. At
+// the path-swap, the footprint screen size = inner-box, and the live
+// FileZoom is reconstructed from the file's intrinsic ViewZoom ratio
+// for visual continuity.
 func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
@@ -905,13 +935,9 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 		Path: append([]int64(nil), p.Path...),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
-	w := zoomtrans.Well{
-		ID: file.ID, X: file.X, Y: file.Y, W: file.W, H: file.H,
-		ViewX: file.ViewX, ViewY: file.ViewY, ViewZoom: file.ViewZoom,
-	}
 	wellCx := float64(file.X) + float64(file.W)/2
 	wellCy := float64(file.Y) + float64(file.H)/2
-	target := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
+	target := fileOvertakeZoom(r, file.W, file.H)
 	if target < from.Zoom {
 		target = from.Zoom
 	}
@@ -947,7 +973,14 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 			fp.FileMode = mode
 			fp.FileScrollY = initialScroll
 			fp.FileScrollX = 0
-			fp.FileZoom = fileInitialZoom(r.W, r.H)
+			// Reconstruct live FileZoom from the intrinsic ratio
+			// stored on the node. 0 = never visited → fall back to a
+			// pane-size-calibrated initial zoom.
+			if file.ViewZoom > 0 {
+				fp.FileZoom = file.ViewZoom * fileOvertakeZoom(r, file.W, file.H)
+			} else {
+				fp.FileZoom = fileInitialZoom(r.W, r.H)
+			}
 			a.refreshFileOverlay()
 		},
 	})
@@ -973,13 +1006,9 @@ func (a *App) startFileAscent(p *pane.Pane) {
 		return
 	}
 	r := paneRectFor(a, p)
-	w := zoomtrans.Well{
-		ID: file.ID, X: file.X, Y: file.Y, W: file.W, H: file.H,
-		ViewX: file.ViewX, ViewY: file.ViewY, ViewZoom: file.ViewZoom,
-	}
 	wellCx := float64(file.X) + float64(file.W)/2
 	wellCy := float64(file.Y) + float64(file.H)/2
-	overtake := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
+	overtake := fileOvertakeZoom(r, file.W, file.H)
 	if overtake > p.Zoom {
 		overtake = p.Zoom
 	}
@@ -1038,12 +1067,15 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.scheduleURLUpdate()
 }
 
-// saveWellViewBeforeAscent updates `well`'s ViewX/ViewY so its
-// parent-grid preview reflects the user's last position in the child
-// grid. Mutates well in-place (so the local-side ascent transition
-// uses the new values) and patches the cache so the parent's preview
-// renders the new view immediately on path-swap. Posts SetNodeViewport
-// in a goroutine; the server's event will catch up the cache.
+// saveWellViewBeforeAscent updates `well`'s ViewX/ViewY/ViewZoom so its
+// parent-grid preview reflects the user's last position and zoom in
+// the child grid. ViewZoom is stored as the intrinsic ratio
+// childZoom_at_ascent / OvertakeZoom_at_ascent — window-independent so
+// the preview stays stable across browser resizes. Mutates well in-place
+// (so the local-side ascent transition uses the new values) and patches
+// the cache so the parent's preview renders the new view immediately on
+// path-swap. Posts SetNodeViewport in a goroutine; the server's event
+// will catch up the cache.
 //
 // No-op if the user's current center hasn't moved from the well's
 // stored view (rounded to int cells), so casual ascents don't churn
@@ -1051,9 +1083,12 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath []int64) {
 	newViewX := int64(math.Round(p.Cx)) - well.W/2
 	newViewY := int64(math.Round(p.Cy)) - well.H/2
-	newViewZoom := p.Zoom
-	if newViewZoom <= 0 {
-		newViewZoom = 1.0
+	r := paneRectFor(a, p)
+	zw := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
+	overtake := zoomtrans.OvertakeZoom(zw, r.W, r.H, cellPx)
+	newViewZoom := 0.0
+	if overtake > 0 && p.Zoom > 0 {
+		newViewZoom = p.Zoom / overtake
 	}
 	if newViewX == well.ViewX && newViewY == well.ViewY &&
 		math.Abs(newViewZoom-well.ViewZoom) < 0.001 {
@@ -1075,7 +1110,6 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath 
 	// state we'll restore on ascent). Falls back to a generous default
 	// if no saved state exists — locality is best-effort here, since
 	// the action is genuinely local to the user's current view.
-	r := paneRectFor(a, p)
 	parentCx, parentCy, parentZoom := 0.0, 0.0, 1.0
 	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
 		ps := stack[len(stack)-1]
@@ -1149,10 +1183,17 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
 				a.c.PutBlob(resp.Node.BlobID, []byte(buf), "text/markdown")
 			}
 		}
-		// Always update view_y so re-descent restores the scroll.
+		// Always update view_y + zoom so re-descent restores the
+		// user's scroll and zoom. ViewZoom is stored as the intrinsic
+		// ratio FileZoom / FileOvertake_at_ascent (window-independent).
+		intrinsic := 0.0
+		ot := fileOvertakeZoom(r, file.W, file.H)
+		if ot > 0 && p.FileZoom > 0 {
+			intrinsic = p.FileZoom / ot
+		}
 		vreq := rpc.SetNodeViewportRequest{
 			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-			NodeID: file.ID, ViewX: 0, ViewY: scrollY,
+			NodeID: file.ID, ViewX: 0, ViewY: scrollY, ViewZoom: intrinsic,
 		}
 		var vresp rpc.NodeResponse
 		_, _ = postJSON("/rpc/SetNodeViewport", vreq, &vresp)

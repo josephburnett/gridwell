@@ -27,15 +27,16 @@ type Endpoints struct {
 
 // Well is the minimal information about a well needed to compute a
 // transition: its row id, its location and size in the parent grid, and
-// its saved internal view offset and zoom.
+// its saved internal view offset and intrinsic view ratio.
 //
-// ViewZoom is the user's last child-grid zoom for this well. Zero means
-// "not yet set" — the descent uses the calibrated default (zPTarget /
-// PreviewFactor) and the preview renders at PreviewFactor scale. When
-// non-zero, descent lands at exactly ViewZoom and the parent preview
-// renders child cells at cellPx × ViewZoom screen pixels (instead of
-// parentCell / PreviewFactor) so the preview matches the user's last
-// view and the path-swap is continuous without an extra zoom segment.
+// ViewZoom is an intrinsic ratio = liveScale / EffectiveOvertake at the
+// moment of the user's last ascent from this well/file. It is
+// dimensionless and window-independent: the preview formula uses it
+// directly as the per-parentCell child-cell-size multiplier, and the
+// descent formula reconstructs the user's live zoom for the current
+// pane size as ViewZoom × EffectiveOvertake_now. Zero means "never
+// visited"; in that case the descent and preview fall back to the
+// PreviewFactor calibration.
 type Well struct {
 	ID       int64
 	X, Y     int64
@@ -97,16 +98,18 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, to Endp
 		Zoom: zPTarget,
 	}
 	childPath := append(append([]int64(nil), from.Path...), w.ID)
-	// Calibrated child zoom at the switch moment: must equal the
-	// preview cell size in screen-px / cellPx so the path swap is
-	// visually continuous. When the well has a stored ViewZoom, the
-	// preview renders child cells at cellPx × ViewZoom (renderer rule
-	// — see drawNodeWithPreview), so the matching child zoom is
-	// ViewZoom directly. When unset (ViewZoom == 0), the original
-	// PreviewFactor calibration applies.
+	// Calibrated child zoom at the switch moment: at parent =
+	// OvertakeZoom, a parent cell is cellPx × OvertakeZoom in screen
+	// px, and the renderer paints child cells at parentCell × ViewZoom
+	// in the preview. So for the path-swap to be visually continuous,
+	// the post-swap child zoom must be ViewZoom × OvertakeZoom (so
+	// child cells render at cellPx × ViewZoom × OvertakeZoom in both
+	// preview-just-before and live-just-after). ViewZoom == 0 falls
+	// back to the legacy PreviewFactor calibration (1/PreviewFactor as
+	// the implicit default ratio).
 	childZoom := zPTarget / PreviewFactor
 	if w.ViewZoom > 0 {
-		childZoom = w.ViewZoom
+		childZoom = w.ViewZoom * zPTarget
 	}
 	to = Endpoints{
 		Path: childPath,
@@ -127,10 +130,11 @@ func Ascent(from Endpoints, w Well, parentPath []int64, paneW, paneH, cellPx flo
 	zPTarget := OvertakeZoom(w, paneW, paneH, cellPx)
 	// Mid-state child zoom: matches the preview cell size in
 	// screen-px / cellPx so the path-swap into the parent's preview
-	// is continuous. ViewZoom drives this when set (see Descent).
+	// is continuous. With ViewZoom = intrinsic ratio, the matching
+	// child zoom is ViewZoom × OvertakeZoom_now (mirrors Descent).
 	midZoom := zPTarget / PreviewFactor
 	if w.ViewZoom > 0 {
-		midZoom = w.ViewZoom
+		midZoom = w.ViewZoom * zPTarget
 	}
 	mid = Endpoints{
 		Path: from.Path,

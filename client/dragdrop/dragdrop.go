@@ -142,17 +142,13 @@ type ChildPreview struct {
 
 // ChildPreviewFor returns the screen-coord transform for a well's
 // child-grid preview, given the parent pane and the well's footprint,
-// view region, and stored ViewZoom (all in parent-grid cells; ViewZoom
-// is dimensionless).
+// view region, and stored ViewZoom (intrinsic ratio).
 //
-// previewFactor is the default cell-size ratio between the parent
-// grid and the child preview when the well has no stored ViewZoom —
-// pass zoomtrans.PreviewFactor (8.0). When the well's ViewZoom is
-// non-zero, the preview cell scales so the user's full visible region
-// in the child grid fits inside the well's footprint at the current
-// parent zoom. At parentZoom = OvertakeZoom this collapses to
-// cellPx × ViewZoom (matching the child cell size at the path-swap);
-// at smaller parent zooms the preview cell shrinks proportionally.
+// previewFactor is the default cell-size ratio used when the well has
+// no stored ViewZoom (= "never visited") — pass zoomtrans.PreviewFactor
+// (8.0). When the well's ViewZoom is non-zero, it is the intrinsic
+// child-cell-per-parent-cell multiplier: previewCell = parentCell ×
+// ViewZoom. Pane-size independent.
 func ChildPreviewFor(parent Pane, well struct {
 	X, Y, W, H, ViewX, ViewY int64
 	ViewZoom                 float64
@@ -160,18 +156,7 @@ func ChildPreviewFor(parent Pane, well struct {
 	parentCell := parent.CellPx * parent.Zoom
 	previewCell := parentCell / previewFactor
 	if well.ViewZoom > 0 {
-		// OvertakeZoom: max parent zoom needed for the well to overtake
-		// either pane dimension. Inlined to keep dragdrop free of a
-		// dependency on client/zoomtrans.
-		zw := parent.ScreenW / (float64(well.W) * parent.CellPx)
-		zh := parent.ScreenH / (float64(well.H) * parent.CellPx)
-		ot := zw
-		if zh > ot {
-			ot = zh
-		}
-		if ot > 0 {
-			previewCell = parentCell * well.ViewZoom / ot
-		}
+		previewCell = parentCell * well.ViewZoom
 	}
 	wellLeft, wellTop := parent.CellToScreen(float64(well.X), float64(well.Y))
 	wellCenterX := wellLeft + float64(well.W)*parentCell/2

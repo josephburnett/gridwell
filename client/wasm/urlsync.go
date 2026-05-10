@@ -15,6 +15,53 @@ import (
 // bookmark / copy-paste reflects the latest state.
 const urlUpdateDebounceMs = 150
 
+// rootViewSaveDebounceMs is the delay before persisting a changed root
+// viewport to the server's default_view. Longer than the URL debounce
+// so a continuous pan/zoom doesn't spam the server with intermediate
+// values — we only care about the resting state.
+const rootViewSaveDebounceMs = 600
+
+// scheduleRootViewSave queues a debounced SetGridDefaultView for the
+// user's root grid. Cheap to call from any code path that mutates the
+// focused pane's viewport; no-op when the focused pane isn't at root.
+func (a *App) scheduleRootViewSave() {
+	if a.rootViewSaveScheduled {
+		return
+	}
+	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.FileFocus != 0 {
+		return
+	}
+	a.rootViewSaveScheduled = true
+	js.Global().Call("setTimeout", a.rootViewSaveCb, rootViewSaveDebounceMs)
+}
+
+// flushRootViewSave reads the focused pane's viewport and posts
+// SetGridDefaultView for the user's root grid. Triggered by the
+// debounce timer; safe to call manually.
+func (a *App) flushRootViewSave() {
+	if a.user == nil {
+		return
+	}
+	p := a.tree.FocusedPane()
+	if p == nil || len(p.Path) > 0 || p.FileFocus != 0 {
+		return
+	}
+	zoom := p.Zoom
+	if zoom <= 0 {
+		zoom = 1.0
+	}
+	req := rpc.SetGridDefaultViewRequest{
+		GridID: a.user.RootGridID,
+		Cx:     p.Cx,
+		Cy:     p.Cy,
+		Zoom:   zoom,
+	}
+	go func() {
+		var resp rpc.SetGridDefaultViewResponse
+		_, _ = postJSON("/rpc/SetGridDefaultView", req, &resp)
+	}()
+}
+
 // scheduleURLUpdate marks that the URL is out of date and arranges for
 // it to be replaced on the next debounce tick. Cheap to call from any
 // state-mutating code path.
@@ -121,21 +168,27 @@ func (a *App) applyURLOnBoot() {
 	// something to read. If the URL has no path, we're done.
 	rootID := a.user.RootGridID
 	if len(state.NodeIDs) == 0 {
-		a.fetchGrid(rootID)
-		a.draw()
-		// Apply viewport even when the path is empty — the user might
-		// have bookmarked a viewport at root.
-		if state.X != 0 || state.Y != 0 || state.Zoom != 0 {
-			p := a.tree.FocusedPane()
-			if p != nil {
+		// Block on the fetch so we can read the grid's stored
+		// DefaultView before drawing — otherwise the user sees a
+		// flash of the (0,0,1) default and then jumps to their
+		// preferred viewport once the response arrives.
+		a.fetchGridSync(rootID)
+		p := a.tree.FocusedPane()
+		if p != nil {
+			if state.X != 0 || state.Y != 0 || state.Zoom != 0 {
+				// URL viewport wins over stored default.
 				p.Cx = state.X
 				p.Cy = state.Y
 				if state.Zoom > 0 {
 					p.Zoom = state.Zoom
 				}
+			} else if g, ok := a.c.Grid(rootID); ok && g.Meta.DefaultZoom > 0 {
+				p.Cx = g.Meta.DefaultViewCx
+				p.Cy = g.Meta.DefaultViewCy
+				p.Zoom = g.Meta.DefaultZoom
 			}
-			a.draw()
 		}
+		a.draw()
 		a.scheduleURLUpdate()
 		return
 	}
@@ -194,7 +247,16 @@ walk:
 		} else {
 			p.FileMode = "rendered"
 		}
-		p.FileZoom = fileInitialZoom(a.width, a.height)
+		// Reconstruct live FileZoom from the intrinsic ViewZoom ratio
+		// (FileZoom = ViewZoom × FileOvertake_now). For unvisited
+		// files (ViewZoom == 0) fall back to a calibrated initial
+		// zoom from pane size.
+		if file, ok := a.cachedFile(p.Path, fileNodeID); ok && file.ViewZoom > 0 {
+			r := paneRectFor(a, p)
+			p.FileZoom = file.ViewZoom * fileOvertakeZoom(r, file.W, file.H)
+		} else {
+			p.FileZoom = fileInitialZoom(a.width, a.height)
+		}
 		a.fetchBlobAndSetCursor(fileNodeID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()
@@ -210,6 +272,19 @@ walk:
 	a.draw()
 	// Replace the URL in case we truncated.
 	a.scheduleURLUpdate()
+}
+
+// cachedFile returns the file node at the leaf of `path` with id
+// nodeID, if cached. Used during URL boot to honor a previously
+// stored ViewZoom before the blob arrives.
+func (a *App) cachedFile(path []int64, nodeID int64) (rpc.Node, bool) {
+	gid := a.gridIDForPath(path)
+	g, ok := a.c.Grid(gid)
+	if !ok {
+		return rpc.Node{}, false
+	}
+	n, ok := g.Nodes[nodeID]
+	return n, ok
 }
 
 // fetchGridSync fetches a grid and waits for the result. Returns true

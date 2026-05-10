@@ -30,13 +30,6 @@ const (
 	// content comfortably; previews scale this down to fit the file's
 	// footprint when displayed in the parent grid.
 	fileNaturalContentPx = 800.0
-
-	// fileZoomMin / Max bound the user-controllable zoom range inside
-	// file mode. Wider than the parent grid's range because zoomed-out
-	// markdown (sub-1.0) is useful for an overview, and zoomed-in is
-	// useful for accessibility.
-	fileZoomMin = 0.25
-	fileZoomMax = 6.0
 )
 
 // fileInitialZoom returns the FileZoom that gives the just-descended
@@ -164,6 +157,20 @@ type App struct {
 	// it cleanly if the App is torn down (currently never).
 	fileTextareaInputCb js.Func
 	fileTextareaScrollCb js.Func
+
+	// fileSaveScheduled is true when a debounced save is pending; the
+	// timer is in flight via setTimeout. fileSaveCb is the bound
+	// callback (allocated once, retained so JS can call it repeatedly).
+	fileSaveScheduled bool
+	fileSaveCb        js.Func
+
+	// rootViewSaveScheduled is the same pattern for the root-grid
+	// default-view persistence. Saves only when the focused pane is
+	// at the user's root (path empty); the well's child grids use
+	// SetNodeViewport on ascent instead, so this only ever updates
+	// the root.
+	rootViewSaveScheduled bool
+	rootViewSaveCb        js.Func
 }
 
 // paneState is a captured viewport: viewport center in cells (sub-cell
@@ -346,6 +353,12 @@ func (a *App) afterLogin() {
 	a.canvas.Call("focus")
 	// Initialize root pane with the user's root grid path (empty).
 	a.tree.FocusedPane().Path = nil
+
+	a.rootViewSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.rootViewSaveScheduled = false
+		a.flushRootViewSave()
+		return nil
+	})
 
 	// Subscribe to SSE.
 	go a.startSSE()
