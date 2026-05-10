@@ -85,7 +85,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
-			viewRect: wellChildViewRect(n),
+			viewRect: wellChildViewRect(n, r.W, r.H),
 		}, true
 	}
 
@@ -112,14 +112,21 @@ func nodeCopy(n *rpc.Node) *rpc.Node {
 
 // wellChildViewRect returns the visible region of a well's child grid
 // in *child cell* coordinates, suitable for the server's locality
-// check on cross-grid moves into / out of the well. The well stores
-// W, H in parent cells; the visible child region is W*PreviewFactor
-// cells wide centered on (ViewX + W/2, ViewY + H/2). A small ±1 pad
-// matches paneViewRect's convention.
-func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
-	pf := int64(zoomtrans.PreviewFactor)
-	visW := well.W * pf
-	visH := well.H * pf
+// check on cross-grid moves into / out of the well.
+//
+// Visible region size depends on ViewZoom and the pane:
+//   - ViewZoom == 0 (default): well.W × PreviewFactor cells, the
+//     historical PreviewFactor calibration.
+//   - ViewZoom > 0: well.W × OvertakeZoom / ViewZoom cells, matching
+//     the renderer's previewCell = parentCell × ViewZoom / OvertakeZoom
+//     formula (visibleCells × previewCell = wellScreenSize).
+//
+// Both centered on (ViewX + W/2, ViewY + H/2). ±1 pad matches
+// paneViewRect's convention.
+func wellChildViewRect(well *rpc.Node, paneRectW, paneRectH float64) rpc.ViewRect {
+	visWf, visHf := wellChildVisibleCells(well, paneRectW, paneRectH)
+	visW := int64(math.Ceil(visWf))
+	visH := int64(math.Ceil(visHf))
 	centerX := float64(well.ViewX) + float64(well.W)/2
 	centerY := float64(well.ViewY) + float64(well.H)/2
 	leftX := int64(math.Floor(centerX - float64(visW)/2))
@@ -130,6 +137,25 @@ func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
 		W: visW + 3,
 		H: visH + 3,
 	}
+}
+
+// wellChildVisibleCells returns (visW, visH): the visible child-cell
+// counts in the well's preview at the given pane size. Mirrors the
+// previewCell formula used by drawNodeWithPreview and ChildPreviewFor
+// so the locality rect always matches what the user can target.
+func wellChildVisibleCells(well *rpc.Node, paneW, paneH float64) (float64, float64) {
+	if well.ViewZoom <= 0 {
+		return float64(well.W) * zoomtrans.PreviewFactor,
+			float64(well.H) * zoomtrans.PreviewFactor
+	}
+	w := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
+	ot := zoomtrans.OvertakeZoom(w, paneW, paneH, cellPx)
+	if ot <= 0 {
+		return float64(well.W) * zoomtrans.PreviewFactor,
+			float64(well.H) * zoomtrans.PreviewFactor
+	}
+	return float64(well.W) * ot / well.ViewZoom,
+		float64(well.H) * ot / well.ViewZoom
 }
 
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor
