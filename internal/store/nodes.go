@@ -32,7 +32,7 @@ func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWel
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
-	if !req.ViewRect.Contains(req.X, req.Y, req.W, req.H) {
+	if !req.ViewRect.Intersects(req.X, req.Y, req.W, req.H) {
 		return nil, ErrLocality
 	}
 	var out *rpc.Node
@@ -133,7 +133,7 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 	if int64(len(req.Data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: file too large", ErrInvalidArgument)
 	}
-	if !req.ViewRect.Contains(req.X, req.Y, req.W, req.H) {
+	if !req.ViewRect.Intersects(req.X, req.Y, req.W, req.H) {
 		return nil, ErrLocality
 	}
 
@@ -248,10 +248,10 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 		// Locality: existing footprint AND new footprint must each lie
 		// inside the framed view. Existing-side prevents action-at-a-
 		// distance; new-side prevents flinging the tile out of view.
-		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
-		if !req.ViewRect.Contains(req.X, req.Y, req.W, req.H) {
+		if !req.ViewRect.Intersects(req.X, req.Y, req.W, req.H) {
 			return ErrLocality
 		}
 		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
@@ -307,7 +307,7 @@ func (s *Store) SetNodeViewport(ctx context.Context, userID int64, req *rpc.SetN
 		if err != nil {
 			return err
 		}
-		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
 		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
@@ -425,7 +425,7 @@ func (s *Store) FillWell(ctx context.Context, userID int64, req *rpc.FillWellReq
 		if n.Type != "well" {
 			return fmt.Errorf("%w: node is not a well", ErrInvalidArgument)
 		}
-		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
 		// Permission: w on parent grid.

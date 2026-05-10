@@ -7,8 +7,9 @@
 package rpc
 
 // ViewRect is the framed region of the originating pane in the affected grid's
-// own coordinates. Servers reject mutations whose target footprint is not
-// entirely inside this rectangle. See spec §6.
+// own coordinates. Servers reject mutations whose target footprint does not
+// intersect this rectangle (i.e. the user can't see any part of the tile they
+// claim to be acting on). See spec §6.
 type ViewRect struct {
 	X int64 `json:"x"`
 	Y int64 `json:"y"`
@@ -19,6 +20,18 @@ type ViewRect struct {
 // Contains reports whether the rectangle (x,y,w,h) is entirely inside r.
 func (r ViewRect) Contains(x, y, w, h int64) bool {
 	return x >= r.X && y >= r.Y && x+w <= r.X+r.W && y+h <= r.Y+r.H
+}
+
+// Intersects reports whether the rectangle (x,y,w,h) overlaps r at all
+// — i.e., at least one cell of the rectangle is inside r. Used by the
+// locality check on cross-grid moves so a tile larger than the framed
+// view can still be acted on, as long as the user can see *some* part
+// of it.
+func (r ViewRect) Intersects(x, y, w, h int64) bool {
+	if w <= 0 || h <= 0 || r.W <= 0 || r.H <= 0 {
+		return false
+	}
+	return x < r.X+r.W && x+w > r.X && y < r.Y+r.H && y+h > r.Y
 }
 
 // Path is the descent path from the user's root grid to the grid the caller is

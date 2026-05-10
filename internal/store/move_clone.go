@@ -27,12 +27,12 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 		}
 		// Source-side locality (the existing footprint must lie inside
 		// the source view rect).
-		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
 		// Dest-side locality (the new footprint must lie inside the dest
 		// view rect, with the existing w/h since move doesn't resize).
-		if !req.DestViewRect.Contains(req.X, req.Y, n.W, n.H) {
+		if !req.DestViewRect.Intersects(req.X, req.Y, n.W, n.H) {
 			return ErrLocality
 		}
 
@@ -164,11 +164,11 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 			return err
 		}
 		// Source locality: existing footprint inside source view rect.
-		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
 		// Dest locality: clone target footprint inside dest view rect.
-		if !req.DestViewRect.Contains(req.X, req.Y, n.W, n.H) {
+		if !req.DestViewRect.Intersects(req.X, req.Y, n.W, n.H) {
 			return ErrLocality
 		}
 
@@ -301,7 +301,7 @@ func (s *Store) UpdateFileContent(ctx context.Context, userID int64, req *rpc.Up
 		if n.MimeType != "text/markdown" {
 			return fmt.Errorf("%w: %s is read-only", ErrInvalidArgument, n.MimeType)
 		}
-		if !req.ViewRect.Contains(n.X, n.Y, n.W, n.H) {
+		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
 		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
