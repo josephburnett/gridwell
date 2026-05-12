@@ -108,3 +108,187 @@ func TestAscentSwitchContinuity(t *testing.T) {
 		t.Errorf("to center = (%v, %v); want (2, 2.5)", to.Cx, to.Cy)
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Intrinsic-ratio helpers.
+//
+// The bug that motivated this test suite: startDescent forgot to
+// multiply ViewZoom by Overtake when reconstructing the live zoom, so
+// every ascend→descend round trip shrank the content by a factor of
+// Overtake. The tests below would have failed before that fix.
+
+func TestLiveIntrinsicAreInverses(t *testing.T) {
+	// LiveFromIntrinsic and IntrinsicFromLive must be exact inverses
+	// for any non-degenerate input. This is the single property that
+	// the whole intrinsic-ratio model relies on.
+	cases := []struct{ live, overtake float64 }{
+		{1.0, 1.0},
+		{2.98, 4.44}, // values from the original bug repro
+		{0.5, 10.0},
+		{50.0, 0.1},
+		{1e-3, 1e3},
+		{1e3, 1e-3},
+	}
+	for _, c := range cases {
+		vz := IntrinsicFromLive(c.live, c.overtake)
+		got := LiveFromIntrinsic(vz, c.overtake)
+		if !near(got, c.live) {
+			t.Errorf("live=%v overtake=%v: round trip got %v", c.live, c.overtake, got)
+		}
+	}
+}
+
+func TestIntrinsicFromLiveGuards(t *testing.T) {
+	if IntrinsicFromLive(2.0, 0) != 0 {
+		t.Error("zero overtake should yield 0 ratio")
+	}
+	if IntrinsicFromLive(0, 4.0) != 0 {
+		t.Error("zero liveZoom should yield 0 ratio")
+	}
+	if IntrinsicFromLive(2.0, -1.0) != 0 {
+		t.Error("negative overtake should yield 0 ratio")
+	}
+}
+
+func TestOvertakeEquivalentWellAndDirect(t *testing.T) {
+	// The well-flavored OvertakeZoom convenience must produce the same
+	// number as a direct Overtake call.
+	w := Well{W: 3, H: 5}
+	if !near(OvertakeZoom(w, 1920, 1080, cellPx),
+		Overtake(3, 5, 1920, 1080, cellPx)) {
+		t.Error("OvertakeZoom and Overtake disagree")
+	}
+}
+
+func TestOvertakeFillsAtLeastOneDim(t *testing.T) {
+	// At zoom = Overtake, the footprint's screen size in at least one
+	// dimension equals the reference rect (the other overflows). This
+	// is the geometric meaning of "max of dim ratios".
+	for _, c := range []struct {
+		fw, fh int64
+		rw, rh float64
+	}{
+		{1, 1, 1920, 1080},
+		{3, 2, 1920, 1080},
+		{5, 5, 800, 600},
+		{1, 10, 500, 500},
+	} {
+		z := Overtake(c.fw, c.fh, c.rw, c.rh, cellPx)
+		footW := float64(c.fw) * cellPx * z
+		footH := float64(c.fh) * cellPx * z
+		// One dimension equals the ref rect; the other ≥.
+		fillsW := near(footW, c.rw) && footH >= c.rh-1e-9
+		fillsH := near(footH, c.rh) && footW >= c.rw-1e-9
+		if !fillsW && !fillsH {
+			t.Errorf("foot=(%v,%v) rect=(%v,%v): no dim filled; footprint=(%v,%v)",
+				c.fw, c.fh, c.rw, c.rh, footW, footH)
+		}
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Round-trip ascend→descend identity.
+//
+// This is the property that the user's bug violated. The scenario:
+// user is in a well at live zoom L0; ascends (we save ViewZoom); then
+// descends again into the same well; the reconstructed live zoom must
+// equal L0. Tested across pane sizes — preview/live state must be
+// stable across window resizes between ascent and descent.
+
+func TestWellRoundTripSamePane(t *testing.T) {
+	// Same pane size at ascent and descent: live zoom must be restored
+	// exactly. Iterates a range of starting zooms to cover the case
+	// the bug fix landed on (`final.Zoom = ViewZoom × Overtake`) and
+	// edge cases (very small / very large live zoom).
+	for _, L0 := range []float64{0.5, 1.0, 2.98, 10.0, 50.0} {
+		paneW, paneH := 1920.0, 1080.0
+		w := Well{ID: 1, W: 3, H: 2}
+
+		// Ascend: save the intrinsic ratio that lives on the well.
+		overtake := OvertakeZoom(w, paneW, paneH, cellPx)
+		w.ViewZoom = IntrinsicFromLive(L0, overtake)
+
+		// Descend in the same pane: the reconstructed live zoom must
+		// equal L0. (The actual restored zoom in the application is
+		// computed as ViewZoom × overtake_now; this test guards that
+		// formula directly, independent of the Descent endpoints.)
+		got := LiveFromIntrinsic(w.ViewZoom, OvertakeZoom(w, paneW, paneH, cellPx))
+		if !near(got, L0) {
+			t.Errorf("L0=%v: round trip got %v", L0, got)
+		}
+	}
+}
+
+func TestWellRoundTripAcrossPaneResize(t *testing.T) {
+	// Different pane size at descent than ascent: live zoom necessarily
+	// changes (the well's footprint is a different number of pixels
+	// now), but the **visible child cells across the well width**
+	// must be invariant. That's the pane-independent property the
+	// intrinsic-ratio model exists to guarantee.
+	for _, L0 := range []float64{1.0, 2.98, 7.5} {
+		w := Well{ID: 1, W: 3, H: 2}
+		// Ascent in pane A.
+		ot1 := OvertakeZoom(w, 1920, 1080, cellPx)
+		w.ViewZoom = IntrinsicFromLive(L0, ot1)
+		// Visible child cells across the well width at ascent:
+		// well footprint screen px / cellPx_screen = (W × cellPx × overtake) / (cellPx × live)
+		//                                          = W × overtake / live
+		// With live = vz × overtake, this is W / vz.
+		visibleA := float64(w.W) / w.ViewZoom
+
+		// Descent in pane B (different size).
+		ot2 := OvertakeZoom(w, 800, 1200, cellPx)
+		L1 := LiveFromIntrinsic(w.ViewZoom, ot2)
+		visibleB := float64(w.W) * ot2 / L1
+		if !near(visibleA, visibleB) {
+			t.Errorf("L0=%v: visible cells %v ≠ %v across pane resize",
+				L0, visibleA, visibleB)
+		}
+	}
+}
+
+func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
+	// At the path swap, the just-before previewCell (parent grid view
+	// of the well's contents) must equal the just-after liveCell
+	// (child grid native render). For ViewZoom > 0 the formulae are:
+	//   previewCell_just_before = cellPx × parentZoom × ViewZoom
+	//                            = cellPx × Overtake × ViewZoom
+	//   liveCell_just_after     = cellPx × childZoom
+	//                            = cellPx × LiveFromIntrinsic(ViewZoom, Overtake)
+	// These must be equal — that's what makes the descent feel
+	// continuous. The old TestDescentMidIsOvertakeAndContinuity tests
+	// the ViewZoom == 0 path (PreviewFactor calibration); this one
+	// tests the populated-ratio path.
+	from := Endpoints{Zoom: 1}
+	for _, vz := range []float64{0.1, 0.25, 0.671, 1.0, 3.0} {
+		w := Well{ID: 1, W: 3, H: 2, ViewZoom: vz}
+		paneW, paneH := 1920.0, 1080.0
+		overtake := OvertakeZoom(w, paneW, paneH, cellPx)
+		_, to := Descent(from, w, paneW, paneH, cellPx)
+		// Just-before-swap parent zoom is the mid (= overtake when
+		// from.Zoom <= overtake, which holds for from.Zoom = 1 here).
+		previewCellPx := cellPx * overtake * vz
+		liveCellPx := cellPx * to.Zoom
+		if !near(previewCellPx, liveCellPx) {
+			t.Errorf("vz=%v: preview=%v live=%v", vz, previewCellPx, liveCellPx)
+		}
+	}
+}
+
+func TestAscentMidContinuityForIntrinsicRatio(t *testing.T) {
+	// Mirror of TestPathSwapContinuityForIntrinsicRatio for ascent:
+	// at the switch, the just-before child cell equals the just-after
+	// preview cell. Equivalent: mid.Zoom = ViewZoom × overtake.
+	for _, vz := range []float64{0.25, 0.671, 1.0, 3.0} {
+		w := Well{ID: 1, W: 3, H: 2, ViewZoom: vz}
+		paneW, paneH := 1920.0, 1080.0
+		overtake := OvertakeZoom(w, paneW, paneH, cellPx)
+		from := Endpoints{Path: []int64{1}, Zoom: vz * overtake}
+		mid, _ := Ascent(from, w, nil, paneW, paneH, cellPx)
+		want := vz * overtake
+		// Note: Ascent caps mid.Zoom at from.Zoom, so we expect equality.
+		if !near(mid.Zoom, want) {
+			t.Errorf("vz=%v: mid.Zoom=%v want %v", vz, mid.Zoom, want)
+		}
+	}
+}
