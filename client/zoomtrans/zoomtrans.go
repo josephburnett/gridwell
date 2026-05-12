@@ -53,19 +53,50 @@ type Well struct {
 // previews and the just-switched-to view render at identical scale.
 const PreviewFactor = 8.0
 
-// OvertakeZoom returns the parent zoom at which the well's footprint
-// exceeds both pane dimensions — the "well has fully consumed the
-// screen, its outline is just past every edge" point. This is the zoom
-// the descent animation aims for, regardless of how zoomed-out the user
-// started: zooming exactly to here fills the smaller dim, and slightly
-// beyond pushes the longer dim's outline off-screen too.
-func OvertakeZoom(w Well, paneW, paneH, cellPx float64) float64 {
-	if w.W <= 0 || w.H <= 0 || cellPx <= 0 {
+// Overtake returns the zoom at which a (footprintW × footprintH) cell
+// footprint exceeds both dimensions of a (refW × refH) px reference
+// rectangle — the "footprint has fully consumed the reference area, its
+// outline is just past every edge" point.
+//
+// This is the path-swap target zoom shared by wells and files. For wells
+// the reference rect is the pane; for files it is the inner-box (textarea
+// region). Returns 1 on degenerate input so the descent never divides by
+// zero downstream.
+func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
+	if footprintW <= 0 || footprintH <= 0 || cellPx <= 0 {
 		return 1
 	}
-	zw := paneW / (float64(w.W) * cellPx)
-	zh := paneH / (float64(w.H) * cellPx)
+	zw := refW / (float64(footprintW) * cellPx)
+	zh := refH / (float64(footprintH) * cellPx)
 	return math.Max(zw, zh)
+}
+
+// OvertakeZoom is the well-flavored convenience for Overtake — takes a
+// Well so existing callers stay terse. Files call Overtake directly with
+// the inner-box dimensions as the reference rect.
+func OvertakeZoom(w Well, paneW, paneH, cellPx float64) float64 {
+	return Overtake(w.W, w.H, paneW, paneH, cellPx)
+}
+
+// LiveFromIntrinsic reconstructs a live zoom from an intrinsic ratio
+// and the current effective overtake. This is the inverse of
+// IntrinsicFromLive — together they are the single source of truth for
+// the "stored ratio ↔ live zoom" mapping.
+//
+// Returns 0 when viewZoom is 0, so callers can detect "never visited"
+// and substitute a pane-calibrated default.
+func LiveFromIntrinsic(viewZoom, overtake float64) float64 {
+	return viewZoom * overtake
+}
+
+// IntrinsicFromLive converts a live zoom to the dimensionless intrinsic
+// ratio that, multiplied by overtake_now, reconstructs it. Returns 0 on
+// degenerate input so the caller can leave ViewZoom unset.
+func IntrinsicFromLive(liveZoom, overtake float64) float64 {
+	if overtake <= 0 || liveZoom <= 0 {
+		return 0
+	}
+	return liveZoom / overtake
 }
 
 // Descent computes the transition endpoints for descending from the
@@ -107,9 +138,9 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, to Endp
 	// preview-just-before and live-just-after). ViewZoom == 0 falls
 	// back to the legacy PreviewFactor calibration (1/PreviewFactor as
 	// the implicit default ratio).
-	childZoom := zPTarget / PreviewFactor
-	if w.ViewZoom > 0 {
-		childZoom = w.ViewZoom * zPTarget
+	childZoom := LiveFromIntrinsic(w.ViewZoom, zPTarget)
+	if childZoom <= 0 {
+		childZoom = zPTarget / PreviewFactor
 	}
 	to = Endpoints{
 		Path: childPath,
@@ -132,9 +163,9 @@ func Ascent(from Endpoints, w Well, parentPath []int64, paneW, paneH, cellPx flo
 	// screen-px / cellPx so the path-swap into the parent's preview
 	// is continuous. With ViewZoom = intrinsic ratio, the matching
 	// child zoom is ViewZoom × OvertakeZoom_now (mirrors Descent).
-	midZoom := zPTarget / PreviewFactor
-	if w.ViewZoom > 0 {
-		midZoom = w.ViewZoom * zPTarget
+	midZoom := LiveFromIntrinsic(w.ViewZoom, zPTarget)
+	if midZoom <= 0 {
+		midZoom = zPTarget / PreviewFactor
 	}
 	mid = Endpoints{
 		Path: from.Path,

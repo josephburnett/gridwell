@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/ascent/client/dragdrop"
 	"github.com/josephburnett/ascent/client/pane"
+	"github.com/josephburnett/ascent/client/zoomtrans"
 	"github.com/josephburnett/ascent/internal/rpc"
 )
 
@@ -53,35 +54,18 @@ func fileMargin(r paneRect) float64 {
 
 // fileOvertakeZoom returns the parent zoom at which the file node's
 // footprint (W × H cells) exceeds the inner-box dimensions (textarea
-// region) of pane rect r. This is the file-mode analogue of
-// zoomtrans.OvertakeZoom: it's the parent zoom the descent transition
-// targets, so at the path-swap moment the footprint screen size equals
-// the inner-box and content rendered at FileZoom in the textarea matches
-// the preview at parent = FileOvertake.
-//
-// Smaller than the legacy OvertakeZoom (footprint = full pane) by a
-// factor of inner-box-vs-pane — i.e., the preview "zooms in a little
-// more" so it shows only the meaningful textarea content, not the
-// surrounding outer-ring chrome. The "max" choice picks the dimension
-// that needs more zoom to fill, so the other dimension overflows the
-// inner-box and the user sees a center-crop of the textarea content
-// in the preview.
+// region) of pane rect r. The file-mode analogue of
+// zoomtrans.OvertakeZoom: same formula, different reference rect (the
+// inner box rather than the full pane). Delegates to zoomtrans.Overtake
+// so the math is owned in one place.
 func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
-	if fileW <= 0 || fileH <= 0 {
-		return 1
-	}
 	m := fileMargin(r)
 	innerW := r.W - 2*m
 	innerH := r.H - 2*m
 	if innerW <= 0 || innerH <= 0 {
 		return 1
 	}
-	zw := innerW / (float64(fileW) * cellPx)
-	zh := innerH / (float64(fileH) * cellPx)
-	if zw > zh {
-		return zw
-	}
-	return zh
+	return zoomtrans.Overtake(fileW, fileH, innerW, innerH, cellPx)
 }
 
 // fileInnerBox returns the screen rectangle of a file-focused pane's
