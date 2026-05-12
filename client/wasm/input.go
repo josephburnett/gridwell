@@ -867,10 +867,14 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	a.fetchGrid(well.ChildGridID)
 
 	// Final child-grid state: position from well's view (already in `to`),
-	// zoom from stored ViewZoom when set. Falls back to calibrated zoom.
+	// zoom = intrinsic ratio × OvertakeZoom_now, reconstructing the live
+	// zoom for the current pane size. Equal to `to.Zoom` unless the user
+	// started past OvertakeZoom (then `to.Zoom` is calibrated to from.Zoom
+	// for path-swap continuity, and segment C eases out to the saved zoom).
+	overtake := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
 	final := to
 	if well.ViewZoom > 0 {
-		final.Zoom = well.ViewZoom
+		final.Zoom = well.ViewZoom * overtake
 	}
 
 	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
