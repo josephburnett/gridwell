@@ -114,17 +114,8 @@ func nodeCopy(n *rpc.Node) *rpc.Node {
 
 // wellChildViewRect returns the visible region of a well's child grid
 // in *child cell* coordinates, suitable for the server's locality
-// check on cross-grid moves into / out of the well.
-//
-// Visible region size depends on ViewZoom and the pane:
-//   - ViewZoom == 0 (default): well.W × PreviewFactor cells, the
-//     historical PreviewFactor calibration.
-//   - ViewZoom > 0: well.W × OvertakeZoom / ViewZoom cells, matching
-//     the renderer's previewCell = parentCell × ViewZoom / OvertakeZoom
-//     formula (visibleCells × previewCell = wellScreenSize).
-//
-// Both centered on (ViewX + W/2, ViewY + H/2). ±1 pad matches
-// paneViewRect's convention.
+// check on cross-grid moves into / out of the well. Centered on
+// (ViewX + W/2, ViewY + H/2). ±1 pad matches paneViewRect's convention.
 func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
 	visWf, visHf := wellChildVisibleCells(well)
 	visW := int64(math.Ceil(visWf))
