@@ -1,7 +1,7 @@
 .PHONY: build bin wasm test test-cover serve clean
 
-BIN := ./ascent
-WASM := ./web/ascent.wasm
+BIN := ./gridwell
+WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
 
@@ -11,7 +11,7 @@ GOROOT := $(shell go env GOROOT)
 build: bin wasm
 
 bin:
-	go build -o $(BIN) ./cmd/ascent
+	go build -o $(BIN) ./cmd/gridwell
 
 wasm: $(WASM_EXEC)
 	mkdir -p web
@@ -34,7 +34,7 @@ test-cover:
 	go test -cover ./...
 
 serve: build
-	$(BIN) serve --db ./ascent.db
+	$(BIN) serve --db ./gridwell.db
 
 clean:
 	rm -f $(BIN) $(WASM) $(WASM_EXEC)

@@ -1,5 +1,5 @@
 // Package zoomtrans computes the (Cx, Cy, Zoom) endpoints for the
-// "zoom into / out of a well" transition animation used by the Ascent
+// "zoom into / out of a well" transition animation used by the Gridwell
 // client.
 //
 // The math is delicate enough that it deserves an isolated, unit-tested

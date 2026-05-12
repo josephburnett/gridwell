@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/josephburnett/ascent/internal/store"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // RunInit creates the SQLite database and applies the schema. Idempotent:
@@ -13,7 +13,7 @@ import (
 // EXISTS.
 func RunInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	db := resolveDB(fs, "./ascent.db")
+	db := resolveDB(fs, "./gridwell.db")
 	args = reorderFlagsFirst(args, func(name string) bool { return name == "db" })
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -24,6 +24,6 @@ func RunInit(args []string) int {
 		return 1
 	}
 	defer s.Close()
-	fmt.Printf("ascent: initialized database at %s\n", *db)
+	fmt.Printf("gridwell: initialized database at %s\n", *db)
 	return 0
 }

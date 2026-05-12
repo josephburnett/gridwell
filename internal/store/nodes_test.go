@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // fixtureUser creates a user "alice" and returns the user.

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // largeView returns a viewrect that contains anything reasonable.

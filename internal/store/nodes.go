@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // allowedMimes are the file MIME types accepted in v1 (spec §8). The list is

@@ -1,4 +1,4 @@
-// Package cli implements the subcommand dispatch for the ascent binary.
+// Package cli implements the subcommand dispatch for the gridwell binary.
 //
 // Each subcommand returns the process exit code so main.go is a thin shell.
 // The commands share a tiny database-path resolution helper and otherwise
@@ -11,7 +11,7 @@ import (
 	"io"
 )
 
-// resolveDB returns the database path. Default is "./ascent.db" — convenient
+// resolveDB returns the database path. Default is "./gridwell.db" — convenient
 // for development; production users override via --db.
 func resolveDB(fs *flag.FlagSet, defaultPath string) *string {
 	return fs.String("db", defaultPath, "path to the SQLite database file")

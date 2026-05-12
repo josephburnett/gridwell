@@ -1,5 +1,5 @@
-/ascent
-/web/ascent.wasm
+/gridwell
+/web/gridwell.wasm
 /web/wasm_exec.js
 *.db
 *.db-journal

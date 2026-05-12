@@ -6,9 +6,9 @@ import (
 	"math"
 	"syscall/js"
 
-	"github.com/josephburnett/ascent/client/dragdrop"
-	"github.com/josephburnett/ascent/client/pane"
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // colorTileResize is the preview outline of an in-flight tile resize.

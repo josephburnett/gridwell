@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/josephburnett/ascent/internal/server"
-	"github.com/josephburnett/ascent/internal/store"
+	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // RunServe starts the HTTP server. SIGINT/SIGTERM trigger graceful shutdown.
 func RunServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	db := resolveDB(fs, "./ascent.db")
+	db := resolveDB(fs, "./gridwell.db")
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	staticDir := fs.String("static", "./web", "directory of static files served at /")
 	insecure := fs.Bool("insecure", false, "do not set the Secure flag on the session cookie (use only when serving over plain HTTP locally)")
@@ -61,7 +61,7 @@ func RunServe(args []string) int {
 
 	errCh := make(chan error, 1)
 	go func() {
-		fmt.Printf("ascent: serving on %s (db=%s static=%s)\n", *addr, *db, *staticDir)
+		fmt.Printf("gridwell: serving on %s (db=%s static=%s)\n", *addr, *db, *staticDir)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -69,7 +69,7 @@ func RunServe(args []string) int {
 
 	select {
 	case <-stop:
-		fmt.Println("ascent: shutting down")
+		fmt.Println("gridwell: shutting down")
 	case err := <-errCh:
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1

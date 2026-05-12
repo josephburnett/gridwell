@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // TestCloneNodeCreatesSecondPointer verifies that cloning a well produces a

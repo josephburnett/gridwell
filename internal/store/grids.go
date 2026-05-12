@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // GetGrid returns the grid plus all of its nodes, or ErrPermissionDenied if

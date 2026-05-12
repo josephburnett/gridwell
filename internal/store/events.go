@@ -1,7 +1,7 @@
 package store
 
 import (
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // subscriber is one Subscribe stream connected to the store. The store

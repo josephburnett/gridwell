@@ -8,11 +8,11 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/josephburnett/ascent/client/anim"
-	"github.com/josephburnett/ascent/client/dragdrop"
-	"github.com/josephburnett/ascent/client/pane"
-	"github.com/josephburnett/ascent/client/zoomtrans"
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/client/anim"
+	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Animation durations in milliseconds. Tuned for "stone settling" feel.
@@ -21,7 +21,7 @@ const (
 	snapBackMs = 220.0
 )
 
-// installCanvasInput attaches mouse listeners to the canvas. Ascent is
+// installCanvasInput attaches mouse listeners to the canvas. Gridwell is
 // mouse-only by design — every gesture has a pointer equivalent and the
 // keyboard is reserved for future text-editing modes (e.g., the markdown
 // editor that's still TODO).

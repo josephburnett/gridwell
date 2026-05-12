@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"syscall/js"
 
-	"github.com/josephburnett/ascent/client/dragdrop"
-	"github.com/josephburnett/ascent/client/pane"
-	"github.com/josephburnett/ascent/client/zoomtrans"
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // fileSaveDebounceMs is the delay between the first keystroke since

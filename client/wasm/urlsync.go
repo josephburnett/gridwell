@@ -5,8 +5,8 @@ package main
 import (
 	"syscall/js"
 
-	"github.com/josephburnett/ascent/client/url"
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/client/url"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // urlUpdateDebounceMs is how long we wait after the last state change

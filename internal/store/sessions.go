@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/josephburnett/ascent/internal/auth"
+	"github.com/josephburnett/gridwell/internal/auth"
 )
 
 // SessionTTL is the cookie lifetime per spec §7.2.

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // gridSequence is the sequence of grid ids from the user's root down to the

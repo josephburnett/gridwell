@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/ascent/internal/rpc"
-	"github.com/josephburnett/ascent/internal/store"
+	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // newTestServer wires up a Server backed by an in-memory store and a test

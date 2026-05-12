@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/josephburnett/ascent/internal/cli"
+	"github.com/josephburnett/gridwell/internal/cli"
 )
 
 func main() {
@@ -32,10 +32,10 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `ascent — a spatial information system
+	fmt.Fprintln(os.Stderr, `gridwell — a spatial information system
 
 Usage:
-    ascent init    [--db PATH]                       create the database and schema
-    ascent adduser USERNAME [--db PATH]              create a user (interactive password)
-    ascent serve   [--db PATH] [--addr ADDR]         run the server`)
+    gridwell init    [--db PATH]                       create the database and schema
+    gridwell adduser USERNAME [--db PATH]              create a user (interactive password)
+    gridwell serve   [--db PATH] [--addr ADDR]         run the server`)
 }

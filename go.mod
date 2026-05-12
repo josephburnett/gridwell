@@ -1,4 +1,4 @@
-module github.com/josephburnett/ascent
+module github.com/josephburnett/gridwell
 
 go 1.25.0
 

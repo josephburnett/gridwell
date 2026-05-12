@@ -1,4 +1,4 @@
-// Package pane implements the tmux-style pane tree used by the Ascent client.
+// Package pane implements the tmux-style pane tree used by the Gridwell client.
 //
 // All logic here is pure Go: no syscall/js, no network. The package is
 // imported by the WASM entry point and is fully covered by standard

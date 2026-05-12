@@ -1,4 +1,4 @@
-// Package server is the HTTP layer of Ascent. It exposes RPC endpoints under
+// Package server is the HTTP layer of Gridwell. It exposes RPC endpoints under
 // /rpc/<MethodName> with JSON request/response bodies, an SSE endpoint at
 // /rpc/Subscribe for real-time events, and serves the static web/ directory
 // at /. Session middleware resolves the auth cookie to a user id before each
@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/josephburnett/ascent/internal/store"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // Config configures the server.
@@ -174,7 +174,7 @@ func (s *Server) resolveSession(r *http.Request) (int64, bool) {
 }
 
 // SessionCookieName is the cookie name used for sessions.
-const SessionCookieName = "ascent_session"
+const SessionCookieName = "gridwell_session"
 
 // readJSON decodes the request body into out. Returns a user-friendly error
 // on malformed input.

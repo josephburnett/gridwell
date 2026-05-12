@@ -1,4 +1,4 @@
-// Package markdown is the small layout pass used by the Ascent client to
+// Package markdown is the small layout pass used by the Gridwell client to
 // render markdown into a canvas.
 //
 // We do not use a full CommonMark parser because the rendering surface is a
@@ -54,7 +54,7 @@ type Block struct {
 // Parse splits source into Blocks. Inline parsing happens per-block.
 //
 // The parser is line-based and does not handle nested block structure
-// (e.g., a list inside a blockquote). For Ascent's use the simplifications
+// (e.g., a list inside a blockquote). For Gridwell's use the simplifications
 // are acceptable; nothing here goes wrong on input it does not understand,
 // it just renders as a paragraph.
 func Parse(src string) []Block {

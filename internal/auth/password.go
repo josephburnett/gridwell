@@ -1,5 +1,5 @@
 // Package auth implements password hashing and session token primitives for
-// Ascent.
+// Gridwell.
 //
 // Passwords are hashed with argon2id and stored in the PHC string format so
 // that hash parameters can be upgraded over time without breaking existing

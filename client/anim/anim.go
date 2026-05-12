@@ -1,4 +1,4 @@
-// Package anim is the small interpolation toolbox used by the Ascent client
+// Package anim is the small interpolation toolbox used by the Gridwell client
 // for drag snap-to-cell and snap-back animations.
 //
 // Pure Go, no syscall/js — exercised by ordinary go test.

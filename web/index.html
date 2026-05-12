@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Ascent</title>
+  <title>Gridwell</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #0c0d11; color: #d8d9de; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
@@ -31,7 +31,7 @@
 <body>
   <div id="login-overlay">
     <form id="login-card" autocomplete="off">
-      <h1>ascent</h1>
+      <h1>gridwell</h1>
       <label for="username">user</label>
       <input id="username" name="username" type="text" autocomplete="username" autofocus>
       <label for="password">password</label>
@@ -40,7 +40,7 @@
       <div class="err" id="login-error"></div>
       <div class="hint">
         no signup form. create users on the server with
-        <code>ascent adduser &lt;name&gt;</code>.
+        <code>gridwell adduser &lt;name&gt;</code>.
       </div>
     </form>
   </div>
@@ -50,7 +50,7 @@
   <script>
     (async () => {
       const go = new Go();
-      const result = await WebAssembly.instantiateStreaming(fetch("/ascent.wasm"), go.importObject);
+      const result = await WebAssembly.instantiateStreaming(fetch("/gridwell.wasm"), go.importObject);
       go.run(result.instance);
     })();
   </script>

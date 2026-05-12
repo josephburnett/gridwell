@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/josephburnett/ascent/internal/rpc"
-	"github.com/josephburnett/ascent/internal/store"
+	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

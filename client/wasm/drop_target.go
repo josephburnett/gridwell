@@ -5,10 +5,10 @@ package main
 import (
 	"math"
 
-	"github.com/josephburnett/ascent/client/dragdrop"
-	"github.com/josephburnett/ascent/client/pane"
-	"github.com/josephburnett/ascent/client/zoomtrans"
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // dropTarget describes where the cursor is currently pointing as a

@@ -244,7 +244,7 @@ func TestWellRoundTripSamePane(t *testing.T) {
 }
 
 func TestWellRoundTripAcrossPaneResize(t *testing.T) {
-	// Different pane size at descent than ascent: live zoom necessarily
+	// Different pane size at descent than gridwell: live zoom necessarily
 	// changes (the well's footprint is a different number of pixels
 	// now), but the **visible child cells across the well width**
 	// must be invariant. That's the pane-independent property the
@@ -254,7 +254,7 @@ func TestWellRoundTripAcrossPaneResize(t *testing.T) {
 		// Ascent in pane A.
 		ot1 := OvertakeZoom(w, 1920, 1080, cellPx)
 		w.ViewZoom = IntrinsicFromLive(L0, ot1)
-		// Visible child cells across the well width at ascent:
+		// Visible child cells across the well width at gridwell:
 		// well footprint screen px / cellPx_screen = (W × cellPx × overtake) / (cellPx × live)
 		//                                          = W × overtake / live
 		// With live = vz × overtake, this is W / vz.
@@ -414,7 +414,7 @@ func TestFileFallbackUnifiesPreviewAndLive(t *testing.T) {
 }
 
 func TestAscentMidContinuityForIntrinsicRatio(t *testing.T) {
-	// Mirror of TestPathSwapContinuityForIntrinsicRatio for ascent:
+	// Mirror of TestPathSwapContinuityForIntrinsicRatio for gridwell:
 	// at the switch, the just-before child cell equals the just-after
 	// preview cell. Equivalent: mid.Zoom = ViewZoom × overtake.
 	for _, vz := range []float64{0.25, 0.671, 1.0, 3.0} {

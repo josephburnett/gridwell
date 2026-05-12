@@ -3,7 +3,7 @@ package cache
 import (
 	"testing"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 func seedCache(t *testing.T) *Cache {

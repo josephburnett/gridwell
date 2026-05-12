@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/josephburnett/ascent/internal/store"
+	"github.com/josephburnett/gridwell/internal/store"
 	"golang.org/x/term"
 )
 
-// RunAddUser is the `ascent adduser USERNAME` subcommand. It opens the
+// RunAddUser is the `gridwell adduser USERNAME` subcommand. It opens the
 // database (creating tables if they don't exist), then prompts for a
 // password on stdin without echoing it.
 func RunAddUser(args []string) int {
@@ -35,7 +35,7 @@ func pipe() (*os.File, *os.File, error) { return os.Pipe() }
 
 func runAddUser(args []string, stdin *os.File) int {
 	fs := flag.NewFlagSet("adduser", flag.ContinueOnError)
-	db := resolveDB(fs, "./ascent.db")
+	db := resolveDB(fs, "./gridwell.db")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		// All current flags take a value; this function is the place
 		// to special-case bool flags when they appear.
@@ -45,7 +45,7 @@ func runAddUser(args []string, stdin *os.File) int {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ascent adduser USERNAME [--db PATH]")
+		fmt.Fprintln(os.Stderr, "usage: gridwell adduser USERNAME [--db PATH]")
 		return 2
 	}
 	username := fs.Arg(0)
@@ -68,7 +68,7 @@ func runAddUser(args []string, stdin *os.File) int {
 		fmt.Fprintf(os.Stderr, "adduser: %v\n", err)
 		return 1
 	}
-	fmt.Printf("ascent: created user %s (id=%d, root_grid_id=%d)\n", u.Username, u.ID, u.RootGridID)
+	fmt.Printf("gridwell: created user %s (id=%d, root_grid_id=%d)\n", u.Username, u.ID, u.RootGridID)
 	return 0
 }
 

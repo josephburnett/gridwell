@@ -1,6 +1,6 @@
 package store
 
-// Schema is the canonical SQLite schema for Ascent. It mirrors spec §9.1.
+// Schema is the canonical SQLite schema for Gridwell. It mirrors spec §9.1.
 //
 // We deliberately keep this as a single string rather than a migration ladder
 // because v1 has no deployed users — there is nothing to migrate from. When

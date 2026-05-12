@@ -1,4 +1,4 @@
-// Package store is the SQLite-backed persistence layer for Ascent.
+// Package store is the SQLite-backed persistence layer for Gridwell.
 //
 // All mutating methods run inside a single transaction so refcount and tree
 // invariants stay consistent under concurrent callers. The store also

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main is the WASM entry point for the Ascent client.
+// Package main is the WASM entry point for the Gridwell client.
 //
 // This file is intentionally a thin wiring shim: anything testable lives in
 // client/pane, client/markdown, client/dragdrop, client/cache. The code here
@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"syscall/js"
 
-	"github.com/josephburnett/ascent/client/anim"
-	"github.com/josephburnett/ascent/client/cache"
-	"github.com/josephburnett/ascent/client/dragdrop"
-	"github.com/josephburnett/ascent/client/pane"
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/client/anim"
+	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 const (

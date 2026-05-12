@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/josephburnett/ascent/internal/auth"
+	"github.com/josephburnett/gridwell/internal/auth"
 )
 
 // User is the read view of a user row.

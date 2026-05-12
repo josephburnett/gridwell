@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // titleCache memoizes URL → page title lookups. Entries persist for the
@@ -46,7 +46,7 @@ func defaultFetcher(ctx context.Context, url string, maxBytes int64) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "AscentTitleFetcher/1.0")
+	req.Header.Set("User-Agent", "GridwellTitleFetcher/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

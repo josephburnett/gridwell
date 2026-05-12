@@ -9,7 +9,7 @@ package cache
 import (
 	"sync"
 
-	"github.com/josephburnett/ascent/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Cache stores grids and their nodes keyed by grid id. Concurrency-safe.
