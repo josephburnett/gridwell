@@ -20,15 +20,15 @@ func TestEncodeRootWithViewport(t *testing.T) {
 }
 
 func TestEncodePath(t *testing.T) {
-	got := Encode(State{NodeIDs: []int64{3, 4, 5}})
-	if got != "/g/3/4/5" {
+	got := Encode(State{TileIDs: []int64{3, 4, 5}})
+	if got != "/3/4/5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeFileText(t *testing.T) {
-	got := Encode(State{NodeIDs: []int64{3, 4, 5, 9}, CursorMode: true, Col: 24, Row: 10})
-	want := "/g/3/4/5/9?c=24&r=10"
+	got := Encode(State{TileIDs: []int64{3, 4, 5, 9}, CursorMode: true, Col: 24, Row: 10})
+	want := "/3/4/5/9?c=24&r=10"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -36,30 +36,30 @@ func TestEncodeFileText(t *testing.T) {
 
 func TestEncodeFileTextAtOrigin(t *testing.T) {
 	// Cursor at (0, 0) is still emitted: presence implies text mode.
-	got := Encode(State{NodeIDs: []int64{9}, CursorMode: true})
-	want := "/g/9?c=0&r=0"
+	got := Encode(State{TileIDs: []int64{9}, CursorMode: true})
+	want := "/9?c=0&r=0"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestEncodeOmitsDefaultZoom(t *testing.T) {
-	if got := Encode(State{NodeIDs: []int64{1}, Zoom: 1.0}); got != "/g/1" {
+	if got := Encode(State{TileIDs: []int64{1}, Zoom: 1.0}); got != "/1" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeOmitsZeroXY(t *testing.T) {
-	got := Encode(State{NodeIDs: []int64{1}, Zoom: 1.5})
-	if got != "/g/1?z=1.5" {
+	got := Encode(State{TileIDs: []int64{1}, Zoom: 1.5})
+	if got != "/1?z=1.5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeStripsTrailingZeros(t *testing.T) {
-	got := Encode(State{NodeIDs: []int64{1}, X: 0.5, Y: 1.0, Zoom: 2.0})
+	got := Encode(State{TileIDs: []int64{1}, X: 0.5, Y: 1.0, Zoom: 2.0})
 	// X=0.5 → "0.5"; Y=1.0 → "1"; Zoom=2.0 → "2"
-	want := "/g/1?x=0.5&y=1&z=2"
+	want := "/1?x=0.5&y=1&z=2"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -71,24 +71,24 @@ func TestDecodeRoot(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Decode(%q) err: %v", in, err)
 		}
-		if len(s.NodeIDs) != 0 {
-			t.Errorf("Decode(%q) NodeIDs = %v, want empty", in, s.NodeIDs)
+		if len(s.TileIDs) != 0 {
+			t.Errorf("Decode(%q) TileIDs = %v, want empty", in, s.TileIDs)
 		}
 	}
 }
 
 func TestDecodePath(t *testing.T) {
-	s, err := Decode("/g/3/4/5")
+	s, err := Decode("/3/4/5")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s.NodeIDs, []int64{3, 4, 5}) {
-		t.Errorf("NodeIDs = %v", s.NodeIDs)
+	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4, 5}) {
+		t.Errorf("TileIDs = %v", s.TileIDs)
 	}
 }
 
 func TestDecodeWithViewport(t *testing.T) {
-	s, err := Decode("/g/3?x=5.5&y=-2&z=1.5")
+	s, err := Decode("/3?x=5.5&y=-2&z=1.5")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestDecodeWithViewport(t *testing.T) {
 }
 
 func TestDecodeWithCursor(t *testing.T) {
-	s, err := Decode("/g/9?c=24&r=10")
+	s, err := Decode("/9?c=24&r=10")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,29 +110,30 @@ func TestDecodeWithCursor(t *testing.T) {
 	}
 }
 
-func TestDecodeRejectsUnknownPath(t *testing.T) {
+func TestDecodeRejectsNonNumericSegments(t *testing.T) {
+	// "/foo" can't be a tile-id path — non-numeric segment.
 	if _, err := Decode("/foo"); err == nil {
 		t.Error("expected error for /foo")
 	}
 }
 
 func TestDecodeIgnoresTrailingSlash(t *testing.T) {
-	s, err := Decode("/g/3/4/")
+	s, err := Decode("/3/4/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s.NodeIDs, []int64{3, 4}) {
-		t.Errorf("NodeIDs = %v", s.NodeIDs)
+	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4}) {
+		t.Errorf("TileIDs = %v", s.TileIDs)
 	}
 }
 
 func TestRoundTrip(t *testing.T) {
 	cases := []State{
 		{},
-		{NodeIDs: []int64{3, 4, 5}, X: 12.5, Y: -3.25, Zoom: 1.5},
-		{NodeIDs: []int64{9}, CursorMode: true, Col: 0, Row: 0},
-		{NodeIDs: []int64{42, 100, 99}, CursorMode: true, Col: 100, Row: 25},
-		{NodeIDs: []int64{7}, Zoom: 1.234},
+		{TileIDs: []int64{3, 4, 5}, X: 12.5, Y: -3.25, Zoom: 1.5},
+		{TileIDs: []int64{9}, CursorMode: true, Col: 0, Row: 0},
+		{TileIDs: []int64{42, 100, 99}, CursorMode: true, Col: 100, Row: 25},
+		{TileIDs: []int64{7}, Zoom: 1.234},
 	}
 	for _, in := range cases {
 		raw := Encode(in)

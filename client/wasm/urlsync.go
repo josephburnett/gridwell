@@ -91,9 +91,9 @@ func (a *App) replaceURLNow() {
 }
 
 // encodeFocusedPaneURL builds a url.State from the focused pane.
-//   - If the pane is in file mode: NodeIDs = path + FileFocus.
+//   - If the pane is in file mode: TileIDs = path + FileFocus.
 //     For text mode, fill cursor (col, row) read from the textarea.
-//   - Otherwise: NodeIDs = path; viewport from Cx, Cy, Zoom.
+//   - Otherwise: TileIDs = path; viewport from Cx, Cy, Zoom.
 func (a *App) encodeFocusedPaneURL() url.State {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -101,7 +101,7 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	}
 	var s url.State
 	if p.FileFocus != 0 {
-		s.NodeIDs = append(append([]int64(nil), p.Path...), p.FileFocus)
+		s.TileIDs = append(append([]int64(nil), p.Path...), p.FileFocus)
 		if p.FileMode == "text" {
 			col, row := a.textareaCursorRowCol()
 			s.CursorMode = true
@@ -110,7 +110,7 @@ func (a *App) encodeFocusedPaneURL() url.State {
 		}
 		return s
 	}
-	s.NodeIDs = append([]int64(nil), p.Path...)
+	s.TileIDs = append([]int64(nil), p.Path...)
 	s.X = p.Cx
 	s.Y = p.Cy
 	s.Zoom = p.Zoom
@@ -167,7 +167,7 @@ func (a *App) applyURLOnBoot() {
 	// Always start by fetching the user's root grid so the walk has
 	// something to read. If the URL has no path, we're done.
 	rootID := a.user.RootGridID
-	if len(state.NodeIDs) == 0 {
+	if len(state.TileIDs) == 0 {
 		// Block on the fetch so we can read the grid's stored
 		// DefaultView before drawing — otherwise the user sees a
 		// flash of the (0,0,1) default and then jumps to their
@@ -201,8 +201,8 @@ func (a *App) applyURLOnBoot() {
 	resolvedPath := []int64{}
 	var fileNodeID int64
 walk:
-	for i, id := range state.NodeIDs {
-		isLast := i == len(state.NodeIDs)-1
+	for i, id := range state.TileIDs {
+		isLast := i == len(state.TileIDs)-1
 		// Ensure the current grid is cached (synchronously is impossible
 		// — we have to fetch and wait).
 		if _, ok := a.c.Grid(gid); !ok {

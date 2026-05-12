@@ -83,7 +83,7 @@ func (s *Server) routes() {
 
 // staticOrSPA serves files from dir, falling back to index.html for any
 // request that isn't an /rpc/* call and doesn't match an on-disk file.
-// This lets the WASM client own URLs like "/g/3/4/5" — direct hits and
+// This lets the WASM client own URLs like "/3/4/5" — direct hits and
 // reloads land on index.html, the client decodes window.location, and
 // hydrates the view.
 func (s *Server) staticOrSPA(dir string) http.Handler {

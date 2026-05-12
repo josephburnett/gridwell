@@ -240,8 +240,9 @@ func TestSubscribeStreamsEvents(t *testing.T) {
 }
 
 // TestSPAFallbackForUnknownPaths verifies that arbitrary client-owned URLs
-// (like /g/3/4/5) return index.html so reload doesn't 404. /rpc/* paths
-// should still 404 cleanly when the method is unknown.
+// (like /3/4/5 — a descent path of tile ids) return index.html so reload
+// doesn't 404. /rpc/* paths should still 404 cleanly when the method is
+// unknown.
 func TestSPAFallbackForUnknownPaths(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -268,8 +269,8 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		want string
 	}{
 		{"/", indexBody},
-		{"/g/3", indexBody},
-		{"/g/27/26/25/24/23/22/21/20/19/16/15/14/12", indexBody},
+		{"/3", indexBody},
+		{"/27/26/25/24/23/22/21/20/19/16/15/14/12", indexBody},
 		{"/wasm_exec.js", assetBody},
 	}
 	for _, tc := range tests {

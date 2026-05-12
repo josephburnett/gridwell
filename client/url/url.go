@@ -1,17 +1,17 @@
-// Package url is the encoder/decoder for Ascent's client URL state.
+// Package url is the encoder/decoder for Gridwell's client URL state.
 //
 // URL shape:
 //
-//	/                                      root grid, default viewport
-//	/g/3/4/5                               descended through wells 3, 4, 5
-//	/g/3/4/5?x=12.5&y=-3&z=1.5             grid leaf, viewport center + zoom
-//	/g/3/4/5/9                             file leaf (rendered mode)
-//	/g/3/4/5/9?c=24&r=10                   file leaf in text mode, cursor
+//	/                                root grid, default viewport
+//	/3/4/5                           descended through tiles 3, 4, 5
+//	/3/4/5?x=12.5&y=-3&z=1.5         grid leaf, viewport center + zoom
+//	/3/4/5/9                         file leaf (rendered mode)
+//	/3/4/5/9?c=24&r=10               file leaf in text mode, cursor
 //
-// The path segments after `/g/` are node row ids (server-side), in
-// descent order from the user's root grid. The trailing id may be a
-// well or a file; the caller resolves which by walking the node ids
-// against the cache after a successful Decode.
+// The path segments are tile row ids in descent order from the user's
+// root grid. The trailing id may be a well-tile or a file-tile; the
+// caller resolves which by walking the ids against the cache after a
+// successful Decode.
 //
 // Presence of `c`/`r` (column / row, 0-indexed) implies "file is in
 // text mode with the cursor at this position". Absence means rendered
@@ -30,9 +30,9 @@ import (
 
 // State is the parsed/about-to-be-encoded URL state.
 type State struct {
-	// NodeIDs is the descent path of node row ids. Empty means "root
-	// grid". The trailing id may be a file (resolved post-Decode).
-	NodeIDs []int64
+	// TileIDs is the descent path of tile row ids. Empty means "root
+	// grid". The trailing id may be a file-tile (resolved post-Decode).
+	TileIDs []int64
 
 	// Viewport — set when the leaf is a grid (or a file in the floating
 	// view, eventually). Encoder only emits these if at least one
@@ -54,11 +54,10 @@ const DefaultZoom = 1.0
 // pane at root produces just "/".
 func Encode(s State) string {
 	var path strings.Builder
-	if len(s.NodeIDs) == 0 {
+	if len(s.TileIDs) == 0 {
 		path.WriteByte('/')
 	} else {
-		path.WriteString("/g")
-		for _, id := range s.NodeIDs {
+		for _, id := range s.TileIDs {
 			path.WriteByte('/')
 			path.WriteString(strconv.FormatInt(id, 10))
 		}
@@ -109,14 +108,13 @@ func Decode(raw string) (State, error) {
 	var s State
 	if pathPart == "" || pathPart == "/" {
 		// Root.
-		s.NodeIDs = nil
+		s.TileIDs = nil
 	} else {
-		const prefix = "/g/"
-		if !strings.HasPrefix(pathPart, prefix) {
+		if !strings.HasPrefix(pathPart, "/") {
 			// Unknown URL shape; treat as root.
-			return State{}, errors.New("path does not start with /g/")
+			return State{}, errors.New("path does not start with /")
 		}
-		segs := strings.Split(pathPart[len(prefix):], "/")
+		segs := strings.Split(pathPart[1:], "/")
 		ids := make([]int64, 0, len(segs))
 		for _, seg := range segs {
 			if seg == "" {
@@ -128,7 +126,7 @@ func Decode(raw string) (State, error) {
 			}
 			ids = append(ids, id)
 		}
-		s.NodeIDs = ids
+		s.TileIDs = ids
 	}
 
 	if queryPart == "" {
