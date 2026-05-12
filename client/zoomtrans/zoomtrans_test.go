@@ -39,7 +39,7 @@ func TestOvertakeZoomGuards(t *testing.T) {
 func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	from := Endpoints{Path: nil, Cx: 0, Cy: 0, Zoom: 1.0}
 	w := Well{ID: 7, X: 5, Y: 3, W: 1, H: 1, ViewX: 0, ViewY: 0}
-	mid, to := Descent(from, w, 1920, 1080, cellPx)
+	mid, swap, final := Descent(from, w, 1920, 1080, cellPx)
 
 	// Mid centers on well center; zoom is the overtake zoom (30 for the
 	// 1x1 / 1920 case).
@@ -49,16 +49,40 @@ func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	if !near(mid.Zoom, 30) {
 		t.Errorf("mid zoom = %v, want 30", mid.Zoom)
 	}
-	// To has new path with well appended; viewport on well's view region;
-	// zoom = mid.Zoom / PreviewFactor (calibration check).
-	if len(to.Path) != 1 || to.Path[0] != 7 {
-		t.Errorf("to path = %v", to.Path)
+	// Swap has new path with well appended; viewport on well's view
+	// region; zoom = mid.Zoom / PreviewFactor (legacy calibration check
+	// for the unvisited fallback).
+	if len(swap.Path) != 1 || swap.Path[0] != 7 {
+		t.Errorf("swap path = %v", swap.Path)
 	}
-	if !near(to.Cx, 0.5) || !near(to.Cy, 0.5) {
-		t.Errorf("to center = (%v, %v)", to.Cx, to.Cy)
+	if !near(swap.Cx, 0.5) || !near(swap.Cy, 0.5) {
+		t.Errorf("swap center = (%v, %v)", swap.Cx, swap.Cy)
 	}
-	if !near(to.Zoom, 30/PreviewFactor) {
-		t.Errorf("to zoom = %v, want %v", to.Zoom, 30/PreviewFactor)
+	if !near(swap.Zoom, 30/PreviewFactor) {
+		t.Errorf("swap zoom = %v, want %v", swap.Zoom, 30/PreviewFactor)
+	}
+	// For from.Zoom <= Overtake the final equals swap (no segment C).
+	if !near(final.Zoom, swap.Zoom) {
+		t.Errorf("final zoom = %v, want %v", final.Zoom, swap.Zoom)
+	}
+}
+
+func TestDescentFinalReconstructsLiveZoom(t *testing.T) {
+	// The bug the round-trip fix addressed: startDescent was computing
+	// final.Zoom = ViewZoom literally, instead of ViewZoom × Overtake.
+	// Now Descent returns final itself so the caller can't get it wrong.
+	// Property: final.Zoom = ViewZoom × Overtake, for any from.Zoom
+	// (including past Overtake — final still reconstructs the saved live
+	// zoom, while swap.Zoom may differ for continuity).
+	w := Well{ID: 1, W: 3, H: 2, ViewZoom: 0.671}
+	overtake := OvertakeZoom(w, 1920, 1080, cellPx)
+	wantLive := 0.671 * overtake
+	for _, fromZoom := range []float64{0.5, 1.0, overtake, overtake * 2, 100} {
+		from := Endpoints{Zoom: fromZoom}
+		_, _, final := Descent(from, w, 1920, 1080, cellPx)
+		if !near(final.Zoom, wantLive) {
+			t.Errorf("from.Zoom=%v: final.Zoom=%v, want %v", fromZoom, final.Zoom, wantLive)
+		}
 	}
 }
 
@@ -67,7 +91,7 @@ func TestDescentNeverZoomsOut(t *testing.T) {
 	// regress. mid.Zoom should be at least from.Zoom.
 	from := Endpoints{Zoom: 50}
 	w := Well{W: 1, H: 1}
-	mid, _ := Descent(from, w, 1920, 1080, cellPx)
+	mid, _, _ := Descent(from, w, 1920, 1080, cellPx)
 	if mid.Zoom < from.Zoom {
 		t.Errorf("mid.Zoom = %v, want >= %v", mid.Zoom, from.Zoom)
 	}
@@ -76,8 +100,8 @@ func TestDescentNeverZoomsOut(t *testing.T) {
 func TestDescentDoesNotShareSlice(t *testing.T) {
 	from := Endpoints{Path: []int64{1, 2, 3}, Zoom: 1}
 	w := Well{ID: 9}
-	_, to := Descent(from, w, 100, 100, cellPx)
-	to.Path[0] = 999
+	_, swap, _ := Descent(from, w, 100, 100, cellPx)
+	swap.Path[0] = 999
 	if from.Path[0] == 999 {
 		t.Error("Descent shared the path slice")
 	}
@@ -264,11 +288,11 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 		w := Well{ID: 1, W: 3, H: 2, ViewZoom: vz}
 		paneW, paneH := 1920.0, 1080.0
 		overtake := OvertakeZoom(w, paneW, paneH, cellPx)
-		_, to := Descent(from, w, paneW, paneH, cellPx)
+		_, swap, _ := Descent(from, w, paneW, paneH, cellPx)
 		// Just-before-swap parent zoom is the mid (= overtake when
 		// from.Zoom <= overtake, which holds for from.Zoom = 1 here).
 		previewCellPx := cellPx * overtake * vz
-		liveCellPx := cellPx * to.Zoom
+		liveCellPx := cellPx * swap.Zoom
 		if !near(previewCellPx, liveCellPx) {
 			t.Errorf("vz=%v: preview=%v live=%v", vz, previewCellPx, liveCellPx)
 		}

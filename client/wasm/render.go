@@ -392,17 +392,13 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	// Preview cell size: ViewZoom is the intrinsic child-cell-per-
-	// parent-cell ratio (dimensionless, window-independent). previewCell
-	// = parentCell × ViewZoom. At parent = OvertakeZoom_now this gives
-	// previewCell = cellPx × OvertakeZoom × ViewZoom = cellPx ×
-	// childZoom_landing, matching the live render — the path-swap is
-	// visually continuous at any window size. Default (ViewZoom == 0)
-	// keeps the legacy PreviewFactor calibration.
-	previewCell := parentCellSize / zoomtrans.PreviewFactor
-	if n.ViewZoom > 0 {
-		previewCell = parentCellSize * n.ViewZoom
-	}
+	// Preview cell size: previewCell = parentCell × ratio, where ratio
+	// is the well's intrinsic ViewZoom (or DefaultWellViewZoom for an
+	// unvisited well, which collapses this to the legacy PreviewFactor
+	// calibration). At parent = Overtake_now the previewCell matches
+	// the just-after-swap live cell, making the path swap continuous.
+	ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
+	previewCell := parentCellSize * ratio
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")

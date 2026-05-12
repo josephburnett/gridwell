@@ -273,11 +273,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// child preview tile sits at the cursor, treat *that* as the
 		// drag source instead of the well.
 		if child := a.childTileAtScreen(p, r, n, sx, sy); child != nil {
+			ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
 			cp := dragdrop.ChildPreviewFor(ps, struct {
 				X, Y, W, H, ViewX, ViewY int64
-				ViewZoom                 float64
-			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY, ViewZoom: n.ViewZoom},
-				zoomtrans.PreviewFactor)
+			}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+				ratio)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
 			a.dragging.nodeID = child.ID
@@ -289,7 +289,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.originPaneRect = r
 			a.dragging.srcGridID = n.ChildGridID
 			a.dragging.srcPath = append(append([]int64(nil), p.Path...), n.ID)
-			a.dragging.srcViewRect = wellChildViewRect(n, r.W, r.H)
+			a.dragging.srcViewRect = wellChildViewRect(n)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
 		}
@@ -863,23 +863,12 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
-	mid, to := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
+	mid, swap, final := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
 	a.fetchGrid(well.ChildGridID)
-
-	// Final child-grid state: position from well's view (already in `to`),
-	// zoom = intrinsic ratio × OvertakeZoom_now, reconstructing the live
-	// zoom for the current pane size. Equal to `to.Zoom` unless the user
-	// started past OvertakeZoom (then `to.Zoom` is calibrated to from.Zoom
-	// for path-swap continuity, and segment C eases out to the saved zoom).
-	overtake := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
-	final := to
-	if well.ViewZoom > 0 {
-		final.Zoom = well.ViewZoom * overtake
-	}
 
 	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
 		zoomDist(from.Zoom, mid.Zoom)
-	childDist := zoomDist(to.Zoom, final.Zoom)
+	childDist := zoomDist(swap.Zoom, final.Zoom)
 	var durations []float64
 	if childDist > 0 {
 		durations = anim.SplitN([]float64{parentDist, childDist}, totalTransitionMs)
@@ -890,20 +879,20 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
-			// A: parent pan+zoom toward well center at OvertakeZoom.
+			// A: parent pan+zoom toward well center at Overtake.
 			{
 				path:   from.Path,
 				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
 				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
 				durationMs: durations[0],
 			},
-			// B+C: install calibrated child state, then animate to
-			// stored ViewZoom. zoomtrans calibration makes the path
-			// swap visually continuous; the inner zoom adjust is
-			// brief.
+			// C: after the atomic path swap to (swap.Cx, swap.Cy, swap.Zoom),
+			// ease the child zoom out to the stored saved-ratio. Same Cx,Cy
+			// as swap (we landed where the saved view region is centered);
+			// only the zoom moves. Zero-length when swap == final.
 			{
-				path:   to.Path,
-				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
+				path:   swap.Path,
+				fromCx: swap.Cx, fromCy: swap.Cy, fromZoom: swap.Zoom,
 				toCx: final.Cx, toCy: final.Cy, toZoom: final.Zoom,
 				durationMs: durations[1],
 			},
@@ -1090,10 +1079,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath 
 	r := paneRectFor(a, p)
 	zw := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
 	overtake := zoomtrans.OvertakeZoom(zw, r.W, r.H, cellPx)
-	newViewZoom := 0.0
-	if overtake > 0 && p.Zoom > 0 {
-		newViewZoom = p.Zoom / overtake
-	}
+	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
 	if newViewX == well.ViewX && newViewY == well.ViewY &&
 		math.Abs(newViewZoom-well.ViewZoom) < 0.001 {
 		return
@@ -1190,11 +1176,8 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
 		// Always update view_y + zoom so re-descent restores the
 		// user's scroll and zoom. ViewZoom is stored as the intrinsic
 		// ratio FileZoom / FileOvertake_at_ascent (window-independent).
-		intrinsic := 0.0
 		ot := fileOvertakeZoom(r, file.W, file.H)
-		if ot > 0 && p.FileZoom > 0 {
-			intrinsic = p.FileZoom / ot
-		}
+		intrinsic := zoomtrans.IntrinsicFromLive(p.FileZoom, ot)
 		vreq := rpc.SetNodeViewportRequest{
 			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
 			NodeID: file.ID, ViewX: 0, ViewY: scrollY, ViewZoom: intrinsic,

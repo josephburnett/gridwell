@@ -69,12 +69,14 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 	if n := a.nodeAtCell(p, cellX, cellY); n != nil &&
 		n.Type == "well" && !n.Capped && n.ChildGridID != 0 &&
 		n.ID != excludeNodeID {
-		// Well preview math.
+		// Well preview math. Effective ratio resolves the unvisited
+		// fallback in one place so the child cell size is computed
+		// the same way here as in the renderer.
+		ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
 		cp := dragdrop.ChildPreviewFor(ps, struct {
 			X, Y, W, H, ViewX, ViewY int64
-			ViewZoom                 float64
-		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY, ViewZoom: n.ViewZoom},
-			zoomtrans.PreviewFactor)
+		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
+			ratio)
 		path := append(append([]int64(nil), p.Path...), n.ID)
 		return &dropTarget{
 			pane:     p,
@@ -85,7 +87,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
-			viewRect: wellChildViewRect(n, r.W, r.H),
+			viewRect: wellChildViewRect(n),
 		}, true
 	}
 
@@ -123,8 +125,8 @@ func nodeCopy(n *rpc.Node) *rpc.Node {
 //
 // Both centered on (ViewX + W/2, ViewY + H/2). ±1 pad matches
 // paneViewRect's convention.
-func wellChildViewRect(well *rpc.Node, paneRectW, paneRectH float64) rpc.ViewRect {
-	visWf, visHf := wellChildVisibleCells(well, paneRectW, paneRectH)
+func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
+	visWf, visHf := wellChildVisibleCells(well)
 	visW := int64(math.Ceil(visWf))
 	visH := int64(math.Ceil(visHf))
 	centerX := float64(well.ViewX) + float64(well.W)/2
@@ -141,19 +143,13 @@ func wellChildViewRect(well *rpc.Node, paneRectW, paneRectH float64) rpc.ViewRec
 
 // wellChildVisibleCells returns (visW, visH): the visible child-cell
 // counts in the well's preview. Derived from the previewCell formula
-// (parentCell × ViewZoom) — the visible cell count is footprint /
-// previewCell = footprintCells / ViewZoom, which is window-independent
-// once ViewZoom is the intrinsic ratio. Default (ViewZoom == 0) falls
-// back to the PreviewFactor calibration (footprintCells × PreviewFactor
-// child cells visible).
-func wellChildVisibleCells(well *rpc.Node, paneW, paneH float64) (float64, float64) {
-	_, _ = paneW, paneH
-	if well.ViewZoom <= 0 {
-		return float64(well.W) * zoomtrans.PreviewFactor,
-			float64(well.H) * zoomtrans.PreviewFactor
-	}
-	return float64(well.W) / well.ViewZoom,
-		float64(well.H) / well.ViewZoom
+// (parentCell × ratio) — visible cells = footprint / previewCell =
+// footprintCells / ratio, window-independent because `ratio` is the
+// intrinsic ViewZoom (with the well-side default substituted when the
+// well is unvisited).
+func wellChildVisibleCells(well *rpc.Node) (float64, float64) {
+	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
+	return float64(well.W) / ratio, float64(well.H) / ratio
 }
 
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor
@@ -181,12 +177,12 @@ func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Node, sx, sy
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
+	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
 	cp := dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H, ViewX, ViewY int64
-		ViewZoom                 float64
 	}{X: well.X, Y: well.Y, W: well.W, H: well.H,
-		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom},
-		zoomtrans.PreviewFactor)
+		ViewX: well.ViewX, ViewY: well.ViewY},
+		ratio)
 	cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 	// Floor (which cell does the cursor sit in?), handling negatives.
 	cellX := int64(cxF)
