@@ -7,3 +7,4 @@
 *.db-wal
 /coverage.out
 screenshot.png
+s*.png

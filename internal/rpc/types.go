@@ -1,9 +1,8 @@
-// Package rpc declares the wire-format types for the Hangar RPC service.
+// Package rpc declares the wire-format types for the Gridwell RPC service.
 //
-// These types mirror the messages defined in proto/hangar.proto. The server
-// transports them as JSON over HTTP under /rpc/<MethodName>; the client uses
-// the same encoding. All field names are snake_case via JSON tags so they
-// match the proto field names exactly.
+// The server transports them as JSON over HTTP under /rpc/<MethodName>; the
+// client uses the same encoding. All field names are snake_case via JSON
+// tags.
 package rpc
 
 // ViewRect is the framed region of the originating pane in the affected grid's
