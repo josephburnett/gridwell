@@ -18,8 +18,8 @@ func TestMoveNodeWithinGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.MoveNode(ctx, u.ID, &rpc.MoveNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID,
+	got, err := s.MoveTile(ctx, u.ID, &rpc.MoveTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 5, Y: 5,
 	})
@@ -46,8 +46,8 @@ func TestMoveNodeOverlapRefused(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.MoveNode(ctx, u.ID, &rpc.MoveNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: a.ID,
+	_, err = s.MoveTile(ctx, u.ID, &rpc.MoveTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 4, Y: 4,
 	})
@@ -74,8 +74,8 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Move target into A's child grid.
-	moved, err := s.MoveNode(ctx, u.ID, &rpc.MoveNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: target.ID,
+	moved, err := s.MoveTile(ctx, u.ID, &rpc.MoveTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: target.ID,
 		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []int64{a.ID}}, DestViewRect: largeView(),
 		X: 0, Y: 0,
 	})
@@ -87,7 +87,7 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	}
 	// Original location should now be empty.
 	root, _ := s.GetGrid(ctx, u.ID, u.RootGridID)
-	for _, n := range root.Nodes {
+	for _, n := range root.Tiles {
 		if n.ID == target.ID && n.GridID == u.RootGridID {
 			t.Errorf("target still in root grid: %+v", n)
 		}
@@ -114,7 +114,7 @@ func TestUpdateFileContentMarkdownOnly(t *testing.T) {
 	}
 	// Update markdown is allowed.
 	updated, err := s.UpdateFileContent(ctx, u.ID, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: mdFile.ID, Data: []byte("# updated"),
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: mdFile.ID, Data: []byte("# updated"),
 	})
 	if err != nil {
 		t.Fatalf("update md: %v", err)
@@ -124,7 +124,7 @@ func TestUpdateFileContentMarkdownOnly(t *testing.T) {
 	}
 	// Update image is refused.
 	if _, err := s.UpdateFileContent(ctx, u.ID, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: imgFile.ID, Data: []byte("X"),
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: imgFile.ID, Data: []byte("X"),
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for image edit, got %v", err)
 	}
@@ -143,11 +143,11 @@ func TestCloneRequiresWriteOnSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Strip write bit on the well node, leaving owner-read only.
-	if _, err := s.db.Exec(`UPDATE nodes SET mode = ? WHERE id = ?`, 0o400, w.ID); err != nil {
+	if _, err := s.db.Exec(`UPDATE tiles SET mode = ? WHERE id = ?`, 0o400, w.ID); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.CloneNode(ctx, u.ID, &rpc.CloneNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID,
+	_, err = s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 5, Y: 5,
 	})

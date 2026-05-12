@@ -46,8 +46,8 @@ func TestCreateWellHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(g.Nodes) != 1 {
-		t.Errorf("expected 1 node, got %d", len(g.Nodes))
+	if len(g.Tiles) != 1 {
+		t.Errorf("expected 1 node, got %d", len(g.Tiles))
 	}
 }
 
@@ -202,8 +202,8 @@ func TestResizeNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.ResizeNode(ctx, u.ID, &rpc.ResizeNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID, W: 3, H: 4,
+	r, err := s.ResizeTile(ctx, u.ID, &rpc.ResizeTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID, W: 3, H: 4,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,8 +218,8 @@ func TestResizeNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.ResizeNode(ctx, u.ID, &rpc.ResizeNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: r.ID, W: 5, H: 4,
+	_, err = s.ResizeTile(ctx, u.ID, &rpc.ResizeTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: r.ID, W: 5, H: 4,
 	})
 	if !errors.Is(err, ErrOverlap) {
 		t.Errorf("expected ErrOverlap, got %v", err)
@@ -236,8 +236,8 @@ func TestSetNodeViewport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.SetNodeViewport(ctx, u.ID, &rpc.SetNodeViewportRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID, ViewX: 5, ViewY: 7,
+	got, err := s.SetTileViewport(ctx, u.ID, &rpc.SetTileViewportRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID, ViewX: 5, ViewY: 7,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +257,7 @@ func TestCapRedig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID})
+	c, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,17 +265,17 @@ func TestCapRedig(t *testing.T) {
 		t.Error("expected capped=true")
 	}
 	// Already capped.
-	if _, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID}); !errors.Is(err, ErrCapped) {
+	if _, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); !errors.Is(err, ErrCapped) {
 		t.Errorf("expected ErrCapped, got %v", err)
 	}
-	r, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID})
+	r, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r.Capped {
 		t.Error("expected capped=false")
 	}
-	if _, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID}); !errors.Is(err, ErrNotCapped) {
+	if _, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); !errors.Is(err, ErrNotCapped) {
 		t.Errorf("expected ErrNotCapped, got %v", err)
 	}
 }
@@ -291,11 +291,11 @@ func TestFillEmptyWell(t *testing.T) {
 		t.Fatal(err)
 	}
 	childGridID := w.ChildGridID
-	if err := s.FillWell(ctx, u.ID, &rpc.FillWellRequest{Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID}); err != nil {
+	if err := s.FillWell(ctx, u.ID, &rpc.FillWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); err != nil {
 		t.Fatalf("fill: %v", err)
 	}
 	// Well row is gone.
-	if _, err := s.loadNode(ctx, s.db, w.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.loadTile(ctx, s.db, w.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("well still exists: %v", err)
 	}
 	// Child grid is gone.
@@ -320,7 +320,7 @@ func TestFillNonEmptyWellRefused(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FillWell(ctx, u.ID, &rpc.FillWellRequest{Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID}); !errors.Is(err, ErrNotEmpty) {
+	if err := s.FillWell(ctx, u.ID, &rpc.FillWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); !errors.Is(err, ErrNotEmpty) {
 		t.Errorf("expected ErrNotEmpty, got %v", err)
 	}
 }
@@ -345,7 +345,7 @@ func TestAscendAtRoot(t *testing.T) {
 		t.Errorf("user root = %d, expected %d", got.RootGridID, resp.NewRootGridID)
 	}
 	// Verify the well exists in the new root pointing at the old root.
-	well, err := s.loadNode(ctx, s.db, resp.WellID)
+	well, err := s.loadTile(ctx, s.db, resp.WellID)
 	if err != nil {
 		t.Fatal(err)
 	}

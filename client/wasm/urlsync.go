@@ -146,7 +146,7 @@ func (a *App) textareaCursorRowCol() (int, int) {
 }
 
 // applyURLOnBoot reads window.location, decodes it, and walks the
-// node-id list against the user's grids to set up the focused pane.
+// tile-id list against the user's grids to set up the focused pane.
 // Loose on input: an id that's missing from the current grid is
 // silently skipped — we stay in the same grid and try the next id.
 // This lets URLs like `/g/.../19/9999/15/14/12` (with 9999 invalid)
@@ -199,7 +199,7 @@ func (a *App) applyURLOnBoot() {
 	// what we've got.
 	gid := rootID
 	resolvedPath := []int64{}
-	var fileNodeID int64
+	var fileTileID int64
 walk:
 	for i, id := range state.TileIDs {
 		isLast := i == len(state.TileIDs)-1
@@ -211,7 +211,7 @@ walk:
 			}
 		}
 		g, _ := a.c.Grid(gid)
-		n, ok := g.Nodes[id]
+		n, ok := g.Tiles[id]
 		if !ok {
 			// Skip unknown id — it might be a stale or bogus entry.
 			// Keep the current grid and continue with the next id.
@@ -230,7 +230,7 @@ walk:
 				// File mid-path is nonsense; ignore and keep walking.
 				continue
 			}
-			fileNodeID = id
+			fileTileID = id
 		}
 	}
 
@@ -239,24 +239,24 @@ walk:
 		return
 	}
 	p.Path = resolvedPath
-	if fileNodeID != 0 {
-		p.FileFocus = fileNodeID
+	if fileTileID != 0 {
+		p.FileFocus = fileTileID
 		if state.CursorMode {
 			p.FileMode = "text"
-			a.fileLastMode[fileNodeID] = "text"
+			a.fileLastMode[fileTileID] = "text"
 		} else {
 			p.FileMode = "rendered"
 		}
 		// Reconstruct live FileZoom via the single file-zoom helper,
 		// which substitutes a pane-derived default for unvisited files
 		// (ViewZoom == 0) so live and preview agree at path-swap.
-		if file, ok := a.cachedFile(p.Path, fileNodeID); ok {
+		if file, ok := a.cachedFile(p.Path, fileTileID); ok {
 			r := paneRectFor(a, p)
 			p.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
 		} else {
 			p.FileZoom = fileInitialZoom(a.width, a.height)
 		}
-		a.fetchBlobAndSetCursor(fileNodeID, state)
+		a.fetchBlobAndSetCursor(fileTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()
 	} else {
@@ -273,16 +273,16 @@ walk:
 	a.scheduleURLUpdate()
 }
 
-// cachedFile returns the file node at the leaf of `path` with id
-// nodeID, if cached. Used during URL boot to honor a previously
+// cachedFile returns the file tile at the leaf of `path` with id
+// tileID, if cached. Used during URL boot to honor a previously
 // stored ViewZoom before the blob arrives.
-func (a *App) cachedFile(path []int64, nodeID int64) (rpc.Node, bool) {
+func (a *App) cachedFile(path []int64, tileID int64) (rpc.Tile, bool) {
 	gid := a.gridIDForPath(path)
 	g, ok := a.c.Grid(gid)
 	if !ok {
-		return rpc.Node{}, false
+		return rpc.Tile{}, false
 	}
-	n, ok := g.Nodes[nodeID]
+	n, ok := g.Tiles[tileID]
 	return n, ok
 }
 
@@ -303,20 +303,20 @@ func (a *App) fetchGridSync(id int64) bool {
 		return false
 	}
 	delete(a.gridLoadFailed, id)
-	a.c.PutGrid(resp.Grid, resp.Nodes)
+	a.c.PutGrid(resp.Grid, resp.Tiles)
 	return true
 }
 
 // fetchBlobAndSetCursor pulls the file's bytes and, once they're in
 // the cache, places the cursor at (state.Col, state.Row) inside the
 // textarea. Asynchronous because GetBlob is over the wire.
-func (a *App) fetchBlobAndSetCursor(fileNodeID int64, state url.State) {
+func (a *App) fetchBlobAndSetCursor(fileTileID int64, state url.State) {
 	gid := a.gridIDForPath(a.tree.FocusedPane().Path)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return
 	}
-	file, ok := g.Nodes[fileNodeID]
+	file, ok := g.Tiles[fileTileID]
 	if !ok {
 		return
 	}

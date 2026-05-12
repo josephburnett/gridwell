@@ -9,7 +9,7 @@ import (
 func seedCache(t *testing.T) *Cache {
 	t.Helper()
 	c := New()
-	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Node{
+	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{
 		{ID: 100, GridID: 1, Type: "well", X: 0, Y: 0, W: 1, H: 1, ChildGridID: 2},
 		{ID: 101, GridID: 1, Type: "file", X: 5, Y: 5, W: 1, H: 1, MimeType: "text/markdown", BlobID: 1},
 	})
@@ -22,12 +22,12 @@ func TestPutAndGet(t *testing.T) {
 	if !ok || g == nil {
 		t.Fatal("missing grid")
 	}
-	if len(g.Nodes) != 2 {
-		t.Errorf("nodes = %d", len(g.Nodes))
+	if len(g.Tiles) != 2 {
+		t.Errorf("nodes = %d", len(g.Tiles))
 	}
 	// Mutating the snapshot must not affect the cache.
-	delete(g.Nodes, 100)
-	if g2, _ := c.Grid(1); len(g2.Nodes) != 2 {
+	delete(g.Tiles, 100)
+	if g2, _ := c.Grid(1); len(g2.Tiles) != 2 {
 		t.Errorf("snapshot wasn't deep enough")
 	}
 }
@@ -35,35 +35,35 @@ func TestPutAndGet(t *testing.T) {
 func TestApplyNodeChanged(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
-		Kind:        rpc.EventNodeChanged,
-		NodeChanged: &rpc.NodeChanged{Node: rpc.Node{ID: 100, GridID: 1, Type: "well", X: 9, Y: 9, W: 2, H: 2, ChildGridID: 2}},
+		Kind:        rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 100, GridID: 1, Type: "well", X: 9, Y: 9, W: 2, H: 2, ChildGridID: 2}},
 	})
 	if !ok {
 		t.Error("Apply returned false")
 	}
 	g, _ := c.Grid(1)
-	if g.Nodes[100].W != 2 {
-		t.Errorf("node not updated: %+v", g.Nodes[100])
+	if g.Tiles[100].W != 2 {
+		t.Errorf("node not updated: %+v", g.Tiles[100])
 	}
 }
 
 func TestApplyNodeRemoved(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
-		Kind:        rpc.EventNodeRemoved,
-		NodeRemoved: &rpc.NodeRemoved{GridID: 1, NodeID: 100},
+		Kind:        rpc.EventTileRemoved,
+		TileRemoved: &rpc.TileRemoved{GridID: 1, TileID: 100},
 	})
 	if !ok {
 		t.Error("Apply returned false")
 	}
 	g, _ := c.Grid(1)
-	if _, ok := g.Nodes[100]; ok {
+	if _, ok := g.Tiles[100]; ok {
 		t.Error("node still present")
 	}
 	// Idempotent: removing again returns false (nothing changed).
 	if c.Apply(rpc.Event{
-		Kind:        rpc.EventNodeRemoved,
-		NodeRemoved: &rpc.NodeRemoved{GridID: 1, NodeID: 100},
+		Kind:        rpc.EventTileRemoved,
+		TileRemoved: &rpc.TileRemoved{GridID: 1, TileID: 100},
 	}) {
 		t.Error("expected false on second remove")
 	}
@@ -79,16 +79,16 @@ func TestApplyGridForked(t *testing.T) {
 		t.Error("Apply returned false")
 	}
 	g, _ := c.Grid(1)
-	if g.Nodes[100].ChildGridID != 99 {
-		t.Errorf("well not redirected: %+v", g.Nodes[100])
+	if g.Tiles[100].ChildGridID != 99 {
+		t.Errorf("well not redirected: %+v", g.Tiles[100])
 	}
 }
 
 func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
-		Kind:        rpc.EventNodeChanged,
-		NodeChanged: &rpc.NodeChanged{Node: rpc.Node{ID: 999, GridID: 999, Type: "well", ChildGridID: 1}},
+		Kind:        rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 999, GridID: 999, Type: "well", ChildGridID: 1}},
 	})
 	if ok {
 		t.Error("expected false for unknown grid")

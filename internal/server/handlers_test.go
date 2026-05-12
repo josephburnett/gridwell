@@ -12,10 +12,10 @@ func largeView() rpc.ViewRect { return rpc.ViewRect{X: -100, Y: -100, W: 200, H:
 
 // createWell helper: creates a well via the RPC layer at (x, y) and returns
 // the response.
-func createWell(t *testing.T, hs *struct{ URL string }, cookie *http.Cookie, gridID int64, x, y int64) rpc.Node {
+func createWell(t *testing.T, hs *struct{ URL string }, cookie *http.Cookie, gridID int64, x, y int64) rpc.Tile {
 	t.Helper()
 	t.Fatal("unused — use the structured server tests instead")
-	return rpc.Node{}
+	return rpc.Tile{}
 }
 
 // silence unused param.
@@ -23,7 +23,7 @@ var _ = createWell
 
 func TestCreateFileHappyPath(t *testing.T) {
 	hs, u, cookie := newTestServer(t)
-	var nr rpc.NodeResponse
+	var nr rpc.TileResponse
 	st, body := callRPC(t, hs, cookie, "CreateFile", &rpc.CreateFileRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
 		X: 1, Y: 1, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("# hi"),
@@ -31,13 +31,13 @@ func TestCreateFileHappyPath(t *testing.T) {
 	if st != 200 {
 		t.Fatalf("status %d: %s", st, body)
 	}
-	if nr.Node.Type != "file" || nr.Node.MimeType != "text/markdown" {
-		t.Errorf("got %+v", nr.Node)
+	if nr.Tile.Type != "file" || nr.Tile.MimeType != "text/markdown" {
+		t.Errorf("got %+v", nr.Tile)
 	}
 
 	// GetBlob should return the bytes.
 	var br rpc.GetBlobResponse
-	st, body = callRPC(t, hs, cookie, "GetBlob", &rpc.GetBlobRequest{BlobID: nr.Node.BlobID}, &br)
+	st, body = callRPC(t, hs, cookie, "GetBlob", &rpc.GetBlobRequest{BlobID: nr.Tile.BlobID}, &br)
 	if st != 200 {
 		t.Fatalf("blob status %d: %s", st, body)
 	}
@@ -48,58 +48,58 @@ func TestCreateFileHappyPath(t *testing.T) {
 
 func TestResizeAndViewportRPCs(t *testing.T) {
 	hs, u, cookie := newTestServer(t)
-	var nr rpc.NodeResponse
+	var nr rpc.TileResponse
 	if st, _ := callRPC(t, hs, cookie, "CreateWell", &rpc.CreateWellRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
 	}, &nr); st != 200 {
 		t.Fatal("create")
 	}
-	id := nr.Node.ID
+	id := nr.Tile.ID
 
 	// Resize.
-	if st, body := callRPC(t, hs, cookie, "ResizeNode", &rpc.ResizeNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: id, W: 2, H: 2,
+	if st, body := callRPC(t, hs, cookie, "ResizeTile", &rpc.ResizeTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: id, W: 2, H: 2,
 	}, &nr); st != 200 {
 		t.Fatalf("resize: %d %s", st, body)
 	}
 	// Set viewport.
-	if st, body := callRPC(t, hs, cookie, "SetNodeViewport", &rpc.SetNodeViewportRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: id, ViewX: 7, ViewY: 8,
+	if st, body := callRPC(t, hs, cookie, "SetTileViewport", &rpc.SetTileViewportRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: id, ViewX: 7, ViewY: 8,
 	}, &nr); st != 200 {
 		t.Fatalf("viewport: %d %s", st, body)
 	}
-	if nr.Node.ViewX != 7 || nr.Node.ViewY != 8 {
-		t.Errorf("after viewport: %+v", nr.Node)
+	if nr.Tile.ViewX != 7 || nr.Tile.ViewY != 8 {
+		t.Errorf("after viewport: %+v", nr.Tile)
 	}
 }
 
 func TestCapRedigFillRPCs(t *testing.T) {
 	hs, u, cookie := newTestServer(t)
-	var nr rpc.NodeResponse
+	var nr rpc.TileResponse
 	if st, _ := callRPC(t, hs, cookie, "CreateWell", &rpc.CreateWellRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
 	}, &nr); st != 200 {
 		t.Fatal("create")
 	}
-	id := nr.Node.ID
+	id := nr.Tile.ID
 
 	if st, body := callRPC(t, hs, cookie, "CapWell", &rpc.CapWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: id,
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: id,
 	}, &nr); st != 200 {
 		t.Fatalf("cap: %d %s", st, body)
 	}
-	if !nr.Node.Capped {
+	if !nr.Tile.Capped {
 		t.Error("expected capped")
 	}
 	if st, _ := callRPC(t, hs, cookie, "RedigWell", &rpc.RedigWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: id,
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: id,
 	}, &nr); st != 200 {
 		t.Error("redig failed")
 	}
 	// Fill empty.
 	var fr rpc.FillWellResponse
 	if st, body := callRPC(t, hs, cookie, "FillWell", &rpc.FillWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: id,
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: id,
 	}, &fr); st != 200 {
 		t.Fatalf("fill: %d %s", st, body)
 	}
@@ -118,17 +118,17 @@ func TestAscendAtRootRPC(t *testing.T) {
 
 func TestUpdateFileContentRPC(t *testing.T) {
 	hs, u, cookie := newTestServer(t)
-	var nr rpc.NodeResponse
+	var nr rpc.TileResponse
 	if st, _ := callRPC(t, hs, cookie, "CreateFile", &rpc.CreateFileRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
 		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("v1"),
 	}, &nr); st != 200 {
 		t.Fatal("create file")
 	}
-	id := nr.Node.ID
+	id := nr.Tile.ID
 
 	if st, body := callRPC(t, hs, cookie, "UpdateFileContent", &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: id, Data: []byte("v2"),
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: id, Data: []byte("v2"),
 	}, &nr); st != 200 {
 		t.Fatalf("update: %d %s", st, body)
 	}
@@ -136,35 +136,35 @@ func TestUpdateFileContentRPC(t *testing.T) {
 
 func TestCloneAndMoveRPCs(t *testing.T) {
 	hs, u, cookie := newTestServer(t)
-	var nr rpc.NodeResponse
+	var nr rpc.TileResponse
 	if st, _ := callRPC(t, hs, cookie, "CreateWell", &rpc.CreateWellRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
 	}, &nr); st != 200 {
 		t.Fatal("create")
 	}
-	src := nr.Node.ID
+	src := nr.Tile.ID
 
 	// Clone.
-	if st, body := callRPC(t, hs, cookie, "CloneNode", &rpc.CloneNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: src,
+	if st, body := callRPC(t, hs, cookie, "CloneTile", &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: src,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 5, Y: 5,
 	}, &nr); st != 200 {
 		t.Fatalf("clone: %d %s", st, body)
 	}
-	clone := nr.Node.ID
+	clone := nr.Tile.ID
 
 	// Move clone.
-	var mr rpc.MoveNodeResponse
-	if st, body := callRPC(t, hs, cookie, "MoveNode", &rpc.MoveNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: clone,
+	var mr rpc.MoveTileResponse
+	if st, body := callRPC(t, hs, cookie, "MoveTile", &rpc.MoveTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: clone,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 8, Y: 8,
 	}, &mr); st != 200 {
 		t.Fatalf("move: %d %s", st, body)
 	}
-	if mr.Node.X != 8 || mr.Node.Y != 8 {
-		t.Errorf("moved to %+v", mr.Node)
+	if mr.Tile.X != 8 || mr.Tile.Y != 8 {
+		t.Errorf("moved to %+v", mr.Tile)
 	}
 }
 

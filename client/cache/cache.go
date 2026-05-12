@@ -1,4 +1,4 @@
-// Package cache holds the client-side per-grid node cache and the
+// Package cache holds the client-side per-grid tile cache and the
 // reconciliation logic that applies Subscribe events to it.
 //
 // Splitting this out of the WASM main lets us test the merge semantics
@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// Cache stores grids and their nodes keyed by grid id. Concurrency-safe.
+// Cache stores grids and their tiles keyed by grid id. Concurrency-safe.
 //
 // The client always treats the server as canonical. Apply replaces existing
 // rows by id; events arriving for unknown grids are dropped (the client
@@ -29,10 +29,10 @@ type Blob struct {
 	MimeType string
 }
 
-// Grid is a cached grid plus its nodes indexed by id for cheap upsert.
+// Grid is a cached grid plus its tiles indexed by id for cheap upsert.
 type Grid struct {
 	Meta  rpc.Grid
-	Nodes map[int64]rpc.Node
+	Tiles map[int64]rpc.Tile
 }
 
 // New returns an empty cache.
@@ -66,14 +66,14 @@ func (c *Cache) InvalidateBlob(blobID int64) {
 	delete(c.blobs, blobID)
 }
 
-// PutGrid replaces a grid's metadata and node set. Used after a fresh
+// PutGrid replaces a grid's metadata and tile set. Used after a fresh
 // GetGrid call.
-func (c *Cache) PutGrid(g rpc.Grid, nodes []rpc.Node) {
+func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	gr := &Grid{Meta: g, Nodes: map[int64]rpc.Node{}}
-	for _, n := range nodes {
-		gr.Nodes[n.ID] = n
+	gr := &Grid{Meta: g, Tiles: map[int64]rpc.Tile{}}
+	for _, n := range tiles {
+		gr.Tiles[n.ID] = n
 	}
 	c.grids[g.ID] = gr
 }
@@ -88,9 +88,9 @@ func (c *Cache) Grid(id int64) (*Grid, bool) {
 	if !ok {
 		return nil, false
 	}
-	out := &Grid{Meta: g.Meta, Nodes: make(map[int64]rpc.Node, len(g.Nodes))}
-	for k, v := range g.Nodes {
-		out.Nodes[k] = v
+	out := &Grid{Meta: g.Meta, Tiles: make(map[int64]rpc.Tile, len(g.Tiles))}
+	for k, v := range g.Tiles {
+		out.Tiles[k] = v
 	}
 	return out, true
 }
@@ -102,7 +102,7 @@ func (c *Cache) KnownWellIDs() map[int64]bool {
 	defer c.mu.Unlock()
 	out := map[int64]bool{}
 	for _, g := range c.grids {
-		for id, n := range g.Nodes {
+		for id, n := range g.Tiles {
 			if n.Type == "well" {
 				out[id] = true
 			}
@@ -121,27 +121,27 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch ev.Kind {
-	case rpc.EventNodeChanged:
-		if ev.NodeChanged == nil {
+	case rpc.EventTileChanged:
+		if ev.TileChanged == nil {
 			return false
 		}
-		n := ev.NodeChanged.Node
+		n := ev.TileChanged.Tile
 		g, ok := c.grids[n.GridID]
 		if !ok {
 			return false
 		}
-		g.Nodes[n.ID] = n
+		g.Tiles[n.ID] = n
 		return true
-	case rpc.EventNodeRemoved:
-		if ev.NodeRemoved == nil {
+	case rpc.EventTileRemoved:
+		if ev.TileRemoved == nil {
 			return false
 		}
-		g, ok := c.grids[ev.NodeRemoved.GridID]
+		g, ok := c.grids[ev.TileRemoved.GridID]
 		if !ok {
 			return false
 		}
-		_, present := g.Nodes[ev.NodeRemoved.NodeID]
-		delete(g.Nodes, ev.NodeRemoved.NodeID)
+		_, present := g.Tiles[ev.TileRemoved.TileID]
+		delete(g.Tiles, ev.TileRemoved.TileID)
 		return present
 	case rpc.EventGridChanged:
 		// We can't update without a new GetGrid; signal redraw so the
@@ -154,9 +154,9 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 			return false
 		}
 		for _, g := range c.grids {
-			if n, ok := g.Nodes[ev.GridForked.WellID]; ok {
+			if n, ok := g.Tiles[ev.GridForked.WellID]; ok {
 				n.ChildGridID = ev.GridForked.NewGridID
-				g.Nodes[n.ID] = n
+				g.Tiles[n.ID] = n
 				return true
 			}
 		}

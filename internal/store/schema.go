@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS blobs (
     refcount  INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS nodes (
+CREATE TABLE IF NOT EXISTS tiles (
     id            INTEGER PRIMARY KEY,
     object_id     TEXT NOT NULL,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
@@ -81,9 +81,9 @@ CREATE TABLE IF NOT EXISTS nodes (
         (type = 'file' AND child_grid_id IS NULL     AND mime_type IS NOT NULL AND blob_id IS NOT NULL)
     )
 );
-CREATE INDEX IF NOT EXISTS idx_nodes_grid_id   ON nodes(grid_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_object_id ON nodes(object_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_child     ON nodes(child_grid_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,

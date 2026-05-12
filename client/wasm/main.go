@@ -77,7 +77,7 @@ type App struct {
 	dragging *dragState
 
 	// Per-pane selection: paneID → node id (0 means nothing selected).
-	selectedNodeID map[string]int64
+	selectedTileID map[string]int64
 
 	// Plus-button popover state.
 	menuOpen   bool
@@ -173,7 +173,7 @@ type App struct {
 	// rootViewSaveScheduled is the same pattern for the root-grid
 	// default-view persistence. Saves only when the focused pane is
 	// at the user's root (path empty); the well's child grids use
-	// SetNodeViewport on ascent instead, so this only ever updates
+	// SetTileViewport on ascent instead, so this only ever updates
 	// the root.
 	rootViewSaveScheduled bool
 	rootViewSaveCb        js.Func
@@ -218,9 +218,9 @@ type transSegment struct {
 }
 
 
-// ghost is a transient floating render of a node, positioned in screen
+// ghost is a transient floating render of a tile, positioned in screen
 // coordinates within a specific pane. screenX/Y is the top-left corner of
-// the node's footprint at the rendered cell size.
+// the tile's footprint at the rendered cell size.
 //
 // displayedCellSize is the actual rendered size used by the renderer
 // each frame; targetCellSize is what the cursor's current drop target
@@ -228,7 +228,7 @@ type transSegment struct {
 // ghost smoothly resizes when the cursor crosses pane boundaries or
 // enters/leaves a well's child preview.
 type ghost struct {
-	node              rpc.Node
+	tile              rpc.Tile
 	paneID            string
 	screenX           float64
 	screenY           float64
@@ -236,18 +236,18 @@ type ghost struct {
 	targetCellSize    float64
 }
 
-// dragState tracks an in-progress drag from a node onto the cursor.
+// dragState tracks an in-progress drag from a tile onto the cursor.
 //
 // `started` is false until the cursor moves more than dragThreshold pixels
 // from the mousedown point, so a bare click (down+up with no movement) can
 // be distinguished from a drag and treated as "select" instead of "move".
 //
-// snapshotNode and origin* fields capture where the dragged node started so
+// snapshotTile and origin* fields capture where the dragged tile started so
 // we can render a smooth ghost at the cursor and animate snap-back to the
 // original position if the drop is rejected.
 type dragState struct {
 	originPaneID   string
-	nodeID         int64
+	tileID         int64
 	cellOffsetX    float64
 	cellOffsetY    float64
 	startScreenX   float64
@@ -256,12 +256,12 @@ type dragState struct {
 	curScreenY     float64
 	clone          bool // no binding yet; placeholder for the clone gesture
 	started        bool
-	snapshotNode   rpc.Node
+	snapshotTile   rpc.Tile
 	originScreenX  float64
 	originScreenY  float64
 	originPaneRect paneRect
 
-	// Template drag from the + palette: nodeID is 0 (no real node yet)
+	// Template drag from the + palette: tileID is 0 (no real node yet)
 	// but isTemplate is true and template carries the kind that was
 	// grabbed. Drop creates the node at the snapped cell.
 	isTemplate bool
@@ -270,7 +270,7 @@ type dragState struct {
 	// Source-grid info — set at mousedown; same as the focused pane's
 	// grid for parent-grid drags, or the well's child grid for "pull
 	// out of well" drags. Carried separately so the drop commit can
-	// build a MoveNode RPC with the right Path/ViewRect/grid id even
+	// build a MoveTile RPC with the right Path/ViewRect/grid id even
 	// when source and dest are different grids inside the same pane.
 	srcGridID   int64
 	srcPath     []int64
@@ -287,7 +287,7 @@ func main() {
 		doc:            js.Global().Get("document"),
 		win:            js.Global().Get("window"),
 		c:              cache.New(),
-		selectedNodeID: map[string]int64{},
+		selectedTileID: map[string]int64{},
 		menuHover:      -1,
 		gridLoadFailed: map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
@@ -407,7 +407,7 @@ func (a *App) fetchGrid(id int64) {
 			return
 		}
 		delete(a.gridLoadFailed, id)
-		a.c.PutGrid(resp.Grid, resp.Nodes)
+		a.c.PutGrid(resp.Grid, resp.Tiles)
 		a.draw()
 	}()
 }
@@ -516,7 +516,7 @@ func (a *App) completeTransition() {
 	if p == nil {
 		return
 	}
-	delete(a.selectedNodeID, p.ID)
+	delete(a.selectedTileID, p.ID)
 	a.gridLoadFailed = map[int64]bool{}
 	a.fetchGrid(a.gridIDForPath(p.Path))
 	if tr.onComplete != nil {
@@ -600,7 +600,7 @@ func (a *App) gridIDForPath(p []int64) int64 {
 			a.fetchGrid(gid)
 			return gid
 		}
-		w, ok := g.Nodes[wellID]
+		w, ok := g.Tiles[wellID]
 		if !ok {
 			return gid
 		}

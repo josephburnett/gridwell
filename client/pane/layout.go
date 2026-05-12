@@ -24,7 +24,7 @@ func Layout(t *Tree, root Rect) map[string]Rect {
 	return out
 }
 
-func layoutInto(n Node, r Rect, out map[string]Rect) {
+func layoutInto(n TreeNode, r Rect, out map[string]Rect) {
 	if n.IsLeaf() {
 		out[n.Pane.ID] = r
 		return
@@ -235,7 +235,7 @@ func RatioFromCursor(container Rect, dir Direction, sx, sy float64) float64 {
 	return r
 }
 
-func collectDividers(n *Node, r Rect, bandPx float64, out *[]Divider) {
+func collectDividers(n *TreeNode, r Rect, bandPx float64, out *[]Divider) {
 	if n.IsLeaf() {
 		return
 	}

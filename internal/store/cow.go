@@ -27,7 +27,7 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, userID int6
 	}
 	seq := gridSequence{grids: []int64{u.RootGridID}}
 	for _, wellID := range p.WellIDs {
-		w, err := s.loadNode(ctx, q, wellID)
+		w, err := s.loadTile(ctx, q, wellID)
 		if err != nil {
 			return gridSequence{}, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
 		}
@@ -48,9 +48,9 @@ type preWriteResult struct {
 	// GridID is the (possibly new, post-fork) leaf grid id where mutations
 	// must now apply.
 	GridID int64
-	// TargetNodeID is the (possibly new) id of the input target node after
+	// TargetTileID is the (possibly new) id of the input target node after
 	// any fork. Zero if no target was supplied.
-	TargetNodeID int64
+	TargetTileID int64
 	// Events is a list of GridForked events to publish to subscribers
 	// after the transaction commits.
 	Events []rpc.Event
@@ -58,11 +58,11 @@ type preWriteResult struct {
 
 // preWrite ensures that the leaf grid in the descent path is unshared,
 // forking grids up the path as needed so the editing pane has a private
-// chain. If a target node id is supplied (non-zero), it must lie in the
-// leaf grid at call time; the returned TargetNodeID is its post-fork id.
+// chain. If a target tile id is supplied (non-zero), it must lie in the
+// leaf grid at call time; the returned TargetTileID is its post-fork id.
 //
 // preWrite must be called inside a transaction; it does not commit.
-func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc.Path, targetNodeID int64) (*preWriteResult, error) {
+func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc.Path, targetTileID int64) (*preWriteResult, error) {
 	seq, err := s.buildGridSequence(ctx, tx, userID, path)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 	}
 
 	if numForks == 0 {
-		return &preWriteResult{GridID: seq.grids[len(seq.grids)-1], TargetNodeID: targetNodeID}, nil
+		return &preWriteResult{GridID: seq.grids[len(seq.grids)-1], TargetTileID: targetTileID}, nil
 	}
 
 	// We will fork grids at indices [topForkIdx .. len-1].
@@ -103,17 +103,17 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 	wellObjects := make([]string, len(seq.wells))
 	for i, wid := range seq.wells {
 		var obj string
-		if err := tx.QueryRowContext(ctx, `SELECT object_id FROM nodes WHERE id = ?`, wid).Scan(&obj); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT object_id FROM tiles WHERE id = ?`, wid).Scan(&obj); err != nil {
 			return nil, err
 		}
 		wellObjects[i] = obj
 	}
 	// Object id of the target node, if any.
 	var targetObjectID string
-	if targetNodeID != 0 {
-		err := tx.QueryRowContext(ctx, `SELECT object_id FROM nodes WHERE id = ?`, targetNodeID).Scan(&targetObjectID)
+	if targetTileID != 0 {
+		err := tx.QueryRowContext(ctx, `SELECT object_id FROM tiles WHERE id = ?`, targetTileID).Scan(&targetObjectID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: target node %d", ErrNotFound, targetNodeID)
+			return nil, fmt.Errorf("%w: target node %d", ErrNotFound, targetTileID)
 		}
 		if err != nil {
 			return nil, err
@@ -146,7 +146,7 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 		// to point at newGridID.
 		if parentWellID != 0 {
 			if _, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET child_grid_id = ?, updated_at = ? WHERE id = ?`,
+				`UPDATE tiles SET child_grid_id = ?, updated_at = ? WHERE id = ?`,
 				newGridID, s.now().Unix(), parentWellID); err != nil {
 				return nil, err
 			}
@@ -185,10 +185,10 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 	}
 
 	// Translate target node id if it was in a forked grid.
-	newTargetID := targetNodeID
-	if targetNodeID != 0 {
+	newTargetID := targetTileID
+	if targetTileID != 0 {
 		err := tx.QueryRowContext(ctx,
-			`SELECT id FROM nodes WHERE grid_id = ? AND object_id = ?`,
+			`SELECT id FROM tiles WHERE grid_id = ? AND object_id = ?`,
 			seq.grids[len(seq.grids)-1], targetObjectID).Scan(&newTargetID)
 		if err != nil {
 			return nil, fmt.Errorf("relocate target after fork: %w", err)
@@ -197,13 +197,13 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 
 	return &preWriteResult{
 		GridID:       seq.grids[len(seq.grids)-1],
-		TargetNodeID: newTargetID,
+		TargetTileID: newTargetID,
 		Events:       events,
 	}, nil
 }
 
 // forkGrid creates a new grid that is a copy of oldGridID. Returns the new
-// grid id and a mapping from old node id to new node id in the copy.
+// grid id and a mapping from old tile id to new tile id in the copy.
 // The new grid starts with refcount=0 (the caller must increment it as it
 // installs the well that points to it).
 //
@@ -238,13 +238,13 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
 		       created_at, updated_at
-		FROM nodes WHERE grid_id = ?`, oldGridID)
+		FROM tiles WHERE grid_id = ?`, oldGridID)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer rows.Close()
 
-	type nodeCopy struct {
+	type tileCopy struct {
 		oldID     int64
 		objectID  string
 		typ       string
@@ -259,9 +259,9 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		mode      int32
 		createdAt, updatedAt int64
 	}
-	var copies []nodeCopy
+	var copies []tileCopy
 	for rows.Next() {
-		var nc nodeCopy
+		var nc tileCopy
 		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.typ, &nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
 			&nc.ownerID, &nc.groupID, &nc.mode, &nc.createdAt, &nc.updatedAt); err != nil {
@@ -276,7 +276,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	remap := make(map[int64]int64, len(copies))
 	for _, nc := range copies {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 				child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
 				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -284,7 +284,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.ownerID, nc.groupID, nc.mode,
 			nc.createdAt, now)
 		if err != nil {
-			return 0, nil, fmt.Errorf("copy node: %w", err)
+			return 0, nil, fmt.Errorf("copy tile: %w", err)
 		}
 		newID, err := res.LastInsertId()
 		if err != nil {
@@ -329,11 +329,11 @@ func (s *Store) decRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error
 	return nil
 }
 
-// deleteGrid removes a grid row and all of its nodes, decrementing refcounts
+// deleteGrid removes a grid row and all of its tiles, decrementing refcounts
 // on referenced child grids and blobs (recursively, possibly deleting them).
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, type, child_grid_id, blob_id FROM nodes WHERE grid_id = ?`, gridID)
+		`SELECT id, type, child_grid_id, blob_id FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 	rows.Close()
 
 	for _, r := range refs {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ?`, r.id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, r.id); err != nil {
 			return err
 		}
 		if r.typ == "well" && r.child.Valid {

@@ -26,7 +26,7 @@ import (
 type dropTarget struct {
 	pane     *pane.Pane
 	paneRect paneRect
-	inWell   *rpc.Node
+	inWell   *rpc.Tile
 	gridID   int64
 	path     []int64
 	cellSize float64
@@ -39,12 +39,12 @@ type dropTarget struct {
 // Returns false when the cursor is over a file-mode pane or off-canvas
 // — neither is a valid drop destination.
 //
-// excludeNodeID, if non-zero, prevents a well at that row id from
+// excludeTileID, if non-zero, prevents a well at that row id from
 // being treated as a drop-into-well target — used so a user dragging
 // well X around can't accidentally drop X into its own child grid
-// when the cursor is still on top of X. Pass d.nodeID from the
+// when the cursor is still on top of X. Pass d.tileID from the
 // dragState; it's a safe no-op when the source isn't a well.
-func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bool) {
+func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil, false
@@ -66,9 +66,9 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 	// well *is* the source being dragged; that would be a drop into
 	// self and creates a parent/child cycle on the server.
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
-	if n := a.nodeAtCell(p, cellX, cellY); n != nil &&
+	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
 		n.Type == "well" && !n.Capped && n.ChildGridID != 0 &&
-		n.ID != excludeNodeID {
+		n.ID != excludeTileID {
 		// Well preview math. Effective ratio resolves the unvisited
 		// fallback in one place so the child cell size is computed
 		// the same way here as in the renderer.
@@ -81,7 +81,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 		return &dropTarget{
 			pane:     p,
 			paneRect: r,
-			inWell:   nodeCopy(n),
+			inWell:   tileCopy(n),
 			gridID:   n.ChildGridID,
 			path:     path,
 			cellSize: cp.CellPx,
@@ -104,10 +104,10 @@ func (a *App) dropTargetAt(sx, sy float64, excludeNodeID int64) (*dropTarget, bo
 	}, true
 }
 
-// nodeCopy returns a copy of *n owned by the caller — the cache may
-// rewrite its node map underneath us, so callers that retain a node
+// tileCopy returns a copy of *n owned by the caller — the cache may
+// rewrite its tile map underneath us, so callers that retain a tile
 // across event boundaries should hold their own copy.
-func nodeCopy(n *rpc.Node) *rpc.Node {
+func tileCopy(n *rpc.Tile) *rpc.Tile {
 	c := *n
 	return &c
 }
@@ -116,7 +116,7 @@ func nodeCopy(n *rpc.Node) *rpc.Node {
 // in *child cell* coordinates, suitable for the server's locality
 // check on cross-grid moves into / out of the well. Centered on
 // (ViewX + W/2, ViewY + H/2). ±1 pad matches paneViewRect's convention.
-func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
+func wellChildViewRect(well *rpc.Tile) rpc.ViewRect {
 	visWf, visHf := wellChildVisibleCells(well)
 	visW := int64(math.Ceil(visWf))
 	visH := int64(math.Ceil(visHf))
@@ -138,7 +138,7 @@ func wellChildViewRect(well *rpc.Node) rpc.ViewRect {
 // footprintCells / ratio, window-independent because `ratio` is the
 // intrinsic ViewZoom (with the well-side default substituted when the
 // well is unvisited).
-func wellChildVisibleCells(well *rpc.Node) (float64, float64) {
+func wellChildVisibleCells(well *rpc.Tile) (float64, float64) {
 	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
 	return float64(well.W) / ratio, float64(well.H) / ratio
 }
@@ -156,7 +156,7 @@ func (t *dropTarget) cellAtCursor(sx, sy, cellOffsetX, cellOffsetY float64) (int
 // well's child preview, or nil if no tile is there. Used at mousedown
 // to decide whether a click on a well is starting a "pull out" gesture
 // on a specific child tile.
-func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Node, sx, sy float64) *rpc.Node {
+func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Tile, sx, sy float64) *rpc.Tile {
 	if well.Type != "well" || well.Capped || well.ChildGridID == 0 {
 		return nil
 	}
@@ -184,9 +184,9 @@ func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Node, sx, sy
 	if cyF < 0 && float64(cellY) != cyF {
 		cellY--
 	}
-	for _, n := range g.Nodes {
-		if dragdrop.NodeContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
-			return nodeCopy(&n)
+	for _, n := range g.Tiles {
+		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
+			return tileCopy(&n)
 		}
 	}
 	return nil

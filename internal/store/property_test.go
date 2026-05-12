@@ -13,8 +13,8 @@ import (
 // TestPropertyRefcountAndOverlap exercises a long random sequence of
 // mutations and asserts:
 //   - Refcounts on grids and blobs always match the actual reference count.
-//   - No two nodes in the same grid overlap.
-//   - The node count in any grid equals the SQL count of nodes in it.
+//   - No two tiles in the same grid overlap.
+//   - The tile count in any grid equals the SQL count of tiles in it.
 //
 // The test does not aim for coverage of every code path; it stress-tests the
 // invariants that the CoW logic is responsible for. The seed is fixed so
@@ -39,7 +39,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		childGridID int64
 	}
 	var nodes []liveNode
-	addNode := func(n *rpc.Node, path rpc.Path) {
+	addNode := func(n *rpc.Tile, path rpc.Path) {
 		nodes = append(nodes, liveNode{
 			id: n.ID, typ: n.Type, gridID: n.GridID, path: path,
 			w: n.W, h: n.H, x: n.X, y: n.Y, childGridID: n.ChildGridID,
@@ -94,8 +94,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			src := nodes[rng.IntN(len(nodes))]
 			x := int64(rng.IntN(20))*2 + 100 // bias to "open" area
 			y := int64(rng.IntN(20)) * 2
-			n, err := s.CloneNode(ctx, u.ID, &rpc.CloneNodeRequest{
-				Path: src.path, ViewRect: largeView(), NodeID: src.id,
+			n, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+				Path: src.path, ViewRect: largeView(), TileID: src.id,
 				DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 				X: x, Y: y,
 			})
@@ -115,8 +115,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			pick := nodes[pickIdx]
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
-			n, err := s.ResizeNode(ctx, u.ID, &rpc.ResizeNodeRequest{
-				Path: pick.path, ViewRect: largeView(), NodeID: pick.id,
+			n, err := s.ResizeTile(ctx, u.ID, &rpc.ResizeTileRequest{
+				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 				X: pick.x, Y: pick.y, W: w, H: h,
 			})
 			if err != nil {
@@ -141,7 +141,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				continue
 			}
 			n, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{
-				Path: pick.path, ViewRect: largeView(), NodeID: pick.id,
+				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 			})
 			if err != nil && !isBenignPropError(err) && !errors.Is(err, ErrCapped) {
 				t.Fatalf("iter %d cap: %v", i, err)
@@ -160,7 +160,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				continue
 			}
 			n, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{
-				Path: pick.path, ViewRect: largeView(), NodeID: pick.id,
+				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 			})
 			if err != nil && !isBenignPropError(err) && !errors.Is(err, ErrNotCapped) {
 				t.Fatalf("iter %d redig: %v", i, err)
@@ -175,8 +175,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
-			n, err := s.SetNodeViewport(ctx, u.ID, &rpc.SetNodeViewportRequest{
-				Path: pick.path, ViewRect: largeView(), NodeID: pick.id,
+			n, err := s.SetTileViewport(ctx, u.ID, &rpc.SetTileViewportRequest{
+				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 				ViewX: int64(rng.IntN(50)), ViewY: int64(rng.IntN(50)),
 			})
 			if err != nil && !isBenignPropError(err) {
@@ -196,10 +196,10 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	verifyNoOverlap(t, s)
 }
 
-// verifyNoOverlap asserts that within every grid, no two nodes overlap.
+// verifyNoOverlap asserts that within every grid, no two tiles overlap.
 func verifyNoOverlap(t *testing.T, s *Store) {
 	t.Helper()
-	rows, err := s.db.Query(`SELECT id, grid_id, x, y, w, h FROM nodes`)
+	rows, err := s.db.Query(`SELECT id, grid_id, x, y, w, h FROM tiles`)
 	if err != nil {
 		t.Fatal(err)
 	}

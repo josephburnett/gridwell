@@ -7,8 +7,8 @@ package rpc
 
 // ViewRect is the framed region of the originating pane in the affected grid's
 // own coordinates. Servers reject mutations whose target footprint does not
-// intersect this rectangle (i.e. the user can't see any part of the tile they
-// claim to be acting on). See spec §6.
+// intersect this rectangle — a locality guard so a pane can't move tiles in
+// regions it isn't currently looking at.
 type ViewRect struct {
 	X int64 `json:"x"`
 	Y int64 `json:"y"`
@@ -33,14 +33,15 @@ func (r ViewRect) Intersects(x, y, w, h int64) bool {
 	return x < r.X+r.W && x+w > r.X && y < r.Y+r.H && y+h > r.Y
 }
 
-// Path is the descent path from the user's root grid to the grid the caller is
-// looking at. WellIDs is the sequence of well row ids walked through. A path
-// of length 0 means the caller is at the user's root grid.
+// Path is the sequence of well-tile IDs walked from the user's root grid to
+// the pane the request originates from. Used both for permission scoping and
+// to identify the affected grid stack for CoW forks.
 type Path struct {
 	WellIDs []int64 `json:"well_ids"`
 }
 
-// Grid mirrors the grids table.
+// Grid is the persistent unit of canvas. Tiles live in grids; wells point at
+// child grids. The user's root grid has no parent.
 type Grid struct {
 	ID            int64   `json:"id"`
 	ObjectID      string  `json:"object_id"`
@@ -52,27 +53,32 @@ type Grid struct {
 	DefaultZoom   float64 `json:"default_zoom"`
 }
 
-// Node mirrors the nodes table. Type-specific fields are populated only for
-// the matching kind (well or file).
-type Node struct {
-	ID          int64  `json:"id"`
-	ObjectID    string `json:"object_id"`
-	GridID      int64  `json:"grid_id"`
-	Type        string `json:"type"`
-	X           int64  `json:"x"`
-	Y           int64  `json:"y"`
-	W           int64  `json:"w"`
-	H           int64  `json:"h"`
+// Tile is the persistent unit of content in a grid: a movable, resizable,
+// non-overlapping element. Two kinds are distinguished by Type:
+//   - "well": points at a child grid (ChildGridID, Capped).
+//   - "file": holds a blob (MimeType, BlobID).
+//
+// Mirrors the tiles table. Kind-specific fields are populated only for the
+// matching kind.
+type Tile struct {
+	ID          int64   `json:"id"`
+	ObjectID    string  `json:"object_id"`
+	GridID      int64   `json:"grid_id"`
+	Type        string  `json:"type"`
+	X           int64   `json:"x"`
+	Y           int64   `json:"y"`
+	W           int64   `json:"w"`
+	H           int64   `json:"h"`
 	ViewX       int64   `json:"view_x"`
 	ViewY       int64   `json:"view_y"`
 	ViewZoom    float64 `json:"view_zoom"`
 	ChildGridID int64   `json:"child_grid_id,omitempty"`
-	Capped      bool   `json:"capped,omitempty"`
-	MimeType    string `json:"mime_type,omitempty"`
-	BlobID      int64  `json:"blob_id,omitempty"`
-	OwnerID     int64  `json:"owner_id"`
-	GroupID     int64  `json:"group_id"`
-	Mode        int32  `json:"mode"`
+	Capped      bool    `json:"capped,omitempty"`
+	MimeType    string  `json:"mime_type,omitempty"`
+	BlobID      int64   `json:"blob_id,omitempty"`
+	OwnerID     int64   `json:"owner_id"`
+	GroupID     int64   `json:"group_id"`
+	Mode        int32   `json:"mode"`
 }
 
 // Auth requests/responses.
@@ -102,7 +108,7 @@ type GetGridRequest struct {
 }
 type GetGridResponse struct {
 	Grid     Grid   `json:"grid"`
-	Nodes    []Node `json:"nodes"`
+	Tiles    []Tile `json:"tiles"`
 	Readable bool   `json:"readable"`
 	Writable bool   `json:"writable"`
 }
@@ -148,28 +154,28 @@ type CreateFileRequest struct {
 	Data     []byte   `json:"data"`
 }
 
-type NodeResponse struct {
-	Node Node `json:"node"`
+type TileResponse struct {
+	Tile Tile `json:"tile"`
 }
 
-type MoveNodeRequest struct {
+type MoveTileRequest struct {
 	Path         Path     `json:"path"`
 	ViewRect     ViewRect `json:"view_rect"`
-	NodeID       int64    `json:"node_id"`
+	TileID       int64    `json:"tile_id"`
 	DestGridID   int64    `json:"dest_grid_id"`
 	DestPath     Path     `json:"dest_path"`
 	DestViewRect ViewRect `json:"dest_view_rect"`
 	X            int64    `json:"x"`
 	Y            int64    `json:"y"`
 }
-type MoveNodeResponse struct {
-	Node Node `json:"node"`
+type MoveTileResponse struct {
+	Tile Tile `json:"tile"`
 }
 
-type CloneNodeRequest struct {
+type CloneTileRequest struct {
 	Path         Path     `json:"path"`
 	ViewRect     ViewRect `json:"view_rect"`
-	NodeID       int64    `json:"node_id"`
+	TileID       int64    `json:"tile_id"`
 	DestGridID   int64    `json:"dest_grid_id"`
 	DestPath     Path     `json:"dest_path"`
 	DestViewRect ViewRect `json:"dest_view_rect"`
@@ -177,10 +183,10 @@ type CloneNodeRequest struct {
 	Y            int64    `json:"y"`
 }
 
-type ResizeNodeRequest struct {
+type ResizeTileRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
-	NodeID   int64    `json:"node_id"`
+	TileID   int64    `json:"tile_id"`
 	// X, Y, W, H specify the new footprint. The whole footprint is
 	// updated, so callers that only want to change W/H must still send
 	// the existing X, Y. Used by corner-drag resize where any corner
@@ -194,7 +200,7 @@ type ResizeNodeRequest struct {
 // SetGridDefaultViewRequest sets a grid's default viewport. The user
 // must have write permission on the grid. Used to remember the user's
 // preferred camera position for the user's root grid (which has no
-// parent node to hang ViewX/Y/Zoom off of).
+// parent tile to hang ViewX/Y/Zoom off of).
 type SetGridDefaultViewRequest struct {
 	GridID int64   `json:"grid_id"`
 	Cx     float64 `json:"cx"`
@@ -205,40 +211,40 @@ type SetGridDefaultViewResponse struct {
 	Grid Grid `json:"grid"`
 }
 
-type SetNodeViewportRequest struct {
+type SetTileViewportRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
-	NodeID   int64    `json:"node_id"`
+	TileID   int64    `json:"tile_id"`
 	ViewX    int64    `json:"view_x"`
 	ViewY    int64    `json:"view_y"`
-	// ViewZoom is the zoom the node should be shown at when re-entered
-	// (e.g., re-descending into a well). Persisted alongside ViewX/Y.
-	// Wells use this; files ignore it (their zoom is computed from
-	// the pane size and natural content size on each entry).
+	// ViewZoom is the zoom the tile should be shown at when re-entered
+	// (e.g., re-descending into a well-tile). Persisted alongside
+	// ViewX/Y. Wells use this; files ignore it (their zoom is computed
+	// from the pane size and natural content size on each entry).
 	ViewZoom float64 `json:"view_zoom"`
 }
 
 type CapWellRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
-	NodeID   int64    `json:"node_id"`
+	TileID   int64    `json:"tile_id"`
 }
 type RedigWellRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
-	NodeID   int64    `json:"node_id"`
+	TileID   int64    `json:"tile_id"`
 }
 type FillWellRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
-	NodeID   int64    `json:"node_id"`
+	TileID   int64    `json:"tile_id"`
 }
 type FillWellResponse struct{}
 
 type UpdateFileContentRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
-	NodeID   int64    `json:"node_id"`
+	TileID   int64    `json:"tile_id"`
 	Data     []byte   `json:"data"`
 }
 
@@ -257,31 +263,31 @@ type EventKind string
 
 const (
 	EventGridChanged EventKind = "grid_changed"
-	EventNodeChanged EventKind = "node_changed"
-	EventNodeRemoved EventKind = "node_removed"
+	EventTileChanged EventKind = "tile_changed"
+	EventTileRemoved EventKind = "tile_removed"
 	EventGridForked  EventKind = "grid_forked"
 )
 
 type Event struct {
 	Kind        EventKind    `json:"kind"`
 	GridChanged *GridChanged `json:"grid_changed,omitempty"`
-	NodeChanged *NodeChanged `json:"node_changed,omitempty"`
-	NodeRemoved *NodeRemoved `json:"node_removed,omitempty"`
+	TileChanged *TileChanged `json:"tile_changed,omitempty"`
+	TileRemoved *TileRemoved `json:"tile_removed,omitempty"`
 	GridForked  *GridForked  `json:"grid_forked,omitempty"`
 }
 
 type GridChanged struct {
 	GridID int64 `json:"grid_id"`
 }
-type NodeChanged struct {
-	Node Node `json:"node"`
+type TileChanged struct {
+	Tile Tile `json:"tile"`
 }
-type NodeRemoved struct {
+type TileRemoved struct {
 	GridID int64 `json:"grid_id"`
-	NodeID int64 `json:"node_id"`
+	TileID int64 `json:"tile_id"`
 }
 type GridForked struct {
-	WellID     int64 `json:"well_id"`
-	OldGridID  int64 `json:"old_grid_id"`
-	NewGridID  int64 `json:"new_grid_id"`
+	WellID    int64 `json:"well_id"`
+	OldGridID int64 `json:"old_grid_id"`
+	NewGridID int64 `json:"new_grid_id"`
 }

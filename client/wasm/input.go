@@ -52,7 +52,7 @@ func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, paneRect, bool) {
 
 // cellAtScreen returns the integer cell that contains screen point (sx, sy)
 // inside the given pane. Uses floor (which cell is the cursor *in?*), not
-// round — round-half made clicks in the lower-right half of a node miss.
+// round — round-half made clicks in the lower-right half of a tile miss.
 func cellAtScreen(p *pane.Pane, r paneRect, sx, sy float64) (int64, int64) {
 	ps := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
@@ -62,15 +62,15 @@ func cellAtScreen(p *pane.Pane, r paneRect, sx, sy float64) (int64, int64) {
 	return int64(math.Floor(cx)), int64(math.Floor(cy))
 }
 
-// nodeAtCell returns the node in the pane's grid that covers the given cell,
+// tileAtCell returns the tile in the pane's grid that covers the given cell,
 // or nil. Used for click hit-testing.
-func (a *App) nodeAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Node {
+func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 	gid := a.gridIDForPath(p.Path)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return nil
 	}
-	for _, n := range g.Nodes {
+	for _, n := range g.Tiles {
 		if cellX >= n.X && cellX < n.X+n.W && cellY >= n.Y && cellY < n.Y+n.H {
 			nn := n
 			return &nn
@@ -207,7 +207,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		if p.FileMode == "rendered" {
 			a.dragging = &dragState{
 				originPaneID: p.ID,
-				nodeID:       0,
+				tileID:       0,
 				startScreenX: sx,
 				startScreenY: sy,
 				curScreenX:   sx,
@@ -248,7 +248,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
-	n := a.nodeAtCell(p, cellX, cellY)
+	n := a.tileAtCell(p, cellX, cellY)
 	parentCell := cellPx * p.Zoom
 	ps := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
@@ -256,7 +256,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		nodeID:       0,
+		tileID:       0,
 		startScreenX: sx,
 		startScreenY: sy,
 		curScreenX:   sx,
@@ -280,8 +280,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				ratio)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
-			a.dragging.nodeID = child.ID
-			a.dragging.snapshotNode = *child
+			a.dragging.tileID = child.ID
+			a.dragging.snapshotTile = *child
 			a.dragging.cellOffsetX = cxF - float64(child.X)
 			a.dragging.cellOffsetY = cyF - float64(child.Y)
 			a.dragging.originScreenX = tlX
@@ -294,11 +294,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			return nil
 		}
 		// Regular parent-grid drag of the well (or a non-well tile).
-		a.dragging.nodeID = n.ID
+		a.dragging.tileID = n.ID
 		cx, cy := ps.ScreenToCell(sx, sy)
 		a.dragging.cellOffsetX = cx - float64(n.X)
 		a.dragging.cellOffsetY = cy - float64(n.Y)
-		a.dragging.snapshotNode = *n
+		a.dragging.snapshotTile = *n
 		a.dragging.originScreenX, a.dragging.originScreenY = ps.CellToScreen(float64(n.X), float64(n.Y))
 		a.dragging.originPaneRect = r
 	}
@@ -347,7 +347,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// the original at its stored position so we don't see two
 			// copies of the same stone. Template drags also need a
 			// ghost so the synthetic tile follows the cursor.
-			if d.nodeID != 0 || d.isTemplate {
+			if d.tileID != 0 || d.isTemplate {
 				size := d.srcCellSize
 				if size <= 0 {
 					// Template drag: srcCellSize wasn't set by the
@@ -360,15 +360,15 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					}
 				}
 				a.ghost = &ghost{
-					node:              d.snapshotNode,
+					tile:              d.snapshotTile,
 					paneID:            d.originPaneID,
 					screenX:           d.originScreenX,
 					screenY:           d.originScreenY,
 					displayedCellSize: size,
 					targetCellSize:    size,
 				}
-				if d.nodeID != 0 && !d.clone {
-					a.hiddenObjectID = d.snapshotNode.ObjectID
+				if d.tileID != 0 && !d.clone {
+					a.hiddenObjectID = d.snapshotTile.ObjectID
 					a.hiddenPaneID = d.originPaneID
 				}
 			}
@@ -376,7 +376,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			return nil
 		}
 	}
-	if d.nodeID == 0 && !d.isTemplate {
+	if d.tileID == 0 && !d.isTemplate {
 		// Pan the source pane smoothly. In file-rendered mode the drag
 		// scrolls the file's logical content; in grid mode it pans the
 		// parent-grid view.
@@ -405,7 +405,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// cursor crosses pane boundaries or enters/leaves a well's
 		// preview. Position is computed from cursor − cellOffset ×
 		// displayedCellSize so the grab point stays under the cursor.
-		if t, ok := a.dropTargetAt(sx, sy, d.nodeID); ok {
+		if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
 			a.ghost.paneID = t.pane.ID
 			a.ghost.targetCellSize = t.cellSize
 		} else {
@@ -454,10 +454,10 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			return nil
 		}
 		cellX, cellY := cellAtScreen(focused, r, sx, sy)
-		if n := a.nodeAtCell(focused, cellX, cellY); n != nil {
-			a.selectedNodeID[focused.ID] = n.ID
+		if n := a.tileAtCell(focused, cellX, cellY); n != nil {
+			a.selectedTileID[focused.ID] = n.ID
 		} else {
-			delete(a.selectedNodeID, focused.ID)
+			delete(a.selectedTileID, focused.ID)
 		}
 		a.draw()
 		a.scheduleURLUpdate()
@@ -472,7 +472,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	}
 
 	// Pan drag end: just persist viewport state.
-	if d.nodeID == 0 {
+	if d.tileID == 0 {
 		a.scheduleURLUpdate()
 		a.scheduleRootViewSave()
 		a.draw()
@@ -482,7 +482,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// Node move/clone drag. Resolve the drop target — may be the
 	// destination pane's parent grid or, when the cursor is on an open
 	// well, the well's child grid.
-	t, ok := a.dropTargetAt(sx, sy, d.nodeID)
+	t, ok := a.dropTargetAt(sx, sy, d.tileID)
 	if !ok {
 		a.cancelDragSnapBack(d)
 		return nil
@@ -491,7 +491,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 
 	// Same-cell-as-source short-circuit: drop where it already is →
 	// no RPC, just snap back to origin (which is the same place).
-	if t.gridID == d.srcGridID && dropX == d.snapshotNode.X && dropY == d.snapshotNode.Y {
+	if t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y {
 		a.cancelDragSnapBack(d)
 		return nil
 	}
@@ -523,23 +523,23 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	go func() {
 		var status int
 		if d.clone {
-			req := rpc.CloneNodeRequest{
+			req := rpc.CloneTileRequest{
 				Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
-				NodeID:     d.nodeID,
+				TileID:     d.tileID,
 				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
 				X: dropX, Y: dropY,
 			}
-			var resp rpc.NodeResponse
-			status, _ = postJSON("/rpc/CloneNode", req, &resp)
+			var resp rpc.TileResponse
+			status, _ = postJSON("/rpc/CloneTile", req, &resp)
 		} else {
-			req := rpc.MoveNodeRequest{
+			req := rpc.MoveTileRequest{
 				Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
-				NodeID:     d.nodeID,
+				TileID:     d.tileID,
 				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
 				X: dropX, Y: dropY,
 			}
-			var resp rpc.MoveNodeResponse
-			status, _ = postJSON("/rpc/MoveNode", req, &resp)
+			var resp rpc.MoveTileResponse
+			status, _ = postJSON("/rpc/MoveTile", req, &resp)
 		}
 		if status != 200 {
 			// Server rejected the drop. Snap the ghost back to origin so
@@ -554,15 +554,15 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// nodeAtCellInGrid returns the cached node covering (cellX, cellY) in
-// gridID, or nil. Mirrors nodeAtCell but works against an arbitrary
+// nodeAtCellInGrid returns the cached tile covering (cellX, cellY) in
+// gridID, or nil. Mirrors tileAtCell but works against an arbitrary
 // grid id rather than the focused pane's leaf grid.
-func (a *App) nodeAtCellInGrid(gridID, cellX, cellY int64) *rpc.Node {
+func (a *App) nodeAtCellInGrid(gridID, cellX, cellY int64) *rpc.Tile {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
 		return nil
 	}
-	for _, n := range g.Nodes {
+	for _, n := range g.Tiles {
 		if cellX >= n.X && cellX < n.X+n.W && cellY >= n.Y && cellY < n.Y+n.H {
 			nn := n
 			return &nn
@@ -600,7 +600,7 @@ func (a *App) cancelDragSnapBack(d *dragState) {
 }
 
 // snapBackToOrigin starts an animation from the ghost's current position
-// back to the original location of the dragged node. Used both for failed
+// back to the original location of the dragged tile. Used both for failed
 // server commits and for drops outside any pane. Position animates on
 // the anim.Animation; the ghost's displayedCellSize is independently
 // lerped toward srcCellSize each frame so the ghost grows or shrinks
@@ -643,8 +643,8 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 //   - Otherwise: no-op (selection is handled by the bare-click path
 //     in onMouseUp before this is invoked).
 //
-// Edge takes priority over node hits when ascent is available, so the
-// user always has a reachable ascent target even when a node sits
+// Edge takes priority over tile hits when ascent is available, so the
+// user always has a reachable ascent target even when a tile sits
 // along the edge.
 //
 // Returns true if a navigation gesture was performed (caller should skip
@@ -670,7 +670,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 		return false
 	}
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
-	hit := a.nodeAtCell(p, cellX, cellY)
+	hit := a.tileAtCell(p, cellX, cellY)
 	if hit == nil {
 		return false
 	}
@@ -731,7 +731,7 @@ func (a *App) startAscent(p *pane.Pane) {
 	// grid is unreadable, skip past it and try the level above. Falls
 	// back to instant snap-to-root when nothing in the path resolves.
 	level := len(p.Path) - 1
-	var well rpc.Node
+	var well rpc.Tile
 	for ; level >= 0; level-- {
 		parentPath := p.Path[:level]
 		parentGridID := a.gridIDForPath(parentPath)
@@ -740,7 +740,7 @@ func (a *App) startAscent(p *pane.Pane) {
 			a.fetchGrid(parentGridID)
 			continue
 		}
-		w, ok := g.Nodes[p.Path[level]]
+		w, ok := g.Tiles[p.Path[level]]
 		if !ok {
 			continue
 		}
@@ -833,7 +833,7 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
 	p.Path = parentPath
 	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
-	delete(a.selectedNodeID, p.ID)
+	delete(a.selectedTileID, p.ID)
 	a.draw()
 	a.scheduleURLUpdate()
 }
@@ -851,7 +851,7 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 //
 // Total time is split between A and C proportional to motion distance
 // so neither feels rushed. C is zero-length when ViewZoom is unset.
-func (a *App) startDescent(p *pane.Pane, well *rpc.Node) {
+func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
 	r := paneRectFor(a, p)
@@ -913,14 +913,14 @@ func nonzero(x float64) float64 {
 // startFileDescent zooms a pane into a markdown file in a single
 // concurrent pan+zoom motion, then flips to file-editing mode. Unlike
 // well descent, the path is not extended (the file lives in the parent
-// grid as a leaf node) and the meaningful screen area in live mode is
+// grid as a leaf tile) and the meaningful screen area in live mode is
 // the inner box (textarea region), not the full pane — so the descent
 // targets FileOvertake (parent zoom that makes the footprint fit the
 // inner box), one notch further in than the legacy OvertakeZoom. At
 // the path-swap, the footprint screen size = inner-box, and the live
 // FileZoom is reconstructed from the file's intrinsic ViewZoom ratio
 // for visual continuity.
-func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
+func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
 	r := paneRectFor(a, p)
@@ -986,7 +986,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 		a.exitFileFocusInstant(p)
 		return
 	}
-	file, ok := g.Nodes[p.FileFocus]
+	file, ok := g.Tiles[p.FileFocus]
 	if !ok {
 		a.exitFileFocusInstant(p)
 		return
@@ -1005,7 +1005,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	}
 
 	// Save before transition: capture the editor buffer (if text mode is
-	// active) and post UpdateFileContent + SetNodeViewport. The animation
+	// active) and post UpdateFileContent + SetTileViewport. The animation
 	// runs concurrently with the network round-trip; the user doesn't
 	// have to wait.
 	a.saveFileBeforeAscent(p, file)
@@ -1060,13 +1060,13 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 // the preview stays stable across browser resizes. Mutates well in-place
 // (so the local-side ascent transition uses the new values) and patches
 // the cache so the parent's preview renders the new view immediately on
-// path-swap. Posts SetNodeViewport in a goroutine; the server's event
+// path-swap. Posts SetTileViewport in a goroutine; the server's event
 // will catch up the cache.
 //
 // No-op if the user's current center hasn't moved from the well's
 // stored view (rounded to int cells), so casual ascents don't churn
 // the DB.
-func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath []int64) {
+func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []int64) {
 	newViewX := int64(math.Round(p.Cx)) - well.W/2
 	newViewY := int64(math.Round(p.Cy)) - well.H/2
 	r := paneRectFor(a, p)
@@ -1085,8 +1085,8 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath 
 	// before the SSE event from the server arrives.
 	updated := *well
 	a.c.Apply(rpc.Event{
-		Kind:        rpc.EventNodeChanged,
-		NodeChanged: &rpc.NodeChanged{Node: updated},
+		Kind:        rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: updated},
 	})
 
 	// Build a parent-grid view rect from the saved parent state (the
@@ -1110,16 +1110,16 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath 
 
 	wellID := well.ID
 	go func() {
-		req := rpc.SetNodeViewportRequest{
+		req := rpc.SetTileViewportRequest{
 			Path:     rpc.Path{WellIDs: append([]int64(nil), parentPath...)},
 			ViewRect: parentView,
-			NodeID:   wellID,
+			TileID:   wellID,
 			ViewX:    newViewX,
 			ViewY:    newViewY,
 			ViewZoom: newViewZoom,
 		}
-		var resp rpc.NodeResponse
-		_, _ = postJSON("/rpc/SetNodeViewport", req, &resp)
+		var resp rpc.TileResponse
+		_, _ = postJSON("/rpc/SetTileViewport", req, &resp)
 	}()
 }
 
@@ -1127,7 +1127,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Node, parentPath 
 // and the live scroll position back to the server. Failures are silently
 // dropped; the user will see the local state on next descent and the
 // server state otherwise.
-func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
+func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	gid := a.gridIDForPath(p.Path)
 	r := paneRectFor(a, p)
 	pscreen := dragdrop.Pane{
@@ -1159,11 +1159,11 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
 		if hasBuf {
 			req := rpc.UpdateFileContentRequest{
 				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-				NodeID: file.ID, Data: []byte(buf),
+				TileID: file.ID, Data: []byte(buf),
 			}
-			var resp rpc.NodeResponse
+			var resp rpc.TileResponse
 			if _, err := postJSON("/rpc/UpdateFileContent", req, &resp); err == nil {
-				a.c.PutBlob(resp.Node.BlobID, []byte(buf), "text/markdown")
+				a.c.PutBlob(resp.Tile.BlobID, []byte(buf), "text/markdown")
 			}
 		}
 		// Always update view_y + zoom so re-descent restores the
@@ -1171,19 +1171,19 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Node) {
 		// ratio FileZoom / FileOvertake_at_ascent (window-independent).
 		ot := fileOvertakeZoom(r, file.W, file.H)
 		intrinsic := zoomtrans.IntrinsicFromLive(p.FileZoom, ot)
-		vreq := rpc.SetNodeViewportRequest{
+		vreq := rpc.SetTileViewportRequest{
 			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-			NodeID: file.ID, ViewX: 0, ViewY: scrollY, ViewZoom: intrinsic,
+			TileID: file.ID, ViewX: 0, ViewY: scrollY, ViewZoom: intrinsic,
 		}
-		var vresp rpc.NodeResponse
-		_, _ = postJSON("/rpc/SetNodeViewport", vreq, &vresp)
+		var vresp rpc.TileResponse
+		_, _ = postJSON("/rpc/SetTileViewport", vreq, &vresp)
 		a.fetchGrid(gid)
 	}()
 }
 
 // startTemplateDrag arms a template drag from the i'th palette tile.
 // The dragState is set up so the existing ghost machinery treats it
-// like a regular node drag (snapshot node + cell offset), but with
+// like a regular tile drag (snapshot tile + cell offset), but with
 // isTemplate=true so onMouseUp branches to creation instead of move.
 // The palette stays open during the drag — it'll close on commit.
 func (a *App) startTemplateDrag(p *pane.Pane, r paneRect, idx int, sx, sy float64) {
@@ -1202,28 +1202,28 @@ func (a *App) startTemplateDrag(p *pane.Pane, r paneRect, idx int, sx, sy float6
 		curScreenY:     sy,
 		cellOffsetX:    0.5,
 		cellOffsetY:    0.5,
-		snapshotNode:   templateGhostNode(kind),
+		snapshotTile:   templateGhostNode(kind),
 		originScreenX:  tx,
 		originScreenY:  ty,
 		originPaneRect: r,
 	}
 }
 
-// templateGhostNode synthesizes a 1×1 rpc.Node matching the kind, so
+// templateGhostNode synthesizes a 1×1 rpc.Tile matching the kind, so
 // the ghost renderer can paint the in-flight tile using the same
-// drawNode path that a real node would use.
-func templateGhostNode(kind templateKind) rpc.Node {
+// drawNode path that a real tile would use.
+func templateGhostNode(kind templateKind) rpc.Tile {
 	switch kind {
 	case tplWell:
-		return rpc.Node{Type: "well", W: 1, H: 1}
+		return rpc.Tile{Type: "well", W: 1, H: 1}
 	case tplMarkdown:
-		return rpc.Node{Type: "file", MimeType: "text/markdown", W: 1, H: 1}
+		return rpc.Tile{Type: "file", MimeType: "text/markdown", W: 1, H: 1}
 	case tplURL:
-		return rpc.Node{Type: "file", MimeType: "text/uri-list", W: 1, H: 1}
+		return rpc.Tile{Type: "file", MimeType: "text/uri-list", W: 1, H: 1}
 	case tplUpload:
-		return rpc.Node{Type: "file", MimeType: "application/octet-stream", W: 1, H: 1}
+		return rpc.Tile{Type: "file", MimeType: "application/octet-stream", W: 1, H: 1}
 	}
-	return rpc.Node{}
+	return rpc.Tile{}
 }
 
 // commitTemplateDrop resolves the template drag at release. Off-pane
@@ -1245,7 +1245,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	dropY := dragdrop.SnapToCell(dcy - d.cellOffsetY)
 
 	// Bail early if the drop cell would overlap an existing node.
-	if a.nodeAtCell(destPane, dropX, dropY) != nil {
+	if a.tileAtCell(destPane, dropX, dropY) != nil {
 		a.cancelDragSnapBack(d)
 		return
 	}
@@ -1326,7 +1326,7 @@ func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []b
 				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
 				GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 			}
-			var resp rpc.NodeResponse
+			var resp rpc.TileResponse
 			_, _ = postJSON("/rpc/CreateWell", req, &resp)
 		} else {
 			req := rpc.CreateFileRequest{
@@ -1334,7 +1334,7 @@ func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []b
 				GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 				MimeType: mime, Data: data,
 			}
-			var resp rpc.NodeResponse
+			var resp rpc.TileResponse
 			_, _ = postJSON("/rpc/CreateFile", req, &resp)
 		}
 		a.fetchGrid(gid)
@@ -1398,7 +1398,7 @@ func (a *App) uploadFileBytesAtCell(p *pane.Pane, r paneRect, file js.Value, mim
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		MimeType: mime, Data: data,
 	}
-	var resp rpc.NodeResponse
+	var resp rpc.TileResponse
 	_, _ = postJSON("/rpc/CreateFile", req, &resp)
 	a.fetchGrid(gid)
 }

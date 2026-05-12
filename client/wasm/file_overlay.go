@@ -52,7 +52,7 @@ func fileMargin(r paneRect) float64 {
 	return m
 }
 
-// fileOvertakeZoom returns the parent zoom at which the file node's
+// fileOvertakeZoom returns the parent zoom at which the file tile's
 // footprint (W × H cells) exactly fits inside the inner-box dimensions
 // (textarea region) of pane rect r — the smaller inner-box dim binds.
 //
@@ -183,7 +183,7 @@ func (a *App) ensureFileTextarea() {
 
 	a.fileTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the browser scroll position onto the focused pane so
-		// SetNodeViewport on ascent persists the right value.
+		// SetTileViewport on ascent persists the right value.
 		p := a.tree.FocusedPane()
 		if p == nil || p.FileFocus == 0 {
 			return nil
@@ -318,7 +318,7 @@ func (a *App) refreshFileOverlay() {
 	gid := a.gridIDForPath(p.Path)
 	g, ok := a.c.Grid(gid)
 	if ok {
-		if file, ok := g.Nodes[p.FileFocus]; ok {
+		if file, ok := g.Tiles[p.FileFocus]; ok {
 			if blob, ok := a.c.Blob(file.BlobID); ok {
 				if ta.Get("value").String() == "" {
 					ta.Set("value", string(blob.Data))
@@ -436,7 +436,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 // user's typed content rather than the stale (pre-edit) blob. The
 // RPC then runs async; on completion the cache is also updated under
 // the new (content-hashed) BlobID, and the SSE NodeChanged event
-// repoints the cached node at it.
+// repoints the cached tile at it.
 func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
 		return
@@ -447,7 +447,7 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	file, ok := g.Nodes[p.FileFocus]
+	file, ok := g.Tiles[p.FileFocus]
 	if !ok {
 		return
 	}
@@ -466,11 +466,11 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	go func() {
 		req := rpc.UpdateFileContentRequest{
 			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-			NodeID: file.ID, Data: []byte(buf),
+			TileID: file.ID, Data: []byte(buf),
 		}
-		var resp rpc.NodeResponse
+		var resp rpc.TileResponse
 		if _, err := postJSON("/rpc/UpdateFileContent", req, &resp); err == nil {
-			a.c.PutBlob(resp.Node.BlobID, []byte(buf), "text/markdown")
+			a.c.PutBlob(resp.Tile.BlobID, []byte(buf), "text/markdown")
 		}
 	}()
 }

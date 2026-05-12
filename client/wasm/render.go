@@ -196,7 +196,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 
 	if gridOK {
 		cellSize := pscreen.CellPx * pscreen.Zoom
-		selected := a.selectedNodeID[p.ID]
+		selected := a.selectedTileID[p.ID]
 		// In live file mode the pane is "inside" the file: skip the
 		// parent-grid node walk and render the focused file in the
 		// inner box (inset by the file margin so the surrounding grid
@@ -207,11 +207,11 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 			ix, iy, iw, ih := fileInnerBox(p, r)
 			a.cctx.Set("fillStyle", colorFileInnerBg)
 			a.cctx.Call("fillRect", ix, iy, iw, ih)
-			if file, ok := g.Nodes[p.FileFocus]; ok && file.Type == "file" && file.MimeType == "text/markdown" {
+			if file, ok := g.Tiles[p.FileFocus]; ok && file.Type == "file" && file.MimeType == "text/markdown" {
 				a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
 			}
 		} else {
-			for _, n := range g.Nodes {
+			for _, n := range g.Tiles {
 				if a.hiddenObjectID != "" && a.hiddenPaneID == p.ID && n.ObjectID == a.hiddenObjectID {
 					continue
 				}
@@ -224,9 +224,9 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 				nn := n
 				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected)
 			}
-			a.drawEdgeIndicators(g.Nodes, pscreen, r)
+			a.drawEdgeIndicators(g.Tiles, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
-				gn := a.ghost.node
+				gn := a.ghost.tile
 				gcs := a.ghost.displayedCellSize
 				if gcs <= 0 {
 					gcs = cellSize
@@ -373,7 +373,7 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
 	if n.Type == "file" && n.MimeType == "text/markdown" {
 		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, r, selected)
 		return
@@ -448,7 +448,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float6
 // the focused pane (the textarea overlay handles that one). Other
 // panes still render the source as canvas text so the user has
 // continuity in non-focused split siblings.
-func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Node, x, y, w, h float64) {
+func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	mode := p.FileMode
 	if mode == "" {
 		mode = "rendered"
@@ -482,7 +482,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Node, x, y, w, h float64) 
 	a.cctx.Call("restore")
 }
 
-// drawMarkdownNode renders a markdown file node at (x, y, w, h).
+// drawMarkdownNode renders a markdown file tile at (x, y, w, h).
 //
 // Two distinct rendering modes:
 //
@@ -498,7 +498,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Node, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
 	mode := "text"
 	if last, ok := a.fileLastMode[n.ID]; ok && last != "" {
 		mode = last
@@ -837,12 +837,12 @@ func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64
 }
 
 // paneFocusedOnFile returns any pane currently descended into the given
-// file node id, or nil if none. Used by the renderer to pull the live
+// file tile id, or nil if none. Used by the renderer to pull the live
 // scroll/mode state instead of the saved view_y.
-func (a *App) paneFocusedOnFile(fileNodeID int64) *pane.Pane {
+func (a *App) paneFocusedOnFile(fileTileID int64) *pane.Pane {
 	var found *pane.Pane
 	a.tree.Walk(func(p *pane.Pane) {
-		if p.FileFocus == fileNodeID {
+		if p.FileFocus == fileTileID {
 			found = p
 		}
 	})
@@ -872,14 +872,14 @@ func (a *App) fetchBlob(blobID int64) {
 	}()
 }
 
-// drawChildPreview paints the cached child grid's nodes inside a clipped
+// drawChildPreview paints the cached child grid's tiles inside a clipped
 // region. Each child cell renders at previewCell pixels. centerCellX/Y is
 // the child cell coordinate that should land at (centerScreenX, centerScreenY).
 //
 // Child wells in the preview render flat (no recursive preview) — that is
 // the "one level only" rule.
 //
-// hiddenObjectID, if non-empty, suppresses any child node with that
+// hiddenObjectID, if non-empty, suppresses any child tile with that
 // ObjectID — used so that a tile being dragged out of a well preview
 // disappears from its original spot while the ghost flies.
 func drawChildPreview(c js.Value, child *cache.Grid,
@@ -887,7 +887,7 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 	clipX, clipY, clipW, clipH float64,
 	hiddenObjectID string,
 ) {
-	for _, n := range child.Nodes {
+	for _, n := range child.Tiles {
 		if hiddenObjectID != "" && n.ObjectID == hiddenObjectID {
 			continue
 		}
@@ -905,11 +905,11 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 	}
 }
 
-// drawNode renders one node into the canvas at the given screen rectangle.
-// `selected` highlights the node with a dedicated outline color. This is
+// drawNode renders one tile into the canvas at the given screen rectangle.
+// `selected` highlights the tile with a dedicated outline color. This is
 // the "flat" renderer used for nested previews (no recursion) and for
-// non-well nodes; the parent-grid renderer is drawNodeWithPreview.
-func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
+// non-well tiles; the parent-grid renderer is drawNodeWithPreview.
+func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 	switch {
 	case n.Type == "well" && n.Capped:
 		c.Set("fillStyle", colorCapped)
@@ -960,10 +960,10 @@ func drawNode(c js.Value, n *rpc.Node, x, y, w, h float64, selected bool) {
 }
 
 // drawEdgeIndicators paints small markers along the pane's inner edge for
-// every node whose footprint lies entirely outside the visible viewport.
+// every tile whose footprint lies entirely outside the visible viewport.
 // Each marker is positioned where the ray from the viewport center to the
-// node's center crosses the pane's inset rectangle, and points outward.
-func (a *App) drawEdgeIndicators(nodes map[int64]rpc.Node, ps dragdrop.Pane, r paneRect) {
+// tile's center crosses the pane's inset rectangle, and points outward.
+func (a *App) drawEdgeIndicators(nodes map[int64]rpc.Tile, ps dragdrop.Pane, r paneRect) {
 	cellSize := ps.CellPx * ps.Zoom
 	const inset = 12.0
 	innerL := r.X + inset

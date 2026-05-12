@@ -73,7 +73,7 @@ func TestSubscribeEventsReceivesPublish(t *testing.T) {
 	}
 	select {
 	case ev := <-ch:
-		if ev.Kind != rpc.EventNodeChanged {
+		if ev.Kind != rpc.EventTileChanged {
 			t.Errorf("kind = %v, want NodeChanged", ev.Kind)
 		}
 	default:

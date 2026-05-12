@@ -45,13 +45,13 @@ func (s Side) Direction() Direction {
 // (well row ids) from root to the currently-viewed grid. Cx, Cy are the
 // viewport center in cells; Zoom is the pane's zoom multiplier.
 //
-// FileFocus, when nonzero, marks the pane as "descended into" a file node:
+// FileFocus, when nonzero, marks the pane as "descended into" a file tile:
 // the pane still sits in the parent grid (Path is unchanged), but the
 // chrome and input semantics switch to file-editing mode. FileMode picks
 // between "text" (raw markdown in a textarea overlay) and "rendered" (the
 // markdown layout rendered into the canvas). FileScrollY is the vertical
 // scroll inside the file's interior in logical pixels; mirrored to the
-// file node's view_y on save.
+// file tile's view_y on save.
 type Pane struct {
 	ID   string
 	Path []int64
@@ -79,29 +79,29 @@ func (p *Pane) Clone(newID string) *Pane {
 	return &c
 }
 
-// Split is an internal node in the pane tree. Ratio is in [0, 1]; A is the
+// Split is an internal tile in the pane tree. Ratio is in [0, 1]; A is the
 // top/left child, B is the bottom/right.
 type Split struct {
 	Dir   Direction
 	Ratio float64
-	A     Node
-	B     Node
+	A     TreeNode
+	B     TreeNode
 }
 
-// Node is the sum type of pane-tree nodes. Exactly one of *Pane or *Split
+// TreeNode is the sum type of pane-tree tiles. Exactly one of *Pane or *Split
 // is non-nil. We model it explicitly rather than as an interface to keep
 // JSON marshaling straightforward.
-type Node struct {
+type TreeNode struct {
 	Pane  *Pane
 	Split *Split
 }
 
-// IsLeaf reports whether the node is a leaf pane.
-func (n Node) IsLeaf() bool { return n.Pane != nil }
+// IsLeaf reports whether the tile is a leaf pane.
+func (n TreeNode) IsLeaf() bool { return n.Pane != nil }
 
 // Tree is the whole pane state, plus the id of the keyboard-focused pane.
 type Tree struct {
-	Root  Node
+	Root  TreeNode
 	Focus string
 	// nextID is incremented on each split to mint fresh pane ids.
 	nextID int
@@ -111,7 +111,7 @@ type Tree struct {
 func NewTree() *Tree {
 	t := &Tree{nextID: 1}
 	pane := &Pane{ID: "p1", Zoom: 1.0}
-	t.Root = Node{Pane: pane}
+	t.Root = TreeNode{Pane: pane}
 	t.Focus = pane.ID
 	return t
 }
@@ -121,7 +121,7 @@ func (t *Tree) Walk(fn func(*Pane)) {
 	walk(t.Root, fn)
 }
 
-func walk(n Node, fn func(*Pane)) {
+func walk(n TreeNode, fn func(*Pane)) {
 	if n.IsLeaf() {
 		fn(n.Pane)
 		return
@@ -208,7 +208,7 @@ func clamp01(x float64) float64 {
 
 // findParentSplit returns the *Split whose direct child contains the
 // pane with id targetID, or nil if not found.
-func findParentSplit(n *Node, targetID string) *Split {
+func findParentSplit(n *TreeNode, targetID string) *Split {
 	if n.IsLeaf() {
 		return nil
 	}
@@ -235,11 +235,11 @@ func (t *Tree) Split(dir Direction) (*Pane, error) {
 
 	// Find the parent of the focused pane and replace it with a Split.
 	var replaced bool
-	t.Root, replaced = replacePane(t.Root, focused.ID, Node{
+	t.Root, replaced = replacePane(t.Root, focused.ID, TreeNode{
 		Split: &Split{
 			Dir: dir, Ratio: 0.5,
-			A: Node{Pane: focused},
-			B: Node{Pane: newPane},
+			A: TreeNode{Pane: focused},
+			B: TreeNode{Pane: newPane},
 		},
 	})
 	if !replaced {
@@ -249,8 +249,8 @@ func (t *Tree) Split(dir Direction) (*Pane, error) {
 }
 
 // replacePane substitutes the leaf pane with id targetID for replacement.
-// Returns the new node and whether a replacement occurred.
-func replacePane(n Node, targetID string, replacement Node) (Node, bool) {
+// Returns the new tile and whether a replacement occurred.
+func replacePane(n TreeNode, targetID string, replacement TreeNode) (TreeNode, bool) {
 	if n.IsLeaf() {
 		if n.Pane.ID == targetID {
 			return replacement, true
@@ -294,7 +294,7 @@ func (t *Tree) Close() error {
 
 // dropPane returns the modified tree, the id of a pane to focus next (the
 // surviving sibling), and ok=true if the target was found.
-func dropPane(n Node, targetID string) (Node, string, bool) {
+func dropPane(n TreeNode, targetID string) (TreeNode, string, bool) {
 	if n.IsLeaf() {
 		return n, "", false
 	}
@@ -316,7 +316,7 @@ func dropPane(n Node, targetID string) (Node, string, bool) {
 	return n, "", false
 }
 
-func anyLeafID(n Node) string {
+func anyLeafID(n TreeNode) string {
 	if n.IsLeaf() {
 		return n.Pane.ID
 	}
@@ -350,9 +350,9 @@ func (t *Tree) CollapseSplit(s *Split, dropA bool) error {
 	return nil
 }
 
-// findSplitHolder returns a pointer to the *Node slot whose Split ==
+// findSplitHolder returns a pointer to the *TreeNode slot whose Split ==
 // target, or nil if not found.
-func findSplitHolder(n *Node, target *Split) *Node {
+func findSplitHolder(n *TreeNode, target *Split) *TreeNode {
 	if n.IsLeaf() {
 		return nil
 	}
@@ -388,10 +388,10 @@ func (t *Tree) Swap(idA, idB string) error {
 	return nil
 }
 
-// findPaneNode returns a pointer to the *Node slot in the tree that
+// findPaneNode returns a pointer to the *TreeNode slot in the tree that
 // contains the leaf with id targetID, or nil if not found. Used by
 // Swap to exchange positions without rebuilding the tree.
-func findPaneNode(n *Node, targetID string) *Node {
+func findPaneNode(n *TreeNode, targetID string) *TreeNode {
 	if n.IsLeaf() {
 		if n.Pane.ID == targetID {
 			return n
@@ -427,7 +427,7 @@ func (t *Tree) SetRatio(paneID string, ratio float64) bool {
 	return setRatio(&t.Root, paneID, ratio)
 }
 
-func setRatio(n *Node, paneID string, ratio float64) bool {
+func setRatio(n *TreeNode, paneID string, ratio float64) bool {
 	if n.IsLeaf() {
 		return false
 	}

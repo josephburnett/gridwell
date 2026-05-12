@@ -170,7 +170,7 @@ func TestChildPreviewCenterAlignsWithViewCenter(t *testing.T) {
 	}
 }
 
-func TestNodeContainsCell(t *testing.T) {
+func TestTileContainsCell(t *testing.T) {
 	cases := []struct {
 		x, y, w, h, cx, cy int64
 		want               bool
@@ -187,9 +187,9 @@ func TestNodeContainsCell(t *testing.T) {
 		{-2, -3, 2, 2, 0, -2, false},
 	}
 	for _, c := range cases {
-		got := NodeContainsCell(c.x, c.y, c.w, c.h, c.cx, c.cy)
+		got := TileContainsCell(c.x, c.y, c.w, c.h, c.cx, c.cy)
 		if got != c.want {
-			t.Errorf("NodeContainsCell(%d,%d,%d,%d,%d,%d) = %v, want %v",
+			t.Errorf("TileContainsCell(%d,%d,%d,%d,%d,%d) = %v, want %v",
 				c.x, c.y, c.w, c.h, c.cx, c.cy, got, c.want)
 		}
 	}

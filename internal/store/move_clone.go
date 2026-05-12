@@ -8,20 +8,20 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// MoveNode moves a node either within its grid or across grids. When the
+// MoveTile moves a tile either within its grid or across grids. When the
 // source grid and dest grid differ, both must be reachable via valid paths
 // (req.Path for source, req.DestPath for dest), and the user must have write
 // permission on both grids. CoW fork is performed on each path independently
 // when needed.
 //
 // Cross-grid move is the "teleport" gesture from §4.2.
-func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeRequest) (*rpc.Node, error) {
-	var out *rpc.Node
+func (s *Store) MoveTile(ctx context.Context, userID int64, req *rpc.MoveTileRequest) (*rpc.Tile, error) {
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		// Load the source node up front so we can validate its current
 		// position against the source view rect.
-		n, err := s.loadNode(ctx, tx, req.NodeID)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -44,7 +44,7 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 		}
 		srcGrid := srcSeq.grids[len(srcSeq.grids)-1]
 		if n.GridID != srcGrid {
-			return fmt.Errorf("%w: node %d not in source path leaf grid %d", ErrInvalidPath, req.NodeID, srcGrid)
+			return fmt.Errorf("%w: node %d not in source path leaf grid %d", ErrInvalidPath, req.TileID, srcGrid)
 		}
 
 		// Permissions: w on source grid (for removal) and w on dest grid (for insertion).
@@ -65,12 +65,12 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 
 		// Source-side fork: ensure the source path leaf is private, since
 		// we're about to remove a node from it.
-		srcPre, err := s.preWrite(ctx, tx, userID, req.Path, req.NodeID)
+		srcPre, err := s.preWrite(ctx, tx, userID, req.Path, req.TileID)
 		if err != nil {
 			return err
 		}
 		events = append(events, srcPre.Events...)
-		nodeID := srcPre.TargetNodeID
+		tileID := srcPre.TargetTileID
 		srcGrid = srcPre.GridID
 
 		// Dest-side: validate dest path and fork if needed. If dest is the
@@ -106,7 +106,7 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 		// down from root.
 		if n.Type == "well" {
 			for _, wid := range req.DestPath.WellIDs {
-				if wid == nodeID {
+				if wid == tileID {
 					return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
 				}
 			}
@@ -116,7 +116,7 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 		// dest is the same grid as src.
 		var excludes []int64
 		if dstGrid == srcGrid {
-			excludes = []int64{nodeID}
+			excludes = []int64{tileID}
 		}
 		over, err := overlapsExisting(ctx, tx, dstGrid, req.X, req.Y, n.W, n.H, excludes...)
 		if err != nil {
@@ -128,19 +128,19 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 
 		// Apply: update grid_id (if moving across) and (x, y).
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
-			dstGrid, req.X, req.Y, s.now().Unix(), nodeID); err != nil {
+			`UPDATE tiles SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
+			dstGrid, req.X, req.Y, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		out, err = s.loadNode(ctx, tx, nodeID)
+		out, err = s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
 		// Cross-grid move: fire NodeRemoved on src, NodeChanged on dst.
 		if dstGrid != srcGrid {
-			events = append(events, rpc.Event{Kind: rpc.EventNodeRemoved, NodeRemoved: &rpc.NodeRemoved{GridID: srcGrid, NodeID: nodeID}})
+			events = append(events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: srcGrid, TileID: tileID}})
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -152,14 +152,14 @@ func (s *Store) MoveNode(ctx context.Context, userID int64, req *rpc.MoveNodeReq
 	return out, nil
 }
 
-// CloneNode duplicates a node into a destination grid at (x, y). Inherits the
+// CloneTile duplicates a tile into a destination grid at (x, y). Inherits the
 // source's owner/group/mode (spec §7.6). For wells, the clone shares the
 // child grid (CoW deferred to the first write through either clone).
-func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeRequest) (*rpc.Node, error) {
-	var out *rpc.Node
+func (s *Store) CloneTile(ctx context.Context, userID int64, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadNode(ctx, tx, req.NodeID)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 			return err
 		}
 		if n.GridID != srcSeq.grids[len(srcSeq.grids)-1] {
-			return fmt.Errorf("%w: node %d not in source path leaf grid", ErrInvalidPath, req.NodeID)
+			return fmt.Errorf("%w: node %d not in source path leaf grid", ErrInvalidPath, req.TileID)
 		}
 		dstSeq, err := s.buildGridSequence(ctx, tx, userID, req.DestPath)
 		if err != nil {
@@ -190,7 +190,7 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 
 		// Permissions: write on the SOURCE NODE (clone privilege), and
 		// write on the DEST GRID. Spec §7.3.
-		_, srcWrite, err := s.permForNode(ctx, tx, userID, req.NodeID)
+		_, srcWrite, err := s.permForTile(ctx, tx, userID, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -242,7 +242,7 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 			cappedInt = 1
 		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 				child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
 				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -266,11 +266,11 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 				return err
 			}
 		}
-		out, err = s.loadNode(ctx, tx, newID)
+		out, err = s.loadTile(ctx, tx, newID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -282,15 +282,15 @@ func (s *Store) CloneNode(ctx context.Context, userID int64, req *rpc.CloneNodeR
 	return out, nil
 }
 
-// UpdateFileContent replaces a file node's blob with new bytes.
-func (s *Store) UpdateFileContent(ctx context.Context, userID int64, req *rpc.UpdateFileContentRequest) (*rpc.Node, error) {
+// UpdateFileContent replaces a file tile's blob with new bytes.
+func (s *Store) UpdateFileContent(ctx context.Context, userID int64, req *rpc.UpdateFileContentRequest) (*rpc.Tile, error) {
 	if int64(len(req.Data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: file too large", ErrInvalidArgument)
 	}
-	var out *rpc.Node
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadNode(ctx, tx, req.NodeID)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -304,14 +304,14 @@ func (s *Store) UpdateFileContent(ctx context.Context, userID int64, req *rpc.Up
 		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
-		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
+		_, write, err := s.permForTile(ctx, tx, userID, req.TileID)
 		if err != nil {
 			return err
 		}
 		if !write {
 			return ErrPermissionDenied
 		}
-		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.NodeID)
+		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -337,15 +337,15 @@ func (s *Store) UpdateFileContent(ctx context.Context, userID int64, req *rpc.Up
 		}
 
 		// Reload the (post-fork) node to get its current blob_id.
-		current, err := s.loadNode(ctx, tx, pre.TargetNodeID)
+		current, err := s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
 		}
 		oldBlobID := current.BlobID
 
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET blob_id = ?, updated_at = ? WHERE id = ?`,
-			newBlobID, s.now().Unix(), pre.TargetNodeID); err != nil {
+			`UPDATE tiles SET blob_id = ?, updated_at = ? WHERE id = ?`,
+			newBlobID, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
 		// Adjust blob refcounts. If old == new (no-op write), skip.
@@ -358,11 +358,11 @@ func (s *Store) UpdateFileContent(ctx context.Context, userID int64, req *rpc.Up
 				return err
 			}
 		}
-		out, err = s.loadNode(ctx, tx, pre.TargetNodeID)
+		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {

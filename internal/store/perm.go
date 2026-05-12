@@ -63,13 +63,13 @@ func (s *Store) permForGrid(ctx context.Context, q queryRower, userID, gridID in
 	return r, w, err
 }
 
-// permForNode loads the named node and returns (read, write) for userID
+// permForTile loads the named tile and returns (read, write) for userID
 // against it.
-func (s *Store) permForNode(ctx context.Context, q queryRower, userID, nodeID int64) (read, write bool, err error) {
+func (s *Store) permForTile(ctx context.Context, q queryRower, userID, tileID int64) (read, write bool, err error) {
 	var owner, group int64
 	var mode int32
 	err = q.QueryRowContext(ctx,
-		`SELECT owner_id, group_id, mode FROM nodes WHERE id = ?`, nodeID,
+		`SELECT owner_id, group_id, mode FROM tiles WHERE id = ?`, tileID,
 	).Scan(&owner, &group, &mode)
 	if err == sql.ErrNoRows {
 		return false, false, ErrNotFound

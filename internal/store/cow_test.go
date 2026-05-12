@@ -8,7 +8,7 @@ import (
 )
 
 // TestCloneNodeCreatesSecondPointer verifies that cloning a well produces a
-// second well node sharing the same child grid (refcount 2 on the child)
+// second well tile sharing the same child grid (refcount 2 on the child)
 // without copying the child's contents.
 func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	s := newTestStore(t)
@@ -31,8 +31,8 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clone, err := s.CloneNode(ctx, u.ID, &rpc.CloneNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID,
+	clone, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 10, Y: 0,
 	})
@@ -82,8 +82,8 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneNode(ctx, u.ID, &rpc.CloneNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w.ID,
+	clone, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 10, Y: 0,
 	})
@@ -92,9 +92,9 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	}
 
 	// Write through clone's child (fork should occur).
-	resized, err := s.ResizeNode(ctx, u.ID, &rpc.ResizeNodeRequest{
+	resized, err := s.ResizeTile(ctx, u.ID, &rpc.ResizeTileRequest{
 		Path: rpc.Path{WellIDs: []int64{clone.ID}}, ViewRect: largeView(),
-		NodeID: inner.ID, W: 3, H: 3,
+		TileID: inner.ID, W: 3, H: 3,
 	})
 	if err != nil {
 		t.Fatalf("resize through clone: %v", err)
@@ -116,15 +116,15 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(origChildContents.Nodes) != 1 {
-		t.Fatalf("original child has %d nodes, want 1", len(origChildContents.Nodes))
+	if len(origChildContents.Tiles) != 1 {
+		t.Fatalf("original child has %d nodes, want 1", len(origChildContents.Tiles))
 	}
-	if origChildContents.Nodes[0].W != 1 || origChildContents.Nodes[0].H != 1 {
-		t.Errorf("original child node was mutated: %+v", origChildContents.Nodes[0])
+	if origChildContents.Tiles[0].W != 1 || origChildContents.Tiles[0].H != 1 {
+		t.Errorf("original child node was mutated: %+v", origChildContents.Tiles[0])
 	}
 
 	// The clone's child grid should now be a different id from w's.
-	cloneAfter, err := s.loadNode(ctx, s.db, clone.ID)
+	cloneAfter, err := s.loadTile(ctx, s.db, clone.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,8 +171,8 @@ func TestRefcountInvariant(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Clone w1 into root.
-	clone, err := s.CloneNode(ctx, u.ID, &rpc.CloneNodeRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), NodeID: w1.ID,
+	clone, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: w1.ID,
 		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 4, Y: 0,
 	})
@@ -197,7 +197,7 @@ func TestRefcountInvariant(t *testing.T) {
 }
 
 // verifyRefcounts asserts the refcount invariant globally. Every grid's
-// refcount should equal: (number of node rows with child_grid_id = grid.id)
+// refcount should equal: (number of tile rows with child_grid_id = grid.id)
 // plus (1 if any user.root_grid_id = grid.id).
 //
 // We collect all rows up front (fully materializing each Rows before issuing
@@ -239,7 +239,7 @@ func verifyRefcounts(t *testing.T, s *Store) {
 
 	for _, g := range grids {
 		var pointers, asRoot int64
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM nodes WHERE child_grid_id = ?`, g.id).Scan(&pointers); err != nil {
+		if err := s.db.QueryRow(`SELECT COUNT(1) FROM tiles WHERE child_grid_id = ?`, g.id).Scan(&pointers); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.db.QueryRow(`SELECT COUNT(1) FROM users WHERE root_grid_id = ?`, g.id).Scan(&asRoot); err != nil {
@@ -252,7 +252,7 @@ func verifyRefcounts(t *testing.T, s *Store) {
 	}
 	for _, b := range blobs {
 		var n int64
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM nodes WHERE blob_id = ?`, b.id).Scan(&n); err != nil {
+		if err := s.db.QueryRow(`SELECT COUNT(1) FROM tiles WHERE blob_id = ?`, b.id).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		if b.refcount != n {

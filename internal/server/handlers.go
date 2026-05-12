@@ -121,7 +121,7 @@ func (s *Server) createWell(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) createFile(w http.ResponseWriter, r *http.Request) {
@@ -139,79 +139,79 @@ func (s *Server) createFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
-func (s *Server) moveNode(w http.ResponseWriter, r *http.Request) {
+func (s *Server) moveTile(w http.ResponseWriter, r *http.Request) {
 	uid, ok := uidOrError(w, r)
 	if !ok {
 		return
 	}
-	var req rpc.MoveNodeRequest
+	var req rpc.MoveTileRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.MoveNode(r.Context(), uid, &req)
+	n, err := s.store.MoveTile(r.Context(), uid, &req)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.MoveNodeResponse{Node: *n})
+	writeJSON(w, &rpc.MoveTileResponse{Tile: *n})
 }
 
-func (s *Server) cloneNode(w http.ResponseWriter, r *http.Request) {
+func (s *Server) cloneTile(w http.ResponseWriter, r *http.Request) {
 	uid, ok := uidOrError(w, r)
 	if !ok {
 		return
 	}
-	var req rpc.CloneNodeRequest
+	var req rpc.CloneTileRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.CloneNode(r.Context(), uid, &req)
+	n, err := s.store.CloneTile(r.Context(), uid, &req)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
-func (s *Server) resizeNode(w http.ResponseWriter, r *http.Request) {
+func (s *Server) resizeTile(w http.ResponseWriter, r *http.Request) {
 	uid, ok := uidOrError(w, r)
 	if !ok {
 		return
 	}
-	var req rpc.ResizeNodeRequest
+	var req rpc.ResizeTileRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.ResizeNode(r.Context(), uid, &req)
+	n, err := s.store.ResizeTile(r.Context(), uid, &req)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
-func (s *Server) setNodeViewport(w http.ResponseWriter, r *http.Request) {
+func (s *Server) setTileViewport(w http.ResponseWriter, r *http.Request) {
 	uid, ok := uidOrError(w, r)
 	if !ok {
 		return
 	}
-	var req rpc.SetNodeViewportRequest
+	var req rpc.SetTileViewportRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.SetNodeViewport(r.Context(), uid, &req)
+	n, err := s.store.SetTileViewport(r.Context(), uid, &req)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) setGridDefaultView(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +247,7 @@ func (s *Server) capWell(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) redigWell(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +265,7 @@ func (s *Server) redigWell(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) fillWell(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +300,7 @@ func (s *Server) updateFileContent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.NodeResponse{Node: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) ascendAtRoot(w http.ResponseWriter, r *http.Request) {

@@ -65,7 +65,7 @@ func SnapToCell(c float64) int64 {
 // pane's smaller dimension so the band never swallows a tiny pane.
 //
 // Used by the client to decide whether a right-click is "on the edge"
-// (which means ascend) vs. "in the middle" (which targets a node or
+// (which means ascend) vs. "in the middle" (which targets a tile or
 // is a no-op).
 func EdgeBand(p Pane) float64 {
 	smaller := p.ScreenW
@@ -173,10 +173,10 @@ func (cp ChildPreview) CellToScreen(cx, cy float64) (float64, float64) {
 	return cp.OriginX + cx*cp.CellPx, cp.OriginY + cy*cp.CellPx
 }
 
-// NodeContainsCell reports whether the cell (cx, cy) lies within the
+// TileContainsCell reports whether the cell (cx, cy) lies within the
 // rectangle (x, y, w, h). Used to decide whether a cursor's child-cell
 // hits a tile inside a well preview.
-func NodeContainsCell(x, y, w, h, cx, cy int64) bool {
+func TileContainsCell(x, y, w, h, cx, cy int64) bool {
 	return cx >= x && cx < x+w && cy >= y && cy < y+h
 }
 

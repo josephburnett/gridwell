@@ -60,8 +60,8 @@ const PreviewFactor = 8.0
 const DefaultWellViewZoom = 1.0 / PreviewFactor
 
 // EffectiveViewZoom returns stored if positive, else fallback. This is
-// the one place "unvisited node" branching lives — every read site
-// passes its node's stored ViewZoom and the appropriate default,
+// the one place "unvisited tile" branching lives — every read site
+// passes its tile's stored ViewZoom and the appropriate default,
 // then feeds the result into LiveFromIntrinsic or directly into a
 // preview-cell formula (parentCell × ratio).
 //

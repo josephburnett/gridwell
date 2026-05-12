@@ -28,14 +28,14 @@ const MaxBlobBytes = 16 * 1024 * 1024
 // CreateWell creates a new well at (x,y) with footprint (w,h) inside the leaf
 // grid of req.Path. The well points at a fresh empty child grid that
 // inherits the parent grid's owner/group/mode.
-func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWellRequest) (*rpc.Node, error) {
+func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
 	if !req.ViewRect.Intersects(req.X, req.Y, req.W, req.H) {
 		return nil, ErrLocality
 	}
-	var out *rpc.Node
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		seq, err := s.buildGridSequence(ctx, tx, userID, req.Path)
@@ -92,7 +92,7 @@ func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWel
 		// Create the well node.
 		objID := s.newID()
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y,
 				child_grid_id, capped, owner_id, group_id, mode, created_at, updated_at)
 			VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, ?, 0, ?, ?, ?, ?, ?)`,
 			objID, gridID, req.X, req.Y, req.W, req.H, childGridID,
@@ -100,15 +100,15 @@ func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWel
 		if err != nil {
 			return fmt.Errorf("insert well: %w", err)
 		}
-		nodeID, err := res.LastInsertId()
+		tileID, err := res.LastInsertId()
 		if err != nil {
 			return err
 		}
-		out, err = s.loadNode(ctx, tx, nodeID)
+		out, err = s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -121,9 +121,9 @@ func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWel
 }
 
 // CreateFile uploads bytes as a content-addressed blob and creates a file
-// node referencing it. If the blob already exists (same sha256), it is
+// tile referencing it. If the blob already exists (same sha256), it is
 // reused with refcount bumped.
-func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFileRequest) (*rpc.Node, error) {
+func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFileRequest) (*rpc.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
@@ -140,7 +140,7 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 	// Hash outside the transaction — it's the slow step and pure.
 	hash := hashBytes(req.Data)
 
-	var out *rpc.Node
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		seq, err := s.buildGridSequence(ctx, tx, userID, req.Path)
@@ -199,7 +199,7 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 		now := s.now().Unix()
 		objID := s.newID()
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y,
 				mime_type, blob_id, owner_id, group_id, mode, created_at, updated_at)
 			VALUES (?, ?, 'file', ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
 			objID, gridID, req.X, req.Y, req.W, req.H, req.MimeType, blobID,
@@ -207,18 +207,18 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 		if err != nil {
 			return fmt.Errorf("insert file: %w", err)
 		}
-		nodeID, err := res.LastInsertId()
+		tileID, err := res.LastInsertId()
 		if err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID); err != nil {
 			return err
 		}
-		out, err = s.loadNode(ctx, tx, nodeID)
+		out, err = s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -230,18 +230,18 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 	return out, nil
 }
 
-// ResizeNode changes a node's footprint to (X, Y, W, H). The new
-// footprint must not overlap any other node in the grid and must lie
+// ResizeTile changes a tile's footprint to (X, Y, W, H). The new
+// footprint must not overlap any other tile in the grid and must lie
 // inside the request's view rect. The full footprint is updated each
 // call — corner-drag resize uses this to move any corner.
-func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNodeRequest) (*rpc.Node, error) {
+func (s *Store) ResizeTile(ctx context.Context, userID int64, req *rpc.ResizeTileRequest) (*rpc.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
-	var out *rpc.Node
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadNode(ctx, tx, req.NodeID)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -254,7 +254,7 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 		if !req.ViewRect.Intersects(req.X, req.Y, req.W, req.H) {
 			return ErrLocality
 		}
-		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
+		_, write, err := s.permForTile(ctx, tx, userID, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -262,15 +262,15 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 			return ErrPermissionDenied
 		}
 
-		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.NodeID)
+		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.TileID)
 		if err != nil {
 			return err
 		}
-		nodeID := pre.TargetNodeID
+		tileID := pre.TargetTileID
 		events = append(events, pre.Events...)
 
 		// Overlap check against the new footprint, excluding this node.
-		over, err := overlapsExisting(ctx, tx, pre.GridID, req.X, req.Y, req.W, req.H, nodeID)
+		over, err := overlapsExisting(ctx, tx, pre.GridID, req.X, req.Y, req.W, req.H, tileID)
 		if err != nil {
 			return err
 		}
@@ -278,15 +278,15 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 			return ErrOverlap
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
-			req.X, req.Y, req.W, req.H, s.now().Unix(), nodeID); err != nil {
+			`UPDATE tiles SET x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
+			req.X, req.Y, req.W, req.H, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		out, err = s.loadNode(ctx, tx, nodeID)
+		out, err = s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -298,26 +298,26 @@ func (s *Store) ResizeNode(ctx context.Context, userID int64, req *rpc.ResizeNod
 	return out, nil
 }
 
-// SetNodeViewport updates the (view_x, view_y) of a node.
-func (s *Store) SetNodeViewport(ctx context.Context, userID int64, req *rpc.SetNodeViewportRequest) (*rpc.Node, error) {
-	var out *rpc.Node
+// SetTileViewport updates the (view_x, view_y) of a tile.
+func (s *Store) SetTileViewport(ctx context.Context, userID int64, req *rpc.SetTileViewportRequest) (*rpc.Tile, error) {
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadNode(ctx, tx, req.NodeID)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
 		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
-		_, write, err := s.permForNode(ctx, tx, userID, req.NodeID)
+		_, write, err := s.permForTile(ctx, tx, userID, req.TileID)
 		if err != nil {
 			return err
 		}
 		if !write {
 			return ErrPermissionDenied
 		}
-		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.NodeID)
+		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -326,15 +326,15 @@ func (s *Store) SetNodeViewport(ctx context.Context, userID int64, req *rpc.SetN
 		// uses calibrated descent zoom in that case. Older clients (or
 		// callers that don't care about zoom) send 0; we store 0.
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
-			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), pre.TargetNodeID); err != nil {
+			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
+			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
-		out, err = s.loadNode(ctx, tx, pre.TargetNodeID)
+		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -347,20 +347,20 @@ func (s *Store) SetNodeViewport(ctx context.Context, userID int64, req *rpc.SetN
 }
 
 // CapWell sets capped=true on a well.
-func (s *Store) CapWell(ctx context.Context, userID int64, req *rpc.CapWellRequest) (*rpc.Node, error) {
-	return s.flipWell(ctx, userID, req.Path, req.ViewRect, req.NodeID, true)
+func (s *Store) CapWell(ctx context.Context, userID int64, req *rpc.CapWellRequest) (*rpc.Tile, error) {
+	return s.flipWell(ctx, userID, req.Path, req.ViewRect, req.TileID, true)
 }
 
 // RedigWell clears capped on a well.
-func (s *Store) RedigWell(ctx context.Context, userID int64, req *rpc.RedigWellRequest) (*rpc.Node, error) {
-	return s.flipWell(ctx, userID, req.Path, req.ViewRect, req.NodeID, false)
+func (s *Store) RedigWell(ctx context.Context, userID int64, req *rpc.RedigWellRequest) (*rpc.Tile, error) {
+	return s.flipWell(ctx, userID, req.Path, req.ViewRect, req.TileID, false)
 }
 
-func (s *Store) flipWell(ctx context.Context, userID int64, p rpc.Path, vr rpc.ViewRect, nodeID int64, capped bool) (*rpc.Node, error) {
-	var out *rpc.Node
+func (s *Store) flipWell(ctx context.Context, userID int64, p rpc.Path, vr rpc.ViewRect, tileID int64, capped bool) (*rpc.Tile, error) {
+	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadNode(ctx, tx, nodeID)
+		n, err := s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
@@ -376,14 +376,14 @@ func (s *Store) flipWell(ctx context.Context, userID int64, p rpc.Path, vr rpc.V
 		if !capped && !n.Capped {
 			return ErrNotCapped
 		}
-		_, write, err := s.permForNode(ctx, tx, userID, nodeID)
+		_, write, err := s.permForTile(ctx, tx, userID, tileID)
 		if err != nil {
 			return err
 		}
 		if !write {
 			return ErrPermissionDenied
 		}
-		pre, err := s.preWrite(ctx, tx, userID, p, nodeID)
+		pre, err := s.preWrite(ctx, tx, userID, p, tileID)
 		if err != nil {
 			return err
 		}
@@ -393,15 +393,15 @@ func (s *Store) flipWell(ctx context.Context, userID int64, p rpc.Path, vr rpc.V
 			v = 1
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE nodes SET capped = ?, updated_at = ? WHERE id = ?`,
-			v, s.now().Unix(), pre.TargetNodeID); err != nil {
+			`UPDATE tiles SET capped = ?, updated_at = ? WHERE id = ?`,
+			v, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
-		out, err = s.loadNode(ctx, tx, pre.TargetNodeID)
+		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeChanged, NodeChanged: &rpc.NodeChanged{Node: *out}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
 	if err != nil {
@@ -414,11 +414,11 @@ func (s *Store) flipWell(ctx context.Context, userID int64, p rpc.Path, vr rpc.V
 }
 
 // FillWell deletes an empty well and its (empty) child grid. Returns
-// ErrNotEmpty if the child grid contains any nodes.
+// ErrNotEmpty if the child grid contains any tiles.
 func (s *Store) FillWell(ctx context.Context, userID int64, req *rpc.FillWellRequest) error {
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadNode(ctx, tx, req.NodeID)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -438,30 +438,30 @@ func (s *Store) FillWell(ctx context.Context, userID int64, req *rpc.FillWellReq
 		}
 		var nodeCount int
 		if err := tx.QueryRowContext(ctx,
-			`SELECT COUNT(1) FROM nodes WHERE grid_id = ?`, n.ChildGridID).Scan(&nodeCount); err != nil {
+			`SELECT COUNT(1) FROM tiles WHERE grid_id = ?`, n.ChildGridID).Scan(&nodeCount); err != nil {
 			return err
 		}
 		if nodeCount > 0 {
 			return ErrNotEmpty
 		}
-		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.NodeID)
+		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.TileID)
 		if err != nil {
 			return err
 		}
 		events = append(events, pre.Events...)
 		// Reload the well after potential fork.
-		w, err := s.loadNode(ctx, tx, pre.TargetNodeID)
+		w, err := s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
 		}
 		// Delete the well row, then dec refcount on its child grid.
-		if _, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ?`, pre.TargetNodeID); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, pre.TargetTileID); err != nil {
 			return err
 		}
 		if err := s.decRefcount(ctx, tx, w.ChildGridID); err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventNodeRemoved, NodeRemoved: &rpc.NodeRemoved{GridID: pre.GridID, NodeID: pre.TargetNodeID}})
+		events = append(events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: pre.GridID, TileID: pre.TargetTileID}})
 		return nil
 	})
 	if err != nil {
@@ -505,7 +505,7 @@ func (s *Store) AscendAtRoot(ctx context.Context, userID int64) (*rpc.AscendAtRo
 		// Create well in new grid pointing at old root.
 		wellObj := s.newID()
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO nodes (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y,
 				child_grid_id, capped, owner_id, group_id, mode, created_at, updated_at)
 			VALUES (?, ?, 'well', 0, 0, 1, 1, 0, 0, ?, 0, ?, ?, ?, ?, ?)`,
 			wellObj, newGridID, u.RootGridID, old.OwnerID, old.GroupID, old.Mode, now, now)

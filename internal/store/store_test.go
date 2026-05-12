@@ -57,7 +57,7 @@ func TestOpenAppliesSchema(t *testing.T) {
 	}
 	want := map[string]bool{
 		"groups": true, "users": true, "user_groups": true,
-		"grids": true, "nodes": true, "blobs": true, "sessions": true,
+		"grids": true, "tiles": true, "blobs": true, "sessions": true,
 	}
 	for _, g := range got {
 		delete(want, g)
@@ -214,7 +214,7 @@ func TestPermForGridAndNodeNotFound(t *testing.T) {
 	if _, _, err := s.permForGrid(ctx, s.db, 1, 9999); err != ErrNotFound {
 		t.Errorf("permForGrid missing: got %v", err)
 	}
-	if _, _, err := s.permForNode(ctx, s.db, 1, 9999); err != ErrNotFound {
-		t.Errorf("permForNode missing: got %v", err)
+	if _, _, err := s.permForTile(ctx, s.db, 1, 9999); err != ErrNotFound {
+		t.Errorf("permForTile missing: got %v", err)
 	}
 }

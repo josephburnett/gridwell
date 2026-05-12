@@ -141,7 +141,7 @@ func TestWhoamiAndCreateWell(t *testing.T) {
 		t.Errorf("whoami = %+v", who)
 	}
 
-	var nr rpc.NodeResponse
+	var nr rpc.TileResponse
 	st, body = callRPC(t, hs, cookie, "CreateWell", &rpc.CreateWellRequest{
 		Path:     rpc.Path{},
 		ViewRect: rpc.ViewRect{X: -100, Y: -100, W: 200, H: 200},
@@ -150,8 +150,8 @@ func TestWhoamiAndCreateWell(t *testing.T) {
 	if st != 200 {
 		t.Fatalf("create well: %d %s", st, body)
 	}
-	if nr.Node.Type != "well" {
-		t.Errorf("got %+v", nr.Node)
+	if nr.Tile.Type != "well" {
+		t.Errorf("got %+v", nr.Tile)
 	}
 }
 

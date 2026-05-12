@@ -84,7 +84,7 @@ type rightDragState struct {
 
 	// Tile-only.
 	tilePaneID string
-	tileNode   rpc.Node
+	tileNode   rpc.Tile
 	tilePane   *pane.Pane // for path/grid lookups at commit time
 	tilePaneR  paneRect   // pane rect at right-down (for cell mapping)
 
@@ -109,7 +109,7 @@ type rightDragState struct {
 
 // onRightDown classifies the right-down and arms the matching gesture
 // state. Tile gestures (cap/redig/fill on bare release; resize on
-// drag) take priority when the cursor is over a node in a grid view.
+// drag) take priority when the cursor is over a tile in a grid view.
 // No tree or store edits happen here — those wait for release (or the
 // next move tick, for pane resize).
 //
@@ -199,17 +199,17 @@ func (a *App) onRightMove(sx, sy float64) {
 }
 
 // tileAtScreen returns the tile under (sx, sy) inside pane p, or nil.
-// Wraps cellAtScreen + nodeAtCell so the tile-gesture entry is a
+// Wraps cellAtScreen + tileAtCell so the tile-gesture entry is a
 // single helper rather than an inline pair.
-func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Node {
+func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Tile {
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
-	return a.nodeAtCell(p, cellX, cellY)
+	return a.tileAtCell(p, cellX, cellY)
 }
 
 // armTileGesture installs the right state for a click on a tile —
 // either rightDragTileCenter (cap/delete) or rightDragTileResize
 // (rubber-band) — based on whether (sx, sy) lands in the inner third.
-func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Node, sx, sy float64) {
+func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
 	common := rightDragState{
 		startX:     sx,
 		startY:     sy,
@@ -245,7 +245,7 @@ func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Node, sx, sy float
 // 1/3 × 1/3 cell rect of tile n. Computed in cell coordinates so the
 // zone scales with zoom and is always 1/9 of the tile's footprint
 // even on 1×1 tiles.
-func inTileCenter(n *rpc.Node, p *pane.Pane, r paneRect, sx, sy float64) bool {
+func inTileCenter(n *rpc.Tile, p *pane.Pane, r paneRect, sx, sy float64) bool {
 	ps := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
@@ -269,7 +269,7 @@ func inTileCenter(n *rpc.Node, p *pane.Pane, r paneRect, sx, sy float64) bool {
 // The move handler tracks the moving corner as
 // origMoving + (cursorCell - clickCell), so right-down with no
 // movement leaves the tile unchanged.
-func tileResizeAnchors(n *rpc.Node, p *pane.Pane, r paneRect, sx, sy float64) (
+func tileResizeAnchors(n *rpc.Tile, p *pane.Pane, r paneRect, sx, sy float64) (
 	pinX, pinY, origMovingX, origMovingY, clickCellX, clickCellY int64,
 ) {
 	ps := dragdrop.Pane{
@@ -392,10 +392,10 @@ func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
 	// grid is in cache with zero nodes, the release fills it instead
 	// of capping. Capped wells always redig.
 	if !n.Capped {
-		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Nodes) == 0 {
+		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Tiles) == 0 {
 			go func() {
 				req := rpc.FillWellRequest{
-					Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, NodeID: n.ID,
+					Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, TileID: n.ID,
 				}
 				var resp rpc.FillWellResponse
 				_, _ = postJSON("/rpc/FillWell", req, &resp)
@@ -406,15 +406,15 @@ func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
 	}
 
 	go func() {
-		var resp rpc.NodeResponse
+		var resp rpc.TileResponse
 		if n.Capped {
 			req := rpc.RedigWellRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, NodeID: n.ID,
+				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, TileID: n.ID,
 			}
 			_, _ = postJSON("/rpc/RedigWell", req, &resp)
 		} else {
 			req := rpc.CapWellRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, NodeID: n.ID,
+				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, TileID: n.ID,
 			}
 			_, _ = postJSON("/rpc/CapWell", req, &resp)
 		}
@@ -422,7 +422,7 @@ func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
 	}()
 }
 
-// commitTileResize commits the proposed (X, Y, W, H) via ResizeNode.
+// commitTileResize commits the proposed (X, Y, W, H) via ResizeTile.
 // If the new size matches the original, no RPC is issued.
 func (a *App) commitTileResize(rd *rightDragState) {
 	n := rd.tileNode
@@ -440,18 +440,18 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	}
 	view := a.paneViewRect(p, pscreen)
 	gid := a.gridIDForPath(p.Path)
-	req := rpc.ResizeNodeRequest{
+	req := rpc.ResizeTileRequest{
 		Path:     rpc.Path{WellIDs: p.Path},
 		ViewRect: view,
-		NodeID:   n.ID,
+		TileID:   n.ID,
 		X:        rd.tileNewX,
 		Y:        rd.tileNewY,
 		W:        rd.tileNewW,
 		H:        rd.tileNewH,
 	}
 	go func() {
-		var resp rpc.NodeResponse
-		_, _ = postJSON("/rpc/ResizeNode", req, &resp)
+		var resp rpc.TileResponse
+		_, _ = postJSON("/rpc/ResizeTile", req, &resp)
 		a.fetchGrid(gid)
 	}()
 }
@@ -671,7 +671,7 @@ func (a *App) drawTileCenterPreview(rd *rightDragState) {
 	// (grey diagonals + redig appearance).
 	deletePreview := false
 	if !n.Capped {
-		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Nodes) == 0 {
+		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Tiles) == 0 {
 			deletePreview = true
 		}
 	}
@@ -704,7 +704,7 @@ func (a *App) drawTileCenterPreview(rd *rightDragState) {
 
 // tileScreenRect returns the on-screen rectangle of tile n as drawn
 // in pane p. Mirrors the math used by the parent-grid renderer.
-func tileScreenRect(n *rpc.Node, p *pane.Pane, r paneRect) (left, top, w, h float64) {
+func tileScreenRect(n *rpc.Tile, p *pane.Pane, r paneRect) (left, top, w, h float64) {
 	ps := dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,

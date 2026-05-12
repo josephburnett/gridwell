@@ -9,11 +9,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// GetGrid returns the grid plus all of its nodes, or ErrPermissionDenied if
+// GetGrid returns the grid plus all of its tiles, or ErrPermissionDenied if
 // the user lacks read on the grid.
 //
-// Nodes are returned in their stored order. The caller (RPC layer) substitutes
-// "locked" placeholders for nodes the user cannot read; the store returns the
+// Tiles are returned in their stored order. The caller (RPC layer) substitutes
+// "locked" placeholders for tiles the user cannot read; the store returns the
 // raw rows so callers can decide.
 func (s *Store) GetGrid(ctx context.Context, userID, gridID int64) (*rpc.GetGridResponse, error) {
 	read, write, err := s.permForGrid(ctx, s.db, userID, gridID)
@@ -27,14 +27,14 @@ func (s *Store) GetGrid(ctx context.Context, userID, gridID int64) (*rpc.GetGrid
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := s.loadNodesInGrid(ctx, s.db, gridID)
+	tiles, err := s.loadTilesInGrid(ctx, s.db, gridID)
 	if err != nil {
 		return nil, err
 	}
-	return &rpc.GetGridResponse{Grid: *g, Nodes: nodes, Readable: true, Writable: write}, nil
+	return &rpc.GetGridResponse{Grid: *g, Tiles: tiles, Readable: true, Writable: write}, nil
 }
 
-// gridReader is the interface needed to read grid/node rows. Both *sql.DB and
+// gridReader is the interface needed to read grid/tile rows. Both *sql.DB and
 // *sql.Tx satisfy it.
 type gridReader interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -57,9 +57,9 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 	return &g, nil
 }
 
-func (s *Store) loadNode(ctx context.Context, q gridReader, nodeID int64) (*rpc.Node, error) {
+func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.Tile, error) {
 	var (
-		n           rpc.Node
+		n           rpc.Tile
 		childGrid   sql.NullInt64
 		mime        sql.NullString
 		blob        sql.NullInt64
@@ -68,7 +68,7 @@ func (s *Store) loadNode(ctx context.Context, q gridReader, nodeID int64) (*rpc.
 	err := q.QueryRowContext(ctx, `
 		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode
-		FROM nodes WHERE id = ?`, nodeID,
+		FROM tiles WHERE id = ?`, tileID,
 	).Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob,
 		&n.OwnerID, &n.GroupID, &n.Mode)
@@ -91,19 +91,19 @@ func (s *Store) loadNode(ctx context.Context, q gridReader, nodeID int64) (*rpc.
 	return &n, nil
 }
 
-func (s *Store) loadNodesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Node, error) {
+func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Tile, error) {
 	rows, err := q.QueryContext(ctx, `
 		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode
-		FROM nodes WHERE grid_id = ? ORDER BY id`, gridID)
+		FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []rpc.Node
+	var out []rpc.Tile
 	for rows.Next() {
 		var (
-			n         rpc.Node
+			n         rpc.Tile
 			childGrid sql.NullInt64
 			mime      sql.NullString
 			blob      sql.NullInt64
@@ -165,7 +165,7 @@ func (s *Store) SetGridDefaultView(ctx context.Context, userID int64, req *rpc.S
 	return out, nil
 }
 
-// overlapsExisting reports whether the rectangle (x,y,w,h) overlaps any node
+// overlapsExisting reports whether the rectangle (x,y,w,h) overlaps any tile
 // in the grid except those whose id is in the excludeIDs set.
 //
 // Two AABBs do not overlap iff one is entirely to the left, right, above, or
@@ -187,7 +187,7 @@ func overlapsExisting(ctx context.Context, q gridReader, gridID, x, y, w, h int6
 		excl += ")"
 	}
 	q1 := fmt.Sprintf(`
-		SELECT 1 FROM nodes
+		SELECT 1 FROM tiles
 		WHERE grid_id = ?
 		  AND x < ? AND (x + w) > ?
 		  AND y < ? AND (y + h) > ?
