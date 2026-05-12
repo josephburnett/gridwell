@@ -1,8 +1,16 @@
-# Ascent — Implementation Specification
+# Gridwell — Implementation Specification
 
-A spatial information system. The user arranges files and containers ("wells") on an infinite 2D grid. Wells contain grids (the "third dimension"). Each user has their own tree.
+A spatial information system. The user arranges tiles on an infinite 2D grid. Some tiles are "wells" — they contain another grid (the "third dimension"). Each user has their own tree.
 
-The name **Ascent** refers to the system's central gesture: popping out of a well into its parent grid. Ascent is also the operation that creates new structure (popping out at the root creates a new root above).
+**Gridwell**'s three primitives:
+
+  - **grid** — the infinite plane
+  - **tile** — a movable, resizable, non-overlapping element on a grid (file or well)
+  - **well** — a tile that contains another grid
+
+A **pane** is a non-overlapping view on a grid (tmux-style) that allows multi-tasking and teleportation of tiles between grids.
+
+The central gesture is **ascent** — popping out of a well into its parent grid. Ascent is also the operation that creates new structure: popping out at the root creates a new root above.
 
 This document specifies the system to be built. Read it end-to-end before starting.
 
@@ -18,23 +26,22 @@ Every design decision must serve this. If a feature would silently shift things 
 
 ## 2. Architecture
 
-- **Server**: single Go binary. Subcommands: `serve`, `init`, `adduser`. Persists to one SQLite file. Serves the web app and a gRPC-Web API.
+- **Server**: single Go binary. Subcommands: `serve`, `init`, `adduser`. Persists to one SQLite file. Serves the web app and a JSON-over-HTTP RPC API.
 - **Client**: written in Go, compiled to WebAssembly. Loaded by a small static `index.html`. The client renders to a single full-window `<canvas>`. No HTML/CSS UI components beyond the canvas, the login form, and the file upload `<input>`.
-- **Transport**: gRPC-Web over HTTP/1.1 (use `github.com/improbable-eng/grpc-web` server wrapper, or write thin HTTP handlers around generated gRPC stubs — implementer's choice). Server-streaming RPCs are required for real-time sync.
+- **Transport**: JSON over HTTP/1.1. Each RPC method is a `POST` to `/rpc/<MethodName>`; `Subscribe` is a `GET` server-sent-events stream at `/rpc/Subscribe`. Wire types are hand-coded in `internal/rpc/types.go`; no protobuf code generation.
 - **Persistence**: SQLite via `modernc.org/sqlite` (pure-Go, no cgo) so the binary is statically linkable. WAL mode. All writes wrapped in transactions.
-- **Dependency policy**: Go modules from the standard ecosystem are permitted, but the running system depends only on the Go toolchain at build time and SQLite at runtime — no other external programs, no Chromium, no cgo. The pure-Go SQLite driver and gRPC libraries are Go modules vendored at build time; they impose no system dependencies. There is no headless browser in the system; URL rendering relies on the user's browser only.
+- **Dependency policy**: Go modules from the standard ecosystem are permitted, but the running system depends only on the Go toolchain at build time and SQLite at runtime — no other external programs, no Chromium, no cgo. The pure-Go SQLite driver is a Go module vendored at build time; it imposes no system dependencies. There is no headless browser in the system; URL rendering relies on the user's browser only.
 - **Auth**: cookie-based session. Cookie is `HttpOnly`, `Secure` (in production), `SameSite=Strict`. Session token is a random 32-byte value, stored hex-encoded.
 - **Testing**: every package has unit tests. Server logic tested at the service-method layer with an in-memory SQLite. WASM client logic factored so non-DOM code is testable under standard `go test`.
 
 Project layout:
 
 ```
-/cmd/ascent/                 main.go — subcommand dispatch
-/internal/server/            HTTP server, gRPC-Web handlers, session middleware
+/cmd/gridwell/               main.go — subcommand dispatch
+/internal/server/            HTTP server, RPC handlers, session middleware
 /internal/store/             SQLite schema + queries; CoW logic
 /internal/auth/              password hashing (argon2id), session creation
-/internal/proto/             generated from .proto files
-/proto/                      .proto definitions
+/internal/rpc/               hand-coded wire types (JSON over HTTP)
 /client/                     Go-WASM client; pure logic in subpackages
 /client/wasm/main.go         WASM entry point
 /web/                        index.html, the .wasm output, wasm_exec.js
@@ -46,36 +53,36 @@ Project layout:
 
 ### 3.1 Grid
 
-A grid is an infinite 2D plane of integer cells. Cells are either empty or covered by exactly one node (well or file). A grid has an owner, a group, and a unix-style mode.
+A grid is an infinite 2D plane of integer cells. Cells are either empty or covered by exactly one tile (well or file). A grid has an owner, a group, and a unix-style mode.
 
 The grid's own "where" lives nowhere — a grid is not placed at a coordinate. It is reached through a well that points to it.
 
-### 3.2 Node (Well or File)
+### 3.2 Tile (Well or File)
 
-A node is a rectangle on a grid. It has:
+A tile is a rectangle on a grid. It has:
 
 - `(x, y)` — top-left cell of its footprint.
 - `(w, h)` — width and height in cells. Default `1×1`. Must be positive.
 - `(view_x, view_y)` — internal viewport offset (see §3.5).
 - `owner`, `group`, `mode`.
 
-Two nodes in the same grid never overlap. Drops, moves, resizes, and clones that would cause overlap are refused.
+Two tiles in the same grid never overlap. Drops, moves, resizes, and clones that would cause overlap are refused.
 
-Nodes are typed: `well` or `file`.
+Tiles are typed: `well` or `file`.
 
 ### 3.3 Well
 
-A well is a node whose content is another grid (its **child grid**). Pointer is well → child grid (parent-to-child). A well also has:
+A well is a tile whose content is another grid (its **child grid**). Pointer is well → child grid (parent-to-child). A well also has:
 
 - `child_grid_id`
 - `capped` — boolean. A capped well cannot be descended into.
 
 ### 3.4 File
 
-A file is a leaf node. It has:
+A file is a leaf tile. It has:
 
 - `mime_type`
-- `blob_id` — content-addressed storage (sha256). Multiple file nodes may reference the same blob.
+- `blob_id` — content-addressed storage (sha256). Multiple file tiles may reference the same blob.
 
 ### 3.5 Internal Viewport
 
@@ -84,16 +91,16 @@ Both wells and files have `(view_x, view_y)` describing what region of their int
 - For a well, `(view_x, view_y)` is in cells. The well's `w×h` footprint exposes a `w×h` window of the child grid starting at `(view_x, view_y)`.
 - For a file, `(view_x, view_y)` is in pixels relative to the file's full rendered content.
 
-**Resize exposes/hides content; it does not scale.** Making a node larger reveals more of its interior at the same scale; making it smaller hides some.
+**Resize exposes/hides content; it does not scale.** Making a tile larger reveals more of its interior at the same scale; making it smaller hides some.
 
-The internal viewport is persistent state on the node. Changing it is a write. Snapshots taken on ascent reflect the current viewport.
+The internal viewport is persistent state on the tile. Changing it is a write. Snapshots taken on ascent reflect the current viewport.
 
 ### 3.6 Tree
 
 Wells form a strict tree:
 
-- Each grid contains zero or more well-nodes.
-- Each well-node points to exactly one child grid.
+- Each grid contains zero or more well-tiles.
+- Each well-tile points to exactly one child grid.
 - A grid is referenced by at most one well at any time **in any single user's tree** (clones are version-distinct rows; see §3.8).
 - No grid points "up." Ascent is path-dependent and tracked per-pane.
 
@@ -103,25 +110,25 @@ Each user has a `root_grid_id`. Ascending from this grid creates a new grid that
 
 - **Cap** (write perm on parent grid): set `capped = true` on a well. The well remains visible in its parent grid but cannot be descended into. Any panes currently inside the capped well or any of its descendants are forced to ascend back to the capped well's parent. Capped wells render distinctly from open wells (e.g., dark cover) and distinctly from unreadable wells (§7.4).
 - **Redig** (write perm): clear `capped`. Contents are restored exactly as they were.
-- **Fill empty well** (write perm): destroy the well and its (empty) child grid. **This is the only irreversible operation.** A well is "empty" iff its child grid contains zero nodes. Filling a non-empty well is refused; cap it instead.
+- **Fill empty well** (write perm): destroy the well and its (empty) child grid. **This is the only irreversible operation.** A well is "empty" iff its child grid contains zero tiles. Filling a non-empty well is refused; cap it instead.
 
 ### 3.8 Identity: object_id and row_id
 
-Every grid and every node has two identifiers:
+Every grid and every tile has two identifiers:
 
 - `id` (row id): the SQLite primary key. Unique per row.
-- `object_id` (text, UUID): stable across clones. A clone of a well produces a new node row (new `id`, same `object_id`).
+- `object_id` (text, UUID): stable across clones. A clone of a well produces a new tile row (new `id`, same `object_id`).
 
 Filtering by `object_id` shows the lineage of clones of one logical thing. There is no implicit history beyond this — within a single clone lineage, edits update rows in place.
 
 ### 3.9 Cloning and Copy-on-Write
 
-Cloning a well produces a new well node with a new `id` but the same `object_id` and the same `child_grid_id` as the original. The two clones share the child grid until something inside is written through one of them.
+Cloning a well produces a new well tile with a new `id` but the same `object_id` and the same `child_grid_id` as the original. The two clones share the child grid until something inside is written through one of them.
 
 CoW forks at the **grid boundary**:
 
-1. A write happens to a node `N` whose containing grid `G` is referenced by more than one well (refcount > 1).
-2. Before applying the write, the system creates a new grid `G'` (new `id`, same `object_id`, same owner/group/mode), copies all node rows from `G` into `G'` (each new row gets a new `id`, same `object_id`), and updates the well *along the editing pane's descent path* to point to `G'` instead of `G`.
+1. A write happens to a tile `N` whose containing grid `G` is referenced by more than one well (refcount > 1).
+2. Before applying the write, the system creates a new grid `G'` (new `id`, same `object_id`, same owner/group/mode), copies all tile rows from `G` into `G'` (each new row gets a new `id`, same `object_id`), and updates the well *along the editing pane's descent path* to point to `G'` instead of `G`.
 3. The write is then applied against `G'`.
 
 Blobs are content-addressed and never forked.
@@ -130,7 +137,7 @@ Forking propagates upward only as far as needed: the rewritten well lives in som
 
 Reference counts on grids are maintained as wells are created, cloned, deleted, and moved.
 
-**Cloning a node requires write permission on the source node** (not just read). This prevents unauthorized indefinite preservation of read-only content.
+**Cloning a tile requires write permission on the source tile** (not just read). This prevents unauthorized indefinite preservation of read-only content.
 
 ---
 
@@ -138,7 +145,7 @@ Reference counts on grids are maintained as wells are created, cloned, deleted, 
 
 The viewport UI is a tmux-style pane tree.
 
-- The window is split by a binary tree of nodes. Internal nodes are horizontal or vertical splits with a ratio in `[0, 1]`. Leaves are panes.
+- The window is split by a binary tree of tiles. Internal tiles are horizontal or vertical splits with a ratio in `[0, 1]`. Leaves are panes.
 - At any moment there is at least one pane. The last pane cannot be closed.
 - Each pane has its own state: descent path (list of `(well_row_id)` from root to the currently-viewed grid), viewport center `(cx, cy)` in cells (floating point), and zoom level (floating point, continuous).
 - **Keyboard focus** is a single pane. **Mouse focus** is a (possibly different) single pane, determined by hover.
@@ -155,10 +162,10 @@ The viewport UI is a tmux-style pane tree.
 
 ### 4.2 Cross-Pane Drag (Teleport)
 
-To move a node from pane A's grid to pane B's grid:
+To move a tile from pane A's grid to pane B's grid:
 
 1. Both panes must be open and pointing at the relevant grids (achieved via split + walk).
-2. The user mouse-drags the node from A. While dragging, a "ghost" follows the cursor across pane boundaries.
+2. The user mouse-drags the tile from A. While dragging, a "ghost" follows the cursor across pane boundaries.
 3. On drop in pane B at coordinates `(x, y)`, the system attempts the move. If `(x, y, w, h)` doesn't fit, the drop is refused.
 
 Holding a modifier (`Alt` for clone, default for move) selects clone vs. move. Move and clone share the exact same gesture.
@@ -171,7 +178,7 @@ There are no bookmarks, persistent portals, or cross-tree navigation. Every navi
 
 - **Move = zoom.** No avatar. The viewport is "where you are." asdw or arrow keys pan the keyboard-focused pane. Mouse wheel zooms it. The viewport is `(cx, cy, zoom)` per pane.
 - **Continuous zoom.** Any positive zoom value is allowed. Zoom is a viewport property only — it does not change cell size in storage.
-- **Locality of action.** A node may be operated on only if its footprint is currently visible in the focused pane. Definition: any of its cells lies inside the focused pane's framed rectangle. The client enforces this (gray out controls); the server also enforces it via the view position included in each mutating RPC (§6).
+- **Locality of action.** A tile may be operated on only if its footprint is currently visible in the focused pane. Definition: any of its cells lies inside the focused pane's framed rectangle. The client enforces this (gray out controls); the server also enforces it via the view position included in each mutating RPC (§6).
 - **Descent.** Click on a well or file → that pane's descent path is appended with the well's row id. The pane's viewport resets to the child grid's last-saved viewport (or `(0,0,1.0)` if none).
 - **Ascent.** A keyboard shortcut and an on-screen control. Pops the last entry off the descent path. Refused if path is empty (you're at root) — instead, **ascent at root creates a new root**: a new grid is created, a new well in it points to the old root, and the user's `root_grid_id` is updated.
 - **Cell size.** Cell size in storage is unitless integer coordinates. The client renders cells at a default of `64` logical pixels at zoom `1.0`. Implementation hint, not spec: feel free to tune.
@@ -180,43 +187,17 @@ There are no bookmarks, persistent portals, or cross-tree navigation. Every navi
 
 ## 6. RPC Service
 
-Defined in `proto/hangar.proto`. All requests except `Login` carry the session cookie; the server resolves it to a `user_id` in middleware. All mutating RPCs return the canonical post-write state of the affected grid(s) so the client can reconcile.
+Wire types are hand-coded in Go in `internal/rpc/types.go` as JSON-over-HTTP messages under `/rpc/<MethodName>`. All requests except `Login` carry the session cookie; the server resolves it to a `user_id` in middleware. All mutating RPCs return the canonical post-write state of the affected grid(s) so the client can reconcile.
 
-```proto
-syntax = "proto3";
+Methods (Go method names; HTTP path is `/rpc/<MethodName>`):
 
-service Hangar {
-  // Auth
-  rpc Login(LoginRequest) returns (LoginResponse);
-  rpc Logout(LogoutRequest) returns (LogoutResponse);
-  rpc Whoami(WhoamiRequest) returns (WhoamiResponse);
+  - **Auth**: `Login`, `Logout`, `Whoami`
+  - **Read**: `GetGrid` (returns `Grid` + `[]Tile`), `GetBlob`, `GetURLTitle`
+  - **Mutations**: `CreateWell`, `CreateFile`, `MoveTile`, `CloneTile`, `ResizeTile`, `SetTileViewport`, `CapWell`, `RedigWell`, `FillWell`, `UpdateFileContent`
+  - **Tree-level**: `AscendAtRoot`
+  - **Real-time**: `Subscribe` (server-sent events stream)
 
-  // Read
-  rpc GetGrid(GetGridRequest) returns (GetGridResponse);
-  rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
-  rpc GetURLTitle(GetURLTitleRequest) returns (GetURLTitleResponse);
-
-  // Mutations on grids
-  rpc CreateWell(CreateWellRequest) returns (NodeResponse);
-  rpc CreateFile(CreateFileRequest) returns (NodeResponse);
-  rpc MoveNode(MoveNodeRequest) returns (MoveNodeResponse);    // may cross grids
-  rpc CloneNode(CloneNodeRequest) returns (NodeResponse);
-  rpc ResizeNode(ResizeNodeRequest) returns (NodeResponse);
-  rpc SetNodeViewport(SetNodeViewportRequest) returns (NodeResponse);
-  rpc CapWell(CapWellRequest) returns (NodeResponse);
-  rpc RedigWell(RedigWellRequest) returns (NodeResponse);
-  rpc FillWell(FillWellRequest) returns (FillWellResponse);     // empty wells only
-  rpc UpdateFileContent(UpdateFileContentRequest) returns (NodeResponse);
-
-  // Tree-level
-  rpc AscendAtRoot(AscendAtRootRequest) returns (AscendAtRootResponse);
-
-  // Real-time
-  rpc Subscribe(SubscribeRequest) returns (stream Event);
-}
-```
-
-Every mutating request includes a `view_rect { x, y, w, h }` field describing the framed region of the pane that initiated the mutation. The server rejects the mutation if the affected node(s) are not entirely within `view_rect`. This enforces locality of action server-side.
+Every mutating request includes a `view_rect { x, y, w, h }` field describing the framed region of the pane that initiated the mutation. The server rejects the mutation if the affected tile(s) are not entirely within `view_rect`. This enforces locality of action server-side.
 
 ### 6.1 Subscribe
 
@@ -224,20 +205,16 @@ The client opens one server-streaming `Subscribe` per descent-path that any of i
 
 Events:
 
-```proto
-message Event {
-  oneof kind {
-    GridChanged grid_changed = 1;     // a grid the user can see was modified
-    NodeChanged node_changed = 2;
-    NodeRemoved node_removed = 3;
-    GridForked  grid_forked  = 4;     // a CoW fork happened; clients update child_grid_id refs
-  }
-}
-```
+Event kinds (`rpc.Event.Kind`):
+
+  - `grid_changed` — a grid the user can see was modified
+  - `tile_changed` — a tile was upserted (payload: `Tile`)
+  - `tile_removed` — a tile was deleted (payload: `grid_id`, `tile_id`)
+  - `grid_forked` — a CoW fork happened; clients update `child_grid_id` refs
 
 ### 6.2 Concurrency Semantics
 
-All mutations are SQLite transactions. On conflict, the rule is **snap to canonical**: the client applies mutations optimistically, and reconciles when the server's response or `Subscribe` event reports a different state. No override feedback in v1; the affected node simply moves to its canonical position.
+All mutations are SQLite transactions. On conflict, the rule is **snap to canonical**: the client applies mutations optimistically, and reconciles when the server's response or `Subscribe` event reports a different state. No override feedback in v1; the affected tile simply moves to its canonical position.
 
 Drag and drop are client-side only until release. The release issues one mutation RPC. The "ghost" the user sees during drag is purely local.
 
@@ -250,7 +227,7 @@ Drag and drop are client-side only until release. The release issues one mutatio
 The first user is created via:
 
 ```
-ascent adduser <username>
+gridwell adduser <username>
 ```
 
 This subcommand is allowed regardless of whether any users exist. It prompts for a password on stdin (no echo). It is also the only way to create new users in v1 — there is no signup flow in the web UI.
@@ -271,27 +248,27 @@ Passwords are hashed with argon2id (use `golang.org/x/crypto/argon2`). Salt per-
 
 ### 7.3 Permissions Model
 
-Unix-style. Every grid and every node has `owner`, `group`, `mode`. `mode` is the lower 9 bits of a unix mode (rwxrwxrwx, but `x` is unused — only `r` and `w` matter). Default mode for new grids and nodes is `0o640` (rw- r-- ---).
+Unix-style. Every grid and every tile has `owner`, `group`, `mode`. `mode` is the lower 9 bits of a unix mode (rwxrwxrwx, but `x` is unused — only `r` and `w` matter). Default mode for new grids and tiles is `0o640` (rw- r-- ---).
 
-- **Read** on a grid: needed to see its node list, descend into it.
-- **Write** on a grid: needed to create/move/delete nodes in it.
-- **Read** on a node: needed to see its rendered preview (file content or well's child grid sample).
-- **Write** on a node: needed to resize, edit content, set viewport, cap/redig, **and to clone**.
+- **Read** on a grid: needed to see its tile list, descend into it.
+- **Write** on a grid: needed to create/move/delete tiles in it.
+- **Read** on a tile: needed to see its rendered preview (file content or well's child grid sample).
+- **Write** on a tile: needed to resize, edit content, set viewport, cap/redig, **and to clone**.
 
 Effective check: user matches `owner` → use owner bits; else user is in `group` → use group bits; else use other bits.
 
-Cloning a node requires `w` on the *source node* and `w` on the *destination grid*.
+Cloning a tile requires `w` on the *source tile* and `w` on the *destination grid*.
 
-Moving a node requires `w` on both source grid and destination grid (often the same grid).
+Moving a tile requires `w` on both source grid and destination grid (often the same grid).
 
 Filling an empty well requires `w` on the parent grid.
 
-Editing file content requires `w` on the file node.
+Editing file content requires `w` on the file tile.
 
 ### 7.4 No-Read and No-Write Visibility
 
-- **No-read on a node**: the node is rendered as a generic "locked" tile in its parent grid (e.g., padlock icon). Visually distinct from capped wells. The user can see the node's footprint and that it exists, but not its contents or preview. Descent is refused.
-- **No-write on a node**: the node renders normally; mutations are refused.
+- **No-read on a tile**: the tile is rendered as a generic "locked" tile in its parent grid (e.g., padlock icon). Visually distinct from capped wells. The user can see the tile's footprint and that it exists, but not its contents or preview. Descent is refused.
+- **No-write on a tile**: the tile renders normally; mutations are refused.
 - **No-read on a grid**: the parent well that points to it is rendered as a "locked well." Descent is refused.
 - **No-write on a grid**: the grid renders normally; mutations are refused.
 
@@ -306,9 +283,9 @@ A clone inherits the source's `owner`, `group`, and `mode` exactly. This prevent
 ### 7.7 CLI Reference
 
 ```
-ascent init [--db <path>]              create the SQLite database and schema
-ascent adduser <username> [--db <path>] interactive password prompt; creates user, primary group, root grid
-ascent serve [--db <path>] [--addr :8080]
+gridwell init [--db <path>]              create the SQLite database and schema
+gridwell adduser <username> [--db <path>] interactive password prompt; creates user, primary group, root grid
+gridwell serve [--db <path>] [--addr :8080]
 ```
 
 No CLI for group management, chmod, or chown in v1. The data model fully supports them; commands are deferred.
@@ -350,8 +327,8 @@ Three MIME types in v1:
 
 ### 8.5 Resize
 
-- Drag a node's edge or corner. While dragging, the client displays a ghost rectangle that snaps to whole cells. Release commits via `ResizeNode`.
-- Refused if the new footprint would overlap any other node or extend off the grid (note: grids are infinite, so off-edge isn't a concern; overlap is the only check).
+- Drag a tile's edge or corner. While dragging, the client displays a ghost rectangle that snaps to whole cells. Release commits via `ResizeNode`.
+- Refused if the new footprint would overlap any other tile or extend off the grid (note: grids are infinite, so off-edge isn't a concern; overlap is the only check).
 - Resize never scales content. Internal viewport is preserved.
 
 ---
@@ -390,7 +367,7 @@ CREATE TABLE grids (
   owner_id   INTEGER NOT NULL REFERENCES users(id),
   group_id   INTEGER NOT NULL REFERENCES groups(id),
   mode       INTEGER NOT NULL,
-  refcount   INTEGER NOT NULL DEFAULT 1,   -- number of well-nodes pointing here
+  refcount   INTEGER NOT NULL DEFAULT 1,   -- number of well-tiles pointing here
   -- saved viewport for fresh descents:
   default_view_cx REAL NOT NULL DEFAULT 0,
   default_view_cy REAL NOT NULL DEFAULT 0,
@@ -399,7 +376,7 @@ CREATE TABLE grids (
 );
 CREATE INDEX idx_grids_object_id ON grids(object_id);
 
-CREATE TABLE nodes (
+CREATE TABLE tiles (
   id            INTEGER PRIMARY KEY,
   object_id     TEXT NOT NULL,
   grid_id       INTEGER NOT NULL REFERENCES grids(id),
@@ -431,9 +408,9 @@ CREATE TABLE nodes (
     (type = 'file' AND child_grid_id IS NULL     AND mime_type IS NOT NULL AND blob_id IS NOT NULL)
   )
 );
-CREATE INDEX idx_nodes_grid_id   ON nodes(grid_id);
-CREATE INDEX idx_nodes_object_id ON nodes(object_id);
-CREATE INDEX idx_nodes_child     ON nodes(child_grid_id);
+CREATE INDEX idx_tiles_grid_id   ON tiles(grid_id);
+CREATE INDEX idx_tiles_object_id ON tiles(object_id);
+CREATE INDEX idx_tiles_child     ON tiles(child_grid_id);
 
 CREATE TABLE blobs (
   id        INTEGER PRIMARY KEY,
@@ -456,15 +433,15 @@ CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 
 ### 9.2 CoW Fork Procedure
 
-When a write must apply to a node `N` in grid `G`, and `G.refcount > 1`:
+When a write must apply to a tile `N` in grid `G`, and `G.refcount > 1`:
 
 ```
 BEGIN TRANSACTION
 
   G' := INSERT INTO grids (object_id, owner, group, mode, refcount=1, defaults...) VALUES (G.object_id, G.owner, G.group, G.mode, 1, ...)
 
-  for each node M in G:
-    INSERT INTO nodes (object_id, grid_id=G', type, x, y, w, h, view_x, view_y, child_grid_id, capped, mime_type, blob_id, owner, group, mode, ...)
+  for each tile M in G:
+    INSERT INTO tiles (object_id, grid_id=G', type, x, y, w, h, view_x, view_y, child_grid_id, capped, mime_type, blob_id, owner, group, mode, ...)
       values copied from M.
     if M.type == 'well':
        UPDATE grids SET refcount = refcount + 1 WHERE id = M.child_grid_id  -- new well points at same child grid; bump its refcount
@@ -473,27 +450,27 @@ BEGIN TRANSACTION
   -- Editing pane's path is provided by the client in the request; the well is the deepest one in the path.
   W := pane.path[-1]    -- the well through which we descended into G
   UPDATE grids SET refcount = refcount - 1 WHERE id = W.child_grid_id
-  UPDATE nodes SET child_grid_id = G' WHERE id = W.id
+  UPDATE tiles SET child_grid_id = G' WHERE id = W.id
   -- (this UPDATE may itself need to recurse if W's grid is also shared)
   -- Use recursive logic, propagating up the path.
 
-  apply the original write to the corresponding node in G'.
+  apply the original write to the corresponding tile in G'.
 
 COMMIT
 ```
 
 The recursion up the path stops at the first grid in the path that has `refcount == 1` (no clone above this point in the user's tree).
 
-When forking, blob references are not duplicated; `blobs.refcount` is incremented for each new node row that references a blob.
+When forking, blob references are not duplicated; `blobs.refcount` is incremented for each new tile row that references a blob.
 
 ### 9.3 Reference Counts
 
-- `grids.refcount`: number of well-nodes whose `child_grid_id` equals this grid's id, plus 1 if this grid is a user's `root_grid_id`. The "+1 for root" prevents accidental garbage-collection of root grids that are momentarily unreferenced during ascent-at-root.
-- `blobs.refcount`: number of node rows referencing this blob (via `blob_id` or `preview_blob_id`).
+- `grids.refcount`: number of well-tiles whose `child_grid_id` equals this grid's id, plus 1 if this grid is a user's `root_grid_id`. The "+1 for root" prevents accidental garbage-collection of root grids that are momentarily unreferenced during ascent-at-root.
+- `blobs.refcount`: number of tile rows referencing this blob (via `blob_id` or `preview_blob_id`).
 
 When refcount drops to 0:
 
-- Grid deletion cascades: remove all nodes in the grid (each node's child grid or blob has its refcount decremented, possibly recursively deleting them).
+- Grid deletion cascades: remove all tiles in the grid (each tile's child grid or blob has its refcount decremented, possibly recursively deleting them).
 - Blob deletion: simply delete the row.
 
 A `FillWell` on an empty well is the only operation that intentionally drops a grid's refcount to 0 (the well is deleted, removing the only reference to its child grid).
@@ -503,8 +480,8 @@ A `FillWell` on an empty well is the only operation that intentionally drops a g
 Every mutating RPC includes the originating pane's framed rectangle (in the grid's own coordinates) and descent path. The server:
 
 1. Validates the descent path is well-formed (each well in the path actually points to the next grid).
-2. Validates the affected node's footprint is entirely within the framed rectangle.
-3. Validates permissions on every relevant grid/node.
+2. Validates the affected tile's footprint is entirely within the framed rectangle.
+3. Validates permissions on every relevant grid/tile.
 4. Performs the operation, including any CoW forking, in a single transaction.
 
 ---
@@ -516,24 +493,24 @@ The client renders to a single `<canvas>` and drives all input from there. No DO
 ### 10.1 Rendering
 
 - Cell size: `64` logical pixels at zoom `1.0`. Configurable constant.
-- For each pane: clear, compute visible cell range from `(cx, cy, zoom)`, query a local cache of nodes for that grid, render each visible node.
-- Node rendering:
+- For each pane: clear, compute visible cell range from `(cx, cy, zoom)`, query a local cache of tiles for that grid, render each visible tile.
+- Tile rendering:
   - **Well, open**: a bordered rectangle showing a downsampled rendering of its child grid's framed region.
   - **Well, capped**: distinct visual — covered look, no descent allowed, no preview of contents.
   - **Well, no-read**: padlock tile, distinct from capped.
-  - **File, markdown**: thumbnail of the rendered markdown, cropped to `view_y` and the node's footprint.
+  - **File, markdown**: thumbnail of the rendered markdown, cropped to `view_y` and the tile's footprint.
   - **File, image**: cropped image at `(view_x, view_y, w*cell, h*cell)`.
   - **File, uri-list**: cached URL snapshot, similarly cropped.
 
 ### 10.2 Local Cache
 
-The client keeps a per-grid cache of nodes. It populates it via `GetGrid` on first descent, and updates it via `Subscribe` events.
+The client keeps a per-grid cache of tiles. It populates it via `GetGrid` on first descent, and updates it via `Subscribe` events.
 
 Recursive previews (well showing its child grid) require fetching the child grid as well. The client lazily fetches child grids one level deep when zoom is high enough that the preview would be legible.
 
 ### 10.3 Input
 
-- **Mouse**: hover establishes mouse-focus pane. Wheel zooms the mouse-focused pane. Click selects/descends. Right-click context menu. Drag begins on a node and follows the cursor across panes. Drag on empty space pans.
+- **Mouse**: hover establishes mouse-focus pane. Wheel zooms the mouse-focused pane. Click selects/descends. Right-click context menu. Drag begins on a tile and follows the cursor across panes. Drag on empty space pans.
 - **Keyboard**: arrow keys / asdw pan the keyboard-focused pane. `+`/`-` zoom. `Esc` ascends. `Ctrl+arrow` moves keyboard focus between panes. Modifier-drag clones (`Alt`).
 
 ### 10.4 Pane Tree State
@@ -560,15 +537,14 @@ If no session cookie or session is invalid, the client renders a centered HTML l
 ## 11. Build and Run
 
 ```
-make proto       # regenerate from .proto
-make build       # builds ascent binary; compiles client to web/ascent.wasm
+make build       # builds gridwell binary; compiles client to web/gridwell.wasm
 make test        # runs all unit tests
-make serve       # ./ascent serve --db ./ascent.db
+make serve       # ./gridwell serve --db ./gridwell.db
 ```
 
-`make build` runs `GOOS=js GOARCH=wasm go build -o web/ascent.wasm ./client/wasm` and copies `wasm_exec.js` from `$(go env GOROOT)/misc/wasm/` (or `lib/wasm/` on newer Go versions) into `web/`.
+`make build` runs `GOOS=js GOARCH=wasm go build -o web/gridwell.wasm ./client/wasm` and copies `wasm_exec.js` from `$(go env GOROOT)/misc/wasm/` (or `lib/wasm/` on newer Go versions) into `web/`.
 
-The `serve` subcommand serves `web/` as static files at `/` and gRPC-Web at `/rpc/...`.
+The `serve` subcommand serves `web/` as static files at `/` and JSON-RPC at `/rpc/...`.
 
 ---
 
@@ -588,7 +564,7 @@ Concretely, every package has unit tests with the following minimums:
 - `internal/store`: full coverage of CoW fork, refcount maintenance, locality enforcement, permission checks, every mutation type, every refusal path (overlap, capped, empty-only, permission-denied), and the schema's CHECK constraints. Use an in-memory SQLite (`:memory:`) per test. Property-based tests for invariants.
 - `internal/auth`: password hashing/verification (including timing-safe comparison), session creation, expiry, and revocation.
 - `internal/server`: each RPC method tested with a fake `store` interface — happy path, every error path, every permission case. `GetURLTitle` tested against an in-process `httptest.Server` returning various HTML payloads (well-formed, malformed, missing title, oversized, slow, redirecting, non-200).
-- `client/...` (non-WASM packages): pane tree manipulation (split, close, focus, resize), local cache reconciliation against `Subscribe` events, descent path validation and truncation when nodes are deleted, drag/drop coordinate logic, markdown layout pass.
+- `client/...` (non-WASM packages): pane tree manipulation (split, close, focus, resize), local cache reconciliation against `Subscribe` events, descent path validation and truncation when tiles are deleted, drag/drop coordinate logic, markdown layout pass.
 - `client/wasm`: factor everything possible into subpackages tested under standard `go test`. The `wasm/main.go` entry point should be a thin wiring layer.
 
 Property-based tests (using `gopter` or hand-rolled, or table-driven with randomized inputs) are required for:
@@ -610,20 +586,20 @@ Every bug that is found and fixed must come with a regression test that fails be
 |---|---|---|
 | Read a grid | r on grid | — |
 | Descend into well | r on well + r on its child grid | well is capped |
-| Create well | w on parent grid | new footprint overlaps existing node |
+| Create well | w on parent grid | new footprint overlaps existing tile |
 | Create file | w on parent grid | overlap; unsupported MIME; oversized |
-| Move node within grid | w on grid | new footprint overlaps |
-| Move node across grids | w on source grid + w on dest grid | overlap on dest |
-| Clone node | w on source node + w on dest grid | overlap on dest |
-| Resize node | w on node | new footprint overlaps |
-| Set viewport | w on node | — |
+| Move tile within grid | w on grid | new footprint overlaps |
+| Move tile across grids | w on source grid + w on dest grid | overlap on dest |
+| Clone tile | w on source tile + w on dest grid | overlap on dest |
+| Resize tile | w on tile | new footprint overlaps |
+| Set viewport | w on tile | — |
 | Cap well | w on well | already capped |
 | Redig well | w on well | not capped |
 | Fill well | w on parent grid | well is non-empty |
 | Edit file content | w on file | type is read-only (image, uri-list) |
 | Ascend at root | always allowed (creates new root) | — |
 
-In every case, locality of action is also enforced: the affected node's footprint must lie within the originating pane's framed rectangle.
+In every case, locality of action is also enforced: the affected tile's footprint must lie within the originating pane's framed rectangle.
 
 ---
 
@@ -644,7 +620,7 @@ These are designed-around but not built:
 
 ## 15. Definition of Done
 
-- `hangar init`, `hangar adduser`, `hangar serve` all work end-to-end.
+- `gridwell init`, `gridwell adduser`, `gridwell serve` all work end-to-end.
 - A logged-in user can create wells and files, descend, ascend, cap, redig, fill, move, clone, resize, set viewports, and edit markdown.
 - Two browser sessions for the same user see each other's changes via `Subscribe`.
 - Permissions model is enforced for all operations (verified by tests; the UI does not yet expose ways to set non-default permissions).
