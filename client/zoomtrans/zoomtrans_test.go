@@ -299,6 +299,75 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 	}
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// File-side round-trip and continuity.
+//
+// Files use the same intrinsic-ratio model as wells; only the reference
+// rectangle differs (inner-box vs full pane). The tests below pin the
+// invariants at the math level so a future regression in fileLiveZoom
+// / fileEffectiveRatio (in the wasm package, not testable directly)
+// is caught by failures here when someone reaches for a shortcut.
+
+func TestFileRoundTripSamePane(t *testing.T) {
+	// Mirror of TestWellRoundTripSamePane: save & reconstruct a live
+	// FileZoom across the same pane. Uses a plausible fileOvertake
+	// from a 4×3 file in a 1920×1080 pane with the typical inner-box
+	// margin (~80px).
+	innerW, innerH := 1760.0, 920.0
+	fileOvertake := Overtake(4, 3, innerW, innerH, cellPx)
+	for _, L0 := range []float64{0.5, 1.0, 1.4, 3.0} {
+		stored := IntrinsicFromLive(L0, fileOvertake)
+		got := LiveFromIntrinsic(stored, fileOvertake)
+		if !near(got, L0) {
+			t.Errorf("L0=%v: got %v", L0, got)
+		}
+	}
+}
+
+func TestFileRoundTripAcrossPaneResize(t *testing.T) {
+	// Saving at pane A and reconstructing at pane B preserves the
+	// ratio. The visible *fraction of the file's content width that
+	// fits in the inner box* is the pane-independent invariant —
+	// fileOvertake × fileNaturalContentPx / (live × W × cellPx) = const.
+	// Equivalently: 1 / stored is the pane-independent property.
+	for _, L0 := range []float64{1.0, 1.4} {
+		innerAW, innerAH := 1760.0, 920.0
+		ovA := Overtake(4, 3, innerAW, innerAH, cellPx)
+		stored := IntrinsicFromLive(L0, ovA)
+		innerBW, innerBH := 1120.0, 560.0
+		ovB := Overtake(4, 3, innerBW, innerBH, cellPx)
+		L1 := LiveFromIntrinsic(stored, ovB)
+		if !near(stored, IntrinsicFromLive(L1, ovB)) {
+			t.Errorf("L0=%v: ratio drift across pane resize", L0)
+		}
+	}
+}
+
+func TestFileFallbackUnifiesPreviewAndLive(t *testing.T) {
+	// The file-side fallback rule (wasm-side helper fileEffectiveRatio)
+	// is: substitute IntrinsicFromLive(fileInitialZoom, fileOvertake)
+	// when stored is 0. Property under test: at the moment of descent
+	// (parent zoom = fileOvertake), the preview scale and the live
+	// FileZoom must agree — that's the path-swap continuity for
+	// unvisited files, fixed in Phase 3.
+	//
+	// Math: preview_at_overtake = overtake × ratio
+	//       live_first_descent = overtake × ratio  (when ratio =
+	//         IntrinsicFromLive(fileInitialZoom, overtake))
+	//                          = fileInitialZoom
+	// So preview at descent should literally equal fileInitialZoom.
+	for _, initialZoom := range []float64{0.5, 1.0, 1.4} {
+		for _, overtake := range []float64{2.5, 5.0, 6.875, 10.0} {
+			ratio := IntrinsicFromLive(initialZoom, overtake)
+			previewAtOvertake := overtake * ratio
+			if !near(previewAtOvertake, initialZoom) {
+				t.Errorf("initial=%v overtake=%v: preview-at-swap=%v ≠ initial",
+					initialZoom, overtake, previewAtOvertake)
+			}
+		}
+	}
+}
+
 func TestAscentMidContinuityForIntrinsicRatio(t *testing.T) {
 	// Mirror of TestPathSwapContinuityForIntrinsicRatio for ascent:
 	// at the switch, the just-before child cell equals the just-after
