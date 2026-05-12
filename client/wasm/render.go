@@ -499,7 +499,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Node, x, y, w, h float64) 
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
 func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
-	mode := "rendered"
+	mode := "text"
 	if last, ok := a.fileLastMode[n.ID]; ok && last != "" {
 		mode = last
 	}

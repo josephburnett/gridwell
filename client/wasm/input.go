@@ -110,8 +110,8 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 			if z < zoomMin {
 				z = zoomMin
 			}
-			if z > zoomMax {
-				z = zoomMax
+			if z > fileZoomMax {
+				z = fileZoomMax
 			}
 			p.FileZoom = z
 			a.refreshFileOverlay()
@@ -941,7 +941,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 
 	fileID := file.ID
 	initialScroll := float64(file.ViewY)
-	mode := "rendered"
+	mode := "text"
 	if last, ok := a.fileLastMode[fileID]; ok && last != "" {
 		mode = last
 	}
@@ -1250,9 +1250,9 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// URL and upload need user input *before* creation. The synthetic
-	// ghost is dismissed, the palette stays open until the user
-	// confirms; a cancel keeps everything as-is.
+	// URL, markdown, and upload need user input *before* creation. The
+	// synthetic ghost is dismissed, the palette stays open until the
+	// user confirms; a cancel keeps everything as-is.
 	switch d.template {
 	case tplURL:
 		val := js.Global().Call("prompt", "URL:")
@@ -1270,6 +1270,23 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.menuOpen = false
 		a.draw()
 		return
+	case tplMarkdown:
+		val := js.Global().Call("prompt", "Title:")
+		a.ghost = nil
+		if val.IsNull() || val.IsUndefined() {
+			a.draw()
+			return
+		}
+		title := val.String()
+		if title == "" {
+			a.draw()
+			return
+		}
+		a.createAtCell(destPane, destRect, "file", "text/markdown",
+			[]byte("# "+title+"\n"), dropX, dropY)
+		a.menuOpen = false
+		a.draw()
+		return
 	case tplUpload:
 		a.ghost = nil
 		a.openUploadAtCell(destPane, destRect, dropX, dropY)
@@ -1279,8 +1296,8 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// Wells and markdown commit immediately. Animate the ghost to
-	// the snap target for a tactile landing.
+	// Wells commit immediately. Animate the ghost to the snap target
+	// for a tactile landing.
 	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
 	if a.ghost != nil {
 		a.ghost.paneID = destPane.ID
@@ -1290,8 +1307,6 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	switch d.template {
 	case tplWell:
 		a.createAtCell(destPane, destRect, "well", "", nil, dropX, dropY)
-	case tplMarkdown:
-		a.createAtCell(destPane, destRect, "file", "text/markdown", []byte("# untitled\n"), dropX, dropY)
 	}
 	a.menuOpen = false
 }

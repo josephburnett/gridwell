@@ -25,6 +25,12 @@ const (
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
+	// fileZoomMax is the maximum FileZoom (zoom inside a file). Much
+	// higher than the grid zoomMax so a heading can be enlarged enough
+	// to fill a single cell of the parent grid in preview — that lets a
+	// user use a markdown file as a section title.
+	fileZoomMax = 50.0
+
 	// fileNaturalContentPx is the logical width of the rendered markdown
 	// canvas at FileZoom=1.0. Picked so a typical desktop pane shows the
 	// content comfortably; previews scale this down to fit the file's
