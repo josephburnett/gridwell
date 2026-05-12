@@ -96,6 +96,33 @@ func fileLiveZoom(r paneRect, fileW, fileH int64, storedViewZoom float64) float6
 	return zoomtrans.LiveFromIntrinsic(ratio, overtake)
 }
 
+// filePreviewContentBox returns the rect within a file's preview cell
+// (x, y, w, h) where the rendered content is painted. The content box
+// has the inner-box aspect of pane rect r and is fit top-left inside
+// the cell — so the preview is a faithful scaled-down version of the
+// live mode's inner-box. Text-to-grey ratio is preserved across the
+// ascend/descend transition.
+//
+// The "starting from the left" anchoring is the user's explicit
+// preference; centering would also preserve the ratio but require
+// drift checking when the file footprint isn't square.
+func filePreviewContentBox(r paneRect, x, y, w, h float64) (cx, cy, cw, ch float64) {
+	m := fileMargin(r)
+	innerW := r.W - 2*m
+	innerH := r.H - 2*m
+	if innerW <= 0 || innerH <= 0 || w <= 0 || h <= 0 {
+		return x, y, w, h
+	}
+	aspect := innerW / innerH
+	cellAspect := w / h
+	if aspect > cellAspect {
+		// Inner box is wider than cell. Width-bound; height shrinks.
+		return x, y, w, w / aspect
+	}
+	// Inner box is taller (or same). Height-bound; width shrinks.
+	return x, y, h * aspect, h
+}
+
 // fileInnerBox returns the screen rectangle of a file-focused pane's
 // inner area: the light-grey reading region that the textarea sits on
 // (text mode) or the rendered markdown fills (rendered mode). Bounded
