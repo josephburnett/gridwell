@@ -247,13 +247,12 @@ walk:
 		} else {
 			p.FileMode = "rendered"
 		}
-		// Reconstruct live FileZoom from the intrinsic ViewZoom ratio
-		// (FileZoom = ViewZoom × FileOvertake_now). For unvisited
-		// files (ViewZoom == 0) fall back to a calibrated initial
-		// zoom from pane size.
-		if file, ok := a.cachedFile(p.Path, fileNodeID); ok && file.ViewZoom > 0 {
+		// Reconstruct live FileZoom via the single file-zoom helper,
+		// which substitutes a pane-derived default for unvisited files
+		// (ViewZoom == 0) so live and preview agree at path-swap.
+		if file, ok := a.cachedFile(p.Path, fileNodeID); ok {
 			r := paneRectFor(a, p)
-			p.FileZoom = file.ViewZoom * fileOvertakeZoom(r, file.W, file.H)
+			p.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
 		} else {
 			p.FileZoom = fileInitialZoom(a.width, a.height)
 		}

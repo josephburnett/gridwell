@@ -966,14 +966,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Node) {
 			fp.FileMode = mode
 			fp.FileScrollY = initialScroll
 			fp.FileScrollX = 0
-			// Reconstruct live FileZoom from the intrinsic ratio
-			// stored on the node. 0 = never visited → fall back to a
-			// pane-size-calibrated initial zoom.
-			if file.ViewZoom > 0 {
-				fp.FileZoom = file.ViewZoom * fileOvertakeZoom(r, file.W, file.H)
-			} else {
-				fp.FileZoom = fileInitialZoom(r.W, r.H)
-			}
+			fp.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
 			a.refreshFileOverlay()
 		},
 	})

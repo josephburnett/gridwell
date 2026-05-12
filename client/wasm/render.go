@@ -222,7 +222,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 					continue
 				}
 				nn := n
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected)
 			}
 			a.drawEdgeIndicators(g.Nodes, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
@@ -233,7 +233,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 				}
 				w := float64(gn.W) * gcs
 				h := float64(gn.H) * gcs
-				a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, false)
+				a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, r, false)
 			}
 		}
 	} else {
@@ -373,9 +373,9 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Node, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
 	if n.Type == "file" && n.MimeType == "text/markdown" {
-		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, selected)
+		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, r, selected)
 		return
 	}
 	if n.Type != "well" || n.Capped {
@@ -498,7 +498,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Node, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, selected bool) {
+func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
 	mode := "rendered"
 	if last, ok := a.fileLastMode[n.ID]; ok && last != "" {
 		mode = last
@@ -516,22 +516,15 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 		scrollX = fp.FileScrollX
 		scrollY = fp.FileScrollY
 	} else {
-		// ViewZoom is the intrinsic ratio = FileZoom / FileOvertake_at_save
-		// where FileOvertake is the parent zoom that makes the file's
-		// footprint = inner-box (the meaningful textarea screen rect).
-		// Preview scale = parentZoom × ViewZoom. At parent =
-		// FileOvertake_now this collapses to FileZoom = ViewZoom ×
-		// FileOvertake — matching the live render at the path-swap.
-		// Pane-size independent.
-		// Default (ViewZoom == 0) falls back to footprint-fill.
-		var previewScale float64
-		if n.ViewZoom > 0 && parentCellSize > 0 {
-			parentZoom := parentCellSize / cellPx
-			previewScale = parentZoom * n.ViewZoom
-		}
-		if previewScale <= 0 {
-			previewScale = w / fileNaturalContentPx
-		}
+		// Preview scale = parentZoom × effectiveRatio, where the
+		// effective ratio is the file's stored ViewZoom (or the
+		// unvisited-file default substituted by fileEffectiveRatio).
+		// At parent = fileOvertake_now this equals the live FileZoom
+		// computed by fileLiveZoom, so the path swap is visually
+		// continuous for visited AND unvisited files.
+		parentZoom := parentCellSize / cellPx
+		ratio := fileEffectiveRatio(r, n.W, n.H, n.ViewZoom)
+		previewScale := parentZoom * ratio
 		if previewScale < 0.05 {
 			previewScale = 0.05
 		}
