@@ -53,11 +53,15 @@ func fileMargin(r paneRect) float64 {
 }
 
 // fileOvertakeZoom returns the parent zoom at which the file node's
-// footprint (W × H cells) exceeds the inner-box dimensions (textarea
-// region) of pane rect r. The file-mode analogue of
-// zoomtrans.OvertakeZoom: same formula, different reference rect (the
-// inner box rather than the full pane). Delegates to zoomtrans.Overtake
-// so the math is owned in one place.
+// footprint (W × H cells) exactly fits inside the inner-box dimensions
+// (textarea region) of pane rect r — the smaller inner-box dim binds.
+//
+// Uses zoomtrans.Fit (min of dim ratios), not Overtake (max). The
+// distinction matters when the file's footprint aspect ≠ the inner-box
+// aspect (e.g., a 1×1 file in a landscape pane): the binding dim is
+// what limits user content in live mode, so calibrating ViewZoom
+// against it makes the preview text fill the file cell at the same
+// fraction as live text fills the inner-box.
 func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
 	m := fileMargin(r)
 	innerW := r.W - 2*m
@@ -65,7 +69,7 @@ func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
 	if innerW <= 0 || innerH <= 0 {
 		return 1
 	}
-	return zoomtrans.Overtake(fileW, fileH, innerW, innerH, cellPx)
+	return zoomtrans.Fit(fileW, fileH, innerW, innerH, cellPx)
 }
 
 // fileEffectiveRatio returns the intrinsic ViewZoom for `file` in pane
@@ -96,32 +100,6 @@ func fileLiveZoom(r paneRect, fileW, fileH int64, storedViewZoom float64) float6
 	return zoomtrans.LiveFromIntrinsic(ratio, overtake)
 }
 
-// filePreviewContentBox returns the rect within a file's preview cell
-// (x, y, w, h) where the rendered content is painted. The content box
-// has the inner-box aspect of pane rect r and is fit top-left inside
-// the cell — so the preview is a faithful scaled-down version of the
-// live mode's inner-box. Text-to-grey ratio is preserved across the
-// ascend/descend transition.
-//
-// The "starting from the left" anchoring is the user's explicit
-// preference; centering would also preserve the ratio but require
-// drift checking when the file footprint isn't square.
-func filePreviewContentBox(r paneRect, x, y, w, h float64) (cx, cy, cw, ch float64) {
-	m := fileMargin(r)
-	innerW := r.W - 2*m
-	innerH := r.H - 2*m
-	if innerW <= 0 || innerH <= 0 || w <= 0 || h <= 0 {
-		return x, y, w, h
-	}
-	aspect := innerW / innerH
-	cellAspect := w / h
-	if aspect > cellAspect {
-		// Inner box is wider than cell. Width-bound; height shrinks.
-		return x, y, w, w / aspect
-	}
-	// Inner box is taller (or same). Height-bound; width shrinks.
-	return x, y, h * aspect, h
-}
 
 // fileInnerBox returns the screen rectangle of a file-focused pane's
 // inner area: the light-grey reading region that the textarea sits on

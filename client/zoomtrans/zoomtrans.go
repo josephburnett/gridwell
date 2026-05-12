@@ -77,12 +77,14 @@ func EffectiveViewZoom(stored, fallback float64) float64 {
 // Overtake returns the zoom at which a (footprintW × footprintH) cell
 // footprint exceeds both dimensions of a (refW × refH) px reference
 // rectangle — the "footprint has fully consumed the reference area, its
-// outline is just past every edge" point.
+// outline is just past every edge" point. Uses the larger of the two
+// dim ratios so neither dimension can fit; the descent target "fills"
+// the rect (one dim exactly, the other overflows).
 //
-// This is the path-swap target zoom shared by wells and files. For wells
-// the reference rect is the pane; for files it is the inner-box (textarea
-// region). Returns 1 on degenerate input so the descent never divides by
-// zero downstream.
+// Wells use Overtake: the well's descent target is "well fills pane".
+// Files use Fit (min of ratios) — see below — because the file
+// footprint should match its grey area, calibrated by the bounding
+// dimension that limits user content. Returns 1 on degenerate input.
 func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
 	if footprintW <= 0 || footprintH <= 0 || cellPx <= 0 {
 		return 1
@@ -90,6 +92,29 @@ func Overtake(footprintW, footprintH int64, refW, refH, cellPx float64) float64 
 	zw := refW / (float64(footprintW) * cellPx)
 	zh := refH / (float64(footprintH) * cellPx)
 	return math.Max(zw, zh)
+}
+
+// Fit returns the zoom at which a (footprintW × footprintH) cell
+// footprint exactly fits inside a (refW × refH) px reference
+// rectangle — one dim matches exactly, the other has slack. Uses the
+// smaller of the two dim ratios.
+//
+// Used by files for fileOvertakeZoom. Calibrating against the smaller
+// inner-box dimension means the saved ViewZoom reconstructs the text
+// scale relative to whichever dim was binding the user's editing
+// (the user's content can only grow until it hits the smaller dim;
+// past that they would have wanted a bigger file footprint instead).
+// The preview then renders text at a scale that fills the file cell
+// in that same binding dimension.
+//
+// Returns 1 on degenerate input.
+func Fit(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
+	if footprintW <= 0 || footprintH <= 0 || cellPx <= 0 {
+		return 1
+	}
+	zw := refW / (float64(footprintW) * cellPx)
+	zh := refH / (float64(footprintH) * cellPx)
+	return math.Min(zw, zh)
 }
 
 // OvertakeZoom is the well-flavored convenience for Overtake — takes a

@@ -532,29 +532,16 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 		scrollY = float64(n.ViewY)
 	}
 
-	// In preview, the rendered content lives inside a "content box" with
-	// the same aspect as the live mode's inner-box (textarea region) of
-	// the pane the preview is being drawn in. The content box is fit
-	// top-left inside the cell footprint. This way the user sees a
-	// faithful miniature of what they had in live: text fills the same
-	// fraction of the grey area in both views. Outside the content box,
-	// inside the cell, is dark — the part of the file footprint that
-	// extends beyond the inner-box in live mode is empty there too.
-	cx, cy, cw, ch := x, y, w, h
-	if fp == nil {
-		cx, cy, cw, ch = filePreviewContentBox(r, x, y, w, h)
-	}
-
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", cx, cy, cw, ch)
+	a.cctx.Call("rect", x, y, w, h)
 	a.cctx.Call("clip")
 
-	// Paint the content box with the same light-grey background that
-	// live mode uses for its inner-box. Principle: things stay where
-	// the user put them — including colors.
+	// Paint the full cell with the same light-grey background that
+	// live mode uses for its inner-box. The user sees the cell as the
+	// preview unit; the grey = cell.
 	a.cctx.Set("fillStyle", colorFileInnerBg)
-	a.cctx.Call("fillRect", cx, cy, cw, ch)
+	a.cctx.Call("fillRect", x, y, w, h)
 
 	// When the focused pane is descended into THIS file in text mode,
 	// the textarea overlay renders the editable source. Drawing the
@@ -565,10 +552,14 @@ func (a *App) drawMarkdownNode(n *rpc.Node, x, y, w, h, parentCellSize float64, 
 		if blob, ok := a.c.Blob(n.BlobID); ok {
 			// Layout width is fixed at the natural content width so
 			// every preview wraps lines the same way live mode does —
-			// principle of continuity across the path swap.
+			// principle of continuity across the path swap. Text that
+			// would extend past the cell to the right (because live
+			// inner-box is wider than tall) gets clipped at the cell
+			// edge — that's the "start from the left" behavior the
+			// user asked for.
 			drawMarkdownInRect(a.cctx, string(blob.Data),
-				cx-scrollX*scale, cy-scrollY*scale,
-				fileNaturalContentPx*scale, ch+scrollY*scale,
+				x-scrollX*scale, y-scrollY*scale,
+				fileNaturalContentPx*scale, h+scrollY*scale,
 				scale, 0, mode)
 		} else if n.BlobID != 0 {
 			a.fetchBlob(n.BlobID)

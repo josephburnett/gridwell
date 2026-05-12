@@ -310,11 +310,11 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 
 func TestFileRoundTripSamePane(t *testing.T) {
 	// Mirror of TestWellRoundTripSamePane: save & reconstruct a live
-	// FileZoom across the same pane. Uses a plausible fileOvertake
-	// from a 4×3 file in a 1920×1080 pane with the typical inner-box
-	// margin (~80px).
+	// FileZoom across the same pane. Uses Fit (not Overtake) because
+	// file fileOvertakeZoom calibrates against the *smaller* inner-box
+	// dim — see Fit's docstring.
 	innerW, innerH := 1760.0, 920.0
-	fileOvertake := Overtake(4, 3, innerW, innerH, cellPx)
+	fileOvertake := Fit(4, 3, innerW, innerH, cellPx)
 	for _, L0 := range []float64{0.5, 1.0, 1.4, 3.0} {
 		stored := IntrinsicFromLive(L0, fileOvertake)
 		got := LiveFromIntrinsic(stored, fileOvertake)
@@ -326,19 +326,64 @@ func TestFileRoundTripSamePane(t *testing.T) {
 
 func TestFileRoundTripAcrossPaneResize(t *testing.T) {
 	// Saving at pane A and reconstructing at pane B preserves the
-	// ratio. The visible *fraction of the file's content width that
-	// fits in the inner box* is the pane-independent invariant —
-	// fileOvertake × fileNaturalContentPx / (live × W × cellPx) = const.
-	// Equivalently: 1 / stored is the pane-independent property.
+	// ratio. Uses Fit for the file overtake.
 	for _, L0 := range []float64{1.0, 1.4} {
 		innerAW, innerAH := 1760.0, 920.0
-		ovA := Overtake(4, 3, innerAW, innerAH, cellPx)
+		ovA := Fit(4, 3, innerAW, innerAH, cellPx)
 		stored := IntrinsicFromLive(L0, ovA)
 		innerBW, innerBH := 1120.0, 560.0
-		ovB := Overtake(4, 3, innerBW, innerBH, cellPx)
+		ovB := Fit(4, 3, innerBW, innerBH, cellPx)
 		L1 := LiveFromIntrinsic(stored, ovB)
 		if !near(stored, IntrinsicFromLive(L1, ovB)) {
 			t.Errorf("L0=%v: ratio drift across pane resize", L0)
+		}
+	}
+}
+
+// TestFilePreviewMatchesLiveOnAspectMismatch is the test that would
+// have caught the s6/s7 bug. Setup: a 1×1 file in a landscape pane
+// (innerW > innerH). The invariant under test: in the preview, an
+// h1 must fill the file cell's height at the SAME fraction it fills
+// the inner-box height in live. That's "things stay where you put
+// them, including relative sizes" applied to the file/cell pair —
+// for whichever inner-box dimension the user's content fills.
+//
+// Files with aspect ≠ inner-box aspect can't preserve both width and
+// height ratios simultaneously through the live→preview transform.
+// Calibrating against the *smaller* inner-box dim (Fit, not Overtake)
+// preserves height ratio in the landscape-pane case below — which is
+// the dim that actually bounds the user's content (a title fills the
+// available vertical room before it overflows the wider horizontal
+// room). Width may overflow the cell on the right; the user accepts
+// that ("starting from the left").
+//
+// Before switching fileOvertakeZoom from Overtake (max) to Fit (min),
+// this test failed.
+func TestFilePreviewMatchesLiveOnAspectMismatch(t *testing.T) {
+	innerW, innerH := 2400.0, 1204.0
+	fileW, fileH := int64(1), int64(1)
+	const h1Px = 24.0 // logical px for h1 in markdown style
+
+	// User has FileZoom that gives a readable h1 — value doesn't
+	// matter as long as we measure fill fractions from it consistently.
+	const liveFileZoom = 23.0
+	liveHeightFill := liveFileZoom * h1Px / innerH
+
+	// Save the intrinsic ratio via the file overtake.
+	fileOvertake := Fit(fileW, fileH, innerW, innerH, cellPx)
+	stored := IntrinsicFromLive(liveFileZoom, fileOvertake)
+
+	// At any preview parent zoom, the rendered h1's fraction-of-cell-
+	// height must equal the live fraction-of-innerH.
+	for _, parentZoom := range []float64{0.5, 1.0, 2.5, 5.0} {
+		previewScale := LiveFromIntrinsic(stored, parentZoom)
+		previewH1Height := previewScale * h1Px
+		cellHeight := cellPx * parentZoom
+		previewHeightFill := previewH1Height / cellHeight
+
+		if !near(previewHeightFill, liveHeightFill) {
+			t.Errorf("parentZoom=%v: preview height fill = %v, want %v (live ratio)",
+				parentZoom, previewHeightFill, liveHeightFill)
 		}
 	}
 }
