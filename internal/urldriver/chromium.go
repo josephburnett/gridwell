@@ -298,33 +298,10 @@ func (d *Driver) ForwardInput(userID, tileID int64, ev InputEvent) error {
 		return nil
 	}
 	err = runWithTimeout(tc.ctx, 2*time.Second, action)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, context.Canceled) {
+	if err != nil {
 		log.Printf("[urldriver] ForwardInput cdp-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
-		return err
 	}
-	// Recovery path: chromedp tore the tab down. Respawn at the last
-	// URL and retry once.
-	log.Printf("[urldriver] ForwardInput respawning uid=%d tile=%d after-canceled-kind=%s", userID, tileID, ev.Kind)
-	if rerr := d.respawnTab(userID, tileID); rerr != nil {
-		log.Printf("[urldriver] respawn-failed uid=%d tile=%d err=%v", userID, tileID, rerr)
-		return err
-	}
-	d.mu.Lock()
-	tc, ok = d.tabs[liveKey{userID, tileID}]
-	d.mu.Unlock()
-	if !ok {
-		return err
-	}
-	retryErr := runWithTimeout(tc.ctx, 2*time.Second, action)
-	if retryErr != nil {
-		log.Printf("[urldriver] ForwardInput retry-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, retryErr)
-	} else {
-		log.Printf("[urldriver] ForwardInput retry-ok uid=%d tile=%d kind=%s", userID, tileID, ev.Kind)
-	}
-	return retryErr
+	return err
 }
 
 // respawnTab replaces a dead per-tab chromedp context with a fresh
@@ -356,6 +333,13 @@ func (d *Driver) respawnTab(userID, tileID int64) error {
 		d.mu.Unlock()
 		return err
 	}
+	browserAlive := true
+	select {
+	case <-browser.ctx.Done():
+		browserAlive = false
+	default:
+	}
+	log.Printf("[urldriver] respawn-attempt uid=%d tile=%d browser-alive=%v", userID, tileID, browserAlive)
 	// Drain the old previewLoop. If it already exited (likely — its
 	// own select on tc.ctx.Done would have returned), tc.done is
 	// already closed; otherwise close stop to signal it.
@@ -598,6 +582,15 @@ func (d *Driver) userBrowserLocked(userID int64) (*userBrowser, error) {
 	// CDP level — preliminary attempts wedged subsequent screencast.
 	b := &userBrowser{ctx: browserCtx, cancel: cancel}
 	d.users[userID] = b
+
+	// Watchdog: a dead browser context cascades — every chromedp.NewContext
+	// derived from it is born canceled. If we see this fire we know to
+	// rebuild the browser, not just the tab.
+	go func() {
+		<-browserCtx.Done()
+		log.Printf("[urldriver] BROWSER ctx done uid=%d err=%v", userID, browserCtx.Err())
+	}()
+
 	return b, nil
 }
 
