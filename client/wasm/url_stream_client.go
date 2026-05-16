@@ -216,14 +216,20 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 	return t.IsURL()
 }
 
-// paneToStreamCoords maps a screen coordinate (sx, sy) inside a pane
-// whose rect is r to the corresponding (X, Y) in server-side viewport
-// space. The server's viewport is fixed at streamViewportW×H in v1.
+// paneToStreamCoords maps a screen coordinate (sx, sy) inside a
+// pane's content box to the corresponding (X, Y) in server-side
+// viewport space. The server's viewport is fixed at streamViewportW
+// × streamViewportH in v1. We translate from the content box (NOT
+// the full pane rect): the page renders inside paneContentBox, so
+// the user's click at screen (sx, sy) corresponds to the same
+// location in viewport space only after subtracting the margin and
+// scaling against the content box size.
 func paneToStreamCoords(r paneRect, sx, sy float64) (float64, float64) {
-	if r.W <= 0 || r.H <= 0 {
+	cx, cy, cw, ch := paneContentBox(r)
+	if cw <= 0 || ch <= 0 {
 		return 0, 0
 	}
-	x := (sx - r.X) * streamViewportW / r.W
-	y := (sy - r.Y) * streamViewportH / r.H
+	x := (sx - cx) * streamViewportW / cw
+	y := (sy - cy) * streamViewportH / ch
 	return x, y
 }
