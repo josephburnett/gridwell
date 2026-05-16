@@ -127,10 +127,14 @@ func (t *tabContext) getURL() string {
 
 // hardeningJS is injected on every new document. It blocks
 // page-initiated popups and fullscreen requests, both of which we
-// promise to suppress in v1 (spec §8.3 "hard boundaries").
+// promise to suppress in v1 (spec §8.3 "hard boundaries"). It also
+// neutralizes window.close — without this, a page calling
+// window.close() can shut its tab and (when it's the last tab) the
+// entire headless Chromium process, killing every URL tile.
 const hardeningJS = `
 (function(){
   try { window.open = function(){ return null; }; } catch (e) {}
+  try { window.close = function(){}; } catch (e) {}
   try {
     if (Element.prototype.requestFullscreen) {
       Element.prototype.requestFullscreen = function(){
@@ -555,6 +559,10 @@ func (d *Driver) userBrowserLocked(userID int64) (*userBrowser, error) {
 		// Block all permission prompts (camera/mic/geo/notif/...).
 		// Available since Chrome 100.
 		chromedp.Flag("deny-permission-prompts", true),
+		// Verbose Chromium logging to stderr so chromium.log captures
+		// what the browser was doing right before it exits.
+		chromedp.Flag("enable-logging", "stderr"),
+		chromedp.Flag("v", "1"),
 		chromedp.UserDataDir(profileDir),
 		chromedp.ExecPath(d.binaryPath),
 	)
