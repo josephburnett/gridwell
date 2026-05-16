@@ -309,6 +309,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				a.startFileAscent(p)
 				return nil
 			}
+			// Defensive: a tile woken after descent started won't have
+			// triggered openURLStream yet. Sync first, then forward.
+			a.syncURLStreamForPane(p)
 			vx, vy := paneToStreamCoords(r, sx, sy)
 			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 				Kind: urldriver.InputMouseMove, X: vx, Y: vy,
