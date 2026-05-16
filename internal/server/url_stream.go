@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -154,8 +155,12 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 
 	sub := newWSSubscriber()
 	unsubscribe := s.urlStreamer.Subscribe(uid, tileID, sub)
-	defer unsubscribe()
+	defer func() {
+		log.Printf("[urlstream] unsubscribe uid=%d tile=%d", uid, tileID)
+		unsubscribe()
+	}()
 	defer sub.close()
+	log.Printf("[urlstream] subscribe uid=%d tile=%d", uid, tileID)
 
 	// Writer goroutine: drain frames + nav into the WS.
 	//
@@ -184,6 +189,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 				err := conn.Write(wctx, websocket.MessageBinary, f)
 				wcancel()
 				if err != nil {
+					log.Printf("[urlstream] writer-exit uid=%d tile=%d kind=binary err=%v", uid, tileID, err)
 					return
 				}
 			case n, ok := <-sub.nav:
@@ -195,6 +201,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 				err := conn.Write(wctx, websocket.MessageText, payload)
 				wcancel()
 				if err != nil {
+					log.Printf("[urlstream] writer-exit uid=%d tile=%d kind=nav err=%v", uid, tileID, err)
 					return
 				}
 			}
@@ -205,6 +212,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	for {
 		mt, data, err := conn.Read(ctx)
 		if err != nil {
+			log.Printf("[urlstream] reader-exit uid=%d tile=%d err=%v", uid, tileID, err)
 			break
 		}
 		if mt != websocket.MessageText {
@@ -212,15 +220,21 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 		}
 		var msg urlStreamMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Printf("[urlstream] bad-json uid=%d tile=%d err=%v body=%q", uid, tileID, err, string(data))
 			continue
 		}
 		ev, ok := messageToInputEvent(msg)
 		if !ok {
+			log.Printf("[urlstream] unknown-kind uid=%d tile=%d kind=%q", uid, tileID, msg.Kind)
 			continue
 		}
 		// Best-effort: errors are not surfaced to the client (the next
 		// frame will reflect whatever the page did with the input).
-		_ = s.urlStreamer.ForwardInput(uid, tileID, ev)
+		if err := s.urlStreamer.ForwardInput(uid, tileID, ev); err != nil {
+			log.Printf("[urlstream] forward-err uid=%d tile=%d kind=%s err=%v", uid, tileID, ev.Kind, err)
+		} else {
+			log.Printf("[urlstream] forward-ok uid=%d tile=%d kind=%s x=%.0f y=%.0f button=%s key=%s", uid, tileID, ev.Kind, ev.X, ev.Y, ev.Button, ev.Key)
+		}
 	}
 	cancel()
 	<-writerDone

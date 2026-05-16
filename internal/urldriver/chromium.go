@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -255,13 +256,19 @@ func (d *Driver) ForwardInput(userID, tileID int64, ev InputEvent) error {
 	tc, ok := d.tabs[liveKey{userID, tileID}]
 	d.mu.Unlock()
 	if !ok {
+		log.Printf("[urldriver] ForwardInput no-tab uid=%d tile=%d kind=%s", userID, tileID, ev.Kind)
 		return nil
 	}
 	action, err := inputAction(ev)
 	if err != nil {
+		log.Printf("[urldriver] ForwardInput bad-action uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
 		return err
 	}
-	return runWithTimeout(tc.ctx, 2*time.Second, action)
+	err = runWithTimeout(tc.ctx, 2*time.Second, action)
+	if err != nil {
+		log.Printf("[urldriver] ForwardInput cdp-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
+	}
+	return err
 }
 
 // captureJPEG is a chromedp action that grabs a JPEG screenshot at a

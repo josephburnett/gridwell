@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"syscall/js"
 
@@ -44,6 +45,13 @@ type urlStreamConn struct {
 	closed  bool
 }
 
+// urlLog writes a tagged debug message to the browser console.
+// Keeps URLStream-related logs grepable in devtools.
+func urlLog(format string, args ...any) {
+	msg := "[urlstream] " + fmt.Sprintf(format, args...)
+	js.Global().Get("console").Call("log", msg)
+}
+
 // openURLStream opens a WebSocket to /rpc/URLStream for the (paneID,
 // tileID) pair. Incoming binary frames are pushed into the URL
 // preview cache (which the descent renderer draws from). If a stream
@@ -59,6 +67,7 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 	}
 	host := loc.Get("host").String()
 	url := proto + "//" + host + "/rpc/URLStream?tile_id=" + strconv.FormatInt(tileID, 10)
+	urlLog("openURLStream pane=%s tile=%d url=%s", paneID, tileID, url)
 	ws := js.Global().Get("WebSocket").New(url)
 	ws.Set("binaryType", "arraybuffer")
 
@@ -83,17 +92,27 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 		// Safe to ws.Call now: readyState is OPEN.
 		pending := conn.pending
 		conn.pending = nil
+		urlLog("onOpen pane=%s tile=%d flushing=%d", paneID, tileID, len(pending))
 		for _, p := range pending {
 			conn.ws.Call("send", p)
 		}
 		return nil
 	})
-	conn.onClose = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+	conn.onClose = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		code := -1
+		reason := ""
+		clean := false
+		if len(args) > 0 {
+			code = args[0].Get("code").Int()
+			reason = args[0].Get("reason").String()
+			clean = args[0].Get("wasClean").Bool()
+		}
+		urlLog("onClose pane=%s tile=%d code=%d clean=%v reason=%q", paneID, tileID, code, clean, reason)
 		a.releaseURLStream(paneID, conn)
 		return nil
 	})
 	conn.onError = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		// The close handler will fire after error; nothing to do here.
+		urlLog("onError pane=%s tile=%d readyState=%d", paneID, tileID, conn.ws.Get("readyState").Int())
 		return nil
 	})
 	ws.Call("addEventListener", "message", conn.onMessage)
@@ -213,13 +232,15 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	if err != nil {
 		return
 	}
-	switch conn.ws.Get("readyState").Int() {
+	state := conn.ws.Get("readyState").Int()
+	switch state {
 	case 0: // CONNECTING — queue, flushed by onOpen
 		conn.pending = append(conn.pending, string(payload))
+		urlLog("queue pane=%s kind=%s queued=%d", paneID, ev.Kind, len(conn.pending))
 	case 1: // OPEN
 		conn.ws.Call("send", string(payload))
 	default: // 2 CLOSING, 3 CLOSED
-		// drop — onClose will fire and we'll reopen later if needed
+		urlLog("drop pane=%s kind=%s state=%d", paneID, ev.Kind, state)
 	}
 }
 
@@ -240,6 +261,9 @@ func (a *App) syncURLStreamForPane(p *pane.Pane) {
 		return
 	}
 	if !a.isURLDescent(p) {
+		if _, has := a.urlStreams[p.ID]; has {
+			urlLog("sync pane=%s action=close reason=not-url-descent", p.ID)
+		}
 		a.closeURLStream(p.ID)
 		return
 	}
@@ -254,12 +278,17 @@ func (a *App) syncURLStreamForPane(p *pane.Pane) {
 	}
 	existing, hasConn := a.urlStreams[p.ID]
 	if t.Live {
-		if !hasConn || existing.tileID != t.ID {
+		if !hasConn {
+			urlLog("sync pane=%s action=open reason=no-conn tile=%d", p.ID, t.ID)
+			a.openURLStream(p.ID, t.ID)
+		} else if existing.tileID != t.ID {
+			urlLog("sync pane=%s action=reopen reason=tile-changed old=%d new=%d", p.ID, existing.tileID, t.ID)
 			a.openURLStream(p.ID, t.ID)
 		}
 		return
 	}
 	if hasConn {
+		urlLog("sync pane=%s action=close reason=tile-dormant tile=%d", p.ID, existing.tileID)
 		a.closeURLStream(p.ID)
 	}
 }
