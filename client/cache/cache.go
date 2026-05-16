@@ -95,6 +95,34 @@ func (c *Cache) Grid(id int64) (*Grid, bool) {
 	return out, true
 }
 
+// KnownGridIDs returns the set of grid ids the cache currently holds.
+func (c *Cache) KnownGridIDs() []int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]int64, 0, len(c.grids))
+	for id := range c.grids {
+		out = append(out, id)
+	}
+	return out
+}
+
+// UpdateTile replaces a single tile row in the named grid. No-op if
+// the grid or tile is not cached. Used by URLStream nav events to
+// keep cached URL tiles in sync with in-page navigation without
+// going through the full Subscribe event path.
+func (c *Cache) UpdateTile(gridID int64, t rpc.Tile) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	g, ok := c.grids[gridID]
+	if !ok {
+		return
+	}
+	if _, ok := g.Tiles[t.ID]; !ok {
+		return
+	}
+	g.Tiles[t.ID] = t
+}
+
 // KnownWellIDs returns the set of well row ids the cache currently holds.
 // The pane layer uses this to truncate stale descent paths after deletes.
 func (c *Cache) KnownWellIDs() map[int64]bool {

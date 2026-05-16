@@ -146,6 +146,17 @@ type App struct {
 	// server-side field. Persisted to localStorage along with the tree.
 	fileLastMode map[int64]string
 
+	// urlPreview caches decoded HTMLImageElement values for URL tile
+	// previews (one image per tile, refreshed when GetTilePreview returns
+	// new bytes). Updated reactively on url_preview_updated Subscribe
+	// events.
+	urlPreview *urlPreviewCache
+
+	// urlStreams holds the active /rpc/URLStream WebSocket connection
+	// for each pane that's descended into a live URL tile. One per
+	// pane id; multiple panes may stream concurrently.
+	urlStreams map[string]*urlStreamConn
+
 	// urlUpdateScheduled is true when a debounced URL replaceState is
 	// pending. Multiple state changes within the debounce window
 	// coalesce into a single replaceState. Cleared when the timeout
@@ -292,6 +303,8 @@ func main() {
 		gridLoadFailed: map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
 		fileLastMode:   map[int64]string{},
+		urlPreview:     newURLPreviewCache(),
+		urlStreams:     map[string]*urlStreamConn{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -572,6 +585,16 @@ func (a *App) startSSE() {
 		// GridChanged: refetch the affected grid if any pane is looking at it.
 		if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
 			a.fetchGrid(ev.GridChanged.GridID)
+		}
+		// URL preview was overwritten — drop the cached decoded image so
+		// the next render refetches via GetTilePreview. Skip the
+		// invalidate when a WebSocket stream is already open for the
+		// tile: the WS will deliver the same bytes faster and cheaper.
+		if ev.Kind == rpc.EventURLPreviewUpdated && ev.URLPreviewUpdated != nil {
+			if !a.hasURLStreamForTile(ev.URLPreviewUpdated.TileID) {
+				a.urlPreview.Invalidate(ev.URLPreviewUpdated.TileID)
+			}
+			a.draw()
 		}
 		return nil
 	}))

@@ -71,14 +71,25 @@ CREATE TABLE IF NOT EXISTS tiles (
     capped        INTEGER NOT NULL DEFAULT 0,
     mime_type     TEXT,
     blob_id       INTEGER REFERENCES blobs(id),
+    -- URL tiles only (mime_type='text/uri-list'): the current URL,
+    -- mutated by the server's Chromium driver as the live tab navigates.
+    -- Not content-addressed; not refcounted.
+    url_string    TEXT,
+    -- URL tiles only: the latest captured JPEG preview frame. Mutable
+    -- BLOB overwritten in place (does not flow through the content-
+    -- addressed blobs table).
+    preview_jpeg  BLOB,
     owner_id      INTEGER NOT NULL REFERENCES users(id),
     group_id      INTEGER NOT NULL REFERENCES groups(id),
     mode          INTEGER NOT NULL,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
-        (type = 'well' AND child_grid_id IS NOT NULL AND mime_type IS NULL AND blob_id IS NULL) OR
-        (type = 'file' AND child_grid_id IS NULL     AND mime_type IS NOT NULL AND blob_id IS NOT NULL)
+        (type = 'well' AND child_grid_id IS NOT NULL AND mime_type IS NULL AND blob_id IS NULL AND url_string IS NULL AND preview_jpeg IS NULL) OR
+        (type = 'file' AND child_grid_id IS NULL AND mime_type IS NOT NULL AND (
+            (mime_type = 'text/uri-list' AND blob_id IS NULL AND url_string IS NOT NULL) OR
+            (mime_type <> 'text/uri-list' AND blob_id IS NOT NULL AND url_string IS NULL AND preview_jpeg IS NULL)
+        ))
     )
 );
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);

@@ -236,8 +236,8 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	// Copy each node row, bumping child grid / blob refcounts as needed.
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom,
-		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
-		       created_at, updated_at
+		       child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
+		       owner_id, group_id, mode, created_at, updated_at
 		FROM tiles WHERE grid_id = ?`, oldGridID)
 	if err != nil {
 		return 0, nil, err
@@ -245,18 +245,20 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	defer rows.Close()
 
 	type tileCopy struct {
-		oldID     int64
-		objectID  string
-		typ       string
-		x, y, w, h int64
-		viewX, viewY int64
-		viewZoom  float64
-		childGrid sql.NullInt64
-		cappedInt int64
-		mime      sql.NullString
-		blob      sql.NullInt64
-		ownerID, groupID int64
-		mode      int32
+		oldID                int64
+		objectID             string
+		typ                  string
+		x, y, w, h           int64
+		viewX, viewY         int64
+		viewZoom             float64
+		childGrid            sql.NullInt64
+		cappedInt            int64
+		mime                 sql.NullString
+		blob                 sql.NullInt64
+		urlString            sql.NullString
+		previewJPEG          []byte
+		ownerID, groupID     int64
+		mode                 int32
 		createdAt, updatedAt int64
 	}
 	var copies []tileCopy
@@ -264,6 +266,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		var nc tileCopy
 		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.typ, &nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
+			&nc.urlString, &nc.previewJPEG,
 			&nc.ownerID, &nc.groupID, &nc.mode, &nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
@@ -277,12 +280,12 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	for _, nc := range copies {
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
-				child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
-				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
+				owner_id, group_id, mode, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY, nc.viewZoom,
-			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.ownerID, nc.groupID, nc.mode,
-			nc.createdAt, now)
+			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.urlString, nc.previewJPEG,
+			nc.ownerID, nc.groupID, nc.mode, nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)
 		}

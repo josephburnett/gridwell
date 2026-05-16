@@ -36,6 +36,12 @@ func (s *Store) SubscribeEvents(userID int64) (<-chan rpc.Event, func()) {
 // publish sends the event to every subscriber for userID. Dropped events are
 // silently ignored; clients self-heal on next read.
 func (s *Store) publish(userID int64, ev rpc.Event) {
+	// Populate the runtime-only `Live` field on any TileChanged payload
+	// before sending. Done here so every emitter — tiles.go, cow.go,
+	// move_clone.go, url.go — gets the field for free.
+	if ev.TileChanged != nil && ev.TileChanged.Tile.IsURL() && s.urlDriver != nil {
+		ev.TileChanged.Tile.Live = s.urlDriver.IsLive(userID, ev.TileChanged.Tile.ID)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for sub := range s.subs {

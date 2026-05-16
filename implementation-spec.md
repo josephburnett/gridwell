@@ -30,7 +30,7 @@ Every design decision must serve this. If a feature would silently shift things 
 - **Client**: written in Go, compiled to WebAssembly. Loaded by a small static `index.html`. The client renders to a single full-window `<canvas>`. No HTML/CSS UI components beyond the canvas, the login form, and the file upload `<input>`.
 - **Transport**: JSON over HTTP/1.1. Each RPC method is a `POST` to `/rpc/<MethodName>`; `Subscribe` is a `GET` server-sent-events stream at `/rpc/Subscribe`. Wire types are hand-coded in `internal/rpc/types.go`; no protobuf code generation.
 - **Persistence**: SQLite via `modernc.org/sqlite` (pure-Go, no cgo) so the binary is statically linkable. WAL mode. All writes wrapped in transactions.
-- **Dependency policy**: Go modules from the standard ecosystem are permitted, but the running system depends only on the Go toolchain at build time and SQLite at runtime — no other external programs, no Chromium, no cgo. The pure-Go SQLite driver is a Go module vendored at build time; it imposes no system dependencies. There is no headless browser in the system; URL rendering relies on the user's browser only.
+- **Dependency policy**: Go modules from the standard ecosystem are permitted, no cgo. The pure-Go SQLite driver is a Go module vendored at build time; it imposes no system dependencies. **Chromium is an optional runtime dependency** required only for the `text/uri-list` (URL) tile type. When Chromium is present, the server manages one headless Chromium process per logged-in user and drives it via the Chrome DevTools Protocol; when Chromium is absent, all other tile types still work, and existing URL tiles still render their last captured preview but cannot be woken or created (see §8.3).
 - **Auth**: cookie-based session. Cookie is `HttpOnly`, `Secure` (in production), `SameSite=Strict`. Session token is a random 32-byte value, stored hex-encoded.
 - **Testing**: every package has unit tests. Server logic tested at the service-method layer with an in-memory SQLite. WASM client logic factored so non-DOM code is testable under standard `go test`.
 
@@ -38,9 +38,10 @@ Project layout:
 
 ```
 /cmd/gridwell/               main.go — subcommand dispatch
+/internal/cli/               init / adduser / serve subcommand implementations
 /internal/server/            HTTP server, RPC handlers, session middleware
 /internal/store/             SQLite schema + queries; CoW logic
-/internal/auth/              password hashing (argon2id), session creation
+/internal/auth/              password hashing (argon2id), session token generation
 /internal/rpc/               hand-coded wire types (JSON over HTTP)
 /client/                     Go-WASM client; pure logic in subpackages
 /client/wasm/main.go         WASM entry point
@@ -86,14 +87,14 @@ A file is a leaf tile. It has:
 
 ### 3.5 Internal Viewport
 
-Both wells and files have `(view_x, view_y)` describing what region of their interior is currently framed by their footprint.
+Both wells and files have `(view_x, view_y, view_zoom)` describing what region of their interior is currently framed by their footprint, and at what intrinsic zoom ratio.
 
-- For a well, `(view_x, view_y)` is in cells. The well's `w×h` footprint exposes a `w×h` window of the child grid starting at `(view_x, view_y)`.
-- For a file, `(view_x, view_y)` is in pixels relative to the file's full rendered content.
+- For a well, `(view_x, view_y)` is in cells: the top-left of the visible region of the child grid centered on the well's footprint. `view_zoom` is a window-independent intrinsic ratio (live child zoom divided by the well's overtake zoom at the time of ascent), which the client uses to reconstruct the preview cell size in the parent grid and to land at the user's prior zoom on re-descent. A `view_zoom` of `0` is the sentinel "never visited"; the client substitutes a default ratio in that case.
+- For a file, `(view_x, view_y)` is in pixels relative to the file's full rendered content. `view_zoom` is similarly an intrinsic FileZoom-to-overtake ratio used to restore the file's zoom on re-descent and to scale its parent-grid preview.
 
 **Resize exposes/hides content; it does not scale.** Making a tile larger reveals more of its interior at the same scale; making it smaller hides some.
 
-The internal viewport is persistent state on the tile. Changing it is a write. Snapshots taken on ascent reflect the current viewport.
+The internal viewport is persistent state on the tile. Changing it is a write (`SetTileViewport`). Snapshots taken on ascent reflect the current viewport.
 
 ### 3.6 Tree
 
@@ -147,28 +148,32 @@ The viewport UI is a tmux-style pane tree.
 
 - The window is split by a binary tree of tiles. Internal tiles are horizontal or vertical splits with a ratio in `[0, 1]`. Leaves are panes.
 - At any moment there is at least one pane. The last pane cannot be closed.
-- Each pane has its own state: descent path (list of `(well_row_id)` from root to the currently-viewed grid), viewport center `(cx, cy)` in cells (floating point), and zoom level (floating point, continuous).
-- **Keyboard focus** is a single pane. **Mouse focus** is a (possibly different) single pane, determined by hover.
+- Each pane has its own state: descent path (list of `(well_row_id)` from root to the currently-viewed grid), viewport center `(cx, cy)` in cells (floating point), and zoom level (floating point, continuous). When a pane is "inside" a markdown file, the pane additionally holds `FileFocus` (the file tile's row id), `FileMode` (`"text"` or `"rendered"`), `FileScrollX/Y`, and `FileZoom`; the pane's `Path` remains the parent grid, so file-focus is logically a leaf state that lives on top of the parent grid.
+- **Focus** is a single pane, determined by the most recent mousedown. There is no separate keyboard-vs-mouse focus split: input is mouse-only (§10.3).
 - Splitting a pane clones the current pane's state into both halves. After the split, the panes evolve independently.
 - Closing a pane discards its state.
-- Pane-tree state is *ephemeral*: it lives only in the client. On reconnect/reopen, the client restores its last-saved pane tree from `localStorage`. Server is not involved in pane state.
+- Pane-tree state is *ephemeral*: it lives only in the client and is **not** persisted to `localStorage`. On reload the layout resets to a single pane; the focused pane's descent path and viewport are recovered from the URL (§10.4). Within-session state that survives across descent/ascent but not reload — the per-pane saved-state stack, the per-file "last mode" memo — is held in memory only.
 
 ### 4.1 Operations on Panes
 
-- `Split horizontal` / `Split vertical`: creates a sibling pane. The new pane starts as a copy of the originating pane (same descent path, same viewport, same zoom).
-- `Close pane`: removes the focused pane.
-- `Focus pane`: directional movement (e.g., `Ctrl+arrow`).
-- `Resize split`: drag the split bar.
+All pane operations are driven by the **right mouse button**, with the gesture chosen by the cursor's starting region inside the pane (see §10.3):
+
+- `Split horizontal` / `Split vertical`: right-press in the outer ring near an edge, drag, release. Creates a sibling pane on that edge with the new pane inheriting the originating pane's state (path / viewport / zoom / file-mode).
+- `Swap panes`: right-press in the inner third of a pane, drag to another pane, release. The two panes' positions in the tree are exchanged.
+- `Resize split`: right-press in the resize band along the shared edge between two panes and drag. Squeezing one side past a minimum threshold closes that pane.
+- There is no keyboard shortcut for any of these.
 
 ### 4.2 Cross-Pane Drag (Teleport)
 
 To move a tile from pane A's grid to pane B's grid:
 
 1. Both panes must be open and pointing at the relevant grids (achieved via split + walk).
-2. The user mouse-drags the tile from A. While dragging, a "ghost" follows the cursor across pane boundaries.
-3. On drop in pane B at coordinates `(x, y)`, the system attempts the move. If `(x, y, w, h)` doesn't fit, the drop is refused.
+2. The user left-drags the tile from A. While dragging, a "ghost" follows the cursor across pane boundaries. The ghost smoothly interpolates its cell size between the source and destination scales so dropping into a smaller (well-preview) cell looks continuous.
+3. On drop in pane B at coordinates `(x, y)`, the system attempts the move. If `(x, y, w, h)` doesn't fit (overlap with another tile), the drop is refused and the ghost snaps back.
 
-Holding a modifier (`Alt` for clone, default for move) selects clone vs. move. Move and clone share the exact same gesture.
+Cloning shares the gesture with moving; the clone-vs-move distinction is **not yet wired to a modifier in the client** — every left-drag commits as a move (`MoveTile`). The clone branch in the drop handler exists in the code and is exercised by `CloneTile` RPCs from other entry points; a modifier binding is a small future addition.
+
+If the cursor is over an open well during a drag, the drop target promotes from the parent grid to the well's child grid (visible through the well's preview); this is the "drop into a well" gesture. Conversely, mousedown on a tile visible inside another well's preview begins a "pull out of well" drag with that child tile as the source.
 
 There are no bookmarks, persistent portals, or cross-tree navigation. Every navigation has a real cost paid in walking.
 
@@ -176,12 +181,12 @@ There are no bookmarks, persistent portals, or cross-tree navigation. Every navi
 
 ## 5. Navigation
 
-- **Move = zoom.** No avatar. The viewport is "where you are." asdw or arrow keys pan the keyboard-focused pane. Mouse wheel zooms it. The viewport is `(cx, cy, zoom)` per pane.
-- **Continuous zoom.** Any positive zoom value is allowed. Zoom is a viewport property only — it does not change cell size in storage.
-- **Locality of action.** A tile may be operated on only if its footprint is currently visible in the focused pane. Definition: any of its cells lies inside the focused pane's framed rectangle. The client enforces this (gray out controls); the server also enforces it via the view position included in each mutating RPC (§6).
-- **Descent.** Click on a well or file → that pane's descent path is appended with the well's row id. The pane's viewport resets to the child grid's last-saved viewport (or `(0,0,1.0)` if none).
-- **Ascent.** A keyboard shortcut and an on-screen control. Pops the last entry off the descent path. Refused if path is empty (you're at root) — instead, **ascent at root creates a new root**: a new grid is created, a new well in it points to the old root, and the user's `root_grid_id` is updated.
-- **Cell size.** Cell size in storage is unitless integer coordinates. The client renders cells at a default of `64` logical pixels at zoom `1.0`. Implementation hint, not spec: feel free to tune.
+- **Move = zoom.** No avatar. The viewport is "where you are." Left-drag on empty grid space pans the mouse-focused pane; mouse wheel zooms it, centered on the cursor. The viewport is `(cx, cy, zoom)` per pane.
+- **Continuous zoom.** Any positive zoom value is allowed within `[zoomMin, zoomMax]` (currently `0.25` … `8.0`); inside a focused file, `FileZoom` ranges up to `fileZoomMax` (`50.0`) so a heading can be enlarged enough to fill a parent cell. Zoom is a viewport property only — it does not change cell size in storage.
+- **Locality of action.** A tile may be operated on only if its footprint is currently visible in the focused pane. The client enforces this (gestures are scoped to visible tiles); the server also enforces it via the framed `view_rect` included in each mutating RPC (§6). The server's check is "the affected footprint *intersects* the view rect" — any single cell of the tile inside the rect is enough — except for `CapWell` / `RedigWell`, which require the well's footprint to be *entirely* inside the rect.
+- **Descent.** Left-click on a well descends into it (the pane's descent path is appended with the well's row id) via an animated zoom-in transition. Left-click on a markdown file descends into the file: the pane's `FileFocus` is set to the file's row id while `Path` stays at the parent grid. The pane's pre-descent viewport is pushed onto an in-memory stack for the matching ascent.
+- **Ascent.** Triggered by a left-click in the outer edge band of the pane (the region near the pane border, when there is somewhere to ascend to). For files this restores the parent-grid viewport; for grids it pops the last entry off the descent path. Refused if path is empty *and* the pane is not file-focused — but the gesture is still meaningful at root: `AscendAtRoot` creates a new grid, places a new well at `(0, 0)` 1×1 pointing to the old root, and updates the user's `root_grid_id`.
+- **Cell size.** Cell size in storage is unitless integer coordinates. The client renders cells at `64` logical pixels at zoom `1.0` (`cellPx` constant). Implementation hint, not spec: feel free to tune.
 
 ---
 
@@ -192,12 +197,19 @@ Wire types are hand-coded in Go in `internal/rpc/types.go` as JSON-over-HTTP mes
 Methods (Go method names; HTTP path is `/rpc/<MethodName>`):
 
   - **Auth**: `Login`, `Logout`, `Whoami`
-  - **Read**: `GetGrid` (returns `Grid` + `[]Tile`), `GetBlob`, `GetURLTitle`
-  - **Mutations**: `CreateWell`, `CreateFile`, `MoveTile`, `CloneTile`, `ResizeTile`, `SetTileViewport`, `CapWell`, `RedigWell`, `FillWell`, `UpdateFileContent`
+  - **Read**: `GetGrid` (returns `Grid` + `[]Tile` + `readable` / `writable` flags), `GetBlob`, `GetTilePreview` (raw JPEG bytes for a URL tile's current preview)
+  - **Mutations**: `CreateWell`, `CreateFile`, `MoveTile`, `CloneTile`, `ResizeTile`, `SetTileViewport`, `SetGridDefaultView`, `CapWell`, `RedigWell`, `FillWell`, `UpdateFileContent`, `WakeURL`, `CaptureURL`, `ForkURL`
   - **Tree-level**: `AscendAtRoot`
-  - **Real-time**: `Subscribe` (server-sent events stream)
+  - **Real-time**: `Subscribe` (server-sent events stream for grid mutations), `URLStream` (per-tile bidirectional WebSocket carrying screencast frames out and synthetic input events in; see §8.3)
 
-Every mutating request includes a `view_rect { x, y, w, h }` field describing the framed region of the pane that initiated the mutation. The server rejects the mutation if the affected tile(s) are not entirely within `view_rect`. This enforces locality of action server-side.
+All RPC methods accept `POST` requests except `Subscribe`, which is a `GET` (an EventSource fetch). Public endpoints (`Login`, `Logout`) need no session; all others require a valid session cookie resolved by middleware to a `user_id`.
+
+Every mutating request includes:
+
+  - `path { well_ids: [...] }` — the originating pane's descent path (sequence of well row ids from the user's root grid down to the leaf grid). The server uses this both to validate the request (each well must point at the next grid) and to walk the CoW fork up the path.
+  - `view_rect { x, y, w, h }` — the framed region of the originating pane in the affected grid's own coordinates.
+
+The server enforces locality of action by rejecting any mutation whose target footprint does not **intersect** `view_rect` (at least one cell inside is enough); `CapWell` and `RedigWell` use the stricter rule that the well's footprint must be **entirely contained** in `view_rect`. Cross-grid `MoveTile` and `CloneTile` carry a second pair (`dest_path`, `dest_view_rect`) for the destination side; both sides are checked.
 
 ### 6.1 Subscribe
 
@@ -211,12 +223,26 @@ Event kinds (`rpc.Event.Kind`):
   - `tile_changed` — a tile was upserted (payload: `Tile`)
   - `tile_removed` — a tile was deleted (payload: `grid_id`, `tile_id`)
   - `grid_forked` — a CoW fork happened; clients update `child_grid_id` refs
+  - `url_preview_updated` — a URL tile's `preview_jpeg` was overwritten (payload: `grid_id`, `tile_id`); the client invalidates its cached preview and re-fetches via `GetTilePreview` on next render
 
 ### 6.2 Concurrency Semantics
 
 All mutations are SQLite transactions. On conflict, the rule is **snap to canonical**: the client applies mutations optimistically, and reconciles when the server's response or `Subscribe` event reports a different state. No override feedback in v1; the affected tile simply moves to its canonical position.
 
 Drag and drop are client-side only until release. The release issues one mutation RPC. The "ghost" the user sees during drag is purely local.
+
+### 6.3 URLStream
+
+`URLStream` is the only transport in the system that is not JSON-over-HTTP / SSE. It is a bidirectional WebSocket at `/rpc/URLStream?tile_id=<id>` used for two things, both per-tile:
+
+- **Server → client**: CDP screencast frames from the tile's live Chromium tab as JPEG bytes, plus URL-changed notifications when the tab navigates.
+- **Client → server**: synthetic input events (`mousemove`, `mousedown`, `mouseup`, `wheel`, `keydown`, `keyup`) the server translates into CDP `Input.dispatch{Mouse,Key}Event` calls and forwards to the Chromium tab.
+
+A URL tile can have multiple concurrent `URLStream` connections (e.g., the same tile viewed from two gridwell browser tabs). All connected clients receive the same frames; all can send input. There is no input-ownership coordination — conflicting cursors physically fight, by design.
+
+`URLStream` open is refused if the tile is not currently live, if the tile is not a `text/uri-list` tile, or if Chromium is unavailable. Clients are expected to call `WakeURL` first if the tile is dormant.
+
+Frames are sized to whatever viewport the server has currently set on the Chromium tab (§8.3, "Viewport"). When the client's pane resizes, the client sends a `resize` message; the server calls `Emulation.setDeviceMetricsOverride` and subsequent frames arrive at the new size.
 
 ---
 
@@ -312,23 +338,81 @@ Three MIME types in v1:
 - The internal `(view_x, view_y)` pair is the pixel offset of the framed window into the full image.
 - Snapshot: simply crop the image at `(view_x, view_y, w*cell, h*cell)`.
 
-### 8.3 `text/uri-list` (read, plus title fetch)
+### 8.3 `text/uri-list` (URL tile)
 
-- The blob is one URL (UTF-8). Despite the MIME name, only one URL per file in v1.
-- On descent: the client embeds the URL in an `<iframe>` overlay positioned at the pane's bounds. Subject to the target site's `X-Frame-Options` and CSP — pages that forbid framing simply won't render. The iframe is removed on ascent. No server-side proxy.
-- Tile preview (always shown in parent grid): the client requests the URL's title from the server via a `GetURLTitle(url)` RPC. The server fetches the URL (`net/http`, with a short timeout and a sensible User-Agent), reads the first ~64KB, and extracts the contents of the first `<title>...</title>` via regex. The result is cached server-side keyed by URL; the client also caches client-side. The tile is rendered client-side via `fillText`, showing the title and the URL beneath. No screenshots, no headless browser.
-- If title fetch fails, the tile shows the URL alone.
+A URL tile renders a live web page via a server-side headless Chromium tab streamed into the descended pane. Its preview in the parent grid is a JPEG screenshot kept fresh while the tile is "live" and frozen when the tile is "dormant."
+
+**Identity.** A URL tile is identified by a URL stored on the tile row in `url_string` (one URL only — no multi-URL `text/uri-list` in v1). The URL is set on creation and thereafter updates **silently** to reflect in-page navigation inside the tile's live Chromium tab. There is no visible address bar; navigation happens by clicking links inside the page. To use an unrelated URL, the user creates a new tile.
+
+**Liveness.** A URL tile is in one of two runtime states:
+
+- **Live** — the server holds a Chromium tab open at the tile's URL. The tab renders the page; CDP screencast frames are streamed to whichever clients have an open `URLStream` for the tile (see §6.2). Navigations inside the tab mutate `url_string`.
+- **Dormant** — no Chromium tab exists. The tile is represented purely by its last-captured `preview_jpeg` and its stored URL.
+
+Liveness is **runtime state**, not persistent. It is held in the server's in-memory Chromium driver, not in SQLite. On server start, all tiles begin **dormant** regardless of their state before shutdown.
+
+A new tile is born **live**. The user toggles liveness with **right-click** on the tile (descended or not). Right-click on a live tile fires `CaptureURL` (live → dormant); right-click on a dormant tile fires `WakeURL` (dormant → live). Reload is right-click twice. Liveness is independent of descent: ascending out of a live tile does **not** capture it. The Chromium tab stays open and continues to render at a reduced preview cadence.
+
+**Preview.**
+
+- Stored as JPEG bytes in `tiles.preview_jpeg` (mutable BLOB column; not part of the content-addressed `blobs` table).
+- While **live**, the server writes the latest screencast frame to `preview_jpeg` and emits a `Subscribe` event invalidating the cached preview for connected clients. Cadence: at the descended pane's stream rate while the tile is descended into a focused pane (typically 10–30 frames per second, bounded by CDP screencast), and approximately **every 700 ms** when no pane is descended into the tile but it is still live.
+- While **dormant**, `preview_jpeg` is frozen — the bytes captured at the moment the tile went dormant.
+- The parent-grid rendering shows `preview_jpeg`, cropped/scaled to the tile's footprint. A subtle live indicator (small dot or faint pulsing border) distinguishes live tiles from dormant ones.
+- Clients fetch the bytes via `GetTilePreview(tile_id)`.
+
+**Descent.**
+
+- Into a **live** tile: the descended pane opens a `URLStream` WebSocket for the tile. Inbound JPEG frames are drawn onto a canvas filling the pane. Mouse and keyboard input from the focused pane are forwarded as synthetic CDP `Input.dispatch{Mouse,Key,Touch}Event` messages. Multiple panes (in this gridwell or other gridwell browser tabs) can attach to the same tile simultaneously; all see the same stream and all can send input. This is a free consequence of CDP being multi-subscriber; no coordination layer.
+- Into a **dormant** tile: the pane shows `preview_jpeg` scaled to the pane bounds with no stream. A "wake up" affordance is visible; the user wakes the tile via right-click, which fires `WakeURL`. The Chromium tab spawns at the tile's stored URL and the pane immediately attaches to the new `URLStream`.
+
+**Viewport.** The Chromium tab's viewport tracks the descended pane's pixel dimensions and reflows on pane resize (`Emulation.setDeviceMetricsOverride`). When the tile is live but no pane is descended into it, the viewport retains its last-descended dimensions; for never-descended live tiles a default viewport of **1280×800** is used until first descent.
+
+**The five tile primitives.**
+
+| primitive | RPC | effect |
+|---|---|---|
+| **create(url)** | `CreateFile` with `mime_type = text/uri-list`, payload = URL | new tile, born live, Chromium tab spawned, streaming begins |
+| **wake** | `WakeURL(tile_id)` | dormant → live; Chromium tab spawned at `url_string` |
+| **capture** | `CaptureURL(tile_id)` | live → dormant; Chromium tab closed; `preview_jpeg` frozen at the last frame |
+| **fork** | `ForkURL(tile_id, dest_path, dest_view_rect)` | duplicates the tile as a frozen sibling at the current `url_string` + `preview_jpeg`; born dormant. The original is unaffected. Works on live or dormant tiles. |
+| **delete** | (existing tile-delete path) | remove tile; preview bytes released with the row |
+
+`WakeURL` and `CaptureURL` are the same right-click gesture from the client's point of view; the client picks the RPC based on the tile's current liveness in its local cache.
+
+**Chromium process model.** The server manages **one headless Chromium process per logged-in gridwell user**. Each user's Chromium is launched with `--user-data-dir=<gridwell-data>/chromium/<user_id>/`, giving that user a persistent, isolated profile (cookies, localStorage, IndexedDB, service workers, eventual extensions). This is a multi-user convenience layer, not a security boundary. Processes are lazily spawned on first `WakeURL` / `CreateFile`-for-URL by that user, kept alive while the user has any live URL tile, and torn down when their last live tile is captured or when the user logs out and a configurable grace period elapses.
+
+**Hard boundaries in v1.**
+
+- **Downloads blocked.** Any download triggered by a page is canceled at the CDP `Browser.downloadWillBegin` event. No bytes leave Chromium.
+- **File uploads blocked.** `<input type="file">` clicks do nothing usable; file-picker calls are denied.
+- **Popups blocked.** `window.open` and `target="_blank"` are suppressed via CDP overrides; nothing is opened, no new tiles are spawned.
+- **Permissions auto-denied.** Camera, microphone, geolocation, notifications, clipboard read, MIDI, sensors — all denied via `Browser.setPermission`.
+- **JS dialogs auto-dismissed.** `alert` / `confirm` / `prompt` are auto-canceled via `Page.handleJavaScriptDialog`; `beforeunload` is suppressed.
+- **Audio muted.** Chromium is launched with `--mute-audio`. Pages play silently; no audio path exists.
+- **Page-initiated fullscreen blocked.** Fullscreen API requests are denied.
+- **Right-click is gridwell's.** Right-click is the liveness toggle and is never forwarded to the page. Other browser-chrome shortcuts (Ctrl+T, Ctrl+W, Ctrl+L, Ctrl+F, F5, F12) are likewise not passed; they retain their gridwell meanings (if any). Pages cannot use right-click for their own context menus.
+- **URL scheme allow-list.** Only `http` and `https` are accepted at `CreateFile` time and on in-page navigation; `file:`, `data:`, `chrome:`, `javascript:`, `about:` and the like are refused.
+- **Failed loads** (DNS, cert, 4xx/5xx, infinite redirect, hung renderer) — no special handling. Whatever Chromium paints (an error page, a blank, the last good frame) is what the preview captures. The invariant promises "what was on screen," not "successful content."
+- **No URL editing.** `url_string` is not directly editable by the client. It is set by `CreateFile` at creation time and mutated thereafter only by the server's Chromium driver in response to in-page navigations. The "Edit file content" gesture is refused on URL tiles.
+
+**Chromium-absent behavior.** If the server's Chromium binary is missing or fails to launch, URL tiles created previously still render their last `preview_jpeg` in parent grids; descent into them shows the frozen preview with a "Chromium not available — wake disabled" overlay. `CreateFile` for `text/uri-list`, `WakeURL`, and `URLStream` open requests all return an explicit error code the client surfaces in the UI.
 
 ### 8.4 Creation Gestures
 
-- **New well**: right-click on empty grid space → context menu → "New well." A 1×1 well is created at the clicked cell with a default empty child grid.
-- **New file from OS drag-and-drop**: drop a file onto an empty grid region. MIME inferred from extension/content; refused if not in §8 or oversized.
-- **New file via + button**: a circular `+` button hovers in the lower-left of every pane. Clicking it opens a small popover with options: "New markdown," "Upload file...". On selection, the next click on empty grid space places it.
+All creation goes through the **+ palette**. A circular `+` button hovers in a corner of every pane. Clicking it opens a small popover with four tile templates, left to right: well, markdown, URL, upload. The user **drags** a template tile out of the popover onto empty grid space; on release the new tile is placed at the snapped cell (1×1 footprint by default). Template-specific behavior:
+
+- **Well**: commits immediately on drop via `CreateWell`.
+- **Markdown**: drop opens a `prompt()` for a title; on confirm, `CreateFile` is fired with `text/markdown` content `"# <title>\n"`.
+- **URL**: drop opens a `prompt()` for the URL; on confirm, `CreateFile` is fired with `text/uri-list` and the URL as the payload. The server stores the URL in `url_string`, leaves `blob_id` null, and immediately spawns a Chromium tab for the tile (born live, per §8.3).
+- **Upload**: drop triggers the hidden `<input type="file">` picker; on selection the file's bytes are read in the browser and posted as `CreateFile` with a MIME type inferred from the browser-supplied type or the filename extension (limited to the v1 set).
+
+There is no `contextmenu` gesture (the browser's context menu is suppressed on the canvas) and no OS drag-and-drop file upload — all uploads route through the + palette's "upload" template.
 
 ### 8.5 Resize
 
-- Drag a tile's edge or corner. While dragging, the client displays a ghost rectangle that snaps to whole cells. Release commits via `ResizeNode`.
-- Refused if the new footprint would overlap any other tile or extend off the grid (note: grids are infinite, so off-edge isn't a concern; overlap is the only check).
+- Right-press on a tile (outside the inner-third center zone), drag, release. The pin is the corner of the original tile diagonally opposite the click quadrant; the cursor (snapped to whole cells) defines the moving corner. New footprint = bounding box of (pin, cursor) with each side ≥ 1. While dragging, the client displays a ghost rectangle that snaps to whole cells. Release commits via `ResizeTile`.
+- Refused if the new footprint would overlap any other tile or fall outside the framed view (grids are infinite, so off-edge isn't a concern; overlap and locality are the only checks).
 - Resize never scales content. Internal viewport is preserved.
 
 ---
@@ -387,6 +471,10 @@ CREATE TABLE tiles (
   h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
   view_x        INTEGER NOT NULL DEFAULT 0,
   view_y        INTEGER NOT NULL DEFAULT 0,
+  -- Intrinsic view zoom ratio: window-independent. 0 is the sentinel
+  -- "never visited" — the client substitutes a calibrated default for
+  -- preview rendering and re-entry.
+  view_zoom     REAL NOT NULL DEFAULT 0,
 
   -- well-only:
   child_grid_id INTEGER REFERENCES grids(id),
@@ -395,6 +483,14 @@ CREATE TABLE tiles (
   -- file-only:
   mime_type     TEXT,
   blob_id       INTEGER REFERENCES blobs(id),
+  -- URL tiles only (mime_type='text/uri-list'): the current URL, mutated by
+  -- the server's Chromium driver as the live tab navigates. Not content-
+  -- addressed; not refcounted. NULL for all other file types and for wells.
+  url_string    TEXT,
+  -- URL tiles only: the latest captured JPEG preview frame. Mutable BLOB,
+  -- overwritten in place (does not flow through the content-addressed blobs
+  -- table). NULL for all other file types and for wells.
+  preview_jpeg  BLOB,
 
   owner_id      INTEGER NOT NULL REFERENCES users(id),
   group_id      INTEGER NOT NULL REFERENCES groups(id),
@@ -404,8 +500,11 @@ CREATE TABLE tiles (
   updated_at    INTEGER NOT NULL,
 
   CHECK (
-    (type = 'well' AND child_grid_id IS NOT NULL AND mime_type IS NULL AND blob_id IS NULL) OR
-    (type = 'file' AND child_grid_id IS NULL     AND mime_type IS NOT NULL AND blob_id IS NOT NULL)
+    (type = 'well' AND child_grid_id IS NOT NULL AND mime_type IS NULL AND blob_id IS NULL AND url_string IS NULL AND preview_jpeg IS NULL) OR
+    (type = 'file' AND child_grid_id IS NULL AND mime_type IS NOT NULL AND (
+      (mime_type = 'text/uri-list' AND blob_id IS NULL AND url_string IS NOT NULL) OR
+      (mime_type <> 'text/uri-list' AND blob_id IS NOT NULL AND url_string IS NULL AND preview_jpeg IS NULL)
+    ))
   )
 );
 CREATE INDEX idx_tiles_grid_id   ON tiles(grid_id);
@@ -418,7 +517,10 @@ CREATE TABLE blobs (
   size      INTEGER NOT NULL,
   mime_type TEXT,                    -- optional hint
   data      BLOB NOT NULL,
-  refcount  INTEGER NOT NULL DEFAULT 1
+  -- Refcount starts at 0; the insert-blob-then-bump pattern in CreateFile
+  -- and UpdateFileContent treats the bump as a separate step, which keeps
+  -- the find-or-insert branches symmetric.
+  refcount  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE sessions (
@@ -466,7 +568,7 @@ When forking, blob references are not duplicated; `blobs.refcount` is incremente
 ### 9.3 Reference Counts
 
 - `grids.refcount`: number of well-tiles whose `child_grid_id` equals this grid's id, plus 1 if this grid is a user's `root_grid_id`. The "+1 for root" prevents accidental garbage-collection of root grids that are momentarily unreferenced during ascent-at-root.
-- `blobs.refcount`: number of tile rows referencing this blob (via `blob_id` or `preview_blob_id`).
+- `blobs.refcount`: number of tile rows referencing this blob via `blob_id`.
 
 When refcount drops to 0:
 
@@ -480,7 +582,7 @@ A `FillWell` on an empty well is the only operation that intentionally drops a g
 Every mutating RPC includes the originating pane's framed rectangle (in the grid's own coordinates) and descent path. The server:
 
 1. Validates the descent path is well-formed (each well in the path actually points to the next grid).
-2. Validates the affected tile's footprint is entirely within the framed rectangle.
+2. Validates that the affected tile's footprint **intersects** the framed rectangle (one cell of overlap is enough). `CapWell` and `RedigWell` apply the stricter rule that the well is **entirely contained** in the rectangle — those operations affect rendering of the whole well, not just a corner, so the user must see all of it.
 3. Validates permissions on every relevant grid/tile.
 4. Performs the operation, including any CoW forking, in a single transaction.
 
@@ -500,7 +602,7 @@ The client renders to a single `<canvas>` and drives all input from there. No DO
   - **Well, no-read**: padlock tile, distinct from capped.
   - **File, markdown**: thumbnail of the rendered markdown, cropped to `view_y` and the tile's footprint.
   - **File, image**: cropped image at `(view_x, view_y, w*cell, h*cell)`.
-  - **File, uri-list**: cached URL snapshot, similarly cropped.
+  - **File, uri-list (URL tile)**: `preview_jpeg` cropped/scaled to the tile's footprint. A subtle live indicator (small dot or faint pulsing border) distinguishes live tiles from dormant ones (§8.3). Fetched lazily via `GetTilePreview`; invalidated on the `preview_updated` Subscribe event.
 
 ### 10.2 Local Cache
 
@@ -510,23 +612,41 @@ Recursive previews (well showing its child grid) require fetching the child grid
 
 ### 10.3 Input
 
-- **Mouse**: hover establishes mouse-focus pane. Wheel zooms the mouse-focused pane. Click selects/descends. Right-click context menu. Drag begins on a tile and follows the cursor across panes. Drag on empty space pans.
-- **Keyboard**: arrow keys / asdw pan the keyboard-focused pane. `+`/`-` zoom. `Esc` ascends. `Ctrl+arrow` moves keyboard focus between panes. Modifier-drag clones (`Alt`).
+Gridwell is **mouse-only by design**. Every gesture has a pointer equivalent; the keyboard is reserved for future text-editing modes (the markdown text-mode `<textarea>` overlay handles its own keys natively).
+
+- **Left mouse button** — content gestures:
+  - **Mousedown on empty grid space**: arms a pan. Cursor movement past `dragThreshold` pixels promotes to a pan-drag.
+  - **Mousedown on a tile**: arms a tile drag. If the cursor is inside an open well's child preview, the drag source is the child tile under the cursor (the "pull out of well" gesture).
+  - **Bare click** (no movement) on a well: descend. On a markdown file: file-descent. On any tile: select. In the outer edge band of a descended/file-focused pane: ascend.
+  - **Click on the + button**: open the creation palette popover for that pane.
+  - **Click on the file-mode toggle** (lower-right in a file-focused pane): swap between `"text"` and `"rendered"` mode.
+- **Right mouse button** — pane-management gestures (§4.1): swap (inner third), split (outer ring near an edge), resize (band along a shared edge), tile cap/redig/fill (right-press on a tile's inner third), tile resize (right-press on a tile outside its center; the diagonally opposite corner is the pin).
+- **Mouse wheel**: zooms the pane under the cursor, centered on the cursor. Inside a focused file, the outer ring zooms `FileZoom`; the inner area scrolls (rendered mode) or is handled by the textarea (text mode).
+- **Browser context menu** is suppressed on the canvas (`contextmenu` event preventDefault'd).
+
+Modifier-drag for clone is **not yet wired** (see §4.2); when added, the natural binding is `Alt`.
 
 ### 10.4 Pane Tree State
 
-Persisted to `localStorage` after every change. Restored on load. Format:
+The pane tree is **not** persisted across reloads. On boot the client builds a fresh tree with a single pane and recovers the focused pane's state from the URL, which the client maintains via `history.replaceState` (debounced) on every state-mutating gesture.
+
+URL shape (handled by `client/url`):
 
 ```
-{
-  "tree": <pane-or-split>,
-  "focus": <pane-id>
-}
-where pane = { id, path: [well_row_id...], cx, cy, zoom }
-and split = { dir: "h"|"v", ratio: float, a: pane-or-split, b: pane-or-split }
+/                                root grid, stored default viewport
+/3/4/5                           descended through tiles 3, 4, 5 (well leaf)
+/3/4/5?x=12.5&y=-3&z=1.5         grid leaf, viewport center + zoom
+/3/4/5/9                         file leaf (rendered mode)
+/3/4/5/9?c=24&r=10               file leaf, text mode, cursor at col 24, row 10
 ```
 
-If a stored pane's `path` references a row id that no longer exists (was deleted), truncate the path back to the deepest still-valid prefix. If the entire path is invalid, reset to the user's root grid.
+Path segments are tile row ids in descent order from the user's root grid. The trailing id may resolve to a well-tile or a file-tile; the client resolves which by walking the ids against the cache after decode. Presence of `c`/`r` implies "file is in text mode with the cursor here"; their absence (on a file leaf) means rendered mode. Defaults `x=0`, `y=0`, `z=1` are stripped from the encoded URL to keep it short.
+
+URL-walk robustness: an id that is no longer present in the current grid is silently skipped — the walk stays in the current grid and tries the next id. A capped well or a file mid-path ends the descent at the deepest still-valid prefix. After applying, the client `replaceState`s the cleaned URL so what's in the bar matches what's on screen.
+
+In-memory-only state that survives across descent/ascent but not reload: the per-pane saved-state stack (so within-session ascent restores the exact pre-descent viewport) and `fileLastMode` (so previews remember the user's last-used mode for a file until reload).
+
+The user's root-grid viewport (camera position and zoom) **is** persisted server-side: a debounced `SetGridDefaultView` fires whenever the focused pane is at root and the user pans / zooms. On boot, if the URL has no viewport for root, the client picks up `grids.default_view_cx/cy/default_zoom` and starts the user where they last were.
 
 ### 10.5 Login Flow
 
@@ -537,14 +657,16 @@ If no session cookie or session is invalid, the client renders a centered HTML l
 ## 11. Build and Run
 
 ```
-make build       # builds gridwell binary; compiles client to web/gridwell.wasm
+make build       # builds gridwell binary AND compiles the client to web/gridwell.wasm
 make test        # runs all unit tests
-make serve       # ./gridwell serve --db ./gridwell.db
+make test-cover  # runs all unit tests with coverage
+make serve       # builds, then ./gridwell serve --db ./gridwell.db
+make clean       # removes the built binary, .wasm, and wasm_exec.js
 ```
 
-`make build` runs `GOOS=js GOARCH=wasm go build -o web/gridwell.wasm ./client/wasm` and copies `wasm_exec.js` from `$(go env GOROOT)/misc/wasm/` (or `lib/wasm/` on newer Go versions) into `web/`.
+`make build` chains two targets: `bin` (`go build -o ./gridwell ./cmd/gridwell`) and `wasm` (`GOOS=js GOARCH=wasm go build -o web/gridwell.wasm ./client/wasm`). The `wasm` target also copies `wasm_exec.js` from `$(go env GOROOT)/lib/wasm/` (or `misc/wasm/` on older Go versions) into `web/`. Both targets are phony so `go`'s build cache decides what to recompile; this guarantees we never serve a stale artifact.
 
-The `serve` subcommand serves `web/` as static files at `/` and JSON-RPC at `/rpc/...`.
+The `serve` subcommand serves the static directory (default `./web`) at `/`, with SPA fallback (any non-`/rpc/*` path that doesn't match an on-disk file is served as `index.html` so the WASM client owns deep links like `/3/4/5`), and JSON-RPC at `/rpc/...`. Flags: `--db PATH`, `--addr ADDR`, `--static DIR`, `--insecure` (omits the `Secure` flag on the session cookie for local HTTP development).
 
 ---
 
@@ -563,7 +685,7 @@ Concretely, every package has unit tests with the following minimums:
 
 - `internal/store`: full coverage of CoW fork, refcount maintenance, locality enforcement, permission checks, every mutation type, every refusal path (overlap, capped, empty-only, permission-denied), and the schema's CHECK constraints. Use an in-memory SQLite (`:memory:`) per test. Property-based tests for invariants.
 - `internal/auth`: password hashing/verification (including timing-safe comparison), session creation, expiry, and revocation.
-- `internal/server`: each RPC method tested with a fake `store` interface — happy path, every error path, every permission case. `GetURLTitle` tested against an in-process `httptest.Server` returning various HTML payloads (well-formed, malformed, missing title, oversized, slow, redirecting, non-200).
+- `internal/server`: each RPC method tested with a fake `store` interface — happy path, every error path, every permission case. URL-tile RPCs (`WakeURL`, `CaptureURL`, `ForkURL`, `GetTilePreview`) and the `URLStream` WebSocket tested with a fake Chromium-driver interface that yields scripted frame and navigation events; the real Chromium driver is exercised by a small integration test gated on the Chromium binary being available.
 - `client/...` (non-WASM packages): pane tree manipulation (split, close, focus, resize), local cache reconciliation against `Subscribe` events, descent path validation and truncation when tiles are deleted, drag/drop coordinate logic, markdown layout pass.
 - `client/wasm`: factor everything possible into subpackages tested under standard `go test`. The `wasm/main.go` entry point should be a thin wiring layer.
 
@@ -596,7 +718,10 @@ Every bug that is found and fixed must come with a regression test that fails be
 | Cap well | w on well | already capped |
 | Redig well | w on well | not capped |
 | Fill well | w on parent grid | well is non-empty |
-| Edit file content | w on file | type is read-only (image, uri-list) |
+| Edit file content | w on file | type is read-only (image); uri-list URL is not editable via this RPC — it mutates only via in-page navigation in the live Chromium tab |
+| Wake URL tile | w on file | Chromium unavailable; tile not uri-list |
+| Capture URL tile | w on file | tile not currently live; tile not uri-list |
+| Fork URL tile | w on source + w on dest grid | overlap on dest; tile not uri-list |
 | Ascend at root | always allowed (creates new root) | — |
 
 In every case, locality of action is also enforced: the affected tile's footprint must lie within the originating pane's framed rectangle.
@@ -613,8 +738,15 @@ These are designed-around but not built:
 - Group-management CLI commands (`addgroup`, `usermod`, `chmod`, `chown`).
 - Tile-pyramid caching for extreme zoom-out (lazy regeneration of previews is enough for v1).
 - History navigation across `object_id` lineage.
-- Multi-URL `text/uri-list` files.
 - Mobile/touch input.
+- URL-tile downloads (block in v1 — future: save as a gridwell file tile adjacent to the URL tile).
+- URL-tile file uploads (block in v1 — future: bridge a gridwell file picker or the user's local file picker).
+- URL-tile audio (mute in v1 — future: opus or WebRTC audio bridged from the headless Chromium to the descending client).
+- Per-tile permission grants (camera-allowed tiles, mic-allowed tiles, etc.).
+- Extension installation in the per-user Chromium profile.
+- Find-in-page, devtools, and a "true reload" RPC distinct from capture-then-wake.
+- Configurable User-Agent and per-tile viewport overrides.
+- Persisting URL-tile liveness across server restarts (currently all tiles start dormant after a restart).
 
 ---
 

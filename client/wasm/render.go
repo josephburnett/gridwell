@@ -207,8 +207,13 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 			ix, iy, iw, ih := fileInnerBox(p, r)
 			a.cctx.Set("fillStyle", colorFileInnerBg)
 			a.cctx.Call("fillRect", ix, iy, iw, ih)
-			if file, ok := g.Tiles[p.FileFocus]; ok && file.Type == "file" && file.MimeType == "text/markdown" {
-				a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
+			if file, ok := g.Tiles[p.FileFocus]; ok {
+				switch {
+				case file.Type == "file" && file.MimeType == "text/markdown":
+					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
+				case file.IsURL():
+					a.drawURLTileInPane(p, &file, ix, iy, iw, ih)
+				}
 			}
 		} else {
 			for _, n := range g.Tiles {
@@ -376,6 +381,10 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
 	if n.Type == "file" && n.MimeType == "text/markdown" {
 		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, r, selected)
+		return
+	}
+	if n.IsURL() {
+		a.drawURLTile(n, x, y, w, h, selected)
 		return
 	}
 	if n.Type != "well" || n.Capped {

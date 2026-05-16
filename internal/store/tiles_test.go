@@ -160,6 +160,58 @@ func TestCreateFileMimeAndSize(t *testing.T) {
 	}
 }
 
+func TestCreateFileURLTile(t *testing.T) {
+	s := newTestStore(t)
+	u := fixtureUser(t, s)
+	ctx := context.Background()
+	tile, err := s.CreateFile(ctx, u.ID, &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+		X: 0, Y: 0, W: 1, H: 1,
+		MimeType: rpc.MimeURIList, Data: []byte("https://example.com"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tile.IsURL() {
+		t.Errorf("IsURL() = false; tile = %+v", tile)
+	}
+	if tile.URLString != "https://example.com" {
+		t.Errorf("URLString = %q, want https://example.com", tile.URLString)
+	}
+	if tile.BlobID != 0 {
+		t.Errorf("URL tile got BlobID = %d, want 0", tile.BlobID)
+	}
+	// Whitespace around the URL should be trimmed.
+	tile2, err := s.CreateFile(ctx, u.ID, &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+		X: 1, Y: 0, W: 1, H: 1,
+		MimeType: rpc.MimeURIList, Data: []byte("  https://example.org/path\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tile2.URLString != "https://example.org/path" {
+		t.Errorf("URLString = %q (whitespace not trimmed)", tile2.URLString)
+	}
+	// Disallowed scheme → ErrInvalidArgument.
+	_, err = s.CreateFile(ctx, u.ID, &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+		X: 2, Y: 0, W: 1, H: 1,
+		MimeType: rpc.MimeURIList, Data: []byte("javascript:alert(1)"),
+	})
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("javascript: scheme: got %v, want ErrInvalidArgument", err)
+	}
+	// GetTilePreview on a brand-new URL tile returns nil.
+	jpeg, err := s.GetTilePreview(ctx, u.ID, tile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jpeg) != 0 {
+		t.Errorf("new URL tile preview = %d bytes, want 0", len(jpeg))
+	}
+}
+
 func TestCreateFileBlobReuse(t *testing.T) {
 	s := newTestStore(t)
 	u := fixtureUser(t, s)

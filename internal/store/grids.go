@@ -59,18 +59,19 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 
 func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.Tile, error) {
 	var (
-		n           rpc.Tile
-		childGrid   sql.NullInt64
-		mime        sql.NullString
-		blob        sql.NullInt64
-		cappedInt   int64
+		n         rpc.Tile
+		childGrid sql.NullInt64
+		mime      sql.NullString
+		blob      sql.NullInt64
+		urlStr    sql.NullString
+		cappedInt int64
 	)
 	err := q.QueryRowContext(ctx, `
 		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
-		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode
+		       child_grid_id, capped, mime_type, blob_id, url_string, owner_id, group_id, mode
 		FROM tiles WHERE id = ?`, tileID,
 	).Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob,
+		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob, &urlStr,
 		&n.OwnerID, &n.GroupID, &n.Mode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -87,6 +88,9 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 	if blob.Valid {
 		n.BlobID = blob.Int64
 	}
+	if urlStr.Valid {
+		n.URLString = urlStr.String
+	}
 	n.Capped = cappedInt != 0
 	return &n, nil
 }
@@ -94,7 +98,7 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Tile, error) {
 	rows, err := q.QueryContext(ctx, `
 		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
-		       child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode
+		       child_grid_id, capped, mime_type, blob_id, url_string, owner_id, group_id, mode
 		FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
@@ -107,10 +111,11 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 			childGrid sql.NullInt64
 			mime      sql.NullString
 			blob      sql.NullInt64
+			urlStr    sql.NullString
 			cappedInt int64
 		)
 		if err := rows.Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-			&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob,
+			&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob, &urlStr,
 			&n.OwnerID, &n.GroupID, &n.Mode); err != nil {
 			return nil, err
 		}
@@ -123,10 +128,48 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 		if blob.Valid {
 			n.BlobID = blob.Int64
 		}
+		if urlStr.Valid {
+			n.URLString = urlStr.String
+		}
 		n.Capped = cappedInt != 0
 		out = append(out, n)
 	}
 	return out, rows.Err()
+}
+
+// GetTile returns a single tile by ID, after checking that the user
+// has read permission on it.
+func (s *Store) GetTile(ctx context.Context, userID, tileID int64) (*rpc.Tile, error) {
+	read, _, err := s.permForTile(ctx, s.db, userID, tileID)
+	if err != nil {
+		return nil, err
+	}
+	if !read {
+		return nil, ErrPermissionDenied
+	}
+	return s.loadTile(ctx, s.db, tileID)
+}
+
+// GetTilePreview returns the JPEG bytes for a URL tile's current preview.
+// Returns nil for tiles that don't have a preview yet (brand-new URL tile,
+// or non-URL tile). Requires read permission on the tile.
+func (s *Store) GetTilePreview(ctx context.Context, userID, tileID int64) ([]byte, error) {
+	read, _, err := s.permForTile(ctx, s.db, userID, tileID)
+	if err != nil {
+		return nil, err
+	}
+	if !read {
+		return nil, ErrPermissionDenied
+	}
+	var jpeg []byte
+	err = s.db.QueryRowContext(ctx, `SELECT preview_jpeg FROM tiles WHERE id = ?`, tileID).Scan(&jpeg)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return jpeg, nil
 }
 
 // SetGridDefaultView updates the grid's stored default viewport.

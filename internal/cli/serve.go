@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
 // RunServe starts the HTTP server. SIGINT/SIGTERM trigger graceful shutdown.
@@ -23,8 +25,10 @@ func RunServe(args []string) int {
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	staticDir := fs.String("static", "./web", "directory of static files served at /")
 	insecure := fs.Bool("insecure", false, "do not set the Secure flag on the session cookie (use only when serving over plain HTTP locally)")
+	chromiumPath := fs.String("chromium", "", "path to the Chromium binary (empty: auto-detect on PATH; if not found, URL tiles cannot be woken)")
+	profileRoot := fs.String("profiles", "", "root directory for per-user Chromium profiles (default: <db dir>/chromium)")
 	args = reorderFlagsFirst(args, func(name string) bool {
-		return name == "db" || name == "addr" || name == "static"
+		return name == "db" || name == "addr" || name == "static" || name == "chromium" || name == "profiles"
 	})
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -37,10 +41,27 @@ func RunServe(args []string) int {
 	}
 	defer s.Close()
 
+	root := *profileRoot
+	if root == "" {
+		root = filepath.Join(filepath.Dir(*db), "chromium")
+	}
+	driver := urldriver.New(s, urldriver.Config{
+		BinaryPath:  *chromiumPath,
+		ProfileRoot: root,
+	})
+	s.SetURLDriver(driver)
+	defer driver.Shutdown()
+	if driver.Available() {
+		fmt.Printf("gridwell: chromium driver ready (profiles=%s)\n", root)
+	} else {
+		fmt.Println("gridwell: chromium not found — URL tiles cannot be woken; existing previews still render")
+	}
+
 	srv := server.New(s, server.Config{
 		StaticDir:    *staticDir,
 		SecureCookie: !*insecure,
 	})
+	srv.SetURLStreamer(driver)
 
 	// requestCtx is shared by every incoming request via BaseContext. We
 	// cancel it on shutdown so long-running handlers (notably the SSE

@@ -214,10 +214,3 @@ func TestErrorStatusMapping(t *testing.T) {
 	}
 }
 
-func TestGetURLTitleNeedsURL(t *testing.T) {
-	hs, _, cookie := newTestServer(t)
-	st, _ := callRPC(t, hs, cookie, "GetURLTitle", &rpc.GetURLTitleRequest{}, nil)
-	if st != http.StatusInternalServerError && st != http.StatusBadRequest {
-		t.Errorf("status %d for empty url", st)
-	}
-}

@@ -30,19 +30,18 @@ type Config struct {
 // Server is the wired-up HTTP server. Construct with New and mount via
 // Server.Handler() into an http.Server.
 type Server struct {
-	cfg   Config
-	store *store.Store
-	mux   *http.ServeMux
-	titles *titleCache
+	cfg          Config
+	store        *store.Store
+	mux          *http.ServeMux
+	urlStreamer  urlStreamer
 }
 
 // New constructs a Server bound to the given store.
 func New(s *store.Store, cfg Config) *Server {
 	srv := &Server{
-		cfg:    cfg,
-		store:  s,
-		mux:    http.NewServeMux(),
-		titles: newTitleCache(),
+		cfg:   cfg,
+		store: s,
+		mux:   http.NewServeMux(),
 	}
 	srv.routes()
 	return srv
@@ -60,7 +59,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/Whoami", s.authed(s.whoami))
 	s.mux.HandleFunc("/rpc/GetGrid", s.authed(s.getGrid))
 	s.mux.HandleFunc("/rpc/GetBlob", s.authed(s.getBlob))
-	s.mux.HandleFunc("/rpc/GetURLTitle", s.authed(s.getURLTitle))
+	s.mux.HandleFunc("/rpc/GetTilePreview", s.authed(s.getTilePreview))
 
 	s.mux.HandleFunc("/rpc/CreateWell", s.authed(s.createWell))
 	s.mux.HandleFunc("/rpc/CreateFile", s.authed(s.createFile))
@@ -73,8 +72,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/RedigWell", s.authed(s.redigWell))
 	s.mux.HandleFunc("/rpc/FillWell", s.authed(s.fillWell))
 	s.mux.HandleFunc("/rpc/UpdateFileContent", s.authed(s.updateFileContent))
+	s.mux.HandleFunc("/rpc/WakeURL", s.authed(s.wakeURL))
+	s.mux.HandleFunc("/rpc/CaptureURL", s.authed(s.captureURL))
+	s.mux.HandleFunc("/rpc/ForkURL", s.authed(s.forkURL))
 	s.mux.HandleFunc("/rpc/AscendAtRoot", s.authed(s.ascendAtRoot))
 	s.mux.HandleFunc("/rpc/Subscribe", s.authedSSE(s.subscribe))
+	// URLStream is a WebSocket (GET upgrade), authenticated via the
+	// session cookie inside the handler.
+	s.mux.HandleFunc("/rpc/URLStream", s.urlStream)
 
 	if s.cfg.StaticDir != "" {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticDir))
@@ -215,6 +220,10 @@ func errorStatus(err error) int {
 		errors.Is(err, store.ErrNotCapped),
 		errors.Is(err, store.ErrNotEmpty):
 		return http.StatusConflict
+	case errors.Is(err, store.ErrNotURLTile):
+		return http.StatusBadRequest
+	case errors.Is(err, store.ErrChromiumUnavailable):
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}

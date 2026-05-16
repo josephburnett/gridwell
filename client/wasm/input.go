@@ -13,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
 // Animation durations in milliseconds. Tuned for "stone settling" feel.
@@ -36,6 +37,101 @@ func (a *App) installCanvasInput() {
 		args[0].Call("preventDefault")
 		return nil
 	}))
+	// Window-level keyboard listener: handles Esc-to-ascend out of a
+	// URL-tile descent, suppresses browser-chrome shortcuts while
+	// inside one, and forwards every other key to the streaming
+	// Chromium tab.
+	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
+	a.win.Call("addEventListener", "keyup", js.FuncOf(a.onKeyUp))
+}
+
+func (a *App) onKeyDown(this js.Value, args []js.Value) any {
+	key := args[0].Get("key").String()
+	p := a.tree.FocusedPane()
+	if p == nil || !a.isURLDescent(p) {
+		return nil
+	}
+	if key == "Escape" {
+		args[0].Call("preventDefault")
+		a.startFileAscent(p)
+		return nil
+	}
+	if isSuppressedBrowserKey(args[0]) {
+		args[0].Call("preventDefault")
+		return nil
+	}
+	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+		Kind:      urldriver.InputKeyDown,
+		Key:       key,
+		Code:      args[0].Get("code").String(),
+		Modifiers: readModifiers(args[0]),
+	})
+	args[0].Call("preventDefault")
+	return nil
+}
+
+func (a *App) onKeyUp(this js.Value, args []js.Value) any {
+	p := a.tree.FocusedPane()
+	if p == nil || !a.isURLDescent(p) {
+		return nil
+	}
+	if args[0].Get("key").String() == "Escape" {
+		return nil
+	}
+	if isSuppressedBrowserKey(args[0]) {
+		args[0].Call("preventDefault")
+		return nil
+	}
+	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+		Kind:      urldriver.InputKeyUp,
+		Key:       args[0].Get("key").String(),
+		Code:      args[0].Get("code").String(),
+		Modifiers: readModifiers(args[0]),
+	})
+	args[0].Call("preventDefault")
+	return nil
+}
+
+// readModifiers packs the standard DOM key-event modifier booleans
+// into the CDP bit field expected by Input.dispatchKeyEvent:
+// Alt=1, Ctrl=2, Meta=4, Shift=8.
+func readModifiers(ev js.Value) int64 {
+	var m int64
+	if ev.Get("altKey").Bool() {
+		m |= 1
+	}
+	if ev.Get("ctrlKey").Bool() {
+		m |= 2
+	}
+	if ev.Get("metaKey").Bool() {
+		m |= 4
+	}
+	if ev.Get("shiftKey").Bool() {
+		m |= 8
+	}
+	return m
+}
+
+// isSuppressedBrowserKey reports whether a key event is a browser-
+// chrome shortcut we promise to swallow inside a URL descent (spec
+// §8.3): Ctrl+T/W/L/F/N/R (open/close/locate/find/window/reload),
+// F5/F11/F12. Note: the OS-level effect of some of these (Ctrl+T
+// opening a new browser tab) can't always be suppressed from JS;
+// this is best-effort.
+func isSuppressedBrowserKey(ev js.Value) bool {
+	key := ev.Get("key").String()
+	ctrl := ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()
+	if ctrl {
+		switch strings.ToLower(key) {
+		case "t", "w", "l", "f", "n", "r":
+			return true
+		}
+	}
+	switch key {
+	case "F5", "F11", "F12":
+		return true
+	}
+	return false
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
@@ -93,6 +189,22 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// textarea natively (text mode — those events never reach the
 	// canvas listener).
 	if p.FileFocus != 0 {
+		// URL stream: forward wheel as mouse_wheel.
+		if a.isURLDescent(p) {
+			if pointInFileInner(p, r, sx, sy) {
+				vx, vy := paneToStreamCoords(r, sx, sy)
+				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+					Kind:   urldriver.InputMouseWheel,
+					X:      vx,
+					Y:      vy,
+					DeltaY: dy,
+				})
+				args[0].Call("preventDefault")
+				return nil
+			}
+			// Outside inner: fall through to pane-wide gridwell wheel
+			// (zoom), same as other file types.
+		}
 		if !pointInFileInner(p, r, sx, sy) {
 			step := dy / 200.0
 			if step > 0.5 {
@@ -188,6 +300,24 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
 	if p.FileFocus != 0 {
+		// URL tile descent: clicks inside the inner box forward to the
+		// streaming Chromium tab; clicks outside ascend (no toggle
+		// button since URL tiles have no text/rendered modes).
+		if a.isURLDescent(p) {
+			if !pointInFileInner(p, r, sx, sy) {
+				a.startFileAscent(p)
+				return nil
+			}
+			vx, vy := paneToStreamCoords(r, sx, sy)
+			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+				Kind: urldriver.InputMouseMove, X: vx, Y: vy,
+			})
+			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+				Kind: urldriver.InputMouseDown, X: vx, Y: vy,
+				Button: urldriver.MouseButtonLeft,
+			})
+			return nil
+		}
 		if pointInPlus(r, sx, sy) {
 			a.onToggleFileMode(p)
 			return nil
@@ -307,6 +437,21 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
+	// URL-stream forwarding: if the cursor is over a pane that's
+	// descended into a live URL tile, the move belongs to the page.
+	// Right-button gestures still take precedence below so users can
+	// trigger gridwell gestures (resize / fork) even over a URL tile.
+	if a.rightDrag == nil {
+		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
+			if pointInFileInner(p, r, sx, sy) {
+				vx, vy := paneToStreamCoords(r, sx, sy)
+				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+					Kind: urldriver.InputMouseMove, X: vx, Y: vy,
+				})
+				return nil
+			}
+		}
+	}
 	// Right-button gestures take precedence so a drag that started on
 	// the right button doesn't accidentally invoke left-button code
 	// paths (e.g., menu hover) below.
@@ -431,12 +576,24 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishRightDrag(sx, sy)
 		return nil
 	}
+	// URL-stream forwarding for the corresponding mouseup.
+	sx, sy := mouseXY(args[0], a.canvas)
+	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
+		if pointInFileInner(p, r, sx, sy) && args[0].Get("button").Int() == 0 {
+			vx, vy := paneToStreamCoords(r, sx, sy)
+			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+				Kind: urldriver.InputMouseUp, X: vx, Y: vy,
+				Button: urldriver.MouseButtonLeft,
+			})
+			return nil
+		}
+	}
 	if a.dragging == nil {
 		return nil
 	}
 	d := a.dragging
 	a.dragging = nil
-	sx, sy := mouseXY(args[0], a.canvas)
+	sx, sy = mouseXY(args[0], a.canvas)
 
 	// Bare click (no movement): navigation.
 	if !d.started {
@@ -679,6 +836,9 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 		a.startDescent(p, hit)
 		return true
 	case hit.Type == "file" && hit.MimeType == "text/markdown":
+		a.startFileDescent(p, hit)
+		return true
+	case hit.IsURL():
 		a.startFileDescent(p, hit)
 		return true
 	}
@@ -968,6 +1128,11 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			fp.FileScrollX = 0
 			fp.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
 			a.refreshFileOverlay()
+			// If the descended file is a live URL tile, attach a
+			// streaming WebSocket. Closed in startFileAscent.
+			if file.IsURL() && file.Live {
+				a.openURLStream(p.ID, file.ID)
+			}
 		},
 	})
 }
@@ -1009,6 +1174,11 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// runs concurrently with the network round-trip; the user doesn't
 	// have to wait.
 	a.saveFileBeforeAscent(p, file)
+
+	// If we're ascending out of a URL tile stream, close the WS.
+	if file.IsURL() {
+		a.closeURLStream(p.ID)
+	}
 
 	// Persist the mode the user is leaving in so previews and re-descent
 	// honor the "however you left it" rule.
@@ -1336,6 +1506,20 @@ func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []b
 			}
 			var resp rpc.TileResponse
 			_, _ = postJSON("/rpc/CreateFile", req, &resp)
+			// Spec §8.3: URL tiles are born live. After CreateFile
+			// succeeds, fire WakeURL so the server-side Chromium tab
+			// spawns and the preview starts updating. The Live flag
+			// on the tile updates via the Subscribe stream / the
+			// follow-up GetGrid below.
+			if mime == rpc.MimeURIList && resp.Tile.ID != 0 {
+				wakeReq := rpc.WakeURLRequest{
+					Path:     rpc.Path{WellIDs: p.Path},
+					ViewRect: view,
+					TileID:   resp.Tile.ID,
+				}
+				var wakeResp rpc.TileResponse
+				_, _ = postJSON("/rpc/WakeURL", wakeReq, &wakeResp)
+			}
 		}
 		a.fetchGrid(gid)
 	}()

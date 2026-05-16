@@ -5,9 +5,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
+
+// urlSchemeAllowed reports whether u is one of the schemes accepted by
+// URL tiles (spec §8.3 hard boundary). Only http and https.
+func urlSchemeAllowed(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
 
 // allowedMimes are the file MIME types accepted in v1 (spec §8). The list is
 // closed; uploads of other types are rejected.
@@ -120,9 +127,11 @@ func (s *Store) CreateWell(ctx context.Context, userID int64, req *rpc.CreateWel
 	return out, nil
 }
 
-// CreateFile uploads bytes as a content-addressed blob and creates a file
-// tile referencing it. If the blob already exists (same sha256), it is
-// reused with refcount bumped.
+// CreateFile creates a file tile. For URL tiles (mime_type = text/uri-list)
+// the payload is the URL itself; it is stored directly on the tile row in
+// `url_string` and no blob is created. For all other file types the bytes
+// go into the content-addressed `blobs` table; if the blob already exists
+// (same sha256) it is reused with refcount bumped.
 func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFileRequest) (*rpc.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
@@ -137,8 +146,21 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 		return nil, ErrLocality
 	}
 
-	// Hash outside the transaction — it's the slow step and pure.
-	hash := hashBytes(req.Data)
+	isURL := req.MimeType == rpc.MimeURIList
+	var urlString string
+	if isURL {
+		urlString = strings.TrimSpace(string(req.Data))
+		if !urlSchemeAllowed(urlString) {
+			return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
+		}
+	}
+
+	// Hash outside the transaction — pure and slow. Skipped for URL tiles
+	// which don't go through the blob table.
+	var hash string
+	if !isURL {
+		hash = hashBytes(req.Data)
+	}
 
 	var out *rpc.Tile
 	var events []rpc.Event
@@ -173,46 +195,63 @@ func (s *Store) CreateFile(ctx context.Context, userID int64, req *rpc.CreateFil
 			return ErrOverlap
 		}
 
-		// Find or insert the blob. Refcount starts at 0; it's bumped after
-		// the file row references it.
-		var blobID int64
-		err = tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&blobID)
-		if errors.Is(err, sql.ErrNoRows) {
-			res, err := tx.ExecContext(ctx,
-				`INSERT INTO blobs (hash, size, mime_type, data, refcount) VALUES (?, ?, ?, ?, 0)`,
-				hash, len(req.Data), req.MimeType, req.Data)
-			if err != nil {
-				return fmt.Errorf("insert blob: %w", err)
-			}
-			blobID, err = res.LastInsertId()
-			if err != nil {
-				return err
-			}
-		} else if err != nil {
-			return err
-		}
-
 		parent, err := s.loadGrid(ctx, tx, gridID)
 		if err != nil {
 			return err
 		}
 		now := s.now().Unix()
 		objID := s.newID()
-		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y,
-				mime_type, blob_id, owner_id, group_id, mode, created_at, updated_at)
-			VALUES (?, ?, 'file', ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
-			objID, gridID, req.X, req.Y, req.W, req.H, req.MimeType, blobID,
-			parent.OwnerID, parent.GroupID, parent.Mode, now, now)
-		if err != nil {
-			return fmt.Errorf("insert file: %w", err)
-		}
-		tileID, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID); err != nil {
-			return err
+
+		var tileID int64
+		if isURL {
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+					mime_type, url_string, owner_id, group_id, mode, created_at, updated_at)
+				VALUES (?, ?, 'file', ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, req.MimeType, urlString,
+				parent.OwnerID, parent.GroupID, parent.Mode, now, now)
+			if err != nil {
+				return fmt.Errorf("insert url tile: %w", err)
+			}
+			tileID, err = res.LastInsertId()
+			if err != nil {
+				return err
+			}
+		} else {
+			// Find or insert the blob. Refcount starts at 0; it's bumped
+			// after the tile row references it.
+			var blobID int64
+			err = tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&blobID)
+			if errors.Is(err, sql.ErrNoRows) {
+				res, err := tx.ExecContext(ctx,
+					`INSERT INTO blobs (hash, size, mime_type, data, refcount) VALUES (?, ?, ?, ?, 0)`,
+					hash, len(req.Data), req.MimeType, req.Data)
+				if err != nil {
+					return fmt.Errorf("insert blob: %w", err)
+				}
+				blobID, err = res.LastInsertId()
+				if err != nil {
+					return err
+				}
+			} else if err != nil {
+				return err
+			}
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y,
+					mime_type, blob_id, owner_id, group_id, mode, created_at, updated_at)
+				VALUES (?, ?, 'file', ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, req.MimeType, blobID,
+				parent.OwnerID, parent.GroupID, parent.Mode, now, now)
+			if err != nil {
+				return fmt.Errorf("insert file: %w", err)
+			}
+			tileID, err = res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID); err != nil {
+				return err
+			}
 		}
 		out, err = s.loadTile(ctx, tx, tileID)
 		if err != nil {

@@ -56,7 +56,9 @@ type Grid struct {
 // Tile is the persistent unit of content in a grid: a movable, resizable,
 // non-overlapping element. Two kinds are distinguished by Type:
 //   - "well": points at a child grid (ChildGridID, Capped).
-//   - "file": holds a blob (MimeType, BlobID).
+//   - "file": holds a blob (MimeType, BlobID) — except URL tiles
+//     (MimeType=="text/uri-list") which store the URL directly in
+//     URLString instead, see §8.3.
 //
 // Mirrors the tiles table. Kind-specific fields are populated only for the
 // matching kind.
@@ -76,10 +78,22 @@ type Tile struct {
 	Capped      bool    `json:"capped,omitempty"`
 	MimeType    string  `json:"mime_type,omitempty"`
 	BlobID      int64   `json:"blob_id,omitempty"`
+	URLString   string  `json:"url_string,omitempty"`
+	// Live is runtime state (not persisted): true if a URL tile has a
+	// live Chromium tab right now. Populated by the server when
+	// serializing; always false on a fresh server start. Only
+	// meaningful on URL tiles.
+	Live        bool    `json:"live,omitempty"`
 	OwnerID     int64   `json:"owner_id"`
 	GroupID     int64   `json:"group_id"`
 	Mode        int32   `json:"mode"`
 }
+
+// IsURL reports whether the tile is a URL tile (text/uri-list file).
+func (t *Tile) IsURL() bool { return t.Type == "file" && t.MimeType == MimeURIList }
+
+// MimeURIList is the canonical MIME type for URL tiles.
+const MimeURIList = "text/uri-list"
 
 // Auth requests/responses.
 
@@ -121,11 +135,14 @@ type GetBlobResponse struct {
 	MimeType string `json:"mime_type"`
 }
 
-type GetURLTitleRequest struct {
-	URL string `json:"url"`
+// GetTilePreview returns the latest captured JPEG preview bytes for a URL
+// tile. Empty bytes means the tile has no preview yet (e.g. brand-new
+// tile or Chromium currently unavailable). See spec §8.3.
+type GetTilePreviewRequest struct {
+	TileID int64 `json:"tile_id"`
 }
-type GetURLTitleResponse struct {
-	Title string `json:"title"`
+type GetTilePreviewResponse struct {
+	JPEG []byte `json:"jpeg"`
 }
 
 // Mutations on a grid. Every mutating request carries the originating pane's
@@ -254,6 +271,43 @@ type AscendAtRootResponse struct {
 	WellID        int64 `json:"well_id"`
 }
 
+// URL tile mutations. See spec §8.3 for semantics. WakeURL and CaptureURL
+// toggle a tile's runtime liveness (Chromium tab present / absent);
+// ForkURL duplicates the tile as a dormant sibling capturing the current
+// URL + preview.
+
+type WakeURLRequest struct {
+	Path     Path     `json:"path"`
+	ViewRect ViewRect `json:"view_rect"`
+	TileID   int64    `json:"tile_id"`
+}
+type WakeURLResponse struct {
+	Tile Tile `json:"tile"`
+}
+
+type CaptureURLRequest struct {
+	Path     Path     `json:"path"`
+	ViewRect ViewRect `json:"view_rect"`
+	TileID   int64    `json:"tile_id"`
+}
+type CaptureURLResponse struct {
+	Tile Tile `json:"tile"`
+}
+
+type ForkURLRequest struct {
+	Path         Path     `json:"path"`
+	ViewRect     ViewRect `json:"view_rect"`
+	TileID       int64    `json:"tile_id"`
+	DestGridID   int64    `json:"dest_grid_id"`
+	DestPath     Path     `json:"dest_path"`
+	DestViewRect ViewRect `json:"dest_view_rect"`
+	X            int64    `json:"x"`
+	Y            int64    `json:"y"`
+}
+type ForkURLResponse struct {
+	Tile Tile `json:"tile"`
+}
+
 // Real-time subscription. Each event is one JSON object on an SSE stream.
 
 type SubscribeRequest struct{}
@@ -262,18 +316,20 @@ type SubscribeRequest struct{}
 type EventKind string
 
 const (
-	EventGridChanged EventKind = "grid_changed"
-	EventTileChanged EventKind = "tile_changed"
-	EventTileRemoved EventKind = "tile_removed"
-	EventGridForked  EventKind = "grid_forked"
+	EventGridChanged       EventKind = "grid_changed"
+	EventTileChanged       EventKind = "tile_changed"
+	EventTileRemoved       EventKind = "tile_removed"
+	EventGridForked        EventKind = "grid_forked"
+	EventURLPreviewUpdated EventKind = "url_preview_updated"
 )
 
 type Event struct {
-	Kind        EventKind    `json:"kind"`
-	GridChanged *GridChanged `json:"grid_changed,omitempty"`
-	TileChanged *TileChanged `json:"tile_changed,omitempty"`
-	TileRemoved *TileRemoved `json:"tile_removed,omitempty"`
-	GridForked  *GridForked  `json:"grid_forked,omitempty"`
+	Kind               EventKind           `json:"kind"`
+	GridChanged        *GridChanged        `json:"grid_changed,omitempty"`
+	TileChanged        *TileChanged        `json:"tile_changed,omitempty"`
+	TileRemoved        *TileRemoved        `json:"tile_removed,omitempty"`
+	GridForked         *GridForked         `json:"grid_forked,omitempty"`
+	URLPreviewUpdated  *URLPreviewUpdated  `json:"url_preview_updated,omitempty"`
 }
 
 type GridChanged struct {
@@ -290,4 +346,8 @@ type GridForked struct {
 	WellID    int64 `json:"well_id"`
 	OldGridID int64 `json:"old_grid_id"`
 	NewGridID int64 `json:"new_grid_id"`
+}
+type URLPreviewUpdated struct {
+	GridID int64 `json:"grid_id"`
+	TileID int64 `json:"tile_id"`
 }

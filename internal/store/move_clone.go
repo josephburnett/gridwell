@@ -8,6 +8,17 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
+// loadPreviewJPEG reads a tile's preview_jpeg bytes inside the given
+// transaction. Returns nil for tiles with no preview.
+func loadPreviewJPEG(ctx context.Context, tx *sql.Tx, tileID int64) ([]byte, error) {
+	var jpeg []byte
+	err := tx.QueryRowContext(ctx, `SELECT preview_jpeg FROM tiles WHERE id = ?`, tileID).Scan(&jpeg)
+	if err != nil {
+		return nil, err
+	}
+	return jpeg, nil
+}
+
 // MoveTile moves a tile either within its grid or across grids. When the
 // source grid and dest grid differ, both must be reachable via valid paths
 // (req.Path for source, req.DestPath for dest), and the user must have write
@@ -224,16 +235,26 @@ func (s *Store) CloneTile(ctx context.Context, userID int64, req *rpc.CloneTileR
 		}
 
 		// Insert the clone. Same object_id, new row id, same owner/group/
-		// mode, same content (child_grid_id or blob_id).
+		// mode, same content (child_grid_id, blob_id, or url_string+preview).
 		now := s.now().Unix()
 		var (
-			child sql.NullInt64
-			mime  sql.NullString
-			blob  sql.NullInt64
+			child       sql.NullInt64
+			mime        sql.NullString
+			blob        sql.NullInt64
+			urlStr      sql.NullString
+			previewJPEG []byte
 		)
-		if n.Type == "well" {
+		switch {
+		case n.Type == "well":
 			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
-		} else {
+		case n.IsURL():
+			mime = sql.NullString{String: n.MimeType, Valid: true}
+			urlStr = sql.NullString{String: n.URLString, Valid: true}
+			previewJPEG, err = loadPreviewJPEG(ctx, tx, n.ID)
+			if err != nil {
+				return err
+			}
+		default:
 			mime = sql.NullString{String: n.MimeType, Valid: true}
 			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
 		}
@@ -243,11 +264,12 @@ func (s *Store) CloneTile(ctx context.Context, userID int64, req *rpc.CloneTileR
 		}
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
-				child_grid_id, capped, mime_type, blob_id, owner_id, group_id, mode,
-				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
+				owner_id, group_id, mode, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ObjectID, dstGrid, n.Type, req.X, req.Y, n.W, n.H, n.ViewX, n.ViewY, n.ViewZoom,
-			child, cappedInt, mime, blob, n.OwnerID, n.GroupID, n.Mode, now, now)
+			child, cappedInt, mime, blob, urlStr, previewJPEG,
+			n.OwnerID, n.GroupID, n.Mode, now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)
 		}
@@ -255,12 +277,14 @@ func (s *Store) CloneTile(ctx context.Context, userID int64, req *rpc.CloneTileR
 		if err != nil {
 			return err
 		}
-		// Bump child grid or blob refcount for the new pointer.
-		if n.Type == "well" {
+		// Bump child grid or blob refcount for the new pointer. URL tiles
+		// don't reference shared resources, so nothing to bump.
+		switch {
+		case n.Type == "well":
 			if err := s.incRefcount(ctx, tx, n.ChildGridID); err != nil {
 				return err
 			}
-		} else {
+		case !n.IsURL():
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, n.BlobID); err != nil {
 				return err
