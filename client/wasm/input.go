@@ -191,7 +191,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if p.FileFocus != 0 {
 		// URL stream: forward wheel as mouse_wheel.
 		if a.isURLDescent(p) {
-			if pointInFileInner(p, r, sx, sy) {
+			if pointInPaneContent(r, sx, sy) {
 				vx, vy := paneToStreamCoords(r, sx, sy)
 				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 					Kind:   urldriver.InputMouseWheel,
@@ -300,11 +300,12 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
 	if p.FileFocus != 0 {
-		// URL tile descent: clicks inside the inner box forward to the
-		// streaming Chromium tab; clicks outside ascend (no toggle
-		// button since URL tiles have no text/rendered modes).
+		// URL tile descent: clicks inside the pane content area forward
+		// to the streaming Chromium tab; clicks in the outer margin
+		// ascend. No toggle button (URL tiles have no text/rendered
+		// modes); the right-click gesture handles wake/capture.
 		if a.isURLDescent(p) {
-			if !pointInFileInner(p, r, sx, sy) {
+			if !pointInPaneContent(r, sx, sy) {
 				a.startFileAscent(p)
 				return nil
 			}
@@ -443,7 +444,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// trigger gridwell gestures (resize / fork) even over a URL tile.
 	if a.rightDrag == nil {
 		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-			if pointInFileInner(p, r, sx, sy) {
+			if pointInPaneContent(r, sx, sy) {
 				vx, vy := paneToStreamCoords(r, sx, sy)
 				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 					Kind: urldriver.InputMouseMove, X: vx, Y: vy,
@@ -579,7 +580,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// URL-stream forwarding for the corresponding mouseup.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		if pointInFileInner(p, r, sx, sy) && args[0].Get("button").Int() == 0 {
+		if pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			vx, vy := paneToStreamCoords(r, sx, sy)
 			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 				Kind: urldriver.InputMouseUp, X: vx, Y: vy,
@@ -1096,14 +1097,22 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	}
 
 	// Eagerly fetch the blob so it's likely cached by the time the
-	// transition lands.
-	a.fetchBlob(file.BlobID)
+	// transition lands. URL tiles don't have a blob; their preview
+	// path goes through urlPreview instead.
+	if !file.IsURL() {
+		a.fetchBlob(file.BlobID)
+	}
 
 	fileID := file.ID
 	initialScroll := float64(file.ViewY)
-	mode := "text"
-	if last, ok := a.fileLastMode[fileID]; ok && last != "" {
-		mode = last
+	// URL tiles have no text/rendered modes; mode is "" for them so
+	// the textarea overlay (gated on FileMode == "text") never shows.
+	var mode string
+	if !file.IsURL() {
+		mode = "text"
+		if last, ok := a.fileLastMode[fileID]; ok && last != "" {
+			mode = last
+		}
 	}
 	a.startTransition(&paneTransition{
 		paneID: p.ID,

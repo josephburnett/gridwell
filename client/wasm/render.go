@@ -204,15 +204,20 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		// exactly so the user's "outside textarea = grid rules"
 		// mental model is consistent.
 		if p.FileFocus != 0 {
-			ix, iy, iw, ih := fileInnerBox(p, r)
-			a.cctx.Set("fillStyle", colorFileInnerBg)
-			a.cctx.Call("fillRect", ix, iy, iw, ih)
 			if file, ok := g.Tiles[p.FileFocus]; ok {
 				switch {
 				case file.Type == "file" && file.MimeType == "text/markdown":
+					ix, iy, iw, ih := fileInnerBox(p, r)
+					a.cctx.Set("fillStyle", colorFileInnerBg)
+					a.cctx.Call("fillRect", ix, iy, iw, ih)
 					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
 				case file.IsURL():
+					ix, iy, iw, ih := paneContentBox(r)
 					a.drawURLTileInPane(p, &file, ix, iy, iw, ih)
+				default:
+					ix, iy, iw, ih := fileInnerBox(p, r)
+					a.cctx.Set("fillStyle", colorFileInnerBg)
+					a.cctx.Call("fillRect", ix, iy, iw, ih)
 				}
 			}
 		} else {
@@ -271,9 +276,12 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	}
 
 	// In file-focus mode replace the + with a text/rendered toggle; the
-	// menu never opens here.
+	// menu never opens here. URL tiles have no text/rendered modes, so
+	// no toggle button — they're driven by right-click instead.
 	if p.FileFocus != 0 {
-		a.drawFileToggleButton(p, r)
+		if !a.isURLDescent(p) {
+			a.drawFileToggleButton(p, r)
+		}
 	} else {
 		// + button is always available; gives the user an entry point
 		// even when the grid is unreachable (they can still ascend, etc).

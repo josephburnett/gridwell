@@ -109,9 +109,40 @@ func fileLiveZoom(r paneRect, fileW, fileH int64, storedViewZoom float64) float6
 // canvas painter, the markdown renderer, the textarea positioner, and
 // the click hit-test so the user's "inside vs. outside" mental model
 // is consistent across all three.
+//
+// URL tiles use the full pane content area (paneContentBox) instead
+// of this narrower textarea-shaped box — see drawURLTileInPane and
+// the mouse/wheel handlers' isURLDescent branches.
 func fileInnerBox(p *pane.Pane, r paneRect) (x, y, w, h float64) {
 	left, top, width, height, _ := fileTextareaBox(p, r)
 	return left, top, width, height
+}
+
+// paneContentBox returns the full content rectangle of a file-focused
+// pane: everything inside the file margin. Wider than fileInnerBox
+// (which is centered to ~80 columns for markdown text editing). Used
+// by URL tiles whose content fills the available pane.
+func paneContentBox(r paneRect) (x, y, w, h float64) {
+	m := fileMargin(r)
+	x = r.X + m
+	y = r.Y + m
+	w = r.W - 2*m
+	h = r.H - 2*m
+	if w < 0 {
+		w = 0
+	}
+	if h < 0 {
+		h = 0
+	}
+	return
+}
+
+// pointInPaneContent reports whether (sx, sy) lies inside the
+// pane's full content rectangle. Mirrors pointInFileInner but for
+// the wider URL-tile content surface.
+func pointInPaneContent(r paneRect, sx, sy float64) bool {
+	x, y, w, h := paneContentBox(r)
+	return sx >= x && sx < x+w && sy >= y && sy < y+h
 }
 
 // pointInFileInner reports whether (sx, sy) lies inside the
