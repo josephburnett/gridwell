@@ -23,16 +23,25 @@ const (
 // urlStreamConn is the live state for one URLStream WebSocket — one
 // per pane that's descended into a live URL tile. The js.Func
 // handlers are tracked so we can Release them on close.
+//
+// pending buffers JSON input messages that arrive between WebSocket
+// construction and the open event firing. WebSocket.send throws if
+// called in any readyState other than OPEN (1), so we queue while
+// CONNECTING and flush on open. This prevents the "wake → immediately
+// click" race where the first click would otherwise fire while the
+// WS was still handshaking.
 type urlStreamConn struct {
 	ws     js.Value
 	tileID int64
 	paneID string
 
 	onMessage js.Func
+	onOpen    js.Func
 	onClose   js.Func
 	onError   js.Func
 
-	closed bool
+	pending []string
+	closed  bool
 }
 
 // openURLStream opens a WebSocket to /rpc/URLStream for the (paneID,
@@ -69,6 +78,16 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 		}
 		return nil
 	})
+	conn.onOpen = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		// Flush any input messages queued while we were CONNECTING.
+		// Safe to ws.Call now: readyState is OPEN.
+		pending := conn.pending
+		conn.pending = nil
+		for _, p := range pending {
+			conn.ws.Call("send", p)
+		}
+		return nil
+	})
 	conn.onClose = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		a.releaseURLStream(paneID, conn)
 		return nil
@@ -78,6 +97,7 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 		return nil
 	})
 	ws.Call("addEventListener", "message", conn.onMessage)
+	ws.Call("addEventListener", "open", conn.onOpen)
 	ws.Call("addEventListener", "close", conn.onClose)
 	ws.Call("addEventListener", "error", conn.onError)
 
@@ -108,6 +128,7 @@ func (a *App) releaseURLStream(paneID string, conn *urlStreamConn) {
 		delete(a.urlStreams, paneID)
 	}
 	conn.onMessage.Release()
+	conn.onOpen.Release()
 	conn.onClose.Release()
 	conn.onError.Release()
 }
@@ -149,7 +170,18 @@ func (a *App) updateCachedTileURL(tileID int64, newURL string) {
 }
 
 // sendURLStreamInput marshals an InputEvent to JSON and sends it on
-// the WebSocket for the given pane. No-op if no stream is open.
+// the WebSocket for the given pane. Behavior depends on WebSocket
+// readyState:
+//
+//   CONNECTING (0)  → queue in conn.pending; flushed by onOpen.
+//   OPEN       (1)  → send immediately.
+//   CLOSING/CLOSED  → drop. The conn will be removed from the map
+//                     by onClose; the next interaction will reopen
+//                     via syncURLStreamForPane.
+//
+// Calling ws.send() outside OPEN throws a JS exception; ws.Call
+// propagates that as a Go panic, which would crash the calling
+// goroutine. Gating on readyState is the canonical fix.
 func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	conn, ok := a.urlStreams[paneID]
 	if !ok || conn.closed || !conn.ws.Truthy() {
@@ -181,7 +213,14 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	if err != nil {
 		return
 	}
-	conn.ws.Call("send", string(payload))
+	switch conn.ws.Get("readyState").Int() {
+	case 0: // CONNECTING — queue, flushed by onOpen
+		conn.pending = append(conn.pending, string(payload))
+	case 1: // OPEN
+		conn.ws.Call("send", string(payload))
+	default: // 2 CLOSING, 3 CLOSED
+		// drop — onClose will fire and we'll reopen later if needed
+	}
 }
 
 // syncURLStreamForPane brings the URLStream WS state for pane p into

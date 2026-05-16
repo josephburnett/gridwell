@@ -158,6 +158,17 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	defer sub.close()
 
 	// Writer goroutine: drain frames + nav into the WS.
+	//
+	// Write timeout is generous (30s) because the client's JS event
+	// loop is single-threaded — a slow page navigation can wedge it
+	// long enough that the browser's WS receive buffer fills and our
+	// TCP send blocks. A short timeout would tear the WS down on
+	// transient backpressure; the user would experience "clicks
+	// stopped working" as the reconnected WS sat in CONNECTING. The
+	// frames channel already has bounded buffering with oldest-drop
+	// (wsSubscriber.SendFrame), so a slow client just sees skipped
+	// frames, not a torn-down connection.
+	const writeTimeout = 30 * time.Second
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
@@ -169,7 +180,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 				if !ok {
 					return
 				}
-				wctx, wcancel := context.WithTimeout(ctx, 5*time.Second)
+				wctx, wcancel := context.WithTimeout(ctx, writeTimeout)
 				err := conn.Write(wctx, websocket.MessageBinary, f)
 				wcancel()
 				if err != nil {
@@ -180,7 +191,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				payload, _ := json.Marshal(urlStreamServerMessage{Kind: "nav", URL: n})
-				wctx, wcancel := context.WithTimeout(ctx, 5*time.Second)
+				wctx, wcancel := context.WithTimeout(ctx, writeTimeout)
 				err := conn.Write(wctx, websocket.MessageText, payload)
 				wcancel()
 				if err != nil {
