@@ -209,6 +209,12 @@ func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Tile {
 // armTileGesture installs the right state for a click on a tile —
 // either rightDragTileCenter (cap/delete) or rightDragTileResize
 // (rubber-band) — based on whether (sx, sy) lands in the inner third.
+//
+// URL tiles override this: ANY right-click on a URL tile body arms
+// rightDragTileCenter, since the gesture vocabulary for URL tiles is
+// "no-drag = toggle wake/capture, drag = fork" rather than the well/
+// file center-vs-edge split. Resize via right-click is not supported
+// for URL tiles in v1.
 func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
 	common := rightDragState{
 		startX:     sx,
@@ -219,6 +225,13 @@ func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float
 		tileNode:   *n,
 		tilePane:   p,
 		tilePaneR:  r,
+	}
+	if n.IsURL() {
+		common.kind = rightDragTileCenter
+		common.cursorInCenter = true
+		a.rightDrag = &common
+		a.draw()
+		return
 	}
 	if inTileCenter(n, p, r, sx, sy) {
 		common.kind = rightDragTileCenter
@@ -372,7 +385,14 @@ func (a *App) finishRightDrag(sx, sy float64) {
 func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
 	n := rd.tileNode
 	if n.IsURL() {
-		if inTileCenter(&n, rd.tilePane, rd.tilePaneR, sx, sy) {
+		// URL tile gesture vocabulary: no-drag = toggle wake/capture,
+		// drag = fork (drop a frozen sibling at the cursor). The
+		// disambiguator is the screen distance from the initial
+		// right-down, not the cursor's location at release.
+		const dragThresholdPx = 6.0
+		dx := sx - rd.startX
+		dy := sy - rd.startY
+		if dx*dx+dy*dy < dragThresholdPx*dragThresholdPx {
 			a.toggleURLLiveness(rd, &n)
 		} else {
 			a.forkURLDrop(rd, &n, sx, sy)
