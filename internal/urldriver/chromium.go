@@ -94,12 +94,35 @@ type userBrowser struct {
 	cancel context.CancelFunc
 }
 
+// tabContext is the per-tile runtime state managed by the driver.
+//
+// chromedp's per-tab context dies on certain navigations (target
+// destroyed events from CDP, including some same-origin navigations
+// that internally swap renderer or session). When that happens we
+// respawn the tab at currentURL and replace the chromedp ctx atomically
+// in d.tabs. Goroutines that hold a stale reference (e.g. an in-flight
+// runWithTimeout) just return ErrCanceled; the caller re-lookups from
+// d.tabs to find the new tc and retries.
 type tabContext struct {
+	mu         sync.Mutex // protects currentURL only
+	currentURL string
+
 	ctx    context.Context
 	cancel context.CancelFunc
-	url    string
 	stop   chan struct{}
 	done   chan struct{}
+}
+
+func (t *tabContext) setURL(u string) {
+	t.mu.Lock()
+	t.currentURL = u
+	t.mu.Unlock()
+}
+
+func (t *tabContext) getURL() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.currentURL
 }
 
 // hardeningJS is injected on every new document. It blocks
@@ -180,14 +203,22 @@ func (d *Driver) Wake(ctx context.Context, userID, tileID int64, initialURL stri
 	// chromedp.NewContext on the browser's context spawns a new tab.
 	tabCtx, cancel := chromedp.NewContext(browser.ctx)
 	tc := &tabContext{
-		ctx:    tabCtx,
-		cancel: cancel,
-		url:    initialURL,
-		stop:   make(chan struct{}),
-		done:   make(chan struct{}),
+		ctx:        tabCtx,
+		cancel:     cancel,
+		currentURL: initialURL,
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
 	}
 	d.tabs[liveKey{userID, tileID}] = tc
 	d.mu.Unlock()
+
+	// Watchdog: log when the tab context dies. This helps catch
+	// the case where chromedp tears it down on us (e.g. on a
+	// renderer swap during navigation).
+	go func() {
+		<-tabCtx.Done()
+		log.Printf("[urldriver] tab ctx done uid=%d tile=%d err=%v", userID, tileID, tabCtx.Err())
+	}()
 
 	// Install per-tab listeners (dialog dismiss, navigation tracking).
 	// Must happen before Navigate so we don't miss the first events.
@@ -249,9 +280,16 @@ type InputEvent struct {
 
 // ForwardInput translates an InputEvent into CDP commands and
 // dispatches them to the (userID, tileID) tab. No-op if the tile is
-// not live. Errors are returned so the URLStream handler can decide
-// whether to surface them.
+// not live. If the underlying chromedp context has been canceled
+// (chromedp can drop the per-tab context on certain navigations
+// internal target swaps), we transparently respawn the tab at its
+// last-known URL and retry once.
 func (d *Driver) ForwardInput(userID, tileID int64, ev InputEvent) error {
+	action, err := inputAction(ev)
+	if err != nil {
+		log.Printf("[urldriver] ForwardInput bad-action uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
+		return err
+	}
 	d.mu.Lock()
 	tc, ok := d.tabs[liveKey{userID, tileID}]
 	d.mu.Unlock()
@@ -259,16 +297,101 @@ func (d *Driver) ForwardInput(userID, tileID int64, ev InputEvent) error {
 		log.Printf("[urldriver] ForwardInput no-tab uid=%d tile=%d kind=%s", userID, tileID, ev.Kind)
 		return nil
 	}
-	action, err := inputAction(ev)
-	if err != nil {
-		log.Printf("[urldriver] ForwardInput bad-action uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
+	err = runWithTimeout(tc.ctx, 2*time.Second, action)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, context.Canceled) {
+		log.Printf("[urldriver] ForwardInput cdp-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
 		return err
 	}
-	err = runWithTimeout(tc.ctx, 2*time.Second, action)
-	if err != nil {
-		log.Printf("[urldriver] ForwardInput cdp-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
+	// Recovery path: chromedp tore the tab down. Respawn at the last
+	// URL and retry once.
+	log.Printf("[urldriver] ForwardInput respawning uid=%d tile=%d after-canceled-kind=%s", userID, tileID, ev.Kind)
+	if rerr := d.respawnTab(userID, tileID); rerr != nil {
+		log.Printf("[urldriver] respawn-failed uid=%d tile=%d err=%v", userID, tileID, rerr)
+		return err
 	}
-	return err
+	d.mu.Lock()
+	tc, ok = d.tabs[liveKey{userID, tileID}]
+	d.mu.Unlock()
+	if !ok {
+		return err
+	}
+	retryErr := runWithTimeout(tc.ctx, 2*time.Second, action)
+	if retryErr != nil {
+		log.Printf("[urldriver] ForwardInput retry-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, retryErr)
+	} else {
+		log.Printf("[urldriver] ForwardInput retry-ok uid=%d tile=%d kind=%s", userID, tileID, ev.Kind)
+	}
+	return retryErr
+}
+
+// respawnTab replaces a dead per-tab chromedp context with a fresh
+// one at the same URL. Caller has already observed that ForwardInput
+// returned context.Canceled. Coordinated through d.mu so concurrent
+// callers don't double-respawn.
+func (d *Driver) respawnTab(userID, tileID int64) error {
+	d.mu.Lock()
+	tc, ok := d.tabs[liveKey{userID, tileID}]
+	if !ok {
+		d.mu.Unlock()
+		return errors.New("no tab")
+	}
+	// If another caller already respawned, the new ctx will be alive
+	// and we have nothing to do.
+	select {
+	case <-tc.ctx.Done():
+	default:
+		d.mu.Unlock()
+		return nil
+	}
+	url := tc.getURL()
+	if url == "" {
+		d.mu.Unlock()
+		return errors.New("no current url to respawn at")
+	}
+	browser, err := d.userBrowserLocked(userID)
+	if err != nil {
+		d.mu.Unlock()
+		return err
+	}
+	// Drain the old previewLoop. If it already exited (likely — its
+	// own select on tc.ctx.Done would have returned), tc.done is
+	// already closed; otherwise close stop to signal it.
+	select {
+	case <-tc.done:
+	default:
+		close(tc.stop)
+		<-tc.done
+	}
+	tc.cancel()
+
+	// Build the replacement tabContext.
+	tabCtx, cancel := chromedp.NewContext(browser.ctx)
+	newTc := &tabContext{
+		ctx:        tabCtx,
+		cancel:     cancel,
+		currentURL: url,
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
+	}
+	d.tabs[liveKey{userID, tileID}] = newTc
+	d.mu.Unlock()
+
+	go func() {
+		<-tabCtx.Done()
+		log.Printf("[urldriver] tab ctx done (respawned) uid=%d tile=%d err=%v", userID, tileID, tabCtx.Err())
+	}()
+	d.installTabListeners(tabCtx, userID, tileID)
+	_ = runWithTimeout(tabCtx, 20*time.Second,
+		chromedp.EmulateViewport(d.cfg.ViewportWidth, d.cfg.ViewportHeight),
+		injectHardening(),
+		chromedp.Navigate(url),
+	)
+	go d.previewLoop(userID, tileID, newTc)
+	log.Printf("[urldriver] respawned uid=%d tile=%d url=%s", userID, tileID, url)
+	return nil
 }
 
 // captureJPEG is a chromedp action that grabs a JPEG screenshot at a
@@ -500,6 +623,13 @@ func (d *Driver) installTabListeners(tabCtx context.Context, userID, tileID int6
 			if !schemeAllowed(u) {
 				return
 			}
+			// Also record on the live tabContext so respawn after a
+			// CDP-side target swap can pick up the right URL.
+			d.mu.Lock()
+			if tc, ok := d.tabs[liveKey{userID, tileID}]; ok {
+				tc.setURL(u)
+			}
+			d.mu.Unlock()
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
