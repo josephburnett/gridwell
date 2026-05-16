@@ -558,6 +558,14 @@ func (d *Driver) userBrowserLocked(userID int64) (*userBrowser, error) {
 		chromedp.UserDataDir(profileDir),
 		chromedp.ExecPath(d.binaryPath),
 	)
+	// Pipe Chromium's stdout/stderr into a per-user log file so we can
+	// see why it exits when it does.
+	if f, err := os.OpenFile(
+		filepath.Join(profileDir, "chromium.log"),
+		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644,
+	); err == nil {
+		opts = append(opts, chromedp.CombinedOutput(f))
+	}
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 	cancel := func() {
