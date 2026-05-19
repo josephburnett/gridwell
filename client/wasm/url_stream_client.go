@@ -152,6 +152,15 @@ func (a *App) closeURLStream(paneID string) {
 	}
 }
 
+// closeAllURLStreams closes every open URL stream. Used on
+// beforeunload so the server's save-and-destroy runs before the tab
+// goes away.
+func (a *App) closeAllURLStreams() {
+	for id := range a.urlStreams {
+		a.closeURLStream(id)
+	}
+}
+
 // releaseURLStream cleans up the js.Func handlers and removes the
 // conn from the App's stream map. Called from the onClose handler.
 func (a *App) releaseURLStream(paneID string, conn *urlStreamConn) {

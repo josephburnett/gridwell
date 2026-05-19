@@ -319,6 +319,16 @@ func main() {
 		return nil
 	}))
 
+	// beforeunload: close every URL stream cleanly so the server's
+	// save-and-destroy path fires before the TCP connection dies.
+	// Without this, the WS still drops via TCP FIN — but server-side
+	// cleanup runs after a small delay and the user's final state
+	// might miss the preview write.
+	app.win.Call("addEventListener", "beforeunload", js.FuncOf(func(this js.Value, args []js.Value) any {
+		app.closeAllURLStreams()
+		return nil
+	}))
+
 	// Login form submission.
 	form := app.doc.Call("getElementById", "login-card")
 	form.Call("addEventListener", "submit", js.FuncOf(func(this js.Value, args []js.Value) any {

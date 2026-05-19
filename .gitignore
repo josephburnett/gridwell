@@ -8,3 +8,6 @@
 /coverage.out
 screenshot.png
 s*.png
+
+# Stray top-level wasm output from `GOOS=js GOARCH=wasm go build ./client/wasm/`.
+/wasm
