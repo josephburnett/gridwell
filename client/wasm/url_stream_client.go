@@ -72,6 +72,8 @@ func paneStreamLocal(r paneRect, sx, sy float64) (float64, float64) {
 // closed first.
 func (a *App) openURLStream(p *pane.Pane, tileID int64, w, h int64) {
 	a.closeURLStream(p.ID)
+	// Opening a stream clears any prior "lost" marker for this pane.
+	delete(a.urlStreamLost, p.ID)
 
 	loc := js.Global().Get("location")
 	proto := "ws:"
@@ -122,7 +124,19 @@ func (a *App) openURLStream(p *pane.Pane, tileID int64, w, h int64) {
 			clean = args[0].Get("wasClean").Bool()
 		}
 		urlLog("onClose pane=%s tile=%d code=%d clean=%v reason=%q", p.ID, tileID, code, clean, reason)
+		userInitiated := conn.closed
 		a.releaseURLStream(p.ID, conn)
+		if !userInitiated {
+			// Stream died on the server side. The user is still
+			// descended; mark the pane so the renderer overlays a
+			// "page no longer active" notice instead of pretending
+			// the page is healthy.
+			if a.urlStreamLost == nil {
+				a.urlStreamLost = map[string]bool{}
+			}
+			a.urlStreamLost[p.ID] = true
+			a.draw()
+		}
 		return nil
 	})
 	conn.onError = js.FuncOf(func(_ js.Value, _ []js.Value) any {

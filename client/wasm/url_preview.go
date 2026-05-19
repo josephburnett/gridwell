@@ -23,6 +23,11 @@ import (
 // inner-rect (x, y, w, h) gets the cached preview image scaled to fit.
 // While the WebSocket stream is open, frames flow into the same
 // urlPreview cache, so this draw call automatically reflects them.
+//
+// If the stream has been lost (server-side Chromium died), an overlay
+// is drawn on top of the last cached frame so the user knows the page
+// is no longer interactive — without auto-reloading and silently
+// throwing away their in-page state.
 func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	// Keep the server-side Chromium viewport in step with the area
 	// we're painting into. notifyURLStreamSize is a no-op when the
@@ -45,6 +50,20 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 		a.cctx.Set("font", "16px monospace")
 		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
 	}
+
+	if a.urlStreamLost[p.ID] {
+		a.cctx.Set("fillStyle", "rgba(0,0,0,0.55)")
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("fillStyle", "#f0c674")
+		a.cctx.Set("font", "16px sans-serif")
+		a.cctx.Set("textAlign", "center")
+		a.cctx.Call("fillText", "page no longer active", x+w/2, y+h/2, w-32)
+		a.cctx.Set("fillStyle", colorMuted)
+		a.cctx.Set("font", "13px sans-serif")
+		a.cctx.Call("fillText", "press Esc to ascend", x+w/2, y+h/2+22, w-32)
+		a.cctx.Set("textAlign", "start")
+	}
+
 	a.cctx.Call("restore")
 }
 

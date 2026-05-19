@@ -150,6 +150,17 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[urlstream] open uid=%d tile=%d", uid, tileID)
 
+	// If the session's chromedp ctx dies on its own (the per-tab
+	// context-canceled gotcha), wake the reader so the WS closes
+	// promptly instead of looping on inputs that all fail. The client
+	// surfaces this as "page no longer active" — it does NOT
+	// auto-reconnect, because doing so silently throws away whatever
+	// in-page state the user was working on.
+	go func() {
+		<-session.Done()
+		cancel()
+	}()
+
 	writerDone := make(chan struct{})
 	go writeLoop(ctx, conn, session, uid, tileID, writerDone)
 
@@ -222,6 +233,13 @@ func readLoop(ctx context.Context, conn *websocket.Conn, session urlSession, uid
 			continue
 		}
 		if err := session.Input(ev); err != nil {
+			// If the chromedp ctx is gone, every further Input will
+			// fail the same way. Exit so cleanup runs and the client
+			// observes the WS close.
+			if errors.Is(err, context.Canceled) {
+				log.Printf("[urlstream] session-dead uid=%d tile=%d", uid, tileID)
+				return
+			}
 			log.Printf("[urlstream] forward-err uid=%d tile=%d kind=%s err=%v", uid, tileID, ev.Kind, err)
 		}
 	}

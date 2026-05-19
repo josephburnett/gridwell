@@ -11,3 +11,6 @@ s*.png
 
 # Stray top-level wasm output from `GOOS=js GOARCH=wasm go build ./client/wasm/`.
 /wasm
+
+# Chromium profile when the server is run from the repo root.
+/chromium/

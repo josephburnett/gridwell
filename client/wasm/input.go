@@ -1187,9 +1187,11 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// have to wait.
 	a.saveFileBeforeAscent(p, file)
 
-	// If we're ascending out of a URL tile stream, close the WS.
+	// If we're ascending out of a URL tile stream, close the WS and
+	// clear any stream-lost marker.
 	if file.IsURL() {
 		a.closeURLStream(p.ID)
+		delete(a.urlStreamLost, p.ID)
 	}
 
 	// Persist the mode the user is leaving in so previews and re-descent
@@ -1226,6 +1228,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 // clear FileFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.closeURLStream(p.ID) // no-op if not a URL descent
+	delete(a.urlStreamLost, p.ID)
 	saved := a.popPaneState(p.ID)
 	p.FileFocus = 0
 	if saved != nil {
