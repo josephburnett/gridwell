@@ -192,7 +192,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// URL stream: forward wheel as mouse_wheel.
 		if a.isURLDescent(p) {
 			if pointInPaneContent(r, sx, sy) {
-				vx, vy := paneToStreamCoords(r, sx, sy)
+				vx, vy := paneStreamLocal(r, sx, sy)
 				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 					Kind:   urldriver.InputMouseWheel,
 					X:      vx,
@@ -309,10 +309,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				a.startFileAscent(p)
 				return nil
 			}
-			// Defensive: a tile woken after descent started won't have
-			// triggered openURLStream yet. Sync first, then forward.
-			a.syncURLStreamForPane(p)
-			vx, vy := paneToStreamCoords(r, sx, sy)
+			vx, vy := paneStreamLocal(r, sx, sy)
 			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 				Kind: urldriver.InputMouseMove, X: vx, Y: vy,
 			})
@@ -448,7 +445,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	if a.rightDrag == nil {
 		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
 			if pointInPaneContent(r, sx, sy) {
-				vx, vy := paneToStreamCoords(r, sx, sy)
+				vx, vy := paneStreamLocal(r, sx, sy)
 				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 					Kind: urldriver.InputMouseMove, X: vx, Y: vy,
 				})
@@ -584,7 +581,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
 		if pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
-			vx, vy := paneToStreamCoords(r, sx, sy)
+			vx, vy := paneStreamLocal(r, sx, sy)
 			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 				Kind: urldriver.InputMouseUp, X: vx, Y: vy,
 				Button: urldriver.MouseButtonLeft,
@@ -1143,7 +1140,9 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			// If the descended file is a live URL tile, attach a
 			// streaming WebSocket. Closed in startFileAscent.
 			if file.IsURL() && file.Live {
-				a.openURLStream(p.ID, file.ID)
+				rr := a.paneRectByID(fp.ID)
+				w, h := paneStreamSize(rr)
+				a.openURLStream(fp, file.ID, w, h)
 			}
 		},
 	})

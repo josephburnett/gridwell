@@ -12,25 +12,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
-// streamViewport is the server-side Chromium viewport URL tiles
-// render at in v1. The user's pane scales the streamed image to fit;
-// coordinates flowing the other way (input events) are mapped from
-// pane-local screen coords to this viewport space before being sent.
-const (
-	streamViewportW = 1280
-	streamViewportH = 800
-)
-
-// urlStreamConn is the live state for one URLStream WebSocket — one
-// per pane that's descended into a live URL tile. The js.Func
-// handlers are tracked so we can Release them on close.
-//
-// pending buffers JSON input messages that arrive between WebSocket
-// construction and the open event firing. WebSocket.send throws if
-// called in any readyState other than OPEN (1), so we queue while
-// CONNECTING and flush on open. This prevents the "wake → immediately
-// click" race where the first click would otherwise fire while the
-// WS was still handshaking.
+// urlStreamConn is one URLStream WebSocket — one per pane descended
+// into a live URL tile. The js.Func handlers are tracked so we can
+// Release them on close. pending buffers JSON messages that arrive
+// between WebSocket construction and the open event firing (which
+// WebSocket.send rejects with an exception).
 type urlStreamConn struct {
 	ws     js.Value
 	tileID int64
@@ -43,6 +29,10 @@ type urlStreamConn struct {
 
 	pending []string
 	closed  bool
+
+	// lastSentW/H is the most recent viewport we informed the server
+	// of, used to suppress duplicate "viewport" messages every draw.
+	lastSentW, lastSentH int64
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -52,14 +42,37 @@ func urlLog(format string, args ...any) {
 	js.Global().Get("console").Call("log", msg)
 }
 
-// openURLStream opens a WebSocket to /rpc/URLStream for the (paneID,
-// tileID) pair. Incoming binary frames are pushed into the URL
-// preview cache (which the descent renderer draws from). If a stream
-// is already open for that pane, the old one is closed first.
-func (a *App) openURLStream(paneID string, tileID int64) {
-	a.closeURLStream(paneID)
+// paneStreamSize returns the integer pixel size of the URL-stream
+// viewport for a pane with the given screen rect. The viewport is the
+// pane's content box (rect minus margin), so the page reflows to the
+// exact area painted with frames.
+func paneStreamSize(r paneRect) (int64, int64) {
+	_, _, cw, ch := paneContentBox(r)
+	if cw < 1 {
+		cw = 1
+	}
+	if ch < 1 {
+		ch = 1
+	}
+	return int64(cw), int64(ch)
+}
 
-	// ws:// or wss:// matching the current page's protocol.
+// paneStreamLocal returns screen coords (sx, sy) translated into
+// pane-content-local coordinates — the space the Chromium tab thinks
+// it's painting in. Pane content size = Chromium viewport size, so no
+// scaling is needed beyond the origin shift.
+func paneStreamLocal(r paneRect, sx, sy float64) (float64, float64) {
+	cx, cy, _, _ := paneContentBox(r)
+	return sx - cx, sy - cy
+}
+
+// openURLStream opens a WebSocket to /rpc/URLStream for the (pane,
+// tileID) pair, sized w×h. The viewport is sent as the first message
+// on open. If a stream is already open for that pane, the old one is
+// closed first.
+func (a *App) openURLStream(p *pane.Pane, tileID int64, w, h int64) {
+	a.closeURLStream(p.ID)
+
 	loc := js.Global().Get("location")
 	proto := "ws:"
 	if loc.Get("protocol").String() == "https:" {
@@ -67,19 +80,22 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 	}
 	host := loc.Get("host").String()
 	url := proto + "//" + host + "/rpc/URLStream?tile_id=" + strconv.FormatInt(tileID, 10)
-	urlLog("openURLStream pane=%s tile=%d url=%s", paneID, tileID, url)
+	urlLog("open pane=%s tile=%d url=%s w=%d h=%d", p.ID, tileID, url, w, h)
 	ws := js.Global().Get("WebSocket").New(url)
 	ws.Set("binaryType", "arraybuffer")
 
-	conn := &urlStreamConn{ws: ws, tileID: tileID, paneID: paneID}
+	conn := &urlStreamConn{ws: ws, tileID: tileID, paneID: p.ID}
+	// Queue the initial viewport so it's the first thing the server
+	// sees once the handshake completes.
+	conn.pending = append(conn.pending, viewportPayload(w, h))
+	conn.lastSentW, conn.lastSentH = w, h
 
 	conn.onMessage = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		data := args[0].Get("data")
-		switch t := data.Type(); t {
+		switch data.Type() {
 		case js.TypeString:
 			a.handleURLStreamText(tileID, data.String())
 		case js.TypeObject:
-			// Binary frame: ArrayBuffer → bytes → into preview cache.
 			u8 := js.Global().Get("Uint8Array").New(data)
 			b := make([]byte, u8.Get("length").Int())
 			js.CopyBytesToGo(b, u8)
@@ -88,13 +104,11 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 		return nil
 	})
 	conn.onOpen = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		// Flush any input messages queued while we were CONNECTING.
-		// Safe to ws.Call now: readyState is OPEN.
 		pending := conn.pending
 		conn.pending = nil
-		urlLog("onOpen pane=%s tile=%d flushing=%d", paneID, tileID, len(pending))
-		for _, p := range pending {
-			conn.ws.Call("send", p)
+		urlLog("onOpen pane=%s tile=%d flushing=%d", p.ID, tileID, len(pending))
+		for _, q := range pending {
+			conn.ws.Call("send", q)
 		}
 		return nil
 	})
@@ -107,12 +121,12 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 			reason = args[0].Get("reason").String()
 			clean = args[0].Get("wasClean").Bool()
 		}
-		urlLog("onClose pane=%s tile=%d code=%d clean=%v reason=%q", paneID, tileID, code, clean, reason)
-		a.releaseURLStream(paneID, conn)
+		urlLog("onClose pane=%s tile=%d code=%d clean=%v reason=%q", p.ID, tileID, code, clean, reason)
+		a.releaseURLStream(p.ID, conn)
 		return nil
 	})
 	conn.onError = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		urlLog("onError pane=%s tile=%d readyState=%d", paneID, tileID, conn.ws.Get("readyState").Int())
+		urlLog("onError pane=%s tile=%d readyState=%d", p.ID, tileID, conn.ws.Get("readyState").Int())
 		return nil
 	})
 	ws.Call("addEventListener", "message", conn.onMessage)
@@ -123,7 +137,7 @@ func (a *App) openURLStream(paneID string, tileID int64) {
 	if a.urlStreams == nil {
 		a.urlStreams = map[string]*urlStreamConn{}
 	}
-	a.urlStreams[paneID] = conn
+	a.urlStreams[p.ID] = conn
 }
 
 // closeURLStream closes the stream for paneID, if any. Idempotent.
@@ -133,8 +147,6 @@ func (a *App) closeURLStream(paneID string) {
 		return
 	}
 	conn.closed = true
-	// Closing the underlying WS triggers our onClose, which calls
-	// releaseURLStream. Be defensive in case the WS is already gone.
 	if conn.ws.Truthy() {
 		conn.ws.Call("close")
 	}
@@ -152,9 +164,42 @@ func (a *App) releaseURLStream(paneID string, conn *urlStreamConn) {
 	conn.onError.Release()
 }
 
+// notifyURLStreamSize informs the server of a new pane content size
+// for a descended URL tile. No-op if the size hasn't changed since
+// the last notify (so it's safe to call every draw).
+func (a *App) notifyURLStreamSize(paneID string, w, h int64) {
+	conn, ok := a.urlStreams[paneID]
+	if !ok || conn.closed {
+		return
+	}
+	if conn.lastSentW == w && conn.lastSentH == h {
+		return
+	}
+	conn.lastSentW, conn.lastSentH = w, h
+	payload := viewportPayload(w, h)
+	state := conn.ws.Get("readyState").Int()
+	switch state {
+	case 0: // CONNECTING — queue, flushed by onOpen
+		conn.pending = append(conn.pending, payload)
+	case 1: // OPEN
+		conn.ws.Call("send", payload)
+	}
+}
+
+// viewportPayload returns a JSON {"kind":"viewport","width":w,"height":h}
+// message ready to send on the WS.
+func viewportPayload(w, h int64) string {
+	b, _ := json.Marshal(struct {
+		Kind   string `json:"kind"`
+		Width  int64  `json:"width"`
+		Height int64  `json:"height"`
+	}{Kind: "viewport", Width: w, Height: h})
+	return string(b)
+}
+
 // handleURLStreamText processes a JSON text message from the server.
-// Currently only `nav` (navigation events) are sent. Updates the
-// cached tile URL so re-renders show the new address.
+// Currently only `nav` (navigation events) is sent. Updates the cached
+// tile URL so re-renders show the new address.
 func (a *App) handleURLStreamText(tileID int64, payload string) {
 	var msg struct {
 		Kind string `json:"kind"`
@@ -166,13 +211,11 @@ func (a *App) handleURLStreamText(tileID int64, payload string) {
 	if msg.Kind != "nav" {
 		return
 	}
-	// Update the cached tile's URLString in any grid that holds it.
 	a.updateCachedTileURL(tileID, msg.URL)
 }
 
 // updateCachedTileURL walks every cached grid and rewrites the
-// URLString field on a tile with the given id. Doesn't trigger
-// rerender on its own.
+// URLString field on a tile with the given id.
 func (a *App) updateCachedTileURL(tileID int64, newURL string) {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
@@ -189,18 +232,15 @@ func (a *App) updateCachedTileURL(tileID int64, newURL string) {
 }
 
 // sendURLStreamInput marshals an InputEvent to JSON and sends it on
-// the WebSocket for the given pane. Behavior depends on WebSocket
-// readyState:
+// the WebSocket for the given pane. Behavior depends on readyState:
 //
-//   CONNECTING (0)  → queue in conn.pending; flushed by onOpen.
-//   OPEN       (1)  → send immediately.
-//   CLOSING/CLOSED  → drop. The conn will be removed from the map
-//                     by onClose; the next interaction will reopen
-//                     via syncURLStreamForPane.
+//	CONNECTING (0) → queue in conn.pending; flushed by onOpen.
+//	OPEN       (1) → send immediately.
+//	CLOSING/CLOSED → drop. The next interaction reopens via
+//	                 syncURLStreamForPane.
 //
 // Calling ws.send() outside OPEN throws a JS exception; ws.Call
-// propagates that as a Go panic, which would crash the calling
-// goroutine. Gating on readyState is the canonical fix.
+// propagates that as a Go panic. The readyState switch is the fix.
 func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	conn, ok := a.urlStreams[paneID]
 	if !ok || conn.closed || !conn.ws.Truthy() {
@@ -215,8 +255,6 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 		Key       string  `json:"key,omitempty"`
 		Code      string  `json:"code,omitempty"`
 		Modifiers int64   `json:"modifiers,omitempty"`
-		Width     int64   `json:"width,omitempty"`
-		Height    int64   `json:"height,omitempty"`
 	}{
 		Kind:      string(ev.Kind),
 		X:         ev.X,
@@ -226,36 +264,29 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 		Key:       ev.Key,
 		Code:      ev.Code,
 		Modifiers: ev.Modifiers,
-		Width:     ev.Width,
-		Height:    ev.Height,
 	})
 	if err != nil {
 		return
 	}
 	state := conn.ws.Get("readyState").Int()
 	switch state {
-	case 0: // CONNECTING — queue, flushed by onOpen
+	case 0:
 		conn.pending = append(conn.pending, string(payload))
 		urlLog("queue pane=%s kind=%s queued=%d", paneID, ev.Kind, len(conn.pending))
-	case 1: // OPEN
+	case 1:
 		conn.ws.Call("send", string(payload))
-	default: // 2 CLOSING, 3 CLOSED
+	default:
 		urlLog("drop pane=%s kind=%s state=%d", paneID, ev.Kind, state)
 	}
 }
 
 // syncURLStreamForPane brings the URLStream WS state for pane p into
 // agreement with the pane's current focus and the focused tile's
-// liveness:
+// liveness. Called from the SSE handler so a Live→true transition
+// after descent immediately attaches a stream.
 //
-//   - not descended into a URL tile  → no WS (close if any)
-//   - descended into dormant URL tile → no WS
-//   - descended into live URL tile    → WS open for that tile
-//
-// Called reactively from the SSE handler (so a Live→true transition
-// after descent immediately opens the stream) and as a safety net
-// from each input handler (so clicks land even if the SSE pass
-// missed them).
+// Phase 3 deletes this: once Live disappears and descent always opens
+// the WS, no reconciliation is needed.
 func (a *App) syncURLStreamForPane(p *pane.Pane) {
 	if p == nil {
 		return
@@ -277,13 +308,15 @@ func (a *App) syncURLStreamForPane(p *pane.Pane) {
 		return
 	}
 	existing, hasConn := a.urlStreams[p.ID]
+	r := a.paneRectByID(p.ID)
+	w, h := paneStreamSize(r)
 	if t.Live {
 		if !hasConn {
 			urlLog("sync pane=%s action=open reason=no-conn tile=%d", p.ID, t.ID)
-			a.openURLStream(p.ID, t.ID)
+			a.openURLStream(p, t.ID, w, h)
 		} else if existing.tileID != t.ID {
 			urlLog("sync pane=%s action=reopen reason=tile-changed old=%d new=%d", p.ID, existing.tileID, t.ID)
-			a.openURLStream(p.ID, t.ID)
+			a.openURLStream(p, t.ID, w, h)
 		}
 		return
 	}
@@ -325,20 +358,10 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 	return t.IsURL()
 }
 
-// paneToStreamCoords maps a screen coordinate (sx, sy) inside a
-// pane's content box to the corresponding (X, Y) in server-side
-// viewport space. The server's viewport is fixed at streamViewportW
-// × streamViewportH in v1. We translate from the content box (NOT
-// the full pane rect): the page renders inside paneContentBox, so
-// the user's click at screen (sx, sy) corresponds to the same
-// location in viewport space only after subtracting the margin and
-// scaling against the content box size.
-func paneToStreamCoords(r paneRect, sx, sy float64) (float64, float64) {
-	cx, cy, cw, ch := paneContentBox(r)
-	if cw <= 0 || ch <= 0 {
-		return 0, 0
-	}
-	x := (sx - cx) * streamViewportW / cw
-	y := (sy - cy) * streamViewportH / ch
-	return x, y
+// paneRectByID looks up the screen rect for the given pane via a fresh
+// layout pass. Used by code paths (SSE handler, viewport-resize tick)
+// that don't have the rect on hand.
+func (a *App) paneRectByID(paneID string) paneRect {
+	rs := a.layoutPanes()
+	return rs[paneID]
 }

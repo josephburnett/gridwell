@@ -22,6 +22,11 @@ import (
 // frozen preview blob with a "wake up" hint overlay so the user
 // knows the right-click gesture brings it back to life.
 func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
+	// Keep the server-side Chromium viewport in step with the area
+	// we're painting into. notifyURLStreamSize is a no-op when the
+	// size hasn't changed, so this is cheap to call every frame.
+	a.notifyURLStreamSize(p.ID, int64(w), int64(h))
+
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
 	a.cctx.Call("rect", x, y, w, h)
