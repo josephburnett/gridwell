@@ -61,7 +61,7 @@ func RunServe(args []string) int {
 		StaticDir:    *staticDir,
 		SecureCookie: !*insecure,
 	})
-	srv.SetURLStreamer(driver)
+	srv.SetURLStreamer(server.StreamerFromDriver(driver))
 
 	// requestCtx is shared by every incoming request via BaseContext. We
 	// cancel it on shutdown so long-running handlers (notably the SSE

@@ -22,7 +22,7 @@ import (
 
 // streamTestServer wires up a fresh in-memory Server and returns the
 // *Server (so the caller can call SetURLStreamer), the httptest
-// fixture, and a session cookie for the "alice" user.
+// fixture, the test user, and a session cookie.
 func streamTestServer(t *testing.T) (*Server, *httptest.Server, *store.User, *http.Cookie) {
 	t.Helper()
 	st, err := store.Open(":memory:")
@@ -63,14 +63,14 @@ func streamTestServer(t *testing.T) (*Server, *httptest.Server, *store.User, *ht
 }
 
 // fakeStreamer is a non-Chromium urlStreamer for HTTP-level tests of
-// the URLStream handler. Records every Subscribe + ForwardInput call
-// and exposes a method to push frames to all current subscribers.
+// the URLStream handler. Records sessions opened against it. Each
+// fakeSession exposes channels the test can push frames/navs onto and
+// counters the test can inspect.
 type fakeStreamer struct {
 	available bool
 	mu        sync.Mutex
 	live      map[liveKeyT]bool
-	subs      []urldriver.Subscriber
-	inputs    []urldriver.InputEvent
+	sessions  []*fakeSession
 }
 
 type liveKeyT struct {
@@ -102,57 +102,136 @@ func (f *fakeStreamer) setLive(u, t int64, live bool) {
 	f.live[liveKeyT{u, t}] = live
 }
 
-func (f *fakeStreamer) Subscribe(_, _ int64, sub urldriver.Subscriber) func() {
-	f.mu.Lock()
-	f.subs = append(f.subs, sub)
-	f.mu.Unlock()
-	return func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		for i, s := range f.subs {
-			if s == sub {
-				f.subs = append(f.subs[:i], f.subs[i+1:]...)
-				return
-			}
-		}
+func (f *fakeStreamer) OpenSession(uid, tid int64, url string, w, h int64) (urlSession, error) {
+	s := &fakeSession{
+		userID: uid, tileID: tid,
+		frames:    make(chan []byte, 4),
+		navs:      make(chan string, 8),
+		done:      make(chan struct{}),
+		lastURL:   url,
+		initialW:  w,
+		initialH:  h,
+		finalJPEG: []byte("final-jpeg-bytes"),
 	}
+	f.mu.Lock()
+	f.sessions = append(f.sessions, s)
+	f.mu.Unlock()
+	return s, nil
 }
 
-func (f *fakeStreamer) ForwardInput(_, _ int64, ev urldriver.InputEvent) error {
+func (f *fakeStreamer) lastSession() *fakeSession {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.inputs = append(f.inputs, ev)
+	if len(f.sessions) == 0 {
+		return nil
+	}
+	return f.sessions[len(f.sessions)-1]
+}
+
+// fakeSession implements urlSession in-memory for tests.
+type fakeSession struct {
+	userID, tileID int64
+
+	mu       sync.Mutex
+	inputs   []urldriver.InputEvent
+	resizes  [][2]int64
+	lastURL  string
+	closed   bool
+	captures int
+
+	frames chan []byte
+	navs   chan string
+	done   chan struct{}
+
+	initialW, initialH int64
+	finalJPEG          []byte
+}
+
+func (s *fakeSession) Input(ev urldriver.InputEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inputs = append(s.inputs, ev)
 	return nil
 }
 
-func (f *fakeStreamer) pushFrame(jpeg []byte) {
-	f.mu.Lock()
-	subs := append([]urldriver.Subscriber(nil), f.subs...)
-	f.mu.Unlock()
-	for _, s := range subs {
-		s.SendFrame(jpeg)
+func (s *fakeSession) Resize(w, h int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resizes = append(s.resizes, [2]int64{w, h})
+	return nil
+}
+
+func (s *fakeSession) Frames() <-chan []byte { return s.frames }
+func (s *fakeSession) Navs() <-chan string   { return s.navs }
+func (s *fakeSession) Done() <-chan struct{} { return s.done }
+
+func (s *fakeSession) LastURL() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastURL
+}
+
+func (s *fakeSession) setLastURL(u string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastURL = u
+}
+
+func (s *fakeSession) CaptureFinal(_ context.Context) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.captures++
+	return s.finalJPEG, nil
+}
+
+func (s *fakeSession) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
 	}
+	s.closed = true
+	close(s.done)
 }
 
-func (f *fakeStreamer) pushNav(u string) {
-	f.mu.Lock()
-	subs := append([]urldriver.Subscriber(nil), f.subs...)
-	f.mu.Unlock()
-	for _, s := range subs {
-		s.SendNavigation(u)
+func (s *fakeSession) inputCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.inputs)
+}
+
+func (s *fakeSession) inputAt(i int) urldriver.InputEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inputs[i]
+}
+
+func (s *fakeSession) resizeCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.resizes)
+}
+
+func (s *fakeSession) lastResize() (int64, int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.resizes) == 0 {
+		return 0, 0
 	}
+	r := s.resizes[len(s.resizes)-1]
+	return r[0], r[1]
 }
 
-func (f *fakeStreamer) inputCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.inputs)
+func (s *fakeSession) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
 }
 
-func (f *fakeStreamer) inputAt(i int) urldriver.InputEvent {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.inputs[i]
+func (s *fakeSession) captureCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.captures
 }
 
 // createURLTileViaRPC creates a uri-list tile through the public
@@ -167,7 +246,7 @@ func createURLTileViaRPC(t *testing.T, hs *httptest.Server, cookie *http.Cookie,
 	st, body := callRPC(t, hs, cookie, "CreateFile", &rpc.CreateFileRequest{
 		Path: rpc.Path{}, ViewRect: rpc.ViewRect{X: -100, Y: -100, W: 200, H: 200},
 		GridID: w.RootGridID,
-		X: 0, Y: 0, W: 1, H: 1,
+		X:      0, Y: 0, W: 1, H: 1,
 		MimeType: rpc.MimeURIList, Data: []byte(url),
 	}, &resp)
 	if st != 200 {
@@ -187,11 +266,25 @@ func cookieHeader(c *http.Cookie) http.Header {
 	return h
 }
 
+// waitForSession polls for the first session opened against the
+// streamer; returns it or fails the test.
+func waitForSession(t *testing.T, fake *fakeStreamer) *fakeSession {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if s := fake.lastSession(); s != nil {
+			return s
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no session opened within 2s")
+	return nil
+}
+
 func TestURLStreamRefusesWithoutSession(t *testing.T) {
 	srv, hs, _, _ := streamTestServer(t)
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
-	// No session cookie on the WS handshake.
 	_, resp, err := websocket.Dial(context.Background(), urlStreamURL(hs, 1), nil)
 	if err == nil {
 		t.Fatal("unauthenticated dial succeeded; expected 401")
@@ -203,7 +296,6 @@ func TestURLStreamRefusesWithoutSession(t *testing.T) {
 
 func TestURLStreamRefusesWhenStreamerMissing(t *testing.T) {
 	_, hs, _, cookie := streamTestServer(t)
-	// Don't SetURLStreamer.
 	_, resp, err := websocket.Dial(context.Background(), urlStreamURL(hs, 1),
 		&websocket.DialOptions{HTTPHeader: cookieHeader(cookie)})
 	if err == nil {
@@ -219,7 +311,6 @@ func TestURLStreamRefusesNonLive(t *testing.T) {
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	// Don't mark it live in the fake.
 	_, resp, err := websocket.Dial(context.Background(), urlStreamURL(hs, tileID),
 		&websocket.DialOptions{HTTPHeader: cookieHeader(cookie)})
 	if err == nil {
@@ -227,6 +318,31 @@ func TestURLStreamRefusesNonLive(t *testing.T) {
 	}
 	if resp == nil || resp.StatusCode != http.StatusConflict {
 		t.Errorf("status = %v, want 409", resp)
+	}
+}
+
+func TestURLStreamOpensSession(t *testing.T) {
+	srv, hs, u, cookie := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
+	fake.setLive(u.ID, tileID, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, urlStreamURL(hs, tileID),
+		&websocket.DialOptions{HTTPHeader: cookieHeader(cookie)})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	s := waitForSession(t, fake)
+	if s.userID != u.ID || s.tileID != tileID {
+		t.Errorf("session id = (%d, %d), want (%d, %d)", s.userID, s.tileID, u.ID, tileID)
+	}
+	if s.initialW != defaultViewportW || s.initialH != defaultViewportH {
+		t.Errorf("session viewport = %dx%d, want %dx%d", s.initialW, s.initialH, defaultViewportW, defaultViewportH)
 	}
 }
 
@@ -246,10 +362,10 @@ func TestURLStreamDeliversFramesAndNav(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
+	s := waitForSession(t, fake)
 	go func() {
-		time.Sleep(50 * time.Millisecond)
-		fake.pushFrame([]byte{0xff, 0xd8, 0xff, 0xe0}) // JPEG magic prefix
-		fake.pushNav("https://example.com/two")
+		s.frames <- []byte{0xff, 0xd8, 0xff, 0xe0}
+		s.navs <- "https://example.com/two"
 	}()
 
 	gotBinary, gotNav := false, false
@@ -293,23 +409,108 @@ func TestURLStreamForwardsInput(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
+	s := waitForSession(t, fake)
 	payload, _ := json.Marshal(urlStreamMessage{
 		Kind: string(urldriver.InputMouseDown),
-		X: 17, Y: 23, Button: urldriver.MouseButtonLeft,
+		X:    17, Y: 23, Button: urldriver.MouseButtonLeft,
 	})
 	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && fake.inputCount() == 0 {
+	for time.Now().Before(deadline) && s.inputCount() == 0 {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if got := fake.inputCount(); got != 1 {
+	if got := s.inputCount(); got != 1 {
 		t.Fatalf("got %d inputs, want 1", got)
 	}
-	ev := fake.inputAt(0)
+	ev := s.inputAt(0)
 	if ev.Kind != urldriver.InputMouseDown || ev.X != 17 || ev.Y != 23 || ev.Button != urldriver.MouseButtonLeft {
 		t.Errorf("input = %+v", ev)
+	}
+}
+
+func TestURLStreamHandlesViewport(t *testing.T) {
+	srv, hs, u, cookie := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
+	fake.setLive(u.ID, tileID, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, urlStreamURL(hs, tileID),
+		&websocket.DialOptions{HTTPHeader: cookieHeader(cookie)})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	s := waitForSession(t, fake)
+	payload, _ := json.Marshal(urlStreamMessage{Kind: "viewport", Width: 1024, Height: 768})
+	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && s.resizeCount() == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := s.resizeCount(); got != 1 {
+		t.Fatalf("got %d resizes, want 1", got)
+	}
+	if w, h := s.lastResize(); w != 1024 || h != 768 {
+		t.Errorf("resize = %dx%d, want 1024x768", w, h)
+	}
+}
+
+func TestURLStreamClosesSessionAndPersists(t *testing.T) {
+	srv, hs, u, cookie := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
+	fake.setLive(u.ID, tileID, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, urlStreamURL(hs, tileID),
+		&websocket.DialOptions{HTTPHeader: cookieHeader(cookie)})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	s := waitForSession(t, fake)
+	// Simulate a navigation so LastURL is non-empty when the WS closes.
+	s.setLastURL("https://example.com/last")
+
+	_ = conn.Close(websocket.StatusNormalClosure, "")
+
+	// Wait for the server's cleanup: Session.Close fires.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && !s.isClosed() {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !s.isClosed() {
+		t.Fatal("session not closed within 2s of WS disconnect")
+	}
+	if got := s.captureCount(); got != 1 {
+		t.Errorf("CaptureFinal call count = %d, want 1", got)
+	}
+
+	// Verify the preview made it to the store.
+	tile, err := srv.store.GetTile(context.Background(), u.ID, tileID)
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if tile.URLString != "https://example.com/last" {
+		t.Errorf("url_string = %q, want %q", tile.URLString, "https://example.com/last")
+	}
+	jpeg, err := srv.store.GetTilePreview(context.Background(), u.ID, tileID)
+	if err != nil {
+		t.Fatalf("GetTilePreview: %v", err)
+	}
+	if string(jpeg) != "final-jpeg-bytes" {
+		t.Errorf("preview_jpeg = %q, want %q", string(jpeg), "final-jpeg-bytes")
 	}
 }
