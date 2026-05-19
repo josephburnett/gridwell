@@ -433,3 +433,165 @@ func readTitle(tabCtx context.Context) string {
 	}
 	return title
 }
+
+// --- Session API integration tests ---
+
+func TestIntegrationSessionRoundtrip(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>session</title><body style="background:#abc">hi</body>`))
+	}))
+	defer srv.Close()
+
+	s, err := d.OpenSession(1, 1000, srv.URL, 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+
+	// First frame arrives within the polling cadence.
+	select {
+	case f := <-s.Frames():
+		if len(f) < 100 {
+			t.Errorf("first frame too small: %d bytes", len(f))
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("no frame within 15s")
+	}
+
+	// LastURL should reflect the initial URL after the page settles.
+	if !waitFor(5*time.Second, func() bool { return s.LastURL() == srv.URL+"/" }) {
+		t.Errorf("LastURL = %q, want %q", s.LastURL(), srv.URL+"/")
+	}
+
+	// CaptureFinal returns a non-empty JPEG.
+	buf, err := s.CaptureFinal(context.Background())
+	if err != nil {
+		t.Fatalf("CaptureFinal: %v", err)
+	}
+	if len(buf) < 200 {
+		t.Errorf("CaptureFinal too small: %d bytes", len(buf))
+	}
+}
+
+func TestIntegrationSessionCloseIdempotent(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<!doctype html><title>x</title>`))
+	}))
+	defer srv.Close()
+
+	s, err := d.OpenSession(1, 1001, srv.URL, 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	s.Close()
+	s.Close() // second call must be a no-op, not panic / deadlock.
+	select {
+	case <-s.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("Done() did not unblock after Close")
+	}
+}
+
+func TestIntegrationSessionResize(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<!doctype html><title>resize</title>`))
+	}))
+	defer srv.Close()
+
+	s, err := d.OpenSession(1, 1002, srv.URL, 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+
+	// Resize to a different viewport — should not error.
+	if err := s.Resize(1024, 768); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
+	// Verify by reading window.innerWidth from inside the tab.
+	if !waitFor(5*time.Second, func() bool {
+		var w int64
+		ctx, cancel := context.WithTimeout(s.ctx, 1*time.Second)
+		defer cancel()
+		if err := chromedp.Run(ctx, chromedp.Evaluate("window.innerWidth", &w)); err != nil {
+			return false
+		}
+		return w == 1024
+	}) {
+		t.Errorf("window.innerWidth did not become 1024 after Resize")
+	}
+}
+
+func TestIntegrationSessionInputClick(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>before</title>
+<body>
+<button id="b" style="position:fixed;left:0;top:0;width:200px;height:200px;font-size:40px"
+  onclick="document.title='clicked'">B</button>
+</body>`))
+	}))
+	defer srv.Close()
+
+	s, err := d.OpenSession(1, 1003, srv.URL, 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	time.Sleep(500 * time.Millisecond) // let the page lay out
+
+	for _, ev := range []InputEvent{
+		{Kind: InputMouseMove, X: 100, Y: 100},
+		{Kind: InputMouseDown, X: 100, Y: 100, Button: MouseButtonLeft},
+		{Kind: InputMouseUp, X: 100, Y: 100, Button: MouseButtonLeft},
+	} {
+		if err := s.Input(ev); err != nil {
+			t.Fatalf("Input %s: %v", ev.Kind, err)
+		}
+	}
+
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.ctx) == "clicked" }) {
+		t.Errorf("title = %q, want \"clicked\"", readTitle(s.ctx))
+	}
+}
+
+func TestIntegrationSessionNavigation(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	var srvURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`<!doctype html><title>a</title>
+<script>setTimeout(function(){ window.location.href = '/next'; }, 50);</script>`))
+		case "/next":
+			_, _ = w.Write([]byte(`<!doctype html><title>b</title>`))
+		}
+	}))
+	defer srv.Close()
+	srvURL = srv.URL
+
+	s, err := d.OpenSession(1, 1004, srvURL+"/", 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+
+	want := srvURL + "/next"
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case u := <-s.Navs():
+			if u == want {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("never observed nav to %q; LastURL=%q", want, s.LastURL())
+		}
+	}
+}
