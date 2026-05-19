@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/chromedp"
+	"github.com/go-rod/rod"
 )
 
 // requireChromium skips the test cleanly if no Chromium binary is on
@@ -102,16 +102,24 @@ func newDriverForTest(t *testing.T) (*Driver, *recordingStore) {
 	return d, store
 }
 
-// readTitle returns document.title from the given chromedp tab
-// context, or "" on any failure (so callers can poll with waitFor).
-func readTitle(tabCtx context.Context) string {
-	ctx, cancel := context.WithTimeout(tabCtx, 1*time.Second)
-	defer cancel()
-	var title string
-	if err := chromedp.Run(ctx, chromedp.Title(&title)); err != nil {
+// readTitle returns document.title from the given rod page, or "" on
+// any failure (so callers can poll with waitFor).
+func readTitle(p *rod.Page) string {
+	res, err := p.Timeout(1*time.Second).Eval(`() => document.title`)
+	if err != nil || res == nil {
 		return ""
 	}
-	return title
+	return res.Value.Str()
+}
+
+// evalInt is a test helper: evaluate a JS expression on the page and
+// return the result as an int64, or 0 on failure.
+func evalInt(p *rod.Page, expr string) int64 {
+	res, err := p.Timeout(1*time.Second).Eval(expr)
+	if err != nil || res == nil {
+		return 0
+	}
+	return int64(res.Value.Int())
 }
 
 // --- Session API integration tests ---
@@ -190,13 +198,7 @@ func TestIntegrationSessionResize(t *testing.T) {
 		t.Fatalf("Resize: %v", err)
 	}
 	if !waitFor(5*time.Second, func() bool {
-		var w int64
-		ctx, cancel := context.WithTimeout(s.ctx, 1*time.Second)
-		defer cancel()
-		if err := chromedp.Run(ctx, chromedp.Evaluate("window.innerWidth", &w)); err != nil {
-			return false
-		}
-		return w == 1024
+		return evalInt(s.page, `() => window.innerWidth`) == 1024
 	}) {
 		t.Errorf("window.innerWidth did not become 1024 after Resize")
 	}
@@ -231,8 +233,8 @@ func TestIntegrationSessionInputClick(t *testing.T) {
 		}
 	}
 
-	if !waitFor(5*time.Second, func() bool { return readTitle(s.ctx) == "clicked" }) {
-		t.Errorf("title = %q, want \"clicked\"", readTitle(s.ctx))
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "clicked" }) {
+		t.Errorf("title = %q, want \"clicked\"", readTitle(s.page))
 	}
 }
 
@@ -294,8 +296,8 @@ func TestIntegrationSessionDialogAutoDismiss(t *testing.T) {
 		t.Fatalf("OpenSession: %v", err)
 	}
 	defer s.Close()
-	if !waitFor(10*time.Second, func() bool { return readTitle(s.ctx) == "after-dialogs" }) {
-		t.Errorf("page appears stuck on a dialog; title = %q", readTitle(s.ctx))
+	if !waitFor(10*time.Second, func() bool { return readTitle(s.page) == "after-dialogs" }) {
+		t.Errorf("page appears stuck on a dialog; title = %q", readTitle(s.page))
 	}
 }
 
@@ -316,8 +318,85 @@ func TestIntegrationSessionPopupBlocked(t *testing.T) {
 		t.Fatalf("OpenSession: %v", err)
 	}
 	defer s.Close()
-	if !waitFor(10*time.Second, func() bool { return readTitle(s.ctx) == "blocked" }) {
-		t.Errorf("title after popup attempt = %q, want \"blocked\"", readTitle(s.ctx))
+	if !waitFor(10*time.Second, func() bool { return readTitle(s.page) == "blocked" }) {
+		t.Errorf("title after popup attempt = %q, want \"blocked\"", readTitle(s.page))
+	}
+}
+
+// TestIntegrationSessionSurvivesCrossOriginNav is the test that proves
+// the chromedp→rod migration was worth doing. Two httptest servers on
+// different ports = different origins; page A has a link to page B.
+// Clicking the link makes Chromium swap renderer processes (Site
+// Isolation). Before rod, this killed the per-tab chromedp.Context and
+// every subsequent input failed with "context canceled". With rod,
+// the *Page rebinds across the swap and the Session stays usable.
+func TestIntegrationSessionSurvivesCrossOriginNav(t *testing.T) {
+	d, _ := newDriverForTest(t)
+
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>B</title>
+<body>
+<button id="b" style="position:fixed;left:0;top:0;width:200px;height:200px;font-size:40px"
+  onclick="document.title='B-clicked'">B</button>
+</body>`))
+	}))
+	defer srvB.Close()
+
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>A</title>
+<body>
+<a id="link" href="` + srvB.URL + `/" style="position:fixed;left:0;top:0;width:200px;height:200px;font-size:40px;display:block">go</a>
+</body>`))
+	}))
+	defer srvA.Close()
+
+	s, err := d.OpenSession(1, 1010, srvA.URL+"/", 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	time.Sleep(500 * time.Millisecond)
+
+	// Click the link → cross-origin navigation, renderer swap.
+	for _, ev := range []InputEvent{
+		{Kind: InputMouseMove, X: 100, Y: 100},
+		{Kind: InputMouseDown, X: 100, Y: 100, Button: MouseButtonLeft},
+		{Kind: InputMouseUp, X: 100, Y: 100, Button: MouseButtonLeft},
+	} {
+		if err := s.Input(ev); err != nil {
+			t.Fatalf("first-click Input %s: %v", ev.Kind, err)
+		}
+	}
+
+	// Wait for the cross-origin nav to land.
+	if !waitFor(10*time.Second, func() bool { return s.LastURL() == srvB.URL+"/" }) {
+		t.Fatalf("never navigated to %q; LastURL=%q", srvB.URL+"/", s.LastURL())
+	}
+	// Give the new page a moment to lay out.
+	time.Sleep(500 * time.Millisecond)
+
+	// Critical: input still works post-swap. Click the button on
+	// page B. With chromedp this would return context.Canceled.
+	for _, ev := range []InputEvent{
+		{Kind: InputMouseMove, X: 100, Y: 100},
+		{Kind: InputMouseDown, X: 100, Y: 100, Button: MouseButtonLeft},
+		{Kind: InputMouseUp, X: 100, Y: 100, Button: MouseButtonLeft},
+	} {
+		if err := s.Input(ev); err != nil {
+			t.Fatalf("post-swap Input %s: %v — Session did not survive cross-origin nav", ev.Kind, err)
+		}
+	}
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "B-clicked" }) {
+		t.Errorf("post-swap title = %q, want \"B-clicked\"", readTitle(s.page))
+	}
+
+	// And the page is still alive (Done has not fired).
+	select {
+	case <-s.Done():
+		t.Fatal("Session.Done fired after cross-origin nav — Page should survive")
+	default:
 	}
 }
 
