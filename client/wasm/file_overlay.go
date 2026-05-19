@@ -118,12 +118,14 @@ func fileInnerBox(p *pane.Pane, r paneRect) (x, y, w, h float64) {
 	return left, top, width, height
 }
 
-// paneContentBox returns the full content rectangle of a file-focused
-// pane: everything inside the file margin. Wider than fileInnerBox
-// (which is centered to ~80 columns for markdown text editing). Used
-// by URL tiles whose content fills the available pane.
+// paneContentBox returns the rectangle a URL tile renders into when
+// descended: the full pane minus the pane outline thickness. URL tiles
+// fill the pane edge-to-edge — the wide textarea-style margin used by
+// markdown files (fileMargin) makes no sense here, since web pages
+// have their own internal layout and want all the pixels they can get.
+// Ascent out of a URL tile is via the Escape key.
 func paneContentBox(r paneRect) (x, y, w, h float64) {
-	m := fileMargin(r)
+	const m = paneBorderPx
 	x = r.X + m
 	y = r.Y + m
 	w = r.W - 2*m
