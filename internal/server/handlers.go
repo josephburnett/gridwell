@@ -85,14 +85,6 @@ func (s *Server) getGrid(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	// Populate runtime Live field on URL tiles before serializing.
-	if s.urlStreamer != nil {
-		for i := range resp.Tiles {
-			if resp.Tiles[i].IsURL() {
-				resp.Tiles[i].Live = s.urlStreamer.IsLive(uid, resp.Tiles[i].ID)
-			}
-		}
-	}
 	writeJSON(w, resp)
 }
 
@@ -327,42 +319,6 @@ func (s *Server) updateFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, &rpc.TileResponse{Tile: *n})
-}
-
-func (s *Server) wakeURL(w http.ResponseWriter, r *http.Request) {
-	uid, ok := uidOrError(w, r)
-	if !ok {
-		return
-	}
-	var req rpc.WakeURLRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	t, err := s.store.WakeURL(r.Context(), uid, &req)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, &rpc.WakeURLResponse{Tile: *t})
-}
-
-func (s *Server) captureURL(w http.ResponseWriter, r *http.Request) {
-	uid, ok := uidOrError(w, r)
-	if !ok {
-		return
-	}
-	var req rpc.CaptureURLRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	t, err := s.store.CaptureURL(r.Context(), uid, &req)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, &rpc.CaptureURLResponse{Tile: *t})
 }
 
 func (s *Server) forkURL(w http.ResponseWriter, r *http.Request) {

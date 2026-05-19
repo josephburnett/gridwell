@@ -280,65 +280,6 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	}
 }
 
-// syncURLStreamForPane brings the URLStream WS state for pane p into
-// agreement with the pane's current focus and the focused tile's
-// liveness. Called from the SSE handler so a Live→true transition
-// after descent immediately attaches a stream.
-//
-// Phase 3 deletes this: once Live disappears and descent always opens
-// the WS, no reconciliation is needed.
-func (a *App) syncURLStreamForPane(p *pane.Pane) {
-	if p == nil {
-		return
-	}
-	if !a.isURLDescent(p) {
-		if _, has := a.urlStreams[p.ID]; has {
-			urlLog("sync pane=%s action=close reason=not-url-descent", p.ID)
-		}
-		a.closeURLStream(p.ID)
-		return
-	}
-	gid := a.gridIDForPath(p.Path)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		return
-	}
-	t, ok := g.Tiles[p.FileFocus]
-	if !ok {
-		return
-	}
-	existing, hasConn := a.urlStreams[p.ID]
-	r := a.paneRectByID(p.ID)
-	w, h := paneStreamSize(r)
-	if t.Live {
-		if !hasConn {
-			urlLog("sync pane=%s action=open reason=no-conn tile=%d", p.ID, t.ID)
-			a.openURLStream(p, t.ID, w, h)
-		} else if existing.tileID != t.ID {
-			urlLog("sync pane=%s action=reopen reason=tile-changed old=%d new=%d", p.ID, existing.tileID, t.ID)
-			a.openURLStream(p, t.ID, w, h)
-		}
-		return
-	}
-	if hasConn {
-		urlLog("sync pane=%s action=close reason=tile-dormant tile=%d", p.ID, existing.tileID)
-		a.closeURLStream(p.ID)
-	}
-}
-
-// hasURLStreamForTile reports whether any open URLStream connection
-// is currently subscribed to the given tile. Used to skip the
-// url_preview_updated-driven refetch when a WS is already in flight
-// for the same tile (the WS delivers the bytes directly).
-func (a *App) hasURLStreamForTile(tileID int64) bool {
-	for _, conn := range a.urlStreams {
-		if conn != nil && conn.tileID == tileID {
-			return true
-		}
-	}
-	return false
-}
-
 // isURLDescent reports whether pane p is currently descended into a
 // URL tile. Used by the input handlers to switch from gridwell-native
 // gestures to URLStream input forwarding.

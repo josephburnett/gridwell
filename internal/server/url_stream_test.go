@@ -69,37 +69,17 @@ func streamTestServer(t *testing.T) (*Server, *httptest.Server, *store.User, *ht
 type fakeStreamer struct {
 	available bool
 	mu        sync.Mutex
-	live      map[liveKeyT]bool
 	sessions  []*fakeSession
 }
 
-type liveKeyT struct {
-	user, tile int64
-}
-
 func newFakeStreamer() *fakeStreamer {
-	return &fakeStreamer{
-		available: true,
-		live:      map[liveKeyT]bool{},
-	}
+	return &fakeStreamer{available: true}
 }
 
 func (f *fakeStreamer) Available() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.available
-}
-
-func (f *fakeStreamer) IsLive(u, t int64) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.live[liveKeyT{u, t}]
-}
-
-func (f *fakeStreamer) setLive(u, t int64, live bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.live[liveKeyT{u, t}] = live
 }
 
 func (f *fakeStreamer) OpenSession(uid, tid int64, url string, w, h int64) (urlSession, error) {
@@ -306,27 +286,11 @@ func TestURLStreamRefusesWhenStreamerMissing(t *testing.T) {
 	}
 }
 
-func TestURLStreamRefusesNonLive(t *testing.T) {
-	srv, hs, _, cookie := streamTestServer(t)
-	fake := newFakeStreamer()
-	srv.SetURLStreamer(fake)
-	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	_, resp, err := websocket.Dial(context.Background(), urlStreamURL(hs, tileID),
-		&websocket.DialOptions{HTTPHeader: cookieHeader(cookie)})
-	if err == nil {
-		t.Fatal("dial on non-live tile succeeded; expected 409")
-	}
-	if resp == nil || resp.StatusCode != http.StatusConflict {
-		t.Errorf("status = %v, want 409", resp)
-	}
-}
-
 func TestURLStreamOpensSession(t *testing.T) {
 	srv, hs, u, cookie := streamTestServer(t)
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	fake.setLive(u.ID, tileID, true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -347,11 +311,10 @@ func TestURLStreamOpensSession(t *testing.T) {
 }
 
 func TestURLStreamDeliversFramesAndNav(t *testing.T) {
-	srv, hs, u, cookie := streamTestServer(t)
+	srv, hs, _, cookie := streamTestServer(t)
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	fake.setLive(u.ID, tileID, true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -394,11 +357,10 @@ func TestURLStreamDeliversFramesAndNav(t *testing.T) {
 }
 
 func TestURLStreamForwardsInput(t *testing.T) {
-	srv, hs, u, cookie := streamTestServer(t)
+	srv, hs, _, cookie := streamTestServer(t)
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	fake.setLive(u.ID, tileID, true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -432,11 +394,10 @@ func TestURLStreamForwardsInput(t *testing.T) {
 }
 
 func TestURLStreamHandlesViewport(t *testing.T) {
-	srv, hs, u, cookie := streamTestServer(t)
+	srv, hs, _, cookie := streamTestServer(t)
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	fake.setLive(u.ID, tileID, true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -470,7 +431,6 @@ func TestURLStreamClosesSessionAndPersists(t *testing.T) {
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, cookie, "https://example.com")
-	fake.setLive(u.ID, tileID, true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

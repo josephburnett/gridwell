@@ -379,24 +379,20 @@ func (a *App) finishRightDrag(sx, sy float64) {
 
 // commitTileCenter handles release of a center-zone gesture. Commit
 // only when the cursor is still inside the center at release; drag-
-// out-and-release cancels (or, for URL tiles, becomes a fork — see
-// M4g). Wells with an empty child grid in cache → fill; otherwise
-// toggle cap/redig. URL tiles: toggle wake/capture.
+// out-and-release cancels (or, for URL tiles, becomes a fork). Wells
+// with an empty child grid in cache → fill; otherwise toggle
+// cap/redig. URL tiles: drag = fork; no-drag is a no-op (liveness is
+// driven by descent, not a separate gesture).
 func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
 	n := rd.tileNode
 	if n.IsURL() {
-		// URL tile gesture vocabulary: no-drag = toggle wake/capture,
-		// drag = fork (drop a frozen sibling at the cursor). The
-		// disambiguator is the screen distance from the initial
-		// right-down, not the cursor's location at release.
 		const dragThresholdPx = 6.0
 		dx := sx - rd.startX
 		dy := sy - rd.startY
 		if dx*dx+dy*dy < dragThresholdPx*dragThresholdPx {
-			a.toggleURLLiveness(rd, &n)
-		} else {
-			a.forkURLDrop(rd, &n, sx, sy)
+			return
 		}
+		a.forkURLDrop(rd, &n, sx, sy)
 		return
 	}
 	if n.Type != "well" {

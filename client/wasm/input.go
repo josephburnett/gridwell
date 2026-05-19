@@ -1137,9 +1137,10 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			fp.FileScrollX = 0
 			fp.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
 			a.refreshFileOverlay()
-			// If the descended file is a live URL tile, attach a
-			// streaming WebSocket. Closed in startFileAscent.
-			if file.IsURL() && file.Live {
+			// URL descent always attaches a streaming WebSocket; the
+			// server creates a fresh Chromium tab for the duration of
+			// the WS. closed in startFileAscent.
+			if file.IsURL() {
 				rr := a.paneRectByID(fp.ID)
 				w, h := paneStreamSize(rr)
 				a.openURLStream(fp, file.ID, w, h)
@@ -1224,6 +1225,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 // cached or the file row vanished while we were focused on it. We just
 // clear FileFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
+	a.closeURLStream(p.ID) // no-op if not a URL descent
 	saved := a.popPaneState(p.ID)
 	p.FileFocus = 0
 	if saved != nil {
@@ -1517,20 +1519,6 @@ func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []b
 			}
 			var resp rpc.TileResponse
 			_, _ = postJSON("/rpc/CreateFile", req, &resp)
-			// Spec §8.3: URL tiles are born live. After CreateFile
-			// succeeds, fire WakeURL so the server-side Chromium tab
-			// spawns and the preview starts updating. The Live flag
-			// on the tile updates via the Subscribe stream / the
-			// follow-up GetGrid below.
-			if mime == rpc.MimeURIList && resp.Tile.ID != 0 {
-				wakeReq := rpc.WakeURLRequest{
-					Path:     rpc.Path{WellIDs: p.Path},
-					ViewRect: view,
-					TileID:   resp.Tile.ID,
-				}
-				var wakeResp rpc.TileResponse
-				_, _ = postJSON("/rpc/WakeURL", wakeReq, &wakeResp)
-			}
 		}
 		a.fetchGrid(gid)
 	}()

@@ -1,14 +1,17 @@
-// Package urldriver implements the URLDriver interface from the store
-// package on top of headless Chromium via the Chrome DevTools Protocol.
+// Package urldriver implements URL-tile presence on top of headless
+// Chromium via the Chrome DevTools Protocol.
 //
-// See spec §8.3. v1 scope: per-user Chromium process with a persistent
-// profile dir, lazy Wake spawns a tab, Capture takes a screenshot and
-// closes the tab, a background goroutine polls a fresh screenshot at a
-// configurable cadence while a tile is live. The v1 hard boundaries
-// (popup-block, dialog auto-dismiss, permission auto-deny, fullscreen
-// block, download block, audio mute, scheme allow-list) are installed
-// in setupTabHardening / userBrowserLocked. Streaming-rate screencast
-// and input forwarding are part of M4.
+// Public surface:
+//
+//   - Driver: one per gridwell process. Owns the per-user Chromium
+//     subprocess and exposes Available() and OpenSession.
+//   - Session: one Chromium tab whose lifetime matches a single
+//     /rpc/URLStream WebSocket. Created by OpenSession, torn down by
+//     Close. Defined in session.go.
+//
+// The v1 hard boundaries (popup-block, dialog auto-dismiss, permission
+// auto-deny, fullscreen block, window.close neutralization, audio mute,
+// scheme allow-list) live in hardeningJS and userBrowserLocked.
 package urldriver
 
 import (
@@ -60,18 +63,10 @@ type Config struct {
 	ViewportHeight int64
 }
 
-// Subscriber is a sink for streamed frames + navigation events from a
-// live URL tile. Implementations should be non-blocking: SendFrame and
-// SendNavigation are called from the driver's polling goroutine, and a
-// slow subscriber must not stall frame delivery to other subscribers.
-// The typical pattern is a buffered channel with frame drops on
-// overflow (UI streaming).
-type Subscriber interface {
-	SendFrame(jpeg []byte)
-	SendNavigation(newURL string)
-}
-
 // Driver is the chromedp-backed URLDriver.
+// Driver owns one Chromium subprocess per user and hands out per-tab
+// Sessions on demand. Active sessions are not tracked centrally —
+// each Session manages its own teardown.
 type Driver struct {
 	cfg   Config
 	store PreviewWriter
@@ -79,50 +74,13 @@ type Driver struct {
 	available  bool
 	binaryPath string
 
-	mu          sync.Mutex
-	users       map[int64]*userBrowser
-	tabs        map[liveKey]*tabContext
-	subscribers map[liveKey][]Subscriber
-}
-
-type liveKey struct {
-	user, tile int64
+	mu    sync.Mutex
+	users map[int64]*userBrowser
 }
 
 type userBrowser struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-}
-
-// tabContext is the per-tile runtime state managed by the driver.
-//
-// chromedp's per-tab context dies on certain navigations (target
-// destroyed events from CDP, including some same-origin navigations
-// that internally swap renderer or session). When that happens we
-// respawn the tab at currentURL and replace the chromedp ctx atomically
-// in d.tabs. Goroutines that hold a stale reference (e.g. an in-flight
-// runWithTimeout) just return ErrCanceled; the caller re-lookups from
-// d.tabs to find the new tc and retries.
-type tabContext struct {
-	mu         sync.Mutex // protects currentURL only
-	currentURL string
-
-	ctx    context.Context
-	cancel context.CancelFunc
-	stop   chan struct{}
-	done   chan struct{}
-}
-
-func (t *tabContext) setURL(u string) {
-	t.mu.Lock()
-	t.currentURL = u
-	t.mu.Unlock()
-}
-
-func (t *tabContext) getURL() string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.currentURL
 }
 
 // hardeningJS is injected on every new document. It blocks
@@ -167,11 +125,9 @@ func New(store PreviewWriter, cfg Config) *Driver {
 		cfg.ViewportHeight = 800
 	}
 	d := &Driver{
-		cfg:         cfg,
-		store:       store,
-		users:       map[int64]*userBrowser{},
-		tabs:        map[liveKey]*tabContext{},
-		subscribers: map[liveKey][]Subscriber{},
+		cfg:   cfg,
+		store: store,
+		users: map[int64]*userBrowser{},
 	}
 	d.binaryPath = resolveBinary(cfg.BinaryPath)
 	d.available = d.binaryPath != "" && cfg.ProfileRoot != ""
@@ -187,62 +143,6 @@ func New(store PreviewWriter, cfg Config) *Driver {
 
 // Available reports whether the driver is functional.
 func (d *Driver) Available() bool { return d.available }
-
-// Wake spawns a Chromium tab for (userID, tileID) at initialURL, or
-// no-ops if one already exists.
-func (d *Driver) Wake(ctx context.Context, userID, tileID int64, initialURL string) error {
-	if !d.available {
-		return ErrUnavailable
-	}
-	d.mu.Lock()
-	if _, exists := d.tabs[liveKey{userID, tileID}]; exists {
-		d.mu.Unlock()
-		return nil
-	}
-	browser, err := d.userBrowserLocked(userID)
-	if err != nil {
-		d.mu.Unlock()
-		return err
-	}
-	// chromedp.NewContext on the browser's context spawns a new tab.
-	tabCtx, cancel := chromedp.NewContext(browser.ctx)
-	tc := &tabContext{
-		ctx:        tabCtx,
-		cancel:     cancel,
-		currentURL: initialURL,
-		stop:       make(chan struct{}),
-		done:       make(chan struct{}),
-	}
-	d.tabs[liveKey{userID, tileID}] = tc
-	d.mu.Unlock()
-
-	// Watchdog: log when the tab context dies. This helps catch
-	// the case where chromedp tears it down on us (e.g. on a
-	// renderer swap during navigation).
-	go func() {
-		<-tabCtx.Done()
-		log.Printf("[urldriver] tab ctx done uid=%d tile=%d err=%v", userID, tileID, tabCtx.Err())
-	}()
-
-	// Install per-tab listeners (dialog dismiss, navigation tracking).
-	// Must happen before Navigate so we don't miss the first events.
-	d.installTabListeners(tabCtx, userID, tileID)
-
-	// Set up viewport + injected hardening JS, then navigate. The
-	// derived setup context bounds the operation but we never call its
-	// cancel func — see runWithTimeout below for why (chromedp keys
-	// its session listener to a derived context's Done channel and
-	// cancelling it tears down the session).
-	_ = runWithTimeout(tabCtx, 20*time.Second,
-		chromedp.EmulateViewport(d.cfg.ViewportWidth, d.cfg.ViewportHeight),
-		injectHardening(),
-		chromedp.Navigate(initialURL),
-	)
-
-	// Start the polling loop that pushes screenshots into the store.
-	go d.previewLoop(userID, tileID, tc)
-	return nil
-}
 
 // InputEventKind discriminates between mouse, key, and resize events
 // flowing from a URLStream WebSocket client into the driver.
@@ -280,106 +180,6 @@ type InputEvent struct {
 	Modifiers int64
 	Width     int64
 	Height    int64
-}
-
-// ForwardInput translates an InputEvent into CDP commands and
-// dispatches them to the (userID, tileID) tab. No-op if the tile is
-// not live. If the underlying chromedp context has been canceled
-// (chromedp can drop the per-tab context on certain navigations
-// internal target swaps), we transparently respawn the tab at its
-// last-known URL and retry once.
-func (d *Driver) ForwardInput(userID, tileID int64, ev InputEvent) error {
-	action, err := inputAction(ev)
-	if err != nil {
-		log.Printf("[urldriver] ForwardInput bad-action uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
-		return err
-	}
-	d.mu.Lock()
-	tc, ok := d.tabs[liveKey{userID, tileID}]
-	d.mu.Unlock()
-	if !ok {
-		log.Printf("[urldriver] ForwardInput no-tab uid=%d tile=%d kind=%s", userID, tileID, ev.Kind)
-		return nil
-	}
-	err = runWithTimeout(tc.ctx, 2*time.Second, action)
-	if err != nil {
-		log.Printf("[urldriver] ForwardInput cdp-err uid=%d tile=%d kind=%s err=%v", userID, tileID, ev.Kind, err)
-	}
-	return err
-}
-
-// respawnTab replaces a dead per-tab chromedp context with a fresh
-// one at the same URL. Caller has already observed that ForwardInput
-// returned context.Canceled. Coordinated through d.mu so concurrent
-// callers don't double-respawn.
-func (d *Driver) respawnTab(userID, tileID int64) error {
-	d.mu.Lock()
-	tc, ok := d.tabs[liveKey{userID, tileID}]
-	if !ok {
-		d.mu.Unlock()
-		return errors.New("no tab")
-	}
-	// If another caller already respawned, the new ctx will be alive
-	// and we have nothing to do.
-	select {
-	case <-tc.ctx.Done():
-	default:
-		d.mu.Unlock()
-		return nil
-	}
-	url := tc.getURL()
-	if url == "" {
-		d.mu.Unlock()
-		return errors.New("no current url to respawn at")
-	}
-	browser, err := d.userBrowserLocked(userID)
-	if err != nil {
-		d.mu.Unlock()
-		return err
-	}
-	browserAlive := true
-	select {
-	case <-browser.ctx.Done():
-		browserAlive = false
-	default:
-	}
-	log.Printf("[urldriver] respawn-attempt uid=%d tile=%d browser-alive=%v", userID, tileID, browserAlive)
-	// Drain the old previewLoop. If it already exited (likely — its
-	// own select on tc.ctx.Done would have returned), tc.done is
-	// already closed; otherwise close stop to signal it.
-	select {
-	case <-tc.done:
-	default:
-		close(tc.stop)
-		<-tc.done
-	}
-	tc.cancel()
-
-	// Build the replacement tabContext.
-	tabCtx, cancel := chromedp.NewContext(browser.ctx)
-	newTc := &tabContext{
-		ctx:        tabCtx,
-		cancel:     cancel,
-		currentURL: url,
-		stop:       make(chan struct{}),
-		done:       make(chan struct{}),
-	}
-	d.tabs[liveKey{userID, tileID}] = newTc
-	d.mu.Unlock()
-
-	go func() {
-		<-tabCtx.Done()
-		log.Printf("[urldriver] tab ctx done (respawned) uid=%d tile=%d err=%v", userID, tileID, tabCtx.Err())
-	}()
-	d.installTabListeners(tabCtx, userID, tileID)
-	_ = runWithTimeout(tabCtx, 20*time.Second,
-		chromedp.EmulateViewport(d.cfg.ViewportWidth, d.cfg.ViewportHeight),
-		injectHardening(),
-		chromedp.Navigate(url),
-	)
-	go d.previewLoop(userID, tileID, newTc)
-	log.Printf("[urldriver] respawned uid=%d tile=%d url=%s", userID, tileID, url)
-	return nil
 }
 
 // captureJPEG is a chromedp action that grabs a JPEG screenshot at a
@@ -471,65 +271,17 @@ func runWithTimeout(parent context.Context, timeout time.Duration, actions ...ch
 	return chromedp.Run(ctx, actions...)
 }
 
-// Capture takes a final screenshot and closes the tab. No-ops if the
-// tile is not currently live.
-func (d *Driver) Capture(ctx context.Context, userID, tileID int64) error {
-	d.mu.Lock()
-	tc, exists := d.tabs[liveKey{userID, tileID}]
-	if !exists {
-		d.mu.Unlock()
-		return nil
-	}
-	delete(d.tabs, liveKey{userID, tileID})
-	d.mu.Unlock()
-
-	// Stop the polling loop first; if it's mid-screenshot it'll see the
-	// stop channel close and return.
-	close(tc.stop)
-	<-tc.done
-
-	// One final screenshot before tearing down. See runWithTimeout for
-	// why we don't cancel the derived context.
-	var buf []byte
-	if err := runWithTimeout(tc.ctx, 3*time.Second, captureJPEG(&buf)); err == nil && len(buf) > 0 {
-		_ = d.store.SetURLPreview(ctx, userID, tileID, buf)
-	}
-	tc.cancel()
-	return nil
-}
-
-// IsLive reports whether (userID, tileID) currently has a live tab.
-func (d *Driver) IsLive(userID, tileID int64) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	_, ok := d.tabs[liveKey{userID, tileID}]
-	return ok
-}
-
 // Shutdown tears down every user's Chromium process. Call on server stop.
-//
-// Snapshot the tabs and users slices under the lock and release it
-// before waiting on each tab's `done` channel — the preview loop
-// needs d.mu to broadcast frames, so holding it while waiting for the
-// loop to drain would deadlock.
+// Active Sessions are responsible for their own teardown via Close;
+// killing the user browser context cascades to any still-open tab.
 func (d *Driver) Shutdown() {
 	d.mu.Lock()
-	tabs := make([]*tabContext, 0, len(d.tabs))
-	for k, tc := range d.tabs {
-		tabs = append(tabs, tc)
-		delete(d.tabs, k)
-	}
 	users := make([]*userBrowser, 0, len(d.users))
 	for uid, b := range d.users {
 		users = append(users, b)
 		delete(d.users, uid)
 	}
 	d.mu.Unlock()
-	for _, tc := range tabs {
-		close(tc.stop)
-		<-tc.done
-		tc.cancel()
-	}
 	for _, b := range users {
 		b.cancel()
 	}
@@ -610,45 +362,6 @@ func (d *Driver) userBrowserLocked(userID int64) (*userBrowser, error) {
 	return b, nil
 }
 
-// installTabListeners hooks dialog-dismiss + navigation tracking. The
-// chromedp ListenTarget callback runs in a separate goroutine — never
-// block it.
-func (d *Driver) installTabListeners(tabCtx context.Context, userID, tileID int64) {
-	chromedp.ListenTarget(tabCtx, func(ev any) {
-		switch e := ev.(type) {
-		case *page.EventJavascriptDialogOpening:
-			// Auto-dismiss: accept=false. Spec §8.3. The derived ctx
-			// is allowed to time out naturally (see runWithTimeout).
-			go func() {
-				_ = runWithTimeout(tabCtx, 2*time.Second, page.HandleJavaScriptDialog(false))
-			}()
-		case *page.EventFrameNavigated:
-			// Only the main frame's navigations rename the tile's URL.
-			// Subframe navigations (ads, embeds) don't.
-			if e.Frame == nil || string(e.Frame.ParentID) != "" {
-				return
-			}
-			u := e.Frame.URL
-			if !schemeAllowed(u) {
-				return
-			}
-			// Also record on the live tabContext so respawn after a
-			// CDP-side target swap can pick up the right URL.
-			d.mu.Lock()
-			if tc, ok := d.tabs[liveKey{userID, tileID}]; ok {
-				tc.setURL(u)
-			}
-			d.mu.Unlock()
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				_ = d.store.SetURLString(ctx, userID, tileID, u)
-				d.broadcastNavigation(userID, tileID, u)
-			}()
-		}
-	})
-}
-
 // injectHardening returns a chromedp action that registers the
 // popup/fullscreen blocker script to run on every new document in the
 // current tab.
@@ -657,101 +370,6 @@ func injectHardening() chromedp.Action {
 		_, err := page.AddScriptToEvaluateOnNewDocument(hardeningJS).Do(ctx)
 		return err
 	})
-}
-
-// previewLoop polls a screenshot at a cadence chosen by subscriber
-// presence: cfg.StreamInterval while one or more subscribers are
-// attached, cfg.PreviewInterval otherwise. Every successful frame is
-// (a) written to preview_jpeg via the store and (b) fanned out to
-// subscribers. Returns when tc.stop is closed.
-func (d *Driver) previewLoop(userID, tileID int64, tc *tabContext) {
-	defer close(tc.done)
-	// Use a single timer reset to the current cadence instead of a
-	// fixed ticker so cadence changes (subscribe / unsubscribe) take
-	// effect on the next tick without restart.
-	timer := time.NewTimer(d.cfg.PreviewInterval)
-	defer timer.Stop()
-	for {
-		select {
-		case <-tc.stop:
-			return
-		case <-tc.ctx.Done():
-			return
-		case <-timer.C:
-		}
-		var buf []byte
-		err := runWithTimeout(tc.ctx, d.cfg.StreamInterval+1*time.Second, captureJPEG(&buf))
-		if err == nil && len(buf) > 0 {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = d.store.SetURLPreview(ctx, userID, tileID, buf)
-			cancel()
-			d.broadcastFrame(userID, tileID, buf)
-		}
-		timer.Reset(d.tickInterval(userID, tileID))
-	}
-}
-
-// tickInterval returns the current per-tile polling cadence. While at
-// least one subscriber is attached, frames are produced at
-// cfg.StreamInterval (~10fps); otherwise at cfg.PreviewInterval
-// (~700ms, the background-preview cadence from spec §8.3).
-func (d *Driver) tickInterval(userID, tileID int64) time.Duration {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if len(d.subscribers[liveKey{userID, tileID}]) > 0 {
-		return d.cfg.StreamInterval
-	}
-	return d.cfg.PreviewInterval
-}
-
-// broadcastFrame fans a captured frame out to all subscribers for the
-// tile. Snapshots the subscriber slice under lock then sends without
-// the lock held (SendFrame is required to be non-blocking).
-func (d *Driver) broadcastFrame(userID, tileID int64, jpeg []byte) {
-	d.mu.Lock()
-	subs := append([]Subscriber(nil), d.subscribers[liveKey{userID, tileID}]...)
-	d.mu.Unlock()
-	for _, s := range subs {
-		s.SendFrame(jpeg)
-	}
-}
-
-// broadcastNavigation fans a new URL out to all subscribers for the
-// tile. Mirrors broadcastFrame.
-func (d *Driver) broadcastNavigation(userID, tileID int64, newURL string) {
-	d.mu.Lock()
-	subs := append([]Subscriber(nil), d.subscribers[liveKey{userID, tileID}]...)
-	d.mu.Unlock()
-	for _, s := range subs {
-		s.SendNavigation(newURL)
-	}
-}
-
-// Subscribe registers sub as a recipient of frame and navigation
-// events for (userID, tileID). The returned unsubscribe function
-// removes sub from the list; callers should always invoke it (e.g.
-// via defer) to avoid leaking subscriber slots. Subscribe does not
-// validate that the tile is live or that the user has permission —
-// the caller (the URLStream HTTP handler) is responsible for that.
-func (d *Driver) Subscribe(userID, tileID int64, sub Subscriber) func() {
-	key := liveKey{userID, tileID}
-	d.mu.Lock()
-	d.subscribers[key] = append(d.subscribers[key], sub)
-	d.mu.Unlock()
-	return func() {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		list := d.subscribers[key]
-		for i, s := range list {
-			if s == sub {
-				d.subscribers[key] = append(list[:i], list[i+1:]...)
-				break
-			}
-		}
-		if len(d.subscribers[key]) == 0 {
-			delete(d.subscribers, key)
-		}
-	}
 }
 
 // ErrUnavailable is returned when Chromium is not available. Distinct

@@ -580,32 +580,11 @@ func (a *App) startSSE() {
 			return nil
 		}
 		if a.c.Apply(ev) {
-			// Tile liveness may have flipped — bring every pane's
-			// URLStream into agreement so a tile waking after
-			// descent immediately attaches a stream.
-			if ev.Kind == rpc.EventTileChanged && ev.TileChanged != nil {
-				tileID := ev.TileChanged.Tile.ID
-				a.tree.Walk(func(p *pane.Pane) {
-					if p.FileFocus == tileID {
-						a.syncURLStreamForPane(p)
-					}
-				})
-			}
 			a.draw()
 		}
 		// GridChanged: refetch the affected grid if any pane is looking at it.
 		if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
 			a.fetchGrid(ev.GridChanged.GridID)
-		}
-		// URL preview was overwritten — drop the cached decoded image so
-		// the next render refetches via GetTilePreview. Skip the
-		// invalidate when a WebSocket stream is already open for the
-		// tile: the WS will deliver the same bytes faster and cheaper.
-		if ev.Kind == rpc.EventURLPreviewUpdated && ev.URLPreviewUpdated != nil {
-			if !a.hasURLStreamForTile(ev.URLPreviewUpdated.TileID) {
-				a.urlPreview.Invalidate(ev.URLPreviewUpdated.TileID)
-			}
-			a.draw()
 		}
 		return nil
 	}))

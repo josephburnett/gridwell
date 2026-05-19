@@ -15,8 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
-// urlStreamer is the subset of the URL driver this handler and
-// getGrid's Live-stamping require.
+// urlStreamer is the subset of the URL driver this handler requires.
 //
 // OpenSession returns a urlSession (an interface) so the test fake can
 // substitute its own. *urldriver.Driver.OpenSession returns the
@@ -24,7 +23,6 @@ import (
 // typing; StreamerFromDriver provides the thin adapter.
 type urlStreamer interface {
 	Available() bool
-	IsLive(userID, tileID int64) bool
 	OpenSession(userID, tileID int64, initialURL string, w, h int64) (urlSession, error)
 }
 
@@ -52,8 +50,7 @@ func StreamerFromDriver(d *urldriver.Driver) urlStreamer {
 
 type driverStreamer struct{ d *urldriver.Driver }
 
-func (s *driverStreamer) Available() bool        { return s.d.Available() }
-func (s *driverStreamer) IsLive(u, t int64) bool { return s.d.IsLive(u, t) }
+func (s *driverStreamer) Available() bool { return s.d.Available() }
 func (s *driverStreamer) OpenSession(u, t int64, url string, w, h int64) (urlSession, error) {
 	return s.d.OpenSession(u, t, url, w, h)
 }
@@ -130,12 +127,6 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	}
 	if !tile.IsURL() {
 		http.Error(w, "not a URL tile", http.StatusBadRequest)
-		return
-	}
-	// Phase 1: clients still call WakeURL before Dial; require IsLive.
-	// Phase 3 removes this gate (the WS open *is* the wake signal).
-	if !s.urlStreamer.IsLive(uid, tileID) {
-		http.Error(w, "tile is not live", http.StatusConflict)
 		return
 	}
 

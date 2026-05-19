@@ -72,8 +72,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/RedigWell", s.authed(s.redigWell))
 	s.mux.HandleFunc("/rpc/FillWell", s.authed(s.fillWell))
 	s.mux.HandleFunc("/rpc/UpdateFileContent", s.authed(s.updateFileContent))
-	s.mux.HandleFunc("/rpc/WakeURL", s.authed(s.wakeURL))
-	s.mux.HandleFunc("/rpc/CaptureURL", s.authed(s.captureURL))
 	s.mux.HandleFunc("/rpc/ForkURL", s.authed(s.forkURL))
 	s.mux.HandleFunc("/rpc/AscendAtRoot", s.authed(s.ascendAtRoot))
 	s.mux.HandleFunc("/rpc/Subscribe", s.authedSSE(s.subscribe))

@@ -79,11 +79,6 @@ type Tile struct {
 	MimeType    string  `json:"mime_type,omitempty"`
 	BlobID      int64   `json:"blob_id,omitempty"`
 	URLString   string  `json:"url_string,omitempty"`
-	// Live is runtime state (not persisted): true if a URL tile has a
-	// live Chromium tab right now. Populated by the server when
-	// serializing; always false on a fresh server start. Only
-	// meaningful on URL tiles.
-	Live        bool    `json:"live,omitempty"`
 	OwnerID     int64   `json:"owner_id"`
 	GroupID     int64   `json:"group_id"`
 	Mode        int32   `json:"mode"`
@@ -271,28 +266,10 @@ type AscendAtRootResponse struct {
 	WellID        int64 `json:"well_id"`
 }
 
-// URL tile mutations. See spec §8.3 for semantics. WakeURL and CaptureURL
-// toggle a tile's runtime liveness (Chromium tab present / absent);
-// ForkURL duplicates the tile as a dormant sibling capturing the current
-// URL + preview.
-
-type WakeURLRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-}
-type WakeURLResponse struct {
-	Tile Tile `json:"tile"`
-}
-
-type CaptureURLRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-}
-type CaptureURLResponse struct {
-	Tile Tile `json:"tile"`
-}
+// URL tile mutations. See spec §8.3 for semantics. ForkURL duplicates
+// the tile as a dormant sibling capturing the current URL + preview.
+// (Liveness is no longer modelled as tile state: a URL tile is "live"
+// for the duration of a /rpc/URLStream WebSocket — see url_stream.go.)
 
 type ForkURLRequest struct {
 	Path         Path     `json:"path"`
@@ -316,20 +293,18 @@ type SubscribeRequest struct{}
 type EventKind string
 
 const (
-	EventGridChanged       EventKind = "grid_changed"
-	EventTileChanged       EventKind = "tile_changed"
-	EventTileRemoved       EventKind = "tile_removed"
-	EventGridForked        EventKind = "grid_forked"
-	EventURLPreviewUpdated EventKind = "url_preview_updated"
+	EventGridChanged EventKind = "grid_changed"
+	EventTileChanged EventKind = "tile_changed"
+	EventTileRemoved EventKind = "tile_removed"
+	EventGridForked  EventKind = "grid_forked"
 )
 
 type Event struct {
-	Kind               EventKind           `json:"kind"`
-	GridChanged        *GridChanged        `json:"grid_changed,omitempty"`
-	TileChanged        *TileChanged        `json:"tile_changed,omitempty"`
-	TileRemoved        *TileRemoved        `json:"tile_removed,omitempty"`
-	GridForked         *GridForked         `json:"grid_forked,omitempty"`
-	URLPreviewUpdated  *URLPreviewUpdated  `json:"url_preview_updated,omitempty"`
+	Kind        EventKind    `json:"kind"`
+	GridChanged *GridChanged `json:"grid_changed,omitempty"`
+	TileChanged *TileChanged `json:"tile_changed,omitempty"`
+	TileRemoved *TileRemoved `json:"tile_removed,omitempty"`
+	GridForked  *GridForked  `json:"grid_forked,omitempty"`
 }
 
 type GridChanged struct {
@@ -346,8 +321,4 @@ type GridForked struct {
 	WellID    int64 `json:"well_id"`
 	OldGridID int64 `json:"old_grid_id"`
 	NewGridID int64 `json:"new_grid_id"`
-}
-type URLPreviewUpdated struct {
-	GridID int64 `json:"grid_id"`
-	TileID int64 `json:"tile_id"`
 }

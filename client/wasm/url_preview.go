@@ -12,15 +12,17 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
+// Live-tab presence is no longer modeled as tile state. A URL tile in
+// the grid view always shows its cached preview JPEG; that preview is
+// written when a descended client disconnects (see server/url_stream.go
+// closeSession). Right-click on a URL tile means fork-on-drag-release,
+// nothing else.
+
 // drawURLTileInPane renders a URL tile that's currently the pane's
 // FileFocus (i.e., the user descended into it). The pane's
-// inner-rect (x, y, w, h) gets the cached preview image scaled to
-// fit. While the WebSocket stream is open, frames flow into the same
+// inner-rect (x, y, w, h) gets the cached preview image scaled to fit.
+// While the WebSocket stream is open, frames flow into the same
 // urlPreview cache, so this draw call automatically reflects them.
-//
-// The dormant case (no stream open) also lands here: it renders the
-// frozen preview blob with a "wake up" hint overlay so the user
-// knows the right-click gesture brings it back to life.
 func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	// Keep the server-side Chromium viewport in step with the area
 	// we're painting into. notifyURLStreamSize is a no-op when the
@@ -38,35 +40,19 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	if img, ok := a.urlPreview.Get(n.ID); ok {
 		a.cctx.Call("drawImage", img, x, y, w, h)
 	} else {
-		// No preview cached yet; fetch and show URL text in the
-		// meantime.
 		a.fetchURLPreview(n.ID)
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "16px monospace")
 		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
 	}
-
-	if !n.Live {
-		// Dormant: subtle hint that right-click wakes it.
-		a.cctx.Set("fillStyle", "rgba(0,0,0,0.35)")
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("fillStyle", colorMenuItemHi)
-		a.cctx.Set("font", "14px sans-serif")
-		a.cctx.Call("fillText", "right-click to wake", x+16, y+h-16, w-32)
-	}
 	a.cctx.Call("restore")
-	_ = p // pane parameter kept for symmetry with drawMarkdownInPane
 }
 
-// drawURLTile renders a URL tile in the parent grid view. Layers,
-// bottom-up:
+// drawURLTile renders a URL tile in the parent grid view. Layers:
 //   1. dark-grey background (matches the file inner-bg used elsewhere)
 //   2. the cached preview JPEG cropped to the tile footprint, or a
 //      placeholder showing the URL text if no preview is loaded yet
-//   3. a small green dot in the upper-right if the tile is currently
-//      live (Chromium tab present), giving the user the "live vs
-//      dormant" cue called for in spec §8.3
-//   4. the tile outline + selection highlight
+//   3. the tile outline + selection highlight
 func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
@@ -77,31 +63,14 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	if img, ok := a.urlPreview.Get(n.ID); ok {
-		// drawImage(image, dx, dy, dw, dh) — scale to the tile footprint.
 		a.cctx.Call("drawImage", img, x, y, w, h)
 	} else {
-		// No preview yet: show the URL string as a small label so the
-		// tile is at least identifiable, and kick off a fetch.
 		if w > 20 && h > 20 {
 			a.cctx.Set("fillStyle", colorMuted)
 			a.cctx.Set("font", "12px monospace")
 			a.cctx.Call("fillText", n.URLString, x+8, y+18, w-16)
 		}
 		a.fetchURLPreview(n.ID)
-	}
-
-	if n.Live {
-		// Pulsing dot: scale-by-time gives the user a subtle motion
-		// cue without burning CPU on full-frame animation.
-		now := js.Global().Get("Date").Call("now").Float() / 1000.0
-		pulse := 0.7 + 0.3*math.Sin(now*2*math.Pi/1.2) // 1.2s period
-		radius := 4.0 * pulse
-		cx := x + w - 8
-		cy := y + 8
-		a.cctx.Set("fillStyle", "#5ad15a")
-		a.cctx.Call("beginPath")
-		a.cctx.Call("arc", cx, cy, radius, 0.0, 2*math.Pi)
-		a.cctx.Call("fill")
 	}
 
 	a.cctx.Set("strokeStyle", colorTextLine)
@@ -249,55 +218,6 @@ func (c *urlPreviewCache) Put(tileID int64, jpegBytes []byte, onReady func()) {
 	img.Set("onload", onloadFn)
 	img.Set("onerror", onerrorFn)
 	img.Set("src", objectURL)
-}
-
-// toggleURLLiveness calls WakeURL or CaptureURL depending on the
-// tile's current Live flag. The server's response (and any follow-up
-// Subscribe events) drive the cache update; this function only fires
-// the RPC. Spec §8.3: right-click on a URL tile body (no drag)
-// toggles wake/capture.
-func (a *App) toggleURLLiveness(rd *rightDragState, n *rpc.Tile) {
-	p := a.tree.FindPane(rd.tilePaneID)
-	if p == nil {
-		return
-	}
-	pscreen := dragdrop.Pane{
-		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
-		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	view := a.paneViewRect(p, pscreen)
-	wasLive := n.Live
-	gid := a.gridIDForPath(p.Path)
-	tileID := n.ID
-
-	go func() {
-		var resp rpc.TileResponse
-		var status int
-		var err error
-		if wasLive {
-			req := rpc.CaptureURLRequest{
-				Path:     rpc.Path{WellIDs: p.Path},
-				ViewRect: view,
-				TileID:   tileID,
-			}
-			status, err = postJSON("/rpc/CaptureURL", req, &resp)
-		} else {
-			req := rpc.WakeURLRequest{
-				Path:     rpc.Path{WellIDs: p.Path},
-				ViewRect: view,
-				TileID:   tileID,
-			}
-			status, err = postJSON("/rpc/WakeURL", req, &resp)
-		}
-		if err != nil || status != 200 {
-			return
-		}
-		// Update the cached tile so the live indicator changes
-		// immediately, ahead of the Subscribe event arrival.
-		a.c.UpdateTile(gid, resp.Tile)
-		a.draw()
-	}()
 }
 
 // forkURLDrop fires ForkURL with the source tile + the drop position
