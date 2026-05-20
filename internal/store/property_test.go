@@ -131,43 +131,40 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			nodes[pickIdx].w = n.W
 			nodes[pickIdx].h = n.H
 		case 3:
-			// Cap a well.
+			// Delete a random tile (cascades through wells).
 			if len(nodes) == 0 {
 				continue
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
-			if pick.typ != "well" {
-				continue
-			}
-			n, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{
+			err := s.DeleteTile(ctx, u.ID, &rpc.DeleteTileRequest{
 				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 			})
-			if err != nil && !isBenignPropError(err) && !errors.Is(err, ErrCapped) {
-				t.Fatalf("iter %d cap: %v", i, err)
+			if err != nil && !isBenignPropError(err) {
+				t.Fatalf("iter %d delete: %v", i, err)
 			}
 			if err == nil {
-				nodes[pickIdx].id = n.ID
+				// Drop the deleted node and any descendants the harness
+				// was still tracking that lived in the cascaded grid.
+				deletedGrids := map[int64]bool{}
+				if pick.typ == "well" && pick.childGridID != 0 {
+					deletedGrids[pick.childGridID] = true
+				}
+				next := nodes[:0]
+				for _, n := range nodes {
+					if n.id == pick.id {
+						continue
+					}
+					if deletedGrids[n.gridID] {
+						continue
+					}
+					next = append(next, n)
+				}
+				nodes = next
 			}
 		case 4:
-			// Redig a well.
-			if len(nodes) == 0 {
-				continue
-			}
-			pickIdx := rng.IntN(len(nodes))
-			pick := nodes[pickIdx]
-			if pick.typ != "well" {
-				continue
-			}
-			n, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{
-				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
-			})
-			if err != nil && !isBenignPropError(err) && !errors.Is(err, ErrNotCapped) {
-				t.Fatalf("iter %d redig: %v", i, err)
-			}
-			if err == nil {
-				nodes[pickIdx].id = n.ID
-			}
+			// (Reserved op slot — was Redig, now unused. Skip.)
+			continue
 		case 5:
 			// Set viewport.
 			if len(nodes) == 0 {

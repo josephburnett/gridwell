@@ -192,6 +192,7 @@ func (a *App) onRightMove(sx, sy float64) {
 		rd.targetSplit.Ratio = newRatio
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(&rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
+		a.advanceCloneDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
 	}
@@ -206,15 +207,17 @@ func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Tile {
 	return a.tileAtCell(p, cellX, cellY)
 }
 
-// armTileGesture installs the right state for a click on a tile —
-// either rightDragTileCenter (cap/delete) or rightDragTileResize
-// (rubber-band) — based on whether (sx, sy) lands in the inner third.
+// armTileGesture installs the right state for a right-button-down on
+// a tile. The model is the same for every tile kind (well, file, URL,
+// black hole):
+//   - Center 1/3 × 1/3: rightDragTileCenter — drag-past-threshold
+//     clones the tile (via the standard a.dragging machinery, armed
+//     in parallel); bare release does nothing.
+//   - Outside center: rightDragTileResize — rubber-band the footprint.
 //
-// URL tiles override this: ANY right-click on a URL tile body arms
-// rightDragTileCenter, since the gesture vocabulary for URL tiles is
-// "no-drag = toggle wake/capture, drag = fork" rather than the well/
-// file center-vs-edge split. Resize via right-click is not supported
-// for URL tiles in v1.
+// In both cases drawRightDragPreview paints the 5-zone hotspot
+// overlay so the user can see all the affordances on the tile at a
+// glance.
 func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
 	common := rightDragState{
 		startX:     sx,
@@ -226,17 +229,11 @@ func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float
 		tilePane:   p,
 		tilePaneR:  r,
 	}
-	if n.IsURL() {
-		common.kind = rightDragTileCenter
-		common.cursorInCenter = true
-		a.rightDrag = &common
-		a.draw()
-		return
-	}
 	if inTileCenter(n, p, r, sx, sy) {
 		common.kind = rightDragTileCenter
 		common.cursorInCenter = true
 		a.rightDrag = &common
+		a.armRightClone(p, r, n, sx, sy)
 	} else {
 		common.kind = rightDragTileResize
 		common.pinX, common.pinY,
@@ -248,9 +245,6 @@ func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float
 		common.tileNewH = n.H
 		a.rightDrag = &common
 	}
-	// Paint the initial preview right away so the user sees the cap/
-	// delete indicator or rubber-band from t=0 — without a movement,
-	// onRightMove won't fire to redraw.
 	a.draw()
 }
 
@@ -377,74 +371,196 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	a.scheduleURLUpdate()
 }
 
-// commitTileCenter handles release of a center-zone gesture. Commit
-// only when the cursor is still inside the center at release; drag-
-// out-and-release cancels (or, for URL tiles, becomes a fork). Wells
-// with an empty child grid in cache → fill; otherwise toggle
-// cap/redig. URL tiles: drag = fork; no-drag is a no-op (liveness is
-// driven by descent, not a separate gesture).
-func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
-	n := rd.tileNode
-	if n.IsURL() {
-		const dragThresholdPx = 6.0
-		dx := sx - rd.startX
-		dy := sy - rd.startY
-		if dx*dx+dy*dy < dragThresholdPx*dragThresholdPx {
+// advanceCloneDrag drives the a.dragging ghost from a right-button
+// move. Same logic the left-drag onMouseMove path runs, narrowed to
+// the case we care about (d.tileID != 0, d.clone = true): cross the
+// drag threshold to materialize the ghost, then track the cursor.
+func (a *App) advanceCloneDrag(sx, sy float64) {
+	d := a.dragging
+	if d == nil {
+		return
+	}
+	if !d.started {
+		dxs := sx - d.startScreenX
+		dys := sy - d.startScreenY
+		if dxs*dxs+dys*dys < dragThreshold*dragThreshold {
+			d.curScreenX = sx
+			d.curScreenY = sy
 			return
 		}
-		a.forkURLDrop(rd, &n, sx, sy)
-		return
+		d.started = true
+		size := d.srcCellSize
+		if size <= 0 {
+			size = cellPx
+		}
+		a.ghost = &ghost{
+			tile:              d.snapshotTile,
+			paneID:            d.originPaneID,
+			screenX:           d.originScreenX,
+			screenY:           d.originScreenY,
+			displayedCellSize: size,
+			targetCellSize:    size,
+		}
 	}
-	if n.Type != "well" {
-		return
+	if a.ghost != nil {
+		if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
+			a.ghost.paneID = t.pane.ID
+			a.ghost.targetCellSize = t.cellSize
+		} else {
+			a.ghost.paneID = d.originPaneID
+			a.ghost.targetCellSize = d.srcCellSize
+		}
+		size := a.ghost.displayedCellSize
+		a.ghost.screenX = sx - d.cellOffsetX*size
+		a.ghost.screenY = sy - d.cellOffsetY*size
 	}
-	if !inTileCenter(&n, rd.tilePane, rd.tilePaneR, sx, sy) {
-		return
-	}
-	p := a.tree.FindPane(rd.tilePaneID)
-	if p == nil {
-		return
-	}
-	pscreen := dragdrop.Pane{
-		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
-		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
+	d.curScreenX = sx
+	d.curScreenY = sy
+}
+
+// armRightClone primes the a.dragging state so a drag from the center
+// zone of tile n will clone it. The ghost itself is materialized only
+// once the cursor moves past dragThreshold — same convention as
+// left-click drags — so a bare right-click leaves the world unchanged.
+//
+// We don't hide the original tile (clone=true), and the cursor offset
+// inside the tile is preserved so the grab point tracks the cursor.
+func (a *App) armRightClone(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
+	ps := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
-	view := a.paneViewRect(p, pscreen)
-	gid := a.gridIDForPath(p.Path)
+	cxF, cyF := ps.ScreenToCell(sx, sy)
+	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
+	cellSize := cellPx * p.Zoom
+	a.dragging = &dragState{
+		originPaneID:   p.ID,
+		tileID:         n.ID,
+		clone:          true,
+		startScreenX:   sx,
+		startScreenY:   sy,
+		curScreenX:     sx,
+		curScreenY:     sy,
+		cellOffsetX:    cxF - float64(n.X),
+		cellOffsetY:    cyF - float64(n.Y),
+		snapshotTile:   *n,
+		originScreenX:  tlX,
+		originScreenY:  tlY,
+		originPaneRect: r,
+		srcGridID:      a.gridIDForPath(p.Path),
+		srcPath:        append([]int64(nil), p.Path...),
+		srcViewRect:    a.paneViewRect(p, ps),
+		srcCellSize:    cellSize,
+	}
+}
 
-	// "Empty leaf-only" fill: if the well isn't capped and its child
-	// grid is in cache with zero nodes, the release fills it instead
-	// of capping. Capped wells always redig.
-	if !n.Capped {
-		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Tiles) == 0 {
-			go func() {
-				req := rpc.FillWellRequest{
-					Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, TileID: n.ID,
-				}
-				var resp rpc.FillWellResponse
-				_, _ = postJSON("/rpc/FillWell", req, &resp)
-				a.fetchGrid(gid)
-			}()
+// commitTileCenter handles release of a center-zone gesture. With the
+// unified mouse-only model the bare-release semantics are: no-op. The
+// center is "the clone grab handle" — clone happens by dragging past
+// the threshold. If a.dragging was promoted to "started" by motion,
+// commit it as a CloneTile drop; otherwise just clear the priming
+// state so subsequent clicks aren't affected.
+func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
+	_ = rd
+	d := a.dragging
+	a.dragging = nil
+	if d == nil || !d.started {
+		a.ghost = nil
+		a.draw()
+		return
+	}
+	a.commitRightClone(d, sx, sy)
+}
+
+// commitRightClone resolves the drop target at (sx, sy) and either
+// fires CloneTile, drops the source onto a black-hole sink (which is
+// a delete), or snap-backs the ghost on a rejected drop. The async
+// RPC fires in a goroutine; the local cache is patched optimistically
+// by the SSE event when it lands.
+func (a *App) commitRightClone(d *dragState, sx, sy float64) {
+	t, ok := a.dropTargetAt(sx, sy, d.tileID)
+	if !ok {
+		a.cancelDragSnapBack(d)
+		return
+	}
+	// Black-hole sink: any tile dropped on a black-hole tile is
+	// deleted. The drop coordinates are inside the black hole's
+	// footprint, so the dragged source disappears rather than landing.
+	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.IsBlackHole() {
+		a.runDeleteTile(d, t)
+		a.ghost = nil
+		a.draw()
+		return
+	}
+	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
+	if t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y {
+		a.cancelDragSnapBack(d)
+		return
+	}
+	if a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil {
+		a.cancelDragSnapBack(d)
+		return
+	}
+	targetX := t.originX + float64(dropX)*t.cellSize
+	targetY := t.originY + float64(dropY)*t.cellSize
+	if a.ghost != nil {
+		a.ghost.paneID = t.pane.ID
+		a.ghost.targetCellSize = t.cellSize
+	}
+	a.startSnap(targetX, targetY, snapMs)
+	srcPath := append([]int64(nil), d.srcPath...)
+	dstPath := append([]int64(nil), t.path...)
+	srcView := d.srcViewRect
+	dstView := t.viewRect
+	dstGridID := t.gridID
+	srcGridID := d.srcGridID
+	tileID := d.tileID
+	go func() {
+		req := rpc.CloneTileRequest{
+			Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
+			TileID:     tileID,
+			DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
+			X: dropX, Y: dropY,
+		}
+		var resp rpc.TileResponse
+		status, _ := postJSON("/rpc/CloneTile", req, &resp)
+		if status != 200 {
+			a.snapBackToOrigin(d)
 			return
 		}
-	}
-
-	go func() {
-		var resp rpc.TileResponse
-		if n.Capped {
-			req := rpc.RedigWellRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, TileID: n.ID,
-			}
-			_, _ = postJSON("/rpc/RedigWell", req, &resp)
-		} else {
-			req := rpc.CapWellRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view, TileID: n.ID,
-			}
-			_, _ = postJSON("/rpc/CapWell", req, &resp)
-		}
-		a.fetchGrid(gid)
+		a.fetchGrid(srcGridID)
+		a.fetchGrid(dstGridID)
 	}()
+}
+
+// runDeleteTile fires DeleteTile against the dragged source tile. Used
+// when the right-button-clone gesture drops onto a black-hole sink.
+func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
+	srcPath := append([]int64(nil), d.srcPath...)
+	srcView := d.srcViewRect
+	srcGridID := d.srcGridID
+	tileID := d.tileID
+	go func() {
+		req := rpc.DeleteTileRequest{
+			Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
+			TileID: tileID,
+		}
+		var resp rpc.DeleteTileResponse
+		_, _ = postJSON("/rpc/DeleteTile", req, &resp)
+		a.fetchGrid(srcGridID)
+		if t != nil && t.gridID != srcGridID {
+			a.fetchGrid(t.gridID)
+		}
+	}()
+}
+
+// tileAtCellInTarget returns the tile under the cursor inside the
+// resolved drop target's grid (which may be a well's child grid), or
+// nil. Mirrors tileAtCell but works against an arbitrary cached grid.
+func (a *App) tileAtCellInTarget(t *dropTarget, sx, sy float64) *rpc.Tile {
+	cellX := dragdrop.SnapToCell((sx - t.originX) / t.cellSize)
+	cellY := dragdrop.SnapToCell((sy - t.originY) / t.cellSize)
+	return a.nodeAtCellInGrid(t.gridID, cellX, cellY)
 }
 
 // commitTileResize commits the proposed (X, Y, W, H) via ResizeTile.
@@ -668,63 +784,91 @@ func (a *App) drawRightDragPreview() {
 	case rightDragResize:
 		a.drawResizeCloseWarning(rd)
 	case rightDragTileCenter:
-		a.drawTileCenterPreview(rd)
+		a.drawTileHotspotOverlay(rd)
 	case rightDragTileResize:
+		a.drawTileHotspotOverlay(rd)
 		a.drawTileResizePreview(rd)
 	}
 }
 
-// drawTileCenterPreview paints the cap-or-delete indicator over the
-// tile while a center gesture is in flight. Grey diagonal lines
-// (matching the capped-well stripe style) for cap; red border (the
-// pane close-warn red) for an empty well that would be filled. The
-// preview only renders while the cursor is still inside the center
-// zone — drag-out blanks it.
-func (a *App) drawTileCenterPreview(rd *rightDragState) {
-	if !rd.cursorInCenter {
-		return
-	}
-	n := rd.tileNode
-	if n.Type != "well" {
-		return
-	}
-	left, top, w, h := tileScreenRect(&n, rd.tilePane, rd.tilePaneR)
+// drawTileHotspotOverlay paints the five-zone affordance overlay over
+// the tile while a right-button gesture is in flight (or just primed,
+// before any drag movement). The user sees the four edge zones with
+// resize arrows and the center zone with a clone glyph. Strictly grey
+// — the overlay is informational only.
+func (a *App) drawTileHotspotOverlay(rd *rightDragState) {
+	left, top, w, h := tileScreenRect(&rd.tileNode, rd.tilePane, rd.tilePaneR)
 	if w <= 0 || h <= 0 {
 		return
 	}
-	// "Empty" → delete preview (red outline). Otherwise → cap preview
-	// (grey diagonals + redig appearance).
-	deletePreview := false
-	if !n.Capped {
-		if g, ok := a.c.Grid(n.ChildGridID); ok && len(g.Tiles) == 0 {
-			deletePreview = true
-		}
-	}
-	if deletePreview {
-		a.cctx.Set("strokeStyle", colorCloseWarn)
-		a.cctx.Set("lineWidth", paneBorderPx)
-		half := paneBorderPx / 2
-		a.cctx.Call("strokeRect", left+half, top+half, w-paneBorderPx, h-paneBorderPx)
-		a.cctx.Set("lineWidth", 1.0)
-		return
-	}
-	// Cap preview: clip to the tile and paint diagonal lines, matching
-	// the capped-well rendering so the user sees what the tile is
-	// about to become.
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", left, top, w, h)
-	a.cctx.Call("clip")
-	a.cctx.Set("strokeStyle", colorWellLine)
+	// Inner thirds in screen coords.
+	tw := w / 3
+	th := h / 3
+	cxL := left + tw
+	cxR := left + 2*tw
+	cyT := top + th
+	cyB := top + 2*th
+
+	a.cctx.Set("strokeStyle", colorMuted)
+	a.cctx.Set("fillStyle", colorMuted)
 	a.cctx.Set("lineWidth", 1.0)
-	span := w + h
-	for i := -h; i < span; i += 8 {
-		a.cctx.Call("beginPath")
-		a.cctx.Call("moveTo", left+i, top+h)
-		a.cctx.Call("lineTo", left+i+h, top)
-		a.cctx.Call("stroke")
+
+	// Outline the tile and the inner-third grid.
+	a.cctx.Call("strokeRect", left+0.5, top+0.5, w-1, h-1)
+	a.cctx.Call("beginPath")
+	a.cctx.Call("moveTo", cxL+0.5, top)
+	a.cctx.Call("lineTo", cxL+0.5, top+h)
+	a.cctx.Call("moveTo", cxR+0.5, top)
+	a.cctx.Call("lineTo", cxR+0.5, top+h)
+	a.cctx.Call("moveTo", left, cyT+0.5)
+	a.cctx.Call("lineTo", left+w, cyT+0.5)
+	a.cctx.Call("moveTo", left, cyB+0.5)
+	a.cctx.Call("lineTo", left+w, cyB+0.5)
+	a.cctx.Call("stroke")
+
+	// Center: clone glyph (two overlapping squares).
+	ccx := left + w/2
+	ccy := top + h/2
+	gs := math.Min(tw, th) * 0.35
+	if gs < 8 {
+		gs = math.Min(tw, th) * 0.5
 	}
-	a.cctx.Call("restore")
+	a.cctx.Call("strokeRect", ccx-gs/2, ccy-gs/2, gs, gs)
+	a.cctx.Call("strokeRect", ccx-gs/2+gs*0.25, ccy-gs/2+gs*0.25, gs, gs)
+
+	// Edge arrows pointing outward from each face.
+	arrow := math.Min(tw, th) * 0.3
+	if arrow < 8 {
+		arrow = 8
+	}
+	// Top
+	drawHotspotArrow(a.cctx, left+w/2, top+th/2, 0, -arrow)
+	// Bottom
+	drawHotspotArrow(a.cctx, left+w/2, top+h-th/2, 0, arrow)
+	// Left
+	drawHotspotArrow(a.cctx, left+tw/2, top+h/2, -arrow, 0)
+	// Right
+	drawHotspotArrow(a.cctx, left+w-tw/2, top+h/2, arrow, 0)
+}
+
+// drawHotspotArrow draws a simple line+head from (cx, cy) in direction
+// (dx, dy). The head sits at the far end.
+func drawHotspotArrow(c js.Value, cx, cy, dx, dy float64) {
+	hx := cx + dx
+	hy := cy + dy
+	c.Call("beginPath")
+	c.Call("moveTo", cx, cy)
+	c.Call("lineTo", hx, hy)
+	c.Call("stroke")
+	// Arrow head: rotate ±2.5 rad off the direction.
+	ang := math.Atan2(dy, dx)
+	const headLen = 5.0
+	c.Call("beginPath")
+	c.Call("moveTo", hx, hy)
+	c.Call("lineTo", hx+math.Cos(ang+2.5)*headLen, hy+math.Sin(ang+2.5)*headLen)
+	c.Call("moveTo", hx, hy)
+	c.Call("lineTo", hx+math.Cos(ang-2.5)*headLen, hy+math.Sin(ang-2.5)*headLen)
+	c.Call("stroke")
 }
 
 // tileScreenRect returns the on-screen rectangle of tile n as drawn

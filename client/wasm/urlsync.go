@@ -195,8 +195,7 @@ func (a *App) applyURLOnBoot() {
 
 	// Walk the path, fetching each grid as we go. An id that's not
 	// in the current grid is skipped (we stay put and try the next id).
-	// A capped well or non-leaf file ends the descent — we stop with
-	// what we've got.
+	// A non-leaf file ends the descent — we stop with what we've got.
 	gid := rootID
 	resolvedPath := []int64{}
 	var fileTileID int64
@@ -219,10 +218,6 @@ walk:
 		}
 		switch n.Type {
 		case "well":
-			if n.Capped {
-				// Can't descend through a capped well; stop here.
-				break walk
-			}
 			resolvedPath = append(resolvedPath, id)
 			gid = n.ChildGridID
 		case "file":

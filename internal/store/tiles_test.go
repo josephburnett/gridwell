@@ -299,40 +299,7 @@ func TestSetNodeViewport(t *testing.T) {
 	}
 }
 
-func TestCapRedig(t *testing.T) {
-	s := newTestStore(t)
-	u := fixtureUser(t, s)
-	ctx := context.Background()
-	w, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c.Capped {
-		t.Error("expected capped=true")
-	}
-	// Already capped.
-	if _, err := s.CapWell(ctx, u.ID, &rpc.CapWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); !errors.Is(err, ErrCapped) {
-		t.Errorf("expected ErrCapped, got %v", err)
-	}
-	r, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.Capped {
-		t.Error("expected capped=false")
-	}
-	if _, err := s.RedigWell(ctx, u.ID, &rpc.RedigWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); !errors.Is(err, ErrNotCapped) {
-		t.Errorf("expected ErrNotCapped, got %v", err)
-	}
-}
-
-func TestFillEmptyWell(t *testing.T) {
+func TestDeleteTile(t *testing.T) {
 	s := newTestStore(t)
 	u := fixtureUser(t, s)
 	ctx := context.Background()
@@ -343,20 +310,18 @@ func TestFillEmptyWell(t *testing.T) {
 		t.Fatal(err)
 	}
 	childGridID := w.ChildGridID
-	if err := s.FillWell(ctx, u.ID, &rpc.FillWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); err != nil {
-		t.Fatalf("fill: %v", err)
+	if err := s.DeleteTile(ctx, u.ID, &rpc.DeleteTileRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); err != nil {
+		t.Fatalf("delete: %v", err)
 	}
-	// Well row is gone.
 	if _, err := s.loadTile(ctx, s.db, w.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("well still exists: %v", err)
 	}
-	// Child grid is gone.
 	if _, err := s.loadGrid(ctx, s.db, childGridID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("child grid still exists: %v", err)
 	}
 }
 
-func TestFillNonEmptyWellRefused(t *testing.T) {
+func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	s := newTestStore(t)
 	u := fixtureUser(t, s)
 	ctx := context.Background()
@@ -366,14 +331,18 @@ func TestFillNonEmptyWellRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
+	inner, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
 		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FillWell(ctx, u.ID, &rpc.FillWellRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); !errors.Is(err, ErrNotEmpty) {
-		t.Errorf("expected ErrNotEmpty, got %v", err)
+	if err := s.DeleteTile(ctx, u.ID, &rpc.DeleteTileRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := s.loadTile(ctx, s.db, inner.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("inner well still exists after cascading delete")
 	}
 }
 

@@ -68,11 +68,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/ResizeTile", s.authed(s.resizeTile))
 	s.mux.HandleFunc("/rpc/SetTileViewport", s.authed(s.setTileViewport))
 	s.mux.HandleFunc("/rpc/SetGridDefaultView", s.authed(s.setGridDefaultView))
-	s.mux.HandleFunc("/rpc/CapWell", s.authed(s.capWell))
-	s.mux.HandleFunc("/rpc/RedigWell", s.authed(s.redigWell))
-	s.mux.HandleFunc("/rpc/FillWell", s.authed(s.fillWell))
+	s.mux.HandleFunc("/rpc/DeleteTile", s.authed(s.deleteTile))
 	s.mux.HandleFunc("/rpc/UpdateFileContent", s.authed(s.updateFileContent))
-	s.mux.HandleFunc("/rpc/ForkURL", s.authed(s.forkURL))
 	s.mux.HandleFunc("/rpc/AscendAtRoot", s.authed(s.ascendAtRoot))
 	s.mux.HandleFunc("/rpc/Subscribe", s.authedSSE(s.subscribe))
 	// URLStream is a WebSocket (GET upgrade), authenticated via the
@@ -213,10 +210,7 @@ func errorStatus(err error) int {
 		errors.Is(err, store.ErrInvalidPath):
 		return http.StatusBadRequest
 	case errors.Is(err, store.ErrOverlap),
-		errors.Is(err, store.ErrLocality),
-		errors.Is(err, store.ErrCapped),
-		errors.Is(err, store.ErrNotCapped),
-		errors.Is(err, store.ErrNotEmpty):
+		errors.Is(err, store.ErrLocality):
 		return http.StatusConflict
 	case errors.Is(err, store.ErrNotURLTile):
 		return http.StatusBadRequest

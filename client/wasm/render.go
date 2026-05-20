@@ -23,7 +23,6 @@ const (
 	colorPaneBorder  = "#1f2229"
 	colorFocusBorder = "#4a6fff"
 	colorGridLine    = "#15171d"
-	colorWellLine    = "#3a4b5a"
 	// File colors are keyed off the first half of the MIME type, not the
 	// specific subtype: text/markdown and text/uri-list share one palette,
 	// image/* shares another. The user identifies stones by color; the
@@ -32,7 +31,6 @@ const (
 	colorTextLine    = "#7a5a9a"
 	colorImageFill   = "#1a3a2b"
 	colorImageLine   = "#5a8a6a"
-	colorCapped      = "#15171b"
 	colorLocked      = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -73,10 +71,14 @@ const (
 	tplMarkdown
 	tplURL
 	tplUpload
+	// tplBlackHole spawns a "trashcan" tile. Dropping another tile on
+	// top of a black hole deletes the dropped tile — the only delete
+	// affordance in the UI.
+	tplBlackHole
 )
 
 // templateKinds is the palette layout order, left to right.
-var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplUpload}
+var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplUpload, tplBlackHole}
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
 // displayed cell size approaches its target. At 60 fps this gives a
@@ -395,7 +397,17 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.drawURLTile(n, x, y, w, h, selected)
 		return
 	}
-	if n.Type != "well" || n.Capped {
+	if n.IsBlackHole() {
+		drawBlackHoleSwatch(a.cctx, x, y, w, h)
+		if selected {
+			a.cctx.Set("strokeStyle", colorSelected)
+			a.cctx.Set("lineWidth", 2.0)
+			a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
+			a.cctx.Set("lineWidth", 1.0)
+		}
+		return
+	}
+	if n.Type != "well" {
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
 	}
@@ -928,32 +940,14 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
 func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 	switch {
-	case n.Type == "well" && n.Capped:
-		c.Set("fillStyle", colorCapped)
-		c.Call("fillRect", x, y, w, h)
-		// Clip the diagonal stripes to the node rect so they don't bleed.
-		c.Call("save")
-		c.Call("beginPath")
-		c.Call("rect", x, y, w, h)
-		c.Call("clip")
-		c.Set("strokeStyle", colorWellLine)
-		c.Set("lineWidth", 1.0)
-		span := w + h
-		for i := -h; i < span; i += 8 {
-			c.Call("beginPath")
-			c.Call("moveTo", x+i, y+h)
-			c.Call("lineTo", x+i+h, y)
-			c.Call("stroke")
-		}
-		c.Call("restore")
-		c.Set("strokeStyle", colorFocusBorder)
-		c.Call("strokeRect", x, y, w, h)
 	case n.Type == "well":
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
 		c.Set("strokeStyle", colorFocusBorder)
 		c.Set("lineWidth", 1.0)
 		c.Call("strokeRect", x, y, w, h)
+	case n.IsBlackHole():
+		drawBlackHoleSwatch(c, x, y, w, h)
 	case n.Type == "file" && strings.HasPrefix(n.MimeType, "text/"):
 		c.Set("fillStyle", colorTextFill)
 		c.Call("fillRect", x, y, w, h)
@@ -973,6 +967,30 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 		c.Set("lineWidth", 2.0)
 		c.Call("strokeRect", x-1, y-1, w+2, h+2)
 		c.Set("lineWidth", 1.0)
+	}
+}
+
+// drawBlackHoleSwatch paints the canonical black-hole tile visual into
+// (x, y, w, h): a pure-black fill with a few concentric grey rings to
+// suggest event horizons. Used both for palette icon and for live
+// tiles in a grid. No outline — the rings imply the boundary.
+func drawBlackHoleSwatch(c js.Value, x, y, w, h float64) {
+	c.Set("fillStyle", "#000000")
+	c.Call("fillRect", x, y, w, h)
+	cx := x + w/2
+	cy := y + h/2
+	rMax := math.Min(w, h) / 2
+	if rMax <= 0 {
+		return
+	}
+	c.Set("lineWidth", 1.0)
+	for i, frac := range []float64{0.85, 0.6, 0.35} {
+		r := rMax * frac
+		shade := []string{"#1f2229", "#2a2f3a", "#3a4b5a"}[i]
+		c.Set("strokeStyle", shade)
+		c.Call("beginPath")
+		c.Call("arc", cx, cy, r, 0.0, 2*math.Pi)
+		c.Call("stroke")
 	}
 }
 
@@ -1219,6 +1237,8 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 		a.cctx.Call("lineTo", cx+armLen*0.6, cy-armLen*0.4)
 		a.cctx.Call("stroke")
 		a.cctx.Set("lineWidth", 1.0)
+	case tplBlackHole:
+		drawBlackHoleSwatch(a.cctx, x, y, w, h)
 	}
 	if hovered {
 		a.cctx.Set("strokeStyle", colorSelected)

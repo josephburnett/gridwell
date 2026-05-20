@@ -23,115 +23,22 @@ const (
 )
 
 // installCanvasInput attaches mouse listeners to the canvas. Gridwell is
-// mouse-only by design — every gesture has a pointer equivalent and the
-// keyboard is reserved for future text-editing modes (e.g., the markdown
-// editor that's still TODO).
+// strictly mouse-only: every gesture is reachable via left/right click,
+// drag, and the scroll wheel. There are no keyboard bindings of any
+// kind. Native HTML inputs that happen to overlay the canvas (e.g., the
+// markdown <textarea>) handle their own keys; that is browser behavior,
+// not a gridwell binding.
 func (a *App) installCanvasInput() {
 	a.canvas.Call("addEventListener", "wheel", js.FuncOf(a.onWheel))
 	a.canvas.Call("addEventListener", "mousedown", js.FuncOf(a.onMouseDown))
 	a.canvas.Call("addEventListener", "mousemove", js.FuncOf(a.onMouseMove))
 	a.canvas.Call("addEventListener", "mouseup", js.FuncOf(a.onMouseUp))
-	// Suppress the browser's context menu on the canvas without binding
-	// any right-click behavior of our own — input is left-click only.
+	// Suppress the browser's context menu on the canvas; right-click is
+	// the cap/clone/resize gesture stem, not a menu.
 	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(func(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		return nil
 	}))
-	// Window-level keyboard listener: handles Esc-to-ascend out of a
-	// URL-tile descent, suppresses browser-chrome shortcuts while
-	// inside one, and forwards every other key to the streaming
-	// Chromium tab.
-	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
-	a.win.Call("addEventListener", "keyup", js.FuncOf(a.onKeyUp))
-}
-
-func (a *App) onKeyDown(this js.Value, args []js.Value) any {
-	key := args[0].Get("key").String()
-	p := a.tree.FocusedPane()
-	if p == nil || !a.isURLDescent(p) {
-		return nil
-	}
-	if key == "Escape" {
-		args[0].Call("preventDefault")
-		a.startFileAscent(p)
-		return nil
-	}
-	if isSuppressedBrowserKey(args[0]) {
-		args[0].Call("preventDefault")
-		return nil
-	}
-	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-		Kind:      urldriver.InputKeyDown,
-		Key:       key,
-		Code:      args[0].Get("code").String(),
-		Modifiers: readModifiers(args[0]),
-	})
-	args[0].Call("preventDefault")
-	return nil
-}
-
-func (a *App) onKeyUp(this js.Value, args []js.Value) any {
-	p := a.tree.FocusedPane()
-	if p == nil || !a.isURLDescent(p) {
-		return nil
-	}
-	if args[0].Get("key").String() == "Escape" {
-		return nil
-	}
-	if isSuppressedBrowserKey(args[0]) {
-		args[0].Call("preventDefault")
-		return nil
-	}
-	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-		Kind:      urldriver.InputKeyUp,
-		Key:       args[0].Get("key").String(),
-		Code:      args[0].Get("code").String(),
-		Modifiers: readModifiers(args[0]),
-	})
-	args[0].Call("preventDefault")
-	return nil
-}
-
-// readModifiers packs the standard DOM key-event modifier booleans
-// into the CDP bit field expected by Input.dispatchKeyEvent:
-// Alt=1, Ctrl=2, Meta=4, Shift=8.
-func readModifiers(ev js.Value) int64 {
-	var m int64
-	if ev.Get("altKey").Bool() {
-		m |= 1
-	}
-	if ev.Get("ctrlKey").Bool() {
-		m |= 2
-	}
-	if ev.Get("metaKey").Bool() {
-		m |= 4
-	}
-	if ev.Get("shiftKey").Bool() {
-		m |= 8
-	}
-	return m
-}
-
-// isSuppressedBrowserKey reports whether a key event is a browser-
-// chrome shortcut we promise to swallow inside a URL descent (spec
-// §8.3): Ctrl+T/W/L/F/N/R (open/close/locate/find/window/reload),
-// F5/F11/F12. Note: the OS-level effect of some of these (Ctrl+T
-// opening a new browser tab) can't always be suppressed from JS;
-// this is best-effort.
-func isSuppressedBrowserKey(ev js.Value) bool {
-	key := ev.Get("key").String()
-	ctrl := ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()
-	if ctrl {
-		switch strings.ToLower(key) {
-		case "t", "w", "l", "f", "n", "r":
-			return true
-		}
-	}
-	switch key {
-	case "F5", "F11", "F12":
-		return true
-	}
-	return false
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
@@ -243,7 +150,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		return nil
 	}
 	// Smooth zoom centered on the cursor: amount scales with deltaY so a
-	// fast scroll covers more range, but capped per event.
+	// fast scroll covers more range, but capped per event. The pane's
+	// (Cx, Cy) shifts so the world point under the cursor stays under
+	// the cursor after the zoom — like every map app.
 	step := dy / 200.0
 	if step > 0.5 {
 		step = 0.5
@@ -252,7 +161,13 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		step = -0.5
 	}
 	factor := math.Pow(zoomFactor, -step*4)
-	z := p.Zoom * factor
+	ps := dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
+	}
+	cellX, cellY := ps.ScreenToCell(sx, sy)
+	oldZoom := p.Zoom
+	z := oldZoom * factor
 	if z < zoomMin {
 		z = zoomMin
 	}
@@ -260,6 +175,11 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		z = zoomMax
 	}
 	p.Zoom = z
+	if z != oldZoom {
+		ratio := oldZoom / z
+		p.Cx = cellX - (cellX-p.Cx)*ratio
+		p.Cy = cellY - (cellY-p.Cy)*ratio
+	}
 	a.draw()
 	a.scheduleURLUpdate()
 	a.scheduleRootViewSave()
@@ -440,9 +360,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	// URL-stream forwarding: if the cursor is over a pane that's
 	// descended into a live URL tile, the move belongs to the page.
-	// Right-button gestures still take precedence below so users can
-	// trigger gridwell gestures (resize / fork) even over a URL tile.
-	if a.rightDrag == nil {
+	// Any in-flight drag (left or right button) keeps gridwell in
+	// charge of the move so the user can drag clones / resize past a
+	// URL pane without the page seeing it.
+	if a.rightDrag == nil && a.dragging == nil {
 		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
 			if pointInPaneContent(r, sx, sy) {
 				vx, vy := paneStreamLocal(r, sx, sy)
@@ -833,7 +754,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 		return false
 	}
 	switch {
-	case hit.Type == "well" && !hit.Capped:
+	case hit.Type == "well":
 		a.startDescent(p, hit)
 		return true
 	case hit.Type == "file" && hit.MimeType == "text/markdown":
@@ -1436,9 +1357,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// URL, markdown, and upload need user input *before* creation. The
-	// synthetic ghost is dismissed, the palette stays open until the
-	// user confirms; a cancel keeps everything as-is.
+	// Upload still has to bounce through the file picker — there's no
+	// content otherwise. URL still needs a URL; without one the tile
+	// would be inert. Everything else commits immediately with the
+	// snap-and-create gesture wells use.
 	switch d.template {
 	case tplURL:
 		val := js.Global().Call("prompt", "URL:")
@@ -1456,23 +1378,6 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.menuOpen = false
 		a.draw()
 		return
-	case tplMarkdown:
-		val := js.Global().Call("prompt", "Title:")
-		a.ghost = nil
-		if val.IsNull() || val.IsUndefined() {
-			a.draw()
-			return
-		}
-		title := val.String()
-		if title == "" {
-			a.draw()
-			return
-		}
-		a.createAtCell(destPane, destRect, "file", "text/markdown",
-			[]byte("# "+title+"\n"), dropX, dropY)
-		a.menuOpen = false
-		a.draw()
-		return
 	case tplUpload:
 		a.ghost = nil
 		a.openUploadAtCell(destPane, destRect, dropX, dropY)
@@ -1482,8 +1387,9 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// Wells commit immediately. Animate the ghost to the snap target
-	// for a tactile landing.
+	// Wells + markdown commit immediately. Animate the ghost to the
+	// snap target for a tactile landing. Markdown content is empty at
+	// creation; the user descends and types.
 	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
 	if a.ghost != nil {
 		a.ghost.paneID = destPane.ID
@@ -1493,6 +1399,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	switch d.template {
 	case tplWell:
 		a.createAtCell(destPane, destRect, "well", "", nil, dropX, dropY)
+	case tplMarkdown:
+		a.createAtCell(destPane, destRect, "file", "text/markdown", []byte{}, dropX, dropY)
+	case tplBlackHole:
+		a.createAtCell(destPane, destRect, "file", rpc.MimeBlackHole, []byte{}, dropX, dropY)
 	}
 	a.menuOpen = false
 }

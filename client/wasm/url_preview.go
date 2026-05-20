@@ -3,11 +3,9 @@
 package main
 
 import (
-	"math"
 	"sync"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -237,66 +235,6 @@ func (c *urlPreviewCache) Put(tileID int64, jpegBytes []byte, onReady func()) {
 	img.Set("onload", onloadFn)
 	img.Set("onerror", onerrorFn)
 	img.Set("src", objectURL)
-}
-
-// forkURLDrop fires ForkURL with the source tile + the drop position
-// computed from the release coordinates. Resolves the destination
-// pane from the cursor; refuses (silently) if the drop is off-canvas
-// or overlaps an existing tile.
-func (a *App) forkURLDrop(rd *rightDragState, src *rpc.Tile, sx, sy float64) {
-	srcPane := a.tree.FindPane(rd.tilePaneID)
-	if srcPane == nil {
-		return
-	}
-	srcPaneScreen := dragdrop.Pane{
-		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
-		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
-		Cx: srcPane.Cx, Cy: srcPane.Cy, Zoom: srcPane.Zoom, CellPx: cellPx,
-	}
-	srcView := a.paneViewRect(srcPane, srcPaneScreen)
-
-	destPane, destRect, ok := a.paneAtScreen(sx, sy)
-	if !ok {
-		return
-	}
-	destPaneScreen := dragdrop.Pane{
-		ScreenX: destRect.X, ScreenY: destRect.Y, ScreenW: destRect.W, ScreenH: destRect.H,
-		Cx: destPane.Cx, Cy: destPane.Cy, Zoom: destPane.Zoom, CellPx: cellPx,
-	}
-	dcx, dcy := destPaneScreen.ScreenToCell(sx, sy)
-	dropX := int64(math.Floor(dcx))
-	dropY := int64(math.Floor(dcy))
-
-	// Skip if drop overlaps an existing tile (server would reject
-	// anyway, but we save the round-trip).
-	if a.tileAtCell(destPane, dropX, dropY) != nil {
-		return
-	}
-
-	destGridID := a.gridIDForPath(destPane.Path)
-	destView := a.paneViewRect(destPane, destPaneScreen)
-	tileID := src.ID
-	go func() {
-		var resp rpc.ForkURLResponse
-		req := rpc.ForkURLRequest{
-			Path:         rpc.Path{WellIDs: srcPane.Path},
-			ViewRect:     srcView,
-			TileID:       tileID,
-			DestGridID:   destGridID,
-			DestPath:     rpc.Path{WellIDs: destPane.Path},
-			DestViewRect: destView,
-			X:            dropX, Y: dropY,
-		}
-		status, err := postJSON("/rpc/ForkURL", req, &resp)
-		if err != nil || status != 200 {
-			return
-		}
-		// The Subscribe event for the new tile will land via SSE and
-		// the cache will pick it up automatically. Trigger a redraw
-		// to reflect the change immediately on success.
-		a.fetchGrid(destGridID)
-		a.draw()
-	}()
 }
 
 // fetchURLPreview asynchronously requests the JPEG for the given URL

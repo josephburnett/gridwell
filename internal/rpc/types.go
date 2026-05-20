@@ -87,8 +87,18 @@ type Tile struct {
 // IsURL reports whether the tile is a URL tile (text/uri-list file).
 func (t *Tile) IsURL() bool { return t.Type == "file" && t.MimeType == MimeURIList }
 
+// IsBlackHole reports whether the tile is a black-hole (trashcan) tile.
+// Dropping any other tile onto a black hole deletes the dropped tile.
+func (t *Tile) IsBlackHole() bool { return t.Type == "file" && t.MimeType == MimeBlackHole }
+
 // MimeURIList is the canonical MIME type for URL tiles.
 const MimeURIList = "text/uri-list"
+
+// MimeBlackHole is the canonical MIME type for black-hole tiles —
+// "trashcan" tiles that delete anything dropped on them. Not a real
+// IANA type; the application/x-gridwell-* prefix keeps it from
+// colliding with real upload types.
+const MimeBlackHole = "application/x-gridwell-blackhole"
 
 // Auth requests/responses.
 
@@ -236,29 +246,23 @@ type SetTileViewportRequest struct {
 	ViewZoom float64 `json:"view_zoom"`
 }
 
-type CapWellRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-}
-type RedigWellRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-}
-type FillWellRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-}
-type FillWellResponse struct{}
-
 type UpdateFileContentRequest struct {
 	Path     Path     `json:"path"`
 	ViewRect ViewRect `json:"view_rect"`
 	TileID   int64    `json:"tile_id"`
 	Data     []byte   `json:"data"`
 }
+
+// DeleteTileRequest removes a single tile from its grid. If the tile
+// is a well, its child grid is dereferenced (refcount-- and cascade-
+// delete when the count hits zero). Used by the black-hole drop
+// gesture — there is no other delete affordance in the UI.
+type DeleteTileRequest struct {
+	Path     Path     `json:"path"`
+	ViewRect ViewRect `json:"view_rect"`
+	TileID   int64    `json:"tile_id"`
+}
+type DeleteTileResponse struct{}
 
 type AscendAtRootRequest struct{}
 type AscendAtRootResponse struct {

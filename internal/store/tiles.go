@@ -19,12 +19,13 @@ func urlSchemeAllowed(u string) bool {
 // allowedMimes are the file MIME types accepted in v1 (spec §8). The list is
 // closed; uploads of other types are rejected.
 var allowedMimes = map[string]bool{
-	"text/markdown":  true,
-	"text/uri-list":  true,
-	"image/png":      true,
-	"image/jpeg":     true,
-	"image/gif":      true,
-	"image/webp":     true,
+	"text/markdown":                     true,
+	rpc.MimeURIList:                     true,
+	"image/png":                         true,
+	"image/jpeg":                        true,
+	"image/gif":                         true,
+	"image/webp":                        true,
+	rpc.MimeBlackHole:                   true,
 }
 
 // MaxBlobBytes caps a single uploaded file size. The cap exists to bound
@@ -385,89 +386,27 @@ func (s *Store) SetTileViewport(ctx context.Context, userID int64, req *rpc.SetT
 	return out, nil
 }
 
-// CapWell sets capped=true on a well.
-func (s *Store) CapWell(ctx context.Context, userID int64, req *rpc.CapWellRequest) (*rpc.Tile, error) {
-	return s.flipWell(ctx, userID, req.Path, req.ViewRect, req.TileID, true)
-}
-
-// RedigWell clears capped on a well.
-func (s *Store) RedigWell(ctx context.Context, userID int64, req *rpc.RedigWellRequest) (*rpc.Tile, error) {
-	return s.flipWell(ctx, userID, req.Path, req.ViewRect, req.TileID, false)
-}
-
-func (s *Store) flipWell(ctx context.Context, userID int64, p rpc.Path, vr rpc.ViewRect, tileID int64, capped bool) (*rpc.Tile, error) {
-	var out *rpc.Tile
-	var events []rpc.Event
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		if n.Type != "well" {
-			return fmt.Errorf("%w: node is not a well", ErrInvalidArgument)
-		}
-		if !vr.Contains(n.X, n.Y, n.W, n.H) {
-			return ErrLocality
-		}
-		if capped && n.Capped {
-			return ErrCapped
-		}
-		if !capped && !n.Capped {
-			return ErrNotCapped
-		}
-		_, write, err := s.permForTile(ctx, tx, userID, tileID)
-		if err != nil {
-			return err
-		}
-		if !write {
-			return ErrPermissionDenied
-		}
-		pre, err := s.preWrite(ctx, tx, userID, p, tileID)
-		if err != nil {
-			return err
-		}
-		events = append(events, pre.Events...)
-		var v int64
-		if capped {
-			v = 1
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET capped = ?, updated_at = ? WHERE id = ?`,
-			v, s.now().Unix(), pre.TargetTileID); err != nil {
-			return err
-		}
-		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
-		if err != nil {
-			return err
-		}
-		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, ev := range events {
-		s.publish(userID, ev)
-	}
-	return out, nil
-}
-
-// FillWell deletes an empty well and its (empty) child grid. Returns
-// ErrNotEmpty if the child grid contains any tiles.
-func (s *Store) FillWell(ctx context.Context, userID int64, req *rpc.FillWellRequest) error {
+// DeleteTile removes a single tile by ID. For wells the child grid's
+// refcount is decremented (cascading delete of the child grid and its
+// contents when no other well points there). For file tiles with a
+// blob, the blob refcount is decremented likewise. URL tiles and
+// black-hole tiles have nothing to release beyond the row itself.
+//
+// Used by the black-hole drop gesture (the only delete affordance in
+// the UI); the user cannot delete black-hole tiles by dropping them on
+// themselves — they are deleted by dropping them on *another* black
+// hole. Server enforces no special restriction; the client trusts the
+// user to not chain a black hole onto itself.
+func (s *Store) DeleteTile(ctx context.Context, userID int64, req *rpc.DeleteTileRequest) error {
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
-		if n.Type != "well" {
-			return fmt.Errorf("%w: node is not a well", ErrInvalidArgument)
-		}
 		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
 			return ErrLocality
 		}
-		// Permission: w on parent grid.
 		_, write, err := s.permForGrid(ctx, tx, userID, n.GridID)
 		if err != nil {
 			return err
@@ -475,30 +414,28 @@ func (s *Store) FillWell(ctx context.Context, userID int64, req *rpc.FillWellReq
 		if !write {
 			return ErrPermissionDenied
 		}
-		var nodeCount int
-		if err := tx.QueryRowContext(ctx,
-			`SELECT COUNT(1) FROM tiles WHERE grid_id = ?`, n.ChildGridID).Scan(&nodeCount); err != nil {
-			return err
-		}
-		if nodeCount > 0 {
-			return ErrNotEmpty
-		}
 		pre, err := s.preWrite(ctx, tx, userID, req.Path, req.TileID)
 		if err != nil {
 			return err
 		}
 		events = append(events, pre.Events...)
-		// Reload the well after potential fork.
-		w, err := s.loadTile(ctx, tx, pre.TargetTileID)
+		// Reload after potential CoW fork.
+		t, err := s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
 		}
-		// Delete the well row, then dec refcount on its child grid.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, pre.TargetTileID); err != nil {
 			return err
 		}
-		if err := s.decRefcount(ctx, tx, w.ChildGridID); err != nil {
-			return err
+		if t.Type == "well" && t.ChildGridID != 0 {
+			if err := s.decRefcount(ctx, tx, t.ChildGridID); err != nil {
+				return err
+			}
+		}
+		if t.Type == "file" && t.BlobID != 0 {
+			if err := s.decBlobRefcount(ctx, tx, t.BlobID); err != nil {
+				return err
+			}
 		}
 		events = append(events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: pre.GridID, TileID: pre.TargetTileID}})
 		return nil

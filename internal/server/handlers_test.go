@@ -73,7 +73,7 @@ func TestResizeAndViewportRPCs(t *testing.T) {
 	}
 }
 
-func TestCapRedigFillRPCs(t *testing.T) {
+func TestDeleteTileRPC(t *testing.T) {
 	hs, u, cookie := newTestServer(t)
 	var nr rpc.TileResponse
 	if st, _ := callRPC(t, hs, cookie, "CreateWell", &rpc.CreateWellRequest{
@@ -83,25 +83,11 @@ func TestCapRedigFillRPCs(t *testing.T) {
 	}
 	id := nr.Tile.ID
 
-	if st, body := callRPC(t, hs, cookie, "CapWell", &rpc.CapWellRequest{
+	var dr rpc.DeleteTileResponse
+	if st, body := callRPC(t, hs, cookie, "DeleteTile", &rpc.DeleteTileRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), TileID: id,
-	}, &nr); st != 200 {
-		t.Fatalf("cap: %d %s", st, body)
-	}
-	if !nr.Tile.Capped {
-		t.Error("expected capped")
-	}
-	if st, _ := callRPC(t, hs, cookie, "RedigWell", &rpc.RedigWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: id,
-	}, &nr); st != 200 {
-		t.Error("redig failed")
-	}
-	// Fill empty.
-	var fr rpc.FillWellResponse
-	if st, body := callRPC(t, hs, cookie, "FillWell", &rpc.FillWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: id,
-	}, &fr); st != 200 {
-		t.Fatalf("fill: %d %s", st, body)
+	}, &dr); st != 200 {
+		t.Fatalf("delete: %d %s", st, body)
 	}
 }
 

@@ -250,57 +250,21 @@ func (s *Server) setGridDefaultView(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, &rpc.SetGridDefaultViewResponse{Grid: *g})
 }
 
-func (s *Server) capWell(w http.ResponseWriter, r *http.Request) {
+func (s *Server) deleteTile(w http.ResponseWriter, r *http.Request) {
 	uid, ok := uidOrError(w, r)
 	if !ok {
 		return
 	}
-	var req rpc.CapWellRequest
+	var req rpc.DeleteTileRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.CapWell(r.Context(), uid, &req)
-	if err != nil {
+	if err := s.store.DeleteTile(r.Context(), uid, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.TileResponse{Tile: *n})
-}
-
-func (s *Server) redigWell(w http.ResponseWriter, r *http.Request) {
-	uid, ok := uidOrError(w, r)
-	if !ok {
-		return
-	}
-	var req rpc.RedigWellRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	n, err := s.store.RedigWell(r.Context(), uid, &req)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, &rpc.TileResponse{Tile: *n})
-}
-
-func (s *Server) fillWell(w http.ResponseWriter, r *http.Request) {
-	uid, ok := uidOrError(w, r)
-	if !ok {
-		return
-	}
-	var req rpc.FillWellRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	if err := s.store.FillWell(r.Context(), uid, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, &rpc.FillWellResponse{})
+	writeJSON(w, &rpc.DeleteTileResponse{})
 }
 
 func (s *Server) updateFileContent(w http.ResponseWriter, r *http.Request) {
