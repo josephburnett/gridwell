@@ -28,9 +28,9 @@ const (
 	colorFocusBorderFaded = "#2c3d70"
 	// colorRootBorder marks a pane that's at the user's root grid (no
 	// descent path, no file focus). Warm tan — earth-tone "ground",
-	// distinct from both the descent blue and the file greens so it
-	// never gets read as "you're descended into a markdown".
-	colorRootBorder = "#9a8a6a"
+	// distinct from the descent blue and the file greens / purples so
+	// it never gets read as "you're descended into something".
+	colorRootBorder = "#7a6a4a"
 	colorGridLine = "#15171d"
 	// File colors are keyed by MIME subtype so each file kind has its
 	// own identity. The user identifies stones by color at a glance;
@@ -39,12 +39,14 @@ const (
 	//   - text/markdown → olive green (distinct from image's sage)
 	//   - text/uri-list → purple (web pages live in the "browser" bucket)
 	//   - image/*       → sage green
-	colorMarkdownFill = "#2c3a1a"
-	colorMarkdownLine = "#8aa05a"
-	colorURLFill      = "#2b1a3a"
-	colorURLLine      = "#7a5a9a"
-	colorImageFill    = "#1a3a2b"
-	colorImageLine    = "#5a8a6a"
+	colorMarkdownFill       = "#2c3a1a"
+	colorMarkdownLine       = "#8aa05a"
+	colorMarkdownLineFaded  = "#4a5a3a"
+	colorURLFill            = "#2b1a3a"
+	colorURLLine            = "#7a5a9a"
+	colorURLLineFaded       = "#4a3a5a"
+	colorImageFill          = "#1a3a2b"
+	colorImageLine          = "#5a8a6a"
 	colorLocked      = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -185,14 +187,12 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// Clip content to the inside of the border. The border itself is
 	// painted on top at the end of this function so it always frames
 	// the content cleanly, even if a node or markdown text would
-	// otherwise paint over the edge. At root (no border) the inset is
-	// 0 so content fills the full pane.
+	// otherwise paint over the edge. Every pane has a border now
+	// (root included, with its earth-tone hue), so the inset is the
+	// same paneBorderPx for all panes.
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
-	inset := 0.0
-	if len(p.Path) > 0 || p.FileFocus != 0 {
-		inset = paneBorderPx
-	}
+	const inset = paneBorderPx
 	a.cctx.Call("rect", r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset)
 	a.cctx.Call("clip")
 
@@ -287,21 +287,17 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.cctx.Call("restore")
 
 	// Border on top so content can paint up to the pane edge without
-	// bleeding visibly into the chrome. Blue = "you've descended into
-	// something" (bright on the focused pane, faded on the others so
-	// you can still see them at a glance). Green = "this pane is at
-	// the root grid" — i.e., there's nothing to ascend to.
-	var border string
-	switch {
-	case len(p.Path) > 0 || p.FileFocus != 0:
-		if p.ID == a.tree.Focus {
-			border = colorFocusBorder
-		} else {
-			border = colorFocusBorderFaded
-		}
-	default:
-		border = colorRootBorder
-	}
+	// bleeding visibly into the chrome. The hue follows what we've
+	// descended INTO, so the frame echoes the tile that put us here:
+	//   - well descent (path > 0, no file focus) → blue
+	//   - markdown descent (file focus on text/markdown) → green
+	//   - URL descent (file focus on text/uri-list) → purple
+	//   - root (no path, no file focus) → tan
+	// Focused panes get the saturated variant, others a desaturated
+	// one of the same hue so you can still see at a glance which
+	// other panes are also "looking inside" something.
+	focused := p.ID == a.tree.Focus
+	border := paneBorderColorFor(p, g, gridOK, focused)
 	a.cctx.Set("strokeStyle", border)
 	a.cctx.Set("lineWidth", paneBorderPx)
 	half := paneBorderPx / 2
@@ -1089,6 +1085,50 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 		c.Call("stroke")
 	}
 	c.Set("lineWidth", 1.0)
+}
+
+// paneBorderColorFor picks the pane border color from the pane's
+// current state — what it's descended into (or root if nothing).
+//   - file focus on a markdown tile → green
+//   - file focus on a URL tile → purple
+//   - file focus on anything else (image, etc.) → blue (generic descent)
+//   - well descent (path > 0, no file focus) → blue
+//   - root (nothing descended) → tan
+// The focused boolean picks the saturated vs faded variant of that
+// hue. If the grid containing the file-focused tile isn't cached yet,
+// we fall back to the generic blue so the user still sees "descended
+// into something".
+func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) string {
+	if p.FileFocus != 0 {
+		if gridOK {
+			if file, ok := g.Tiles[p.FileFocus]; ok {
+				switch {
+				case file.IsURL():
+					if focused {
+						return colorURLLine
+					}
+					return colorURLLineFaded
+				case file.Type == "file" && file.MimeType == "text/markdown":
+					if focused {
+						return colorMarkdownLine
+					}
+					return colorMarkdownLineFaded
+				}
+			}
+		}
+		// Image (or unknown file): generic descent blue.
+		if focused {
+			return colorFocusBorder
+		}
+		return colorFocusBorderFaded
+	}
+	if len(p.Path) > 0 {
+		if focused {
+			return colorFocusBorder
+		}
+		return colorFocusBorderFaded
+	}
+	return colorRootBorder
 }
 
 // drawDocumentGlyph paints a "page with text lines" icon centered in
