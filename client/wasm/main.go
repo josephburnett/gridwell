@@ -84,12 +84,6 @@ type App struct {
 	menuPaneID string
 	menuHover  int // index of hovered menu item, or -1
 
-	// uploadHandler is the active onchange callback bound to the hidden
-	// upload input. We retain it so we can release it before binding a
-	// fresh handler on the next upload, preventing leaks of js.FuncOf.
-	uploadHandler   js.Func
-	uploadHandlerOK bool
-
 	// gridLoadFailed records grids whose last fetch returned non-200, so
 	// the renderer can show a meaningful message and we don't retry in
 	// a tight loop.

@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -31,15 +30,20 @@ const (
 	// descent path, no file focus). Sage green — semantically "ground"
 	// — so it's distinct from the descent blue without competing.
 	colorRootBorder = "#7a9a5a"
-	colorGridLine    = "#15171d"
-	// File colors are keyed off the first half of the MIME type, not the
-	// specific subtype: text/markdown and text/uri-list share one palette,
-	// image/* shares another. The user identifies stones by color; the
-	// preview (when zoomed in enough) reveals the rest.
-	colorTextFill    = "#2b1a3a"
-	colorTextLine    = "#7a5a9a"
-	colorImageFill   = "#1a3a2b"
-	colorImageLine   = "#5a8a6a"
+	colorGridLine = "#15171d"
+	// File colors are keyed by MIME subtype so each file kind has its
+	// own identity. The user identifies stones by color at a glance;
+	// the icon (and the preview when zoomed in enough) reveals the
+	// rest.
+	//   - text/markdown → olive green (distinct from image's sage)
+	//   - text/uri-list → purple (web pages live in the "browser" bucket)
+	//   - image/*       → sage green
+	colorMarkdownFill = "#2c3a1a"
+	colorMarkdownLine = "#8aa05a"
+	colorURLFill      = "#2b1a3a"
+	colorURLLine      = "#7a5a9a"
+	colorImageFill    = "#1a3a2b"
+	colorImageLine    = "#5a8a6a"
 	colorLocked      = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -79,7 +83,6 @@ const (
 	tplWell templateKind = iota
 	tplMarkdown
 	tplURL
-	tplUpload
 	// tplBlackHole spawns a "trashcan" tile. Dropping another tile on
 	// top of a black hole deletes the dropped tile — the only delete
 	// affordance in the UI.
@@ -87,7 +90,7 @@ const (
 )
 
 // templateKinds is the palette layout order, left to right.
-var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplUpload, tplBlackHole}
+var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplBlackHole}
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
 // displayed cell size approaches its target. At 60 fps this gives a
@@ -626,9 +629,9 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 	a.cctx.Call("restore")
 	_ = parentCellSize
 
-	// Outline: same palette as flat text-file fill so identity-by-color is
-	// preserved. Selected nodes get the gold outline on top.
-	a.cctx.Set("strokeStyle", colorTextLine)
+	// Outline: same palette as flat markdown fill so identity-by-color
+	// is preserved. Selected nodes get the gold outline on top.
+	a.cctx.Set("strokeStyle", colorMarkdownLine)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", x, y, w, h)
 	if selected {
@@ -976,10 +979,15 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 		c.Call("strokeRect", x, y, w, h)
 	case n.IsBlackHole():
 		drawBlackHoleSwatch(c, x, y, w, h)
-	case n.Type == "file" && strings.HasPrefix(n.MimeType, "text/"):
-		c.Set("fillStyle", colorTextFill)
+	case n.IsURL():
+		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorTextLine)
+		c.Set("strokeStyle", colorURLLine)
+		c.Call("strokeRect", x, y, w, h)
+	case n.Type == "file" && strings.HasPrefix(n.MimeType, "text/"):
+		c.Set("fillStyle", colorMarkdownFill)
+		c.Call("fillRect", x, y, w, h)
+		c.Set("strokeStyle", colorMarkdownLine)
 		c.Call("strokeRect", x, y, w, h)
 	case n.Type == "file" && strings.HasPrefix(n.MimeType, "image/"):
 		c.Set("fillStyle", colorImageFill)
@@ -1079,6 +1087,63 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 		c.Call("lineTo", rx-taper*0.7, bottom-(bottom-bodyTop)*0.08)
 		c.Call("stroke")
 	}
+	c.Set("lineWidth", 1.0)
+}
+
+// drawDocumentGlyph paints a "page with text lines" icon centered in
+// (x, y, w, h): a vertical rectangle (the page) with three horizontal
+// lines inside suggesting body text — the last line slightly shorter
+// so it reads as a paragraph end. Used for the markdown palette tile
+// and anywhere else the markdown identity needs a quick visual cue.
+func drawDocumentGlyph(c js.Value, x, y, w, h float64, color string) {
+	c.Set("strokeStyle", color)
+	lw := math.Max(1.0, math.Min(w, h)/28)
+	c.Set("lineWidth", lw)
+	// Page rect: slightly taller than wide, centered.
+	pw := w * 0.46
+	ph := h * 0.62
+	px := x + (w-pw)/2
+	py := y + (h-ph)/2
+	c.Call("strokeRect", px+0.5, py+0.5, pw-1, ph-1)
+	// Three text lines.
+	for i, frac := range []float64{0.28, 0.50, 0.72} {
+		ly := py + ph*frac
+		endFrac := 0.78
+		if i == 2 {
+			endFrac = 0.55 // last line shorter — paragraph end
+		}
+		c.Call("beginPath")
+		c.Call("moveTo", px+pw*0.15, ly)
+		c.Call("lineTo", px+pw*0.15+pw*endFrac, ly)
+		c.Call("stroke")
+	}
+	c.Set("lineWidth", 1.0)
+}
+
+// drawGlobeGlyph paints a stylized globe centered in (x, y, w, h):
+// an outer circle, a horizontal equator, and a vertical meridian
+// drawn as a narrow ellipse. Used for the URL palette tile.
+func drawGlobeGlyph(c js.Value, x, y, w, h float64, color string) {
+	c.Set("strokeStyle", color)
+	lw := math.Max(1.0, math.Min(w, h)/24)
+	c.Set("lineWidth", lw)
+	cx := x + w/2
+	cy := y + h/2
+	r := math.Min(w, h) * 0.30
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, r, 0.0, 2*math.Pi)
+	c.Call("stroke")
+	// Equator.
+	c.Call("beginPath")
+	c.Call("moveTo", cx-r, cy)
+	c.Call("lineTo", cx+r, cy)
+	c.Call("stroke")
+	// Vertical meridian — a narrow ellipse passing through the poles
+	// so it reads as a curved longitude line rather than a straight
+	// bar.
+	c.Call("beginPath")
+	c.Call("ellipse", cx, cy, r*0.45, r, 0.0, 0.0, 2*math.Pi)
+	c.Call("stroke")
 	c.Set("lineWidth", 1.0)
 }
 
@@ -1287,8 +1352,10 @@ func (a *App) drawPalette(p *pane.Pane, r paneRect) {
 
 // drawPaletteTile renders one preview tile inside the palette. Each
 // kind paints to roughly match what the user will get when they drop:
-// well = empty well outline, markdown = monospaced text, url = "url"
-// label, upload = arrow glyph.
+//   - well: empty well outline (blue)
+//   - markdown: green tile with a "document" glyph (paper + text lines)
+//   - URL: purple tile with a globe glyph
+//   - black hole: dark void with concentric rings
 func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered bool) {
 	switch kind {
 	case tplWell:
@@ -1298,57 +1365,17 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 		a.cctx.Set("lineWidth", 1.0)
 		a.cctx.Call("strokeRect", x, y, w, h)
 	case tplMarkdown:
-		a.cctx.Set("fillStyle", colorTextFill)
+		a.cctx.Set("fillStyle", colorMarkdownFill)
 		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorTextLine)
+		a.cctx.Set("strokeStyle", colorMarkdownLine)
 		a.cctx.Call("strokeRect", x, y, w, h)
-		a.cctx.Set("fillStyle", colorMenuItemHi)
-		fontPx := w * 0.18
-		if fontPx < 9 {
-			fontPx = 9
-		}
-		if fontPx > 16 {
-			fontPx = 16
-		}
-		a.cctx.Set("font", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px ui-monospace")
-		// A few short lines mimicking text content.
-		a.cctx.Call("fillText", "aa", x+w*0.18, y+h*0.35)
-		a.cctx.Call("fillText", "bb", x+w*0.18, y+h*0.55)
-		a.cctx.Call("fillText", "cc", x+w*0.18, y+h*0.75)
+		drawDocumentGlyph(a.cctx, x, y, w, h, colorMenuItemHi)
 	case tplURL:
-		a.cctx.Set("fillStyle", colorTextFill)
+		a.cctx.Set("fillStyle", colorURLFill)
 		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorTextLine)
+		a.cctx.Set("strokeStyle", colorURLLine)
 		a.cctx.Call("strokeRect", x, y, w, h)
-		a.cctx.Set("fillStyle", colorMenuItemHi)
-		fontPx := w * 0.22
-		if fontPx < 11 {
-			fontPx = 11
-		}
-		if fontPx > 22 {
-			fontPx = 22
-		}
-		a.cctx.Set("font", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px ui-sans-serif")
-		a.cctx.Call("fillText", "url", x+w*0.18, y+h*0.6)
-	case tplUpload:
-		a.cctx.Set("fillStyle", colorImageFill)
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorImageLine)
-		a.cctx.Call("strokeRect", x, y, w, h)
-		// Up arrow centered in the tile.
-		a.cctx.Set("strokeStyle", colorMenuItemHi)
-		a.cctx.Set("lineWidth", 2.0)
-		cx := x + w/2
-		cy := y + h/2
-		armLen := w * 0.22
-		a.cctx.Call("beginPath")
-		a.cctx.Call("moveTo", cx, cy+armLen)
-		a.cctx.Call("lineTo", cx, cy-armLen)
-		a.cctx.Call("moveTo", cx-armLen*0.6, cy-armLen*0.4)
-		a.cctx.Call("lineTo", cx, cy-armLen)
-		a.cctx.Call("lineTo", cx+armLen*0.6, cy-armLen*0.4)
-		a.cctx.Call("stroke")
-		a.cctx.Set("lineWidth", 1.0)
+		drawGlobeGlyph(a.cctx, x, y, w, h, colorMenuItemHi)
 	case tplBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
 	}

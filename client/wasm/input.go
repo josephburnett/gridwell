@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/anim"
@@ -1355,8 +1354,8 @@ func templateGhostNode(kind templateKind) rpc.Tile {
 		return rpc.Tile{Type: "file", MimeType: "text/markdown", W: 1, H: 1}
 	case tplURL:
 		return rpc.Tile{Type: "file", MimeType: "text/uri-list", W: 1, H: 1}
-	case tplUpload:
-		return rpc.Tile{Type: "file", MimeType: "application/octet-stream", W: 1, H: 1}
+	case tplBlackHole:
+		return rpc.Tile{Type: "file", MimeType: rpc.MimeBlackHole, W: 1, H: 1}
 	}
 	return rpc.Tile{}
 }
@@ -1385,12 +1384,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// Upload still has to bounce through the file picker — there's no
-	// content otherwise. URL still needs a URL; without one the tile
-	// would be inert. Everything else commits immediately with the
-	// snap-and-create gesture wells use.
-	switch d.template {
-	case tplURL:
+	// URL still needs a URL up front; without one the tile is inert.
+	// Every other template commits immediately with the snap-and-
+	// create gesture wells use.
+	if d.template == tplURL {
 		val := js.Global().Call("prompt", "URL:")
 		a.ghost = nil
 		if val.IsNull() || val.IsUndefined() {
@@ -1404,13 +1401,6 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		}
 		a.createAtCell(destPane, destRect, "file", "text/uri-list", []byte(s), dropX, dropY)
 		a.menuOpen = false
-		a.draw()
-		return
-	case tplUpload:
-		a.ghost = nil
-		a.openUploadAtCell(destPane, destRect, dropX, dropY)
-		// menuOpen stays as-is until the file picker resolves; the
-		// upload callback closes it on confirm.
 		a.draw()
 		return
 	}
@@ -1464,90 +1454,6 @@ func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []b
 		a.fetchGrid(gid)
 	}()
 }
-
-// openUploadAtCell triggers the hidden <input type="file"> and, on
-// selection, reads the file via FileReader and POSTs CreateFile at
-// the chosen cell. The palette closes once the file is confirmed (or
-// stays open if the user cancels the picker).
-func (a *App) openUploadAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
-	input := a.doc.Call("getElementById", "upload-input")
-	if input.IsNull() || input.IsUndefined() {
-		return
-	}
-	if a.uploadHandlerOK {
-		a.uploadHandler.Release()
-	}
-	a.uploadHandler = js.FuncOf(func(this js.Value, args []js.Value) any {
-		files := input.Get("files")
-		if files.IsNull() || files.IsUndefined() || files.Length() == 0 {
-			return nil
-		}
-		file := files.Index(0)
-		name := file.Get("name").String()
-		mime := file.Get("type").String()
-		if mime == "" {
-			mime = mimeFromName(name)
-		}
-		go a.uploadFileBytesAtCell(p, r, file, mime, cellX, cellY)
-		input.Set("value", "")
-		a.menuOpen = false
-		a.draw()
-		return nil
-	})
-	a.uploadHandlerOK = true
-	input.Set("onchange", a.uploadHandler)
-	input.Call("click")
-}
-
-// uploadFileBytesAtCell reads the JS File and calls CreateFile at the
-// given cell.
-func (a *App) uploadFileBytesAtCell(p *pane.Pane, r paneRect, file js.Value, mime string, cellX, cellY int64) {
-	buf, err := await(file.Call("arrayBuffer"))
-	if err != nil {
-		return
-	}
-	u8 := js.Global().Get("Uint8Array").New(buf)
-	n := u8.Get("length").Int()
-	data := make([]byte, n)
-	js.CopyBytesToGo(data, u8)
-
-	pscreen := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	view := a.paneViewRect(p, pscreen)
-	gid := a.gridIDForPath(p.Path)
-	req := rpc.CreateFileRequest{
-		Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		MimeType: mime, Data: data,
-	}
-	var resp rpc.TileResponse
-	_, _ = postJSON("/rpc/CreateFile", req, &resp)
-	a.fetchGrid(gid)
-}
-
-// mimeFromName picks a MIME type from the file extension when the browser
-// did not set one. Limited to the v1 set.
-func mimeFromName(name string) string {
-	lower := strings.ToLower(name)
-	switch {
-	case strings.HasSuffix(lower, ".md"), strings.HasSuffix(lower, ".markdown"):
-		return "text/markdown"
-	case strings.HasSuffix(lower, ".png"):
-		return "image/png"
-	case strings.HasSuffix(lower, ".jpg"), strings.HasSuffix(lower, ".jpeg"):
-		return "image/jpeg"
-	case strings.HasSuffix(lower, ".gif"):
-		return "image/gif"
-	case strings.HasSuffix(lower, ".webp"):
-		return "image/webp"
-	case strings.HasSuffix(lower, ".url"), strings.HasSuffix(lower, ".uri"):
-		return "text/uri-list"
-	}
-	return ""
-}
-
 
 // mouseXY returns the click coordinates relative to the canvas.
 func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
