@@ -21,23 +21,98 @@ const (
 	snapBackMs = 220.0
 )
 
-// installCanvasInput attaches mouse listeners to the canvas. Gridwell is
-// strictly mouse-only: every gesture is reachable via left/right click,
-// drag, and the scroll wheel. There are no keyboard bindings of any
-// kind. Native HTML inputs that happen to overlay the canvas (e.g., the
-// markdown <textarea>) handle their own keys; that is browser behavior,
-// not a gridwell binding.
+// installCanvasInput attaches mouse listeners to the canvas. Gridwell
+// navigation is strictly mouse-only: every gesture (move, descend,
+// ascend, resize, clone, delete) is reachable via left/right click,
+// drag, and the scroll wheel — there are no navigation keybindings.
+//
+// Keyboard events are only used in one place: when the focused pane is
+// descended into a URL tile, every key (including browser-chrome
+// shortcuts like Ctrl+W, Ctrl+T, F5, F11, F12) is forwarded to the
+// remote Chromium tab and preventDefault'd locally so the user can
+// drive the remote page exactly like a normal browser tab. When no
+// pane is descended into a URL tile, keystrokes pass through to the
+// browser unmolested (so F12 still opens devtools, Ctrl+L still
+// focuses the address bar, etc.).
 func (a *App) installCanvasInput() {
 	a.canvas.Call("addEventListener", "wheel", js.FuncOf(a.onWheel))
 	a.canvas.Call("addEventListener", "mousedown", js.FuncOf(a.onMouseDown))
 	a.canvas.Call("addEventListener", "mousemove", js.FuncOf(a.onMouseMove))
 	a.canvas.Call("addEventListener", "mouseup", js.FuncOf(a.onMouseUp))
 	// Suppress the browser's context menu on the canvas; right-click is
-	// the cap/clone/resize gesture stem, not a menu.
+	// the clone/resize gesture stem, not a menu.
 	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(func(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		return nil
 	}))
+	// Window-level keyboard listeners forward every keystroke to the
+	// remote URL stream whenever the focused pane is descended into a
+	// URL tile. Window-level (not canvas-level) so we catch keys
+	// regardless of where in the document focus happens to sit.
+	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
+	a.win.Call("addEventListener", "keyup", js.FuncOf(a.onKeyUp))
+}
+
+// onKeyDown / onKeyUp forward keystrokes to the remote Chromium tab
+// when the focused pane is descended into a URL tile. They do nothing
+// otherwise — keystrokes that don't go to a remote tab pass through to
+// the browser unchanged.
+//
+// Every forwarded key is preventDefault'd so browser-chrome shortcuts
+// (Ctrl+W, Ctrl+T, Ctrl+R, F5, F11, F12, ...) act on the remote tab
+// instead of the gridwell tab. The OS-level effect of some shortcuts
+// (e.g. Cmd+Q on macOS) can't be suppressed from JS — this is
+// best-effort, but covers everything the browser itself listens to.
+func (a *App) onKeyDown(this js.Value, args []js.Value) any {
+	p := a.tree.FocusedPane()
+	if p == nil || !a.isURLDescent(p) {
+		return nil
+	}
+	ev := args[0]
+	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+		Kind:      urldriver.InputKeyDown,
+		Key:       ev.Get("key").String(),
+		Code:      ev.Get("code").String(),
+		Modifiers: readModifiers(ev),
+	})
+	ev.Call("preventDefault")
+	return nil
+}
+
+func (a *App) onKeyUp(this js.Value, args []js.Value) any {
+	p := a.tree.FocusedPane()
+	if p == nil || !a.isURLDescent(p) {
+		return nil
+	}
+	ev := args[0]
+	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+		Kind:      urldriver.InputKeyUp,
+		Key:       ev.Get("key").String(),
+		Code:      ev.Get("code").String(),
+		Modifiers: readModifiers(ev),
+	})
+	ev.Call("preventDefault")
+	return nil
+}
+
+// readModifiers packs the DOM key-event modifier booleans into the
+// CDP bit field that Input.dispatchKeyEvent expects: Alt=1, Ctrl=2,
+// Meta=4, Shift=8.
+func readModifiers(ev js.Value) int64 {
+	var m int64
+	if ev.Get("altKey").Bool() {
+		m |= 1
+	}
+	if ev.Get("ctrlKey").Bool() {
+		m |= 2
+	}
+	if ev.Get("metaKey").Bool() {
+		m |= 4
+	}
+	if ev.Get("shiftKey").Bool() {
+		m |= 8
+	}
+	return m
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
