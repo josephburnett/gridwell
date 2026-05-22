@@ -27,9 +27,10 @@ const (
 	// visible as "you're also looking inside something here".
 	colorFocusBorderFaded = "#2c3d70"
 	// colorRootBorder marks a pane that's at the user's root grid (no
-	// descent path, no file focus). Sage green — semantically "ground"
-	// — so it's distinct from the descent blue without competing.
-	colorRootBorder = "#7a9a5a"
+	// descent path, no file focus). Warm tan — earth-tone "ground",
+	// distinct from both the descent blue and the file greens so it
+	// never gets read as "you're descended into a markdown".
+	colorRootBorder = "#9a8a6a"
 	colorGridLine = "#15171d"
 	// File colors are keyed by MIME subtype so each file kind has its
 	// own identity. The user identifies stones by color at a glance;
