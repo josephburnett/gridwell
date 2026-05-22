@@ -16,20 +16,16 @@ import (
 // closeSession). Right-click on a URL tile means fork-on-drag-release,
 // nothing else.
 
-// drawImageCoverTopLeft draws img into the (x,y,w,h) rect using
-// object-fit: cover semantics anchored to the top-left of the source
+// drawImageCoverCentered draws img into the (x,y,w,h) rect using
+// object-fit: cover semantics anchored to the center of the source
 // image — the image is uniformly scaled so it fully covers the
-// destination, and anything that falls outside the destination is
-// cropped from the right and bottom (never stretched). Top-left
-// anchoring matches how a web page is naturally laid out: when the
-// user ascends from a descended URL tile, the content they were
-// looking at stays in the upper-left of the resulting tile rather
-// than shifting around.
+// destination, and any overflow is cropped evenly from both sides
+// (never stretched).
 //
 // No image bytes are discarded — this is purely a draw-time crop, so
 // subsequent renders at a different destination aspect ratio (e.g.
 // after a tile resize) crop differently from the same source frame.
-func drawImageCoverTopLeft(c js.Value, img js.Value, x, y, w, h float64) {
+func drawImageCoverCentered(c js.Value, img js.Value, x, y, w, h float64) {
 	iw := img.Get("naturalWidth").Float()
 	ih := img.Get("naturalHeight").Float()
 	if iw <= 0 || ih <= 0 || w <= 0 || h <= 0 {
@@ -46,7 +42,9 @@ func drawImageCoverTopLeft(c js.Value, img js.Value, x, y, w, h float64) {
 		sw = iw
 		sh = iw / destAR
 	}
-	c.Call("drawImage", img, 0.0, 0.0, sw, sh, x, y, w, h)
+	sx := (iw - sw) / 2
+	sy := (ih - sh) / 2
+	c.Call("drawImage", img, sx, sy, sw, sh, x, y, w, h)
 }
 
 // drawURLTileInPane renders a URL tile that's currently the pane's
@@ -113,7 +111,7 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	if img, ok := a.urlPreview.Get(n.ID); ok {
-		drawImageCoverTopLeft(a.cctx, img, x, y, w, h)
+		drawImageCoverCentered(a.cctx, img, x, y, w, h)
 	} else {
 		if w > 20 && h > 20 {
 			a.cctx.Set("fillStyle", colorMuted)
