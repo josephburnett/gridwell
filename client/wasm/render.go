@@ -22,6 +22,15 @@ const (
 	colorFileInnerBg = "#1c1f26"
 	colorPaneBorder  = "#1f2229"
 	colorFocusBorder = "#4a6fff"
+	// colorFocusBorderFaded is the pane outline for descended-but-not-
+	// focused panes. Same hue as the focus blue, lower saturation and
+	// value so the focused pane still pops, but the others stay
+	// visible as "you're also looking inside something here".
+	colorFocusBorderFaded = "#2c3d70"
+	// colorRootBorder marks a pane that's at the user's root grid (no
+	// descent path, no file focus). Sage green — semantically "ground"
+	// — so it's distinct from the descent blue without competing.
+	colorRootBorder = "#7a9a5a"
 	colorGridLine    = "#15171d"
 	// File colors are keyed off the first half of the MIME type, not the
 	// specific subtype: text/markdown and text/uri-list share one palette,
@@ -274,19 +283,25 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.cctx.Call("restore")
 
 	// Border on top so content can paint up to the pane edge without
-	// bleeding visibly into the chrome. Suppressed at the user's root
-	// (no path, no file focus) — the absence is the cue that there's
-	// nothing to ascend to.
-	if len(p.Path) > 0 || p.FileFocus != 0 {
-		border := colorPaneBorder
+	// bleeding visibly into the chrome. Blue = "you've descended into
+	// something" (bright on the focused pane, faded on the others so
+	// you can still see them at a glance). Green = "this pane is at
+	// the root grid" — i.e., there's nothing to ascend to.
+	var border string
+	switch {
+	case len(p.Path) > 0 || p.FileFocus != 0:
 		if p.ID == a.tree.Focus {
 			border = colorFocusBorder
+		} else {
+			border = colorFocusBorderFaded
 		}
-		a.cctx.Set("strokeStyle", border)
-		a.cctx.Set("lineWidth", paneBorderPx)
-		half := paneBorderPx / 2
-		a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
+	default:
+		border = colorRootBorder
 	}
+	a.cctx.Set("strokeStyle", border)
+	a.cctx.Set("lineWidth", paneBorderPx)
+	half := paneBorderPx / 2
+	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
 	// In file-focus mode replace the + with a text/rendered toggle; the
 	// menu never opens here. URL tiles have no text/rendered modes, so
