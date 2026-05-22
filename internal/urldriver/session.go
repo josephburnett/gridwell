@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
@@ -257,18 +259,23 @@ func (s *Session) Input(ev InputEvent) error {
 			Modifiers: mods,
 		}.Call(page)
 	case InputKeyDown:
+		text, unmodText := keyText(ev.Key, mods)
 		return proto.InputDispatchKeyEvent{
-			Type:      proto.InputDispatchKeyEventTypeKeyDown,
-			Key:       ev.Key,
-			Code:      ev.Code,
-			Modifiers: mods,
+			Type:                  proto.InputDispatchKeyEventTypeKeyDown,
+			Key:                   ev.Key,
+			Code:                  ev.Code,
+			Modifiers:             mods,
+			Text:                  text,
+			UnmodifiedText:        unmodText,
+			WindowsVirtualKeyCode: virtualKeyCode(ev.Key),
 		}.Call(page)
 	case InputKeyUp:
 		return proto.InputDispatchKeyEvent{
-			Type:      proto.InputDispatchKeyEventTypeKeyUp,
-			Key:       ev.Key,
-			Code:      ev.Code,
-			Modifiers: mods,
+			Type:                  proto.InputDispatchKeyEventTypeKeyUp,
+			Key:                   ev.Key,
+			Code:                  ev.Code,
+			Modifiers:             mods,
+			WindowsVirtualKeyCode: virtualKeyCode(ev.Key),
 		}.Call(page)
 	case InputResize:
 		return s.Resize(ev.Width, ev.Height)
@@ -344,4 +351,91 @@ func rodMouseButton(name string) proto.InputMouseButton {
 	default:
 		return proto.InputMouseButtonNone
 	}
+}
+
+// keyText derives the CDP Text / UnmodifiedText fields from a DOM key
+// name and the active modifier set. For typing into <input> elements
+// to work, the keyDown event must carry the character in Text — without
+// it Chromium fires keydown but never inserts the character into the
+// focused field.
+//
+// Single-rune DOM keys are printable; multi-character names like
+// "Enter" or "ArrowLeft" are non-printable and yield empty strings.
+// Ctrl- and Meta-modified keys are treated as accelerators (no text)
+// so the page's shortcut handlers see the keydown event but no stray
+// "a" gets inserted on Ctrl+A.
+func keyText(key string, mods int) (text, unmodifiedText string) {
+	if utf8.RuneCountInString(key) != 1 {
+		return "", ""
+	}
+	// Ctrl=2, Meta=4 — either turns the keystroke into a shortcut.
+	if mods&(2|4) != 0 {
+		return "", ""
+	}
+	return key, strings.ToLower(key)
+}
+
+// virtualKeyCode maps a DOM key name to a Windows virtual-key code so
+// Chromium's input pipeline recognizes special keys (Enter to submit a
+// form, Backspace to delete, arrows to move the caret). For ordinary
+// printable letters/digits the VK is derived from the rune itself.
+// Returns 0 for unrecognized non-printable keys; that's harmless —
+// the keydown event still fires, just without VK-specific defaults.
+func virtualKeyCode(key string) int {
+	if vk, ok := specialKeyVK[key]; ok {
+		return vk
+	}
+	if utf8.RuneCountInString(key) == 1 {
+		r := []rune(key)[0]
+		switch {
+		case r >= 'a' && r <= 'z':
+			return int(r - 'a' + 'A')
+		case r >= 'A' && r <= 'Z':
+			return int(r)
+		case r >= '0' && r <= '9':
+			return int(r)
+		}
+	}
+	return 0
+}
+
+// specialKeyVK covers the common non-printable DOM key names. The
+// values are Windows virtual-key codes (the historical ones Chromium
+// still uses to dispatch built-in handlers like form-submit on Enter
+// or backspace-deletes-char in inputs).
+var specialKeyVK = map[string]int{
+	"Backspace":   8,
+	"Tab":         9,
+	"Enter":       13,
+	"Shift":       16,
+	"Control":     17,
+	"Alt":         18,
+	"Pause":       19,
+	"CapsLock":    20,
+	"Escape":      27,
+	" ":           32, // Space rune handled by the printable branch; this is here for safety.
+	"PageUp":      33,
+	"PageDown":    34,
+	"End":         35,
+	"Home":        36,
+	"ArrowLeft":   37,
+	"ArrowUp":     38,
+	"ArrowRight":  39,
+	"ArrowDown":   40,
+	"Insert":      45,
+	"Delete":      46,
+	"Meta":        91,
+	"ContextMenu": 93,
+	"F1":          112,
+	"F2":          113,
+	"F3":          114,
+	"F4":          115,
+	"F5":          116,
+	"F6":          117,
+	"F7":          118,
+	"F8":          119,
+	"F9":          120,
+	"F10":         121,
+	"F11":         122,
+	"F12":         123,
 }

@@ -122,6 +122,16 @@ func evalInt(p *rod.Page, expr string) int64 {
 	return int64(res.Value.Int())
 }
 
+// evalStr is a test helper: evaluate a JS expression on the page and
+// return the result as a string, or "" on failure.
+func evalStr(p *rod.Page, expr string) string {
+	res, err := p.Timeout(1*time.Second).Eval(expr)
+	if err != nil || res == nil {
+		return ""
+	}
+	return res.Value.Str()
+}
+
 // --- Session API integration tests ---
 
 func TestIntegrationSessionRoundtrip(t *testing.T) {
@@ -235,6 +245,75 @@ func TestIntegrationSessionInputClick(t *testing.T) {
 
 	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "clicked" }) {
 		t.Errorf("title = %q, want \"clicked\"", readTitle(s.page))
+	}
+}
+
+// TestIntegrationSessionInputKeyboard exercises text-typing into a
+// focused <input>. Regression test for the bug where keystrokes
+// reached the page as keydown events but no character actually
+// landed in the input value — the result of dispatching CDP
+// Input.dispatchKeyEvent without the Text / UnmodifiedText fields.
+// Also covers Enter (special-key VK code path).
+func TestIntegrationSessionInputKeyboard(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>kb</title>
+<body>
+<input id="i" autofocus style="position:fixed;left:0;top:0;width:300px;height:60px;font-size:30px">
+<script>
+  // Submit-style handler: Enter while focused on the input updates title.
+  document.getElementById('i').addEventListener('keydown', function(ev){
+    if (ev.key === 'Enter') document.title = 'submit:' + ev.target.value;
+  });
+</script>
+</body>`))
+	}))
+	defer srv.Close()
+
+	s, err := d.OpenSession(1, 1020, srv.URL, 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	// Give autofocus a moment to settle.
+	if !waitFor(5*time.Second, func() bool {
+		return evalStr(s.page, `() => document.activeElement && document.activeElement.id`) == "i"
+	}) {
+		t.Fatalf("input never got focus; activeElement=%q", evalStr(s.page, `() => document.activeElement && document.activeElement.id`))
+	}
+
+	type keystroke struct{ key, code string }
+	for _, k := range []keystroke{
+		{"h", "KeyH"},
+		{"i", "KeyI"},
+		{" ", "Space"},
+		{"7", "Digit7"},
+	} {
+		if err := s.Input(InputEvent{Kind: InputKeyDown, Key: k.key, Code: k.code}); err != nil {
+			t.Fatalf("keydown %q: %v", k.key, err)
+		}
+		if err := s.Input(InputEvent{Kind: InputKeyUp, Key: k.key, Code: k.code}); err != nil {
+			t.Fatalf("keyup %q: %v", k.key, err)
+		}
+	}
+
+	if !waitFor(5*time.Second, func() bool {
+		return evalStr(s.page, `() => document.getElementById('i').value`) == "hi 7"
+	}) {
+		t.Errorf("input.value = %q, want %q",
+			evalStr(s.page, `() => document.getElementById('i').value`), "hi 7")
+	}
+
+	// Enter triggers the keydown handler that writes a title.
+	if err := s.Input(InputEvent{Kind: InputKeyDown, Key: "Enter", Code: "Enter"}); err != nil {
+		t.Fatalf("Enter keydown: %v", err)
+	}
+	if err := s.Input(InputEvent{Kind: InputKeyUp, Key: "Enter", Code: "Enter"}); err != nil {
+		t.Fatalf("Enter keyup: %v", err)
+	}
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "submit:hi 7" }) {
+		t.Errorf("title = %q, want \"submit:hi 7\" — Enter key not recognized", readTitle(s.page))
 	}
 }
 
