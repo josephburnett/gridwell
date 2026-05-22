@@ -982,11 +982,11 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 }
 
 // drawGhostTile renders the active drag ghost. When fragmentation is
-// near zero this is just drawNodeWithPreview. When the cursor enters a
-// black hole, fragmentation animates toward 1 and the ghost splits into
-// four corner shards that drift outward, with reduced alpha, while
-// continuing to shrink via the size lerp. Drag back out and frag
-// animates back to 0 — shards return to their seats, alpha recovers.
+// near zero this is just drawNodeWithPreview. When the cursor enters
+// a black hole, fragmentation animates toward 1 and the ghost cross-
+// fades into a trashcan glyph while the size lerp shrinks it toward
+// the hole. Drag back out and frag returns to 0 — the trashcan fades
+// out and the original tile fades back in at full size.
 func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, frag float64) {
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
@@ -995,52 +995,74 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	if frag > 1 {
 		frag = 1
 	}
-	// Alpha fades to ~0.35 at full fragmentation so the user sees the
-	// tile dissolving without it vanishing before release.
-	alpha := 1.0 - 0.65*frag
-	a.cctx.Set("globalAlpha", alpha)
-	// Drift each corner outward by up to ~35% of the (already-shrunk)
-	// tile size. The shards' own size shrinks slightly with frag too so
-	// they look like they're being pulled apart, not just floating.
-	drift := 0.35 * frag * math.Max(w, h)
-	shardScale := 0.5 - 0.1*frag
-	sw := w * shardScale
-	sh := h * shardScale
-	type quad struct{ dx, dy float64 }
-	quads := []quad{
-		{-1, -1}, {1, -1}, {-1, 1}, {1, 1},
+	// Cross-fade: tile fades out as frag grows; trashcan fades in.
+	if frag < 0.98 {
+		a.cctx.Set("globalAlpha", 1.0-frag)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		a.cctx.Set("globalAlpha", 1.0)
 	}
-	cx := x + w/2
-	cy := y + h/2
-	for _, q := range quads {
-		qx := cx + q.dx*drift - sw/2
-		qy := cy + q.dy*drift - sh/2
-		a.cctx.Call("save")
-		a.cctx.Call("beginPath")
-		a.cctx.Call("rect", qx, qy, sw, sh)
-		a.cctx.Call("clip")
-		// Draw the whole shrunk tile so the visible quadrant lines up
-		// with that corner of the source — gives the "broken apart"
-		// look without per-shard content carving.
-		shardCellSize := parentCellSize * shardScale
-		fullW := float64(n.W) * shardCellSize
-		fullH := float64(n.H) * shardCellSize
-		shardTileX := qx - (q.dx+1)/2*fullW + sw/2 + q.dx*sw/2
-		shardTileY := qy - (q.dy+1)/2*fullH + sh/2 + q.dy*sh/2
-		_ = shardTileX
-		_ = shardTileY
-		// Simple version: render a tinted square per shard. The
-		// alpha + drift sells the effect without needing the source
-		// tile content per-quadrant (which would require recursive
-		// clipping the well preview, etc.).
-		a.cctx.Set("fillStyle", colorFileInnerBg)
-		a.cctx.Call("fillRect", qx, qy, sw, sh)
-		a.cctx.Set("strokeStyle", colorMuted)
-		a.cctx.Set("lineWidth", 1.0)
-		a.cctx.Call("strokeRect", qx+0.5, qy+0.5, sw-1, sh-1)
-		a.cctx.Call("restore")
-	}
+	a.cctx.Set("globalAlpha", frag)
+	drawTrashcanIcon(a.cctx, x, y, w, h)
 	a.cctx.Set("globalAlpha", 1.0)
+}
+
+// drawTrashcanIcon paints a generic "trash" glyph inside (x, y, w, h).
+// Pure strokes in a single colour so it stays legible at every size
+// the ghost shrinks down to.
+func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
+	// Side margin so the can doesn't touch the bounding rect.
+	mx := w * 0.18
+	my := h * 0.12
+	left := x + mx
+	right := x + w - mx
+	top := y + my
+	bottom := y + h - my
+	bodyTop := top + (bottom-top)*0.22
+	lidHeight := (bodyTop - top) * 0.55
+	c.Set("strokeStyle", colorMenuItemHi)
+	c.Set("fillStyle", colorMenuItemHi)
+	lw := math.Max(1.5, math.Min(w, h)/22)
+	c.Set("lineWidth", lw)
+
+	// Handle on top of the lid.
+	handleW := (right - left) * 0.32
+	handleX := (left+right)/2 - handleW/2
+	handleY := top
+	c.Call("beginPath")
+	c.Call("rect", handleX, handleY, handleW, lidHeight*0.7)
+	c.Call("stroke")
+
+	// Lid: a horizontal slab spanning the full width.
+	c.Call("beginPath")
+	c.Call("rect", left, top+lidHeight, right-left, lidHeight)
+	c.Call("stroke")
+
+	// Body: slightly tapered inward at the bottom for the classic can
+	// silhouette. Stroked, not filled, so the underlying ghost (if
+	// any) shows through faintly during the cross-fade.
+	bodyW := right - left
+	taper := bodyW * 0.06
+	c.Call("beginPath")
+	c.Call("moveTo", left+taper, bottom)
+	c.Call("lineTo", left, bodyTop)
+	c.Call("lineTo", right, bodyTop)
+	c.Call("lineTo", right-taper, bottom)
+	c.Call("closePath")
+	c.Call("stroke")
+
+	// Three vertical ribs inside the body — recognisable trashcan
+	// detail even at small sizes.
+	rib := (bodyTop + bottom) / 2
+	_ = rib
+	ribSpacing := (bodyW - 2*taper) / 4
+	for i := 1; i <= 3; i++ {
+		rx := left + taper + ribSpacing*float64(i)
+		c.Call("beginPath")
+		c.Call("moveTo", rx, bodyTop+(bottom-bodyTop)*0.18)
+		c.Call("lineTo", rx-taper*0.7, bottom-(bottom-bodyTop)*0.08)
+		c.Call("stroke")
+	}
+	c.Set("lineWidth", 1.0)
 }
 
 // drawBlackHoleSwatch paints the canonical black-hole tile visual into
