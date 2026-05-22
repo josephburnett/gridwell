@@ -3,6 +3,8 @@
 // proposed drops.
 package dragdrop
 
+import "math"
+
 // Pane describes the screen rectangle and viewport state for one pane. CellPx
 // is the rendered size of one cell at zoom 1.0; the actual pixel size on
 // screen is CellPx*Zoom.
@@ -51,6 +53,11 @@ func PaneAt(panes []Pane, sx, sy float64) int {
 // We round-half-down (floor + 0.5) so a drag exactly on the boundary lands
 // in the lower-numbered cell. This matches typical UI expectations where
 // dragging onto the leading edge "stays" rather than "advances".
+//
+// Use this for "where should a tile come to rest?" semantics. For "what
+// cell is the cursor currently INSIDE?" use FloorCellAt — round and floor
+// disagree on the lower-right half of every cell, and that mismatch will
+// make hit-tests miss.
 func SnapToCell(c float64) int64 {
 	if c >= 0 {
 		return int64(c + 0.5)
@@ -58,6 +65,37 @@ func SnapToCell(c float64) int64 {
 	// For negative values, biasing toward zero keeps the boundary
 	// behavior symmetric.
 	return int64(c - 0.5)
+}
+
+// FloorCellAt returns the integer cell that contains the screen point
+// (sx, sy) on a cell grid whose top-left is at (originX, originY) and
+// whose cell size is cellSize screen pixels.
+//
+// "Floor" semantics: every interior point of cell N reports N — never
+// N±1. This is the right answer for hit-testing "what tile is under
+// the cursor?". SnapToCell, by contrast, rounds to the nearest cell
+// boundary and is the right answer for "where should a dragged tile
+// snap on release?". Mixing them up means the lower-right half of
+// each cell rounds forward, so a hit-test using SnapToCell silently
+// misses half of every cell.
+func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
+	return int64(math.Floor((sx - originX) / cellSize)),
+		int64(math.Floor((sy - originY) / cellSize))
+}
+
+// HiddenMatch reports whether a tile should be skipped during render
+// because it is currently being dragged. The drag layer paints a
+// ghost following the cursor; the source's static row in the cache
+// needs to be hidden underneath it so we don't see two copies.
+//
+// Important: matches by *tile id* (primary-key row), not by object
+// lineage. Two tiles can share an ObjectID — CloneTile deliberately
+// copies the source's ObjectID into the new row so the two pieces
+// share a lineage. Hiding by ObjectID therefore makes every clone of
+// the dragged tile vanish during the drag; hiding by row id keeps
+// each clone visible.
+func HiddenMatch(hiddenTileID int64, hiddenPaneID, currentPaneID string, tileID int64) bool {
+	return hiddenTileID != 0 && hiddenPaneID == currentPaneID && tileID == hiddenTileID
 }
 
 // EdgeBand returns the suggested edge-band thickness in pixels for the

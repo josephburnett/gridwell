@@ -545,12 +545,13 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	}()
 }
 
-// tileAtCellInTarget returns the tile under the cursor inside the
-// resolved drop target's grid (which may be a well's child grid), or
-// nil. Mirrors tileAtCell but works against an arbitrary cached grid.
+// tileAtCellInTarget returns the tile the cursor is *inside* of in
+// the resolved drop target's grid (which may be a well's child grid),
+// or nil. Hit-test semantics: use floor, never round — round-half
+// silently misses the lower-right portion of every cell, which broke
+// the black-hole delete trigger across half each black hole.
 func (a *App) tileAtCellInTarget(t *dropTarget, sx, sy float64) *rpc.Tile {
-	cellX := dragdrop.SnapToCell((sx - t.originX) / t.cellSize)
-	cellY := dragdrop.SnapToCell((sy - t.originY) / t.cellSize)
+	cellX, cellY := dragdrop.FloorCellAt(t.originX, t.originY, t.cellSize, sx, sy)
 	return a.nodeAtCellInGrid(t.gridID, cellX, cellY)
 }
 

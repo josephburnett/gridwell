@@ -100,11 +100,15 @@ type App struct {
 	// sub-cell screen precision instead of at its stored cell position.
 	ghost *ghost
 
-	// hiddenObjectID, when non-empty, suppresses rendering of any cached
-	// node with this object_id. We use object_id (not row id) because CoW
-	// rewrites row ids underneath us; the lineage stays stable.
-	hiddenObjectID string
-	hiddenPaneID   string
+	// hiddenTileID, when non-zero, suppresses rendering of the cached
+	// tile row with this primary-key id in the named pane. Set on drag
+	// start so the dragged source doesn't paint underneath its own
+	// ghost. Matches the dragged ROW, not its ObjectID — a tile and
+	// any clones of it share an ObjectID, and the old by-ObjectID
+	// match made every clone vanish whenever its sibling was picked
+	// up. See dragdrop.HiddenMatch for the predicate + test.
+	hiddenTileID int64
+	hiddenPaneID string
 
 	// previewPaneID is the pane currently being painted; set by
 	// drawPane before per-node calls and cleared after. Lets the
@@ -568,7 +572,7 @@ func (a *App) completeTransition() {
 func (a *App) animationDone() {
 	a.animation = nil
 	a.ghost = nil
-	a.hiddenObjectID = ""
+	a.hiddenTileID = 0
 	a.hiddenPaneID = ""
 }
 

@@ -243,7 +243,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 			}
 		} else {
 			for _, n := range g.Tiles {
-				if a.hiddenObjectID != "" && a.hiddenPaneID == p.ID && n.ObjectID == a.hiddenObjectID {
+				if dragdrop.HiddenMatch(a.hiddenTileID, a.hiddenPaneID, p.ID, n.ID) {
 					continue
 				}
 				left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
@@ -473,9 +473,9 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	drawGridLinesIn(a.cctx, x, y, w, h, previewCell, originX, originY)
 
 	if haveChild && previewCell >= 0.5 {
-		hide := ""
-		if a.hiddenObjectID != "" && a.hiddenPaneID == a.previewPaneID {
-			hide = a.hiddenObjectID
+		var hide int64
+		if a.hiddenPaneID == a.previewPaneID {
+			hide = a.hiddenTileID
 		}
 		drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
 			wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
@@ -934,16 +934,18 @@ func (a *App) fetchBlob(blobID int64) {
 // Child wells in the preview render flat (no recursive preview) — that is
 // the "one level only" rule.
 //
-// hiddenObjectID, if non-empty, suppresses any child tile with that
-// ObjectID — used so that a tile being dragged out of a well preview
-// disappears from its original spot while the ghost flies.
+// hiddenTileID, if non-zero, suppresses the child tile with that row
+// id — used so that a tile being dragged out of a well preview
+// disappears from its original spot while the ghost flies. Matches
+// by row id (not ObjectID) so cloned siblings stay visible during
+// the drag.
 func drawChildPreview(c js.Value, child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
-	hiddenObjectID string,
+	hiddenTileID int64,
 ) {
 	for _, n := range child.Tiles {
-		if hiddenObjectID != "" && n.ObjectID == hiddenObjectID {
+		if hiddenTileID != 0 && n.ID == hiddenTileID {
 			continue
 		}
 		nodeScreenX := centerScreenX + (float64(n.X)-centerCellX)*previewCell

@@ -435,7 +435,12 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					targetCellSize:    size,
 				}
 				if d.tileID != 0 && !d.clone {
-					a.hiddenObjectID = d.snapshotTile.ObjectID
+					// Hide by ROW id, not ObjectID — clones share an
+					// ObjectID with the source, so a by-lineage hide
+					// makes every clone vanish whenever its sibling
+					// is picked up. (dragdrop.HiddenMatch + its test
+					// cover the predicate.)
+					a.hiddenTileID = d.tileID
 					a.hiddenPaneID = d.originPaneID
 				}
 			}

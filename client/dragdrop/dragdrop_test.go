@@ -214,3 +214,76 @@ func TestFootprintFits(t *testing.T) {
 		t.Error("expected left-edge overflow")
 	}
 }
+
+// TestFloorCellAtCoversWholeCell guards against the "right-half misses"
+// bug: a hit-test using SnapToCell on the same coords would round the
+// lower-right portion of each cell forward to the NEXT cell, making
+// any tile-under-cursor detection miss half its target.
+//
+// Concretely: when the cursor sat in the right or bottom half of a
+// black-hole tile's 1×1 cell, the drop-on-blackhole detection (which
+// originally used SnapToCell) failed to fire, so the tile didn't get
+// deleted. FloorCellAt is the correct answer for "which cell am I in".
+func TestFloorCellAtCoversWholeCell(t *testing.T) {
+	const origin = 100.0
+	const cs = 10.0
+	// (sx, sy) → (wantX, wantY). All "wantX=0, wantY=0" cases below
+	// would have rounded to (1, 1) or (0, 1) etc. under SnapToCell.
+	cases := []struct {
+		sx, sy float64
+		wantX  int64
+		wantY  int64
+	}{
+		{100.0, 100.0, 0, 0},   // top-left corner
+		{100.5, 100.0, 0, 0},   // just inside left edge
+		{104.5, 104.5, 0, 0},   // dead center
+		{105.0, 105.0, 0, 0},   // SnapToCell would say (1,1) here
+		{107.0, 107.0, 0, 0},   // right-half (SnapToCell: (1,1))
+		{109.99, 109.99, 0, 0}, // bottom-right interior
+		{110.0, 100.0, 1, 0},   // exact next-cell boundary on X
+		{100.0, 110.0, 0, 1},   // exact next-cell boundary on Y
+		{99.99, 100.0, -1, 0},  // just outside left → previous cell
+		{100.0, 99.99, 0, -1},  // just outside top → previous cell
+	}
+	for _, c := range cases {
+		gotX, gotY := FloorCellAt(origin, origin, cs, c.sx, c.sy)
+		if gotX != c.wantX || gotY != c.wantY {
+			t.Errorf("FloorCellAt(%.2f, %.2f) = (%d, %d), want (%d, %d)",
+				c.sx, c.sy, gotX, gotY, c.wantX, c.wantY)
+		}
+		// Sanity: if SnapToCell agreed with FloorCellAt everywhere the
+		// bug couldn't exist. Catch any regression that aliased the two.
+		snapX := SnapToCell((c.sx - origin) / cs)
+		snapY := SnapToCell((c.sy - origin) / cs)
+		if c.sx == 105.0 && c.sy == 105.0 && snapX == gotX && snapY == gotY {
+			t.Error("SnapToCell unexpectedly agrees at the 0.5 midpoint — guard test no longer protective")
+		}
+	}
+}
+
+// TestHiddenMatchByTileIDNotObjectID guards against the "cloned tile
+// disappears when its sibling is picked up" bug. The render path used
+// to compare tiles by ObjectID, but CloneTile deliberately copies the
+// source's ObjectID — so a hide-by-ObjectID predicate suppresses every
+// clone of the dragged tile, not just the dragged tile itself.
+func TestHiddenMatchByTileIDNotObjectID(t *testing.T) {
+	const sourceID int64 = 5
+	const cloneID int64 = 7 // different row, same ObjectID upstream
+	const otherID int64 = 9
+
+	if !HiddenMatch(sourceID, "p1", "p1", sourceID) {
+		t.Error("dragged source tile should be hidden in its pane")
+	}
+	if HiddenMatch(sourceID, "p1", "p1", cloneID) {
+		t.Error("a clone (different row id) must NOT be hidden")
+	}
+	if HiddenMatch(sourceID, "p1", "p1", otherID) {
+		t.Error("an unrelated tile must NOT be hidden")
+	}
+	if HiddenMatch(sourceID, "p1", "p2", sourceID) {
+		t.Error("source tile in a DIFFERENT pane must NOT be hidden")
+	}
+	if HiddenMatch(0, "p1", "p1", sourceID) {
+		t.Error("no active hide (hiddenTileID==0) must hide nothing")
+	}
+}
