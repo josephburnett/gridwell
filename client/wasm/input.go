@@ -474,12 +474,23 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// displayedCellSize so the grab point stays under the cursor.
 		if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
 			a.ghost.paneID = t.pane.ID
-			a.ghost.targetCellSize = t.cellSize
+			// Black-hole sink: if the cursor is over a black hole, the
+			// ghost shrinks AND fragments. Left-button release commits
+			// a DeleteTile. Drag back out and the lerp reassembles the
+			// ghost; release away from a sink does a normal move.
+			if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.IsBlackHole() && sink.ID != d.tileID {
+				a.ghost.targetCellSize = t.cellSize * 0.2
+				a.ghost.targetFragmentation = 1.0
+			} else {
+				a.ghost.targetCellSize = t.cellSize
+				a.ghost.targetFragmentation = 0.0
+			}
 		} else {
 			// Off-canvas or over a file-mode pane: hold target = source
 			// size so the ghost glides back to its original scale.
 			a.ghost.paneID = d.originPaneID
 			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.targetFragmentation = 0.0
 		}
 		size := a.ghost.displayedCellSize
 		a.ghost.screenX = sx - d.cellOffsetX*size
@@ -566,6 +577,18 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.cancelDragSnapBack(d)
 		return nil
 	}
+
+	// Black-hole sink: dropping a tile (or well) onto a black hole
+	// deletes the source instead of moving/cloning it. Skip the cell
+	// snap and overlap math — the black hole "absorbs" whatever the
+	// cursor is on, regardless of exact coords.
+	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.IsBlackHole() && sink.ID != d.tileID {
+		a.runDeleteTile(d, t)
+		a.ghost = nil
+		a.draw()
+		return nil
+	}
+
 	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 
 	// Same-cell-as-source short-circuit: drop where it already is →

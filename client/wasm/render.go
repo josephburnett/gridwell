@@ -100,6 +100,16 @@ func (a *App) draw() {
 		} else if ts > 0 {
 			a.ghost.displayedCellSize = ts
 		}
+		// Same lerp for fragmentation — drag onto a black hole and the
+		// ghost shatters in; drag back out and it reassembles.
+		df := a.ghost.displayedFragmentation
+		tf := a.ghost.targetFragmentation
+		if math.Abs(tf-df) > 0.01 {
+			a.ghost.displayedFragmentation = df + (tf-df)*ghostSizeLerpAlpha
+			a.scheduleFrame()
+		} else {
+			a.ghost.displayedFragmentation = tf
+		}
 	}
 
 	a.cctx.Set("fillStyle", colorBg)
@@ -245,7 +255,8 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 				}
 				w := float64(gn.W) * gcs
 				h := float64(gn.H) * gcs
-				a.drawNodeWithPreview(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, r, false)
+				a.drawGhostTile(&gn, a.ghost.screenX, a.ghost.screenY, w, h, gcs, r,
+					a.ghost.displayedFragmentation)
 			}
 		}
 	} else {
@@ -968,6 +979,68 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 		c.Call("strokeRect", x-1, y-1, w+2, h+2)
 		c.Set("lineWidth", 1.0)
 	}
+}
+
+// drawGhostTile renders the active drag ghost. When fragmentation is
+// near zero this is just drawNodeWithPreview. When the cursor enters a
+// black hole, fragmentation animates toward 1 and the ghost splits into
+// four corner shards that drift outward, with reduced alpha, while
+// continuing to shrink via the size lerp. Drag back out and frag
+// animates back to 0 — shards return to their seats, alpha recovers.
+func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, frag float64) {
+	if frag < 0.02 {
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		return
+	}
+	if frag > 1 {
+		frag = 1
+	}
+	// Alpha fades to ~0.35 at full fragmentation so the user sees the
+	// tile dissolving without it vanishing before release.
+	alpha := 1.0 - 0.65*frag
+	a.cctx.Set("globalAlpha", alpha)
+	// Drift each corner outward by up to ~35% of the (already-shrunk)
+	// tile size. The shards' own size shrinks slightly with frag too so
+	// they look like they're being pulled apart, not just floating.
+	drift := 0.35 * frag * math.Max(w, h)
+	shardScale := 0.5 - 0.1*frag
+	sw := w * shardScale
+	sh := h * shardScale
+	type quad struct{ dx, dy float64 }
+	quads := []quad{
+		{-1, -1}, {1, -1}, {-1, 1}, {1, 1},
+	}
+	cx := x + w/2
+	cy := y + h/2
+	for _, q := range quads {
+		qx := cx + q.dx*drift - sw/2
+		qy := cy + q.dy*drift - sh/2
+		a.cctx.Call("save")
+		a.cctx.Call("beginPath")
+		a.cctx.Call("rect", qx, qy, sw, sh)
+		a.cctx.Call("clip")
+		// Draw the whole shrunk tile so the visible quadrant lines up
+		// with that corner of the source — gives the "broken apart"
+		// look without per-shard content carving.
+		shardCellSize := parentCellSize * shardScale
+		fullW := float64(n.W) * shardCellSize
+		fullH := float64(n.H) * shardCellSize
+		shardTileX := qx - (q.dx+1)/2*fullW + sw/2 + q.dx*sw/2
+		shardTileY := qy - (q.dy+1)/2*fullH + sh/2 + q.dy*sh/2
+		_ = shardTileX
+		_ = shardTileY
+		// Simple version: render a tinted square per shard. The
+		// alpha + drift sells the effect without needing the source
+		// tile content per-quadrant (which would require recursive
+		// clipping the well preview, etc.).
+		a.cctx.Set("fillStyle", colorFileInnerBg)
+		a.cctx.Call("fillRect", qx, qy, sw, sh)
+		a.cctx.Set("strokeStyle", colorMuted)
+		a.cctx.Set("lineWidth", 1.0)
+		a.cctx.Call("strokeRect", qx+0.5, qy+0.5, sw-1, sh-1)
+		a.cctx.Call("restore")
+	}
+	a.cctx.Set("globalAlpha", 1.0)
 }
 
 // drawBlackHoleSwatch paints the canonical black-hole tile visual into

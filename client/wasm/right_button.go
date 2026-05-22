@@ -473,23 +473,14 @@ func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
 }
 
 // commitRightClone resolves the drop target at (sx, sy) and either
-// fires CloneTile, drops the source onto a black-hole sink (which is
-// a delete), or snap-backs the ghost on a rejected drop. The async
-// RPC fires in a goroutine; the local cache is patched optimistically
-// by the SSE event when it lands.
+// fires CloneTile or snap-backs the ghost on a rejected drop. The
+// async RPC fires in a goroutine; the local cache is patched by the
+// SSE event when it lands. Black-hole deletion is the left-button
+// path, not this one — right-click is strictly clone.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	t, ok := a.dropTargetAt(sx, sy, d.tileID)
 	if !ok {
 		a.cancelDragSnapBack(d)
-		return
-	}
-	// Black-hole sink: any tile dropped on a black-hole tile is
-	// deleted. The drop coordinates are inside the black hole's
-	// footprint, so the dragged source disappears rather than landing.
-	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.IsBlackHole() {
-		a.runDeleteTile(d, t)
-		a.ghost = nil
-		a.draw()
 		return
 	}
 	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)

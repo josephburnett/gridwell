@@ -251,6 +251,13 @@ type ghost struct {
 	screenY           float64
 	displayedCellSize float64
 	targetCellSize    float64
+
+	// fragmentation animates the "going into a black hole" effect.
+	// 0 = intact, 1 = fully fragmented (shards drifted outward,
+	// alpha cut, slight rotation). Lerps the same way cell size
+	// does, so dragging in and back out smoothly reassembles.
+	displayedFragmentation float64
+	targetFragmentation    float64
 }
 
 // dragState tracks an in-progress drag from a tile onto the cursor.
