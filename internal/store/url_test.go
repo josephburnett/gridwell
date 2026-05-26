@@ -9,10 +9,10 @@ import (
 )
 
 // createURLTileForTest creates a uri-list tile and returns it.
-func createURLTileForTest(t *testing.T, s *Store, u *User, x int64, url string) *rpc.Tile {
+func createURLTileForTest(t *testing.T, s *Store, root, x int64, url string) *rpc.Tile {
 	t.Helper()
-	tile, err := s.CreateFile(context.Background(), u.ID, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+	tile, err := s.CreateFile(context.Background(), &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
 		X: x, Y: 0, W: 1, H: 1,
 		MimeType: rpc.MimeURIList, Data: []byte(url),
 	})
@@ -25,17 +25,17 @@ func createURLTileForTest(t *testing.T, s *Store, u *User, x int64, url string) 
 func TestForkURL(t *testing.T) {
 	s := newTestStore(t)
 	s.SetURLDriver(NewFakeURLDriver())
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
-	src := createURLTileForTest(t, s, u, 0, "https://example.com/a")
+	src := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 	// Seed a preview so we can verify it carries over.
-	if err := s.SetURLPreview(ctx, u.ID, src.ID, []byte("jpegbytes")); err != nil {
+	if err := s.SetURLPreview(ctx, src.ID, []byte("jpegbytes")); err != nil {
 		t.Fatalf("seed preview: %v", err)
 	}
 
-	fork, err := s.ForkURL(ctx, u.ID, &rpc.ForkURLRequest{
+	fork, err := s.ForkURL(ctx, &rpc.ForkURLRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), TileID: src.ID,
-		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 2, Y: 0,
 	})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestForkURL(t *testing.T) {
 		t.Error("fork shares object_id with source (forks should be distinct identities)")
 	}
 	// Preview bytes should have copied.
-	jpeg, err := s.GetTilePreview(ctx, u.ID, fork.ID)
+	jpeg, err := s.GetTilePreview(ctx, fork.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,17 +66,17 @@ func TestForkURL(t *testing.T) {
 func TestForkURLRefusesNonURLTile(t *testing.T) {
 	s := newTestStore(t)
 	s.SetURLDriver(NewFakeURLDriver())
-	u := fixtureUser(t, s)
-	w, err := s.CreateWell(context.Background(), u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+	root := rootID(t, s)
+	w, err := s.CreateWell(context.Background(), &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
 		X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.ForkURL(context.Background(), u.ID, &rpc.ForkURLRequest{
+	_, err = s.ForkURL(context.Background(), &rpc.ForkURLRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 2, Y: 0,
 	})
 	if !errors.Is(err, ErrNotURLTile) {
@@ -86,11 +86,11 @@ func TestForkURLRefusesNonURLTile(t *testing.T) {
 
 func TestSetURLString(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
-	tile := createURLTileForTest(t, s, u, 0, "https://example.com/a")
+	tile := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 
-	if err := s.SetURLString(ctx, u.ID, tile.ID, "https://example.com/b"); err != nil {
+	if err := s.SetURLString(ctx, tile.ID, "https://example.com/b"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	got, err := s.loadTile(ctx, s.db, tile.ID)
@@ -104,14 +104,14 @@ func TestSetURLString(t *testing.T) {
 
 func TestSetURLPreview(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
-	tile := createURLTileForTest(t, s, u, 0, "https://example.com")
+	tile := createURLTileForTest(t, s, root, 0, "https://example.com")
 
-	if err := s.SetURLPreview(ctx, u.ID, tile.ID, []byte("xxx")); err != nil {
+	if err := s.SetURLPreview(ctx, tile.ID, []byte("xxx")); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	got, err := s.GetTilePreview(ctx, u.ID, tile.ID)
+	got, err := s.GetTilePreview(ctx, tile.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,15 +122,15 @@ func TestSetURLPreview(t *testing.T) {
 
 func TestSetURLPreviewRefusesNonURLTile(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
-	w, err := s.CreateWell(context.Background(), u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+	root := rootID(t, s)
+	w, err := s.CreateWell(context.Background(), &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
 		X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.SetURLPreview(context.Background(), u.ID, w.ID, []byte("x"))
+	err = s.SetURLPreview(context.Background(), w.ID, []byte("x"))
 	if !errors.Is(err, ErrNotURLTile) {
 		t.Errorf("got %v, want ErrNotURLTile", err)
 	}

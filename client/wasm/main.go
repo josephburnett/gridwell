@@ -68,9 +68,9 @@ type App struct {
 	canvas   js.Value
 	cctx     js.Value // 2d context
 
-	user *rpc.WhoamiResponse
-	tree *pane.Tree
-	c    *cache.Cache
+	rootGridID int64
+	tree       *pane.Tree
+	c          *cache.Cache
 
 	width, height float64
 
@@ -340,58 +340,26 @@ func main() {
 		return nil
 	}))
 
-	// Login form submission.
-	form := app.doc.Call("getElementById", "login-card")
-	form.Call("addEventListener", "submit", js.FuncOf(func(this js.Value, args []js.Value) any {
-		args[0].Call("preventDefault")
-		app.tryLogin()
-		return nil
-	}))
-
 	app.installCanvasInput()
 
-	// Probe session.
 	go app.bootstrap()
 
 	select {}
 }
 
-// bootstrap calls Whoami; if logged in, hides the login overlay and starts
-// the canvas client. Otherwise the login form is the visible UI.
+// bootstrap fetches the current root grid id from the server, then starts
+// the rest of the client.
 func (a *App) bootstrap() {
-	var resp rpc.WhoamiResponse
-	if status, err := postJSON("/rpc/Whoami", rpc.WhoamiRequest{}, &resp); err != nil || status != 200 {
-		// Stay on the login overlay.
+	var resp rpc.BootstrapResponse
+	if status, err := postJSON("/rpc/Bootstrap", rpc.BootstrapRequest{}, &resp); err != nil || status != 200 {
 		return
 	}
-	a.user = &resp
-	a.afterLogin()
+	a.rootGridID = resp.RootGridID
+	a.afterBootstrap()
 }
 
-func (a *App) tryLogin() {
-	usernameVal := a.doc.Call("getElementById", "username").Get("value").String()
-	passwordVal := a.doc.Call("getElementById", "password").Get("value").String()
-	errEl := a.doc.Call("getElementById", "login-error")
-	go func() {
-		var resp rpc.LoginResponse
-		status, err := postJSON("/rpc/Login", rpc.LoginRequest{Username: usernameVal, Password: passwordVal}, &resp)
-		if err != nil {
-			errEl.Set("textContent", err.Error())
-			return
-		}
-		if status != 200 {
-			errEl.Set("textContent", "login failed")
-			return
-		}
-		a.user = &rpc.WhoamiResponse{UserID: resp.UserID, Username: resp.Username, RootGridID: resp.RootGridID}
-		a.afterLogin()
-	}()
-}
-
-func (a *App) afterLogin() {
-	a.doc.Call("getElementById", "login-overlay").Get("style").Set("display", "none")
+func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
-	// Initialize root pane with the user's root grid path (empty).
 	a.tree.FocusedPane().Path = nil
 
 	a.rootViewSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -624,10 +592,10 @@ func (a *App) startSSE() {
 // gridIDForPath walks the pane's descent path and returns the grid id at the
 // leaf. Returns root if the path is empty or stale prefixes don't resolve.
 func (a *App) gridIDForPath(p []int64) int64 {
-	if a.user == nil {
+	if a.rootGridID == 0 {
 		return 0
 	}
-	gid := a.user.RootGridID
+	gid := a.rootGridID
 	for _, wellID := range p {
 		g, ok := a.c.Grid(gid)
 		if !ok {

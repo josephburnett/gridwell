@@ -10,8 +10,6 @@ import (
 
 // postJSON marshals req as JSON, POSTs it to /rpc/<method>, and decodes the
 // response into resp (if non-nil). Returns (status, err).
-//
-// The fetch call uses credentials: "include" so the session cookie is sent.
 func postJSON(path string, req any, resp any) (int, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -22,7 +20,6 @@ func postJSON(path string, req any, resp any) (int, error) {
 	hdr := js.Global().Get("Object").New()
 	hdr.Set("Content-Type", "application/json")
 	opts.Set("headers", hdr)
-	opts.Set("credentials", "include")
 	opts.Set("body", string(body))
 
 	respValue, err := await(js.Global().Call("fetch", path, opts))

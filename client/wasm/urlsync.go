@@ -39,7 +39,7 @@ func (a *App) scheduleRootViewSave() {
 // SetGridDefaultView for the user's root grid. Triggered by the
 // debounce timer; safe to call manually.
 func (a *App) flushRootViewSave() {
-	if a.user == nil {
+	if a.rootGridID == 0 {
 		return
 	}
 	p := a.tree.FocusedPane()
@@ -51,7 +51,7 @@ func (a *App) flushRootViewSave() {
 		zoom = 1.0
 	}
 	req := rpc.SetGridDefaultViewRequest{
-		GridID: a.user.RootGridID,
+		GridID: a.rootGridID,
 		Cx:     p.Cx,
 		Cy:     p.Cy,
 		Zoom:   zoom,
@@ -82,7 +82,7 @@ func (a *App) scheduleURLUpdate() {
 // history.replaceState. Idempotent; safe even when no user change has
 // happened.
 func (a *App) replaceURLNow() {
-	if a.user == nil {
+	if a.rootGridID == 0 {
 		return
 	}
 	state := a.encodeFocusedPaneURL()
@@ -166,7 +166,7 @@ func (a *App) applyURLOnBoot() {
 
 	// Always start by fetching the user's root grid so the walk has
 	// something to read. If the URL has no path, we're done.
-	rootID := a.user.RootGridID
+	rootID := a.rootGridID
 	if len(state.TileIDs) == 0 {
 		// Block on the fetch so we can read the grid's stored
 		// DefaultView before drawing — otherwise the user sees a

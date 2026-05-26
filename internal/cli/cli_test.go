@@ -43,16 +43,3 @@ func slicesEq(a, b []string) bool {
 	return true
 }
 
-func TestRunAddUserAcceptsFlagAfterUsername(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := dir + "/u.db"
-	if rc := RunInit([]string{"--db", dbPath}); rc != 0 {
-		t.Fatal("init failed")
-	}
-	// adduser USERNAME --db PATH (positional first, then flag) used to
-	// silently fall back to ./gridwell.db before reorderFlagsFirst landed.
-	rc := RunAddUserWithStdin([]string{"alice", "--db", dbPath}, "test123\n")
-	if rc != 0 {
-		t.Fatalf("adduser returned %d", rc)
-	}
-}

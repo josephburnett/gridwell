@@ -1,28 +1,20 @@
 package store
 
-// Schema is the canonical SQLite schema for Gridwell. It mirrors spec §9.1.
-//
-// We deliberately keep this as a single string rather than a migration ladder
-// because v1 has no deployed users — there is nothing to migrate from. When
-// that changes, swap this for a migrations package.
+// Schema is the canonical SQLite schema for Gridwell. Single-tenant: there is
+// no users/groups/sessions table and no per-row ownership. The `system` KV
+// table holds singleton state (currently just the current root_grid_id).
 const Schema = `
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 
-CREATE TABLE IF NOT EXISTS groups (
-    id   INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
+CREATE TABLE IF NOT EXISTS system (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
--- grids.owner_id references users(id) and users.root_grid_id references
--- grids(id), forming a cycle. Bootstrap (CreateUser) handles this by
--- enabling PRAGMA defer_foreign_keys for the duration of the transaction.
 CREATE TABLE IF NOT EXISTS grids (
     id              INTEGER PRIMARY KEY,
     object_id       TEXT NOT NULL,
-    owner_id        INTEGER NOT NULL REFERENCES users(id),
-    group_id        INTEGER NOT NULL REFERENCES groups(id),
-    mode            INTEGER NOT NULL,
     refcount        INTEGER NOT NULL DEFAULT 1,
     default_view_cx REAL NOT NULL DEFAULT 0,
     default_view_cy REAL NOT NULL DEFAULT 0,
@@ -30,21 +22,6 @@ CREATE TABLE IF NOT EXISTS grids (
     created_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
-
-CREATE TABLE IF NOT EXISTS users (
-    id               INTEGER PRIMARY KEY,
-    username         TEXT NOT NULL UNIQUE,
-    password_hash    TEXT NOT NULL,
-    primary_group_id INTEGER NOT NULL REFERENCES groups(id),
-    root_grid_id     INTEGER NOT NULL REFERENCES grids(id),
-    created_at       INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS user_groups (
-    user_id  INTEGER NOT NULL REFERENCES users(id),
-    group_id INTEGER NOT NULL REFERENCES groups(id),
-    PRIMARY KEY (user_id, group_id)
-);
 
 CREATE TABLE IF NOT EXISTS blobs (
     id        INTEGER PRIMARY KEY,
@@ -73,15 +50,9 @@ CREATE TABLE IF NOT EXISTS tiles (
     blob_id       INTEGER REFERENCES blobs(id),
     -- URL tiles only (mime_type='text/uri-list'): the current URL,
     -- mutated by the server's Chromium driver as the live tab navigates.
-    -- Not content-addressed; not refcounted.
     url_string    TEXT,
-    -- URL tiles only: the latest captured JPEG preview frame. Mutable
-    -- BLOB overwritten in place (does not flow through the content-
-    -- addressed blobs table).
+    -- URL tiles only: the latest captured JPEG preview frame.
     preview_jpeg  BLOB,
-    owner_id      INTEGER NOT NULL REFERENCES users(id),
-    group_id      INTEGER NOT NULL REFERENCES groups(id),
-    mode          INTEGER NOT NULL,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
@@ -95,13 +66,4 @@ CREATE TABLE IF NOT EXISTS tiles (
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
-
-CREATE TABLE IF NOT EXISTS sessions (
-    token      TEXT PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id),
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 `

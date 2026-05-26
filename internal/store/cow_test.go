@@ -12,18 +12,18 @@ import (
 // without copying the child's contents.
 func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
 
-	w, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Put something inside w's child grid so we can later confirm the
 	// clone's child still sees it.
-	inner, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
+	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
 		GridID: w.ChildGridID, X: 5, Y: 5, W: 1, H: 1,
 	})
@@ -31,9 +31,9 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clone, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 10, Y: 0,
 	})
 	if err != nil {
@@ -65,26 +65,26 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 // pre-fork state.
 func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
 
-	w, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Inside the child grid, place a marker well.
-	inner, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
+	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 10, Y: 0,
 	})
 	if err != nil {
@@ -92,7 +92,7 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	}
 
 	// Write through clone's child (fork should occur).
-	resized, err := s.ResizeTile(ctx, u.ID, &rpc.ResizeTileRequest{
+	resized, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
 		Path: rpc.Path{WellIDs: []int64{clone.ID}}, ViewRect: largeView(),
 		TileID: inner.ID, W: 3, H: 3,
 	})
@@ -112,7 +112,7 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	}
 
 	// The original well's child grid should still contain the unchanged inner.
-	origChildContents, err := s.GetGrid(ctx, u.ID, w.ChildGridID)
+	origChildContents, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 // references to them.
 func TestRefcountInvariant(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
 
 	// A small number of seeded operations exercising the interesting paths.
@@ -158,29 +158,29 @@ func TestRefcountInvariant(t *testing.T) {
 		args []int64
 	}
 	// Build a small tree.
-	w1, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
+	w1, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w2, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 2, Y: 0, W: 1, H: 1,
+	w2, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 2, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Clone w1 into root.
-	clone, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path: rpc.Path{}, ViewRect: largeView(), TileID: w1.ID,
-		DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
 		X: 4, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Add stuff inside w1's (now shared) child.
-	if _, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
+	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path: rpc.Path{WellIDs: []int64{w1.ID}}, ViewRect: largeView(),
 		GridID: w1.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
@@ -237,13 +237,18 @@ func verifyRefcounts(t *testing.T, s *Store) {
 	}
 	brows.Close()
 
+	rootID, err := rootGridID(context.Background(), s.db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, g := range grids {
-		var pointers, asRoot int64
+		var pointers int64
 		if err := s.db.QueryRow(`SELECT COUNT(1) FROM tiles WHERE child_grid_id = ?`, g.id).Scan(&pointers); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM users WHERE root_grid_id = ?`, g.id).Scan(&asRoot); err != nil {
-			t.Fatal(err)
+		asRoot := int64(0)
+		if g.id == rootID {
+			asRoot = 1
 		}
 		want := pointers + asRoot
 		if g.refcount != want {

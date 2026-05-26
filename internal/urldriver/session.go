@@ -15,21 +15,10 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-// Session is one Chromium tab owned by one URL stream. Lifetime matches
-// the streaming WebSocket: created by Driver.OpenSession, torn down by
-// Session.Close.
-//
-// rod's *Page survives cross-process renderer swaps (the whole reason
-// we picked rod over chromedp). Session.Done() therefore only fires on
-// genuine page death: the underlying CDP target was detached or
-// destroyed (e.g., renderer crash, programmatic close).
+// Session is one Chromium tab owned by one URL stream.
 type Session struct {
-	userID, tileID int64
+	tileID int64
 
-	// page is the live tab. pageCancel cancels the page's context,
-	// which is the signal that wakes our EachEvent goroutines and the
-	// frameLoop. We derive page via Browser.Page → WithCancel so we
-	// own the cancellation.
 	page       *rod.Page
 	pageCancel context.CancelFunc
 
@@ -48,11 +37,9 @@ type Session struct {
 	lastURL string
 }
 
-// OpenSession spawns a Chromium tab for (userID, tileID), navigates to
-// initialURL, and sets the viewport to w×h. Frames()/Navs() deliver
-// activity until Close(). Multiple OpenSession calls for the same
-// (userID, tileID) produce independent tabs.
-func (d *Driver) OpenSession(userID, tileID int64, initialURL string, w, h int64) (*Session, error) {
+// OpenSession spawns a Chromium tab for tileID, navigates to initialURL,
+// and sets the viewport to w×h.
+func (d *Driver) OpenSession(tileID int64, initialURL string, w, h int64) (*Session, error) {
 	if !d.available {
 		return nil, ErrUnavailable
 	}
@@ -63,92 +50,62 @@ func (d *Driver) OpenSession(userID, tileID int64, initialURL string, w, h int64
 		h = d.cfg.ViewportHeight
 	}
 	d.mu.Lock()
-	browser, err := d.userBrowserLocked(userID)
+	browser, err := d.ensureBrowserLocked()
 	d.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
 
-	// Create a fresh tab. rod's Page() uses Target.AttachToTarget with
-	// Flatten:true under the hood; the resulting *Page rebinds the
-	// underlying CDP session on cross-process target swaps.
 	rawPage, err := browser.browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
 	if err != nil {
 		return nil, fmt.Errorf("create page: %w", err)
 	}
 
-	// Derive a cancellable page so we can stop our event subscriptions
-	// on Close. The cancel is independent of the underlying CDP
-	// target; cancelling it does NOT close the tab, only our
-	// goroutines watching it.
 	page, cancel := rawPage.WithCancel()
 
 	s := &Session{
-		userID:         userID,
 		tileID:         tileID,
 		page:           page,
 		pageCancel:     cancel,
 		streamInterval: d.cfg.StreamInterval,
-		// Frame channel uses newest-wins drop in pushFrame.
-		frames:     make(chan []byte, 4),
-		navs:       make(chan string, 8),
-		stopFrames: make(chan struct{}),
-		framesDone: make(chan struct{}),
-		done:       make(chan struct{}),
-		lastURL:    initialURL,
+		frames:         make(chan []byte, 4),
+		navs:           make(chan string, 8),
+		stopFrames:     make(chan struct{}),
+		framesDone:     make(chan struct{}),
+		done:           make(chan struct{}),
+		lastURL:        initialURL,
 	}
 
-	// Watchdog: page ctx is canceled by rod on
-	// Target.targetDetachedFromTarget or Target.targetTargetDestroyed
-	// matching this page's target ID. Cross-process navigations swap
-	// the underlying target but the *Page survives — this fires only
-	// on genuine death. (Renderer crashes via Target.targetCrashed
-	// require an explicit subscription; see crashWatch below.)
 	go func() {
 		<-rawPage.GetContext().Done()
-		log.Printf("[urldriver] page ctx done uid=%d tile=%d err=%v",
-			userID, tileID, rawPage.GetContext().Err())
+		log.Printf("[urldriver] page ctx done tile=%d err=%v",
+			tileID, rawPage.GetContext().Err())
 		s.Close()
 	}()
 
 	s.installListeners(browser.browser, rawPage.TargetID)
 
-	// Viewport + injected hardening JS, then navigate. Errors are
-	// logged and swallowed: a failed initial nav still leaves a
-	// usable Session the client can drive (e.g. reload via the URL
-	// bar — actually no, we don't have a URL bar, but the WS can
-	// dispatch keys / mouse). Best effort.
 	if err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
 		Width: int(w), Height: int(h), DeviceScaleFactor: 1,
 	}); err != nil {
-		log.Printf("[urldriver] set viewport failed uid=%d tile=%d err=%v",
-			userID, tileID, err)
+		log.Printf("[urldriver] set viewport failed tile=%d err=%v", tileID, err)
 	}
 	if _, err := page.EvalOnNewDocument(hardeningJS); err != nil {
-		log.Printf("[urldriver] inject hardening failed uid=%d tile=%d err=%v",
-			userID, tileID, err)
+		log.Printf("[urldriver] inject hardening failed tile=%d err=%v", tileID, err)
 	}
 	if err := page.Timeout(20 * time.Second).Navigate(initialURL); err != nil {
-		log.Printf("[urldriver] navigate failed uid=%d tile=%d err=%v",
-			userID, tileID, err)
+		log.Printf("[urldriver] navigate failed tile=%d err=%v", tileID, err)
 	}
 
 	go s.frameLoop()
 	return s, nil
 }
 
-// installListeners hooks dialog auto-dismiss, main-frame navigation
-// tracking, and renderer-crash detection. All subscriptions run on
-// goroutines that exit when s.pageCancel is invoked by Close.
 func (s *Session) installListeners(browser *rod.Browser, targetID proto.TargetTargetID) {
-	// Dialog auto-dismiss.
 	go s.page.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
-		// Accept=false → cancel the dialog.
 		_ = proto.PageHandleJavaScriptDialog{Accept: false}.Call(s.page)
 	})()
 
-	// Main-frame navigation tracking. Sub-frame navs (ads, embeds)
-	// don't rename the tile.
 	go s.page.EachEvent(func(e *proto.PageFrameNavigated) {
 		if e.Frame == nil || e.Frame.ParentID != "" {
 			return
@@ -166,21 +123,16 @@ func (s *Session) installListeners(browser *rod.Browser, targetID proto.TargetTa
 		}
 	})()
 
-	// Renderer-crash watchdog. rod does NOT auto-cancel the page ctx
-	// on Target.targetCrashed, so we subscribe at the browser level
-	// and tear ourselves down on a match.
 	go browser.EachEvent(func(e *proto.TargetTargetCrashed) {
 		if e.TargetID != targetID {
 			return
 		}
-		log.Printf("[urldriver] page crashed uid=%d tile=%d status=%s errorCode=%d",
-			s.userID, s.tileID, e.Status, e.ErrorCode)
+		log.Printf("[urldriver] page crashed tile=%d status=%s errorCode=%d",
+			s.tileID, e.Status, e.ErrorCode)
 		s.Close()
 	})()
 }
 
-// frameLoop polls the tab at streamInterval, pushing JPEGs onto
-// s.frames. Exits when stopFrames is closed or the page ctx dies.
 func (s *Session) frameLoop() {
 	defer close(s.framesDone)
 	quality := 70
@@ -206,7 +158,6 @@ func (s *Session) frameLoop() {
 	}
 }
 
-// pushFrame inserts buf into s.frames, dropping the oldest if full.
 func (s *Session) pushFrame(buf []byte) {
 	for {
 		select {
@@ -214,7 +165,7 @@ func (s *Session) pushFrame(buf []byte) {
 			return
 		default:
 			select {
-			case <-s.frames: // drop oldest, retry
+			case <-s.frames:
 			default:
 				return
 			}
@@ -222,9 +173,6 @@ func (s *Session) pushFrame(buf []byte) {
 	}
 }
 
-// Input synchronously dispatches one input event to the page via raw
-// CDP. Uses proto.* directly (instead of page.Mouse / page.Keyboard
-// helpers) so explicit per-event modifier bits and X/Y are honored.
 func (s *Session) Input(ev InputEvent) error {
 	page := s.page.Timeout(2 * time.Second)
 	mods := int(ev.Modifiers)
@@ -284,8 +232,6 @@ func (s *Session) Input(ev InputEvent) error {
 	}
 }
 
-// Resize sets the device viewport to w×h. The page reflows on the
-// next render frame.
 func (s *Session) Resize(w, h int64) error {
 	if w <= 0 || h <= 0 {
 		return fmt.Errorf("invalid resize %dx%d", w, h)
@@ -295,28 +241,16 @@ func (s *Session) Resize(w, h int64) error {
 	})
 }
 
-// LastURL returns the most recently observed main-frame URL.
 func (s *Session) LastURL() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastURL
 }
 
-// Frames returns the read end of the frame channel.
-func (s *Session) Frames() <-chan []byte { return s.frames }
+func (s *Session) Frames() <-chan []byte    { return s.frames }
+func (s *Session) Navs() <-chan string      { return s.navs }
+func (s *Session) Done() <-chan struct{}    { return s.done }
 
-// Navs returns the read end of the navigation channel.
-func (s *Session) Navs() <-chan string { return s.navs }
-
-// Done is closed when the session has been fully torn down.
-func (s *Session) Done() <-chan struct{} { return s.done }
-
-// CaptureFinal grabs one last screenshot. Intended to be called once
-// on WS close, before Close. After Close the page ctx is canceled and
-// this returns a CDP error.
-//
-// ctx is reserved for future use as a caller-controllable deadline;
-// v1 uses a fixed 3s timeout on the page.
 func (s *Session) CaptureFinal(_ context.Context) ([]byte, error) {
 	quality := 70
 	return s.page.Timeout(3 * time.Second).Screenshot(false, &proto.PageCaptureScreenshot{
@@ -325,16 +259,11 @@ func (s *Session) CaptureFinal(_ context.Context) ([]byte, error) {
 	})
 }
 
-// Close tears down the session: stops the frame loop, cancels event
-// goroutines, closes the Chromium tab. Idempotent.
 func (s *Session) Close() {
 	s.closeOnce.Do(func() {
 		close(s.stopFrames)
 		<-s.framesDone
-		s.pageCancel() // stop EachEvent goroutines
-		// page.Close sends Page.close — gracefully closes the tab.
-		// Errors here are expected if the tab is already gone
-		// (renderer crash, target destroyed); ignore them.
+		s.pageCancel()
 		_ = s.page.Close()
 		close(s.done)
 	})
@@ -353,34 +282,16 @@ func rodMouseButton(name string) proto.InputMouseButton {
 	}
 }
 
-// keyText derives the CDP Text / UnmodifiedText fields from a DOM key
-// name and the active modifier set. For typing into <input> elements
-// to work, the keyDown event must carry the character in Text — without
-// it Chromium fires keydown but never inserts the character into the
-// focused field.
-//
-// Single-rune DOM keys are printable; multi-character names like
-// "Enter" or "ArrowLeft" are non-printable and yield empty strings.
-// Ctrl- and Meta-modified keys are treated as accelerators (no text)
-// so the page's shortcut handlers see the keydown event but no stray
-// "a" gets inserted on Ctrl+A.
 func keyText(key string, mods int) (text, unmodifiedText string) {
 	if utf8.RuneCountInString(key) != 1 {
 		return "", ""
 	}
-	// Ctrl=2, Meta=4 — either turns the keystroke into a shortcut.
 	if mods&(2|4) != 0 {
 		return "", ""
 	}
 	return key, strings.ToLower(key)
 }
 
-// virtualKeyCode maps a DOM key name to a Windows virtual-key code so
-// Chromium's input pipeline recognizes special keys (Enter to submit a
-// form, Backspace to delete, arrows to move the caret). For ordinary
-// printable letters/digits the VK is derived from the rune itself.
-// Returns 0 for unrecognized non-printable keys; that's harmless —
-// the keydown event still fires, just without VK-specific defaults.
 func virtualKeyCode(key string) int {
 	if vk, ok := specialKeyVK[key]; ok {
 		return vk
@@ -399,10 +310,6 @@ func virtualKeyCode(key string) int {
 	return 0
 }
 
-// specialKeyVK covers the common non-printable DOM key names. The
-// values are Windows virtual-key codes (the historical ones Chromium
-// still uses to dispatch built-in handlers like form-submit on Enter
-// or backspace-deletes-char in inputs).
 var specialKeyVK = map[string]int{
 	"Backspace":   8,
 	"Tab":         9,
@@ -413,7 +320,7 @@ var specialKeyVK = map[string]int{
 	"Pause":       19,
 	"CapsLock":    20,
 	"Escape":      27,
-	" ":           32, // Space rune handled by the printable branch; this is here for safety.
+	" ":           32,
 	"PageUp":      33,
 	"PageDown":    34,
 	"End":         35,

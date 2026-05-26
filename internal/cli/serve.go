@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,13 +24,18 @@ import (
 func RunServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	db := resolveDB(fs, "./gridwell.db")
-	addr := fs.String("addr", ":8080", "HTTP listen address")
+	bind := fs.String("bind", "127.0.0.1:8080", "HTTP listen address (default loopback only)")
 	staticDir := fs.String("static", "./web", "directory of static files served at /")
-	insecure := fs.Bool("insecure", false, "do not set the Secure flag on the session cookie (use only when serving over plain HTTP locally)")
-	chromiumPath := fs.String("chromium", "", "path to the Chromium binary (empty: auto-detect on PATH; if not found, URL tiles cannot be woken)")
-	profileRoot := fs.String("profiles", "", "root directory for per-user Chromium profiles (default: <db dir>/chromium)")
+	browserName := fs.String("browser", "chromium", "browser brand: "+strings.Join(sortedBrands(), ", "))
+	browserBin := fs.String("browser-bin", "", "explicit browser binary path (overrides --browser lookup)")
+	xvfbRes := fs.String("xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT")
+	noXvfb := fs.Bool("no-xvfb", false, "do not spawn Xvfb; inherit DISPLAY from environment")
 	args = reorderFlagsFirst(args, func(name string) bool {
-		return name == "db" || name == "addr" || name == "static" || name == "chromium" || name == "profiles"
+		switch name {
+		case "db", "bind", "static", "browser", "browser-bin", "xvfb-resolution":
+			return true
+		}
+		return false
 	})
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -41,37 +48,45 @@ func RunServe(args []string) int {
 	}
 	defer s.Close()
 
-	root := *profileRoot
-	if root == "" {
-		root = filepath.Join(filepath.Dir(*db), "chromium")
+	display := ""
+	var xv *urldriver.Xvfb
+	if !*noXvfb {
+		w, h, err := parseResolution(*xvfbRes)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "serve: --xvfb-resolution: %v\n", err)
+			return 2
+		}
+		xv, err = urldriver.StartXvfb(w, h)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "serve: xvfb: %v\n", err)
+			return 1
+		}
+		defer xv.Stop()
+		display = xv.Display()
+		fmt.Printf("gridwell: Xvfb ready on %s (%dx%d)\n", display, w, h)
 	}
+
 	driver := urldriver.New(s, urldriver.Config{
-		BinaryPath:  *chromiumPath,
-		ProfileRoot: root,
+		Browser:        *browserName,
+		BinaryOverride: *browserBin,
+		Display:        display,
 	})
 	s.SetURLDriver(driver)
 	defer driver.Shutdown()
 	if driver.Available() {
-		fmt.Printf("gridwell: chromium driver ready (profiles=%s)\n", root)
+		fmt.Printf("gridwell: %s driver ready\n", *browserName)
 	} else {
-		fmt.Println("gridwell: chromium not found — URL tiles cannot be woken; existing previews still render")
+		fmt.Printf("gridwell: %s not found — URL tiles cannot be woken; existing previews still render\n", *browserName)
 	}
 
-	srv := server.New(s, server.Config{
-		StaticDir:    *staticDir,
-		SecureCookie: !*insecure,
-	})
+	srv := server.New(s, server.Config{StaticDir: *staticDir})
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))
 
-	// requestCtx is shared by every incoming request via BaseContext. We
-	// cancel it on shutdown so long-running handlers (notably the SSE
-	// Subscribe stream) see their context fire Done() immediately, instead
-	// of blocking Shutdown until its 10s deadline expires.
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
 
 	httpSrv := &http.Server{
-		Addr:              *addr,
+		Addr:              *bind,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
@@ -82,7 +97,7 @@ func RunServe(args []string) int {
 
 	errCh := make(chan error, 1)
 	go func() {
-		fmt.Printf("gridwell: serving on %s (db=%s static=%s)\n", *addr, *db, *staticDir)
+		fmt.Printf("gridwell: serving on %s (db=%s static=%s)\n", *bind, *db, *staticDir)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -95,8 +110,6 @@ func RunServe(args []string) int {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
-	// Cancel in-flight request contexts first; SSE handlers exit
-	// immediately, allowing Shutdown to drain quickly.
 	cancelRequests()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -105,4 +118,26 @@ func RunServe(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func sortedBrands() []string {
+	out := urldriver.BrandNames()
+	sort.Strings(out)
+	return out
+}
+
+func parseResolution(s string) (int, int, error) {
+	parts := strings.SplitN(s, "x", 2)
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("expected WIDTHxHEIGHT, got %q", s)
+	}
+	w, err := strconv.Atoi(parts[0])
+	if err != nil || w <= 0 {
+		return 0, 0, fmt.Errorf("bad width %q", parts[0])
+	}
+	h, err := strconv.Atoi(parts[1])
+	if err != nil || h <= 0 {
+		return 0, 0, fmt.Errorf("bad height %q", parts[1])
+	}
+	return w, h, nil
 }

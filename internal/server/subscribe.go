@@ -5,18 +5,8 @@ import (
 	"net/http"
 )
 
-// subscribe streams Subscribe events to the client as Server-Sent Events.
-//
-// SSE rather than gRPC-Web streaming because it is supported natively by the
-// browser EventSource API and works through any HTTP/1.1 proxy. Each event
-// is one JSON object on a `data: ...\n\n` line. The client demultiplexes by
-// the event's `kind` field.
+// subscribe streams events to the client as Server-Sent Events.
 func (s *Server) subscribe(w http.ResponseWriter, r *http.Request) {
-	uid, ok := userIDFrom(r.Context())
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -28,7 +18,7 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	ch, cancel := s.store.SubscribeEvents(uid)
+	ch, cancel := s.store.SubscribeEvents()
 	defer cancel()
 
 	enc := json.NewEncoder(w)
@@ -44,7 +34,6 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request) {
 			if err := enc.Encode(ev); err != nil {
 				return
 			}
-			// Encoder appends '\n'; SSE needs another to terminate the event.
 			if _, err := w.Write([]byte("\n")); err != nil {
 				return
 			}

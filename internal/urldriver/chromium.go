@@ -1,27 +1,13 @@
 //go:build !js
 
-// Package urldriver implements URL-tile presence on top of headless
-// Chromium via the Chrome DevTools Protocol, using github.com/go-rod/rod.
+// Package urldriver implements URL-tile presence on top of headful Chromium
+// (or a Chromium-derivative like Brave, Chrome, Edge) via the Chrome DevTools
+// Protocol, using github.com/go-rod/rod.
 //
-// Public surface:
-//
-//   - Driver: one per gridwell process. Owns the per-user Chromium
-//     subprocess (via rod.Launcher) and the rod.Browser connected to it.
-//     Exposes Available() and OpenSession.
-//   - Session: one Chromium tab whose lifetime matches a single
-//     /rpc/URLStream WebSocket. Backed by a *rod.Page. Defined in
-//     session.go.
-//
-// The v1 hard boundaries (popup-block, dialog auto-dismiss, permission
-// auto-deny, fullscreen block, window.close neutralization, audio mute,
-// scheme allow-list) live in hardeningJS and userBrowserLocked.
-//
-// rod was chosen over chromedp specifically because rod's *Page object
-// survives cross-process renderer swaps (CDP Target.AttachToTarget with
-// Flatten:true). chromedp's per-target context model cancels on
-// Target.targetDestroyed, which manifests as "context canceled" on every
-// cross-origin link click. See the migration write-up in the project
-// history for the full reasoning.
+// Single-tenant: one browser process per Driver. The browser uses the user's
+// default profile directory for the selected brand, so extensions, cookies,
+// and login state persist across runs and match what the user sees when
+// running the browser interactively from a shell.
 package urldriver
 
 import (
@@ -32,69 +18,71 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/launcher/flags"
 )
 
 // PreviewWriter is the subset of the store the driver needs to push
 // screenshot and URL updates back into.
 type PreviewWriter interface {
-	SetURLPreview(ctx context.Context, userID, tileID int64, jpeg []byte) error
-	SetURLString(ctx context.Context, userID, tileID int64, newURL string) error
+	SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) error
+	SetURLString(ctx context.Context, tileID int64, newURL string) error
 }
 
 // Config configures the driver.
 type Config struct {
-	// BinaryPath is the path to the Chromium/Chrome executable. If
-	// empty, the driver tries the standard names ("chromium",
-	// "chromium-browser", "google-chrome", "chrome",
-	// "chrome-headless-shell") on PATH.
-	BinaryPath string
-	// ProfileRoot is the directory under which each user's persistent
-	// profile dir is created (<root>/<user_id>/). Must be writable.
-	ProfileRoot string
+	// Browser is the brand name from the registry (chromium, chrome,
+	// brave, edge). Defaults to "chromium" if empty.
+	Browser string
+	// BinaryOverride, when non-empty, is used as the browser binary
+	// path instead of looking up the brand's standard names on PATH.
+	BinaryOverride string
+	// ProfileOverride, when non-empty, is the user-data-dir to pass to
+	// the browser. When empty, the brand's standard $HOME-relative
+	// user-data-dir is used. Tests use this to keep their profile data
+	// out of the user's real Chrome/Brave profile.
+	ProfileOverride string
 	// StreamInterval is the screenshot polling cadence used by an
 	// active Session. Defaults to 100ms (~10fps).
 	StreamInterval time.Duration
 	// ViewportWidth/Height are the initial viewport for a fresh
 	// Session that opens without a viewport hint from the client.
-	// Defaults: 1280×800. The client immediately resizes to its
-	// real pane size in the redesigned protocol.
 	ViewportWidth  int64
 	ViewportHeight int64
+	// Display is the X11 DISPLAY value to set when launching the browser.
+	// Empty means inherit the parent process's DISPLAY.
+	Display string
+	// Headless, when true, launches Chromium in headless=new mode.
+	// Production: false (we want extensions, native messaging, focus
+	// semantics). Tests: true so the driver works without a display.
+	Headless bool
 }
 
-// Driver owns one Chromium subprocess and one rod.Browser per user.
-// Sessions are issued via OpenSession; they manage their own lifecycle.
+// Driver owns one Chromium-family subprocess. Sessions issued via OpenSession
+// manage their own lifecycle.
 type Driver struct {
 	cfg   Config
 	store PreviewWriter
 
 	available  bool
 	binaryPath string
+	brandFlags []string
+	profileDir string
 
-	mu    sync.Mutex
-	users map[int64]*userBrowser
+	mu      sync.Mutex
+	browser *userBrowser
 }
 
 type userBrowser struct {
 	browser  *rod.Browser
 	launcher *launcher.Launcher
-	cancel   context.CancelFunc // cancels the browser's ctx → watchdog wakes up
+	cancel   context.CancelFunc
 }
 
-// hardeningJS is injected on every new document. It blocks
-// page-initiated popups and fullscreen requests and neutralizes
-// window.close so a page can't shut its own tab (and, when it's the
-// last tab, the whole Chromium process).
-//
-// rod re-installs scripts registered via EvalOnNewDocument when the
-// underlying target swaps (cross-process navigation), so this protects
-// every renderer the user ever lands on within one Session.
 const hardeningJS = `
 (function(){
   try { window.open = function(){ return null; }; } catch (e) {}
@@ -114,8 +102,8 @@ const hardeningJS = `
 })();
 `
 
-// New constructs a Driver. Probes for Chromium at construction time; if
-// not found, Available() returns false and OpenSession returns
+// New constructs a Driver. Probes for the configured browser at construction
+// time; if not found, Available() returns false and OpenSession returns
 // ErrUnavailable.
 func New(store PreviewWriter, cfg Config) *Driver {
 	if cfg.StreamInterval <= 0 {
@@ -127,81 +115,94 @@ func New(store PreviewWriter, cfg Config) *Driver {
 	if cfg.ViewportHeight <= 0 {
 		cfg.ViewportHeight = 800
 	}
-	d := &Driver{
-		cfg:   cfg,
-		store: store,
-		users: map[int64]*userBrowser{},
+	if cfg.Browser == "" {
+		cfg.Browser = "chromium"
 	}
-	d.binaryPath = resolveBinary(cfg.BinaryPath)
-	d.available = d.binaryPath != "" && cfg.ProfileRoot != ""
-	if d.available {
-		if err := os.MkdirAll(cfg.ProfileRoot, 0o755); err != nil {
-			d.available = false
+	d := &Driver{cfg: cfg, store: store}
+
+	b, ok := brands[cfg.Browser]
+	if !ok {
+		log.Printf("[urldriver] unknown browser %q", cfg.Browser)
+		return d
+	}
+	d.binaryPath = resolveBinary(cfg.BinaryOverride, b.binaryNames)
+	if d.binaryPath == "" {
+		log.Printf("[urldriver] browser binary not found for %q (tried %v)", cfg.Browser, b.binaryNames)
+		return d
+	}
+	if cfg.ProfileOverride != "" {
+		d.profileDir = cfg.ProfileOverride
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("[urldriver] cannot resolve $HOME: %v", err)
+			return d
 		}
+		d.profileDir = filepath.Join(home, b.userDataDir)
 	}
+	d.brandFlags = b.extraFlags
+	d.available = true
 	return d
 }
 
 // Available reports whether the driver is functional.
 func (d *Driver) Available() bool { return d.available }
 
-// Shutdown tears down every user's Chromium process. Active Sessions
-// are responsible for their own teardown via Close; closing the
-// browser also cascades to any still-open page.
+// Shutdown tears down the Chromium subprocess.
 func (d *Driver) Shutdown() {
 	d.mu.Lock()
-	browsers := make([]*userBrowser, 0, len(d.users))
-	for uid, b := range d.users {
-		browsers = append(browsers, b)
-		delete(d.users, uid)
-	}
+	b := d.browser
+	d.browser = nil
 	d.mu.Unlock()
-	for _, b := range browsers {
-		// Cancel first so any goroutine watching the browser ctx
-		// wakes; then close gracefully; then kill the launcher as a
-		// belt-and-braces measure.
-		b.cancel()
-		_ = b.browser.Close()
-		b.launcher.Kill()
+	if b == nil {
+		return
 	}
+	b.cancel()
+	_ = b.browser.Close()
+	b.launcher.Kill()
 }
 
-// userBrowserLocked returns the user's rod.Browser, spawning a Chromium
-// process if none is running. Caller must hold d.mu.
-func (d *Driver) userBrowserLocked(userID int64) (*userBrowser, error) {
-	if b, ok := d.users[userID]; ok {
-		return b, nil
+// ensureBrowserLocked returns the browser, spawning it if it isn't already
+// running. Caller must hold d.mu.
+func (d *Driver) ensureBrowserLocked() (*userBrowser, error) {
+	if d.browser != nil {
+		return d.browser, nil
 	}
-	profileDir := filepath.Join(d.cfg.ProfileRoot, fmt.Sprintf("%d", userID))
-	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+
+	if err := os.MkdirAll(d.profileDir, 0o755); err != nil {
 		return nil, fmt.Errorf("profile dir: %w", err)
 	}
 
 	l := launcher.New().
 		Bin(d.binaryPath).
-		UserDataDir(profileDir).
-		HeadlessNew(true).
+		UserDataDir(d.profileDir).
 		Set("mute-audio").
-		// NoSandbox(true) also strips RendererCodeIntegrity which
-		// otherwise trips up sandboxless mode on Linux. Plain
-		// Set("no-sandbox") does NOT strip that feature.
-		NoSandbox(true).
-		Set("deny-permission-prompts").
-		// Verbose Chromium logging so chromium.log tells us why it
-		// exited when it does.
-		Set("enable-logging", "stderr").
-		Set("v", "1")
+		Set("deny-permission-prompts")
+	if d.cfg.Headless {
+		l = l.HeadlessNew(true)
+	} else {
+		// Headful: extensions only work reliably in a real browser
+		// process. The X server is Xvfb (managed by the gridwell
+		// process); see internal/urldriver/xvfb.go.
+		l = l.Headless(false)
+	}
 
-	if f, err := os.OpenFile(
-		filepath.Join(profileDir, "chromium.log"),
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644,
-	); err == nil {
+	for _, f := range d.brandFlags {
+		l = l.Set(flags.Flag(f))
+	}
+
+	if d.cfg.Display != "" {
+		l = l.Env("DISPLAY=" + d.cfg.Display)
+	}
+
+	logPath := filepath.Join(d.profileDir, "gridwell-browser.log")
+	if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		l = l.Logger(f)
 	}
 
 	controlURL, err := l.Launch()
 	if err != nil {
-		return nil, fmt.Errorf("launch chromium: %w", err)
+		return nil, fmt.Errorf("launch browser: %w", err)
 	}
 
 	browserCtx, cancel := context.WithCancel(context.Background())
@@ -209,44 +210,34 @@ func (d *Driver) userBrowserLocked(userID int64) (*userBrowser, error) {
 	if err := browser.Connect(); err != nil {
 		cancel()
 		l.Kill()
-		return nil, fmt.Errorf("connect chromium: %w", err)
+		return nil, fmt.Errorf("connect browser: %w", err)
 	}
 
-	// Browser watchdog: fires when the connection's context is
-	// canceled (Shutdown, or rod tearing it down on connection loss).
-	// A cascading browser death means every Session derived from it
-	// will also see its page ctx canceled.
 	go func() {
 		<-browserCtx.Done()
-		log.Printf("[urldriver] BROWSER ctx done uid=%d err=%v", userID, browserCtx.Err())
+		log.Printf("[urldriver] BROWSER ctx done err=%v", browserCtx.Err())
 	}()
 
 	b := &userBrowser{browser: browser, launcher: l, cancel: cancel}
-	d.users[userID] = b
+	d.browser = b
 	return b, nil
 }
 
-// ErrUnavailable is returned when Chromium is not available.
-var ErrUnavailable = errors.New("chromium unavailable")
+var ErrUnavailable = errors.New("browser unavailable")
 
-// schemeAllowed reports whether a URL is in the v1 allow-list
-// (http/https only). Used to filter in-page navigation events before
-// writing back to url_string — file://, chrome://, etc. should not
-// rename a tile.
 func schemeAllowed(u string) bool {
-	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+	return len(u) >= 7 && (u[:7] == "http://" || (len(u) >= 8 && u[:8] == "https://"))
 }
 
-// resolveBinary returns the path to a usable Chromium binary, trying
-// configured > standard names on PATH. Returns "" if none exist.
-func resolveBinary(configured string) string {
-	if configured != "" {
-		if _, err := os.Stat(configured); err == nil {
-			return configured
+// resolveBinary returns the path to a usable browser binary.
+func resolveBinary(override string, candidates []string) string {
+	if override != "" {
+		if _, err := os.Stat(override); err == nil {
+			return override
 		}
 		return ""
 	}
-	for _, name := range []string{"chromium", "chromium-browser", "google-chrome", "chrome", "chrome-headless-shell"} {
+	for _, name := range candidates {
 		if p, err := exec.LookPath(name); err == nil {
 			return p
 		}

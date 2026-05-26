@@ -8,41 +8,9 @@
     html, body { margin: 0; padding: 0; height: 100%; background: #0c0d11; color: #d8d9de; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
     body { overflow: hidden; }
     #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
-    #login-overlay {
-      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-      background: #0c0d11; z-index: 10;
-    }
-    #login-card { background: #16181f; padding: 32px; border-radius: 6px; border: 1px solid #292c36; min-width: 280px; }
-    #login-card h1 { margin: 0 0 16px 0; font-size: 18px; font-weight: 500; color: #d8d9de; }
-    #login-card label { display: block; font-size: 12px; color: #8a8d97; margin-top: 12px; }
-    #login-card input[type=text], #login-card input[type=password] {
-      width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #292c36; background: #0c0d11; color: #d8d9de;
-      font-family: inherit; box-sizing: border-box; margin-top: 4px;
-    }
-    #login-card button {
-      margin-top: 16px; width: 100%; padding: 8px; border-radius: 4px; border: 0;
-      background: #4a6fff; color: white; font-family: inherit; cursor: pointer;
-    }
-    #login-card .err { color: #e0727a; margin-top: 12px; font-size: 12px; min-height: 16px; }
-    #login-card .hint { color: #6c6f78; margin-top: 12px; font-size: 11px; line-height: 1.4; }
   </style>
 </head>
 <body>
-  <div id="login-overlay">
-    <form id="login-card" autocomplete="off">
-      <h1>gridwell</h1>
-      <label for="username">user</label>
-      <input id="username" name="username" type="text" autocomplete="username" autofocus>
-      <label for="password">password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password">
-      <button id="login-button" type="submit">log in</button>
-      <div class="err" id="login-error"></div>
-      <div class="hint">
-        no signup form. create users on the server with
-        <code>gridwell adduser &lt;name&gt;</code>.
-      </div>
-    </form>
-  </div>
   <canvas id="canvas" tabindex="0"></canvas>
   <script src="/wasm_exec.js"></script>
   <script>

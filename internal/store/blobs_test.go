@@ -8,20 +8,20 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-func TestGetBlobChecksPermissionAndReturnsBytes(t *testing.T) {
+func TestGetBlobReturnsBytes(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
 
-	f, err := s.CreateFile(ctx, u.ID, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
+	f, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
 		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("payload"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	data, mime, err := s.GetBlob(ctx, u.ID, f.BlobID)
+	data, mime, err := s.GetBlob(ctx, f.BlobID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,42 +32,19 @@ func TestGetBlobChecksPermissionAndReturnsBytes(t *testing.T) {
 		t.Errorf("mime = %q", mime)
 	}
 
-	// Unknown blob.
-	if _, _, err := s.GetBlob(ctx, u.ID, 9999); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.GetBlob(ctx, 9999); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown: got %v", err)
-	}
-}
-
-func TestGetBlobDeniedWhenNoReadableNode(t *testing.T) {
-	s := newTestStore(t)
-	u := fixtureUser(t, s)
-	other, err := s.CreateUser(context.Background(), "bob", "p")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	f, err := s.CreateFile(ctx, u.ID, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("private"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// bob is not in alice's primary group and the default mode (0o640) gives
-	// "other" no read.
-	if _, _, err := s.GetBlob(ctx, other.ID, f.BlobID); !errors.Is(err, ErrPermissionDenied) {
-		t.Errorf("expected ErrPermissionDenied, got %v", err)
 	}
 }
 
 func TestSubscribeEventsReceivesPublish(t *testing.T) {
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
-	ch, cancel := s.SubscribeEvents(u.ID)
+	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
+	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

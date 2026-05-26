@@ -42,14 +42,14 @@ func newRecordingStore() *recordingStore {
 	}
 }
 
-func (r *recordingStore) SetURLPreview(_ context.Context, _, tileID int64, jpeg []byte) error {
+func (r *recordingStore) SetURLPreview(_ context.Context, tileID int64, jpeg []byte) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.previews[tileID] = jpeg
 	return nil
 }
 
-func (r *recordingStore) SetURLString(_ context.Context, _, tileID int64, newURL string) error {
+func (r *recordingStore) SetURLString(_ context.Context, tileID int64, newURL string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.urls[tileID] = append(r.urls[tileID], newURL)
@@ -82,8 +82,10 @@ func newDriverForTest(t *testing.T) (*Driver, *recordingStore) {
 		t.Fatal(err)
 	}
 	d := New(store, Config{
-		ProfileRoot:    profileRoot,
-		StreamInterval: 100 * time.Millisecond,
+		Browser:         "chromium",
+		ProfileOverride: profileRoot,
+		Headless:        true,
+		StreamInterval:  100 * time.Millisecond,
 	})
 	if !d.Available() {
 		_ = os.RemoveAll(profileRoot)
@@ -142,7 +144,7 @@ func TestIntegrationSessionRoundtrip(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1000, srv.URL, 800, 600)
+	s, err := d.OpenSession(1000, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -178,7 +180,7 @@ func TestIntegrationSessionCloseIdempotent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1001, srv.URL, 800, 600)
+	s, err := d.OpenSession(1001, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -198,7 +200,7 @@ func TestIntegrationSessionResize(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1002, srv.URL, 800, 600)
+	s, err := d.OpenSession(1002, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -226,7 +228,7 @@ func TestIntegrationSessionInputClick(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1003, srv.URL, 800, 600)
+	s, err := d.OpenSession(1003, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -271,7 +273,7 @@ func TestIntegrationSessionInputKeyboard(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1020, srv.URL, 800, 600)
+	s, err := d.OpenSession(1020, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -333,7 +335,7 @@ func TestIntegrationSessionNavigation(t *testing.T) {
 	defer srv.Close()
 	srvURL = srv.URL
 
-	s, err := d.OpenSession(1, 1004, srvURL+"/", 800, 600)
+	s, err := d.OpenSession(1004, srvURL+"/", 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -370,7 +372,7 @@ func TestIntegrationSessionDialogAutoDismiss(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1005, srv.URL, 800, 600)
+	s, err := d.OpenSession(1005, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -392,7 +394,7 @@ func TestIntegrationSessionPopupBlocked(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1006, srv.URL, 800, 600)
+	s, err := d.OpenSession(1006, srv.URL, 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -431,7 +433,7 @@ func TestIntegrationSessionSurvivesCrossOriginNav(t *testing.T) {
 	}))
 	defer srvA.Close()
 
-	s, err := d.OpenSession(1, 1010, srvA.URL+"/", 800, 600)
+	s, err := d.OpenSession(1010, srvA.URL+"/", 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}
@@ -486,7 +488,7 @@ func TestIntegrationSessionFailedLoad(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := d.OpenSession(1, 1007, srv.URL+"/missing", 800, 600)
+	s, err := d.OpenSession(1007, srv.URL+"/missing", 800, 600)
 	if err != nil {
 		t.Fatalf("OpenSession: %v", err)
 	}

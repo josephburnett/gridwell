@@ -9,8 +9,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// gridSequence is the sequence of grid ids from the user's root down to the
-// leaf grid the editing pane is in. grids[0] is always the user's root grid;
+// gridSequence is the sequence of grid ids from the root down to the leaf
+// grid the editing pane is in. grids[0] is always the current root grid;
 // grids[len-1] is the leaf. wells[i] is the well in grids[i] that points at
 // grids[i+1], so len(wells) == len(grids)-1.
 type gridSequence struct {
@@ -20,12 +20,12 @@ type gridSequence struct {
 
 // buildGridSequence validates the path and returns the sequence of grids and
 // path wells for it.
-func (s *Store) buildGridSequence(ctx context.Context, q gridReader, userID int64, p rpc.Path) (gridSequence, error) {
-	u, err := getUserQR(ctx, q, userID)
+func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path) (gridSequence, error) {
+	root, err := rootGridID(ctx, q)
 	if err != nil {
 		return gridSequence{}, err
 	}
-	seq := gridSequence{grids: []int64{u.RootGridID}}
+	seq := gridSequence{grids: []int64{root}}
 	for _, wellID := range p.WellIDs {
 		w, err := s.loadTile(ctx, q, wellID)
 		if err != nil {
@@ -45,25 +45,15 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, userID int6
 
 // preWriteResult describes the result of preWrite.
 type preWriteResult struct {
-	// GridID is the (possibly new, post-fork) leaf grid id where mutations
-	// must now apply.
-	GridID int64
-	// TargetTileID is the (possibly new) id of the input target node after
-	// any fork. Zero if no target was supplied.
+	GridID       int64
 	TargetTileID int64
-	// Events is a list of GridForked events to publish to subscribers
-	// after the transaction commits.
-	Events []rpc.Event
+	Events       []rpc.Event
 }
 
 // preWrite ensures that the leaf grid in the descent path is unshared,
-// forking grids up the path as needed so the editing pane has a private
-// chain. If a target tile id is supplied (non-zero), it must lie in the
-// leaf grid at call time; the returned TargetTileID is its post-fork id.
-//
-// preWrite must be called inside a transaction; it does not commit.
-func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc.Path, targetTileID int64) (*preWriteResult, error) {
-	seq, err := s.buildGridSequence(ctx, tx, userID, path)
+// forking grids up the path as needed.
+func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, path rpc.Path, targetTileID int64) (*preWriteResult, error) {
+	seq, err := s.buildGridSequence(ctx, tx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -77,15 +67,10 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 		if err != nil {
 			return nil, err
 		}
-		// Root has +1 in its refcount baseline; refcount==1 means no other
-		// well points at it. For non-root grids, refcount==1 means exactly
-		// one well points at it (the parent's well on this path).
 		if rc <= 1 {
 			break
 		}
 		numForks++
-		// Don't try to fork the root grid; the path's well above it is
-		// the user's root_grid_id anchor, which has no parent well.
 		if i == 0 {
 			return nil, fmt.Errorf("internal: root grid is shared (refcount=%d)", rc)
 		}
@@ -95,11 +80,8 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 		return &preWriteResult{GridID: seq.grids[len(seq.grids)-1], TargetTileID: targetTileID}, nil
 	}
 
-	// We will fork grids at indices [topForkIdx .. len-1].
 	topForkIdx := len(seq.grids) - numForks
 
-	// Prep the per-grid object_id of the path well (so we can find its
-	// copy after a fork by object_id rather than row id).
 	wellObjects := make([]string, len(seq.wells))
 	for i, wid := range seq.wells {
 		var obj string
@@ -108,7 +90,6 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 		}
 		wellObjects[i] = obj
 	}
-	// Object id of the target node, if any.
 	var targetObjectID string
 	if targetTileID != 0 {
 		err := tx.QueryRowContext(ctx, `SELECT object_id FROM tiles WHERE id = ?`, targetTileID).Scan(&targetObjectID)
@@ -122,17 +103,10 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 
 	events := []rpc.Event{}
 
-	// Walk shallowest-first so we can update the well in the grid above
-	// each fork, which has just been forked itself (or, for the topmost
-	// fork, is the unchanged parent grid).
-	parentWellID := int64(0) // the well above the current fork that we must redirect
+	parentWellID := int64(0)
 	if topForkIdx > 0 {
-		// Parent grid is unchanged. Its well to redirect is seq.wells[topForkIdx-1].
 		parentWellID = seq.wells[topForkIdx-1]
 	}
-
-	prevForkedGridID := int64(0) // tracks the new grid id from the previous (shallower) fork
-	_ = prevForkedGridID
 
 	for i := topForkIdx; i < len(seq.grids); i++ {
 		oldGridID := seq.grids[i]
@@ -141,20 +115,15 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 			return nil, fmt.Errorf("fork grid %d: %w", oldGridID, err)
 		}
 
-		// Redirect the parent well (which lives in the previous-iteration's
-		// new grid, or in the unchanged parent grid for the topmost fork)
-		// to point at newGridID.
 		if parentWellID != 0 {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET child_grid_id = ?, updated_at = ? WHERE id = ?`,
 				newGridID, s.now().Unix(), parentWellID); err != nil {
 				return nil, err
 			}
-			// The well used to point at oldGridID. Decrement its refcount.
 			if err := s.decRefcount(ctx, tx, oldGridID); err != nil {
 				return nil, err
 			}
-			// And bump the refcount on newGridID for the new pointer.
 			if err := s.incRefcount(ctx, tx, newGridID); err != nil {
 				return nil, err
 			}
@@ -164,12 +133,6 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 			})
 		}
 
-		// Set up parentWellID for the next iteration: the path well that
-		// points from this newly-forked grid down. It was copied during
-		// forkGrid; its old id was seq.wells[i] and its new id is in
-		// wellRemap. After this loop iteration, when we fork the next
-		// (deeper) grid, we will redirect this well to point at the
-		// newer grid id.
 		if i < len(seq.wells) {
 			oldWell := seq.wells[i]
 			newWell, ok := wellRemap[oldWell]
@@ -179,12 +142,9 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 			parentWellID = newWell
 		}
 
-		// Update grid sequence in-place so that subsequent iterations see
-		// the new id.
 		seq.grids[i] = newGridID
 	}
 
-	// Translate target node id if it was in a forked grid.
 	newTargetID := targetTileID
 	if targetTileID != 0 {
 		err := tx.QueryRowContext(ctx,
@@ -202,29 +162,18 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, userID int64, path rpc
 	}, nil
 }
 
-// forkGrid creates a new grid that is a copy of oldGridID. Returns the new
-// grid id and a mapping from old tile id to new tile id in the copy.
-// The new grid starts with refcount=0 (the caller must increment it as it
-// installs the well that points to it).
-//
-// For each well copied into the new grid, the child grid's refcount is
-// incremented (the new well shares the same child grid). The blob refcount
-// is similarly incremented for each file copied.
+// forkGrid creates a new grid that is a copy of oldGridID.
 func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int64, map[int64]int64, error) {
-	// Load the old grid's metadata.
 	old, err := s.loadGrid(ctx, tx, oldGridID)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	// Insert the new grid row. Same object_id (clone-distinct rows share
-	// lineage), refcount=0 to start (caller bumps it on install).
 	now := s.now().Unix()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (object_id, owner_id, group_id, mode, refcount, default_view_cx, default_view_cy, default_zoom, created_at)
-		 VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-		old.ObjectID, old.OwnerID, old.GroupID, old.Mode,
-		old.DefaultViewCx, old.DefaultViewCy, old.DefaultZoom, now)
+		`INSERT INTO grids (object_id, refcount, default_view_cx, default_view_cy, default_zoom, created_at)
+		 VALUES (?, 0, ?, ?, ?, ?)`,
+		old.ObjectID, old.DefaultViewCx, old.DefaultViewCy, old.DefaultZoom, now)
 	if err != nil {
 		return 0, nil, fmt.Errorf("insert grid: %w", err)
 	}
@@ -233,11 +182,10 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		return 0, nil, err
 	}
 
-	// Copy each node row, bumping child grid / blob refcounts as needed.
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom,
 		       child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
-		       owner_id, group_id, mode, created_at, updated_at
+		       created_at, updated_at
 		FROM tiles WHERE grid_id = ?`, oldGridID)
 	if err != nil {
 		return 0, nil, err
@@ -257,8 +205,6 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		blob                 sql.NullInt64
 		urlString            sql.NullString
 		previewJPEG          []byte
-		ownerID, groupID     int64
-		mode                 int32
 		createdAt, updatedAt int64
 	}
 	var copies []tileCopy
@@ -267,7 +213,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.typ, &nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
 			&nc.urlString, &nc.previewJPEG,
-			&nc.ownerID, &nc.groupID, &nc.mode, &nc.createdAt, &nc.updatedAt); err != nil {
+			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
 		copies = append(copies, nc)
@@ -281,11 +227,11 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
 				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
-				owner_id, group_id, mode, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY, nc.viewZoom,
 			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.urlString, nc.previewJPEG,
-			nc.ownerID, nc.groupID, nc.mode, nc.createdAt, now)
+			nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)
 		}
@@ -309,15 +255,11 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	return newGridID, remap, nil
 }
 
-// incRefcount increments a grid's refcount. Used when a well starts pointing
-// at it.
 func (s *Store) incRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	_, err := tx.ExecContext(ctx, `UPDATE grids SET refcount = refcount + 1 WHERE id = ?`, gridID)
 	return err
 }
 
-// decRefcount decrements a grid's refcount. If it reaches 0, the grid (and
-// everything inside it) is garbage collected.
 func (s *Store) decRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE grids SET refcount = refcount - 1 WHERE id = ?`, gridID); err != nil {
 		return err
@@ -332,8 +274,6 @@ func (s *Store) decRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error
 	return nil
 }
 
-// deleteGrid removes a grid row and all of its tiles, decrementing refcounts
-// on referenced child grids and blobs (recursively, possibly deleting them).
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id, type, child_grid_id, blob_id FROM tiles WHERE grid_id = ?`, gridID)
@@ -341,10 +281,10 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		return err
 	}
 	type ref struct {
-		id       int64
-		typ      string
-		child    sql.NullInt64
-		blob     sql.NullInt64
+		id    int64
+		typ   string
+		child sql.NullInt64
+		blob  sql.NullInt64
 	}
 	var refs []ref
 	for rows.Next() {
@@ -382,7 +322,6 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 	return nil
 }
 
-// decBlobRefcount decrements a blob's refcount; deletes if it reaches 0.
 func (s *Store) decBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount - 1 WHERE id = ?`, blobID); err != nil {
 		return err

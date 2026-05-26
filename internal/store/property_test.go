@@ -25,7 +25,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0xa5cea5ce, 0x42))
 
 	s := newTestStore(t)
-	u := fixtureUser(t, s)
+	root := rootID(t, s)
 	ctx := context.Background()
 
 	// Seed a 1×1 well so the user has somewhere to descend.
@@ -46,8 +46,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		})
 	}
 
-	w0, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: u.RootGridID, X: 0, Y: 0, W: 1, H: 1,
+	w0, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			// Create a well at a random spot in some live well's child grid
 			// or root.
 			parentPath := rpc.Path{}
-			gridID := u.RootGridID
+			gridID := root
 			// Sometimes descend.
 			if len(nodes) > 0 && rng.IntN(2) == 0 {
 				ln := nodes[rng.IntN(len(nodes))]
@@ -76,7 +76,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			y := int64(rng.IntN(20)) * 2
 			w := int64(1 + rng.IntN(2))
 			h := int64(1 + rng.IntN(2))
-			n, err := s.CreateWell(ctx, u.ID, &rpc.CreateWellRequest{
+			n, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 				Path: parentPath, ViewRect: largeView(), GridID: gridID, X: x, Y: y, W: w, H: h,
 			})
 			if err != nil {
@@ -94,9 +94,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			src := nodes[rng.IntN(len(nodes))]
 			x := int64(rng.IntN(20))*2 + 100 // bias to "open" area
 			y := int64(rng.IntN(20)) * 2
-			n, err := s.CloneTile(ctx, u.ID, &rpc.CloneTileRequest{
+			n, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 				Path: src.path, ViewRect: largeView(), TileID: src.id,
-				DestGridID: u.RootGridID, DestPath: rpc.Path{}, DestViewRect: largeView(),
+				DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
 				X: x, Y: y,
 			})
 			if err != nil {
@@ -115,7 +115,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			pick := nodes[pickIdx]
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
-			n, err := s.ResizeTile(ctx, u.ID, &rpc.ResizeTileRequest{
+			n, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
 				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 				X: pick.x, Y: pick.y, W: w, H: h,
 			})
@@ -137,7 +137,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
-			err := s.DeleteTile(ctx, u.ID, &rpc.DeleteTileRequest{
+			err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
 				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 			})
 			if err != nil && !isBenignPropError(err) {
@@ -172,7 +172,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
-			n, err := s.SetTileViewport(ctx, u.ID, &rpc.SetTileViewportRequest{
+			n, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
 				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
 				ViewX: int64(rng.IntN(50)), ViewY: int64(rng.IntN(50)),
 			})
@@ -254,6 +254,5 @@ var _ = fmt.Sprintf
 func isBenignPropError(err error) bool {
 	return errors.Is(err, ErrInvalidPath) ||
 		errors.Is(err, ErrNotFound) ||
-		errors.Is(err, ErrOverlap) ||
-		errors.Is(err, ErrPermissionDenied)
+		errors.Is(err, ErrOverlap)
 }

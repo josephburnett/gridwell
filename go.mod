@@ -5,8 +5,6 @@ go 1.26
 require (
 	github.com/coder/websocket v1.8.14
 	github.com/go-rod/rod v0.116.2
-	golang.org/x/crypto v0.51.0
-	golang.org/x/term v0.43.0
 	modernc.org/sqlite v1.34.4
 )
 

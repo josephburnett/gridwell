@@ -17,8 +17,6 @@ func main() {
 	switch cmd {
 	case "init":
 		os.Exit(cli.RunInit(args))
-	case "adduser":
-		os.Exit(cli.RunAddUser(args))
 	case "serve":
 		os.Exit(cli.RunServe(args))
 	case "-h", "--help", "help":
@@ -35,7 +33,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `gridwell — a spatial information system
 
 Usage:
-    gridwell init    [--db PATH]                       create the database and schema
-    gridwell adduser USERNAME [--db PATH]              create a user (interactive password)
-    gridwell serve   [--db PATH] [--addr ADDR]         run the server`)
+    gridwell init    [--db PATH]                        create the database
+    gridwell serve   [--db PATH] [--bind ADDR] [--browser NAME] [--browser-bin PATH]
+                                                        run the server`)
 }

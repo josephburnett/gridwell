@@ -16,19 +16,12 @@ import (
 )
 
 // urlStreamer is the subset of the URL driver this handler requires.
-//
-// OpenSession returns a urlSession (an interface) so the test fake can
-// substitute its own. *urldriver.Driver.OpenSession returns the
-// concrete *urldriver.Session, which satisfies urlSession by structural
-// typing; StreamerFromDriver provides the thin adapter.
 type urlStreamer interface {
 	Available() bool
-	OpenSession(userID, tileID int64, initialURL string, w, h int64) (urlSession, error)
+	OpenSession(tileID int64, initialURL string, w, h int64) (urlSession, error)
 }
 
-// urlSession is the per-tab handle the URLStream handler holds. Defined
-// here (not in urldriver) so the test fake can implement it without
-// dragging in chromedp.
+// urlSession is the per-tab handle the URLStream handler holds.
 type urlSession interface {
 	Input(ev urldriver.InputEvent) error
 	Resize(w, h int64) error
@@ -40,10 +33,7 @@ type urlSession interface {
 	Close()
 }
 
-// StreamerFromDriver adapts a *urldriver.Driver to the urlStreamer
-// interface. The adapter exists only because Go has no covariant
-// return types: Driver.OpenSession returns *Session, urlStreamer wants
-// urlSession.
+// StreamerFromDriver adapts a *urldriver.Driver to the urlStreamer interface.
 func StreamerFromDriver(d *urldriver.Driver) urlStreamer {
 	return &driverStreamer{d: d}
 }
@@ -51,21 +41,14 @@ func StreamerFromDriver(d *urldriver.Driver) urlStreamer {
 type driverStreamer struct{ d *urldriver.Driver }
 
 func (s *driverStreamer) Available() bool { return s.d.Available() }
-func (s *driverStreamer) OpenSession(u, t int64, url string, w, h int64) (urlSession, error) {
-	return s.d.OpenSession(u, t, url, w, h)
+func (s *driverStreamer) OpenSession(t int64, url string, w, h int64) (urlSession, error) {
+	return s.d.OpenSession(t, url, w, h)
 }
 
-// SetURLStreamer installs the streaming backend used by /rpc/URLStream
-// and getGrid's Live-stamping. Without one, /rpc/URLStream returns 503
-// and getGrid omits Live.
 func (s *Server) SetURLStreamer(d urlStreamer) {
 	s.urlStreamer = d
 }
 
-// urlStreamMessage is one Client→Server JSON message. Kinds:
-//   - "viewport": resize the tab to (Width, Height). MAY be sent at any
-//     time; sending it as the first message is recommended.
-//   - input kinds (see urldriver.InputEventKind): forwarded to the tab.
 type urlStreamMessage struct {
 	Kind      string  `json:"kind"`
 	X         float64 `json:"x,omitempty"`
@@ -79,37 +62,20 @@ type urlStreamMessage struct {
 	Height    int64   `json:"height,omitempty"`
 }
 
-// urlStreamServerMessage is one Server→Client text-frame JSON message.
-// Binary frames carry raw JPEG bytes and have no JSON wrapper.
 type urlStreamServerMessage struct {
 	Kind string `json:"kind"`
 	URL  string `json:"url,omitempty"`
 }
 
 const (
-	// Default viewport for sessions opened before the client sends its
-	// real pane size. Legacy clients (pre-Phase-2 wasm) never send
-	// viewport; they get 1280×800 just like the old fixed setup.
 	defaultViewportW = 1280
 	defaultViewportH = 800
 
-	// writeTimeout is generous because the wasm event loop is single-
-	// threaded — a slow page nav can wedge it long enough that the
-	// browser's WS receive buffer fills. The frame channel has
-	// newest-wins drop, so a slow client sees skipped frames, not a
-	// torn-down connection.
 	writeTimeout = 30 * time.Second
 )
 
-// urlStream is the /rpc/URLStream WebSocket handler. Authenticates the
-// caller, validates the tile, opens a Session, and bridges the
-// frame/nav/input streams.
+// urlStream is the /rpc/URLStream WebSocket handler.
 func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
-	uid, ok := s.resolveSession(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
 	if s.urlStreamer == nil || !s.urlStreamer.Available() {
 		http.Error(w, "chromium unavailable", http.StatusServiceUnavailable)
 		return
@@ -120,7 +86,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing or invalid tile_id", http.StatusBadRequest)
 		return
 	}
-	tile, err := s.store.GetTile(r.Context(), uid, tileID)
+	tile, err := s.store.GetTile(r.Context(), tileID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -131,8 +97,6 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// Local-dev convenience: production locks down via the
-		// same-origin cookie.
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
@@ -142,40 +106,31 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	session, err := s.urlStreamer.OpenSession(uid, tileID, tile.URLString, defaultViewportW, defaultViewportH)
+	session, err := s.urlStreamer.OpenSession(tileID, tile.URLString, defaultViewportW, defaultViewportH)
 	if err != nil {
-		log.Printf("[urlstream] open-err uid=%d tile=%d err=%v", uid, tileID, err)
+		log.Printf("[urlstream] open-err tile=%d err=%v", tileID, err)
 		_ = conn.Close(websocket.StatusInternalError, "open session failed")
 		return
 	}
-	log.Printf("[urlstream] open uid=%d tile=%d", uid, tileID)
+	log.Printf("[urlstream] open tile=%d", tileID)
 
-	// If the session's chromedp ctx dies on its own (the per-tab
-	// context-canceled gotcha), wake the reader so the WS closes
-	// promptly instead of looping on inputs that all fail. The client
-	// surfaces this as "page no longer active" — it does NOT
-	// auto-reconnect, because doing so silently throws away whatever
-	// in-page state the user was working on.
 	go func() {
 		<-session.Done()
 		cancel()
 	}()
 
 	writerDone := make(chan struct{})
-	go writeLoop(ctx, conn, session, uid, tileID, writerDone)
+	go writeLoop(ctx, conn, session, tileID, writerDone)
 
-	readLoop(ctx, conn, session, uid, tileID)
+	readLoop(ctx, conn, session, tileID)
 
 	cancel()
 	<-writerDone
 	_ = conn.Close(websocket.StatusNormalClosure, "")
-	s.closeSession(uid, tileID, session)
+	s.closeSession(tileID, session)
 }
 
-// writeLoop pumps Session frames and nav events to the WebSocket.
-// Exits when ctx is canceled (reader signaled stop) or when the
-// Session ends.
-func writeLoop(ctx context.Context, conn *websocket.Conn, session urlSession, uid, tileID int64, done chan<- struct{}) {
+func writeLoop(ctx context.Context, conn *websocket.Conn, session urlSession, tileID int64, done chan<- struct{}) {
 	defer close(done)
 	for {
 		select {
@@ -188,7 +143,7 @@ func writeLoop(ctx context.Context, conn *websocket.Conn, session urlSession, ui
 			err := conn.Write(wctx, websocket.MessageBinary, f)
 			wcancel()
 			if err != nil {
-				log.Printf("[urlstream] writer-exit uid=%d tile=%d kind=binary err=%v", uid, tileID, err)
+				log.Printf("[urlstream] writer-exit tile=%d kind=binary err=%v", tileID, err)
 				return
 			}
 		case n := <-session.Navs():
@@ -197,20 +152,18 @@ func writeLoop(ctx context.Context, conn *websocket.Conn, session urlSession, ui
 			err := conn.Write(wctx, websocket.MessageText, payload)
 			wcancel()
 			if err != nil {
-				log.Printf("[urlstream] writer-exit uid=%d tile=%d kind=nav err=%v", uid, tileID, err)
+				log.Printf("[urlstream] writer-exit tile=%d kind=nav err=%v", tileID, err)
 				return
 			}
 		}
 	}
 }
 
-// readLoop parses inbound JSON messages and dispatches them to the
-// Session. Returns when the WS errors (any reason) or ctx is canceled.
-func readLoop(ctx context.Context, conn *websocket.Conn, session urlSession, uid, tileID int64) {
+func readLoop(ctx context.Context, conn *websocket.Conn, session urlSession, tileID int64) {
 	for {
 		mt, data, err := conn.Read(ctx)
 		if err != nil {
-			log.Printf("[urlstream] reader-exit uid=%d tile=%d err=%v", uid, tileID, err)
+			log.Printf("[urlstream] reader-exit tile=%d err=%v", tileID, err)
 			return
 		}
 		if mt != websocket.MessageText {
@@ -218,55 +171,47 @@ func readLoop(ctx context.Context, conn *websocket.Conn, session urlSession, uid
 		}
 		var msg urlStreamMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			log.Printf("[urlstream] bad-json uid=%d tile=%d err=%v body=%q", uid, tileID, err, string(data))
+			log.Printf("[urlstream] bad-json tile=%d err=%v body=%q", tileID, err, string(data))
 			continue
 		}
 		if msg.Kind == "viewport" {
 			if err := session.Resize(msg.Width, msg.Height); err != nil {
-				log.Printf("[urlstream] resize-err uid=%d tile=%d w=%d h=%d err=%v", uid, tileID, msg.Width, msg.Height, err)
+				log.Printf("[urlstream] resize-err tile=%d w=%d h=%d err=%v", tileID, msg.Width, msg.Height, err)
 			}
 			continue
 		}
 		ev, ok := messageToInputEvent(msg)
 		if !ok {
-			log.Printf("[urlstream] unknown-kind uid=%d tile=%d kind=%q", uid, tileID, msg.Kind)
+			log.Printf("[urlstream] unknown-kind tile=%d kind=%q", tileID, msg.Kind)
 			continue
 		}
 		if err := session.Input(ev); err != nil {
-			// If the chromedp ctx is gone, every further Input will
-			// fail the same way. Exit so cleanup runs and the client
-			// observes the WS close.
 			if errors.Is(err, context.Canceled) {
-				log.Printf("[urlstream] session-dead uid=%d tile=%d", uid, tileID)
+				log.Printf("[urlstream] session-dead tile=%d", tileID)
 				return
 			}
-			log.Printf("[urlstream] forward-err uid=%d tile=%d kind=%s err=%v", uid, tileID, ev.Kind, err)
+			log.Printf("[urlstream] forward-err tile=%d kind=%s err=%v", tileID, ev.Kind, err)
 		}
 	}
 }
 
-// closeSession is the single cleanup point for a URL session:
-// CaptureFinal → SetURLPreview → SetURLString → Session.Close.
-// Idempotent because Session.Close itself is.
-func (s *Server) closeSession(uid, tileID int64, session urlSession) {
-	log.Printf("[urlstream] save-and-close uid=%d tile=%d", uid, tileID)
+func (s *Server) closeSession(tileID int64, session urlSession) {
+	log.Printf("[urlstream] save-and-close tile=%d", tileID)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if buf, err := session.CaptureFinal(ctx); err == nil && len(buf) > 0 {
-		if err := s.store.SetURLPreview(ctx, uid, tileID, buf); err != nil {
-			log.Printf("[urlstream] save-preview-err uid=%d tile=%d err=%v", uid, tileID, err)
+		if err := s.store.SetURLPreview(ctx, tileID, buf); err != nil {
+			log.Printf("[urlstream] save-preview-err tile=%d err=%v", tileID, err)
 		}
 	}
 	if u := session.LastURL(); u != "" {
-		if err := s.store.SetURLString(ctx, uid, tileID, u); err != nil {
-			log.Printf("[urlstream] save-url-err uid=%d tile=%d err=%v", uid, tileID, err)
+		if err := s.store.SetURLString(ctx, tileID, u); err != nil {
+			log.Printf("[urlstream] save-url-err tile=%d err=%v", tileID, err)
 		}
 	}
 	session.Close()
 }
 
-// messageToInputEvent maps the wire JSON to urldriver.InputEvent.
-// Returns ok=false for unknown kinds.
 func messageToInputEvent(m urlStreamMessage) (urldriver.InputEvent, bool) {
 	kind := urldriver.InputEventKind(m.Kind)
 	switch kind {

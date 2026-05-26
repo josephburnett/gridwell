@@ -972,7 +972,7 @@ func (a *App) startAscent(p *pane.Pane) {
 		// returns to their preferred viewport rather than a forced
 		// "well center, zoom 1" pose.
 		if level == 0 {
-			if g, ok := a.c.Grid(a.user.RootGridID); ok && g.Meta.DefaultZoom > 0 {
+			if g, ok := a.c.Grid(a.rootGridID); ok && g.Meta.DefaultZoom > 0 {
 				saved = &paneState{Cx: g.Meta.DefaultViewCx, Cy: g.Meta.DefaultViewCy, Zoom: g.Meta.DefaultZoom}
 			}
 		}
