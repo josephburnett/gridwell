@@ -221,7 +221,8 @@ func messageToInputEvent(m urlStreamMessage) (urldriver.InputEvent, bool) {
 		urldriver.InputMouseWheel,
 		urldriver.InputKeyDown,
 		urldriver.InputKeyUp,
-		urldriver.InputResize:
+		urldriver.InputResize,
+		urldriver.InputHistoryBack:
 	default:
 		return urldriver.InputEvent{}, false
 	}

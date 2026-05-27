@@ -569,6 +569,46 @@ func TestIntegrationSessionFollowsTargetBlank(t *testing.T) {
 	}
 }
 
+// TestIntegrationSessionHistoryBack pins the wire-level back-button:
+// the client sends InputHistoryBack, the driver dispatches history.back()
+// on the page, and the page reverts to the previous URL.
+func TestIntegrationSessionHistoryBack(t *testing.T) {
+	d, _ := newDriverForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		switch r.URL.Path {
+		case "/a":
+			_, _ = w.Write([]byte(`<!doctype html><title>A</title>`))
+		case "/b":
+			_, _ = w.Write([]byte(`<!doctype html><title>B</title>`))
+		}
+	}))
+	defer srv.Close()
+
+	s, err := d.OpenSession(1040, srv.URL+"/a", 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	time.Sleep(300 * time.Millisecond)
+
+	// Drive an in-tab navigation A → B via JS (no need for a real link;
+	// what we're testing is the back direction).
+	if _, err := s.page.Eval(`() => { location.href = "` + srv.URL + `/b" }`); err != nil {
+		t.Fatalf("nav forward: %v", err)
+	}
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "B" }) {
+		t.Fatalf("never reached B; title=%q", readTitle(s.page))
+	}
+
+	if err := s.Input(InputEvent{Kind: InputHistoryBack}); err != nil {
+		t.Fatalf("InputHistoryBack: %v", err)
+	}
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "A" }) {
+		t.Errorf("after back, title=%q, want \"A\"", readTitle(s.page))
+	}
+}
+
 // TestIntegrationSessionViewportSurvivesSwap pins the fix for a
 // regression where the tab opened via target="_blank" got Chromium's
 // default viewport instead of the tile's current pane size, producing

@@ -172,6 +172,12 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if p.FileFocus != 0 {
 		// URL stream: forward wheel as mouse_wheel.
 		if a.isURLDescent(p) {
+			if pointInPlus(r, sx, sy) {
+				// Wheel over the back-button chrome is swallowed: it's
+				// our UI, not the page's content.
+				args[0].Call("preventDefault")
+				return nil
+			}
 			if pointInPaneContent(r, sx, sy) {
 				vx, vy := paneStreamLocal(r, sx, sy)
 				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
@@ -296,9 +302,15 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if p.FileFocus != 0 {
 		// URL tile descent: clicks inside the pane content area forward
 		// to the streaming Chromium tab; clicks in the outer margin
-		// ascend. No toggle button (URL tiles have no text/rendered
-		// modes); the right-click gesture handles wake/capture.
+		// ascend. The lower-right back button is a Gridwell control
+		// and must be hit-tested before the forwarding path.
 		if a.isURLDescent(p) {
+			if pointInPlus(r, sx, sy) {
+				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+					Kind: urldriver.InputHistoryBack,
+				})
+				return nil
+			}
 			if !pointInPaneContent(r, sx, sy) {
 				a.startFileAscent(p)
 				return nil
@@ -439,6 +451,12 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// URL pane without the page seeing it.
 	if a.rightDrag == nil && a.dragging == nil {
 		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
+			// Don't broadcast moves into the back-button area; the
+			// page would see phantom cursor activity over an empty
+			// region of its viewport.
+			if pointInPlus(r, sx, sy) {
+				return nil
+			}
 			if pointInPaneContent(r, sx, sy) {
 				vx, vy := paneStreamLocal(r, sx, sy)
 				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
@@ -591,6 +609,11 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// URL-stream forwarding for the corresponding mouseup.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
+		// Back-button hit area: swallow the mouseup so the remote
+		// page doesn't receive a phantom release.
+		if pointInPlus(r, sx, sy) && args[0].Get("button").Int() == 0 {
+			return nil
+		}
 		if pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			vx, vy := paneStreamLocal(r, sx, sy)
 			a.sendURLStreamInput(p.ID, urldriver.InputEvent{

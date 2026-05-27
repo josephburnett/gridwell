@@ -394,6 +394,12 @@ func (s *Session) Input(ev InputEvent) error {
 		}.Call(page)
 	case InputResize:
 		return s.Resize(ev.Width, ev.Height)
+	case InputHistoryBack:
+		// Driving via JS rather than Page.navigateToHistoryEntry is
+		// equivalent and far simpler: same defaults (replace vs push,
+		// referer, etc.) as a user-initiated back navigation.
+		_, err := s.page.Eval(`() => history.back()`)
+		return err
 	default:
 		return fmt.Errorf("unknown input kind %q", ev.Kind)
 	}

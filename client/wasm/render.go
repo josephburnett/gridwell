@@ -304,10 +304,12 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
 	// In file-focus mode replace the + with a text/rendered toggle; the
-	// menu never opens here. URL tiles have no text/rendered modes, so
-	// no toggle button — they're driven by right-click instead.
+	// menu never opens here. URL tiles get a back-arrow button instead
+	// (history.back on the descended tab).
 	if p.FileFocus != 0 {
-		if !a.isURLDescent(p) {
+		if a.isURLDescent(p) {
+			a.drawURLBackButton(p, r)
+		} else {
 			a.drawFileToggleButton(p, r)
 		}
 	} else {
@@ -318,6 +320,36 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 			a.drawPalette(p, r)
 		}
 	}
+}
+
+// drawURLBackButton paints the lower-right button on a URL-tile descent.
+// Click → history.back() on the descended Chromium tab. Same circular
+// chrome as the + button so the position is muscle-memory-compatible.
+func (a *App) drawURLBackButton(p *pane.Pane, r paneRect) {
+	cx, cy := plusButtonCenter(r)
+	a.cctx.Set("fillStyle", colorPlusBg)
+	a.cctx.Call("beginPath")
+	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
+	a.cctx.Call("fill")
+	a.cctx.Set("strokeStyle", colorPaneBorder)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("stroke")
+
+	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
+	a.cctx.Set("strokeStyle", colorPlusFg)
+	a.cctx.Set("lineWidth", 2.0)
+	a.cctx.Set("lineCap", "round")
+	a.cctx.Set("lineJoin", "round")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("moveTo", cx+6, cy)
+	a.cctx.Call("lineTo", cx-6, cy)
+	a.cctx.Call("moveTo", cx-2, cy-5)
+	a.cctx.Call("lineTo", cx-6, cy)
+	a.cctx.Call("lineTo", cx-2, cy+5)
+	a.cctx.Call("stroke")
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Set("lineCap", "butt")
+	a.cctx.Set("lineJoin", "miter")
 }
 
 // drawFileToggleButton paints the lower-right button that switches a
