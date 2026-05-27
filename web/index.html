@@ -8,10 +8,77 @@
     html, body { margin: 0; padding: 0; height: 100%; background: #0c0d11; color: #d8d9de; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
     body { overflow: hidden; }
     #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+
+    /* Modal: centered card over a dim backdrop. Matches the canvas palette. */
+    .gw-modal {
+      position: fixed; inset: 0;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(12, 13, 17, 0.72);
+      z-index: 20;
+    }
+    .gw-modal.open { display: flex; }
+    .gw-modal .card {
+      background: #16181f;
+      border: 1px solid #292c36;
+      border-radius: 6px;
+      padding: 20px 24px;
+      min-width: 360px;
+      max-width: 80vw;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    }
+    .gw-modal h2 { margin: 0 0 16px 0; font-size: 14px; font-weight: 500; color: #d8d9de; letter-spacing: 0.04em; text-transform: lowercase; }
+    .gw-modal label { display: block; font-size: 11px; color: #8a8d97; margin-top: 4px; text-transform: lowercase; letter-spacing: 0.05em; }
+    .gw-modal input[type=text] {
+      width: 100%; padding: 8px 10px; margin-top: 6px;
+      border-radius: 4px; border: 1px solid #292c36;
+      background: #0c0d11; color: #d8d9de;
+      font-family: inherit; font-size: 13px;
+      box-sizing: border-box;
+      outline: none;
+    }
+    .gw-modal input[type=text]:focus { border-color: #4a6fff; }
+    .gw-modal .err {
+      color: #e0727a;
+      font-size: 11px;
+      min-height: 14px;
+      margin-top: 8px;
+    }
+    .gw-modal .actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+      margin-top: 16px;
+    }
+    .gw-modal button {
+      padding: 7px 14px;
+      border-radius: 4px;
+      border: 1px solid #292c36;
+      background: #1c1f29;
+      color: #d8d9de;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      text-transform: lowercase;
+    }
+    .gw-modal button:hover { background: #232634; }
+    .gw-modal button.primary { background: #4a6fff; border-color: #4a6fff; color: white; }
+    .gw-modal button.primary:hover { background: #5b7eff; }
   </style>
 </head>
 <body>
   <canvas id="canvas" tabindex="0"></canvas>
+
+  <div id="gw-url-modal" class="gw-modal">
+    <form id="gw-url-form" class="card" autocomplete="off">
+      <h2>new url tile</h2>
+      <label for="gw-url-input">url</label>
+      <input id="gw-url-input" type="text" placeholder="example.com" spellcheck="false">
+      <div class="err" id="gw-url-error"></div>
+      <div class="actions">
+        <button type="button" id="gw-url-cancel">cancel</button>
+        <button type="submit" id="gw-url-submit" class="primary">create</button>
+      </div>
+    </form>
+  </div>
+
   <script src="/wasm_exec.js"></script>
   <script>
     (async () => {

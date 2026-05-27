@@ -1463,20 +1463,20 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	// Every other template commits immediately with the snap-and-
 	// create gesture wells use.
 	if d.template == tplURL {
-		val := js.Global().Call("prompt", "URL:")
 		a.ghost = nil
-		if val.IsNull() || val.IsUndefined() {
-			a.draw()
-			return
-		}
-		s := val.String()
-		if s == "" {
-			a.draw()
-			return
-		}
-		a.createAtCell(destPane, destRect, "file", "text/uri-list", []byte(s), dropX, dropY)
-		a.menuOpen = false
 		a.draw()
+		dp, dr := destPane, destRect
+		dx, dy := dropX, dropY
+		a.openURLModal(
+			func(url string) {
+				a.createAtCell(dp, dr, "file", "text/uri-list", []byte(url), dx, dy)
+				a.menuOpen = false
+				a.draw()
+			},
+			func() {
+				a.draw()
+			},
+		)
 		return
 	}
 
