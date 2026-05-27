@@ -4,6 +4,8 @@ package main
 
 import (
 	"syscall/js"
+
+	"github.com/josephburnett/gridwell/client/urlnorm"
 )
 
 // openURLModal shows the URL-entry overlay and invokes onSubmit with the
@@ -49,7 +51,7 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 
 	commit := func() {
 		raw := input.Get("value").String()
-		url, err := normalizeURL(raw)
+		url, err := urlnorm.Normalize(raw)
 		if err != nil {
 			errEl.Set("textContent", err.Error())
 			input.Call("focus")

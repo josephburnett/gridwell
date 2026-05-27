@@ -1,8 +1,8 @@
-package main
+package urlnorm
 
 import "testing"
 
-func TestNormalizeURL(t *testing.T) {
+func TestNormalize(t *testing.T) {
 	cases := []struct {
 		in      string
 		want    string
@@ -36,19 +36,19 @@ func TestNormalizeURL(t *testing.T) {
 		{"example", "", true},
 	}
 	for _, c := range cases {
-		got, err := normalizeURL(c.in)
+		got, err := Normalize(c.in)
 		if c.wantErr {
 			if err == nil {
-				t.Errorf("normalizeURL(%q) = %q, want error", c.in, got)
+				t.Errorf("Normalize(%q) = %q, want error", c.in, got)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("normalizeURL(%q) error %v, want %q", c.in, err, c.want)
+			t.Errorf("Normalize(%q) error %v, want %q", c.in, err, c.want)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("normalizeURL(%q) = %q, want %q", c.in, got, c.want)
+			t.Errorf("Normalize(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

@@ -16,11 +16,15 @@ import (
 )
 
 // Session is one Chromium tab owned by one URL stream.
+//
+// The "tab" follows clicks across new-tab boundaries: when the current page
+// opens a new tab (target="_blank", window.open, middle-click), the Session
+// attaches to the new tab and closes the old one. From the user's
+// perspective the URL tile is always "where I just clicked to."
 type Session struct {
 	tileID int64
 
-	page       *rod.Page
-	pageCancel context.CancelFunc
+	browser *rod.Browser
 
 	streamInterval time.Duration
 
@@ -33,8 +37,11 @@ type Session struct {
 	closeOnce sync.Once
 	done      chan struct{}
 
-	mu      sync.Mutex
-	lastURL string
+	mu              sync.Mutex
+	lastURL         string
+	page            *rod.Page          // current tab, derived via WithCancel
+	pageCancel      context.CancelFunc // cancels page-level listeners
+	currentTargetID proto.TargetTargetID
 }
 
 // OpenSession spawns a Chromium tab for tileID, navigates to initialURL,
@@ -61,26 +68,25 @@ func (d *Driver) OpenSession(tileID int64, initialURL string, w, h int64) (*Sess
 	page, cancel := rawPage.WithCancel()
 
 	s := &Session{
-		tileID:         tileID,
-		page:           page,
-		pageCancel:     cancel,
-		streamInterval: d.cfg.StreamInterval,
-		frames:         make(chan []byte, 4),
-		navs:           make(chan string, 8),
-		stopFrames:     make(chan struct{}),
-		framesDone:     make(chan struct{}),
-		done:           make(chan struct{}),
-		lastURL:        initialURL,
+		tileID:          tileID,
+		browser:         browser.browser,
+		streamInterval:  d.cfg.StreamInterval,
+		frames:          make(chan []byte, 4),
+		navs:            make(chan string, 8),
+		stopFrames:      make(chan struct{}),
+		framesDone:      make(chan struct{}),
+		done:            make(chan struct{}),
+		lastURL:         initialURL,
+		page:            page,
+		pageCancel:      cancel,
+		currentTargetID: rawPage.TargetID,
 	}
 
-	go func() {
-		<-rawPage.GetContext().Done()
-		log.Printf("[urldriver] page ctx done tile=%d err=%v",
-			tileID, rawPage.GetContext().Err())
-		s.Close()
-	}()
-
-	s.installListeners(browser.browser, rawPage.TargetID)
+	// Browser-level listeners survive page swaps and are installed once.
+	s.installBrowserListeners()
+	// Page-level listeners are tied to a specific *rod.Page; reinstalled
+	// after every swap.
+	s.installPageListeners()
 
 	if err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
 		Width: int(w), Height: int(h), DeviceScaleFactor: 1,
@@ -98,12 +104,74 @@ func (d *Driver) OpenSession(tileID int64, initialURL string, w, h int64) (*Sess
 	return s, nil
 }
 
-func (s *Session) installListeners(browser *rod.Browser, targetID proto.TargetTargetID) {
-	go s.page.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
-		_ = proto.PageHandleJavaScriptDialog{Accept: false}.Call(s.page)
+// installBrowserListeners subscribes to browser-level CDP events that we
+// care about across the lifetime of this Session, regardless of which tab
+// the session is currently bound to.
+func (s *Session) installBrowserListeners() {
+	// New tab opened by our current page (target="_blank", window.open,
+	// middle-click). Follow it.
+	go s.browser.EachEvent(func(e *proto.TargetTargetCreated) {
+		if e.TargetInfo == nil || e.TargetInfo.Type != "page" {
+			return
+		}
+		s.mu.Lock()
+		currentID := s.currentTargetID
+		s.mu.Unlock()
+		if e.TargetInfo.OpenerID != currentID {
+			return
+		}
+		s.swapToTarget(e.TargetInfo.TargetID, e.TargetInfo.URL)
 	})()
 
-	go s.page.EachEvent(func(e *proto.PageFrameNavigated) {
+	// Current tab destroyed (renderer gone, external Close.target call).
+	// Old tabs we close ourselves during a swap are filtered out because
+	// we update currentTargetID before issuing the close.
+	go s.browser.EachEvent(func(e *proto.TargetTargetDestroyed) {
+		s.mu.Lock()
+		currentID := s.currentTargetID
+		s.mu.Unlock()
+		if e.TargetID != currentID {
+			return
+		}
+		log.Printf("[urldriver] current target destroyed tile=%d", s.tileID)
+		s.Close()
+	})()
+
+	// Renderer crash on the current tab.
+	go s.browser.EachEvent(func(e *proto.TargetTargetCrashed) {
+		s.mu.Lock()
+		currentID := s.currentTargetID
+		s.mu.Unlock()
+		if e.TargetID != currentID {
+			return
+		}
+		log.Printf("[urldriver] page crashed tile=%d status=%s errorCode=%d",
+			s.tileID, e.Status, e.ErrorCode)
+		s.Close()
+	})()
+
+	// Browser process death: tear ourselves down so the WS handler
+	// observes our Done() and reports the failure to the client.
+	go func() {
+		<-s.browser.GetContext().Done()
+		log.Printf("[urldriver] browser ctx done tile=%d", s.tileID)
+		s.Close()
+	}()
+}
+
+// installPageListeners subscribes to events on s.page. Must be re-called
+// after every page swap; the old goroutines exit when the prior page's
+// context is canceled.
+func (s *Session) installPageListeners() {
+	s.mu.Lock()
+	page := s.page
+	s.mu.Unlock()
+
+	go page.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
+		_ = proto.PageHandleJavaScriptDialog{Accept: false}.Call(page)
+	})()
+
+	go page.EachEvent(func(e *proto.PageFrameNavigated) {
 		if e.Frame == nil || e.Frame.ParentID != "" {
 			return
 		}
@@ -119,15 +187,96 @@ func (s *Session) installListeners(browser *rod.Browser, targetID proto.TargetTa
 		default:
 		}
 	})()
+}
 
-	go browser.EachEvent(func(e *proto.TargetTargetCrashed) {
-		if e.TargetID != targetID {
+// swapToTarget retargets the Session at newTargetID, closes the previous
+// tab, and re-installs page-level listeners on the new page.
+//
+// initialURL is taken from the TargetInfo and used as the immediate
+// lastURL until PageFrameNavigated catches up — without this, a fast
+// WS-close after a "click _blank → done" sequence would persist the
+// stale source URL on the tile.
+func (s *Session) swapToTarget(newTargetID proto.TargetTargetID, initialURL string) {
+	newRaw, err := s.browser.PageFromTarget(newTargetID)
+	if err != nil {
+		log.Printf("[urldriver] page from target %s tile=%d: %v", newTargetID, s.tileID, err)
+		return
+	}
+	newPage, newCancel := newRaw.WithCancel()
+
+	s.mu.Lock()
+	oldCancel := s.pageCancel
+	oldTargetID := s.currentTargetID
+	s.page = newPage
+	s.pageCancel = newCancel
+	s.currentTargetID = newTargetID
+	if schemeAllowed(initialURL) {
+		s.lastURL = initialURL
+	}
+	s.mu.Unlock()
+
+	// Inject hardening into the new tab. The initial nav of the new tab
+	// is already in flight and may not see this, but any subsequent
+	// in-tab nav will. Best-effort.
+	if _, err := newPage.EvalOnNewDocument(hardeningJS); err != nil {
+		log.Printf("[urldriver] hardening on new tab tile=%d: %v", s.tileID, err)
+	}
+
+	// Wire up dialog + nav listeners on the new page first, THEN cancel
+	// the old listeners. Reversing the order would create a brief window
+	// where in-flight events on the old page get dispatched but nothing
+	// is listening for the equivalents on the new page.
+	s.installPageListeners()
+	oldCancel()
+
+	if _, err := (proto.TargetCloseTarget{TargetID: oldTargetID}).Call(s.browser); err != nil {
+		log.Printf("[urldriver] close old target %s tile=%d: %v", oldTargetID, s.tileID, err)
+	}
+
+	if schemeAllowed(initialURL) {
+		select {
+		case s.navs <- initialURL:
+		default:
+		}
+	}
+
+	// The TargetCreated event often carries url="" because Chromium
+	// creates the target before navigating. Our PageFrameNavigated
+	// listener can also miss the initial navigation if it fired before
+	// we subscribed (a race we can't tighten without losing events
+	// on real swaps). Poll the new page's TargetInfo briefly so the
+	// tile reflects the destination URL even when both signals miss it.
+	go s.refreshURLAfterSwap(newPage)
+
+	log.Printf("[urldriver] swapped tile=%d from %s to %s url=%q",
+		s.tileID, oldTargetID, newTargetID, initialURL)
+}
+
+// refreshURLAfterSwap polls the new page's TargetInfo URL until it's a
+// real http(s) URL (or timeout). Updates lastURL and pushes a nav event.
+func (s *Session) refreshURLAfterSwap(page *rod.Page) {
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		info, err := page.Info()
+		if err != nil {
 			return
 		}
-		log.Printf("[urldriver] page crashed tile=%d status=%s errorCode=%d",
-			s.tileID, e.Status, e.ErrorCode)
-		s.Close()
-	})()
+		if schemeAllowed(info.URL) {
+			s.mu.Lock()
+			if s.lastURL == info.URL {
+				s.mu.Unlock()
+				return
+			}
+			s.lastURL = info.URL
+			s.mu.Unlock()
+			select {
+			case s.navs <- info.URL:
+			default:
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func (s *Session) frameLoop() {
@@ -139,11 +288,15 @@ func (s *Session) frameLoop() {
 		select {
 		case <-s.stopFrames:
 			return
-		case <-s.page.GetContext().Done():
-			return
 		case <-timer.C:
 		}
-		buf, err := s.page.Timeout(s.streamInterval+1*time.Second).
+		// Read s.page under lock so a concurrent swap doesn't tear it
+		// out from under us. Errors from screenshotting (e.g. when a
+		// page is mid-swap) are tolerated; we just skip the frame.
+		s.mu.Lock()
+		page := s.page
+		s.mu.Unlock()
+		buf, err := page.Timeout(s.streamInterval+1*time.Second).
 			Screenshot(false, &proto.PageCaptureScreenshot{
 				Format:  proto.PageCaptureScreenshotFormatJpeg,
 				Quality: &quality,

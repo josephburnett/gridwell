@@ -1,4 +1,6 @@
-package main
+// Package urlnorm normalizes user-typed URL strings so the WASM client can
+// validate before submitting to the server's strict http/https check.
+package urlnorm
 
 import (
 	"errors"
@@ -6,10 +8,10 @@ import (
 	"strings"
 )
 
-// normalizeURL trims the input, prepends "https://" when no scheme is
+// Normalize trims the input, prepends "https://" when no scheme is
 // present, and validates the result is a plausible http(s) URL. Returns
 // a user-facing error message on rejection.
-func normalizeURL(raw string) (string, error) {
+func Normalize(raw string) (string, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return "", errors.New("please enter a URL")

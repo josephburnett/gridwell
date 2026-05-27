@@ -505,3 +505,66 @@ func TestIntegrationSessionFailedLoad(t *testing.T) {
 		t.Fatal("no frame after 404 within 15s")
 	}
 }
+
+// TestIntegrationSessionFollowsTargetBlank verifies that clicking a
+// target="_blank" link causes the session to swap to the new tab and
+// close the old one. Without this swap, target="_blank" links open
+// invisibly in Xvfb and the user perceives the click as dead.
+func TestIntegrationSessionFollowsTargetBlank(t *testing.T) {
+	d, _ := newDriverForTest(t)
+
+	// Destination page served by srvB. The session should end up here.
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>B-after-blank</title>`))
+	}))
+	defer srvB.Close()
+
+	// Source page served by srvA, with a target="_blank" link to srvB.
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>A-before</title>
+<body>
+<a id="link" target="_blank" href="` + srvB.URL + `/" style="position:fixed;left:0;top:0;width:200px;height:200px;font-size:40px;display:block">go</a>
+</body>`))
+	}))
+	defer srvA.Close()
+
+	s, err := d.OpenSession(1030, srvA.URL+"/", 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	time.Sleep(500 * time.Millisecond)
+
+	for _, ev := range []InputEvent{
+		{Kind: InputMouseMove, X: 100, Y: 100},
+		{Kind: InputMouseDown, X: 100, Y: 100, Button: MouseButtonLeft},
+		{Kind: InputMouseUp, X: 100, Y: 100, Button: MouseButtonLeft},
+	} {
+		if err := s.Input(ev); err != nil {
+			t.Fatalf("click Input %s: %v", ev.Kind, err)
+		}
+	}
+
+	if !waitFor(10*time.Second, func() bool { return s.LastURL() == srvB.URL+"/" }) {
+		t.Fatalf("never followed _blank to %q; LastURL=%q", srvB.URL+"/", s.LastURL())
+	}
+	if !waitFor(5*time.Second, func() bool { return readTitle(s.page) == "B-after-blank" }) {
+		t.Errorf("post-swap title = %q, want \"B-after-blank\"", readTitle(s.page))
+	}
+
+	// Only one page should remain in the browser — the new one. The
+	// original (with target="_blank" anchor) must have been closed.
+	pages, err := s.browser.Pages()
+	if err != nil {
+		t.Fatalf("list pages: %v", err)
+	}
+	if len(pages) != 1 {
+		titles := make([]string, 0, len(pages))
+		for _, p := range pages {
+			titles = append(titles, readTitle(p))
+		}
+		t.Errorf("got %d pages, want 1: titles=%v", len(pages), titles)
+	}
+}
