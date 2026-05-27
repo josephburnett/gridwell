@@ -66,18 +66,18 @@ func RunServe(args []string) int {
 		fmt.Printf("gridwell: Xvfb ready on %s (%dx%d)\n", display, w, h)
 	}
 
-	driver := urldriver.New(s, urldriver.Config{
+	driver, err := urldriver.New(s, urldriver.Config{
 		Browser:        *browserName,
 		BinaryOverride: *browserBin,
 		Display:        display,
 	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
 	s.SetURLDriver(driver)
 	defer driver.Shutdown()
-	if driver.Available() {
-		fmt.Printf("gridwell: %s driver ready\n", *browserName)
-	} else {
-		fmt.Printf("gridwell: %s not found — URL tiles cannot be woken; existing previews still render\n", *browserName)
-	}
+	fmt.Printf("gridwell: %s driver ready\n", *browserName)
 
 	srv := server.New(s, server.Config{StaticDir: *staticDir})
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))

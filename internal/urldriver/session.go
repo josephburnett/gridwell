@@ -40,9 +40,6 @@ type Session struct {
 // OpenSession spawns a Chromium tab for tileID, navigates to initialURL,
 // and sets the viewport to w×h.
 func (d *Driver) OpenSession(tileID int64, initialURL string, w, h int64) (*Session, error) {
-	if !d.available {
-		return nil, ErrUnavailable
-	}
 	if w <= 0 {
 		w = d.cfg.ViewportWidth
 	}

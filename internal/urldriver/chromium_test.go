@@ -28,22 +28,19 @@ func (f *fakeStore) SetURLString(_ context.Context, tileID int64, newURL string)
 	return nil
 }
 
-func TestDriverUnavailableWithoutBinary(t *testing.T) {
-	d := New(&fakeStore{}, Config{
+func TestNewErrorsOnMissingBinary(t *testing.T) {
+	_, err := New(&fakeStore{}, Config{
 		Browser:        "chromium",
 		BinaryOverride: "/no/such/chromium-binary",
 	})
-	if d.Available() {
-		t.Fatal("Available() = true; want false when binary missing")
-	}
-	if _, err := d.OpenSession(1, "https://example.com", 800, 600); err != ErrUnavailable {
-		t.Errorf("OpenSession on unavailable driver: got %v, want ErrUnavailable", err)
+	if err == nil {
+		t.Fatal("New returned nil; want error when binary missing")
 	}
 }
 
-func TestUnknownBrandUnavailable(t *testing.T) {
-	d := New(&fakeStore{}, Config{Browser: "no-such-brand"})
-	if d.Available() {
-		t.Fatal("Available() = true; want false for unknown brand")
+func TestNewErrorsOnUnknownBrand(t *testing.T) {
+	_, err := New(&fakeStore{}, Config{Browser: "no-such-brand"})
+	if err == nil {
+		t.Fatal("New returned nil; want error for unknown brand")
 	}
 }

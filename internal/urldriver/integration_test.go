@@ -81,15 +81,15 @@ func newDriverForTest(t *testing.T) (*Driver, *recordingStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := New(store, Config{
+	d, err := New(store, Config{
 		Browser:         "chromium",
 		ProfileOverride: profileRoot,
 		Headless:        true,
 		StreamInterval:  100 * time.Millisecond,
 	})
-	if !d.Available() {
+	if err != nil {
 		_ = os.RemoveAll(profileRoot)
-		t.Skip("driver reports unavailable despite Chromium on PATH")
+		t.Skipf("driver unavailable: %v", err)
 	}
 	t.Cleanup(func() {
 		d.Shutdown()

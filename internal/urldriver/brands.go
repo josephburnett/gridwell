@@ -37,7 +37,9 @@ var brands = map[string]brand{
 }
 
 // BrandNames returns the supported brand names (for CLI usage messages).
-func BrandNames() []string {
+func BrandNames() []string { return brandNames() }
+
+func brandNames() []string {
 	out := make([]string, 0, len(brands))
 	for k := range brands {
 		out = append(out, k)

@@ -68,7 +68,6 @@ type Driver struct {
 	cfg   Config
 	store PreviewWriter
 
-	available  bool
 	binaryPath string
 	brandFlags []string
 	profileDir string
@@ -102,10 +101,10 @@ const hardeningJS = `
 })();
 `
 
-// New constructs a Driver. Probes for the configured browser at construction
-// time; if not found, Available() returns false and OpenSession returns
-// ErrUnavailable.
-func New(store PreviewWriter, cfg Config) *Driver {
+// New constructs a Driver. Returns an error if the requested browser brand
+// is unknown, the binary can't be found, or $HOME can't be resolved — never
+// silently falls back. Callers must abort on error.
+func New(store PreviewWriter, cfg Config) (*Driver, error) {
 	if cfg.StreamInterval <= 0 {
 		cfg.StreamInterval = 100 * time.Millisecond
 	}
@@ -118,35 +117,39 @@ func New(store PreviewWriter, cfg Config) *Driver {
 	if cfg.Browser == "" {
 		cfg.Browser = "chromium"
 	}
-	d := &Driver{cfg: cfg, store: store}
 
 	b, ok := brands[cfg.Browser]
 	if !ok {
-		log.Printf("[urldriver] unknown browser %q", cfg.Browser)
-		return d
+		return nil, fmt.Errorf("unknown browser %q (known: %v)", cfg.Browser, brandNames())
 	}
-	d.binaryPath = resolveBinary(cfg.BinaryOverride, b.binaryNames)
-	if d.binaryPath == "" {
-		log.Printf("[urldriver] browser binary not found for %q (tried %v)", cfg.Browser, b.binaryNames)
-		return d
+	binaryPath := resolveBinary(cfg.BinaryOverride, b.binaryNames)
+	if binaryPath == "" {
+		if cfg.BinaryOverride != "" {
+			return nil, fmt.Errorf("browser binary not found at %q (from --browser-bin)", cfg.BinaryOverride)
+		}
+		return nil, fmt.Errorf("%s binary not found on PATH (tried %v)", cfg.Browser, b.binaryNames)
 	}
-	if cfg.ProfileOverride != "" {
-		d.profileDir = cfg.ProfileOverride
-	} else {
+	profileDir := cfg.ProfileOverride
+	if profileDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			log.Printf("[urldriver] cannot resolve $HOME: %v", err)
-			return d
+			return nil, fmt.Errorf("resolve $HOME: %w", err)
 		}
-		d.profileDir = filepath.Join(home, b.userDataDir)
+		profileDir = filepath.Join(home, b.userDataDir)
 	}
-	d.brandFlags = b.extraFlags
-	d.available = true
-	return d
+
+	return &Driver{
+		cfg:        cfg,
+		store:      store,
+		binaryPath: binaryPath,
+		profileDir: profileDir,
+		brandFlags: b.extraFlags,
+	}, nil
 }
 
-// Available reports whether the driver is functional.
-func (d *Driver) Available() bool { return d.available }
+// Available reports whether the driver is functional. Always true for any
+// Driver returned by New (errors are surfaced at construction time).
+func (d *Driver) Available() bool { return d != nil }
 
 // Shutdown tears down the Chromium subprocess.
 func (d *Driver) Shutdown() {

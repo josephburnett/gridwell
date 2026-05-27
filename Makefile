@@ -34,7 +34,12 @@ test-cover:
 	go test -cover ./...
 
 serve: build
-	$(BIN) serve --db ./gridwell.db
+	$(BIN) serve --db ./gridwell.db --browser $(BROWSER) $(SERVE_FLAGS)
+
+# `make serve BROWSER=brave` selects the browser brand. SERVE_FLAGS passes any
+# extra flags through, e.g. `make serve BROWSER=brave SERVE_FLAGS="--bind 0.0.0.0:8080"`.
+BROWSER ?= chromium
+SERVE_FLAGS ?=
 
 clean:
 	rm -f $(BIN) $(WASM) $(WASM_EXEC)
