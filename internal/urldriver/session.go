@@ -42,6 +42,9 @@ type Session struct {
 	page            *rod.Page          // current tab, derived via WithCancel
 	pageCancel      context.CancelFunc // cancels page-level listeners
 	currentTargetID proto.TargetTargetID
+	// Most recent viewport set via Resize / Input(InputResize) / OpenSession.
+	// Replayed after every tab swap so the new tab matches the tile size.
+	viewportW, viewportH int64
 }
 
 // OpenSession spawns a Chromium tab for tileID, navigates to initialURL,
@@ -80,6 +83,8 @@ func (d *Driver) OpenSession(tileID int64, initialURL string, w, h int64) (*Sess
 		page:            page,
 		pageCancel:      cancel,
 		currentTargetID: rawPage.TargetID,
+		viewportW:       w,
+		viewportH:       h,
 	}
 
 	// Browser-level listeners survive page swaps and are installed once.
@@ -213,7 +218,19 @@ func (s *Session) swapToTarget(newTargetID proto.TargetTargetID, initialURL stri
 	if schemeAllowed(initialURL) {
 		s.lastURL = initialURL
 	}
+	vw, vh := s.viewportW, s.viewportH
 	s.mu.Unlock()
+
+	// Apply the current viewport before anything else: the new tab is
+	// born at Chromium's default and a tile size mismatch shows up as a
+	// stretched / letterboxed JPEG until the user reloads.
+	if vw > 0 && vh > 0 {
+		if err := newPage.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+			Width: int(vw), Height: int(vh), DeviceScaleFactor: 1,
+		}); err != nil {
+			log.Printf("[urldriver] viewport on new tab tile=%d: %v", s.tileID, err)
+		}
+	}
 
 	// Inject hardening into the new tab. The initial nav of the new tab
 	// is already in flight and may not see this, but any subsequent
@@ -386,7 +403,12 @@ func (s *Session) Resize(w, h int64) error {
 	if w <= 0 || h <= 0 {
 		return fmt.Errorf("invalid resize %dx%d", w, h)
 	}
-	return s.page.Timeout(2 * time.Second).SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+	s.mu.Lock()
+	page := s.page
+	s.viewportW = w
+	s.viewportH = h
+	s.mu.Unlock()
+	return page.Timeout(2 * time.Second).SetViewport(&proto.EmulationSetDeviceMetricsOverride{
 		Width: int(w), Height: int(h), DeviceScaleFactor: 1,
 	})
 }

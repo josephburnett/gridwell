@@ -568,3 +568,66 @@ func TestIntegrationSessionFollowsTargetBlank(t *testing.T) {
 		t.Errorf("got %d pages, want 1: titles=%v", len(pages), titles)
 	}
 }
+
+// TestIntegrationSessionViewportSurvivesSwap pins the fix for a
+// regression where the tab opened via target="_blank" got Chromium's
+// default viewport instead of the tile's current pane size, producing
+// a stretched JPEG until the user reloaded by ascending/descending.
+func TestIntegrationSessionViewportSurvivesSwap(t *testing.T) {
+	d, _ := newDriverForTest(t)
+
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>B</title>`))
+	}))
+	defer srvB.Close()
+
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>A</title>
+<body><a id="link" target="_blank" href="` + srvB.URL + `/" style="position:fixed;left:0;top:0;width:200px;height:200px;display:block">go</a></body>`))
+	}))
+	defer srvA.Close()
+
+	s, err := d.OpenSession(1031, srvA.URL+"/", 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	time.Sleep(300 * time.Millisecond)
+
+	// Simulate a pane resize before the click — the tile is now 1234x789.
+	if err := s.Resize(1234, 789); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
+	if !waitFor(3*time.Second, func() bool {
+		return evalInt(s.page, `() => window.innerWidth`) == 1234
+	}) {
+		t.Fatalf("pre-swap viewport never reached 1234; got %d",
+			evalInt(s.page, `() => window.innerWidth`))
+	}
+
+	// Click the target="_blank" link.
+	for _, ev := range []InputEvent{
+		{Kind: InputMouseMove, X: 100, Y: 100},
+		{Kind: InputMouseDown, X: 100, Y: 100, Button: MouseButtonLeft},
+		{Kind: InputMouseUp, X: 100, Y: 100, Button: MouseButtonLeft},
+	} {
+		if err := s.Input(ev); err != nil {
+			t.Fatalf("click Input %s: %v", ev.Kind, err)
+		}
+	}
+	if !waitFor(10*time.Second, func() bool { return s.LastURL() == srvB.URL+"/" }) {
+		t.Fatalf("never followed _blank; LastURL=%q", s.LastURL())
+	}
+
+	// New tab must carry the 1234x789 viewport, not Chromium's default.
+	if !waitFor(3*time.Second, func() bool {
+		return evalInt(s.page, `() => window.innerWidth`) == 1234 &&
+			evalInt(s.page, `() => window.innerHeight`) == 789
+	}) {
+		t.Errorf("post-swap viewport = %dx%d, want 1234x789",
+			evalInt(s.page, `() => window.innerWidth`),
+			evalInt(s.page, `() => window.innerHeight`))
+	}
+}
