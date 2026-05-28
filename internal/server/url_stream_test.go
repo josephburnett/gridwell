@@ -88,6 +88,11 @@ type fakeSession struct {
 	lastURL  string
 	closed   bool
 	captures int
+	// cancelNextInputs makes the next N Input calls return
+	// context.Canceled without recording the event, simulating a tab
+	// mid-swap. Done() stays open so readLoop must treat these as
+	// transient.
+	cancelNextInputs int
 
 	frames chan []byte
 	navs   chan string
@@ -100,6 +105,10 @@ type fakeSession struct {
 func (s *fakeSession) Input(ev urldriver.InputEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.cancelNextInputs > 0 {
+		s.cancelNextInputs--
+		return context.Canceled
+	}
 	s.inputs = append(s.inputs, ev)
 	return nil
 }
@@ -407,5 +416,65 @@ func TestURLStreamClosesSessionAndPersists(t *testing.T) {
 	}
 	if string(jpeg) != "final-jpeg-bytes" {
 		t.Errorf("preview_jpeg = %q, want %q", string(jpeg), "final-jpeg-bytes")
+	}
+}
+
+func (s *fakeSession) setCancelNextInputs(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancelNextInputs = n
+}
+
+// TestURLStreamSurvivesTransientCancel pins the fix for the first-click
+// target=_blank bug: an input that races a tab swap fails with
+// context.Canceled against the old (now-closing) tab. readLoop must NOT
+// tear the WS down for that — the session is still alive — or the client
+// shows "page no longer active" on the first _blank click.
+func TestURLStreamSurvivesTransientCancel(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, root, "https://example.com")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	s := waitForSession(t, fake)
+	// Arm one transient cancel (Done stays open).
+	s.setCancelNextInputs(1)
+
+	mk := func() []byte {
+		b, _ := json.Marshal(urlStreamMessage{
+			Kind: string(urldriver.InputMouseDown), X: 1, Y: 1, Button: urldriver.MouseButtonLeft,
+		})
+		return b
+	}
+
+	// First input: dispatched while "mid-swap" → context.Canceled. The
+	// server must swallow it and keep reading.
+	if err := conn.Write(ctx, websocket.MessageText, mk()); err != nil {
+		t.Fatalf("write 1: %v", err)
+	}
+	// Second input: should land normally, proving the reader survived.
+	if err := conn.Write(ctx, websocket.MessageText, mk()); err != nil {
+		t.Fatalf("write 2: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && s.inputCount() == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := s.inputCount(); got != 1 {
+		t.Fatalf("recorded inputs = %d, want 1 (first canceled, second delivered) — readLoop tore down on transient cancel", got)
+	}
+
+	// Session must still be alive.
+	if s.isClosed() {
+		t.Error("session closed after a transient input cancel")
 	}
 }

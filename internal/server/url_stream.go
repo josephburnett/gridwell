@@ -187,8 +187,23 @@ func readLoop(ctx context.Context, conn *websocket.Conn, session urlSession, til
 		}
 		if err := session.Input(ev); err != nil {
 			if errors.Is(err, context.Canceled) {
-				log.Printf("[urlstream] session-dead tile=%d", tileID)
-				return
+				// A canceled context means EITHER the session is truly
+				// dead OR we dispatched to a tab mid-swap: a
+				// target=_blank follow cancels the old tab's context,
+				// and any input that races the swap fails against it.
+				// Only tear down the stream when the session is
+				// actually done; otherwise drop this one input and
+				// keep reading. Treating every cancel as fatal closed
+				// the WS on the first _blank click ("page no longer
+				// active").
+				select {
+				case <-session.Done():
+					log.Printf("[urlstream] session-dead tile=%d", tileID)
+					return
+				default:
+					log.Printf("[urlstream] input dropped mid-swap tile=%d kind=%s", tileID, ev.Kind)
+					continue
+				}
 			}
 			log.Printf("[urlstream] forward-err tile=%d kind=%s err=%v", tileID, ev.Kind, err)
 		}

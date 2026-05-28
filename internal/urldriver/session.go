@@ -341,7 +341,13 @@ func (s *Session) pushFrame(buf []byte) {
 }
 
 func (s *Session) Input(ev InputEvent) error {
-	page := s.page.Timeout(2 * time.Second)
+	// Read the current page under the lock: a target=_blank swap can
+	// reassign s.page concurrently (swapToTarget writes it under mu, as
+	// do frameLoop and Resize when they read it).
+	s.mu.Lock()
+	cur := s.page
+	s.mu.Unlock()
+	page := cur.Timeout(2 * time.Second)
 	mods := int(ev.Modifiers)
 	switch ev.Kind {
 	case InputMouseMove:
@@ -398,7 +404,7 @@ func (s *Session) Input(ev InputEvent) error {
 		// Driving via JS rather than Page.navigateToHistoryEntry is
 		// equivalent and far simpler: same defaults (replace vs push,
 		// referer, etc.) as a user-initiated back navigation.
-		_, err := s.page.Eval(`() => history.back()`)
+		_, err := page.Eval(`() => history.back()`)
 		return err
 	default:
 		return fmt.Errorf("unknown input kind %q", ev.Kind)

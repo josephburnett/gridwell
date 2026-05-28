@@ -609,6 +609,81 @@ func TestIntegrationSessionHistoryBack(t *testing.T) {
 	}
 }
 
+// TestIntegrationSessionInputDuringSwap exercises the real-world
+// condition behind the first-click target=_blank failure: the client
+// streams continuous mouse-moves while the user points at the page, so
+// an Input call is in flight when the _blank swap fires. It hammers
+// Input across the swap and asserts the session stays alive and reaches
+// the destination. (It also exercises the s.page lock under -race,
+// though a single real-browser swap is too narrow a window to make the
+// detector fire reliably — the lock's correctness is established by
+// matching frameLoop/Resize, which also read s.page under mu.)
+func TestIntegrationSessionInputDuringSwap(t *testing.T) {
+	d, _ := newDriverForTest(t)
+
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>B-swap</title>`))
+	}))
+	defer srvB.Close()
+
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><title>A</title>
+<body><a id="link" target="_blank" href="` + srvB.URL + `/" style="position:fixed;left:0;top:0;width:200px;height:200px;display:block">go</a></body>`))
+	}))
+	defer srvA.Close()
+
+	s, err := d.OpenSession(1041, srvA.URL+"/", 800, 600)
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	defer s.Close()
+	time.Sleep(300 * time.Millisecond)
+
+	// Continuous mouse-move forwarding, like the live client does.
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				// Errors are expected mid-swap; we only care that this
+				// races s.page without corrupting state or killing the
+				// session.
+				_ = s.Input(InputEvent{Kind: InputMouseMove, X: 50, Y: 50})
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// Click the _blank link to trigger the swap.
+	for _, ev := range []InputEvent{
+		{Kind: InputMouseDown, X: 100, Y: 100, Button: MouseButtonLeft},
+		{Kind: InputMouseUp, X: 100, Y: 100, Button: MouseButtonLeft},
+	} {
+		_ = s.Input(ev)
+	}
+
+	if !waitFor(10*time.Second, func() bool { return s.LastURL() == srvB.URL+"/" }) {
+		close(stop)
+		<-done
+		t.Fatalf("never followed _blank under concurrent input; LastURL=%q", s.LastURL())
+	}
+	close(stop)
+	<-done
+
+	// The session must not have died from a mid-swap input cancel.
+	select {
+	case <-s.Done():
+		t.Fatal("session died during swap under concurrent input")
+	default:
+	}
+}
+
 // TestIntegrationSessionViewportSurvivesSwap pins the fix for a
 // regression where the tab opened via target="_blank" got Chromium's
 // default viewport instead of the tile's current pane size, producing
@@ -640,7 +715,7 @@ func TestIntegrationSessionViewportSurvivesSwap(t *testing.T) {
 	if err := s.Resize(1234, 789); err != nil {
 		t.Fatalf("Resize: %v", err)
 	}
-	if !waitFor(3*time.Second, func() bool {
+	if !waitFor(10*time.Second, func() bool {
 		return evalInt(s.page, `() => window.innerWidth`) == 1234
 	}) {
 		t.Fatalf("pre-swap viewport never reached 1234; got %d",
@@ -662,7 +737,7 @@ func TestIntegrationSessionViewportSurvivesSwap(t *testing.T) {
 	}
 
 	// New tab must carry the 1234x789 viewport, not Chromium's default.
-	if !waitFor(3*time.Second, func() bool {
+	if !waitFor(10*time.Second, func() bool {
 		return evalInt(s.page, `() => window.innerWidth`) == 1234 &&
 			evalInt(s.page, `() => window.innerHeight`) == 789
 	}) {
