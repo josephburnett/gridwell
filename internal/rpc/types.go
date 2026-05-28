@@ -53,6 +53,9 @@ type Tile struct {
 	ViewX       int64   `json:"view_x"`
 	ViewY       int64   `json:"view_y"`
 	ViewZoom    float64 `json:"view_zoom"`
+	ViewW       int64   `json:"view_w,omitempty"`
+	ViewH       int64   `json:"view_h,omitempty"`
+	FileMode    string  `json:"file_mode,omitempty"`
 	ChildGridID int64   `json:"child_grid_id,omitempty"`
 	Capped      bool    `json:"capped,omitempty"`
 	MimeType    string  `json:"mime_type,omitempty"`
@@ -180,6 +183,12 @@ type SetTileViewportRequest struct {
 	ViewX    int64    `json:"view_x"`
 	ViewY    int64    `json:"view_y"`
 	ViewZoom float64  `json:"view_zoom"`
+	// Text-file window size (doc px) + mode, persisted so the parent
+	// preview can mirror the last-framed view. Zero/empty leaves the
+	// stored values unchanged.
+	ViewW    int64  `json:"view_w,omitempty"`
+	ViewH    int64  `json:"view_h,omitempty"`
+	FileMode string `json:"file_mode,omitempty"`
 }
 
 type UpdateFileContentRequest struct {

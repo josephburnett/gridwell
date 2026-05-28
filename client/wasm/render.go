@@ -203,18 +203,14 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 
 	// Grid lines render against background regardless of whether the grid
 	// has loaded — they communicate the coordinate system to the user.
-	// In live file mode the grid lines reflect FileZoom centered on the
-	// pane (the outer ring is the visible "grid" cue), not the parent's
-	// grid coordinates.
+	// A focused file has no grid coordinates and (now) no zoom, so it
+	// gets a plain background instead of a grid pattern: the old pattern
+	// was the zoom cue, which no longer applies. The margin around the
+	// inner box is just a plain ascent zone. (URL content fills the pane
+	// and covers this anyway.)
 	if p.FileFocus != 0 {
-		fz := p.FileZoom
-		if fz <= 0 {
-			fz = 1.0
-		}
-		fcell := cellPx * fz
-		fox := r.X + r.W/2
-		foy := r.Y + r.H/2
-		drawGridLinesIn(a.cctx, r.X, r.Y, r.W, r.H, fcell, fox, foy)
+		a.cctx.Set("fillStyle", colorBg)
+		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
 		a.drawGridLines(pscreen, r)
 	}
@@ -540,10 +536,8 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	if mode == "" {
 		mode = "rendered"
 	}
-	scale := p.FileZoom
-	if scale <= 0 {
-		scale = 1.0
-	}
+	// Fixed scale: the pane is a plain window onto the document. No zoom.
+	scale := fileFixedScale
 	scrollX := p.FileScrollX
 	scrollY := p.FileScrollY
 
@@ -586,9 +580,12 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
 func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
-	mode := "text"
-	if last, ok := a.fileLastMode[n.ID]; ok && last != "" {
-		mode = last
+	// Mode comes from the tile (persisted on the server); default to raw
+	// text for a never-opened file. A pane descended into this file
+	// overrides with its live mode.
+	mode := n.FileMode
+	if mode == "" {
+		mode = "text"
 	}
 	fp := a.paneFocusedOnFile(n.ID)
 	var scale, scrollX, scrollY float64
@@ -596,27 +593,31 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 		if fp.FileMode != "" {
 			mode = fp.FileMode
 		}
-		scale = fp.FileZoom
-		if scale <= 0 {
-			scale = 1.0
-		}
+		// Live: fixed scale, scrolled window — matches drawMarkdownInPane.
+		scale = fileFixedScale
 		scrollX = fp.FileScrollX
 		scrollY = fp.FileScrollY
-	} else {
-		// Preview scale = parentZoom × effectiveRatio, where the
-		// effective ratio is the file's stored ViewZoom (or the
-		// unvisited-file default substituted by fileEffectiveRatio).
-		// At parent = fileOvertake_now this equals the live FileZoom
-		// computed by fileLiveZoom, so the path swap is visually
-		// continuous for visited AND unvisited files.
-		parentZoom := parentCellSize / cellPx
-		ratio := fileEffectiveRatio(r, n.W, n.H, n.ViewZoom)
-		previewScale := parentZoom * ratio
-		if previewScale < 0.05 {
-			previewScale = 0.05
+	} else if n.ViewW > 0 && n.ViewH > 0 {
+		// Preview mirrors the last framed window: cover-crop the saved
+		// document-space rectangle (ViewX,ViewY,ViewW,ViewH) into the
+		// tile footprint (x,y,w,h). The larger axis ratio binds (cover),
+		// anchored at the window's top-left so headings stay in view.
+		// w/h already include the parent grid zoom, so the label scales
+		// naturally as the user zooms the parent grid.
+		sxr := w / float64(n.ViewW)
+		syr := h / float64(n.ViewH)
+		scale = sxr
+		if syr > scale {
+			scale = syr
 		}
-		scale = previewScale
+		scrollX = float64(n.ViewX)
 		scrollY = float64(n.ViewY)
+	} else {
+		// Never framed: fit the document width to the tile, top-aligned.
+		scale = w / fileNaturalContentPx
+		if scale < 0.02 {
+			scale = 0.02
+		}
 	}
 
 	a.cctx.Call("save")

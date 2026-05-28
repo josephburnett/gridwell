@@ -44,6 +44,15 @@ CREATE TABLE IF NOT EXISTS tiles (
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 0,
+    -- Text-file tiles: the document-space window (in fixed-scale doc px)
+    -- the file was last framed at. view_x/view_y = scroll offset;
+    -- view_w/view_h = the window size. The parent-grid preview crops this
+    -- rectangle out of the re-rendered doc. 0 means "unset".
+    view_w        INTEGER NOT NULL DEFAULT 0,
+    view_h        INTEGER NOT NULL DEFAULT 0,
+    -- Text-file tiles: "rendered" or "text" (raw). Persists the toggle so
+    -- previews and re-descents reflect the last-used mode across reloads.
+    file_mode     TEXT,
     child_grid_id INTEGER REFERENCES grids(id),
     capped        INTEGER NOT NULL DEFAULT 0,
     mime_type     TEXT,

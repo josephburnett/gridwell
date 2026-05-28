@@ -284,7 +284,10 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 	return out, nil
 }
 
-// SetTileViewport updates the (view_x, view_y) of a tile.
+// SetTileViewport updates a tile's stored view: scroll (view_x/view_y),
+// zoom, and — for text-file tiles — the framed window size (view_w/view_h)
+// and rendered/raw mode. ViewW/ViewH default to the existing values when
+// the request sends 0; FileMode likewise when empty.
 func (s *Store) SetTileViewport(ctx context.Context, req *rpc.SetTileViewportRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	var events []rpc.Event
@@ -301,9 +304,24 @@ func (s *Store) SetTileViewport(ctx context.Context, req *rpc.SetTileViewportReq
 			return err
 		}
 		events = append(events, pre.Events...)
+		viewW, viewH := req.ViewW, req.ViewH
+		if viewW == 0 {
+			viewW = n.ViewW
+		}
+		if viewH == 0 {
+			viewH = n.ViewH
+		}
+		fileMode := req.FileMode
+		if fileMode == "" {
+			fileMode = n.FileMode
+		}
+		var fileModeArg any
+		if fileMode != "" {
+			fileModeArg = fileMode
+		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
-			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), pre.TargetTileID); err != nil {
+			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, view_w = ?, view_h = ?, file_mode = ?, updated_at = ? WHERE id = ?`,
+			req.ViewX, req.ViewY, req.ViewZoom, viewW, viewH, fileModeArg, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
 		out, err = s.loadTile(ctx, tx, pre.TargetTileID)

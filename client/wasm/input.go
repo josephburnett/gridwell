@@ -192,35 +192,12 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 			// Outside inner: fall through to pane-wide gridwell wheel
 			// (zoom), same as other file types.
 		}
-		if !pointInFileInner(p, r, sx, sy) {
-			step := dy / 200.0
-			if step > 0.5 {
-				step = 0.5
-			}
-			if step < -0.5 {
-				step = -0.5
-			}
-			factor := math.Pow(zoomFactor, -step*4)
-			z := p.FileZoom
-			if z <= 0 {
-				z = 1.0
-			}
-			z *= factor
-			if z < zoomMin {
-				z = zoomMin
-			}
-			if z > fileZoomMax {
-				z = fileZoomMax
-			}
-			p.FileZoom = z
-			a.refreshFileOverlay()
-			a.draw()
-			a.scheduleURLUpdate()
-			return nil
-		}
+		// Text file: fixed scale, no zoom. The wheel only scrolls the
+		// window vertically (rendered mode). In text mode the textarea
+		// overlay handles its own scrolling and the wheel never reaches
+		// the canvas.
 		if p.FileMode == "rendered" {
-			z := nonzero(p.FileZoom)
-			p.FileScrollY += dy / z
+			p.FileScrollY += dy
 			if p.FileScrollY < 0 {
 				p.FileScrollY = 0
 			}
@@ -1153,11 +1130,13 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	initialScroll := float64(file.ViewY)
 	// URL tiles have no text/rendered modes; mode is "" for them so
 	// the textarea overlay (gated on FileMode == "text") never shows.
+	// For text files the mode is the one persisted on the tile (server),
+	// defaulting to raw text for a never-opened file.
 	var mode string
 	if !file.IsURL() {
-		mode = "text"
-		if last, ok := a.fileLastMode[fileID]; ok && last != "" {
-			mode = last
+		mode = file.FileMode
+		if mode == "" {
+			mode = "text"
 		}
 	}
 	a.startTransition(&paneTransition{
@@ -1181,7 +1160,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			fp.FileMode = mode
 			fp.FileScrollY = initialScroll
 			fp.FileScrollX = 0
-			fp.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
+			fp.FileZoom = fileFixedScale
 			a.refreshFileOverlay()
 			// URL descent always attaches a streaming WebSocket; the
 			// server creates a fresh Chromium tab for the duration of
@@ -1240,11 +1219,8 @@ func (a *App) startFileAscent(p *pane.Pane) {
 		delete(a.urlStreamLost, p.ID)
 	}
 
-	// Persist the mode the user is leaving in so previews and re-descent
-	// honor the "however you left it" rule.
-	if p.FileMode != "" {
-		a.fileLastMode[file.ID] = p.FileMode
-	}
+	// (Mode + framed window are persisted by saveFileBeforeAscent, which
+	// also patches the cache so the preview is correct immediately.)
 
 	// Reset parent-grid zoom to the overtake value so the animation
 	// begins from "well filling the pane", regardless of how the user
@@ -1386,6 +1362,24 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		a.c.PutBlob(file.BlobID, []byte(buf), "text/markdown")
 	}
 
+	// The framed window in doc px: scroll position + the inner box size
+	// (= screen px, since scale is fixed at 1.0). The parent-grid preview
+	// crops this rectangle out of the re-rendered doc.
+	_, _, iw, ih := fileInnerBox(p, r)
+	viewW := int64(iw + 0.5)
+	viewH := int64(ih + 0.5)
+
+	// Patch the cache immediately so the ascent transition (and any other
+	// pane previewing this tile) reflects the framed window + mode before
+	// the server round-trip lands.
+	patched := file
+	patched.ViewX = 0
+	patched.ViewY = scrollY
+	patched.ViewW = viewW
+	patched.ViewH = viewH
+	patched.FileMode = p.FileMode
+	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
+
 	go func() {
 		// Update content first if the user was editing.
 		if hasBuf {
@@ -1398,14 +1392,16 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 				a.c.PutBlob(resp.Tile.BlobID, []byte(buf), "text/markdown")
 			}
 		}
-		// Always update view_y + zoom so re-descent restores the
-		// user's scroll and zoom. ViewZoom is stored as the intrinsic
-		// ratio FileZoom / FileOvertake_at_ascent (window-independent).
-		ot := fileOvertakeZoom(r, file.W, file.H)
-		intrinsic := zoomtrans.IntrinsicFromLive(p.FileZoom, ot)
+		// Persist the framed window + mode so re-descent and the preview
+		// honor "however you left it" across reloads.
 		vreq := rpc.SetTileViewportRequest{
 			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-			TileID: file.ID, ViewX: 0, ViewY: scrollY, ViewZoom: intrinsic,
+			TileID:   file.ID,
+			ViewX:    0,
+			ViewY:    scrollY,
+			ViewW:    viewW,
+			ViewH:    viewH,
+			FileMode: p.FileMode,
 		}
 		var vresp rpc.TileResponse
 		_, _ = postJSON("/rpc/SetTileViewport", vreq, &vresp)

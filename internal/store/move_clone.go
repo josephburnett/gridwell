@@ -188,12 +188,16 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if n.Capped {
 			cappedInt = 1
 		}
+		var fileModeArg any
+		if n.FileMode != "" {
+			fileModeArg = n.FileMode
+		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
 				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			n.ObjectID, dstGrid, n.Type, req.X, req.Y, n.W, n.H, n.ViewX, n.ViewY, n.ViewZoom,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			n.ObjectID, dstGrid, n.Type, req.X, req.Y, n.W, n.H, n.ViewX, n.ViewY, n.ViewZoom, n.ViewW, n.ViewH, fileModeArg,
 			child, cappedInt, mime, blob, urlStr, previewJPEG, now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)

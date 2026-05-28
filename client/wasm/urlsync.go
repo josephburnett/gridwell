@@ -236,21 +236,20 @@ walk:
 	p.Path = resolvedPath
 	if fileTileID != 0 {
 		p.FileFocus = fileTileID
+		// Mode follows the tile's persisted file_mode; a URL that encodes
+		// a text cursor forces text mode. Scale is fixed; scroll restores
+		// from the tile's stored view_y.
+		if file, ok := a.cachedFile(p.Path, fileTileID); ok {
+			p.FileMode = file.FileMode
+			p.FileScrollY = float64(file.ViewY)
+		}
 		if state.CursorMode {
 			p.FileMode = "text"
-			a.fileLastMode[fileTileID] = "text"
-		} else {
-			p.FileMode = "rendered"
 		}
-		// Reconstruct live FileZoom via the single file-zoom helper,
-		// which substitutes a pane-derived default for unvisited files
-		// (ViewZoom == 0) so live and preview agree at path-swap.
-		if file, ok := a.cachedFile(p.Path, fileTileID); ok {
-			r := paneRectFor(a, p)
-			p.FileZoom = fileLiveZoom(r, file.W, file.H, file.ViewZoom)
-		} else {
-			p.FileZoom = fileInitialZoom(a.width, a.height)
+		if p.FileMode == "" {
+			p.FileMode = "text"
 		}
+		p.FileZoom = fileFixedScale
 		a.fetchBlobAndSetCursor(fileTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()

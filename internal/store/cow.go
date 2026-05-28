@@ -183,7 +183,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom,
+		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
 		       child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
 		       created_at, updated_at
 		FROM tiles WHERE grid_id = ?`, oldGridID)
@@ -199,6 +199,8 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		x, y, w, h           int64
 		viewX, viewY         int64
 		viewZoom             float64
+		viewW, viewH         int64
+		fileMode             sql.NullString
 		childGrid            sql.NullInt64
 		cappedInt            int64
 		mime                 sql.NullString
@@ -211,7 +213,8 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	for rows.Next() {
 		var nc tileCopy
 		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.typ, &nc.x, &nc.y, &nc.w, &nc.h,
-			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
+			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.viewW, &nc.viewH, &nc.fileMode,
+			&nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
 			&nc.urlString, &nc.previewJPEG,
 			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
@@ -225,11 +228,11 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	remap := make(map[int64]int64, len(copies))
 	for _, nc := range copies {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
+			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
 				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY, nc.viewZoom,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY, nc.viewZoom, nc.viewW, nc.viewH, nc.fileMode,
 			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.urlString, nc.previewJPEG,
 			nc.createdAt, now)
 		if err != nil {

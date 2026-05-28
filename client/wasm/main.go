@@ -25,38 +25,19 @@ const (
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
-	// fileZoomMax is the maximum FileZoom (zoom inside a file). Much
-	// higher than the grid zoomMax so a heading can be enlarged enough
-	// to fill a single cell of the parent grid in preview — that lets a
-	// user use a markdown file as a section title.
-	fileZoomMax = 50.0
+	// fileFixedScale is the constant render scale for text-file content
+	// when descended. There is no zoom: the descended pane is a plain
+	// window onto the document at this scale, scrolled vertically. The
+	// parent-grid preview re-renders at this same scale and crops the
+	// last-framed window into the tile footprint.
+	fileFixedScale = 1.0
 
 	// fileNaturalContentPx is the logical width of the rendered markdown
-	// canvas at FileZoom=1.0. Picked so a typical desktop pane shows the
-	// content comfortably; previews scale this down to fit the file's
-	// footprint when displayed in the parent grid.
+	// canvas at fileFixedScale. Lines wrap at this width in both the
+	// descended window and the preview so they match.
 	fileNaturalContentPx = 800.0
 )
 
-// fileInitialZoom returns the FileZoom that gives the just-descended
-// pane a comfortable reading scale: target width = pane width minus a
-// gentle margin, divided by the natural content width. Capped to 1.0
-// upward so we don't blow up tiny panes' text.
-func fileInitialZoom(paneW, paneH float64) float64 {
-	_ = paneH
-	if paneW <= 0 {
-		return 1.0
-	}
-	margin := 64.0
-	z := (paneW - margin) / fileNaturalContentPx
-	if z < 0.5 {
-		z = 0.5
-	}
-	if z > 1.4 {
-		z = 1.4
-	}
-	return z
-}
 
 // app is the running client. Held in a package-level var so JS callbacks can
 // reach it without closures over reflect.Value.
@@ -137,12 +118,6 @@ type App struct {
 	// exact viewport the user was looking at before they descended.
 	// Indexed by pane id; the slice's length matches len(pane.Path).
 	paneStateStack map[string][]paneState
-
-	// fileLastMode remembers, per file node id, the most recent
-	// "text"/"rendered" mode the user left a file in. Used by the parent
-	// grid preview to mirror "however you left it" without needing a
-	// server-side field. Persisted to localStorage along with the tree.
-	fileLastMode map[int64]string
 
 	// urlPreview caches decoded HTMLImageElement values for URL tile
 	// previews (one image per tile, refreshed when GetTilePreview returns
@@ -313,7 +288,6 @@ func main() {
 		menuHover:      -1,
 		gridLoadFailed: map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
-		fileLastMode:   map[int64]string{},
 		urlPreview:     newURLPreviewCache(),
 		urlStreams:     map[string]*urlStreamConn{},
 	}
@@ -586,8 +560,8 @@ func (a *App) startSSE() {
 //
 // In-memory state that is *not* persisted but does survive within a
 // session: paneStateStack (so within-session ascent restores the
-// exact pre-descent viewport) and fileLastMode (so previews remember
-// the user's last-used mode for a file until reload).
+// exact pre-descent viewport). The rendered/raw file mode is persisted
+// on the tile (file_mode), so it survives reload.
 
 // gridIDForPath walks the pane's descent path and returns the grid id at the
 // leaf. Returns root if the path is empty or stale prefixes don't resolve.

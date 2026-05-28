@@ -54,12 +54,13 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 		urlStr    sql.NullString
 		cappedInt int64
 	)
+	var fileMode sql.NullString
 	err := q.QueryRowContext(ctx, `
-		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
+		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
 		       child_grid_id, capped, mime_type, blob_id, url_string
 		FROM tiles WHERE id = ?`, tileID,
 	).Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob, &urlStr)
+		&n.ViewX, &n.ViewY, &n.ViewZoom, &n.ViewW, &n.ViewH, &fileMode, &childGrid, &cappedInt, &mime, &blob, &urlStr)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -78,13 +79,16 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 	if urlStr.Valid {
 		n.URLString = urlStr.String
 	}
+	if fileMode.Valid {
+		n.FileMode = fileMode.String
+	}
 	n.Capped = cappedInt != 0
 	return &n, nil
 }
 
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Tile, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom,
+		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
 		       child_grid_id, capped, mime_type, blob_id, url_string
 		FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
 	if err != nil {
@@ -99,10 +103,11 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 			mime      sql.NullString
 			blob      sql.NullInt64
 			urlStr    sql.NullString
+			fileMode  sql.NullString
 			cappedInt int64
 		)
 		if err := rows.Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-			&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid, &cappedInt, &mime, &blob, &urlStr); err != nil {
+			&n.ViewX, &n.ViewY, &n.ViewZoom, &n.ViewW, &n.ViewH, &fileMode, &childGrid, &cappedInt, &mime, &blob, &urlStr); err != nil {
 			return nil, err
 		}
 		if childGrid.Valid {
@@ -116,6 +121,9 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 		}
 		if urlStr.Valid {
 			n.URLString = urlStr.String
+		}
+		if fileMode.Valid {
+			n.FileMode = fileMode.String
 		}
 		n.Capped = cappedInt != 0
 		out = append(out, n)

@@ -72,34 +72,6 @@ func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
 	return zoomtrans.Fit(fileW, fileH, innerW, innerH, cellPx)
 }
 
-// fileEffectiveRatio returns the intrinsic ViewZoom for `file` in pane
-// rect r, substituting a pane-derived default for an unvisited
-// (ViewZoom == 0) file. This is the single place the unvisited-file
-// fallback rule lives — every read site (preview render, live FileZoom
-// on descent, URL boot) goes through it, so preview and live agree at
-// the path-swap moment for both visited and unvisited files.
-//
-// Fallback rule: an unvisited file's effective ratio is
-// IntrinsicFromLive(fileInitialZoom, fileOvertake), so that
-// LiveFromIntrinsic at this overtake equals fileInitialZoom — the
-// historical first-descent reading scale.
-func fileEffectiveRatio(r paneRect, fileW, fileH int64, storedViewZoom float64) float64 {
-	overtake := fileOvertakeZoom(r, fileW, fileH)
-	fallback := zoomtrans.IntrinsicFromLive(fileInitialZoom(r.W, r.H), overtake)
-	return zoomtrans.EffectiveViewZoom(storedViewZoom, fallback)
-}
-
-// fileLiveZoom returns the live FileZoom for a pane just descending
-// into `file` (or restoring it from a URL). Equivalent to
-// LiveFromIntrinsic(fileEffectiveRatio(...), fileOvertake): for an
-// unvisited file this is exactly fileInitialZoom; for a visited file
-// this reconstructs the saved live scale at the current pane size.
-func fileLiveZoom(r paneRect, fileW, fileH int64, storedViewZoom float64) float64 {
-	overtake := fileOvertakeZoom(r, fileW, fileH)
-	ratio := fileEffectiveRatio(r, fileW, fileH, storedViewZoom)
-	return zoomtrans.LiveFromIntrinsic(ratio, overtake)
-}
-
 
 // fileInnerBox returns the screen rectangle of a file-focused pane's
 // inner area: the light-grey reading region that the textarea sits on
@@ -457,7 +429,8 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 			a.fileTextarea.Set("value", "")
 		}
 	}
-	a.fileLastMode[p.FileFocus] = p.FileMode
+	// The mode is persisted to the tile on ascent (saveFileBeforeAscent).
+	// While descended, the focused pane's live FileMode drives the preview.
 	a.refreshFileOverlay()
 	a.draw()
 	a.scheduleURLUpdate()
