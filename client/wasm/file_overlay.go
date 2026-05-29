@@ -29,28 +29,6 @@ func (a *App) scheduleFileSave() {
 	js.Global().Call("setTimeout", a.fileSaveCb, fileSaveDebounceMs)
 }
 
-// fileMarginMin is the minimum outer-ring width. Set so the file
-// toggle button (inset 24, radius 18) plus a small gap clears the
-// inner-box even on small panes — that lets us forgo the clipPath
-// notch entirely, so the textarea is always a clean rectangle.
-const fileMarginMin = 50.0
-
-// fileMargin returns the pixel inset between the pane edge and the
-// inner text-area for a file-focused pane. Wide enough that the
-// toggle button (drawn in the bottom-right of the pane) sits cleanly
-// in the outer ring, never overlapping the inner-box. Left clicks in
-// this margin trigger ascent; the grid-pattern cue lives here.
-func fileMargin(r paneRect) float64 {
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		CellPx: cellPx, Zoom: 1,
-	}
-	m := dragdrop.EdgeBand(ps)
-	if m < fileMarginMin {
-		m = fileMarginMin
-	}
-	return m
-}
 
 // fileOvertakeZoom returns the parent zoom at which the file tile's
 // footprint (W × H cells) exactly fits inside the inner-box dimensions
@@ -63,9 +41,8 @@ func fileMargin(r paneRect) float64 {
 // against it makes the preview text fill the file cell at the same
 // fraction as live text fills the inner-box.
 func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
-	m := fileMargin(r)
-	innerW := r.W - 2*m
-	innerH := r.H - 2*m
+	innerW := r.W - 2*fileSideInset
+	innerH := r.H - fileSideInset - fileBottomStrip
 	if innerW <= 0 || innerH <= 0 {
 		return 1
 	}
@@ -375,39 +352,34 @@ func (a *App) syncFileOverlayPosition() {
 // outer-ring space surrounds the textarea, and width is capped at the
 // 80-column reading width so long files don't stretch full-pane.
 func fileTextareaBox(p *pane.Pane, r paneRect) (left, top, width, height, fontPx float64) {
-	zoom := p.FileZoom
-	if zoom <= 0 {
-		zoom = 1.0
+	// Fixed scale: the textarea font matches the canvas body size at
+	// fileFixedScale.
+	fontPx = 14.0 * fileFixedScale
+	left = r.X + fileSideInset
+	top = r.Y + fileSideInset
+	width = r.W - 2*fileSideInset
+	// Reserve a bottom strip so the canvas-drawn toggle button (lower
+	// right) stays clickable even in text mode, where the textarea would
+	// otherwise cover it. The strip doubles as the ascent click zone.
+	height = r.H - fileSideInset - fileBottomStrip
+	if width < 0 {
+		width = 0
 	}
-	fontPx = 14.0 * zoom
-	if fontPx < 8 {
-		fontPx = 8
+	if height < 0 {
+		height = 0
 	}
-	if fontPx > 60 {
-		fontPx = 60
-	}
-	m := fileMargin(r)
-	innerX := r.X + m
-	innerY := r.Y + m
-	innerW := r.W - 2*m
-	innerH := r.H - 2*m
-	if innerW < 0 {
-		innerW = 0
-	}
-	if innerH < 0 {
-		innerH = 0
-	}
-	const maxCols = 80
-	colWidth := float64(maxCols)*fontPx*0.6 + 32
-	width = colWidth
-	if width > innerW {
-		width = innerW
-	}
-	left = innerX + (innerW-width)/2
-	top = innerY
-	height = innerH
 	return
 }
+
+const (
+	// fileSideInset is the thin gap between the pane edge and the text
+	// content — just the pane border, so content fills the pane instead
+	// of floating in a wide reading margin.
+	fileSideInset = paneBorderPx
+	// fileBottomStrip is the height reserved at the bottom for the
+	// rendered/raw toggle button and the ascent click zone.
+	fileBottomStrip = plusButtonInset + plusButtonRadius + 8
+)
 
 // onToggleFileMode flips the focused pane between text and rendered
 // modes. Going text→rendered saves the current buffer first; going

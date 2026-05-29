@@ -593,10 +593,23 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 		if fp.FileMode != "" {
 			mode = fp.FileMode
 		}
-		// Live: fixed scale, scrolled window — matches drawMarkdownInPane.
-		scale = fileFixedScale
+		// While a pane is descended, mirror what the preview will be once
+		// the user ascends: cover-crop the LIVE framed window (live scroll
+		// + the focused pane's current inner-box size) into this tile.
+		// Rendering at raw 1:1 instead made the text look too small in a
+		// small tile and rescale as the parent grid zoomed.
+		fpRect := a.paneRectByID(fp.ID)
+		_, _, iw, ih := fileInnerBox(fp, fpRect)
 		scrollX = fp.FileScrollX
 		scrollY = fp.FileScrollY
+		if iw > 0 && ih > 0 {
+			scale = w / iw
+			if sy := h / ih; sy > scale {
+				scale = sy
+			}
+		} else {
+			scale = fileFixedScale
+		}
 	} else if n.ViewW > 0 && n.ViewH > 0 {
 		// Preview mirrors the last framed window: cover-crop the saved
 		// document-space rectangle (ViewX,ViewY,ViewW,ViewH) into the
