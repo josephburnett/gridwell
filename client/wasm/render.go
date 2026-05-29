@@ -299,14 +299,12 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	half := paneBorderPx / 2
 	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
-	// In file-focus mode replace the + with a text/rendered toggle; the
-	// menu never opens here. URL tiles get a back-arrow button instead
-	// (history.back on the descended tab).
+	// URL descent gets a canvas back-arrow button; markdown descent gets
+	// the rendered/raw toggle as a DOM overlay button (refreshFileToggle)
+	// so the text content can fill the pane.
 	if p.FileFocus != 0 {
 		if a.isURLDescent(p) {
 			a.drawURLBackButton(p, r)
-		} else {
-			a.drawFileToggleButton(p, r)
 		}
 	} else {
 		// + button is always available; gives the user an entry point
@@ -346,37 +344,6 @@ func (a *App) drawURLBackButton(p *pane.Pane, r paneRect) {
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Set("lineCap", "butt")
 	a.cctx.Set("lineJoin", "miter")
-}
-
-// drawFileToggleButton paints the lower-right button that switches a
-// file-focused pane between "text" (raw editable source) and "rendered"
-// (canvas markdown layout). Visually mimics the + button so the position
-// and feel are familiar; the glyph hints at the *target* mode using
-// font shape: a typeset serif "A" means clicking renders, a fixed-width
-// monospace "A" means clicking edits as source.
-func (a *App) drawFileToggleButton(p *pane.Pane, r paneRect) {
-	cx, cy := plusButtonCenter(r)
-	a.cctx.Set("fillStyle", colorPlusBg)
-	a.cctx.Call("beginPath")
-	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
-	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", colorPaneBorder)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("stroke")
-
-	// In text mode, the click goes to rendered → show a serif glyph.
-	// In rendered mode, the click goes to text → show a monospace glyph.
-	font := `italic 18px ui-serif, "Times New Roman", Georgia, serif`
-	if p.FileMode == "rendered" {
-		font = `18px ui-monospace, "SF Mono", Menlo, Consolas, monospace`
-	}
-	a.cctx.Set("fillStyle", colorPlusFg)
-	a.cctx.Set("font", font)
-	a.cctx.Set("textBaseline", "middle")
-	a.cctx.Set("textAlign", "center")
-	a.cctx.Call("fillText", "a", cx, cy+1)
-	a.cctx.Set("textAlign", "start")
-	a.cctx.Set("textBaseline", "alphabetic")
 }
 
 // drawGridLines paints faint lines at integer cell boundaries within the

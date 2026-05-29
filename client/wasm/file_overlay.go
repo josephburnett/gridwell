@@ -42,7 +42,7 @@ func (a *App) scheduleFileSave() {
 // fraction as live text fills the inner-box.
 func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
 	innerW := r.W - 2*fileSideInset
-	innerH := r.H - fileSideInset - fileBottomStrip
+	innerH := r.H - 2*fileSideInset
 	if innerW <= 0 || innerH <= 0 {
 		return 1
 	}
@@ -264,10 +264,99 @@ func (a *App) ensureFileTextarea() {
 	a.fileTextarea = ta
 }
 
+// ensureFileToggle creates (once) the floating rendered/raw toggle
+// button used during a markdown descent. A DOM element layered above the
+// textarea (zIndex 6 > textarea 5) so the text content can fill the pane.
+func (a *App) ensureFileToggle() {
+	if !a.fileToggleBtn.IsUndefined() && !a.fileToggleBtn.IsNull() {
+		return
+	}
+	btn := a.doc.Call("createElement", "div")
+	style := btn.Get("style")
+	style.Set("position", "absolute")
+	style.Set("display", "none")
+	style.Set("boxSizing", "border-box")
+	style.Set("width", strconv.Itoa(2*plusButtonRadius)+"px")
+	style.Set("height", strconv.Itoa(2*plusButtonRadius)+"px")
+	style.Set("borderRadius", "50%")
+	style.Set("background", colorPlusBg)
+	style.Set("border", "1px solid "+colorPaneBorder)
+	style.Set("color", colorPlusFg)
+	style.Set("cursor", "pointer")
+	style.Set("alignItems", "center")
+	style.Set("justifyContent", "center")
+	style.Set("zIndex", "6")
+	style.Set("userSelect", "none")
+	style.Set("fontSize", "18px")
+	btn.Set("textContent", "a")
+
+	a.fileToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) > 0 {
+			args[0].Call("preventDefault")
+			args[0].Call("stopPropagation")
+		}
+		p := a.tree.FocusedPane()
+		if p == nil || p.FileFocus == 0 {
+			return nil
+		}
+		a.onToggleFileMode(p)
+		return nil
+	})
+	btn.Call("addEventListener", "mousedown", a.fileToggleCb)
+	a.doc.Get("body").Call("appendChild", btn)
+	a.fileToggleBtn = btn
+}
+
+// refreshFileToggle positions/styles the floating toggle for a markdown
+// descent (any mode) and hides it otherwise. URL tiles use a canvas back
+// button instead, so they're excluded.
+func (a *App) refreshFileToggle() {
+	a.ensureFileToggle()
+	style := a.fileToggleBtn.Get("style")
+	hide := func() { style.Set("display", "none") }
+
+	p := a.tree.FocusedPane()
+	if p == nil || p.FileFocus == 0 || a.isURLDescent(p) {
+		hide()
+		return
+	}
+	gid := a.gridIDForPath(p.Path)
+	g, ok := a.c.Grid(gid)
+	if !ok {
+		hide()
+		return
+	}
+	file, ok := g.Tiles[p.FileFocus]
+	if !ok || file.Type != "file" || file.IsURL() {
+		hide()
+		return
+	}
+	r := paneRectFor(a, p)
+	if r.W <= 0 || r.H <= 0 {
+		hide()
+		return
+	}
+	cx := r.X + r.W - plusButtonInset
+	cy := r.Y + r.H - plusButtonInset
+	style.Set("left", strconv.FormatFloat(cx-plusButtonRadius, 'f', 1, 64)+"px")
+	style.Set("top", strconv.FormatFloat(cy-plusButtonRadius, 'f', 1, 64)+"px")
+	// Glyph hints at the TARGET mode: an italic serif "a" means clicking
+	// renders; a monospace "a" means clicking edits the source.
+	if p.FileMode == "rendered" {
+		style.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
+		style.Set("fontStyle", "normal")
+	} else {
+		style.Set("fontFamily", `ui-serif, "Times New Roman", Georgia, serif`)
+		style.Set("fontStyle", "italic")
+	}
+	style.Set("display", "flex")
+}
+
 // refreshFileOverlay shows or hides the textarea based on whether the
 // focused pane is descended into a file in text mode. Called whenever
 // pane state changes (descent completes, mode toggles, ascent begins).
 func (a *App) refreshFileOverlay() {
+	a.refreshFileToggle()
 	a.ensureFileTextarea()
 	ta := a.fileTextarea
 
@@ -321,6 +410,7 @@ func (a *App) refreshFileOverlay() {
 // continues to track the focused pane through resizes and pane-tree
 // edits. It does not refocus, mutate the value, or toggle visibility.
 func (a *App) syncFileOverlayPosition() {
+	a.refreshFileToggle()
 	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
 		return
 	}
@@ -358,10 +448,7 @@ func fileTextareaBox(p *pane.Pane, r paneRect) (left, top, width, height, fontPx
 	left = r.X + fileSideInset
 	top = r.Y + fileSideInset
 	width = r.W - 2*fileSideInset
-	// Reserve a bottom strip so the canvas-drawn toggle button (lower
-	// right) stays clickable even in text mode, where the textarea would
-	// otherwise cover it. The strip doubles as the ascent click zone.
-	height = r.H - fileSideInset - fileBottomStrip
+	height = r.H - 2*fileSideInset
 	if width < 0 {
 		width = 0
 	}
@@ -371,15 +458,11 @@ func fileTextareaBox(p *pane.Pane, r paneRect) (left, top, width, height, fontPx
 	return
 }
 
-const (
-	// fileSideInset is the thin gap between the pane edge and the text
-	// content — just the pane border, so content fills the pane instead
-	// of floating in a wide reading margin.
-	fileSideInset = paneBorderPx
-	// fileBottomStrip is the height reserved at the bottom for the
-	// rendered/raw toggle button and the ascent click zone.
-	fileBottomStrip = plusButtonInset + plusButtonRadius + 8
-)
+// fileSideInset is the thin gap between the pane edge and the text
+// content — just the pane border, so content fills the pane instead of
+// floating in a wide reading margin. The rendered/raw toggle is a DOM
+// overlay button (refreshFileToggle), so no strip is reserved for it.
+const fileSideInset = paneBorderPx
 
 // onToggleFileMode flips the focused pane between text and rendered
 // modes. Going text→rendered saves the current buffer first; going

@@ -302,10 +302,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			})
 			return nil
 		}
-		if pointInPlus(r, sx, sy) {
-			a.onToggleFileMode(p)
-			return nil
-		}
+		// The rendered/raw toggle is a DOM overlay button
+		// (refreshFileToggle); its clicks never reach the canvas.
 		// Anywhere outside the inner box (textarea / rendered area)
 		// is "outer ring" — ascent. The textarea overlay catches
 		// clicks inside in text mode; rendered mode falls through to

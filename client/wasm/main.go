@@ -154,6 +154,13 @@ type App struct {
 	fileTextareaInputCb js.Func
 	fileTextareaScrollCb js.Func
 
+	// fileToggleBtn is the floating rendered/raw toggle for a markdown
+	// descent. A DOM element (not a canvas button) so it can sit above
+	// the textarea overlay — letting the text content fill the pane
+	// edge-to-edge instead of reserving a strip for a canvas button.
+	fileToggleBtn js.Value
+	fileToggleCb  js.Func
+
 	// fileSaveScheduled is true when a debounced save is pending; the
 	// timer is in flight via setTimeout. fileSaveCb is the bound
 	// callback (allocated once, retained so JS can call it repeatedly).
