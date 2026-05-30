@@ -1,8 +1,15 @@
 package store
 
 // Schema is the canonical SQLite schema for Gridwell. Single-tenant: there is
-// no users/groups/sessions table and no per-row ownership. The `system` KV
-// table holds singleton state (currently just the current root_grid_id).
+// no users/groups/sessions table. The `system` KV table holds singleton state
+// (root grid id and root viewport framing). Every tile has a kind
+// (well/text/url/blackhole) and a version that bumps on content mutation;
+// every grid carries a version too. Blobs are markdown text only — no MIME
+// type. Well rows carry one view rectangle (view_x, view_y, view_zoom) that
+// is at once the preview frame, the descent target, and the ascent return.
+// Text rows carry a doc-space window (text_x, text_y, text_w, text_h) plus a
+// rendered/text mode. URL rows carry a URL string and the last-frozen JPEG
+// preview captured at close.
 const Schema = `
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -11,15 +18,14 @@ CREATE TABLE IF NOT EXISTS system (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- Keys: root_grid_id, root_view_cx, root_view_cy, root_zoom.
 
 CREATE TABLE IF NOT EXISTS grids (
-    id              INTEGER PRIMARY KEY,
-    object_id       TEXT NOT NULL,
-    refcount        INTEGER NOT NULL DEFAULT 1,
-    default_view_cx REAL NOT NULL DEFAULT 0,
-    default_view_cy REAL NOT NULL DEFAULT 0,
-    default_zoom    REAL NOT NULL DEFAULT 1.0,
-    created_at      INTEGER NOT NULL
+    id          INTEGER PRIMARY KEY,
+    object_id   TEXT NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 0,
+    refcount    INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
 
@@ -27,49 +33,45 @@ CREATE TABLE IF NOT EXISTS blobs (
     id        INTEGER PRIMARY KEY,
     hash      TEXT NOT NULL UNIQUE,
     size      INTEGER NOT NULL,
-    mime_type TEXT,
     data      BLOB NOT NULL,
     refcount  INTEGER NOT NULL DEFAULT 0
 );
+-- mime_type column dropped: blobs are markdown text.
 
 CREATE TABLE IF NOT EXISTS tiles (
     id            INTEGER PRIMARY KEY,
     object_id     TEXT NOT NULL,
+    version       INTEGER NOT NULL DEFAULT 0,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
-    type          TEXT NOT NULL CHECK (type IN ('well','file')),
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','blackhole')),
     x             INTEGER NOT NULL,
     y             INTEGER NOT NULL,
     w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
     h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
+    -- well-only: the rectangle in child-grid coordinates that the well's
+    -- preview shows, and that descent restores. One value, three jobs.
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 0,
-    -- Text-file tiles: the document-space window (in fixed-scale doc px)
-    -- the file was last framed at. view_x/view_y = scroll offset;
-    -- view_w/view_h = the window size. The parent-grid preview crops this
-    -- rectangle out of the re-rendered doc. 0 means "unset".
-    view_w        INTEGER NOT NULL DEFAULT 0,
-    view_h        INTEGER NOT NULL DEFAULT 0,
-    -- Text-file tiles: "rendered" or "text" (raw). Persists the toggle so
-    -- previews and re-descents reflect the last-used mode across reloads.
-    file_mode     TEXT,
     child_grid_id INTEGER REFERENCES grids(id),
-    capped        INTEGER NOT NULL DEFAULT 0,
-    mime_type     TEXT,
+    -- text-only: the framed window in doc-space px (scroll offset + size)
+    -- plus rendered/text mode.
+    text_x        INTEGER NOT NULL DEFAULT 0,
+    text_y        INTEGER NOT NULL DEFAULT 0,
+    text_w        INTEGER NOT NULL DEFAULT 0,
+    text_h        INTEGER NOT NULL DEFAULT 0,
+    text_mode     TEXT,
     blob_id       INTEGER REFERENCES blobs(id),
-    -- URL tiles only (mime_type='text/uri-list'): the current URL,
-    -- mutated by the server's Chromium driver as the live tab navigates.
+    -- url-only: the URL string and the frozen preview JPEG from last close.
     url_string    TEXT,
-    -- URL tiles only: the latest captured JPEG preview frame.
     preview_jpeg  BLOB,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
-        (type = 'well' AND child_grid_id IS NOT NULL AND mime_type IS NULL AND blob_id IS NULL AND url_string IS NULL AND preview_jpeg IS NULL) OR
-        (type = 'file' AND child_grid_id IS NULL AND mime_type IS NOT NULL AND (
-            (mime_type = 'text/uri-list' AND blob_id IS NULL AND url_string IS NOT NULL) OR
-            (mime_type <> 'text/uri-list' AND blob_id IS NOT NULL AND url_string IS NULL AND preview_jpeg IS NULL)
-        ))
+       (kind = 'well'      AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_jpeg IS NULL AND text_mode IS NULL)
+    OR (kind = 'text'      AND child_grid_id IS NULL     AND blob_id IS NOT NULL AND url_string IS NULL     AND preview_jpeg IS NULL)
+    OR (kind = 'url'       AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
+    OR (kind = 'blackhole' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND preview_jpeg IS NULL AND text_mode IS NULL)
     )
 );
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);

@@ -4,28 +4,23 @@
 // client uses the same encoding.
 package rpc
 
-// ViewRect is the framed region of the originating pane in the affected grid's
-// own coordinates.
-type ViewRect struct {
-	X int64 `json:"x"`
-	Y int64 `json:"y"`
-	W int64 `json:"w"`
-	H int64 `json:"h"`
-}
+// Tile kinds. A tile is exactly one of these.
+const (
+	KindWell      = "well"
+	KindText      = "text"
+	KindURL       = "url"
+	KindBlackHole = "blackhole"
+)
 
-func (r ViewRect) Contains(x, y, w, h int64) bool {
-	return x >= r.X && y >= r.Y && x+w <= r.X+r.W && y+h <= r.Y+r.H
-}
-
-func (r ViewRect) Intersects(x, y, w, h int64) bool {
-	if w <= 0 || h <= 0 || r.W <= 0 || r.H <= 0 {
-		return false
-	}
-	return x < r.X+r.W && x+w > r.X && y < r.Y+r.H && y+h > r.Y
-}
+// Text-tile display modes.
+const (
+	TextModeRendered = "rendered"
+	TextModeText     = "text"
+)
 
 // Path is the sequence of well-tile IDs walked from the root grid to the
-// pane the request originates from.
+// pane the request originates from. Mutations carry it so the store can fork
+// the COW spine of shared grids up to the highest one still uniquely owned.
 type Path struct {
 	WellIDs []int64 `json:"well_ids"`
 }
@@ -33,47 +28,47 @@ type Path struct {
 // Grid is the persistent unit of canvas. Tiles live in grids; wells point at
 // child grids. The root grid has no parent.
 type Grid struct {
-	ID            int64   `json:"id"`
-	ObjectID      string  `json:"object_id"`
-	DefaultViewCx float64 `json:"default_view_cx"`
-	DefaultViewCy float64 `json:"default_view_cy"`
-	DefaultZoom   float64 `json:"default_zoom"`
+	ID       int64  `json:"id"`
+	ObjectID string `json:"object_id"`
+	Version  int64  `json:"version"`
 }
 
-// Tile is the persistent unit of content in a grid.
+// Tile is the persistent unit of content in a grid. Kind selects which subset
+// of the optional fields is meaningful.
 type Tile struct {
-	ID          int64   `json:"id"`
-	ObjectID    string  `json:"object_id"`
-	GridID      int64   `json:"grid_id"`
-	Type        string  `json:"type"`
-	X           int64   `json:"x"`
-	Y           int64   `json:"y"`
-	W           int64   `json:"w"`
-	H           int64   `json:"h"`
-	ViewX       int64   `json:"view_x"`
-	ViewY       int64   `json:"view_y"`
-	ViewZoom    float64 `json:"view_zoom"`
-	ViewW       int64   `json:"view_w,omitempty"`
-	ViewH       int64   `json:"view_h,omitempty"`
-	FileMode    string  `json:"file_mode,omitempty"`
+	ID       int64  `json:"id"`
+	ObjectID string `json:"object_id"`
+	Version  int64  `json:"version"`
+	GridID   int64  `json:"grid_id"`
+	Kind     string `json:"kind"`
+	X        int64  `json:"x"`
+	Y        int64  `json:"y"`
+	W        int64  `json:"w"`
+	H        int64  `json:"h"`
+	// well-only
+	ViewX       int64   `json:"view_x,omitempty"`
+	ViewY       int64   `json:"view_y,omitempty"`
+	ViewZoom    float64 `json:"view_zoom,omitempty"`
 	ChildGridID int64   `json:"child_grid_id,omitempty"`
-	Capped      bool    `json:"capped,omitempty"`
-	MimeType    string  `json:"mime_type,omitempty"`
-	BlobID      int64   `json:"blob_id,omitempty"`
-	URLString   string  `json:"url_string,omitempty"`
+	// text-only
+	TextX    int64  `json:"text_x,omitempty"`
+	TextY    int64  `json:"text_y,omitempty"`
+	TextW    int64  `json:"text_w,omitempty"`
+	TextH    int64  `json:"text_h,omitempty"`
+	TextMode string `json:"text_mode,omitempty"`
+	BlobID   int64  `json:"blob_id,omitempty"`
+	// url-only
+	URLString string `json:"url_string,omitempty"`
 }
 
-func (t *Tile) IsURL() bool       { return t.Type == "file" && t.MimeType == MimeURIList }
-func (t *Tile) IsBlackHole() bool { return t.Type == "file" && t.MimeType == MimeBlackHole }
-
-const MimeURIList = "text/uri-list"
-const MimeBlackHole = "application/x-gridwell-blackhole"
-
-// Bootstrap RPC: client asks for the current root grid id.
+// Bootstrap RPC: client asks for the current root grid id and root framing.
 
 type BootstrapRequest struct{}
 type BootstrapResponse struct {
-	RootGridID int64 `json:"root_grid_id"`
+	RootGridID int64   `json:"root_grid_id"`
+	RootViewCx float64 `json:"root_view_cx"`
+	RootViewCy float64 `json:"root_view_cy"`
+	RootZoom   float64 `json:"root_zoom"`
 }
 
 // Reads.
@@ -82,18 +77,15 @@ type GetGridRequest struct {
 	GridID int64 `json:"grid_id"`
 }
 type GetGridResponse struct {
-	Grid     Grid   `json:"grid"`
-	Tiles    []Tile `json:"tiles"`
-	Readable bool   `json:"readable"`
-	Writable bool   `json:"writable"`
+	Grid  Grid   `json:"grid"`
+	Tiles []Tile `json:"tiles"`
 }
 
 type GetBlobRequest struct {
 	BlobID int64 `json:"blob_id"`
 }
 type GetBlobResponse struct {
-	Data     []byte `json:"data"`
-	MimeType string `json:"mime_type"`
+	Data []byte `json:"data"`
 }
 
 type GetTilePreviewRequest struct {
@@ -103,127 +95,126 @@ type GetTilePreviewResponse struct {
 	JPEG []byte `json:"jpeg"`
 }
 
-// Mutations on a grid.
-
-type CreateWellRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	GridID   int64    `json:"grid_id"`
-	X        int64    `json:"x"`
-	Y        int64    `json:"y"`
-	W        int64    `json:"w"`
-	H        int64    `json:"h"`
-}
-
-type CreateFileRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	GridID   int64    `json:"grid_id"`
-	X        int64    `json:"x"`
-	Y        int64    `json:"y"`
-	W        int64    `json:"w"`
-	H        int64    `json:"h"`
-	MimeType string   `json:"mime_type"`
-	Data     []byte   `json:"data"`
-}
-
+// TileResponse is the common shape returned by tile-producing mutations.
 type TileResponse struct {
 	Tile Tile `json:"tile"`
 }
 
-type MoveTileRequest struct {
-	Path         Path     `json:"path"`
-	ViewRect     ViewRect `json:"view_rect"`
-	TileID       int64    `json:"tile_id"`
-	DestGridID   int64    `json:"dest_grid_id"`
-	DestPath     Path     `json:"dest_path"`
-	DestViewRect ViewRect `json:"dest_view_rect"`
-	X            int64    `json:"x"`
-	Y            int64    `json:"y"`
+// Creates: no Version (the tile doesn't exist yet).
+
+type CreateWellRequest struct {
+	Path   Path  `json:"path"`
+	GridID int64 `json:"grid_id"`
+	X      int64 `json:"x"`
+	Y      int64 `json:"y"`
+	W      int64 `json:"w"`
+	H      int64 `json:"h"`
 }
-type MoveTileResponse struct {
-	Tile Tile `json:"tile"`
+
+type CreateTextRequest struct {
+	Path   Path   `json:"path"`
+	GridID int64  `json:"grid_id"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
+	Data   []byte `json:"data"`
+}
+
+type CreateURLRequest struct {
+	Path   Path   `json:"path"`
+	GridID int64  `json:"grid_id"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
+	URL    string `json:"url"`
+}
+
+type CreateBlackHoleRequest struct {
+	Path   Path  `json:"path"`
+	GridID int64 `json:"grid_id"`
+	X      int64 `json:"x"`
+	Y      int64 `json:"y"`
+	W      int64 `json:"w"`
+	H      int64 `json:"h"`
+}
+
+// Mutations: Version is the claimed current version of TileID.
+// Server returns 409 / ErrVersionConflict if it does not match.
+
+type MoveTileRequest struct {
+	Path       Path  `json:"path"`
+	TileID     int64 `json:"tile_id"`
+	Version    int64 `json:"version"`
+	DestGridID int64 `json:"dest_grid_id"`
+	DestPath   Path  `json:"dest_path"`
+	X          int64 `json:"x"`
+	Y          int64 `json:"y"`
 }
 
 type CloneTileRequest struct {
-	Path         Path     `json:"path"`
-	ViewRect     ViewRect `json:"view_rect"`
-	TileID       int64    `json:"tile_id"`
-	DestGridID   int64    `json:"dest_grid_id"`
-	DestPath     Path     `json:"dest_path"`
-	DestViewRect ViewRect `json:"dest_view_rect"`
-	X            int64    `json:"x"`
-	Y            int64    `json:"y"`
+	Path       Path  `json:"path"`
+	TileID     int64 `json:"tile_id"`
+	Version    int64 `json:"version"`
+	DestGridID int64 `json:"dest_grid_id"`
+	DestPath   Path  `json:"dest_path"`
+	X          int64 `json:"x"`
+	Y          int64 `json:"y"`
 }
 
 type ResizeTileRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-	X        int64    `json:"x"`
-	Y        int64    `json:"y"`
-	W        int64    `json:"w"`
-	H        int64    `json:"h"`
+	Path    Path  `json:"path"`
+	TileID  int64 `json:"tile_id"`
+	Version int64 `json:"version"`
+	X       int64 `json:"x"`
+	Y       int64 `json:"y"`
+	W       int64 `json:"w"`
+	H       int64 `json:"h"`
 }
 
-type SetGridDefaultViewRequest struct {
-	GridID int64   `json:"grid_id"`
-	Cx     float64 `json:"cx"`
-	Cy     float64 `json:"cy"`
-	Zoom   float64 `json:"zoom"`
-}
-type SetGridDefaultViewResponse struct {
-	Grid Grid `json:"grid"`
-}
-
-type SetTileViewportRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-	ViewX    int64    `json:"view_x"`
-	ViewY    int64    `json:"view_y"`
-	ViewZoom float64  `json:"view_zoom"`
-	// Text-file window size (doc px) + mode, persisted so the parent
-	// preview can mirror the last-framed view. Zero/empty leaves the
-	// stored values unchanged.
-	ViewW    int64  `json:"view_w,omitempty"`
-	ViewH    int64  `json:"view_h,omitempty"`
-	FileMode string `json:"file_mode,omitempty"`
+type SetWellViewRequest struct {
+	Path     Path    `json:"path"`
+	TileID   int64   `json:"tile_id"`
+	Version  int64   `json:"version"`
+	ViewX    int64   `json:"view_x"`
+	ViewY    int64   `json:"view_y"`
+	ViewZoom float64 `json:"view_zoom"`
 }
 
-type UpdateFileContentRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
-	Data     []byte   `json:"data"`
+type SetTextViewRequest struct {
+	Path     Path   `json:"path"`
+	TileID   int64  `json:"tile_id"`
+	Version  int64  `json:"version"`
+	TextX    int64  `json:"text_x"`
+	TextY    int64  `json:"text_y"`
+	TextW    int64  `json:"text_w"`
+	TextH    int64  `json:"text_h"`
+	TextMode string `json:"text_mode"`
+}
+
+type SetRootViewRequest struct {
+	Cx   float64 `json:"cx"`
+	Cy   float64 `json:"cy"`
+	Zoom float64 `json:"zoom"`
+}
+type SetRootViewResponse struct{}
+
+type UpdateTextRequest struct {
+	Path    Path   `json:"path"`
+	TileID  int64  `json:"tile_id"`
+	Version int64  `json:"version"`
+	Data    []byte `json:"data"`
 }
 
 type DeleteTileRequest struct {
-	Path     Path     `json:"path"`
-	ViewRect ViewRect `json:"view_rect"`
-	TileID   int64    `json:"tile_id"`
+	Path    Path  `json:"path"`
+	TileID  int64 `json:"tile_id"`
+	Version int64 `json:"version"`
 }
 type DeleteTileResponse struct{}
 
-type AscendAtRootRequest struct{}
-type AscendAtRootResponse struct {
-	NewRootGridID int64 `json:"new_root_grid_id"`
-	WellID        int64 `json:"well_id"`
-}
-
-type ForkURLRequest struct {
-	Path         Path     `json:"path"`
-	ViewRect     ViewRect `json:"view_rect"`
-	TileID       int64    `json:"tile_id"`
-	DestGridID   int64    `json:"dest_grid_id"`
-	DestPath     Path     `json:"dest_path"`
-	DestViewRect ViewRect `json:"dest_view_rect"`
-	X            int64    `json:"x"`
-	Y            int64    `json:"y"`
-}
-type ForkURLResponse struct {
-	Tile Tile `json:"tile"`
-}
+// Event stream.
 
 type SubscribeRequest struct{}
 
