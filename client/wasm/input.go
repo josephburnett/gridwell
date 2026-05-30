@@ -196,7 +196,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// window vertically (rendered mode). In text mode the textarea
 		// overlay handles its own scrolling and the wheel never reaches
 		// the canvas.
-		if p.FileMode == "rendered" {
+		if p.FileMode == rpc.TextModeRendered {
 			p.FileScrollY += dy
 			if p.FileScrollY < 0 {
 				p.FileScrollY = 0
@@ -316,7 +316,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// Text mode: the textarea covers most of the pane and handles drag
 		// itself. Margin clicks (text mode, narrow textarea) fall through
 		// to a no-op.
-		if p.FileMode == "rendered" {
+		if p.FileMode == rpc.TextModeRendered {
 			a.dragging = &dragState{
 				originPaneID: p.ID,
 				tileID:       0,
@@ -377,7 +377,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// below if we land on a child preview tile.
 		srcGridID:   a.gridIDForPath(p.Path),
 		srcPath:     append([]int64(nil), p.Path...),
-		srcViewRect: a.paneViewRect(p, ps),
 		srcCellSize: parentCell,
 	}
 	if n != nil {
@@ -401,7 +400,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.originPaneRect = r
 			a.dragging.srcGridID = n.ChildGridID
 			a.dragging.srcPath = append(append([]int64(nil), p.Path...), n.ID)
-			a.dragging.srcViewRect = wellChildViewRect(n)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
 		}
@@ -521,7 +519,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// parent-grid view.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.FileFocus != 0 && focused.FileMode == "rendered" {
+			if focused.FileFocus != 0 && focused.FileMode == rpc.TextModeRendered {
 				z := nonzero(focused.FileZoom)
 				focused.FileScrollX -= (sx - d.curScreenX) / z
 				focused.FileScrollY -= (sy - d.curScreenY) / z
@@ -550,7 +548,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// ghost shrinks AND fragments. Left-button release commits
 			// a DeleteTile. Drag back out and the lerp reassembles the
 			// ghost; release away from a sink does a normal move.
-			if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.IsBlackHole() && sink.ID != d.tileID {
+			if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
 				a.ghost.targetCellSize = t.cellSize * 0.2
 				a.ghost.targetFragmentation = 1.0
 			} else {
@@ -659,7 +657,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// deletes the source instead of moving/cloning it. Skip the cell
 	// snap and overlap math — the black hole "absorbs" whatever the
 	// cursor is on, regardless of exact coords.
-	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.IsBlackHole() && sink.ID != d.tileID {
+	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
 		a.runDeleteTile(d, t)
 		a.ghost = nil
 		a.draw()
@@ -694,33 +692,41 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 
 	srcPath := append([]int64(nil), d.srcPath...)
 	dstPath := append([]int64(nil), t.path...)
-	srcView := d.srcViewRect
-	dstView := t.viewRect
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
+	version := d.snapshotTile.Version
 
 	go func() {
 		var status int
 		if d.clone {
 			req := rpc.CloneTileRequest{
-				Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
+				Path:       rpc.Path{WellIDs: srcPath},
 				TileID:     d.tileID,
-				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
-				X: dropX, Y: dropY,
+				Version:    version,
+				DestGridID: dstGridID,
+				DestPath:   rpc.Path{WellIDs: dstPath},
+				X:          dropX,
+				Y:          dropY,
 			}
 			var resp rpc.TileResponse
 			status, _ = postJSON("/rpc/CloneTile", req, &resp)
 		} else {
 			req := rpc.MoveTileRequest{
-				Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
+				Path:       rpc.Path{WellIDs: srcPath},
 				TileID:     d.tileID,
-				DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
-				X: dropX, Y: dropY,
+				Version:    version,
+				DestGridID: dstGridID,
+				DestPath:   rpc.Path{WellIDs: dstPath},
+				X:          dropX,
+				Y:          dropY,
 			}
-			var resp rpc.MoveTileResponse
+			var resp rpc.TileResponse
 			status, _ = postJSON("/rpc/MoveTile", req, &resp)
 		}
 		if status != 200 {
+			if status == 409 {
+				a.refetchGridOnConflict(srcGridID, "MoveTile/CloneTile")
+			}
 			// Server rejected the drop. Snap the ghost back to origin so
 			// the user sees the stone return rather than vanish.
 			a.snapBackToOrigin(d)
@@ -853,14 +859,11 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 	if hit == nil {
 		return false
 	}
-	switch {
-	case hit.Type == "well":
+	switch hit.Kind {
+	case rpc.KindWell:
 		a.startDescent(p, hit)
 		return true
-	case hit.Type == "file" && hit.MimeType == "text/markdown":
-		a.startFileDescent(p, hit)
-		return true
-	case hit.IsURL():
+	case rpc.KindText, rpc.KindURL:
 		a.startFileDescent(p, hit)
 		return true
 	}
@@ -965,14 +968,12 @@ func (a *App) startAscent(p *pane.Pane) {
 	saved := a.popPaneState(p.ID)
 	if saved == nil {
 		// No in-session saved state (e.g., user reloaded mid-descent
-		// and is now ascending). Fall back to the parent grid's
-		// stored DefaultView when ascending to root, so the user
+		// and is now ascending). Fall back to the bootstrap-supplied
+		// root view when ascending all the way to root, so the user
 		// returns to their preferred viewport rather than a forced
 		// "well center, zoom 1" pose.
-		if level == 0 {
-			if g, ok := a.c.Grid(a.rootGridID); ok && g.Meta.DefaultZoom > 0 {
-				saved = &paneState{Cx: g.Meta.DefaultViewCx, Cy: g.Meta.DefaultViewCy, Zoom: g.Meta.DefaultZoom}
-			}
+		if level == 0 && a.rootViewZoom > 0 {
+			saved = &paneState{Cx: a.rootViewCx, Cy: a.rootViewCy, Zoom: a.rootViewZoom}
 		}
 		if saved == nil {
 			saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
@@ -1120,21 +1121,21 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	// Eagerly fetch the blob so it's likely cached by the time the
 	// transition lands. URL tiles don't have a blob; their preview
 	// path goes through urlPreview instead.
-	if !file.IsURL() {
+	if file.Kind == rpc.KindText {
 		a.fetchBlob(file.BlobID)
 	}
 
 	fileID := file.ID
-	initialScroll := float64(file.ViewY)
+	initialScroll := float64(file.TextY)
 	// URL tiles have no text/rendered modes; mode is "" for them so
 	// the textarea overlay (gated on FileMode == "text") never shows.
 	// For text files the mode is the one persisted on the tile (server),
 	// defaulting to raw text for a never-opened file.
 	var mode string
-	if !file.IsURL() {
-		mode = file.FileMode
+	if file.Kind == rpc.KindText {
+		mode = file.TextMode
 		if mode == "" {
-			mode = "text"
+			mode = rpc.TextModeText
 		}
 	}
 	a.startTransition(&paneTransition{
@@ -1163,7 +1164,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			// URL descent always attaches a streaming WebSocket; the
 			// server creates a fresh Chromium tab for the duration of
 			// the WS. closed in startFileAscent.
-			if file.IsURL() {
+			if file.Kind == rpc.KindURL {
 				rr := a.paneRectByID(fp.ID)
 				w, h := paneStreamSize(rr)
 				a.openURLStream(fp, file.ID, w, h)
@@ -1212,7 +1213,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 
 	// If we're ascending out of a URL tile stream, close the WS and
 	// clear any stream-lost marker.
-	if file.IsURL() {
+	if file.Kind == rpc.KindURL {
 		a.closeURLStream(p.ID)
 		delete(a.urlStreamLost, p.ID)
 	}
@@ -1266,8 +1267,8 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 // the preview stays stable across browser resizes. Mutates well in-place
 // (so the local-side ascent transition uses the new values) and patches
 // the cache so the parent's preview renders the new view immediately on
-// path-swap. Posts SetTileViewport in a goroutine; the server's event
-// will catch up the cache.
+// path-swap. Posts SetWellView in a goroutine; the server's event will
+// catch up the cache.
 //
 // No-op if the user's current center hasn't moved from the well's
 // stored view (rounded to int cells), so casual ascents don't churn
@@ -1295,37 +1296,24 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 		TileChanged: &rpc.TileChanged{Tile: updated},
 	})
 
-	// Build a parent-grid view rect from the saved parent state (the
-	// state we'll restore on ascent). Falls back to a generous default
-	// if no saved state exists — locality is best-effort here, since
-	// the action is genuinely local to the user's current view.
-	parentCx, parentCy, parentZoom := 0.0, 0.0, 1.0
-	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
-		ps := stack[len(stack)-1]
-		parentCx, parentCy, parentZoom = ps.Cx, ps.Cy, ps.Zoom
-	}
-	parentCellSize := cellPx * parentZoom
-	visW := r.W / parentCellSize
-	visH := r.H / parentCellSize
-	parentView := rpc.ViewRect{
-		X: int64(parentCx-visW/2) - 1,
-		Y: int64(parentCy-visH/2) - 1,
-		W: int64(visW) + 3,
-		H: int64(visH) + 3,
-	}
-
 	wellID := well.ID
+	wellVersion := well.Version
+	parentGridID := a.gridIDForPath(parentPath)
+	pp := append([]int64(nil), parentPath...)
 	go func() {
-		req := rpc.SetTileViewportRequest{
-			Path:     rpc.Path{WellIDs: append([]int64(nil), parentPath...)},
-			ViewRect: parentView,
+		req := rpc.SetWellViewRequest{
+			Path:     rpc.Path{WellIDs: pp},
 			TileID:   wellID,
+			Version:  wellVersion,
 			ViewX:    newViewX,
 			ViewY:    newViewY,
 			ViewZoom: newViewZoom,
 		}
 		var resp rpc.TileResponse
-		_, _ = postJSON("/rpc/SetTileViewport", req, &resp)
+		status, _ := postJSON("/rpc/SetWellView", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(parentGridID, "SetWellView")
+		}
 	}()
 }
 
@@ -1336,17 +1324,12 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	gid := a.gridIDForPath(p.Path)
 	r := paneRectFor(a, p)
-	pscreen := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	view := a.paneViewRect(p, pscreen)
 	scrollY := int64(p.FileScrollY + 0.5)
 
 	// Capture the textarea contents (if any) before we tear it down.
 	var buf string
 	hasBuf := false
-	if p.FileMode == "text" {
+	if p.FileMode == rpc.TextModeText {
 		ta := a.fileTextarea
 		if !ta.IsNull() && !ta.IsUndefined() {
 			buf = ta.Get("value").String()
@@ -1357,7 +1340,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// BlobID so the parent-grid preview rendered during the ascent
 	// transition reflects the user's edits, not the pre-edit content.
 	if hasBuf && file.BlobID != 0 {
-		a.c.PutBlob(file.BlobID, []byte(buf), "text/markdown")
+		a.c.PutBlob(file.BlobID, []byte(buf))
 	}
 
 	// The framed window in doc px: scroll position + the inner box size
@@ -1371,38 +1354,52 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// pane previewing this tile) reflects the framed window + mode before
 	// the server round-trip lands.
 	patched := file
-	patched.ViewX = 0
-	patched.ViewY = scrollY
-	patched.ViewW = viewW
-	patched.ViewH = viewH
-	patched.FileMode = p.FileMode
+	patched.TextX = 0
+	patched.TextY = scrollY
+	patched.TextW = viewW
+	patched.TextH = viewH
+	patched.TextMode = p.FileMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
 
+	path := append([]int64(nil), p.Path...)
+	mode := p.FileMode
 	go func() {
+		curVersion := file.Version
 		// Update content first if the user was editing.
 		if hasBuf {
-			req := rpc.UpdateFileContentRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-				TileID: file.ID, Data: []byte(buf),
+			req := rpc.UpdateTextRequest{
+				Path:    rpc.Path{WellIDs: path},
+				TileID:  file.ID,
+				Version: curVersion,
+				Data:    []byte(buf),
 			}
 			var resp rpc.TileResponse
-			if _, err := postJSON("/rpc/UpdateFileContent", req, &resp); err == nil {
-				a.c.PutBlob(resp.Tile.BlobID, []byte(buf), "text/markdown")
+			status, err := postJSON("/rpc/UpdateText", req, &resp)
+			if err == nil {
+				a.c.PutBlob(resp.Tile.BlobID, []byte(buf))
+				curVersion = resp.Tile.Version
+			} else if status == 409 {
+				a.refetchGridOnConflict(gid, "UpdateText")
+				return
 			}
 		}
 		// Persist the framed window + mode so re-descent and the preview
 		// honor "however you left it" across reloads.
-		vreq := rpc.SetTileViewportRequest{
-			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
+		vreq := rpc.SetTextViewRequest{
+			Path:     rpc.Path{WellIDs: path},
 			TileID:   file.ID,
-			ViewX:    0,
-			ViewY:    scrollY,
-			ViewW:    viewW,
-			ViewH:    viewH,
-			FileMode: p.FileMode,
+			Version:  curVersion,
+			TextX:    0,
+			TextY:    scrollY,
+			TextW:    viewW,
+			TextH:    viewH,
+			TextMode: mode,
 		}
 		var vresp rpc.TileResponse
-		_, _ = postJSON("/rpc/SetTileViewport", vreq, &vresp)
+		vstatus, _ := postJSON("/rpc/SetTextView", vreq, &vresp)
+		if vstatus == 409 {
+			a.refetchGridOnConflict(gid, "SetTextView")
+		}
 		a.fetchGrid(gid)
 	}()
 }
@@ -1441,13 +1438,13 @@ func (a *App) startTemplateDrag(p *pane.Pane, r paneRect, idx int, sx, sy float6
 func templateGhostNode(kind templateKind) rpc.Tile {
 	switch kind {
 	case tplWell:
-		return rpc.Tile{Type: "well", W: 1, H: 1}
+		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1}
 	case tplMarkdown:
-		return rpc.Tile{Type: "file", MimeType: "text/markdown", W: 1, H: 1}
+		return rpc.Tile{Kind: rpc.KindText, W: 1, H: 1}
 	case tplURL:
-		return rpc.Tile{Type: "file", MimeType: "text/uri-list", W: 1, H: 1}
+		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
 	case tplBlackHole:
-		return rpc.Tile{Type: "file", MimeType: rpc.MimeBlackHole, W: 1, H: 1}
+		return rpc.Tile{Kind: rpc.KindBlackHole, W: 1, H: 1}
 	}
 	return rpc.Tile{}
 }
@@ -1486,7 +1483,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		dx, dy := dropX, dropY
 		a.openURLModal(
 			func(url string) {
-				a.createAtCell(dp, dr, "file", "text/uri-list", []byte(url), dx, dy)
+				a.createURLAtCell(dp, dr, url, dx, dy)
 				a.menuOpen = false
 				a.draw()
 			},
@@ -1508,41 +1505,80 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 
 	switch d.template {
 	case tplWell:
-		a.createAtCell(destPane, destRect, "well", "", nil, dropX, dropY)
+		a.createWellAtCell(destPane, destRect, dropX, dropY)
 	case tplMarkdown:
-		a.createAtCell(destPane, destRect, "file", "text/markdown", []byte{}, dropX, dropY)
+		a.createTextAtCell(destPane, destRect, []byte{}, dropX, dropY)
 	case tplBlackHole:
-		a.createAtCell(destPane, destRect, "file", rpc.MimeBlackHole, []byte{}, dropX, dropY)
+		a.createBlackHoleAtCell(destPane, destRect, dropX, dropY)
 	}
 	a.menuOpen = false
 }
 
-// createAtCell fires the appropriate Create RPC at a specific cell.
-// Used by template drops; the footprint is always 1×1.
-func (a *App) createAtCell(p *pane.Pane, r paneRect, kind, mime string, data []byte, cellX, cellY int64) {
-	pscreen := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	view := a.paneViewRect(p, pscreen)
+// createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
+func (a *App) createWellAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
+	_ = r
 	gid := a.gridIDForPath(p.Path)
+	path := append([]int64(nil), p.Path...)
 	go func() {
-		if kind == "well" {
-			req := rpc.CreateWellRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-				GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-			}
-			var resp rpc.TileResponse
-			_, _ = postJSON("/rpc/CreateWell", req, &resp)
-		} else {
-			req := rpc.CreateFileRequest{
-				Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-				GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-				MimeType: mime, Data: data,
-			}
-			var resp rpc.TileResponse
-			_, _ = postJSON("/rpc/CreateFile", req, &resp)
+		req := rpc.CreateWellRequest{
+			Path:   rpc.Path{WellIDs: path},
+			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		}
+		var resp rpc.TileResponse
+		_, _ = postJSON("/rpc/CreateWell", req, &resp)
+		a.fetchGrid(gid)
+	}()
+}
+
+// createTextAtCell fires CreateText at the given cell with the given
+// initial bytes. Footprint is 1×1.
+func (a *App) createTextAtCell(p *pane.Pane, r paneRect, data []byte, cellX, cellY int64) {
+	_ = r
+	gid := a.gridIDForPath(p.Path)
+	path := append([]int64(nil), p.Path...)
+	go func() {
+		req := rpc.CreateTextRequest{
+			Path:   rpc.Path{WellIDs: path},
+			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+			Data: data,
+		}
+		var resp rpc.TileResponse
+		_, _ = postJSON("/rpc/CreateText", req, &resp)
+		a.fetchGrid(gid)
+	}()
+}
+
+// createURLAtCell fires CreateURL at the given cell with the given URL.
+// Footprint is 1×1.
+func (a *App) createURLAtCell(p *pane.Pane, r paneRect, url string, cellX, cellY int64) {
+	_ = r
+	gid := a.gridIDForPath(p.Path)
+	path := append([]int64(nil), p.Path...)
+	go func() {
+		req := rpc.CreateURLRequest{
+			Path:   rpc.Path{WellIDs: path},
+			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+			URL: url,
+		}
+		var resp rpc.TileResponse
+		_, _ = postJSON("/rpc/CreateURL", req, &resp)
+		a.fetchGrid(gid)
+	}()
+}
+
+// createBlackHoleAtCell fires CreateBlackHole at the given cell.
+// Footprint is 1×1.
+func (a *App) createBlackHoleAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
+	_ = r
+	gid := a.gridIDForPath(p.Path)
+	path := append([]int64(nil), p.Path...)
+	go func() {
+		req := rpc.CreateBlackHoleRequest{
+			Path:   rpc.Path{WellIDs: path},
+			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		}
+		var resp rpc.TileResponse
+		_, _ = postJSON("/rpc/CreateBlackHole", req, &resp)
 		a.fetchGrid(gid)
 	}()
 }

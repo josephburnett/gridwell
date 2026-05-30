@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
@@ -319,7 +320,7 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 	if !ok {
 		return false
 	}
-	return t.IsURL()
+	return t.Kind == rpc.KindURL
 }
 
 // paneRectByID looks up the screen rect for the given pane via a fresh

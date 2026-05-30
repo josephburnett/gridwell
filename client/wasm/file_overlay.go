@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -135,7 +134,7 @@ func (a *App) ensureFileTextarea() {
 	a.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.fileSaveScheduled = false
 		p := a.tree.FocusedPane()
-		if p == nil || p.FileFocus == 0 || p.FileMode != "text" {
+		if p == nil || p.FileFocus == 0 || p.FileMode != rpc.TextModeText {
 			return nil
 		}
 		a.saveFileFromTextarea(p)
@@ -327,7 +326,7 @@ func (a *App) refreshFileToggle() {
 		return
 	}
 	file, ok := g.Tiles[p.FileFocus]
-	if !ok || file.Type != "file" || file.IsURL() {
+	if !ok || file.Kind != rpc.KindText {
 		hide()
 		return
 	}
@@ -342,7 +341,7 @@ func (a *App) refreshFileToggle() {
 	style.Set("top", strconv.FormatFloat(cy-plusButtonRadius, 'f', 1, 64)+"px")
 	// Glyph hints at the TARGET mode: an italic serif "a" means clicking
 	// renders; a monospace "a" means clicking edits the source.
-	if p.FileMode == "rendered" {
+	if p.FileMode == rpc.TextModeRendered {
 		style.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
 		style.Set("fontStyle", "normal")
 	} else {
@@ -361,7 +360,7 @@ func (a *App) refreshFileOverlay() {
 	ta := a.fileTextarea
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.FileFocus == 0 || p.FileMode != "text" {
+	if p == nil || p.FileFocus == 0 || p.FileMode != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
 		// Move focus back to the canvas so ascent and other gestures
 		// continue to work.
@@ -392,7 +391,7 @@ func (a *App) refreshFileOverlay() {
 		if file, ok := g.Tiles[p.FileFocus]; ok {
 			if blob, ok := a.c.Blob(file.BlobID); ok {
 				if ta.Get("value").String() == "" {
-					ta.Set("value", string(blob.Data))
+					ta.Set("value", string(blob))
 				}
 			}
 		}
@@ -419,7 +418,7 @@ func (a *App) syncFileOverlayPosition() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || p.FileFocus == 0 || p.FileMode != "text" {
+	if p == nil || p.FileFocus == 0 || p.FileMode != rpc.TextModeText {
 		a.fileTextarea.Get("style").Set("display", "none")
 		return
 	}
@@ -472,12 +471,12 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	if p.FileFocus == 0 {
 		return
 	}
-	if p.FileMode == "text" {
+	if p.FileMode == rpc.TextModeText {
 		// Save before switching to rendered.
 		a.saveFileFromTextarea(p)
-		p.FileMode = "rendered"
+		p.FileMode = rpc.TextModeRendered
 	} else {
-		p.FileMode = "text"
+		p.FileMode = rpc.TextModeText
 		// Reset textarea contents next time refreshFileOverlay is called
 		// so it picks up the freshest cached blob.
 		if !a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
@@ -516,22 +515,21 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	// renders that read the cached node's blob_id between now and the
 	// RPC round-trip see the user's content.
 	if file.BlobID != 0 {
-		a.c.PutBlob(file.BlobID, []byte(buf), "text/markdown")
+		a.c.PutBlob(file.BlobID, []byte(buf))
 	}
-	r := paneRectFor(a, p)
-	pscreen := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	view := a.paneViewRect(p, pscreen)
 	go func() {
-		req := rpc.UpdateFileContentRequest{
-			Path: rpc.Path{WellIDs: p.Path}, ViewRect: view,
-			TileID: file.ID, Data: []byte(buf),
+		req := rpc.UpdateTextRequest{
+			Path:    rpc.Path{WellIDs: p.Path},
+			TileID:  file.ID,
+			Version: file.Version,
+			Data:    []byte(buf),
 		}
 		var resp rpc.TileResponse
-		if _, err := postJSON("/rpc/UpdateFileContent", req, &resp); err == nil {
-			a.c.PutBlob(resp.Tile.BlobID, []byte(buf), "text/markdown")
+		status, err := postJSON("/rpc/UpdateText", req, &resp)
+		if err == nil {
+			a.c.PutBlob(resp.Tile.BlobID, []byte(buf))
+		} else if status == 409 {
+			a.refetchGridOnConflict(gid, "UpdateText")
 		}
 	}()
 }

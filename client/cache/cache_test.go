@@ -10,8 +10,8 @@ func seedCache(t *testing.T) *Cache {
 	t.Helper()
 	c := New()
 	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{
-		{ID: 100, GridID: 1, Type: "well", X: 0, Y: 0, W: 1, H: 1, ChildGridID: 2},
-		{ID: 101, GridID: 1, Type: "file", X: 5, Y: 5, W: 1, H: 1, MimeType: "text/markdown", BlobID: 1},
+		{ID: 100, GridID: 1, Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridID: 2},
+		{ID: 101, GridID: 1, Kind: rpc.KindText, X: 5, Y: 5, W: 1, H: 1, BlobID: 1},
 	})
 	return c
 }
@@ -36,7 +36,7 @@ func TestApplyNodeChanged(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
 		Kind:        rpc.EventTileChanged,
-		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 100, GridID: 1, Type: "well", X: 9, Y: 9, W: 2, H: 2, ChildGridID: 2}},
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 100, GridID: 1, Kind: rpc.KindWell, X: 9, Y: 9, W: 2, H: 2, ChildGridID: 2}},
 	})
 	if !ok {
 		t.Error("Apply returned false")
@@ -88,7 +88,7 @@ func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
 		Kind:        rpc.EventTileChanged,
-		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 999, GridID: 999, Type: "well", ChildGridID: 1}},
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 999, GridID: 999, Kind: rpc.KindWell, ChildGridID: 1}},
 	})
 	if ok {
 		t.Error("expected false for unknown grid")
@@ -102,7 +102,7 @@ func TestKnownWellIDs(t *testing.T) {
 		t.Errorf("well id 100 missing from known: %v", known)
 	}
 	if known[101] {
-		t.Errorf("file id 101 should not be in known wells: %v", known)
+		t.Errorf("text id 101 should not be in known wells: %v", known)
 	}
 }
 
@@ -111,24 +111,21 @@ func TestBlobPutGetInvalidate(t *testing.T) {
 	if _, ok := c.Blob(7); ok {
 		t.Fatal("empty cache should not have blob 7")
 	}
-	c.PutBlob(7, []byte("hello"), "text/markdown")
+	c.PutBlob(7, []byte("hello"))
 	b, ok := c.Blob(7)
 	if !ok {
 		t.Fatal("blob 7 missing after put")
 	}
-	if string(b.Data) != "hello" {
-		t.Errorf("blob data = %q, want hello", string(b.Data))
-	}
-	if b.MimeType != "text/markdown" {
-		t.Errorf("blob mime = %q, want text/markdown", b.MimeType)
+	if string(b) != "hello" {
+		t.Errorf("blob data = %q, want hello", string(b))
 	}
 	// PutBlob copies the bytes so caller mutations don't propagate.
 	src := []byte("world")
-	c.PutBlob(8, src, "text/markdown")
+	c.PutBlob(8, src)
 	src[0] = 'X'
 	got, _ := c.Blob(8)
-	if string(got.Data) != "world" {
-		t.Errorf("after mutating source, blob 8 = %q (cache should hold its own copy)", string(got.Data))
+	if string(got) != "world" {
+		t.Errorf("after mutating source, blob 8 = %q (cache should hold its own copy)", string(got))
 	}
 	c.InvalidateBlob(7)
 	if _, ok := c.Blob(7); ok {

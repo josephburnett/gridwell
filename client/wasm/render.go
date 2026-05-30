@@ -32,22 +32,21 @@ const (
 	// it never gets read as "you're descended into something".
 	colorRootBorder = "#7a6a4a"
 	colorGridLine = "#15171d"
-	// File colors are keyed by MIME subtype so each file kind has its
-	// own identity. The user identifies stones by color at a glance;
-	// the icon (and the preview when zoomed in enough) reveals the
-	// rest.
-	//   - text/markdown → olive green (distinct from image's sage)
-	//   - text/uri-list → purple (web pages live in the "browser" bucket)
-	//   - image/*       → sage green
-	colorMarkdownFill       = "#2c3a1a"
-	colorMarkdownLine       = "#8aa05a"
-	colorMarkdownLineFaded  = "#4a5a3a"
-	colorURLFill            = "#2b1a3a"
-	colorURLLine            = "#7a5a9a"
-	colorURLLineFaded       = "#4a3a5a"
-	colorImageFill          = "#1a3a2b"
-	colorImageLine          = "#5a8a6a"
-	colorLocked      = "#26262a"
+	// Content-tile colors. Each tile kind has its own identity; the
+	// user reads tiles by color at a glance and the icon / preview
+	// reveals the rest.
+	//   - text      → olive green
+	//   - url       → purple
+	//   - blackhole → red
+	colorMarkdownFill      = "#2c3a1a"
+	colorMarkdownLine      = "#8aa05a"
+	colorMarkdownLineFaded = "#4a5a3a"
+	colorURLFill           = "#2b1a3a"
+	colorURLLine           = "#7a5a9a"
+	colorURLLineFaded      = "#4a3a5a"
+	colorBlackHoleFill     = "#3a1c1a"
+	colorBlackHoleLine     = "#a06a5a"
+	colorLocked            = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
 	colorPlusBg      = "#23252d"
@@ -226,13 +225,13 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		// mental model is consistent.
 		if p.FileFocus != 0 {
 			if file, ok := g.Tiles[p.FileFocus]; ok {
-				switch {
-				case file.Type == "file" && file.MimeType == "text/markdown":
+				switch file.Kind {
+				case rpc.KindText:
 					ix, iy, iw, ih := fileInnerBox(p, r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
 					a.cctx.Call("fillRect", ix, iy, iw, ih)
 					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
-				case file.IsURL():
+				case rpc.KindURL:
 					ix, iy, iw, ih := paneContentBox(r)
 					a.drawURLTileInPane(p, &file, ix, iy, iw, ih)
 				default:
@@ -410,15 +409,14 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
 func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
-	if n.Type == "file" && n.MimeType == "text/markdown" {
+	switch n.Kind {
+	case rpc.KindText:
 		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, r, selected)
 		return
-	}
-	if n.IsURL() {
+	case rpc.KindURL:
 		a.drawURLTile(n, x, y, w, h, selected)
 		return
-	}
-	if n.IsBlackHole() {
+	case rpc.KindBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
 		if selected {
 			a.cctx.Set("strokeStyle", colorSelected)
@@ -428,7 +426,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		}
 		return
 	}
-	if n.Type != "well" {
+	if n.Kind != rpc.KindWell {
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
 	}
@@ -501,7 +499,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	mode := p.FileMode
 	if mode == "" {
-		mode = "rendered"
+		mode = rpc.TextModeRendered
 	}
 	// Fixed scale: the pane is a plain window onto the document. No zoom.
 	scale := fileFixedScale
@@ -513,10 +511,10 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	a.cctx.Call("rect", x, y, w, h)
 	a.cctx.Call("clip")
 
-	hideForTextarea := mode == "text" && p.ID == a.tree.Focus
+	hideForTextarea := mode == rpc.TextModeText && p.ID == a.tree.Focus
 	if !hideForTextarea {
 		if blob, ok := a.c.Blob(n.BlobID); ok {
-			drawMarkdownInRect(a.cctx, string(blob.Data),
+			drawMarkdownInRect(a.cctx, string(blob),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
 				scale, 0, mode)
@@ -550,9 +548,9 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 	// Mode comes from the tile (persisted on the server); default to raw
 	// text for a never-opened file. A pane descended into this file
 	// overrides with its live mode.
-	mode := n.FileMode
+	mode := n.TextMode
 	if mode == "" {
-		mode = "text"
+		mode = rpc.TextModeText
 	}
 	fp := a.paneFocusedOnFile(n.ID)
 	var scale, scrollX, scrollY float64
@@ -577,21 +575,21 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 		} else {
 			scale = fileFixedScale
 		}
-	} else if n.ViewW > 0 && n.ViewH > 0 {
+	} else if n.TextW > 0 && n.TextH > 0 {
 		// Preview mirrors the last framed window: cover-crop the saved
-		// document-space rectangle (ViewX,ViewY,ViewW,ViewH) into the
+		// document-space rectangle (TextX,TextY,TextW,TextH) into the
 		// tile footprint (x,y,w,h). The larger axis ratio binds (cover),
 		// anchored at the window's top-left so headings stay in view.
 		// w/h already include the parent grid zoom, so the label scales
 		// naturally as the user zooms the parent grid.
-		sxr := w / float64(n.ViewW)
-		syr := h / float64(n.ViewH)
+		sxr := w / float64(n.TextW)
+		syr := h / float64(n.TextH)
 		scale = sxr
 		if syr > scale {
 			scale = syr
 		}
-		scrollX = float64(n.ViewX)
-		scrollY = float64(n.ViewY)
+		scrollX = float64(n.TextX)
+		scrollY = float64(n.TextY)
 	} else {
 		// Never framed: fit the document width to the tile, top-aligned.
 		scale = w / fileNaturalContentPx
@@ -615,7 +613,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 	// the textarea overlay renders the editable source. Drawing the
 	// markdown to the canvas behind it would just produce a doubled,
 	// misaligned render, so skip it.
-	hideForTextarea := fp != nil && fp.FileMode == "text" && fp.ID == a.tree.Focus
+	hideForTextarea := fp != nil && fp.FileMode == rpc.TextModeText && fp.ID == a.tree.Focus
 	if !hideForTextarea {
 		if blob, ok := a.c.Blob(n.BlobID); ok {
 			// Layout width is fixed at the natural content width so
@@ -625,7 +623,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 			// inner-box is wider than tall) gets clipped at the cell
 			// edge — that's the "start from the left" behavior the
 			// user asked for.
-			drawMarkdownInRect(a.cctx, string(blob.Data),
+			drawMarkdownInRect(a.cctx, string(blob),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
 				scale, 0, mode)
@@ -661,7 +659,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 //
 // The rect's clip is the caller's responsibility.
 func drawMarkdownInRect(c js.Value, src string, x, y, w, h, scale, scrollY float64, mode string) {
-	if mode == "text" {
+	if mode == rpc.TextModeText {
 		drawMarkdownText(c, src, x, y, w, h, scale, scrollY)
 		return
 	}
@@ -932,7 +930,7 @@ func (a *App) fetchBlob(blobID int64) {
 		if err != nil || status != 200 {
 			return
 		}
-		a.c.PutBlob(blobID, resp.Data, resp.MimeType)
+		a.c.PutBlob(blobID, resp.Data)
 		// If the focused pane is waiting on this blob to populate its
 		// text-mode editor, seed the textarea now.
 		a.refreshFileOverlay()
@@ -980,29 +978,28 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 // the "flat" renderer used for nested previews (no recursion) and for
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
 func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
-	switch {
-	case n.Type == "well":
+	switch n.Kind {
+	case rpc.KindWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
 		c.Set("strokeStyle", colorFocusBorder)
 		c.Set("lineWidth", 1.0)
 		c.Call("strokeRect", x, y, w, h)
-	case n.IsBlackHole():
+	case rpc.KindBlackHole:
+		c.Set("fillStyle", colorBlackHoleFill)
+		c.Call("fillRect", x, y, w, h)
+		c.Set("strokeStyle", colorBlackHoleLine)
+		c.Call("strokeRect", x, y, w, h)
 		drawBlackHoleSwatch(c, x, y, w, h)
-	case n.IsURL():
+	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)
 		c.Set("strokeStyle", colorURLLine)
 		c.Call("strokeRect", x, y, w, h)
-	case n.Type == "file" && strings.HasPrefix(n.MimeType, "text/"):
+	case rpc.KindText:
 		c.Set("fillStyle", colorMarkdownFill)
 		c.Call("fillRect", x, y, w, h)
 		c.Set("strokeStyle", colorMarkdownLine)
-		c.Call("strokeRect", x, y, w, h)
-	case n.Type == "file" && strings.HasPrefix(n.MimeType, "image/"):
-		c.Set("fillStyle", colorImageFill)
-		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorImageLine)
 		c.Call("strokeRect", x, y, w, h)
 	default:
 		c.Set("fillStyle", colorLocked)
@@ -1115,13 +1112,13 @@ func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) 
 	if p.FileFocus != 0 {
 		if gridOK {
 			if file, ok := g.Tiles[p.FileFocus]; ok {
-				switch {
-				case file.IsURL():
+				switch file.Kind {
+				case rpc.KindURL:
 					if focused {
 						return colorURLLine
 					}
 					return colorURLLineFaded
-				case file.Type == "file" && file.MimeType == "text/markdown":
+				case rpc.KindText:
 					if focused {
 						return colorMarkdownLine
 					}
@@ -1129,7 +1126,7 @@ func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) 
 				}
 			}
 		}
-		// Image (or unknown file): generic descent blue.
+		// Unknown file: generic descent blue.
 		if focused {
 			return colorFocusBorder
 		}

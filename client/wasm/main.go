@@ -14,7 +14,6 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
-	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -50,8 +49,12 @@ type App struct {
 	cctx     js.Value // 2d context
 
 	rootGridID int64
-	tree       *pane.Tree
-	c          *cache.Cache
+	// Seeded from Bootstrap and refreshed by scheduleRootViewSave.
+	// Used to restore the focused pane's initial framing on boot, and
+	// as the fallback target when ascending all the way back to root.
+	rootViewCx, rootViewCy, rootViewZoom float64
+	tree                                 *pane.Tree
+	c                                    *cache.Cache
 
 	width, height float64
 
@@ -274,11 +277,10 @@ type dragState struct {
 	// Source-grid info — set at mousedown; same as the focused pane's
 	// grid for parent-grid drags, or the well's child grid for "pull
 	// out of well" drags. Carried separately so the drop commit can
-	// build a MoveTile RPC with the right Path/ViewRect/grid id even
-	// when source and dest are different grids inside the same pane.
+	// build a MoveTile RPC with the right Path/grid id even when source
+	// and dest are different grids inside the same pane.
 	srcGridID   int64
 	srcPath     []int64
-	srcViewRect rpc.ViewRect
 	srcCellSize float64
 }
 
@@ -336,12 +338,24 @@ func (a *App) bootstrap() {
 		return
 	}
 	a.rootGridID = resp.RootGridID
+	a.rootViewCx = resp.RootViewCx
+	a.rootViewCy = resp.RootViewCy
+	a.rootViewZoom = resp.RootZoom
 	a.afterBootstrap()
 }
 
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
-	a.tree.FocusedPane().Path = nil
+	p := a.tree.FocusedPane()
+	p.Path = nil
+	// Seed the root pane with the framing the server told us about.
+	// URL boot may overwrite this in applyURLOnBoot if the URL pins
+	// the focused pane to a specific spot.
+	if a.rootViewZoom > 0 {
+		p.Cx = a.rootViewCx
+		p.Cy = a.rootViewCy
+		p.Zoom = a.rootViewZoom
+	}
 
 	a.rootViewSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.rootViewSaveScheduled = false
@@ -592,18 +606,10 @@ func (a *App) gridIDForPath(p []int64) int64 {
 	return gid
 }
 
-// paneViewRect computes the framed rectangle for a pane in the leaf grid's
-// coordinates. Used as the locality token in mutating RPCs.
-func (a *App) paneViewRect(p *pane.Pane, paneScreen dragdrop.Pane) rpc.ViewRect {
-	cellSize := paneScreen.CellPx * paneScreen.Zoom
-	visW := paneScreen.ScreenW / cellSize
-	visH := paneScreen.ScreenH / cellSize
-	left := p.Cx - visW/2
-	top := p.Cy - visH/2
-	return rpc.ViewRect{
-		X: int64(left) - 1,
-		Y: int64(top) - 1,
-		W: int64(visW) + 3,
-		H: int64(visH) + 3,
-	}
+// refetchGridOnConflict logs a 409 version-conflict and refetches the
+// affected grid so the cache catches up to the server's authoritative
+// version.
+func (a *App) refetchGridOnConflict(gridID int64, where string) {
+	js.Global().Get("console").Call("warn", "gridwell: version conflict on "+where+", refetching grid")
+	a.fetchGrid(gridID)
 }

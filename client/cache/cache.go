@@ -20,13 +20,7 @@ import (
 type Cache struct {
 	mu    sync.Mutex
 	grids map[int64]*Grid
-	blobs map[int64]Blob
-}
-
-// Blob is a cached file body (bytes + mime type) keyed by blob id.
-type Blob struct {
-	Data     []byte
-	MimeType string
+	blobs map[int64][]byte
 }
 
 // Grid is a cached grid plus its tiles indexed by id for cheap upsert.
@@ -37,21 +31,22 @@ type Grid struct {
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[int64]*Grid{}, blobs: map[int64]Blob{}}
+	return &Cache{grids: map[int64]*Grid{}, blobs: map[int64][]byte{}}
 }
 
-// PutBlob stores a blob. Used after a fresh GetBlob call.
-func (c *Cache) PutBlob(blobID int64, data []byte, mime string) {
+// PutBlob stores a blob. Blobs are text bytes (the only blob-bearing tile
+// kind is KindText). Used after a fresh GetBlob call.
+func (c *Cache) PutBlob(blobID int64, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	c.blobs[blobID] = Blob{Data: cp, MimeType: mime}
+	c.blobs[blobID] = cp
 }
 
-// Blob returns the cached blob for blobID, or (Blob{}, false) if absent.
+// Blob returns the cached blob bytes for blobID, or (nil, false) if absent.
 // Bytes are returned by reference; treat as read-only.
-func (c *Cache) Blob(blobID int64) (Blob, bool) {
+func (c *Cache) Blob(blobID int64) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	b, ok := c.blobs[blobID]
@@ -131,7 +126,7 @@ func (c *Cache) KnownWellIDs() map[int64]bool {
 	out := map[int64]bool{}
 	for _, g := range c.grids {
 		for id, n := range g.Tiles {
-			if n.Type == "well" {
+			if n.Kind == rpc.KindWell {
 				out[id] = true
 			}
 		}

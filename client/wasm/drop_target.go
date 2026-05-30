@@ -3,8 +3,6 @@
 package main
 
 import (
-	"math"
-
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -32,7 +30,6 @@ type dropTarget struct {
 	cellSize float64
 	originX  float64
 	originY  float64
-	viewRect rpc.ViewRect
 }
 
 // dropTargetAt resolves the cursor at (sx, sy) to a drop target.
@@ -67,7 +64,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 	// self and creates a parent/child cycle on the server.
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
-		n.Type == "well" && n.ChildGridID != 0 &&
+		n.Kind == rpc.KindWell && n.ChildGridID != 0 &&
 		n.ID != excludeTileID {
 		// Well preview math. Effective ratio resolves the unvisited
 		// fallback in one place so the child cell size is computed
@@ -87,7 +84,6 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
-			viewRect: wellChildViewRect(n),
 		}, true
 	}
 
@@ -100,7 +96,6 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 		cellSize: parentCell,
 		originX:  parentOriginX,
 		originY:  parentOriginY,
-		viewRect: a.paneViewRect(p, ps),
 	}, true
 }
 
@@ -110,37 +105,6 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 func tileCopy(n *rpc.Tile) *rpc.Tile {
 	c := *n
 	return &c
-}
-
-// wellChildViewRect returns the visible region of a well's child grid
-// in *child cell* coordinates, suitable for the server's locality
-// check on cross-grid moves into / out of the well. Centered on
-// (ViewX + W/2, ViewY + H/2). ±1 pad matches paneViewRect's convention.
-func wellChildViewRect(well *rpc.Tile) rpc.ViewRect {
-	visWf, visHf := wellChildVisibleCells(well)
-	visW := int64(math.Ceil(visWf))
-	visH := int64(math.Ceil(visHf))
-	centerX := float64(well.ViewX) + float64(well.W)/2
-	centerY := float64(well.ViewY) + float64(well.H)/2
-	leftX := int64(math.Floor(centerX - float64(visW)/2))
-	topY := int64(math.Floor(centerY - float64(visH)/2))
-	return rpc.ViewRect{
-		X: leftX - 1,
-		Y: topY - 1,
-		W: visW + 3,
-		H: visH + 3,
-	}
-}
-
-// wellChildVisibleCells returns (visW, visH): the visible child-cell
-// counts in the well's preview. Derived from the previewCell formula
-// (parentCell × ratio) — visible cells = footprint / previewCell =
-// footprintCells / ratio, window-independent because `ratio` is the
-// intrinsic ViewZoom (with the well-side default substituted when the
-// well is unvisited).
-func wellChildVisibleCells(well *rpc.Tile) (float64, float64) {
-	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
-	return float64(well.W) / ratio, float64(well.H) / ratio
 }
 
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor
@@ -157,7 +121,7 @@ func (t *dropTarget) cellAtCursor(sx, sy, cellOffsetX, cellOffsetY float64) (int
 // to decide whether a click on a well is starting a "pull out" gesture
 // on a specific child tile.
 func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Tile, sx, sy float64) *rpc.Tile {
-	if well.Type != "well" || well.ChildGridID == 0 {
+	if well.Kind != rpc.KindWell || well.ChildGridID == 0 {
 		return nil
 	}
 	g, ok := a.c.Grid(well.ChildGridID)

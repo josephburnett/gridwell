@@ -449,7 +449,6 @@ func (a *App) armRightClone(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float6
 		originPaneRect: r,
 		srcGridID:      a.gridIDForPath(p.Path),
 		srcPath:        append([]int64(nil), p.Path...),
-		srcViewRect:    a.paneViewRect(p, ps),
 		srcCellSize:    cellSize,
 	}
 }
@@ -501,21 +500,26 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	a.startSnap(targetX, targetY, snapMs)
 	srcPath := append([]int64(nil), d.srcPath...)
 	dstPath := append([]int64(nil), t.path...)
-	srcView := d.srcViewRect
-	dstView := t.viewRect
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	tileID := d.tileID
+	version := d.snapshotTile.Version
 	go func() {
 		req := rpc.CloneTileRequest{
-			Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
+			Path:       rpc.Path{WellIDs: srcPath},
 			TileID:     tileID,
-			DestGridID: dstGridID, DestPath: rpc.Path{WellIDs: dstPath}, DestViewRect: dstView,
-			X: dropX, Y: dropY,
+			Version:    version,
+			DestGridID: dstGridID,
+			DestPath:   rpc.Path{WellIDs: dstPath},
+			X:          dropX,
+			Y:          dropY,
 		}
 		var resp rpc.TileResponse
 		status, _ := postJSON("/rpc/CloneTile", req, &resp)
 		if status != 200 {
+			if status == 409 {
+				a.refetchGridOnConflict(srcGridID, "CloneTile")
+			}
 			a.snapBackToOrigin(d)
 			return
 		}
@@ -525,19 +529,23 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 }
 
 // runDeleteTile fires DeleteTile against the dragged source tile. Used
-// when the right-button-clone gesture drops onto a black-hole sink.
+// when the left-button-move gesture drops onto a black-hole sink.
 func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	srcPath := append([]int64(nil), d.srcPath...)
-	srcView := d.srcViewRect
 	srcGridID := d.srcGridID
 	tileID := d.tileID
+	version := d.snapshotTile.Version
 	go func() {
 		req := rpc.DeleteTileRequest{
-			Path: rpc.Path{WellIDs: srcPath}, ViewRect: srcView,
-			TileID: tileID,
+			Path:    rpc.Path{WellIDs: srcPath},
+			TileID:  tileID,
+			Version: version,
 		}
 		var resp rpc.DeleteTileResponse
-		_, _ = postJSON("/rpc/DeleteTile", req, &resp)
+		status, _ := postJSON("/rpc/DeleteTile", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(srcGridID, "DeleteTile")
+		}
 		a.fetchGrid(srcGridID)
 		if t != nil && t.gridID != srcGridID {
 			a.fetchGrid(t.gridID)
@@ -566,25 +574,22 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	if p == nil {
 		return
 	}
-	pscreen := dragdrop.Pane{
-		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
-		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	view := a.paneViewRect(p, pscreen)
 	gid := a.gridIDForPath(p.Path)
 	req := rpc.ResizeTileRequest{
-		Path:     rpc.Path{WellIDs: p.Path},
-		ViewRect: view,
-		TileID:   n.ID,
-		X:        rd.tileNewX,
-		Y:        rd.tileNewY,
-		W:        rd.tileNewW,
-		H:        rd.tileNewH,
+		Path:    rpc.Path{WellIDs: append([]int64(nil), p.Path...)},
+		TileID:  n.ID,
+		Version: n.Version,
+		X:       rd.tileNewX,
+		Y:       rd.tileNewY,
+		W:       rd.tileNewW,
+		H:       rd.tileNewH,
 	}
 	go func() {
 		var resp rpc.TileResponse
-		_, _ = postJSON("/rpc/ResizeTile", req, &resp)
+		status, _ := postJSON("/rpc/ResizeTile", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, "ResizeTile")
+		}
 		a.fetchGrid(gid)
 	}()
 }

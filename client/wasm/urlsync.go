@@ -21,9 +21,9 @@ const urlUpdateDebounceMs = 150
 // values — we only care about the resting state.
 const rootViewSaveDebounceMs = 600
 
-// scheduleRootViewSave queues a debounced SetGridDefaultView for the
-// user's root grid. Cheap to call from any code path that mutates the
-// focused pane's viewport; no-op when the focused pane isn't at root.
+// scheduleRootViewSave queues a debounced SetRootView for the user's root
+// grid. Cheap to call from any code path that mutates the focused pane's
+// viewport; no-op when the focused pane isn't at root.
 func (a *App) scheduleRootViewSave() {
 	if a.rootViewSaveScheduled {
 		return
@@ -36,8 +36,7 @@ func (a *App) scheduleRootViewSave() {
 }
 
 // flushRootViewSave reads the focused pane's viewport and posts
-// SetGridDefaultView for the user's root grid. Triggered by the
-// debounce timer; safe to call manually.
+// SetRootView. Triggered by the debounce timer; safe to call manually.
 func (a *App) flushRootViewSave() {
 	if a.rootGridID == 0 {
 		return
@@ -50,15 +49,17 @@ func (a *App) flushRootViewSave() {
 	if zoom <= 0 {
 		zoom = 1.0
 	}
-	req := rpc.SetGridDefaultViewRequest{
-		GridID: a.rootGridID,
-		Cx:     p.Cx,
-		Cy:     p.Cy,
-		Zoom:   zoom,
+	a.rootViewCx = p.Cx
+	a.rootViewCy = p.Cy
+	a.rootViewZoom = zoom
+	req := rpc.SetRootViewRequest{
+		Cx:   p.Cx,
+		Cy:   p.Cy,
+		Zoom: zoom,
 	}
 	go func() {
-		var resp rpc.SetGridDefaultViewResponse
-		_, _ = postJSON("/rpc/SetGridDefaultView", req, &resp)
+		var resp rpc.SetRootViewResponse
+		_, _ = postJSON("/rpc/SetRootView", req, &resp)
 	}()
 }
 
@@ -102,7 +103,7 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	var s url.State
 	if p.FileFocus != 0 {
 		s.TileIDs = append(append([]int64(nil), p.Path...), p.FileFocus)
-		if p.FileMode == "text" {
+		if p.FileMode == rpc.TextModeText {
 			col, row := a.textareaCursorRowCol()
 			s.CursorMode = true
 			s.Col = col
@@ -168,24 +169,20 @@ func (a *App) applyURLOnBoot() {
 	// something to read. If the URL has no path, we're done.
 	rootID := a.rootGridID
 	if len(state.TileIDs) == 0 {
-		// Block on the fetch so we can read the grid's stored
-		// DefaultView before drawing — otherwise the user sees a
-		// flash of the (0,0,1) default and then jumps to their
-		// preferred viewport once the response arrives.
 		a.fetchGridSync(rootID)
 		p := a.tree.FocusedPane()
 		if p != nil {
 			if state.X != 0 || state.Y != 0 || state.Zoom != 0 {
-				// URL viewport wins over stored default.
+				// URL viewport wins over the bootstrap-supplied root view.
 				p.Cx = state.X
 				p.Cy = state.Y
 				if state.Zoom > 0 {
 					p.Zoom = state.Zoom
 				}
-			} else if g, ok := a.c.Grid(rootID); ok && g.Meta.DefaultZoom > 0 {
-				p.Cx = g.Meta.DefaultViewCx
-				p.Cy = g.Meta.DefaultViewCy
-				p.Zoom = g.Meta.DefaultZoom
+			} else if a.rootViewZoom > 0 {
+				p.Cx = a.rootViewCx
+				p.Cy = a.rootViewCy
+				p.Zoom = a.rootViewZoom
 			}
 		}
 		a.draw()
@@ -216,13 +213,13 @@ walk:
 			// Keep the current grid and continue with the next id.
 			continue
 		}
-		switch n.Type {
-		case "well":
+		switch n.Kind {
+		case rpc.KindWell:
 			resolvedPath = append(resolvedPath, id)
 			gid = n.ChildGridID
-		case "file":
+		case rpc.KindText, rpc.KindURL, rpc.KindBlackHole:
 			if !isLast {
-				// File mid-path is nonsense; ignore and keep walking.
+				// Content tile mid-path is nonsense; ignore and keep walking.
 				continue
 			}
 			fileTileID = id
@@ -236,18 +233,18 @@ walk:
 	p.Path = resolvedPath
 	if fileTileID != 0 {
 		p.FileFocus = fileTileID
-		// Mode follows the tile's persisted file_mode; a URL that encodes
+		// Mode follows the tile's persisted text_mode; a URL that encodes
 		// a text cursor forces text mode. Scale is fixed; scroll restores
-		// from the tile's stored view_y.
+		// from the tile's stored text_y.
 		if file, ok := a.cachedFile(p.Path, fileTileID); ok {
-			p.FileMode = file.FileMode
-			p.FileScrollY = float64(file.ViewY)
+			p.FileMode = file.TextMode
+			p.FileScrollY = float64(file.TextY)
 		}
 		if state.CursorMode {
-			p.FileMode = "text"
+			p.FileMode = rpc.TextModeText
 		}
 		if p.FileMode == "" {
-			p.FileMode = "text"
+			p.FileMode = rpc.TextModeText
 		}
 		p.FileZoom = fileFixedScale
 		a.fetchBlobAndSetCursor(fileTileID, state)
@@ -320,7 +317,7 @@ func (a *App) fetchBlobAndSetCursor(fileTileID int64, state url.State) {
 		if err != nil || status != 200 {
 			return
 		}
-		a.c.PutBlob(file.BlobID, resp.Data, resp.MimeType)
+		a.c.PutBlob(file.BlobID, resp.Data)
 		// Refresh the overlay (in text mode this seeds the textarea
 		// from the blob), then place the cursor.
 		a.refreshFileOverlay()
