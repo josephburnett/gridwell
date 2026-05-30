@@ -16,7 +16,7 @@ import (
 //     grid of `pane`, cellSize is the parent cell size.
 //   - well-child-grid drop: inWell is the open well that contains the
 //     cursor; gridID is well.ChildGridID, cellSize is the preview
-//     cell size, and the path/viewRect address the well's interior.
+//     cell size, and path is the descent path into the well's interior.
 //
 // origin{X,Y} is the screen coordinate of cell (0, 0) in the target
 // grid — combined with cellSize and the cursor it's enough to compute

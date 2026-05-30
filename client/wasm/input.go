@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"syscall/js"
 
@@ -611,9 +610,10 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 			return nil
 		}
 		r := paneRectFor(a, focused)
-		// Try descent/ascent first — a click on a well, a file, or in
-		// the edge band kicks off navigation. Selection only applies to
-		// other cases (e.g., clicking an image preview to outline it).
+		// Try descent/ascent first — a click on a well, a content
+		// tile, or in the edge band kicks off navigation. Selection
+		// only applies to other cases (e.g., clicking a blackhole to
+		// outline it).
 		if a.attemptDescentOrAscent(focused, r, sx, sy) {
 			a.scheduleURLUpdate()
 			return nil
@@ -1206,9 +1206,9 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	}
 
 	// Save before transition: capture the editor buffer (if text mode is
-	// active) and post UpdateFileContent + SetTileViewport. The animation
-	// runs concurrently with the network round-trip; the user doesn't
-	// have to wait.
+	// active) and post UpdateText + SetTextView. The animation runs
+	// concurrently with the network round-trip; the user doesn't have
+	// to wait.
 	a.saveFileBeforeAscent(p, file)
 
 	// If we're ascending out of a URL tile stream, close the WS and
@@ -1590,8 +1590,5 @@ func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
 	y := ev.Get("clientY").Float() - rect.Get("top").Float()
 	return x, y
 }
-
-// silence unused.
-var _ = fmt.Sprintf
 
 // (Right-button gesture handling lives in right_button.go.)

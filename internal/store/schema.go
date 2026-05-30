@@ -4,10 +4,10 @@ package store
 // no users/groups/sessions table. The `system` KV table holds singleton state
 // (root grid id and root viewport framing). Every tile has a kind
 // (well/text/url/blackhole) and a version that bumps on content mutation;
-// every grid carries a version too. Blobs are markdown text only — no MIME
-// type. Well rows carry one view rectangle (view_x, view_y, view_zoom) that
-// is at once the preview frame, the descent target, and the ascent return.
-// Text rows carry a doc-space window (text_x, text_y, text_w, text_h) plus a
+// every grid carries a version too. Blobs hold markdown text bytes. Well
+// rows carry one view rectangle (view_x, view_y, view_zoom) that is at once
+// the preview frame, the descent target, and the ascent return. Text rows
+// carry a doc-space window (text_x, text_y, text_w, text_h) plus a
 // rendered/text mode. URL rows carry a URL string and the last-frozen JPEG
 // preview captured at close.
 const Schema = `
@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS blobs (
     data      BLOB NOT NULL,
     refcount  INTEGER NOT NULL DEFAULT 0
 );
--- mime_type column dropped: blobs are markdown text.
 
 CREATE TABLE IF NOT EXISTS tiles (
     id            INTEGER PRIMARY KEY,

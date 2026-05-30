@@ -48,10 +48,9 @@ const (
 	rightDragSplit
 	rightDragResize
 	// rightDragTileCenter is armed when right-down lands in the inner
-	// 1/3 × 1/3 of a tile (cell coords). Release here commits cap/redig
-	// for wells, or fill if the well's child grid is empty. Files: no
-	// preview, no commit. Drag out of center suspends the preview;
-	// drag back re-engages.
+	// 1/3 × 1/3 of a tile (cell coords). It's the clone grab handle:
+	// dragging past the threshold materializes a clone ghost via the
+	// standard a.dragging machinery; bare release is a no-op.
 	rightDragTileCenter
 	// rightDragTileResize is armed when right-down lands on a tile
 	// outside its center. The pin is the corner of the original tile
@@ -208,8 +207,8 @@ func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Tile {
 }
 
 // armTileGesture installs the right state for a right-button-down on
-// a tile. The model is the same for every tile kind (well, file, URL,
-// black hole):
+// a tile. The model is the same for every tile kind (well, text, URL,
+// blackhole):
 //   - Center 1/3 × 1/3: rightDragTileCenter — drag-past-threshold
 //     clones the tile (via the standard a.dragging machinery, armed
 //     in parallel); bare release does nothing.

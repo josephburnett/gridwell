@@ -7,8 +7,6 @@ package cli
 
 import (
 	"flag"
-	"fmt"
-	"io"
 )
 
 // resolveDB returns the database path. Default is "./gridwell.db" — convenient
@@ -72,10 +70,4 @@ func indexByte(s string, b byte) int {
 		}
 	}
 	return -1
-}
-
-// printErr writes to w. Centralized so tests can capture output.
-func printErr(w io.Writer, format string, args ...any) {
-	fmt.Fprintf(w, format, args...)
-	fmt.Fprintln(w)
 }

@@ -172,9 +172,9 @@ type App struct {
 
 	// rootViewSaveScheduled is the same pattern for the root-grid
 	// default-view persistence. Saves only when the focused pane is
-	// at the user's root (path empty); the well's child grids use
-	// SetTileViewport on ascent instead, so this only ever updates
-	// the root.
+	// at the user's root (path empty); descents into wells persist
+	// their framing via SetWellView on ascent instead, so this only
+	// ever updates the root.
 	rootViewSaveScheduled bool
 	rootViewSaveCb        js.Func
 }

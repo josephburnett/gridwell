@@ -285,8 +285,8 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// bleeding visibly into the chrome. The hue follows what we've
 	// descended INTO, so the frame echoes the tile that put us here:
 	//   - well descent (path > 0, no file focus) → blue
-	//   - markdown descent (file focus on text/markdown) → green
-	//   - URL descent (file focus on text/uri-list) → purple
+	//   - text descent (file focus on a text tile) → green
+	//   - URL descent (file focus on a url tile) → purple
 	//   - root (no path, no file focus) → tan
 	// Focused panes get the saturated variant, others a desaturated
 	// one of the same hue so you can still see at a glance which
@@ -1099,13 +1099,12 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 
 // paneBorderColorFor picks the pane border color from the pane's
 // current state — what it's descended into (or root if nothing).
-//   - file focus on a markdown tile → green
-//   - file focus on a URL tile → purple
-//   - file focus on anything else (image, etc.) → blue (generic descent)
-//   - well descent (path > 0, no file focus) → blue
+//   - descent into a text tile → green
+//   - descent into a URL tile → purple
+//   - descent into a well (path > 0, no file focus) → blue
 //   - root (nothing descended) → tan
 // The focused boolean picks the saturated vs faded variant of that
-// hue. If the grid containing the file-focused tile isn't cached yet,
+// hue. If the grid containing the descended tile isn't cached yet,
 // we fall back to the generic blue so the user still sees "descended
 // into something".
 func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) string {
@@ -1126,7 +1125,7 @@ func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) 
 				}
 			}
 		}
-		// Unknown file: generic descent blue.
+		// Unknown tile kind: generic descent blue.
 		if focused {
 			return colorFocusBorder
 		}

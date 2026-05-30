@@ -164,7 +164,7 @@ func (a *App) ensureFileTextarea() {
 
 	a.fileTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the browser scroll position onto the focused pane so
-		// SetTileViewport on ascent persists the right value.
+		// SetTextView on ascent persists the right value.
 		p := a.tree.FocusedPane()
 		if p == nil || p.FileFocus == 0 {
 			return nil
