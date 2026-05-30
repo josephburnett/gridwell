@@ -193,18 +193,18 @@ func (s *fakeSession) captureCount() int {
 	return s.captures
 }
 
-// createURLTileViaRPC creates a uri-list tile through CreateFile.
+// createURLTileViaRPC creates a URL tile through CreateURL.
 func createURLTileViaRPC(t *testing.T, hs *httptest.Server, root int64, url string) int64 {
 	t.Helper()
 	var resp rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateFile", &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: rpc.ViewRect{X: -100, Y: -100, W: 200, H: 200},
+	st, body := callRPC(t, hs, "CreateURL", &rpc.CreateURLRequest{
+		Path:   rpc.Path{},
 		GridID: root,
 		X:      0, Y: 0, W: 1, H: 1,
-		MimeType: rpc.MimeURIList, Data: []byte(url),
+		URL: url,
 	}, &resp)
 	if st != 200 {
-		t.Fatalf("CreateFile status=%d body=%s", st, body)
+		t.Fatalf("CreateURL status=%d body=%s", st, body)
 	}
 	return resp.Tile.ID
 }

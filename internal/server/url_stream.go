@@ -11,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
@@ -91,7 +92,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if !tile.IsURL() {
+	if tile.Kind != rpc.KindURL {
 		http.Error(w, "not a URL tile", http.StatusBadRequest)
 		return
 	}

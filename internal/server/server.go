@@ -54,16 +54,17 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/GetTilePreview", s.post(s.getTilePreview))
 
 	s.mux.HandleFunc("/rpc/CreateWell", s.post(s.createWell))
-	s.mux.HandleFunc("/rpc/CreateFile", s.post(s.createFile))
+	s.mux.HandleFunc("/rpc/CreateText", s.post(s.createText))
+	s.mux.HandleFunc("/rpc/CreateURL", s.post(s.createURL))
+	s.mux.HandleFunc("/rpc/CreateBlackHole", s.post(s.createBlackHole))
 	s.mux.HandleFunc("/rpc/MoveTile", s.post(s.moveTile))
 	s.mux.HandleFunc("/rpc/CloneTile", s.post(s.cloneTile))
 	s.mux.HandleFunc("/rpc/ResizeTile", s.post(s.resizeTile))
-	s.mux.HandleFunc("/rpc/SetTileViewport", s.post(s.setTileViewport))
-	s.mux.HandleFunc("/rpc/SetGridDefaultView", s.post(s.setGridDefaultView))
+	s.mux.HandleFunc("/rpc/SetWellView", s.post(s.setWellView))
+	s.mux.HandleFunc("/rpc/SetTextView", s.post(s.setTextView))
+	s.mux.HandleFunc("/rpc/SetRootView", s.post(s.setRootView))
+	s.mux.HandleFunc("/rpc/UpdateText", s.post(s.updateText))
 	s.mux.HandleFunc("/rpc/DeleteTile", s.post(s.deleteTile))
-	s.mux.HandleFunc("/rpc/UpdateFileContent", s.post(s.updateFileContent))
-	s.mux.HandleFunc("/rpc/ForkURL", s.post(s.forkURL))
-	s.mux.HandleFunc("/rpc/AscendAtRoot", s.post(s.ascendAtRoot))
 	s.mux.HandleFunc("/rpc/Subscribe", s.get(s.subscribe))
 	s.mux.HandleFunc("/rpc/URLStream", s.urlStream)
 
@@ -135,13 +136,15 @@ func errorStatus(err error) int {
 	case errors.Is(err, store.ErrNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, store.ErrInvalidArgument),
-		errors.Is(err, store.ErrUnsupportedMime),
 		errors.Is(err, store.ErrInvalidPath):
 		return http.StatusBadRequest
-	case errors.Is(err, store.ErrOverlap),
-		errors.Is(err, store.ErrLocality):
+	case errors.Is(err, store.ErrOverlap):
 		return http.StatusConflict
-	case errors.Is(err, store.ErrNotURLTile):
+	case errors.Is(err, store.ErrVersionConflict):
+		return http.StatusConflict
+	case errors.Is(err, store.ErrNotURLTile),
+		errors.Is(err, store.ErrNotTextTile),
+		errors.Is(err, store.ErrNotWellTile):
 		return http.StatusBadRequest
 	case errors.Is(err, store.ErrChromiumUnavailable):
 		return http.StatusServiceUnavailable

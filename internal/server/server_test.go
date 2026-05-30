@@ -82,27 +82,14 @@ func TestCreateWell(t *testing.T) {
 	hs, root := newTestServer(t)
 	var nr rpc.TileResponse
 	st, body := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path:     rpc.Path{},
-		ViewRect: rpc.ViewRect{X: -100, Y: -100, W: 200, H: 200},
-		GridID:   root, X: 1, Y: 2, W: 1, H: 1,
+		Path:   rpc.Path{},
+		GridID: root, X: 1, Y: 2, W: 1, H: 1,
 	}, &nr)
 	if st != 200 {
 		t.Fatalf("create well: %d %s", st, body)
 	}
-	if nr.Tile.Type != "well" {
+	if nr.Tile.Kind != rpc.KindWell {
 		t.Errorf("got %+v", nr.Tile)
-	}
-}
-
-func TestLocalityRefusedAtRPCLayer(t *testing.T) {
-	hs, root := newTestServer(t)
-	st, body := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path:     rpc.Path{},
-		ViewRect: rpc.ViewRect{X: 0, Y: 0, W: 1, H: 1},
-		GridID:   root, X: 5, Y: 5, W: 1, H: 1,
-	}, nil)
-	if st != http.StatusConflict {
-		t.Errorf("status = %d, want 409: %s", st, body)
 	}
 }
 
@@ -122,7 +109,7 @@ func TestSubscribeStreamsEvents(t *testing.T) {
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		_, _ = callRPCAsync(hs, "CreateWell", &rpc.CreateWellRequest{
-			Path: rpc.Path{}, ViewRect: rpc.ViewRect{X: -10, Y: -10, W: 20, H: 20},
+			Path:   rpc.Path{},
 			GridID: root, X: 0, Y: 0, W: 1, H: 1,
 		})
 	}()

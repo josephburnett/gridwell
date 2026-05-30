@@ -12,7 +12,17 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.BootstrapResponse{RootGridID: id})
+	cx, cy, zoom, err := s.store.RootView(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, &rpc.BootstrapResponse{
+		RootGridID: id,
+		RootViewCx: cx,
+		RootViewCy: cy,
+		RootZoom:   zoom,
+	})
 }
 
 func (s *Server) getGrid(w http.ResponseWriter, r *http.Request) {
@@ -35,12 +45,12 @@ func (s *Server) getBlob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	data, mime, err := s.store.GetBlob(r.Context(), req.BlobID)
+	data, err := s.store.GetBlob(r.Context(), req.BlobID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.GetBlobResponse{Data: data, MimeType: mime})
+	writeJSON(w, &rpc.GetBlobResponse{Data: data})
 }
 
 func (s *Server) getTilePreview(w http.ResponseWriter, r *http.Request) {
@@ -71,13 +81,41 @@ func (s *Server) createWell(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
-func (s *Server) createFile(w http.ResponseWriter, r *http.Request) {
-	var req rpc.CreateFileRequest
+func (s *Server) createText(w http.ResponseWriter, r *http.Request) {
+	var req rpc.CreateTextRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.CreateFile(r.Context(), &req)
+	n, err := s.store.CreateText(r.Context(), &req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
+}
+
+func (s *Server) createURL(w http.ResponseWriter, r *http.Request) {
+	var req rpc.CreateURLRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	n, err := s.store.CreateURL(r.Context(), &req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
+}
+
+func (s *Server) createBlackHole(w http.ResponseWriter, r *http.Request) {
+	var req rpc.CreateBlackHoleRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	n, err := s.store.CreateBlackHole(r.Context(), &req)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -96,7 +134,7 @@ func (s *Server) moveTile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.MoveTileResponse{Tile: *n})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) cloneTile(w http.ResponseWriter, r *http.Request) {
@@ -127,13 +165,13 @@ func (s *Server) resizeTile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
-func (s *Server) setTileViewport(w http.ResponseWriter, r *http.Request) {
-	var req rpc.SetTileViewportRequest
+func (s *Server) setWellView(w http.ResponseWriter, r *http.Request) {
+	var req rpc.SetWellViewRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	n, err := s.store.SetTileViewport(r.Context(), &req)
+	n, err := s.store.SetWellView(r.Context(), &req)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -141,18 +179,45 @@ func (s *Server) setTileViewport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
-func (s *Server) setGridDefaultView(w http.ResponseWriter, r *http.Request) {
-	var req rpc.SetGridDefaultViewRequest
+func (s *Server) setTextView(w http.ResponseWriter, r *http.Request) {
+	var req rpc.SetTextViewRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, err)
 		return
 	}
-	g, err := s.store.SetGridDefaultView(r.Context(), &req)
+	n, err := s.store.SetTextView(r.Context(), &req)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, &rpc.SetGridDefaultViewResponse{Grid: *g})
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
+}
+
+func (s *Server) setRootView(w http.ResponseWriter, r *http.Request) {
+	var req rpc.SetRootViewRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.store.SetRootView(r.Context(), &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, &rpc.SetRootViewResponse{})
+}
+
+func (s *Server) updateText(w http.ResponseWriter, r *http.Request) {
+	var req rpc.UpdateTextRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	n, err := s.store.UpdateText(r.Context(), &req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, &rpc.TileResponse{Tile: *n})
 }
 
 func (s *Server) deleteTile(w http.ResponseWriter, r *http.Request) {
@@ -166,41 +231,4 @@ func (s *Server) deleteTile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, &rpc.DeleteTileResponse{})
-}
-
-func (s *Server) updateFileContent(w http.ResponseWriter, r *http.Request) {
-	var req rpc.UpdateFileContentRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	n, err := s.store.UpdateFileContent(r.Context(), &req)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, &rpc.TileResponse{Tile: *n})
-}
-
-func (s *Server) forkURL(w http.ResponseWriter, r *http.Request) {
-	var req rpc.ForkURLRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, err)
-		return
-	}
-	t, err := s.store.ForkURL(r.Context(), &req)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, &rpc.ForkURLResponse{Tile: *t})
-}
-
-func (s *Server) ascendAtRoot(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.store.AscendAtRoot(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, resp)
 }
