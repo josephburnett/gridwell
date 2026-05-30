@@ -14,12 +14,13 @@ import (
 // mutations and asserts:
 //   - Refcounts on grids and blobs always match the actual reference count.
 //   - No two tiles in the same grid overlap.
-//   - The tile count in any grid equals the SQL count of tiles in it.
 //
-// The test does not aim for coverage of every code path; it stress-tests the
-// invariants that the CoW logic is responsible for. The seed is fixed so
-// failures reproduce, but it can be flipped to a wall-clock seed locally for
-// fuzz-style runs.
+// Where mutations need a tile version, we reload the tile right before the
+// call so we don't have to track versions through the random walk.
+//
+// A previous version of this test generated random MIME types; with the
+// new kind/version model that generator no longer makes sense and was
+// dropped.
 func TestPropertyRefcountAndOverlap(t *testing.T) {
 	const iters = 300
 	rng := rand.New(rand.NewPCG(0xa5cea5ce, 0x42))
@@ -28,10 +29,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	// Seed a 1×1 well so the user has somewhere to descend.
 	type liveNode struct {
 		id          int64
-		typ         string
+		kind        string
 		gridID      int64
 		path        rpc.Path
 		w, h        int64
@@ -41,21 +41,30 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	var nodes []liveNode
 	addNode := func(n *rpc.Tile, path rpc.Path) {
 		nodes = append(nodes, liveNode{
-			id: n.ID, typ: n.Type, gridID: n.GridID, path: path,
+			id: n.ID, kind: n.Kind, gridID: n.GridID, path: path,
 			w: n.W, h: n.H, x: n.X, y: n.Y, childGridID: n.ChildGridID,
 		})
 	}
 
 	w0, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	addNode(w0, rpc.Path{})
 
+	// liveVersion reads the current version of a tile id, returning 0 and
+	// reporting not-found if the row is gone.
+	liveVersion := func(id int64) (int64, error) {
+		t, err := s.loadTile(ctx, s.db, id)
+		if err != nil {
+			return 0, err
+		}
+		return t.Version, nil
+	}
+
 	for i := range iters {
-		// Pick a random op.
 		op := rng.IntN(6)
 		switch op {
 		case 0:
@@ -63,10 +72,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			// or root.
 			parentPath := rpc.Path{}
 			gridID := root
-			// Sometimes descend.
 			if len(nodes) > 0 && rng.IntN(2) == 0 {
 				ln := nodes[rng.IntN(len(nodes))]
-				if ln.typ == "well" && ln.childGridID != 0 {
+				if ln.kind == rpc.KindWell && ln.childGridID != 0 {
 					parentPath = rpc.Path{WellIDs: append([]int64{}, ln.path.WellIDs...)}
 					parentPath.WellIDs = append(parentPath.WellIDs, ln.id)
 					gridID = ln.childGridID
@@ -77,7 +85,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			w := int64(1 + rng.IntN(2))
 			h := int64(1 + rng.IntN(2))
 			n, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-				Path: parentPath, ViewRect: largeView(), GridID: gridID, X: x, Y: y, W: w, H: h,
+				Path: parentPath, GridID: gridID, X: x, Y: y, W: w, H: h,
 			})
 			if err != nil {
 				if !isBenignPropError(err) {
@@ -92,11 +100,15 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				continue
 			}
 			src := nodes[rng.IntN(len(nodes))]
-			x := int64(rng.IntN(20))*2 + 100 // bias to "open" area
+			ver, err := liveVersion(src.id)
+			if err != nil {
+				continue
+			}
+			x := int64(rng.IntN(20))*2 + 100
 			y := int64(rng.IntN(20)) * 2
 			n, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-				Path: src.path, ViewRect: largeView(), TileID: src.id,
-				DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+				Path: src.path, TileID: src.id, Version: ver,
+				DestGridID: root, DestPath: rpc.Path{},
 				X: x, Y: y,
 			})
 			if err != nil {
@@ -113,10 +125,14 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
+			ver, err := liveVersion(pick.id)
+			if err != nil {
+				continue
+			}
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
 			n, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
+				Path: pick.path, TileID: pick.id, Version: ver,
 				X: pick.x, Y: pick.y, W: w, H: h,
 			})
 			if err != nil {
@@ -125,7 +141,6 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				}
 				continue
 			}
-			// CoW may have given us a new id.
 			nodes[pickIdx].id = n.ID
 			nodes[pickIdx].gridID = n.GridID
 			nodes[pickIdx].w = n.W
@@ -137,17 +152,21 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
-			err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
+			ver, err := liveVersion(pick.id)
+			if err != nil {
+				// gone; drop from harness
+				nodes = append(nodes[:pickIdx], nodes[pickIdx+1:]...)
+				continue
+			}
+			err = s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+				Path: pick.path, TileID: pick.id, Version: ver,
 			})
 			if err != nil && !isBenignPropError(err) {
 				t.Fatalf("iter %d delete: %v", i, err)
 			}
 			if err == nil {
-				// Drop the deleted node and any descendants the harness
-				// was still tracking that lived in the cascaded grid.
 				deletedGrids := map[int64]bool{}
-				if pick.typ == "well" && pick.childGridID != 0 {
+				if pick.kind == rpc.KindWell && pick.childGridID != 0 {
 					deletedGrids[pick.childGridID] = true
 				}
 				next := nodes[:0]
@@ -166,18 +185,26 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			// (Reserved op slot — was Redig, now unused. Skip.)
 			continue
 		case 5:
-			// Set viewport.
+			// Set viewport (well-only in the kind/version model).
 			if len(nodes) == 0 {
 				continue
 			}
 			pickIdx := rng.IntN(len(nodes))
 			pick := nodes[pickIdx]
-			n, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
-				Path: pick.path, ViewRect: largeView(), TileID: pick.id,
+			if pick.kind != rpc.KindWell {
+				continue
+			}
+			ver, err := liveVersion(pick.id)
+			if err != nil {
+				continue
+			}
+			n, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+				Path: pick.path, TileID: pick.id, Version: ver,
 				ViewX: int64(rng.IntN(50)), ViewY: int64(rng.IntN(50)),
+				ViewZoom: 1.0,
 			})
 			if err != nil && !isBenignPropError(err) {
-				t.Fatalf("iter %d set viewport: %v", i, err)
+				t.Fatalf("iter %d set well view: %v", i, err)
 			}
 			if err == nil {
 				nodes[pickIdx].id = n.ID
@@ -214,7 +241,6 @@ func verifyNoOverlap(t *testing.T, s *Store) {
 	}
 	rows.Close()
 
-	// O(n^2) per grid, but n is small in these tests.
 	byGrid := map[int64][]rec{}
 	for _, r := range all {
 		byGrid[r.grid] = append(byGrid[r.grid], r)
@@ -243,16 +269,11 @@ func overlap(a, b struct {
 	return true
 }
 
-// silence the unused-import in stress builds
 var _ = fmt.Sprintf
 
-// isBenignPropError reports whether err is one the property test should skip
-// over without aborting. CoW forks rewrite well row ids, so paths cached in
-// the test harness can become stale (ErrInvalidPath) or refer to deleted
-// rows (ErrNotFound). Overlap and permission denials are also legitimate
-// outcomes of randomly-generated requests.
 func isBenignPropError(err error) bool {
 	return errors.Is(err, ErrInvalidPath) ||
 		errors.Is(err, ErrNotFound) ||
-		errors.Is(err, ErrOverlap)
+		errors.Is(err, ErrOverlap) ||
+		errors.Is(err, ErrVersionConflict)
 }

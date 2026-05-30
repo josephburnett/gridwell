@@ -13,26 +13,23 @@ func TestGetBlobReturnsBytes(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	f, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("payload"),
+	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("payload"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	data, mime, err := s.GetBlob(ctx, f.BlobID)
+	data, err := s.GetBlob(ctx, f.BlobID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(data) != "payload" {
 		t.Errorf("data = %q", data)
 	}
-	if mime != "text/markdown" {
-		t.Errorf("mime = %q", mime)
-	}
 
-	if _, _, err := s.GetBlob(ctx, 9999); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetBlob(ctx, 9999); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown: got %v", err)
 	}
 }
@@ -44,14 +41,14 @@ func TestSubscribeEventsReceivesPublish(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case ev := <-ch:
 		if ev.Kind != rpc.EventTileChanged {
-			t.Errorf("kind = %v, want NodeChanged", ev.Kind)
+			t.Errorf("kind = %v, want TileChanged", ev.Kind)
 		}
 	default:
 		t.Fatal("no event received")

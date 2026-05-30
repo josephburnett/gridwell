@@ -7,8 +7,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// TestCloneNodeCreatesSecondPointer verifies that cloning a well produces a
-// second well tile sharing the same child grid (refcount 2 on the child)
+// TestCloneNodeCreatesSharedChildGrid verifies that cloning a well produces
+// a second well tile sharing the same child grid (refcount 2 on the child)
 // without copying the child's contents.
 func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	s := newTestStore(t)
@@ -16,7 +16,7 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	ctx := context.Background()
 
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +24,7 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	// Put something inside w's child grid so we can later confirm the
 	// clone's child still sees it.
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{w.ID}},
 		GridID: w.ChildGridID, X: 5, Y: 5, W: 1, H: 1,
 	})
 	if err != nil {
@@ -32,8 +32,8 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 10, Y: 0,
 	})
 	if err != nil {
@@ -69,22 +69,22 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	ctx := context.Background()
 
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Inside the child grid, place a marker well.
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{w.ID}},
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 10, Y: 0,
 	})
 	if err != nil {
@@ -93,8 +93,9 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 
 	// Write through clone's child (fork should occur).
 	resized, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}}, ViewRect: largeView(),
-		TileID: inner.ID, W: 3, H: 3,
+		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: inner.ID,
+		Version: inner.Version,
+		W:       3, H: 3,
 	})
 	if err != nil {
 		t.Fatalf("resize through clone: %v", err)
@@ -145,25 +146,23 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 }
 
 // TestCowOneLevelByteIdentity exercises the end-to-end COW invariant on a
-// single level of nesting: clone a well that contains content, mutate the
-// content via one path, and assert the other path still sees byte-
-// identical content and tile state.
+// single level of nesting.
 func TestCowOneLevelByteIdentity(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
 	outer, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	original := []byte("# original")
-	text, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path:     rpc.Path{WellIDs: []int64{outer.ID}},
-		ViewRect: largeView(), GridID: outer.ChildGridID,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: original,
+	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path:   rpc.Path{WellIDs: []int64{outer.ID}},
+		GridID: outer.ChildGridID,
+		X:      0, Y: 0, W: 1, H: 1, Data: original,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +182,7 @@ func TestCowOneLevelByteIdentity(t *testing.T) {
 		if len(g.Tiles) != 1 {
 			t.Fatalf("outer child should have 1 tile; got %d", len(g.Tiles))
 		}
-		data, _, err := s.GetBlob(ctx, g.Tiles[0].BlobID)
+		data, err := s.GetBlob(ctx, g.Tiles[0].BlobID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,8 +192,8 @@ func TestCowOneLevelByteIdentity(t *testing.T) {
 
 	// Clone the outer well; its child grid is now shared.
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: outer.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: outer.ID, Version: outer.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 10, Y: 0,
 	})
 	if err != nil {
@@ -202,9 +201,9 @@ func TestCowOneLevelByteIdentity(t *testing.T) {
 	}
 
 	// Walk DOWN clone's path and mutate.
-	updated, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}}, ViewRect: largeView(),
-		TileID: text.ID, Data: []byte("# mutated"),
+	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: text.ID,
+		Version: text.Version, Data: []byte("# mutated"),
 	})
 	if err != nil {
 		t.Fatalf("update through clone: %v", err)
@@ -230,24 +229,7 @@ func TestCowOneLevelByteIdentity(t *testing.T) {
 	_ = beforeBytes
 }
 
-// TestCowTwoLevelByteIdentity exercises the COW invariant where the shared
-// grid is an ANCESTOR of the leaf, not the leaf itself.
-//
-// Path shape: root -> A (well) -> G -> B (well) -> H -> text tile.
-//
-// Clone A so root has both A and A2, both pointing at G (G.rc=2). H is
-// reached from G via the well B, and G holds the only well row that
-// targets H, so H.rc starts at 1.
-//
-// A naive leaf-up walk that stops at the first rc<=1 grid would see H.rc=1
-// and refuse to fork anything — but G must fork because it's shared, and
-// forking G clones the B well, which bumps H.rc to 2. The text tile inside
-// H is then reachable from both A and A2, and a write through [A, B] would
-// leak into A2.
-//
-// The correct behavior: fork from the topmost shared grid (G) all the way
-// down to the leaf (H), so the [A, B] path ends up at a fresh H' that only
-// A can reach.
+// TestCowTwoLevelByteIdentity pins fork-from-topmost-shared, NOT leaf-up.
 func TestCowTwoLevelByteIdentity(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -255,14 +237,14 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 
 	// root -> A (well)
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A's child grid G -> B (well)
 	b, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{a.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{a.ID}},
 		GridID: a.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
@@ -270,18 +252,15 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 	}
 	// B's child grid H -> text tile.
 	original := []byte("# original")
-	text, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path:     rpc.Path{WellIDs: []int64{a.ID, b.ID}},
-		ViewRect: largeView(), GridID: b.ChildGridID,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: original,
+	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path:   rpc.Path{WellIDs: []int64{a.ID, b.ID}},
+		GridID: b.ChildGridID,
+		X:      0, Y: 0, W: 1, H: 1, Data: original,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Snapshot helper: walk down [outerWellID, B'] where B' is whichever B
-	// row lives in outer's current child grid, then read the lone text
-	// tile's bytes.
 	snap := func(outerWellID int64) (rpc.Tile, []byte) {
 		t.Helper()
 		ot, err := s.GetTile(ctx, outerWellID)
@@ -292,7 +271,7 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(g.Tiles) != 1 || g.Tiles[0].Type != "well" {
+		if len(g.Tiles) != 1 || g.Tiles[0].Kind != rpc.KindWell {
 			t.Fatalf("expected exactly one well inside outer %d; got %+v", outerWellID, g.Tiles)
 		}
 		bTile := g.Tiles[0]
@@ -303,7 +282,7 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 		if len(h.Tiles) != 1 {
 			t.Fatalf("expected exactly one tile in H; got %d", len(h.Tiles))
 		}
-		data, _, err := s.GetBlob(ctx, h.Tiles[0].BlobID)
+		data, err := s.GetBlob(ctx, h.Tiles[0].BlobID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,10 +294,10 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 		t.Fatalf("setup: text bytes = %q, want %q", beforeBytes, original)
 	}
 
-	// Clone A. Now root holds A and A2; both point at G; G.rc==2.
+	// Clone A.
 	a2, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 10, Y: 0,
 	})
 	if err != nil {
@@ -335,14 +314,12 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 		t.Fatalf("G refcount after clone = %d, want 2", gRC)
 	}
 
-	// Mutate the text tile via the [A, B] path. H is rc=1; G is rc=2.
-	// The buggy leaf-up walk would stop at H (rc=1) and not fork at all.
-	// The fix must fork G (because G.rc>1) AND then H (because forking G
-	// bumps H.rc to 2).
+	// Mutate via [A, B].
 	mutated := []byte("# mutated")
-	updated, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{WellIDs: []int64{a.ID, b.ID}}, ViewRect: largeView(),
-		TileID: text.ID, Data: mutated,
+	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path:    rpc.Path{WellIDs: []int64{a.ID, b.ID}},
+		TileID:  text.ID,
+		Version: text.Version, Data: mutated,
 	})
 	if err != nil {
 		t.Fatalf("update through [A, B]: %v", err)
@@ -351,7 +328,6 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 		t.Errorf("object identity drift across fork: %s -> %s", text.ObjectID, updated.ObjectID)
 	}
 
-	// A2's path must still see the ORIGINAL bytes.
 	a2Tile, a2Bytes := snap(a2.ID)
 	if string(a2Bytes) != string(original) {
 		t.Errorf("mutation leaked into A2: bytes = %q, want %q", a2Bytes, original)
@@ -360,7 +336,6 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 		t.Errorf("A2 text tile object_id drifted: %s -> %s", beforeTile.ObjectID, a2Tile.ObjectID)
 	}
 
-	// A's path must now see the new bytes.
 	_, aBytes := snap(a.ID)
 	if string(aBytes) != string(mutated) {
 		t.Errorf("A path does not see the write: bytes = %q, want %q", aBytes, mutated)
@@ -369,34 +344,30 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestCowTwoLevelByteIdentityThreeClones extends the two-level test with a
-// third clone (A3) of the same outer well. After the mutation through A,
-// both A2 and A3 must still see the original bytes. This pins that the
-// fork-from-topmost-shared rule isolates the writer regardless of how many
-// other clones exist on the shared spine.
+// TestCowTwoLevelByteIdentityThreeClones extends the two-level test.
 func TestCowTwoLevelByteIdentityThreeClones(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{a.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{a.ID}},
 		GridID: a.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	original := []byte("# original")
-	text, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path:     rpc.Path{WellIDs: []int64{a.ID, b.ID}},
-		ViewRect: largeView(), GridID: b.ChildGridID,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: original,
+	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path:   rpc.Path{WellIDs: []int64{a.ID, b.ID}},
+		GridID: b.ChildGridID,
+		X:      0, Y: 0, W: 1, H: 1, Data: original,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -422,7 +393,7 @@ func TestCowTwoLevelByteIdentityThreeClones(t *testing.T) {
 		if len(h.Tiles) != 1 {
 			t.Fatalf("expected 1 tile in H under outer %d; got %d", outerWellID, len(h.Tiles))
 		}
-		data, _, err := s.GetBlob(ctx, h.Tiles[0].BlobID)
+		data, err := s.GetBlob(ctx, h.Tiles[0].BlobID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -430,23 +401,22 @@ func TestCowTwoLevelByteIdentityThreeClones(t *testing.T) {
 	}
 
 	a2, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 10, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("clone A -> A2: %v", err)
 	}
 	a3, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: a2.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: a2.ID, Version: a2.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 20, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("clone A2 -> A3: %v", err)
 	}
 
-	// G should now have rc=3.
 	var gRC int64
 	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, a.ChildGridID).Scan(&gRC); err != nil {
 		t.Fatal(err)
@@ -456,9 +426,10 @@ func TestCowTwoLevelByteIdentityThreeClones(t *testing.T) {
 	}
 
 	mutated := []byte("# mutated")
-	if _, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{WellIDs: []int64{a.ID, b.ID}}, ViewRect: largeView(),
-		TileID: text.ID, Data: mutated,
+	if _, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path:    rpc.Path{WellIDs: []int64{a.ID, b.ID}},
+		TileID:  text.ID,
+		Version: text.Version, Data: mutated,
 	}); err != nil {
 		t.Fatalf("update through [A, B]: %v", err)
 	}
@@ -490,25 +461,22 @@ func tilesEqual(a, b []rpc.Tile) bool {
 	return true
 }
 
-// TestRefcountGCBlobOnTileDelete pins the blob refcount/GC contract end-to-
-// end: cloning a text tile makes refcount 2; deleting one clone drops it to
-// 1 (blob still alive); deleting the last reference drops it to 0 and the
-// blob row disappears.
+// TestRefcountGCBlobOnTileDelete pins blob refcount/GC end-to-end.
 func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	a, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("# blob"),
+	a, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# blob"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 5, Y: 0,
 	})
 	if err != nil {
@@ -526,9 +494,9 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 		t.Fatalf("blob refcount after clone = %d, want 2", rc)
 	}
 
-	// Delete one clone — refcount drops to 1, blob row still alive.
+	// Delete one clone.
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: clone.ID,
+		Path: rpc.Path{}, TileID: clone.ID, Version: clone.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -539,9 +507,9 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 		t.Errorf("blob refcount after first delete = %d, want 1", rc)
 	}
 
-	// Delete the second — refcount goes to 0, blob row gone.
+	// Delete the other.
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
+		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -551,34 +519,28 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	}
 }
 
-// TestRefcountGCGridCascadesBlobs pins the cross-table GC: when a child
-// grid's refcount drops to 0 (via cascade-delete of its owning well), every
-// blob and child-grid reference held by tiles in that grid must also be
-// decremented. A markdown tile inside the deleted well should have its
-// blob freed; a sub-well should have its child grid freed.
+// TestRefcountGCGridCascadesBlobs pins cross-table GC.
 func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
 	outer, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A markdown tile inside outer.
-	mdTile, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{WellIDs: []int64{outer.ID}}, ViewRect: largeView(),
+	mdTile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{WellIDs: []int64{outer.ID}},
 		GridID: outer.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
-		MimeType: "text/markdown", Data: []byte("inside"),
+		Data: []byte("inside"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A sub-well inside outer.
 	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{outer.ID}}, ViewRect: largeView(),
+		Path: rpc.Path{WellIDs: []int64{outer.ID}},
 		GridID: outer.ChildGridID, X: 5, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
@@ -586,7 +548,6 @@ func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 	}
 	subChildGrid := sub.ChildGridID
 
-	// Sanity: blob refcount 1, sub's child grid refcount 1.
 	var rc int64
 	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, mdTile.BlobID).Scan(&rc); err != nil {
 		t.Fatal(err)
@@ -601,89 +562,30 @@ func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 		t.Fatalf("sub child grid refcount = %d, want 1", rc)
 	}
 
-	// Delete outer. Cascade should: delete outer.ChildGridID, then for each
-	// tile inside it dec the blob (mdTile) and dec the sub-well's child grid.
+	// Reload outer for current version.
+	outerCur, err := s.loadTile(ctx, s.db, outer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: outer.ID,
+		Path: rpc.Path{}, TileID: outer.ID, Version: outerCur.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Outer's child grid should be gone.
 	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, outer.ChildGridID).Scan(&rc); err == nil {
 		t.Errorf("outer child grid still present; refcount=%d", rc)
 	}
-	// The markdown blob must be gone (refcount went to 0).
 	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, mdTile.BlobID).Scan(&rc); err == nil {
 		t.Errorf("md blob still present; refcount=%d", rc)
 	}
-	// The sub-well's child grid must also be gone.
 	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, subChildGrid).Scan(&rc); err == nil {
 		t.Errorf("sub-well child grid still present; refcount=%d", rc)
 	}
 	verifyRefcounts(t, s)
 }
 
-// TestRefcountInvariant runs random create/clone/resize/fill operations and
-// verifies that refcounts on grids and blobs always equal the actual count of
-// references to them.
-func TestRefcountInvariant(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-
-	// A small number of seeded operations exercising the interesting paths.
-	type op struct {
-		kind string
-		args []int64
-	}
-	// Build a small tree.
-	w1, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	w2, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 2, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Clone w1 into root.
-	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w1.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
-		X: 4, Y: 0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Add stuff inside w1's (now shared) child.
-	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{w1.ID}}, ViewRect: largeView(),
-		GridID: w1.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// Each of these triggers a fork.
-	_ = w2
-	_ = clone
-	_ = op{}
-
-	// Verify invariant: every grid's refcount equals the count of well rows
-	// pointing at it, plus 1 if it's any user's root_grid_id.
-	verifyRefcounts(t, s)
-}
-
-// verifyRefcounts asserts the refcount invariant globally. Every grid's
-// refcount should equal: (number of tile rows with child_grid_id = grid.id)
-// plus (1 if any user.root_grid_id = grid.id).
-//
-// We collect all rows up front (fully materializing each Rows before issuing
-// further queries) because the test store uses a single SQLite connection;
-// holding a Rows iterator open while running QueryRow on the same handle
-// would deadlock.
+// verifyRefcounts asserts the refcount invariant globally.
 func verifyRefcounts(t *testing.T, s *Store) {
 	t.Helper()
 	type pair struct{ id, refcount int64 }

@@ -8,28 +8,28 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// largeView returns a viewrect that contains anything reasonable.
-func largeView() rpc.ViewRect { return rpc.ViewRect{X: -1000, Y: -1000, W: 2000, H: 2000} }
-
 func TestCreateWellHappyPath(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(),
+		Path:   rpc.Path{},
 		GridID: root, X: 1, Y: 2, W: 3, H: 4,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if w.Type != "well" {
-		t.Errorf("type=%q", w.Type)
+	if w.Kind != rpc.KindWell {
+		t.Errorf("kind=%q", w.Kind)
 	}
 	if w.X != 1 || w.Y != 2 || w.W != 3 || w.H != 4 {
 		t.Errorf("dims wrong: %+v", w)
 	}
 	if w.ChildGridID == 0 {
 		t.Error("no child grid")
+	}
+	if w.Version != 0 {
+		t.Errorf("new tile version = %d, want 0", w.Version)
 	}
 	// Read the parent grid back.
 	g, err := s.GetGrid(ctx, root)
@@ -46,36 +46,22 @@ func TestCreateWellOverlapRefused(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 5, H: 5,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 5, H: 5,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Overlap.
 	_, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 4, Y: 4, W: 2, H: 2,
+		Path: rpc.Path{}, GridID: root, X: 4, Y: 4, W: 2, H: 2,
 	})
 	if !errors.Is(err, ErrOverlap) {
 		t.Errorf("got %v, want ErrOverlap", err)
 	}
 	// Adjacent (touching) is OK.
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 5, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 5, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Errorf("adjacent placement refused: %v", err)
-	}
-}
-
-func TestCreateWellLocalityEnforced(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-	// Footprint outside the view rect.
-	_, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: rpc.ViewRect{X: 0, Y: 0, W: 5, H: 5},
-		GridID: root, X: 10, Y: 10, W: 1, H: 1,
-	})
-	if !errors.Is(err, ErrLocality) {
-		t.Errorf("got %v, want ErrLocality", err)
 	}
 }
 
@@ -84,13 +70,13 @@ func TestCreateWellInvalidArgs(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	_, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 0, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 0, H: 1,
 	})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("zero w: got %v", err)
 	}
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: -1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: -1,
 	})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("neg h: got %v", err)
@@ -102,14 +88,14 @@ func TestDescentPathThenCreate(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Descend into well; create a sub-well inside it.
 	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{w.ID}},
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
@@ -121,7 +107,7 @@ func TestDescentPathThenCreate(t *testing.T) {
 
 	// Path with a non-existent well should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{9999}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{9999}},
 		GridID: w.ChildGridID, X: 1, Y: 1, W: 1, H: 1,
 	})
 	if !errors.Is(err, ErrInvalidPath) {
@@ -129,41 +115,34 @@ func TestDescentPathThenCreate(t *testing.T) {
 	}
 }
 
-func TestCreateFileMimeAndSize(t *testing.T) {
+func TestCreateTextSize(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	_, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "application/zip", Data: []byte("x"),
-	})
-	if !errors.Is(err, ErrUnsupportedMime) {
-		t.Errorf("bad mime: got %v", err)
-	}
 	huge := make([]byte, MaxBlobBytes+1)
-	_, err = s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: huge,
+	_, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: huge,
 	})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("oversized: got %v", err)
 	}
 }
 
-func TestCreateFileURLTile(t *testing.T) {
+func TestCreateURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	tile, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
+	tile, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
+		Path: rpc.Path{}, GridID: root,
 		X: 0, Y: 0, W: 1, H: 1,
-		MimeType: rpc.MimeURIList, Data: []byte("https://example.com"),
+		URL: "https://example.com",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tile.IsURL() {
-		t.Errorf("IsURL() = false; tile = %+v", tile)
+	if tile.Kind != rpc.KindURL {
+		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindURL)
 	}
 	if tile.URLString != "https://example.com" {
 		t.Errorf("URLString = %q, want https://example.com", tile.URLString)
@@ -172,10 +151,10 @@ func TestCreateFileURLTile(t *testing.T) {
 		t.Errorf("URL tile got BlobID = %d, want 0", tile.BlobID)
 	}
 	// Whitespace around the URL should be trimmed.
-	tile2, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
+	tile2, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
+		Path: rpc.Path{}, GridID: root,
 		X: 1, Y: 0, W: 1, H: 1,
-		MimeType: rpc.MimeURIList, Data: []byte("  https://example.org/path\n"),
+		URL: "  https://example.org/path\n",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -184,10 +163,10 @@ func TestCreateFileURLTile(t *testing.T) {
 		t.Errorf("URLString = %q (whitespace not trimmed)", tile2.URLString)
 	}
 	// Disallowed scheme → ErrInvalidArgument.
-	_, err = s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
+	_, err = s.CreateURL(ctx, &rpc.CreateURLRequest{
+		Path: rpc.Path{}, GridID: root,
 		X: 2, Y: 0, W: 1, H: 1,
-		MimeType: rpc.MimeURIList, Data: []byte("javascript:alert(1)"),
+		URL: "javascript:alert(1)",
 	})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("javascript: scheme: got %v, want ErrInvalidArgument", err)
@@ -202,21 +181,21 @@ func TestCreateFileURLTile(t *testing.T) {
 	}
 }
 
-func TestCreateFileBlobReuse(t *testing.T) {
+func TestCreateTextBlobReuse(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	data := []byte("hello world")
-	a, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: data,
+	a, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: data,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 5, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: data,
+	b, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 5, Y: 0, W: 1, H: 1, Data: data,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -239,13 +218,13 @@ func TestResizeNode(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	r, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID, W: 3, H: 4,
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version, W: 3, H: 4,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -253,70 +232,90 @@ func TestResizeNode(t *testing.T) {
 	if r.W != 3 || r.H != 4 {
 		t.Errorf("after resize %+v", r)
 	}
+	if r.Version != w.Version+1 {
+		t.Errorf("version after resize = %d, want %d", r.Version, w.Version+1)
+	}
 	// Resize to overlap another node should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 4, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 4, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: r.ID, W: 5, H: 4,
+		Path: rpc.Path{}, TileID: r.ID, Version: r.Version, W: 5, H: 4,
 	})
 	if !errors.Is(err, ErrOverlap) {
 		t.Errorf("expected ErrOverlap, got %v", err)
 	}
 }
 
-func TestSetNodeViewport(t *testing.T) {
+func TestResizeVersionConflict(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID, ViewX: 5, ViewY: 7,
+	_, err = s.ResizeTile(ctx, &rpc.ResizeTileRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version + 99, W: 2, H: 2,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.ViewX != 5 || got.ViewY != 7 {
-		t.Errorf("viewport %+v", got)
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("got %v, want ErrVersionConflict", err)
 	}
 }
 
-// TestSetTileViewportTextFilePersistsWindowAndMode pins the text-file
-// tile's preview-frame contract: SetTileViewport persists view_w, view_h
-// and file_mode in addition to the scroll offset, and GetGrid reads them
-// back. Subsequent writes that send 0 / "" for those fields must leave
-// the stored values unchanged — that's how the client posts a scroll-only
-// update without clobbering the framed window.
-func TestSetTileViewportTextFilePersistsWindowAndMode(t *testing.T) {
+func TestSetWellView(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	f, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 2, H: 2, MimeType: "text/markdown", Data: []byte("hello"),
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// First write: set scroll, zoom, window, and mode.
-	got, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: f.ID,
-		ViewX: 10, ViewY: 20, ViewZoom: 1.5,
-		ViewW: 640, ViewH: 480, FileMode: "rendered",
+	got, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		ViewX: 5, ViewY: 7, ViewZoom: 1.5,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ViewX != 10 || got.ViewY != 20 || got.ViewW != 640 || got.ViewH != 480 || got.FileMode != "rendered" {
-		t.Errorf("after first write: %+v", got)
+	if got.ViewX != 5 || got.ViewY != 7 || got.ViewZoom != 1.5 {
+		t.Errorf("view %+v", got)
+	}
+	if got.Version != w.Version+1 {
+		t.Errorf("version after set = %d, want %d", got.Version, w.Version+1)
+	}
+}
+
+// TestSetTextViewPersistsWindowAndMode pins the text-tile preview-frame
+// contract: SetTextView persists text_x/y/w/h and text_mode, and GetGrid
+// reads them back.
+func TestSetTextViewPersistsWindowAndMode(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 2, H: 2, Data: []byte("hello"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
+		Path: rpc.Path{}, TileID: f.ID, Version: f.Version,
+		TextX: 10, TextY: 20, TextW: 640, TextH: 480, TextMode: rpc.TextModeRendered,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TextX != 10 || got.TextY != 20 || got.TextW != 640 || got.TextH != 480 || got.TextMode != rpc.TextModeRendered {
+		t.Errorf("after write: %+v", got)
 	}
 	// Readback through GetGrid must see the same values.
 	gg, err := s.GetGrid(ctx, root)
@@ -333,27 +332,45 @@ func TestSetTileViewportTextFilePersistsWindowAndMode(t *testing.T) {
 	if found == nil {
 		t.Fatal("tile missing from GetGrid")
 	}
-	if found.ViewW != 640 || found.ViewH != 480 || found.FileMode != "rendered" {
+	if found.TextW != 640 || found.TextH != 480 || found.TextMode != rpc.TextModeRendered {
 		t.Errorf("GetGrid round-trip: %+v", found)
 	}
+}
 
-	// Second write: scroll-only (W=0, H=0, mode=""). Existing window +
-	// mode must remain.
-	got2, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: f.ID,
-		ViewX: 11, ViewY: 21, ViewZoom: 1.0,
+func TestSetWellViewRejectsNonWell(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("x"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got2.ViewW != 640 || got2.ViewH != 480 {
-		t.Errorf("zero view_w/h clobbered existing values: %+v", got2)
+	_, err = s.SetWellView(ctx, &rpc.SetWellViewRequest{
+		Path: rpc.Path{}, TileID: f.ID, Version: f.Version, ViewX: 1, ViewY: 1, ViewZoom: 1,
+	})
+	if !errors.Is(err, ErrNotWellTile) {
+		t.Errorf("got %v, want ErrNotWellTile", err)
 	}
-	if got2.FileMode != "rendered" {
-		t.Errorf("empty file_mode clobbered existing value: %+v", got2)
+}
+
+func TestSetTextViewRejectsNonText(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got2.ViewX != 11 || got2.ViewY != 21 {
-		t.Errorf("scroll not updated: %+v", got2)
+	_, err = s.SetTextView(ctx, &rpc.SetTextViewRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+	})
+	if !errors.Is(err, ErrNotTextTile) {
+		t.Errorf("got %v, want ErrNotTextTile", err)
 	}
 }
 
@@ -362,13 +379,13 @@ func TestDeleteTile(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	childGridID := w.ChildGridID
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: w.ID, Version: w.Version}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, err := s.loadTile(ctx, s.db, w.ID); !errors.Is(err, ErrNotFound) {
@@ -384,19 +401,26 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{w.ID}},
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID}); err != nil {
+	// w may have been bumped by the creation of inner in its child grid?
+	// No: creating inner bumps the inner-grid version, not the outer well's.
+	// Reload w for current version.
+	wCur, err := s.loadTile(ctx, s.db, w.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: w.ID, Version: wCur.Version}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, err := s.loadTile(ctx, s.db, inner.ID); !errors.Is(err, ErrNotFound) {
@@ -404,39 +428,33 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	}
 }
 
-func TestAscendAtRoot(t *testing.T) {
+func TestDeleteTileVersionConflict(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	oldRoot := root
-	resp, err := s.AscendAtRoot(ctx)
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.NewRootGridID == 0 || resp.NewRootGridID == oldRoot {
-		t.Errorf("new root not set: %+v", resp)
+	err = s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: w.ID, Version: w.Version + 1})
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("got %v, want ErrVersionConflict", err)
 	}
-	got, err := s.RootGridID(ctx)
+}
+
+func TestCreateBlackHole(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	bh, err := s.CreateBlackHole(ctx, &rpc.CreateBlackHoleRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != resp.NewRootGridID {
-		t.Errorf("root = %d, expected %d", got, resp.NewRootGridID)
-	}
-	// Verify the well exists in the new root pointing at the old root.
-	well, err := s.loadTile(ctx, s.db, resp.WellID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if well.ChildGridID != oldRoot {
-		t.Errorf("well child=%d, want %d", well.ChildGridID, oldRoot)
-	}
-	// Old root's refcount: was 1 (root +1). Now: 0 (no longer root) + 1 (well points). Net 1.
-	var rc int64
-	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, oldRoot).Scan(&rc); err != nil {
-		t.Fatal(err)
-	}
-	if rc != 1 {
-		t.Errorf("old root refcount = %d, want 1", rc)
+	if bh.Kind != rpc.KindBlackHole {
+		t.Errorf("kind = %q", bh.Kind)
 	}
 }

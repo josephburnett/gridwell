@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/josephburnett/gridwell/internal/rpc"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -26,12 +28,13 @@ import (
 var (
 	ErrNotFound            = errors.New("not found")
 	ErrOverlap             = errors.New("footprint overlaps an existing node")
-	ErrLocality            = errors.New("affected node is outside the framed view")
 	ErrInvalidPath         = errors.New("descent path is invalid")
 	ErrInvalidArgument     = errors.New("invalid argument")
-	ErrUnsupportedMime     = errors.New("unsupported mime type")
 	ErrChromiumUnavailable = errors.New("chromium unavailable")
 	ErrNotURLTile          = errors.New("not a URL tile")
+	ErrNotTextTile         = errors.New("not a text tile")
+	ErrNotWellTile         = errors.New("not a well tile")
+	ErrVersionConflict     = errors.New("version mismatch")
 )
 
 // Store wraps a SQLite database. It is safe for concurrent use.
@@ -44,7 +47,12 @@ type Store struct {
 	urlDriver URLDriver // set via SetURLDriver; nil means Chromium-unavailable
 }
 
-const systemKeyRootGridID = "root_grid_id"
+const (
+	systemKeyRootGridID = "root_grid_id"
+	systemKeyRootViewCx = "root_view_cx"
+	systemKeyRootViewCy = "root_view_cy"
+	systemKeyRootZoom   = "root_zoom"
+)
 
 // Open opens a SQLite database at the given path, applies the schema, and
 // bootstraps the root grid if it doesn't already exist. Use ":memory:" for
@@ -79,7 +87,8 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-// bootstrapRoot inserts the initial root grid if none exists. Idempotent.
+// bootstrapRoot inserts the initial root grid if none exists and seeds the
+// root viewport keys. Idempotent.
 func (s *Store) bootstrapRoot(ctx context.Context) error {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&v)
@@ -102,16 +111,78 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx,
-			`INSERT INTO system (key, value) VALUES (?, ?)`,
-			systemKeyRootGridID, strconv.FormatInt(id, 10))
-		return err
+		seeds := []struct{ k, v string }{
+			{systemKeyRootGridID, strconv.FormatInt(id, 10)},
+			{systemKeyRootViewCx, "0"},
+			{systemKeyRootViewCy, "0"},
+			{systemKeyRootZoom, "1"},
+		}
+		for _, kv := range seeds {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO system (key, value) VALUES (?, ?)`,
+				kv.k, kv.v); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
 // RootGridID returns the current root grid id.
 func (s *Store) RootGridID(ctx context.Context) (int64, error) {
 	return rootGridID(ctx, s.db)
+}
+
+// RootView returns the persisted root viewport: center (cx, cy) and zoom.
+func (s *Store) RootView(ctx context.Context) (cx, cy, zoom float64, err error) {
+	cx, err = readFloatKey(ctx, s.db, systemKeyRootViewCx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	cy, err = readFloatKey(ctx, s.db, systemKeyRootViewCy)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	zoom, err = readFloatKey(ctx, s.db, systemKeyRootZoom)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return cx, cy, zoom, nil
+}
+
+// SetRootView writes the root framing to the system KV table and emits a
+// GridChanged for the current root grid.
+func (s *Store) SetRootView(ctx context.Context, req *rpc.SetRootViewRequest) error {
+	var rootID int64
+	err := s.withTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		rootID, err = rootGridID(ctx, tx)
+		if err != nil {
+			return err
+		}
+		writes := []struct {
+			k string
+			v string
+		}{
+			{systemKeyRootViewCx, strconv.FormatFloat(req.Cx, 'f', -1, 64)},
+			{systemKeyRootViewCy, strconv.FormatFloat(req.Cy, 'f', -1, 64)},
+			{systemKeyRootZoom, strconv.FormatFloat(req.Zoom, 'f', -1, 64)},
+		}
+		for _, w := range writes {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO system (key, value) VALUES (?, ?)
+				 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+				w.k, w.v); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	s.publish(rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: rootID}})
+	return nil
 }
 
 func rootGridID(ctx context.Context, q queryRower) (int64, error) {
@@ -123,11 +194,13 @@ func rootGridID(ctx context.Context, q queryRower) (int64, error) {
 	return strconv.ParseInt(v, 10, 64)
 }
 
-func setRootGridID(ctx context.Context, tx *sql.Tx, id int64) error {
-	_, err := tx.ExecContext(ctx,
-		`UPDATE system SET value = ? WHERE key = ?`,
-		strconv.FormatInt(id, 10), systemKeyRootGridID)
-	return err
+func readFloatKey(ctx context.Context, q queryRower, key string) (float64, error) {
+	var v string
+	err := q.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, key).Scan(&v)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(v, 64)
 }
 
 // Close releases the underlying database handle.

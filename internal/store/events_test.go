@@ -9,9 +9,7 @@ import (
 )
 
 // drainEvents collects every event published in the next short window
-// after the subscribe is in place. The window is short on purpose: every
-// store mutation publishes synchronously, so by the time the RPC returns
-// the events are already in the channel.
+// after the subscribe is in place.
 func drainEvents(t *testing.T, ch <-chan rpc.Event) []rpc.Event {
 	t.Helper()
 	var out []rpc.Event
@@ -63,7 +61,7 @@ func TestEventCreateWellEmitsTileChanged(t *testing.T) {
 	defer cancel()
 
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -71,21 +69,54 @@ func TestEventCreateWellEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "CreateWell", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventCreateFileEmitsTileChanged(t *testing.T) {
+func TestEventCreateTextEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 
-	if _, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("# hi"),
+	if _, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "CreateFile", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+	assertCounts(t, "CreateText", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+}
+
+func TestEventCreateURLEmitsTileChanged(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	ch, cancel := s.SubscribeEvents()
+	defer cancel()
+
+	if _, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := countKinds(drainEvents(t, ch))
+	assertCounts(t, "CreateURL", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+}
+
+func TestEventCreateBlackHoleEmitsTileChanged(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	ch, cancel := s.SubscribeEvents()
+	defer cancel()
+
+	if _, err := s.CreateBlackHole(ctx, &rpc.CreateBlackHoleRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := countKinds(drainEvents(t, ch))
+	assertCounts(t, "CreateBlackHole", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
 func TestEventResizeTileEmitsTileChanged(t *testing.T) {
@@ -93,7 +124,7 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +132,7 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID, W: 3, H: 3,
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version, W: 3, H: 3,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -109,40 +140,40 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "ResizeTile", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventSetTileViewportEmitsTileChanged(t *testing.T) {
+func TestEventSetWellViewEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID, ViewX: 5, ViewY: 7,
+	if _, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		ViewX: 5, ViewY: 7, ViewZoom: 1.0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "SetTileViewport", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+	assertCounts(t, "SetWellView", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventSetGridDefaultViewEmitsGridChanged(t *testing.T) {
+func TestEventSetRootViewEmitsGridChanged(t *testing.T) {
 	s := newTestStore(t)
-	root := rootID(t, s)
 	ctx := context.Background()
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.SetGridDefaultView(ctx, &rpc.SetGridDefaultViewRequest{
-		GridID: root, Cx: 1, Cy: 2, Zoom: 0.5,
+	if err := s.SetRootView(ctx, &rpc.SetRootViewRequest{
+		Cx: 1, Cy: 2, Zoom: 0.5,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "SetGridDefaultView", got, map[rpc.EventKind]int{rpc.EventGridChanged: 1})
+	assertCounts(t, "SetRootView", got, map[rpc.EventKind]int{rpc.EventGridChanged: 1})
 }
 
 func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {
@@ -150,7 +181,7 @@ func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +189,7 @@ func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +202,7 @@ func TestEventMoveTileWithinGridEmitsTileChanged(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +210,8 @@ func TestEventMoveTileWithinGridEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 5, Y: 5,
 	}); err != nil {
 		t.Fatal(err)
@@ -194,13 +225,13 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	target, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 5, Y: 5, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -208,8 +239,8 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: target.ID,
-		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []int64{a.ID}}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: target.ID, Version: target.Version,
+		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []int64{a.ID}},
 		X: 0, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
@@ -226,7 +257,7 @@ func TestEventCloneTileEmitsTileChanged(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -234,8 +265,8 @@ func TestEventCloneTileEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 5, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
@@ -244,29 +275,29 @@ func TestEventCloneTileEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "CloneTile", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventUpdateFileContentEmitsTileChanged(t *testing.T) {
+func TestEventUpdateTextEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	f, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("v1"),
+	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("v1"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: f.ID, Data: []byte("v2"),
+	if _, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: f.ID, Version: f.Version, Data: []byte("v2"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "UpdateFileContent", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+	assertCounts(t, "UpdateText", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventForkURLEmitsTileChanged(t *testing.T) {
+func TestEventCloneURLEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	s.SetURLDriver(NewFakeURLDriver())
 	root := rootID(t, s)
@@ -274,15 +305,15 @@ func TestEventForkURLEmitsTileChanged(t *testing.T) {
 	src := createURLTileForTest(t, s, root, 0, "https://example.com")
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.ForkURL(ctx, &rpc.ForkURLRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: src.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+	if _, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, TileID: src.ID, Version: src.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 5, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "ForkURL", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
+	assertCounts(t, "CloneURL", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
 // TestEventCowForkEmitsGridForked: a write into a clone-shared child grid
@@ -293,21 +324,21 @@ func TestEventCowForkEmitsGridForked(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{w.ID}}, ViewRect: largeView(),
+		Path:   rpc.Path{WellIDs: []int64{w.ID}},
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 5, Y: 0,
 	})
 	if err != nil {
@@ -316,10 +347,9 @@ func TestEventCowForkEmitsGridForked(t *testing.T) {
 
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	// Resize the inner well via the clone's path → forks the child grid.
 	if _, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}}, ViewRect: largeView(),
-		TileID: inner.ID, W: 2, H: 2,
+		Path: rpc.Path{WellIDs: []int64{clone.ID}},
+		TileID: inner.ID, Version: inner.Version, W: 2, H: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}

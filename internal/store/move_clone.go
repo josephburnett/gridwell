@@ -24,15 +24,9 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadTile(ctx, tx, req.TileID)
+		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
-		}
-		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
-			return ErrLocality
-		}
-		if !req.DestViewRect.Intersects(req.X, req.Y, n.W, n.H) {
-			return ErrLocality
 		}
 
 		srcSeq, err := s.buildGridSequence(ctx, tx, req.Path)
@@ -61,7 +55,8 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			return fmt.Errorf("%w: dest path leaf is %d not %d", ErrInvalidPath, dstGrid, req.DestGridID)
 		}
 
-		if dstGrid != srcGrid {
+		crossGrid := dstGrid != srcGrid
+		if crossGrid {
 			dstPre, err := s.preWrite(ctx, tx, req.DestPath, 0)
 			if err != nil {
 				return err
@@ -72,7 +67,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			dstGrid = srcGrid
 		}
 
-		if n.Type == "well" {
+		if n.Kind == rpc.KindWell {
 			for _, wid := range req.DestPath.WellIDs {
 				if wid == tileID {
 					return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
@@ -97,11 +92,22 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			dstGrid, req.X, req.Y, s.now().Unix(), tileID); err != nil {
 			return err
 		}
+		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
+			return err
+		}
+		if crossGrid {
+			if err := bumpGridVersion(ctx, tx, srcGrid); err != nil {
+				return err
+			}
+			if err := bumpGridVersion(ctx, tx, dstGrid); err != nil {
+				return err
+			}
+		}
 		out, err = s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
-		if dstGrid != srcGrid {
+		if crossGrid {
 			events = append(events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: srcGrid, TileID: tileID}})
 		}
 		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
@@ -116,20 +122,19 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 	return out, nil
 }
 
-// CloneTile duplicates a tile into a destination grid at (x, y).
+// CloneTile duplicates a tile into a destination grid at (x, y). The new row
+// shares the source's object_id and starting version. For wells, both rows
+// share the same child grid (refcount bumps). For text tiles, both rows
+// share the same blob (refcount bumps). For URL tiles, the new row copies
+// the URL string and the last-frozen preview JPEG. For blackhole tiles,
+// only the kind is carried over.
 func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadTile(ctx, tx, req.TileID)
+		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
-		}
-		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
-			return ErrLocality
-		}
-		if !req.DestViewRect.Intersects(req.X, req.Y, n.W, n.H) {
-			return ErrLocality
 		}
 
 		srcSeq, err := s.buildGridSequence(ctx, tx, req.Path)
@@ -165,40 +170,40 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		now := s.now().Unix()
 		var (
 			child       sql.NullInt64
-			mime        sql.NullString
 			blob        sql.NullInt64
 			urlStr      sql.NullString
+			textMode    sql.NullString
 			previewJPEG []byte
 		)
-		switch {
-		case n.Type == "well":
+		switch n.Kind {
+		case rpc.KindWell:
 			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
-		case n.IsURL():
-			mime = sql.NullString{String: n.MimeType, Valid: true}
+		case rpc.KindURL:
 			urlStr = sql.NullString{String: n.URLString, Valid: true}
 			previewJPEG, err = loadPreviewJPEG(ctx, tx, n.ID)
 			if err != nil {
 				return err
 			}
-		default:
-			mime = sql.NullString{String: n.MimeType, Valid: true}
+		case rpc.KindText:
 			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
-		}
-		var cappedInt int64
-		if n.Capped {
-			cappedInt = 1
-		}
-		var fileModeArg any
-		if n.FileMode != "" {
-			fileModeArg = n.FileMode
+			if n.TextMode != "" {
+				textMode = sql.NullString{String: n.TextMode, Valid: true}
+			}
+		case rpc.KindBlackHole:
+			// no kind-specific state
 		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
-				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
+			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
+				view_x, view_y, view_zoom, child_grid_id,
+				text_x, text_y, text_w, text_h, text_mode, blob_id,
+				url_string, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			n.ObjectID, dstGrid, n.Type, req.X, req.Y, n.W, n.H, n.ViewX, n.ViewY, n.ViewZoom, n.ViewW, n.ViewH, fileModeArg,
-			child, cappedInt, mime, blob, urlStr, previewJPEG, now, now)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			n.ObjectID, n.Version, dstGrid, n.Kind, req.X, req.Y, n.W, n.H,
+			n.ViewX, n.ViewY, n.ViewZoom, child,
+			n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
+			urlStr, previewJPEG,
+			now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)
 		}
@@ -206,16 +211,19 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err != nil {
 			return err
 		}
-		switch {
-		case n.Type == "well":
+		switch n.Kind {
+		case rpc.KindWell:
 			if err := s.incRefcount(ctx, tx, n.ChildGridID); err != nil {
 				return err
 			}
-		case !n.IsURL():
+		case rpc.KindText:
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, n.BlobID); err != nil {
 				return err
 			}
+		}
+		if err := bumpGridVersion(ctx, tx, dstGrid); err != nil {
+			return err
 		}
 		out, err = s.loadTile(ctx, tx, newID)
 		if err != nil {
@@ -233,26 +241,20 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 	return out, nil
 }
 
-// UpdateFileContent replaces a file tile's blob with new bytes.
-func (s *Store) UpdateFileContent(ctx context.Context, req *rpc.UpdateFileContentRequest) (*rpc.Tile, error) {
+// UpdateText replaces a text tile's blob with new bytes.
+func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rpc.Tile, error) {
 	if int64(len(req.Data)) > MaxBlobBytes {
-		return nil, fmt.Errorf("%w: file too large", ErrInvalidArgument)
+		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
 	}
 	var out *rpc.Tile
 	var events []rpc.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		n, err := s.loadTile(ctx, tx, req.TileID)
+		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
 		}
-		if n.Type != "file" {
-			return fmt.Errorf("%w: node is not a file", ErrInvalidArgument)
-		}
-		if n.MimeType != "text/markdown" {
-			return fmt.Errorf("%w: %s is read-only", ErrInvalidArgument, n.MimeType)
-		}
-		if !req.ViewRect.Intersects(n.X, n.Y, n.W, n.H) {
-			return ErrLocality
+		if n.Kind != rpc.KindText {
+			return ErrNotTextTile
 		}
 		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
 		if err != nil {
@@ -260,13 +262,13 @@ func (s *Store) UpdateFileContent(ctx context.Context, req *rpc.UpdateFileConten
 		}
 		events = append(events, pre.Events...)
 
-		hash := sha256Hex(req.Data)
+		hash := hashBytes(req.Data)
 		var newBlobID int64
 		err = tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&newBlobID)
 		if err == sql.ErrNoRows {
 			res, err := tx.ExecContext(ctx,
-				`INSERT INTO blobs (hash, size, mime_type, data, refcount) VALUES (?, ?, ?, ?, 0)`,
-				hash, len(req.Data), n.MimeType, req.Data)
+				`INSERT INTO blobs (hash, size, data, refcount) VALUES (?, ?, ?, 0)`,
+				hash, len(req.Data), req.Data)
 			if err != nil {
 				return fmt.Errorf("insert blob: %w", err)
 			}
@@ -298,6 +300,9 @@ func (s *Store) UpdateFileContent(ctx context.Context, req *rpc.UpdateFileConten
 				return err
 			}
 		}
+		if err := bumpTileVersion(ctx, tx, pre.TargetTileID); err != nil {
+			return err
+		}
 		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
@@ -312,8 +317,4 @@ func (s *Store) UpdateFileContent(ctx context.Context, req *rpc.UpdateFileConten
 		s.publish(ev)
 	}
 	return out, nil
-}
-
-func sha256Hex(data []byte) string {
-	return hashBytes(data)
 }

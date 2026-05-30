@@ -31,7 +31,7 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 		if err != nil {
 			return gridSequence{}, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
 		}
-		if w.Type != "well" {
+		if w.Kind != rpc.KindWell {
 			return gridSequence{}, fmt.Errorf("%w: node %d is not a well", ErrInvalidPath, wellID)
 		}
 		if w.GridID != seq.grids[len(seq.grids)-1] {
@@ -173,9 +173,9 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 
 	now := s.now().Unix()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (object_id, refcount, default_view_cx, default_view_cy, default_zoom, created_at)
-		 VALUES (?, 0, ?, ?, ?, ?)`,
-		old.ObjectID, old.DefaultViewCx, old.DefaultViewCy, old.DefaultZoom, now)
+		`INSERT INTO grids (object_id, version, refcount, created_at)
+		 VALUES (?, ?, 0, ?)`,
+		old.ObjectID, old.Version, now)
 	if err != nil {
 		return 0, nil, fmt.Errorf("insert grid: %w", err)
 	}
@@ -185,8 +185,10 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, object_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
-		       child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
+		SELECT id, object_id, version, kind, x, y, w, h,
+		       view_x, view_y, view_zoom, child_grid_id,
+		       text_x, text_y, text_w, text_h, text_mode, blob_id,
+		       url_string, preview_jpeg,
 		       created_at, updated_at
 		FROM tiles WHERE grid_id = ?`, oldGridID)
 	if err != nil {
@@ -197,15 +199,15 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	type tileCopy struct {
 		oldID                int64
 		objectID             string
-		typ                  string
+		version              int64
+		kind                 string
 		x, y, w, h           int64
 		viewX, viewY         int64
 		viewZoom             float64
-		viewW, viewH         int64
-		fileMode             sql.NullString
 		childGrid            sql.NullInt64
-		cappedInt            int64
-		mime                 sql.NullString
+		textX, textY         int64
+		textW, textH         int64
+		textMode             sql.NullString
 		blob                 sql.NullInt64
 		urlString            sql.NullString
 		previewJPEG          []byte
@@ -214,9 +216,10 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	var copies []tileCopy
 	for rows.Next() {
 		var nc tileCopy
-		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.typ, &nc.x, &nc.y, &nc.w, &nc.h,
-			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.viewW, &nc.viewH, &nc.fileMode,
-			&nc.childGrid, &nc.cappedInt, &nc.mime, &nc.blob,
+		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.version, &nc.kind,
+			&nc.x, &nc.y, &nc.w, &nc.h,
+			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
+			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
 			&nc.urlString, &nc.previewJPEG,
 			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
@@ -230,12 +233,16 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	remap := make(map[int64]int64, len(copies))
 	for _, nc := range copies {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
-				child_grid_id, capped, mime_type, blob_id, url_string, preview_jpeg,
+			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
+				view_x, view_y, view_zoom, child_grid_id,
+				text_x, text_y, text_w, text_h, text_mode, blob_id,
+				url_string, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			nc.objectID, newGridID, nc.typ, nc.x, nc.y, nc.w, nc.h, nc.viewX, nc.viewY, nc.viewZoom, nc.viewW, nc.viewH, nc.fileMode,
-			nc.childGrid, nc.cappedInt, nc.mime, nc.blob, nc.urlString, nc.previewJPEG,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			nc.objectID, nc.version, newGridID, nc.kind, nc.x, nc.y, nc.w, nc.h,
+			nc.viewX, nc.viewY, nc.viewZoom, nc.childGrid,
+			nc.textX, nc.textY, nc.textW, nc.textH, nc.textMode, nc.blob,
+			nc.urlString, nc.previewJPEG,
 			nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)
@@ -245,12 +252,12 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			return 0, nil, err
 		}
 		remap[nc.oldID] = newID
-		if nc.typ == "well" && nc.childGrid.Valid {
+		if nc.kind == rpc.KindWell && nc.childGrid.Valid {
 			if err := s.incRefcount(ctx, tx, nc.childGrid.Int64); err != nil {
 				return 0, nil, err
 			}
 		}
-		if nc.typ == "file" && nc.blob.Valid {
+		if nc.kind == rpc.KindText && nc.blob.Valid {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, nc.blob.Int64); err != nil {
 				return 0, nil, err
@@ -281,20 +288,20 @@ func (s *Store) decRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error
 
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, type, child_grid_id, blob_id FROM tiles WHERE grid_id = ?`, gridID)
+		`SELECT id, kind, child_grid_id, blob_id FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
 	type ref struct {
 		id    int64
-		typ   string
+		kind  string
 		child sql.NullInt64
 		blob  sql.NullInt64
 	}
 	var refs []ref
 	for rows.Next() {
 		var r ref
-		if err := rows.Scan(&r.id, &r.typ, &r.child, &r.blob); err != nil {
+		if err := rows.Scan(&r.id, &r.kind, &r.child, &r.blob); err != nil {
 			rows.Close()
 			return err
 		}
@@ -310,12 +317,12 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, r.id); err != nil {
 			return err
 		}
-		if r.typ == "well" && r.child.Valid {
+		if r.kind == rpc.KindWell && r.child.Valid {
 			if err := s.decRefcount(ctx, tx, r.child.Int64); err != nil {
 				return err
 			}
 		}
-		if r.typ == "file" && r.blob.Valid {
+		if r.kind == rpc.KindText && r.blob.Valid {
 			if err := s.decBlobRefcount(ctx, tx, r.blob.Int64); err != nil {
 				return err
 			}

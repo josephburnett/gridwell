@@ -13,14 +13,14 @@ func TestMoveNodeWithinGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: w.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 5, Y: 5,
 	})
 	if err != nil {
@@ -36,19 +36,19 @@ func TestMoveNodeOverlapRefused(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 2, H: 2,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 5, Y: 5, W: 2, H: 2,
+		Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 2, H: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
-		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
+		DestGridID: root, DestPath: rpc.Path{},
 		X: 4, Y: 4,
 	})
 	if !errors.Is(err, ErrOverlap) {
@@ -60,23 +60,21 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	// Build: root has well A (containing nothing) and a target well T at (5,5).
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	target, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 5, Y: 5, W: 1, H: 1,
+		Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Move target into A's child grid.
 	moved, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: target.ID,
-		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []int64{a.ID}}, DestViewRect: largeView(),
+		Path: rpc.Path{}, TileID: target.ID, Version: target.Version,
+		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []int64{a.ID}},
 		X: 0, Y: 0,
 	})
 	if err != nil {
@@ -85,7 +83,6 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	if moved.GridID != a.ChildGridID {
 		t.Errorf("moved.GridID = %d, want %d", moved.GridID, a.ChildGridID)
 	}
-	// Original location should now be empty.
 	g, _ := s.GetGrid(ctx, root)
 	for _, n := range g.Tiles {
 		if n.ID == target.ID && n.GridID == root {
@@ -94,27 +91,20 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	}
 }
 
-func TestUpdateFileContentMarkdownOnly(t *testing.T) {
+func TestUpdateTextHappy(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	mdFile, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("# hello"),
+	mdFile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	imgFile, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
-		X: 5, Y: 0, W: 1, H: 1, MimeType: "image/png", Data: []byte("PNG"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Update markdown is allowed.
-	updated, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: mdFile.ID, Data: []byte("# updated"),
+	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: mdFile.ID, Version: mdFile.Version,
+		Data: []byte("# updated"),
 	})
 	if err != nil {
 		t.Fatalf("update md: %v", err)
@@ -122,11 +112,44 @@ func TestUpdateFileContentMarkdownOnly(t *testing.T) {
 	if updated.BlobID == mdFile.BlobID {
 		t.Error("blob id did not change after content edit")
 	}
-	// Update image is refused.
-	if _, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
-		Path: rpc.Path{}, ViewRect: largeView(), TileID: imgFile.ID, Data: []byte("X"),
-	}); !errors.Is(err, ErrInvalidArgument) {
-		t.Errorf("expected ErrInvalidArgument for image edit, got %v", err)
+	if updated.Version != mdFile.Version+1 {
+		t.Errorf("version after update = %d, want %d", updated.Version, mdFile.Version+1)
 	}
 }
 
+func TestUpdateTextRejectsNonText(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version, Data: []byte("x"),
+	})
+	if !errors.Is(err, ErrNotTextTile) {
+		t.Errorf("expected ErrNotTextTile, got %v", err)
+	}
+}
+
+func TestUpdateTextVersionConflict(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# v1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: f.ID, Version: f.Version + 1, Data: []byte("# v2"),
+	})
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("got %v, want ErrVersionConflict", err)
+	}
+}

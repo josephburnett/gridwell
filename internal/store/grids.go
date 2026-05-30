@@ -19,7 +19,7 @@ func (s *Store) GetGrid(ctx context.Context, gridID int64) (*rpc.GetGridResponse
 	if err != nil {
 		return nil, err
 	}
-	return &rpc.GetGridResponse{Grid: *g, Tiles: tiles, Readable: true, Writable: true}, nil
+	return &rpc.GetGridResponse{Grid: *g, Tiles: tiles}, nil
 }
 
 // gridReader is the interface needed to read grid/tile rows. Both *sql.DB and
@@ -32,10 +32,8 @@ type gridReader interface {
 func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.Grid, error) {
 	var g rpc.Grid
 	err := q.QueryRowContext(ctx,
-		`SELECT id, object_id, default_view_cx, default_view_cy, default_zoom
-		 FROM grids WHERE id = ?`, gridID,
-	).Scan(&g.ID, &g.ObjectID,
-		&g.DefaultViewCx, &g.DefaultViewCy, &g.DefaultZoom)
+		`SELECT id, object_id, version FROM grids WHERE id = ?`, gridID,
+	).Scan(&g.ID, &g.ObjectID, &g.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -45,33 +43,36 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 	return &g, nil
 }
 
-func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.Tile, error) {
+// tileColumns is the column list for reading a tile row. Keep in sync with
+// scanTile.
+const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
+	view_x, view_y, view_zoom, child_grid_id,
+	text_x, text_y, text_w, text_h, text_mode, blob_id,
+	url_string`
+
+// scanTile scans a single row into an rpc.Tile. It expects the columns to
+// match tileColumns in order.
+func scanTile(scanner interface {
+	Scan(dest ...any) error
+}) (*rpc.Tile, error) {
 	var (
 		n         rpc.Tile
 		childGrid sql.NullInt64
-		mime      sql.NullString
 		blob      sql.NullInt64
 		urlStr    sql.NullString
-		cappedInt int64
+		textMode  sql.NullString
 	)
-	var fileMode sql.NullString
-	err := q.QueryRowContext(ctx, `
-		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
-		       child_grid_id, capped, mime_type, blob_id, url_string
-		FROM tiles WHERE id = ?`, tileID,
-	).Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-		&n.ViewX, &n.ViewY, &n.ViewZoom, &n.ViewW, &n.ViewH, &fileMode, &childGrid, &cappedInt, &mime, &blob, &urlStr)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
+	if err := scanner.Scan(
+		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
+		&n.X, &n.Y, &n.W, &n.H,
+		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
+		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
+		&urlStr,
+	); err != nil {
 		return nil, err
 	}
 	if childGrid.Valid {
 		n.ChildGridID = childGrid.Int64
-	}
-	if mime.Valid {
-		n.MimeType = mime.String
 	}
 	if blob.Valid {
 		n.BlobID = blob.Int64
@@ -79,54 +80,37 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 	if urlStr.Valid {
 		n.URLString = urlStr.String
 	}
-	if fileMode.Valid {
-		n.FileMode = fileMode.String
+	if textMode.Valid {
+		n.TextMode = textMode.String
 	}
-	n.Capped = cappedInt != 0
 	return &n, nil
 }
 
+func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.Tile, error) {
+	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ?`, tileID)
+	n, err := scanTile(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Tile, error) {
-	rows, err := q.QueryContext(ctx, `
-		SELECT id, object_id, grid_id, type, x, y, w, h, view_x, view_y, view_zoom, view_w, view_h, file_mode,
-		       child_grid_id, capped, mime_type, blob_id, url_string
-		FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
+	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []rpc.Tile
 	for rows.Next() {
-		var (
-			n         rpc.Tile
-			childGrid sql.NullInt64
-			mime      sql.NullString
-			blob      sql.NullInt64
-			urlStr    sql.NullString
-			fileMode  sql.NullString
-			cappedInt int64
-		)
-		if err := rows.Scan(&n.ID, &n.ObjectID, &n.GridID, &n.Type, &n.X, &n.Y, &n.W, &n.H,
-			&n.ViewX, &n.ViewY, &n.ViewZoom, &n.ViewW, &n.ViewH, &fileMode, &childGrid, &cappedInt, &mime, &blob, &urlStr); err != nil {
+		n, err := scanTile(rows)
+		if err != nil {
 			return nil, err
 		}
-		if childGrid.Valid {
-			n.ChildGridID = childGrid.Int64
-		}
-		if mime.Valid {
-			n.MimeType = mime.String
-		}
-		if blob.Valid {
-			n.BlobID = blob.Int64
-		}
-		if urlStr.Valid {
-			n.URLString = urlStr.String
-		}
-		if fileMode.Valid {
-			n.FileMode = fileMode.String
-		}
-		n.Capped = cappedInt != 0
-		out = append(out, n)
+		out = append(out, *n)
 	}
 	return out, rows.Err()
 }
@@ -150,32 +134,18 @@ func (s *Store) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error
 	return jpeg, nil
 }
 
-// SetGridDefaultView updates the grid's stored default viewport.
-func (s *Store) SetGridDefaultView(ctx context.Context, req *rpc.SetGridDefaultViewRequest) (*rpc.Grid, error) {
-	var out *rpc.Grid
-	var events []rpc.Event
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE grids SET default_view_cx = ?, default_view_cy = ?, default_zoom = ?
-			 WHERE id = ?`,
-			req.Cx, req.Cy, req.Zoom, req.GridID); err != nil {
-			return err
-		}
-		var err error
-		out, err = s.loadGrid(ctx, tx, req.GridID)
-		if err != nil {
-			return err
-		}
-		events = append(events, rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: req.GridID}})
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, ev := range events {
-		s.publish(ev)
-	}
-	return out, nil
+// bumpTileVersion increments a tile row's version by 1.
+func bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
+	_, err := tx.ExecContext(ctx,
+		`UPDATE tiles SET version = version + 1 WHERE id = ?`, tileID)
+	return err
+}
+
+// bumpGridVersion increments a grid row's version by 1.
+func bumpGridVersion(ctx context.Context, tx *sql.Tx, gridID int64) error {
+	_, err := tx.ExecContext(ctx,
+		`UPDATE grids SET version = version + 1 WHERE id = ?`, gridID)
+	return err
 }
 
 // overlapsExisting reports whether the rectangle (x,y,w,h) overlaps any tile
