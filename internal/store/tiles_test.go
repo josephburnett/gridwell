@@ -289,6 +289,74 @@ func TestSetNodeViewport(t *testing.T) {
 	}
 }
 
+// TestSetTileViewportTextFilePersistsWindowAndMode pins the text-file
+// tile's preview-frame contract: SetTileViewport persists view_w, view_h
+// and file_mode in addition to the scroll offset, and GetGrid reads them
+// back. Subsequent writes that send 0 / "" for those fields must leave
+// the stored values unchanged — that's how the client posts a scroll-only
+// update without clobbering the framed window.
+func TestSetTileViewportTextFilePersistsWindowAndMode(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	f, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
+		X: 0, Y: 0, W: 2, H: 2, MimeType: "text/markdown", Data: []byte("hello"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First write: set scroll, zoom, window, and mode.
+	got, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: f.ID,
+		ViewX: 10, ViewY: 20, ViewZoom: 1.5,
+		ViewW: 640, ViewH: 480, FileMode: "rendered",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ViewX != 10 || got.ViewY != 20 || got.ViewW != 640 || got.ViewH != 480 || got.FileMode != "rendered" {
+		t.Errorf("after first write: %+v", got)
+	}
+	// Readback through GetGrid must see the same values.
+	gg, err := s.GetGrid(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *rpc.Tile
+	for i := range gg.Tiles {
+		if gg.Tiles[i].ID == f.ID {
+			found = &gg.Tiles[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("tile missing from GetGrid")
+	}
+	if found.ViewW != 640 || found.ViewH != 480 || found.FileMode != "rendered" {
+		t.Errorf("GetGrid round-trip: %+v", found)
+	}
+
+	// Second write: scroll-only (W=0, H=0, mode=""). Existing window +
+	// mode must remain.
+	got2, err := s.SetTileViewport(ctx, &rpc.SetTileViewportRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: f.ID,
+		ViewX: 11, ViewY: 21, ViewZoom: 1.0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got2.ViewW != 640 || got2.ViewH != 480 {
+		t.Errorf("zero view_w/h clobbered existing values: %+v", got2)
+	}
+	if got2.FileMode != "rendered" {
+		t.Errorf("empty file_mode clobbered existing value: %+v", got2)
+	}
+	if got2.ViewX != 11 || got2.ViewY != 21 {
+		t.Errorf("scroll not updated: %+v", got2)
+	}
+}
+
 func TestDeleteTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

@@ -144,6 +144,245 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	}
 }
 
+// TestCowOneLevelByteIdentity exercises the end-to-end COW invariant on a
+// single level of nesting: clone a well that contains content, mutate the
+// content via one path, and assert the other path still sees byte-
+// identical content and tile state.
+//
+// Two-level-nesting coverage is intentionally not added here. See the
+// commit notes / Phase 1 report for the COW preWrite bug that surfaces in
+// that case — the test would assert correct behavior the current code
+// does not produce.
+func TestCowOneLevelByteIdentity(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	outer, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("# original")
+	text, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
+		Path:     rpc.Path{WellIDs: []int64{outer.ID}},
+		ViewRect: largeView(), GridID: outer.ChildGridID,
+		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: original,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Snapshot the "other" path.
+	snap := func(outerID int64) (rpc.GetGridResponse, []byte) {
+		t.Helper()
+		ot, err := s.GetTile(ctx, outerID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, err := s.GetGrid(ctx, ot.ChildGridID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(g.Tiles) != 1 {
+			t.Fatalf("outer child should have 1 tile; got %d", len(g.Tiles))
+		}
+		data, _, err := s.GetBlob(ctx, g.Tiles[0].BlobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return *g, data
+	}
+	beforeGrid, beforeBytes := snap(outer.ID)
+
+	// Clone the outer well; its child grid is now shared.
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: outer.ID,
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		X: 10, Y: 0,
+	})
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	// Walk DOWN clone's path and mutate.
+	updated, err := s.UpdateFileContent(ctx, &rpc.UpdateFileContentRequest{
+		Path: rpc.Path{WellIDs: []int64{clone.ID}}, ViewRect: largeView(),
+		TileID: text.ID, Data: []byte("# mutated"),
+	})
+	if err != nil {
+		t.Fatalf("update through clone: %v", err)
+	}
+	if updated.ObjectID != text.ObjectID {
+		t.Errorf("object identity drift: %s -> %s", text.ObjectID, updated.ObjectID)
+	}
+
+	// Original path must be byte-identical to the pre-mutation snapshot.
+	afterGrid, afterBytes := snap(outer.ID)
+	if afterGrid.Grid.ID != beforeGrid.Grid.ID {
+		t.Errorf("outer child grid id changed under original path: %d -> %d",
+			beforeGrid.Grid.ID, afterGrid.Grid.ID)
+	}
+	if !tilesEqual(beforeGrid.Tiles, afterGrid.Tiles) {
+		t.Errorf("outer child tiles diverged:\n  before=%+v\n  after=%+v",
+			beforeGrid.Tiles, afterGrid.Tiles)
+	}
+	if string(afterBytes) != string(original) {
+		t.Errorf("text on original path = %q, want %q (mutation leaked)",
+			afterBytes, original)
+	}
+	_ = beforeBytes
+}
+
+// tilesEqual reports whether two tile slices are equal by all observable
+// field values.
+func tilesEqual(a, b []rpc.Tile) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestRefcountGCBlobOnTileDelete pins the blob refcount/GC contract end-to-
+// end: cloning a text tile makes refcount 2; deleting one clone drops it to
+// 1 (blob still alive); deleting the last reference drops it to 0 and the
+// blob row disappears.
+func TestRefcountGCBlobOnTileDelete(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	a, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root,
+		X: 0, Y: 0, W: 1, H: 1, MimeType: "text/markdown", Data: []byte("# blob"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
+		DestGridID: root, DestPath: rpc.Path{}, DestViewRect: largeView(),
+		X: 5, Y: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clone.BlobID != a.BlobID {
+		t.Fatalf("clone blob id = %d, want %d (shared)", clone.BlobID, a.BlobID)
+	}
+
+	var rc int64
+	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc); err != nil {
+		t.Fatal(err)
+	}
+	if rc != 2 {
+		t.Fatalf("blob refcount after clone = %d, want 2", rc)
+	}
+
+	// Delete one clone — refcount drops to 1, blob row still alive.
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: clone.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc); err != nil {
+		t.Fatalf("blob row should still exist; got %v", err)
+	}
+	if rc != 1 {
+		t.Errorf("blob refcount after first delete = %d, want 1", rc)
+	}
+
+	// Delete the second — refcount goes to 0, blob row gone.
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: a.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err = s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc)
+	if err == nil {
+		t.Errorf("blob row still present after final delete (refcount=%d)", rc)
+	}
+}
+
+// TestRefcountGCGridCascadesBlobs pins the cross-table GC: when a child
+// grid's refcount drops to 0 (via cascade-delete of its owning well), every
+// blob and child-grid reference held by tiles in that grid must also be
+// decremented. A markdown tile inside the deleted well should have its
+// blob freed; a sub-well should have its child grid freed.
+func TestRefcountGCGridCascadesBlobs(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	outer, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A markdown tile inside outer.
+	mdTile, err := s.CreateFile(ctx, &rpc.CreateFileRequest{
+		Path: rpc.Path{WellIDs: []int64{outer.ID}}, ViewRect: largeView(),
+		GridID: outer.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		MimeType: "text/markdown", Data: []byte("inside"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A sub-well inside outer.
+	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{WellIDs: []int64{outer.ID}}, ViewRect: largeView(),
+		GridID: outer.ChildGridID, X: 5, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subChildGrid := sub.ChildGridID
+
+	// Sanity: blob refcount 1, sub's child grid refcount 1.
+	var rc int64
+	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, mdTile.BlobID).Scan(&rc); err != nil {
+		t.Fatal(err)
+	}
+	if rc != 1 {
+		t.Fatalf("md blob refcount = %d, want 1", rc)
+	}
+	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, subChildGrid).Scan(&rc); err != nil {
+		t.Fatal(err)
+	}
+	if rc != 1 {
+		t.Fatalf("sub child grid refcount = %d, want 1", rc)
+	}
+
+	// Delete outer. Cascade should: delete outer.ChildGridID, then for each
+	// tile inside it dec the blob (mdTile) and dec the sub-well's child grid.
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		Path: rpc.Path{}, ViewRect: largeView(), TileID: outer.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outer's child grid should be gone.
+	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, outer.ChildGridID).Scan(&rc); err == nil {
+		t.Errorf("outer child grid still present; refcount=%d", rc)
+	}
+	// The markdown blob must be gone (refcount went to 0).
+	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, mdTile.BlobID).Scan(&rc); err == nil {
+		t.Errorf("md blob still present; refcount=%d", rc)
+	}
+	// The sub-well's child grid must also be gone.
+	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, subChildGrid).Scan(&rc); err == nil {
+		t.Errorf("sub-well child grid still present; refcount=%d", rc)
+	}
+	verifyRefcounts(t, s)
+}
+
 // TestRefcountInvariant runs random create/clone/resize/fill operations and
 // verifies that refcounts on grids and blobs always equal the actual count of
 // references to them.
