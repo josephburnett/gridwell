@@ -58,29 +58,31 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, path rpc.Path, targetT
 		return nil, err
 	}
 
-	// Find the topmost grid index that needs forking by walking from the
-	// leaf upward and stopping at the first refcount==1.
-	numForks := 0
-	for i := len(seq.grids) - 1; i >= 0; i-- {
+	// Find the TOPMOST grid in the path whose refcount > 1. Every grid from
+	// that index down to the leaf must be forked, because forking a shared
+	// ancestor bumps the refcount of every well-child it contains — so any
+	// rc=1 descendant becomes rc=2 as soon as its parent forks, and a
+	// subsequent write through this path would leak into the other clones
+	// of the ancestor.
+	topForkIdx := -1
+	for i := 0; i < len(seq.grids); i++ {
 		var rc int64
 		err := tx.QueryRowContext(ctx, `SELECT refcount FROM grids WHERE id = ?`, seq.grids[i]).Scan(&rc)
 		if err != nil {
 			return nil, err
 		}
-		if rc <= 1 {
+		if rc > 1 {
+			if i == 0 {
+				return nil, fmt.Errorf("internal: root grid is shared (refcount=%d)", rc)
+			}
+			topForkIdx = i
 			break
 		}
-		numForks++
-		if i == 0 {
-			return nil, fmt.Errorf("internal: root grid is shared (refcount=%d)", rc)
-		}
 	}
 
-	if numForks == 0 {
+	if topForkIdx == -1 {
 		return &preWriteResult{GridID: seq.grids[len(seq.grids)-1], TargetTileID: targetTileID}, nil
 	}
-
-	topForkIdx := len(seq.grids) - numForks
 
 	wellObjects := make([]string, len(seq.wells))
 	for i, wid := range seq.wells {
