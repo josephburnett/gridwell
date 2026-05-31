@@ -71,12 +71,7 @@ func (a *App) scheduleURLUpdate() {
 		return
 	}
 	a.urlUpdateScheduled = true
-	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.urlUpdateScheduled = false
-		a.replaceURLNow()
-		return nil
-	})
-	js.Global().Call("setTimeout", cb, urlUpdateDebounceMs)
+	js.Global().Call("setTimeout", a.urlUpdateCb, urlUpdateDebounceMs)
 }
 
 // replaceURLNow encodes the focused pane's state and calls

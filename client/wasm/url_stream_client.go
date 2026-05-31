@@ -171,7 +171,14 @@ func (a *App) closeURLStream(paneID string) {
 // beforeunload so the server's save-and-destroy runs before the tab
 // goes away.
 func (a *App) closeAllURLStreams() {
+	// Snapshot the keys first: closeURLStream triggers onClose →
+	// releaseURLStream → delete(a.urlStreams, id), so mutating the map
+	// while ranging over it is undefined.
+	ids := make([]string, 0, len(a.urlStreams))
 	for id := range a.urlStreams {
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
 		a.closeURLStream(id)
 	}
 }

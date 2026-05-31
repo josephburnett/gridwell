@@ -1525,7 +1525,11 @@ func (a *App) createWellAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
 			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		}
 		var resp rpc.TileResponse
-		_, _ = postJSON("/rpc/CreateWell", req, &resp)
+		status, _ := postJSON("/rpc/CreateWell", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, "CreateWell")
+			return
+		}
 		a.fetchGrid(gid)
 	}()
 }
@@ -1543,7 +1547,11 @@ func (a *App) createTextAtCell(p *pane.Pane, r paneRect, data []byte, cellX, cel
 			Data: data,
 		}
 		var resp rpc.TileResponse
-		_, _ = postJSON("/rpc/CreateText", req, &resp)
+		status, _ := postJSON("/rpc/CreateText", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, "CreateText")
+			return
+		}
 		a.fetchGrid(gid)
 	}()
 }
@@ -1561,7 +1569,11 @@ func (a *App) createURLAtCell(p *pane.Pane, r paneRect, url string, cellX, cellY
 			URL: url,
 		}
 		var resp rpc.TileResponse
-		_, _ = postJSON("/rpc/CreateURL", req, &resp)
+		status, _ := postJSON("/rpc/CreateURL", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, "CreateURL")
+			return
+		}
 		a.fetchGrid(gid)
 	}()
 }
@@ -1578,7 +1590,11 @@ func (a *App) createBlackHoleAtCell(p *pane.Pane, r paneRect, cellX, cellY int64
 			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		}
 		var resp rpc.TileResponse
-		_, _ = postJSON("/rpc/CreateBlackHole", req, &resp)
+		status, _ := postJSON("/rpc/CreateBlackHole", req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, "CreateBlackHole")
+			return
+		}
 		a.fetchGrid(gid)
 	}()
 }

@@ -18,6 +18,11 @@ import (
 // Listeners are installed fresh on every open and released on close, so
 // repeat opens don't leak js.FuncOf handles.
 func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
+	if a.urlModalOpen {
+		return
+	}
+	a.urlModalOpen = true
+
 	doc := a.doc
 	modal := doc.Call("getElementById", "gw-url-modal")
 	form := doc.Call("getElementById", "gw-url-form")
@@ -35,6 +40,7 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 	)
 
 	close := func() {
+		a.urlModalOpen = false
 		modal.Get("classList").Call("remove", "open")
 		form.Call("removeEventListener", "submit", submitCb)
 		cancelBtn.Call("removeEventListener", "click", cancelCb)

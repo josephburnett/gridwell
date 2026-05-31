@@ -177,6 +177,15 @@ type App struct {
 	// ever updates the root.
 	rootViewSaveScheduled bool
 	rootViewSaveCb        js.Func
+
+	// urlUpdateCb is the debounce callback for scheduleURLUpdate.
+	// Allocated once during bootstrap and reused on every call so
+	// repeated scheduleURLUpdate invocations don't leak js.Func handles.
+	urlUpdateCb js.Func
+
+	// urlModalOpen tracks whether the URL-entry modal is currently open.
+	// A second openURLModal call while this is true is a no-op.
+	urlModalOpen bool
 }
 
 // paneState is a captured viewport: viewport center in cells (sub-cell
@@ -362,6 +371,11 @@ func (a *App) afterBootstrap() {
 		a.flushRootViewSave()
 		return nil
 	})
+	a.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.urlUpdateScheduled = false
+		a.replaceURLNow()
+		return nil
+	})
 
 	// Subscribe to SSE.
 	go a.startSSE()
@@ -392,9 +406,11 @@ func (a *App) resize() {
 // recorded so the renderer can surface them and we can avoid re-issuing the
 // same request inside a render loop.
 func (a *App) fetchGrid(id int64) {
-	if a.gridLoadFailed[id] {
-		return
-	}
+	// Clear any stale failure flag before attempting — a new fetch either
+	// succeeds (populates the cache) or fails (re-sets the flag). This
+	// prevents a previously-failed grid from staying locked out when an
+	// SSE GridChanged event fires and triggers a retry.
+	delete(a.gridLoadFailed, id)
 	go func() {
 		var resp rpc.GetGridResponse
 		status, err := postJSON("/rpc/GetGrid", rpc.GetGridRequest{GridID: id}, &resp)
