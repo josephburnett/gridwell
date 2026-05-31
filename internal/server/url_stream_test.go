@@ -446,11 +446,19 @@ func waitForNSessions(t *testing.T, fake *fakeStreamer, n int) *fakeSession {
 	return nil
 }
 
-// TestURLStreamTakeoverClosesOldSession verifies that when a second WS client
-// connects for the same tile_id, the first session is closed (the old WS
-// receives a close frame) and the store persists the old session's data.
-func TestURLStreamTakeoverClosesOldSession(t *testing.T) {
+func (f *fakeStreamer) sessionCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sessions)
+}
+
+// TestURLStreamTakeoverPreservesSession verifies that when a second WS client
+// connects for the same tile_id, the live session (tab) is reused — no new tab
+// is opened, CaptureFinal is not called on takeover, and WS A is closed by the
+// server while WS B remains live on the same session object.
+func TestURLStreamTakeoverPreservesSession(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
+	_ = srv
 	fake := newFakeStreamer()
 	srv.SetURLStreamer(fake)
 	tileID := createURLTileViaRPC(t, hs, root, "https://example.com")
@@ -476,12 +484,12 @@ func TestURLStreamTakeoverClosesOldSession(t *testing.T) {
 	}
 	defer connB.Close(websocket.StatusNormalClosure, "")
 
-	// WS A must receive a close frame (takeover closes it cleanly).
+	// WS A must receive a close frame (takeover evicts it cleanly).
 	connA.CloseRead(ctxA)
 	closedA := make(chan struct{})
 	go func() {
 		defer close(closedA)
-		_, _, _ = connA.Read(ctxA) // will return once the server sends close
+		_, _, _ = connA.Read(ctxA)
 	}()
 	select {
 	case <-closedA:
@@ -489,34 +497,179 @@ func TestURLStreamTakeoverClosesOldSession(t *testing.T) {
 		t.Fatal("WS A did not receive a close frame within 3s of takeover")
 	}
 
-	// Session A must be closed and its data persisted.
+	// The session must NOT have been closed (tab stays alive).
+	if sessionA.isClosed() {
+		t.Error("session was closed on takeover; expected it to survive")
+	}
+
+	// CaptureFinal must NOT have been called (no persist on takeover).
+	if got := sessionA.captureCount(); got != 0 {
+		t.Errorf("CaptureFinal call count = %d, want 0 on takeover", got)
+	}
+
+	// OpenSession must have been called exactly once — no new tab opened.
+	if got := fake.sessionCount(); got != 1 {
+		t.Errorf("OpenSession called %d times, want 1 (no new tab on takeover)", got)
+	}
+
+	// WS B is attached to the same (surviving) session.
+	if sessionA.isClosed() {
+		t.Error("session B (same object) should still be open after takeover")
+	}
+}
+
+// TestURLStreamAscentAfterTakeoverPersistsOnce verifies the sequence:
+// open A → takeover with B → close B (ascent). CaptureFinal must run exactly
+// once and the store must be updated exactly once.
+func TestURLStreamAscentAfterTakeoverPersistsOnce(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, root, "https://example.com")
+
+	// Step 1: WS A connects.
+	ctxA, cancelA := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelA()
+	connA, _, err := websocket.Dial(ctxA, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial A: %v", err)
+	}
+	sessionA := waitForSession(t, fake)
+	sessionA.setLastURL("https://example.com/live")
+
+	// Step 2: WS B takes over.
+	ctxB, cancelB := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelB()
+	connB, _, err := websocket.Dial(ctxB, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial B: %v", err)
+	}
+
+	// Wait for WS A to be evicted.
+	connA.CloseRead(ctxA)
+	closedA := make(chan struct{})
+	go func() {
+		defer close(closedA)
+		_, _, _ = connA.Read(ctxA)
+	}()
+	select {
+	case <-closedA:
+	case <-time.After(3 * time.Second):
+		t.Fatal("WS A not evicted within 3s")
+	}
+
+	// Step 3: WS B closes (simulated ascent).
+	_ = connB.Close(websocket.StatusNormalClosure, "")
+	_ = cancelB
+
+	// Wait for the session to be closed by ascent.
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) && !sessionA.isClosed() {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if !sessionA.isClosed() {
-		t.Error("session A not closed after takeover")
-	}
-	if got := sessionA.captureCount(); got != 1 {
-		t.Errorf("session A CaptureFinal call count = %d, want 1", got)
+		t.Fatal("session not closed within 3s of WS B ascent")
 	}
 
-	// The store must reflect session A's last URL.
+	// CaptureFinal must have run exactly once.
+	if got := sessionA.captureCount(); got != 1 {
+		t.Errorf("CaptureFinal call count = %d, want 1 after ascent", got)
+	}
+
+	// Store must reflect the URL written during ascent.
 	tile, err := srv.store.GetTile(context.Background(), tileID)
 	if err != nil {
 		t.Fatalf("GetTile: %v", err)
 	}
-	if tile.URLString != "https://example.com/fromA" {
-		t.Errorf("tile url_string = %q, want %q", tile.URLString, "https://example.com/fromA")
+	if tile.URLString != "https://example.com/live" {
+		t.Errorf("tile url_string = %q, want %q", tile.URLString, "https://example.com/live")
 	}
 
-	// WS B is the active session — confirm a second fakeSession was created.
-	sessionB := waitForNSessions(t, fake, 2)
-	if sessionB == sessionA {
-		t.Error("session B is the same object as session A")
+	// OpenSession was called exactly once across the two connects.
+	if got := fake.sessionCount(); got != 1 {
+		t.Errorf("OpenSession call count = %d, want 1", got)
 	}
-	if sessionB.isClosed() {
-		t.Error("session B should still be open")
+}
+
+// TestURLStreamConcurrentTakeoversRaceFree opens WS A then simultaneously
+// fires WS B and WS C to verify that concurrent takeovers leave exactly one
+// open session and called OpenSession exactly once.
+func TestURLStreamConcurrentTakeoversRaceFree(t *testing.T) {
+	_, hs, root := streamTestServer(t)
+	fake := newFakeStreamer()
+	// Need access to srv to set the streamer; re-wire.
+	srv, hs2, root2 := streamTestServer(t)
+	_ = hs
+	_ = root
+	fake2 := newFakeStreamer()
+	srv.SetURLStreamer(fake2)
+	fake = fake2
+	hs = hs2
+	root = root2
+
+	tileID := createURLTileViaRPC(t, hs, root, "https://example.com")
+
+	// Open WS A first so there is definitely an existing entry to take over.
+	ctxA, cancelA := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelA()
+	connA, _, err := websocket.Dial(ctxA, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial A: %v", err)
+	}
+	waitForSession(t, fake) // ensure A is registered
+
+	var (
+		wg    sync.WaitGroup
+		conns [2]*websocket.Conn
+	)
+	// Fire B and C concurrently.
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		i := i
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			c, _, e := websocket.Dial(ctx, urlStreamURL(hs, tileID), nil)
+			if e != nil {
+				t.Errorf("dial %c: %v", 'B'+i, e)
+				return
+			}
+			conns[i] = c
+		}()
+	}
+	wg.Wait()
+
+	// Drain A (it was evicted).
+	connA.CloseRead(ctxA)
+	go func() { _, _, _ = connA.Read(ctxA) }()
+
+	// Give the server a moment to settle.
+	time.Sleep(100 * time.Millisecond)
+
+	// OpenSession must have been called exactly once.
+	if got := fake.sessionCount(); got != 1 {
+		t.Errorf("OpenSession call count = %d, want 1", got)
+	}
+
+	// Exactly one of the sessions is open.
+	openCount := 0
+	fake.mu.Lock()
+	for _, s := range fake.sessions {
+		if !s.isClosed() {
+			openCount++
+		}
+	}
+	fake.mu.Unlock()
+	if openCount != 1 {
+		t.Errorf("open sessions = %d, want 1", openCount)
+	}
+
+	// Clean up surviving connections.
+	for _, c := range conns {
+		if c != nil {
+			_ = c.Close(websocket.StatusNormalClosure, "")
+		}
 	}
 }
 

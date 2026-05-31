@@ -77,6 +77,64 @@ const (
 	writeTimeout = 30 * time.Second
 )
 
+// urlSessionEntry is the value type for activeURLSessions. It holds the live
+// session and a stopOld channel that is closed to signal the currently-attached
+// WS handler to exit when a new WS takes over.
+type urlSessionEntry struct {
+	session urlSession
+	stopOld chan struct{} // closed when a new WS replaces the previous one
+}
+
+// acquireSession returns the live session for tileID. If an entry already
+// exists the previous WS handler is signalled to exit (via stopOld) and the
+// same Session is reused — no new tab is opened. If no entry exists a fresh
+// tab is opened via urlStreamer.OpenSession.
+//
+// Returns (session, myStopOld, error). The caller must pass myStopOld to
+// releaseSession when the WS handler exits.
+func (s *Server) acquireSession(tileID int64, url string) (urlSession, chan struct{}, error) {
+	s.activeURLMu.Lock()
+	defer s.activeURLMu.Unlock()
+
+	if entry, ok := s.activeURLSessions[tileID]; ok {
+		// Takeover: signal the previous WS handler to exit, reuse the session.
+		close(entry.stopOld)
+		entry.stopOld = make(chan struct{})
+		return entry.session, entry.stopOld, nil
+	}
+
+	// No existing session — open a new tab.
+	sess, err := s.urlStreamer.OpenSession(tileID, url, defaultViewportW, defaultViewportH)
+	if err != nil {
+		return nil, nil, err
+	}
+	if s.activeURLSessions == nil {
+		s.activeURLSessions = make(map[int64]*urlSessionEntry)
+	}
+	s.activeURLSessions[tileID] = &urlSessionEntry{
+		session: sess,
+		stopOld: make(chan struct{}),
+	}
+	return sess, s.activeURLSessions[tileID].stopOld, nil
+}
+
+// releaseSession is called when a WS handler exits. If this handler was still
+// the active one (its mySession and myStopOld match the entry), the session is
+// closed and the tab terminated. If a takeover already replaced the entry this
+// is a no-op — the tab stays alive.
+func (s *Server) releaseSession(tileID int64, mySession urlSession, myStopOld chan struct{}) {
+	s.activeURLMu.Lock()
+	entry, ok := s.activeURLSessions[tileID]
+	matches := ok && entry.session == mySession && entry.stopOld == myStopOld
+	if matches {
+		delete(s.activeURLSessions, tileID)
+	}
+	s.activeURLMu.Unlock()
+	if matches {
+		s.closeSession(tileID, mySession)
+	}
+}
+
 // urlStream is the /rpc/URLStream WebSocket handler.
 func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	if s.urlStreamer == nil || !s.urlStreamer.Available() {
@@ -109,16 +167,7 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Takeover: close any existing session for this tile before opening a new one.
-	s.activeURLMu.Lock()
-	if prev, ok := s.activeURLSessions[tileID]; ok {
-		delete(s.activeURLSessions, tileID)
-		// Close in a goroutine so we don't hold the lock during closeSession.
-		go s.closeSession(tileID, prev)
-	}
-	s.activeURLMu.Unlock()
-
-	session, err := s.urlStreamer.OpenSession(tileID, tile.URLString, defaultViewportW, defaultViewportH)
+	session, myStopOld, err := s.acquireSession(tileID, tile.URLString)
 	if err != nil {
 		log.Printf("[urlstream] open-err tile=%d err=%v", tileID, err)
 		_ = conn.Close(websocket.StatusInternalError, "open session failed")
@@ -126,17 +175,16 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[urlstream] open tile=%d", tileID)
 
-	// Register new session as the active one.
-	s.activeURLMu.Lock()
-	if s.activeURLSessions == nil {
-		s.activeURLSessions = make(map[int64]urlSession)
-	}
-	s.activeURLSessions[tileID] = session
-	s.activeURLMu.Unlock()
-
+	// Cancel the handler context when the session dies, when a takeover
+	// evicts this handler, or when the client closes the connection.
 	go func() {
-		<-session.Done()
-		cancel()
+		select {
+		case <-session.Done():
+			cancel()
+		case <-myStopOld:
+			cancel()
+		case <-ctx.Done():
+		}
 	}()
 
 	writerDone := make(chan struct{})
@@ -148,18 +196,9 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	<-writerDone
 	_ = conn.Close(websocket.StatusNormalClosure, "")
 
-	// Only close-and-persist if this session is still the active one.
-	// A takeover may have already replaced it.
-	s.activeURLMu.Lock()
-	isCurrent := s.activeURLSessions[tileID] == session
-	if isCurrent {
-		delete(s.activeURLSessions, tileID)
-	}
-	s.activeURLMu.Unlock()
-
-	if isCurrent {
-		s.closeSession(tileID, session)
-	}
+	// Close the tab only if this handler is still the active owner.
+	// On takeover, releaseSession is a no-op and the tab stays alive.
+	s.releaseSession(tileID, session, myStopOld)
 }
 
 func writeLoop(ctx context.Context, conn *websocket.Conn, session urlSession, tileID int64, done chan<- struct{}) {

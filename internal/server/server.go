@@ -36,8 +36,8 @@ type Server struct {
 
 	// activeURLSessions tracks the single live URL session per tile_id.
 	// Protected by activeURLMu.
-	activeURLMu      sync.Mutex
-	activeURLSessions map[int64]urlSession
+	activeURLMu       sync.Mutex
+	activeURLSessions map[int64]*urlSessionEntry
 }
 
 // New constructs a Server bound to the given store.
