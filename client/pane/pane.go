@@ -45,13 +45,13 @@ func (s Side) Direction() Direction {
 // (well row ids) from root to the currently-viewed grid. Cx, Cy are the
 // viewport center in cells; Zoom is the pane's zoom multiplier.
 //
-// FileFocus, when nonzero, marks the pane as "descended into" a file tile:
+// TextFocus, when nonzero, marks the pane as "descended into" a text tile:
 // the pane still sits in the parent grid (Path is unchanged), but the
-// chrome and input semantics switch to file-editing mode. FileMode picks
+// chrome and input semantics switch to text-editing mode. TextMode picks
 // between "text" (raw markdown in a textarea overlay) and "rendered" (the
-// markdown layout rendered into the canvas). FileScrollY is the vertical
-// scroll inside the file's interior in logical pixels; mirrored to the
-// file tile's view_y on save.
+// markdown layout rendered into the canvas). TextScrollY is the vertical
+// scroll inside the text's interior in logical pixels; mirrored to the
+// text tile's view_y on save.
 type Pane struct {
 	ID   string
 	Path []int64
@@ -59,14 +59,14 @@ type Pane struct {
 	Cy   float64
 	Zoom float64
 
-	FileFocus   int64   `json:"file_focus,omitempty"`
-	FileMode    string  `json:"file_mode,omitempty"`
-	FileScrollX float64 `json:"file_scroll_x,omitempty"`
-	FileScrollY float64 `json:"file_scroll_y,omitempty"`
-	// FileZoom is the rendering scale for file-mode (independent of
+	TextFocus   int64   `json:"file_focus,omitempty"`
+	TextMode    string  `json:"file_mode,omitempty"`
+	TextScrollX float64 `json:"file_scroll_x,omitempty"`
+	TextScrollY float64 `json:"file_scroll_y,omitempty"`
+	// TextZoom is the rendering scale for text-mode (independent of
 	// parent-grid Zoom). 1.0 means "natural reading size"; the wheel
-	// adjusts this directly when FileFocus != 0.
-	FileZoom float64 `json:"file_zoom,omitempty"`
+	// adjusts this directly when TextFocus != 0.
+	TextZoom float64 `json:"file_zoom,omitempty"`
 }
 
 // Clone returns a deep copy of the pane (including the path slice).

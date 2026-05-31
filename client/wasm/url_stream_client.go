@@ -308,7 +308,7 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 // URL tile. Used by the input handlers to switch from gridwell-native
 // gestures to URLStream input forwarding.
 func (a *App) isURLDescent(p *pane.Pane) bool {
-	if p == nil || p.FileFocus == 0 {
+	if p == nil || p.TextFocus == 0 {
 		return false
 	}
 	gid := a.gridIDForPath(p.Path)
@@ -316,7 +316,7 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 	if !ok {
 		return false
 	}
-	t, ok := g.Tiles[p.FileFocus]
+	t, ok := g.Tiles[p.TextFocus]
 	if !ok {
 		return false
 	}

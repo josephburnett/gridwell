@@ -310,7 +310,7 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 
 func TestFileRoundTripSamePane(t *testing.T) {
 	// Mirror of TestWellRoundTripSamePane: save & reconstruct a live
-	// FileZoom across the same pane. Uses Fit (not Overtake) because
+	// TextZoom across the same pane. Uses Fit (not Overtake) because
 	// file fileOvertakeZoom calibrates against the *smaller* inner-box
 	// dim — see Fit's docstring.
 	innerW, innerH := 1760.0, 920.0
@@ -364,7 +364,7 @@ func TestFilePreviewMatchesLiveOnAspectMismatch(t *testing.T) {
 	fileW, fileH := int64(1), int64(1)
 	const h1Px = 24.0 // logical px for h1 in markdown style
 
-	// User has FileZoom that gives a readable h1 — value doesn't
+	// User has TextZoom that gives a readable h1 — value doesn't
 	// matter as long as we measure fill fractions from it consistently.
 	const liveFileZoom = 23.0
 	liveHeightFill := liveFileZoom * h1Px / innerH
@@ -393,7 +393,7 @@ func TestFileFallbackUnifiesPreviewAndLive(t *testing.T) {
 	// is: substitute IntrinsicFromLive(fileInitialZoom, fileOvertake)
 	// when stored is 0. Property under test: at the moment of descent
 	// (parent zoom = fileOvertake), the preview scale and the live
-	// FileZoom must agree — that's the path-swap continuity for
+	// TextZoom must agree — that's the path-swap continuity for
 	// unvisited files, fixed in Phase 3.
 	//
 	// Math: preview_at_overtake = overtake × ratio

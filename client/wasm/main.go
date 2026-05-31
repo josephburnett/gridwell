@@ -147,7 +147,7 @@ type App struct {
 
 	// fileTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
-	// when pane.FileFocus != 0 and pane.FileMode == "text", and hidden
+	// when pane.TextFocus != 0 and pane.TextMode == "text", and hidden
 	// otherwise. We hold it as a single shared element to avoid creating
 	// fresh DOM nodes on every descent.
 	fileTextarea js.Value
@@ -203,9 +203,9 @@ type paneTransition struct {
 	segments        []transSegment
 	currentSegment  int
 	segmentStartMs  float64
-	// onComplete, if set, runs after the last segment lands. Used by file
-	// descent to install pane.FileFocus only once the visual transition
-	// has reached the file's footprint at OvertakeZoom (so the toggle
+	// onComplete, if set, runs after the last segment lands. Used by text
+	// tile descent to install pane.TextFocus only once the visual transition
+	// has reached the tile's footprint at OvertakeZoom (so the toggle
 	// button appearing doesn't pop into view mid-animation).
 	onComplete func()
 }

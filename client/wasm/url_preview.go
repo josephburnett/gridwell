@@ -48,7 +48,7 @@ func drawImageCoverCentered(c js.Value, img js.Value, x, y, w, h float64) {
 }
 
 // drawURLTileInPane renders a URL tile that's currently the pane's
-// FileFocus (i.e., the user descended into it). The pane's
+// TextFocus (i.e., the user descended into it). The pane's
 // inner-rect (x, y, w, h) gets the cached preview image scaled to fit.
 // While the WebSocket stream is open, frames flow into the same
 // urlPreview cache, so this draw call automatically reflects them.

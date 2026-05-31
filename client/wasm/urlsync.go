@@ -28,7 +28,7 @@ func (a *App) scheduleRootViewSave() {
 	if a.rootViewSaveScheduled {
 		return
 	}
-	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.FileFocus != 0 {
+	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.TextFocus != 0 {
 		return
 	}
 	a.rootViewSaveScheduled = true
@@ -42,7 +42,7 @@ func (a *App) flushRootViewSave() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || len(p.Path) > 0 || p.FileFocus != 0 {
+	if p == nil || len(p.Path) > 0 || p.TextFocus != 0 {
 		return
 	}
 	zoom := p.Zoom
@@ -92,7 +92,7 @@ func (a *App) replaceURLNow() {
 }
 
 // encodeFocusedPaneURL builds a url.State from the focused pane.
-//   - If the pane is in file mode: TileIDs = path + FileFocus.
+//   - If the pane is in text mode: TileIDs = path + TextFocus.
 //     For text mode, fill cursor (col, row) read from the textarea.
 //   - Otherwise: TileIDs = path; viewport from Cx, Cy, Zoom.
 func (a *App) encodeFocusedPaneURL() url.State {
@@ -101,9 +101,9 @@ func (a *App) encodeFocusedPaneURL() url.State {
 		return url.State{}
 	}
 	var s url.State
-	if p.FileFocus != 0 {
-		s.TileIDs = append(append([]int64(nil), p.Path...), p.FileFocus)
-		if p.FileMode == rpc.TextModeText {
+	if p.TextFocus != 0 {
+		s.TileIDs = append(append([]int64(nil), p.Path...), p.TextFocus)
+		if p.TextMode == rpc.TextModeText {
 			col, row := a.textareaCursorRowCol()
 			s.CursorMode = true
 			s.Col = col
@@ -232,21 +232,21 @@ walk:
 	}
 	p.Path = resolvedPath
 	if fileTileID != 0 {
-		p.FileFocus = fileTileID
+		p.TextFocus = fileTileID
 		// Mode follows the tile's persisted text_mode; a URL that encodes
 		// a text cursor forces text mode. Scale is fixed; scroll restores
 		// from the tile's stored text_y.
 		if file, ok := a.cachedFile(p.Path, fileTileID); ok {
-			p.FileMode = file.TextMode
-			p.FileScrollY = float64(file.TextY)
+			p.TextMode = file.TextMode
+			p.TextScrollY = float64(file.TextY)
 		}
 		if state.CursorMode {
-			p.FileMode = rpc.TextModeText
+			p.TextMode = rpc.TextModeText
 		}
-		if p.FileMode == "" {
-			p.FileMode = rpc.TextModeText
+		if p.TextMode == "" {
+			p.TextMode = rpc.TextModeText
 		}
-		p.FileZoom = fileFixedScale
+		p.TextZoom = fileFixedScale
 		a.fetchBlobAndSetCursor(fileTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()

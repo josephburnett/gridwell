@@ -134,7 +134,7 @@ func (a *App) ensureFileTextarea() {
 	a.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.fileSaveScheduled = false
 		p := a.tree.FocusedPane()
-		if p == nil || p.FileFocus == 0 || p.FileMode != rpc.TextModeText {
+		if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
 			return nil
 		}
 		a.saveFileFromTextarea(p)
@@ -166,16 +166,16 @@ func (a *App) ensureFileTextarea() {
 		// Mirror the browser scroll position onto the focused pane so
 		// SetTextView on ascent persists the right value.
 		p := a.tree.FocusedPane()
-		if p == nil || p.FileFocus == 0 {
+		if p == nil || p.TextFocus == 0 {
 			return nil
 		}
-		p.FileScrollY = a.fileTextarea.Get("scrollTop").Float()
+		p.TextScrollY = a.fileTextarea.Get("scrollTop").Float()
 		return nil
 	})
 	ta.Call("addEventListener", "scroll", a.fileTextareaScrollCb)
 
 	// No wheel listener: text mode uses the textarea's native scroll.
-	// FileZoom is fixed for the visit, so nothing in here needs the
+	// TextZoom is fixed for the visit, so nothing in here needs the
 	// wheel event.
 
 	// The textarea covers the whole pane in text mode, so canvas click
@@ -207,7 +207,7 @@ func (a *App) ensureFileTextarea() {
 			return nil
 		}
 		p := a.tree.FocusedPane()
-		if p == nil || p.FileFocus == 0 {
+		if p == nil || p.TextFocus == 0 {
 			return nil
 		}
 		r := paneRectFor(a, p)
@@ -295,7 +295,7 @@ func (a *App) ensureFileToggle() {
 			args[0].Call("stopPropagation")
 		}
 		p := a.tree.FocusedPane()
-		if p == nil || p.FileFocus == 0 {
+		if p == nil || p.TextFocus == 0 {
 			return nil
 		}
 		a.onToggleFileMode(p)
@@ -315,7 +315,7 @@ func (a *App) refreshFileToggle() {
 	hide := func() { style.Set("display", "none") }
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.FileFocus == 0 || a.isURLDescent(p) {
+	if p == nil || p.TextFocus == 0 || a.isURLDescent(p) {
 		hide()
 		return
 	}
@@ -325,7 +325,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	file, ok := g.Tiles[p.FileFocus]
+	file, ok := g.Tiles[p.TextFocus]
 	if !ok || file.Kind != rpc.KindText {
 		hide()
 		return
@@ -341,7 +341,7 @@ func (a *App) refreshFileToggle() {
 	style.Set("top", strconv.FormatFloat(cy-plusButtonRadius, 'f', 1, 64)+"px")
 	// Glyph hints at the TARGET mode: an italic serif "a" means clicking
 	// renders; a monospace "a" means clicking edits the source.
-	if p.FileMode == rpc.TextModeRendered {
+	if p.TextMode == rpc.TextModeRendered {
 		style.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
 		style.Set("fontStyle", "normal")
 	} else {
@@ -360,7 +360,7 @@ func (a *App) refreshFileOverlay() {
 	ta := a.fileTextarea
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.FileFocus == 0 || p.FileMode != rpc.TextModeText {
+	if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
 		// Move focus back to the canvas so ascent and other gestures
 		// continue to work.
@@ -388,7 +388,7 @@ func (a *App) refreshFileOverlay() {
 	gid := a.gridIDForPath(p.Path)
 	g, ok := a.c.Grid(gid)
 	if ok {
-		if file, ok := g.Tiles[p.FileFocus]; ok {
+		if file, ok := g.Tiles[p.TextFocus]; ok {
 			if blob, ok := a.c.Blob(file.BlobID); ok {
 				if ta.Get("value").String() == "" {
 					ta.Set("value", string(blob))
@@ -398,8 +398,8 @@ func (a *App) refreshFileOverlay() {
 	}
 	// Reflect saved scroll into the textarea; on subsequent calls the
 	// user's own scroll wins.
-	if ta.Get("scrollTop").Float() == 0 && p.FileScrollY > 0 {
-		ta.Set("scrollTop", p.FileScrollY)
+	if ta.Get("scrollTop").Float() == 0 && p.TextScrollY > 0 {
+		ta.Set("scrollTop", p.TextScrollY)
 	}
 	ta.Call("focus")
 }
@@ -418,7 +418,7 @@ func (a *App) syncFileOverlayPosition() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || p.FileFocus == 0 || p.FileMode != rpc.TextModeText {
+	if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
 		a.fileTextarea.Get("style").Set("display", "none")
 		return
 	}
@@ -468,15 +468,15 @@ const fileSideInset = paneBorderPx
 // rendered→text just shows the textarea (the buffer is the cached blob
 // from the last save).
 func (a *App) onToggleFileMode(p *pane.Pane) {
-	if p.FileFocus == 0 {
+	if p.TextFocus == 0 {
 		return
 	}
-	if p.FileMode == rpc.TextModeText {
+	if p.TextMode == rpc.TextModeText {
 		// Save before switching to rendered.
 		a.saveFileFromTextarea(p)
-		p.FileMode = rpc.TextModeRendered
+		p.TextMode = rpc.TextModeRendered
 	} else {
-		p.FileMode = rpc.TextModeText
+		p.TextMode = rpc.TextModeText
 		// Reset textarea contents next time refreshFileOverlay is called
 		// so it picks up the freshest cached blob.
 		if !a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
@@ -484,7 +484,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 		}
 	}
 	// The mode is persisted to the tile on ascent (saveFileBeforeAscent).
-	// While descended, the focused pane's live FileMode drives the preview.
+	// While descended, the focused pane's live TextMode drives the preview.
 	a.refreshFileOverlay()
 	a.draw()
 	a.scheduleURLUpdate()
@@ -507,7 +507,7 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	file, ok := g.Tiles[p.FileFocus]
+	file, ok := g.Tiles[p.TextFocus]
 	if !ok {
 		return
 	}

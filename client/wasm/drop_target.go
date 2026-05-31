@@ -46,7 +46,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 	if !ok {
 		return nil, false
 	}
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		return nil, false
 	}
 	parentCell := cellPx * p.Zoom

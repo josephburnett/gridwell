@@ -116,7 +116,7 @@ type rightDragState struct {
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
 	// Tile gesture: only valid in a grid view (not file mode).
-	if p.FileFocus == 0 {
+	if p.TextFocus == 0 {
 		if n := a.tileAtScreen(p, r, sx, sy); n != nil {
 			a.armTileGesture(p, r, n, sx, sy)
 			return

@@ -167,47 +167,47 @@ func sliceEqual(a, b []int64) bool {
 	return true
 }
 
-func TestCloneCarriesFileFields(t *testing.T) {
+func TestCloneCarriesTextFields(t *testing.T) {
 	src := &Pane{
 		ID:          "p1",
 		Path:        []int64{1, 2},
 		Cx:          3, Cy: 4, Zoom: 5,
-		FileFocus:   42,
-		FileMode:    "text",
-		FileScrollX: 1.5,
-		FileScrollY: 7.25,
-		FileZoom:    1.1,
+		TextFocus:   42,
+		TextMode:    "text",
+		TextScrollX: 1.5,
+		TextScrollY: 7.25,
+		TextZoom:    1.1,
 	}
 	dst := src.Clone("p2")
-	if dst.FileFocus != 42 || dst.FileMode != "text" {
-		t.Errorf("file focus/mode not cloned: %+v", dst)
+	if dst.TextFocus != 42 || dst.TextMode != "text" {
+		t.Errorf("text focus/mode not cloned: %+v", dst)
 	}
-	if dst.FileScrollX != 1.5 || dst.FileScrollY != 7.25 || dst.FileZoom != 1.1 {
-		t.Errorf("file scroll/zoom not cloned: %+v", dst)
+	if dst.TextScrollX != 1.5 || dst.TextScrollY != 7.25 || dst.TextZoom != 1.1 {
+		t.Errorf("text scroll/zoom not cloned: %+v", dst)
 	}
 	// And changing the source post-clone shouldn't bleed through.
-	src.FileFocus = 99
-	if dst.FileFocus == 99 {
-		t.Error("clone shares FileFocus with source")
+	src.TextFocus = 99
+	if dst.TextFocus == 99 {
+		t.Error("clone shares TextFocus with source")
 	}
 }
 
-func TestSplitInheritsFileFields(t *testing.T) {
+func TestSplitInheritsTextFields(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
-	first.FileFocus = 77
-	first.FileMode = "rendered"
-	first.FileScrollY = 12.5
-	first.FileZoom = 0.85
+	first.TextFocus = 77
+	first.TextMode = "rendered"
+	first.TextScrollY = 12.5
+	first.TextZoom = 0.85
 
 	newP, err := tr.Split(Horizontal)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if newP.FileFocus != 77 || newP.FileMode != "rendered" {
-		t.Errorf("file fields not inherited: %+v", newP)
+	if newP.TextFocus != 77 || newP.TextMode != "rendered" {
+		t.Errorf("text fields not inherited: %+v", newP)
 	}
-	if newP.FileScrollY != 12.5 || newP.FileZoom != 0.85 {
+	if newP.TextScrollY != 12.5 || newP.TextZoom != 0.85 {
 		t.Errorf("scroll/zoom not inherited: %+v", newP)
 	}
 }

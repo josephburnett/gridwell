@@ -163,12 +163,12 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// Inside a focused file the wheel rules differ by region. Outer
-	// ring (the visible grid pattern) zooms FileZoom centered on the
+	// Inside a focused text tile the wheel rules differ by region. Outer
+	// ring (the visible grid pattern) zooms TextZoom centered on the
 	// cursor; inner area scrolls (rendered mode) or is handled by the
 	// textarea natively (text mode — those events never reach the
 	// canvas listener).
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		// URL stream: forward wheel as mouse_wheel.
 		if a.isURLDescent(p) {
 			if pointInPlus(r, sx, sy) {
@@ -195,10 +195,10 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// window vertically (rendered mode). In text mode the textarea
 		// overlay handles its own scrolling and the wheel never reaches
 		// the canvas.
-		if p.FileMode == rpc.TextModeRendered {
-			p.FileScrollY += dy
-			if p.FileScrollY < 0 {
-				p.FileScrollY = 0
+		if p.TextMode == rpc.TextModeRendered {
+			p.TextScrollY += dy
+			if p.TextScrollY < 0 {
+				p.TextScrollY = 0
 			}
 			a.draw()
 			a.scheduleURLUpdate()
@@ -275,7 +275,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		// URL tile descent: clicks inside the pane content area forward
 		// to the streaming Chromium tab; clicks in the outer margin
 		// ascend. The lower-right back button is a Gridwell control
@@ -315,7 +315,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// Text mode: the textarea covers most of the pane and handles drag
 		// itself. Margin clicks (text mode, narrow textarea) fall through
 		// to a no-op.
-		if p.FileMode == rpc.TextModeRendered {
+		if p.TextMode == rpc.TextModeRendered {
 			a.dragging = &dragState{
 				originPaneID: p.ID,
 				tileID:       0,
@@ -518,15 +518,15 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// parent-grid view.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.FileFocus != 0 && focused.FileMode == rpc.TextModeRendered {
-				z := nonzero(focused.FileZoom)
-				focused.FileScrollX -= (sx - d.curScreenX) / z
-				focused.FileScrollY -= (sy - d.curScreenY) / z
-				if focused.FileScrollY < 0 {
-					focused.FileScrollY = 0
+			if focused.TextFocus != 0 && focused.TextMode == rpc.TextModeRendered {
+				z := nonzero(focused.TextZoom)
+				focused.TextScrollX -= (sx - d.curScreenX) / z
+				focused.TextScrollY -= (sy - d.curScreenY) / z
+				if focused.TextScrollY < 0 {
+					focused.TextScrollY = 0
 				}
-				if focused.FileScrollX < 0 {
-					focused.FileScrollX = 0
+				if focused.TextScrollX < 0 {
+					focused.TextScrollX = 0
 				}
 			} else {
 				cellSize := cellPx * focused.Zoom
@@ -839,16 +839,16 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
-	if (p.FileFocus != 0 || len(p.Path) > 0) &&
+	if (p.TextFocus != 0 || len(p.Path) > 0) &&
 		dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
-		if p.FileFocus != 0 {
+		if p.TextFocus != 0 {
 			a.startFileAscent(p)
 		} else {
 			a.startAscent(p)
 		}
 		return true
 	}
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		// Inside a file, a click that's not on the toggle and not on the
 		// edge isn't navigation — it's either pan-drag (handled in
 		// mousemove) or a non-action click.
@@ -1085,7 +1085,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 
 
 // nonzero returns x or 1.0 if x is zero/negative. Saves a guard at every
-// call site that divides by FileZoom.
+// call site that divides by TextZoom.
 func nonzero(x float64) float64 {
 	if x <= 0 {
 		return 1.0
@@ -1093,15 +1093,15 @@ func nonzero(x float64) float64 {
 	return x
 }
 
-// startFileDescent zooms a pane into a markdown file in a single
-// concurrent pan+zoom motion, then flips to file-editing mode. Unlike
-// well descent, the path is not extended (the file lives in the parent
+// startFileDescent zooms a pane into a text tile in a single
+// concurrent pan+zoom motion, then flips to text-editing mode. Unlike
+// well descent, the path is not extended (the tile lives in the parent
 // grid as a leaf tile) and the meaningful screen area in live mode is
 // the inner box (textarea region), not the full pane — so the descent
-// targets FileOvertake (parent zoom that makes the footprint fit the
+// targets TextOvertake (parent zoom that makes the footprint fit the
 // inner box), one notch further in than the legacy OvertakeZoom. At
 // the path-swap, the footprint screen size = inner-box, and the live
-// FileZoom is reconstructed from the file's intrinsic ViewZoom ratio
+// TextZoom is reconstructed from the tile's intrinsic ViewZoom ratio
 // for visual continuity.
 func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
@@ -1128,9 +1128,9 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	fileID := file.ID
 	initialScroll := float64(file.TextY)
 	// URL tiles have no text/rendered modes; mode is "" for them so
-	// the textarea overlay (gated on FileMode == "text") never shows.
-	// For text files the mode is the one persisted on the tile (server),
-	// defaulting to raw text for a never-opened file.
+	// the textarea overlay (gated on TextMode == "text") never shows.
+	// For text tiles the mode is the one persisted on the tile (server),
+	// defaulting to raw text for a never-opened tile.
 	var mode string
 	if file.Kind == rpc.KindText {
 		mode = file.TextMode
@@ -1155,11 +1155,11 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			if fp == nil {
 				return
 			}
-			fp.FileFocus = fileID
-			fp.FileMode = mode
-			fp.FileScrollY = initialScroll
-			fp.FileScrollX = 0
-			fp.FileZoom = fileFixedScale
+			fp.TextFocus = fileID
+			fp.TextMode = mode
+			fp.TextScrollY = initialScroll
+			fp.TextScrollX = 0
+			fp.TextZoom = fileFixedScale
 			a.refreshFileOverlay()
 			// URL descent always attaches a streaming WebSocket; the
 			// server creates a fresh Chromium tab for the duration of
@@ -1173,11 +1173,11 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 	})
 }
 
-// startFileAscent reverses the file descent: animate zoom-out from the
-// file's footprint back to the saved viewport, then clear FileFocus and
-// save the file's content + scroll.
+// startFileAscent reverses the text tile descent: animate zoom-out from the
+// tile's footprint back to the saved viewport, then clear TextFocus and
+// save the tile's content + scroll.
 func (a *App) startFileAscent(p *pane.Pane) {
-	if p.FileFocus == 0 {
+	if p.TextFocus == 0 {
 		return
 	}
 	gid := a.gridIDForPath(p.Path)
@@ -1187,7 +1187,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 		a.exitFileFocusInstant(p)
 		return
 	}
-	file, ok := g.Tiles[p.FileFocus]
+	file, ok := g.Tiles[p.TextFocus]
 	if !ok {
 		a.exitFileFocusInstant(p)
 		return
@@ -1223,11 +1223,11 @@ func (a *App) startFileAscent(p *pane.Pane) {
 
 	// Reset parent-grid zoom to the overtake value so the animation
 	// begins from "well filling the pane", regardless of how the user
-	// zoomed within the file. Then clear FileFocus so the chrome (toggle
+	// zoomed within the text tile. Then clear TextFocus so the chrome (toggle
 	// button, textarea) goes away as the animation begins.
 	p.Zoom = overtake
 	p.Cx, p.Cy = wellCx, wellCy
-	p.FileFocus = 0
+	p.TextFocus = 0
 	a.refreshFileOverlay()
 
 	a.startTransition(&paneTransition{
@@ -1245,13 +1245,13 @@ func (a *App) startFileAscent(p *pane.Pane) {
 }
 
 // exitFileFocusInstant is the fallback path when the parent grid isn't
-// cached or the file row vanished while we were focused on it. We just
-// clear FileFocus and reset the viewport to whatever was saved.
+// cached or the text tile row vanished while we were focused on it. We just
+// clear TextFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.closeURLStream(p.ID) // no-op if not a URL descent
 	delete(a.urlStreamLost, p.ID)
 	saved := a.popPaneState(p.ID)
-	p.FileFocus = 0
+	p.TextFocus = 0
 	if saved != nil {
 		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
 	}
@@ -1324,12 +1324,12 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	gid := a.gridIDForPath(p.Path)
 	r := paneRectFor(a, p)
-	scrollY := int64(p.FileScrollY + 0.5)
+	scrollY := int64(p.TextScrollY + 0.5)
 
 	// Capture the textarea contents (if any) before we tear it down.
 	var buf string
 	hasBuf := false
-	if p.FileMode == rpc.TextModeText {
+	if p.TextMode == rpc.TextModeText {
 		ta := a.fileTextarea
 		if !ta.IsNull() && !ta.IsUndefined() {
 			buf = ta.Get("value").String()
@@ -1358,11 +1358,11 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	patched.TextY = scrollY
 	patched.TextW = viewW
 	patched.TextH = viewH
-	patched.TextMode = p.FileMode
+	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
 
 	path := append([]int64(nil), p.Path...)
-	mode := p.FileMode
+	mode := p.TextMode
 	go func() {
 		curVersion := file.Version
 		// Update content first if the user was editing.

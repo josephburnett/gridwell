@@ -207,7 +207,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// was the zoom cue, which no longer applies. The margin around the
 	// inner box is just a plain ascent zone. (URL content fills the pane
 	// and covers this anyway.)
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
@@ -223,8 +223,8 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 		// pattern is visible). Inner-box bounds match the textarea
 		// exactly so the user's "outside textarea = grid rules"
 		// mental model is consistent.
-		if p.FileFocus != 0 {
-			if file, ok := g.Tiles[p.FileFocus]; ok {
+		if p.TextFocus != 0 {
+			if file, ok := g.Tiles[p.TextFocus]; ok {
 				switch file.Kind {
 				case rpc.KindText:
 					ix, iy, iw, ih := fileInnerBox(p, r)
@@ -301,7 +301,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// URL descent gets a canvas back-arrow button; markdown descent gets
 	// the rendered/raw toggle as a DOM overlay button (refreshFileToggle)
 	// so the text content can fill the pane.
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		if a.isURLDescent(p) {
 			a.drawURLBackButton(p, r)
 		}
@@ -489,7 +489,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 
 // drawMarkdownInPane renders a markdown file as the contents of the
 // pane that is currently descended into it. Uses *that* pane's live
-// FileMode / FileZoom / FileScroll values, so two split panes both
+// TextMode / TextZoom / TextScroll values, so two split panes both
 // looking at the same file can each scroll/zoom independently.
 //
 // Also responsible for skipping the canvas render in text mode for
@@ -497,14 +497,14 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 // panes still render the source as canvas text so the user has
 // continuity in non-focused split siblings.
 func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
-	mode := p.FileMode
+	mode := p.TextMode
 	if mode == "" {
 		mode = rpc.TextModeRendered
 	}
 	// Fixed scale: the pane is a plain window onto the document. No zoom.
 	scale := fileFixedScale
-	scrollX := p.FileScrollX
-	scrollY := p.FileScrollY
+	scrollX := p.TextScrollX
+	scrollY := p.TextScrollY
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
@@ -537,9 +537,9 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 //     size, regardless of how far the user has zoomed into the parent
 //     grid. A small file appears as a small but readable preview; a
 //     large parent zoom doesn't blow it up.
-//  2. Live file mode (a pane is descended into this file). The scale
-//     is the pane's FileZoom (independent of parent zoom) and the
-//     visible region is taken from FileScrollX/FileScrollY. Wheel
+//  2. Live text mode (a pane is descended into this file). The scale
+//     is the pane's TextZoom (independent of parent zoom) and the
+//     visible region is taken from TextScrollX/TextScrollY. Wheel
 //     events update those fields directly so navigation is buttery.
 //
 // In both modes the parent grid lines remain visible behind the text
@@ -555,8 +555,8 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 	fp := a.paneFocusedOnFile(n.ID)
 	var scale, scrollX, scrollY float64
 	if fp != nil {
-		if fp.FileMode != "" {
-			mode = fp.FileMode
+		if fp.TextMode != "" {
+			mode = fp.TextMode
 		}
 		// While a pane is descended, mirror what the preview will be once
 		// the user ascends: cover-crop the LIVE framed window (live scroll
@@ -565,8 +565,8 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 		// small tile and rescale as the parent grid zoomed.
 		fpRect := a.paneRectByID(fp.ID)
 		_, _, iw, ih := fileInnerBox(fp, fpRect)
-		scrollX = fp.FileScrollX
-		scrollY = fp.FileScrollY
+		scrollX = fp.TextScrollX
+		scrollY = fp.TextScrollY
 		if iw > 0 && ih > 0 {
 			scale = w / iw
 			if sy := h / ih; sy > scale {
@@ -613,7 +613,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 	// the textarea overlay renders the editable source. Drawing the
 	// markdown to the canvas behind it would just produce a doubled,
 	// misaligned render, so skip it.
-	hideForTextarea := fp != nil && fp.FileMode == rpc.TextModeText && fp.ID == a.tree.Focus
+	hideForTextarea := fp != nil && fp.TextMode == rpc.TextModeText && fp.ID == a.tree.Focus
 	if !hideForTextarea {
 		if blob, ok := a.c.Blob(n.BlobID); ok {
 			// Layout width is fixed at the natural content width so
@@ -908,7 +908,7 @@ func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64
 func (a *App) paneFocusedOnFile(fileTileID int64) *pane.Pane {
 	var found *pane.Pane
 	a.tree.Walk(func(p *pane.Pane) {
-		if p.FileFocus == fileTileID {
+		if p.TextFocus == fileTileID {
 			found = p
 		}
 	})
@@ -1108,9 +1108,9 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 // we fall back to the generic blue so the user still sees "descended
 // into something".
 func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) string {
-	if p.FileFocus != 0 {
+	if p.TextFocus != 0 {
 		if gridOK {
-			if file, ok := g.Tiles[p.FileFocus]; ok {
+			if file, ok := g.Tiles[p.TextFocus]; ok {
 				switch file.Kind {
 				case rpc.KindURL:
 					if focused {
