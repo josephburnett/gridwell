@@ -20,7 +20,6 @@ const colorTileResize = "#4a6fff"
 // Preview rendering colors.
 const (
 	colorSplitInactive = "#6c6f78" // grey
-	colorSplitActive   = "#4a6fff" // bright blue (matches focus)
 	colorSwapArrow     = "#4a6fff"
 	colorCloseWarn     = "#e0727a" // red
 )
