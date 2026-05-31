@@ -23,7 +23,7 @@ These are not four rules. They are one rule from four angles.
 Gridwell has six tile kinds:
 
 - **`text`** — markdown content. Editable. Green outline.
-- **`url`** — a URL. Live browser tab on descent, frozen JPEG in preview. Purple outline.
+- **`url`** — a URL. Frozen JPEG preview by default; refresh gesture opens a live browser tab. Purple outline.
 - **`well`** — a tile pointing at another grid. Descend to enter the child canvas. Blue outline.
 - **`blackhole`** — drops what you drop on it. Deletion is a place. Red outline.
 - **`file-well`** — a view of a directory on the host filesystem. Red outline.
@@ -79,6 +79,7 @@ Mouse-only. No modifiers.
 - **Pan** — left-click + drag empty space.
 - **Zoom** — wheel.
 - **Scroll** (inside a text tile) — wheel.
+- **Refresh URL** — right-click + drag down inside a URL descent. Goes live if frozen; reloads if already live.
 - **Split / swap / resize / close pane** — right-click + drag in the pane regions.
 
 Text tiles take keyboard input because text is being edited. URL tiles forward keystrokes to the embedded page. The canvas itself reads no modifier keys.
@@ -97,7 +98,7 @@ Three rendering paths have to agree for preview = descent = ascent to feel true.
 
 **Text tile.** The tile row stores the document-space window it was last framed at (scroll offset + window size) and its mode, rendered or text. The preview crops the re-rendered document to that window. Descent shows the same crop. Editing scrolls within it. Ascent writes the current window back to the tile.
 
-**URL tile.** The preview is a JPEG captured when the previous descent closed. Descent opens a fresh tab and navigates to the stored URL. The page may have changed since you left. The preview is what was last frozen, not what is currently live. This is where principle #3 meets its limit: URLs point at a world Gridwell does not own.
+**URL tile.** The tile carries a frozen JPEG preview and a URL string. Descent shows the preview — no fresh tab, no network. The refresh gesture opens a Chromium tab, navigates to the stored URL, and streams JPEG frames into the pane. Live frames also update the preview every other view of this tile renders, so navigation in one pane is visible in another in real time. Ascent freezes: the latest URL and JPEG persist, the tab closes. One live session per tile at a time — refreshing a frozen pane of a tile that is already live elsewhere takes over the session. The previous live pane goes frozen at its last frame; the new pane goes live, resized to fit. The frozen preview fills its pane in cover mode and the overflow dimension scrolls with click + drag. The live tab renders at the pane's size down to a minimum; below that the pane shows a clipped window. Border tint distinguishes live from frozen.
 
 **File-well / process-well.** The preview is a deterministic render of the well's contents at last close. Descent shows the current contents of the directory or process table. The view is stable in shape: same sort, same projection, same gestures. Contents may have changed underneath.
 
@@ -128,6 +129,7 @@ Change freely if they get in the way:
 - Multi-user. Single-tenant by design. No auth.
 - Persisted pane layout.
 - A keyboard shortcut layer over the canvas.
+- Background fetches. The URL tile only opens a tab when the user explicitly refreshes.
 - Undo/redo today. History falls out of `version`; replaying it is future work.
 
 ## Horizontal navigation across clones (future work)
