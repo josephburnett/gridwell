@@ -95,6 +95,20 @@ func pointInPaneContent(r paneRect, sx, sy float64) bool {
 	return sx >= x && sx < x+w && sy >= y && sy < y+h
 }
 
+// pointInURLCenter reports whether (sx, sy) lies inside the middle
+// 1/3 × 1/3 of paneContentBox(r). Used by onRightDown to restrict the
+// URL refresh gesture arm zone to the centre of the content area, so
+// right-clicks in the outer band still reach the pane-management
+// region classifier (split / swap / resize).
+func pointInURLCenter(r paneRect, sx, sy float64) bool {
+	x, y, w, h := paneContentBox(r)
+	x1 := x + w/3
+	x2 := x + 2*w/3
+	y1 := y + h/3
+	y2 := y + 2*h/3
+	return sx >= x1 && sx < x2 && sy >= y1 && sy < y2
+}
+
 // pointInFileInner reports whether (sx, sy) lies inside the
 // file-focused pane's inner box. Outside the box (but still inside
 // the pane) is the outer ring with grid-style mouse rules.

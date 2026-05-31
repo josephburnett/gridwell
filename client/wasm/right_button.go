@@ -138,7 +138,7 @@ func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
 	// URL descent: right-down in the pane content area arms the refresh
 	// gesture. Pane-management regions (edges) still work normally — only
 	// the inner content area is claimed by the refresh zone.
-	if a.isURLDescent(p) && pointInPaneContent(r, sx, sy) {
+	if a.isURLDescent(p) && pointInURLCenter(r, sx, sy) {
 		gid := a.gridIDForPath(p.Path)
 		if g, ok := a.c.Grid(gid); ok {
 			if tile, ok := g.Tiles[p.TextFocus]; ok {
@@ -854,62 +854,89 @@ func (a *App) drawRightDragPreview() {
 }
 
 // drawURLRefreshPreview paints the refresh gesture hint inside a URL-descent
-// pane. Before the threshold is crossed, a small "↓ refresh" label appears
-// near the top of the pane content area. After the threshold is crossed, the
-// label changes to "release to refresh" so the user knows the gesture is armed.
+// pane. No text, no pill, no horizontal bar.
+//
+// A small circular-arrow refresh icon is drawn at the click point (rd.startX,
+// rd.startY). Below the icon, a grey filled rectangle grows downward as the
+// user drags, capped at urlRefreshThresholdPx. Colors switch from muted grey
+// to URL-purple once the drag crosses the threshold.
 func (a *App) drawURLRefreshPreview(rd *rightDragState) {
-	p := a.tree.FindPane(rd.refreshPaneID)
-	if p == nil {
-		return
-	}
-	r := a.paneRectByID(p.ID)
-	cx, cy, _, _ := paneContentBox(r)
-	contentW := r.W - 2*paneBorderPx
+	const iconRadius = 14.0
+	const iconGap = 4.0   // gap between icon bottom and rect top
+	const rectW = 100.0   // width of the growing rectangle
 
 	past := rd.curY > rd.startY+urlRefreshThresholdPx
-	label := "↓ refresh"
+
+	strokeColor := colorMuted
+	fillColor := "rgba(108,111,120,0.37)"
 	if past {
-		label = "release to refresh"
+		strokeColor = colorURLLiveLine
+		fillColor = "rgba(160,122,204,0.37)"
 	}
 
-	// Semi-transparent pill at the top of the content area.
-	a.cctx.Set("fillStyle", "rgba(0,0,0,0.55)")
-	pillW := 160.0
-	pillH := 28.0
-	pillX := cx + contentW/2 - pillW/2
-	pillY := cy + 16
-	a.cctx.Call("beginPath")
-	a.cctx.Call("roundRect", pillX, pillY, pillW, pillH, 6)
-	a.cctx.Call("fill")
-
-	color := colorMuted
-	if past {
-		color = "#7a5a9a" // URL purple — "armed"
-	}
-	a.cctx.Set("fillStyle", color)
-	a.cctx.Set("font", "13px sans-serif")
-	a.cctx.Set("textAlign", "center")
-	a.cctx.Set("textBaseline", "middle")
-	a.cctx.Call("fillText", label, cx+contentW/2, pillY+pillH/2)
-	a.cctx.Set("textAlign", "start")
-	a.cctx.Set("textBaseline", "alphabetic")
-
-	// Thin downward-progress bar under the start point.
+	// Growing rectangle: top edge sits just below the icon bottom.
 	draggedDown := rd.curY - rd.startY
 	if draggedDown < 0 {
 		draggedDown = 0
 	}
-	frac := draggedDown / urlRefreshThresholdPx
-	if frac > 1 {
-		frac = 1
+	if draggedDown > urlRefreshThresholdPx {
+		draggedDown = urlRefreshThresholdPx
 	}
-	barH := frac * 4
-	barColor := colorMuted
-	if past {
-		barColor = "#7a5a9a"
+	rectTop := rd.startY + iconRadius + iconGap
+	rectH := draggedDown
+	if rectH > 0 {
+		a.cctx.Set("fillStyle", fillColor)
+		a.cctx.Call("fillRect",
+			rd.startX-rectW/2, rectTop,
+			rectW, rectH)
 	}
-	a.cctx.Set("fillStyle", barColor)
-	a.cctx.Call("fillRect", r.X+paneBorderPx, rd.startY, r.W-2*paneBorderPx, barH)
+
+	// Refresh icon centred at the click point.
+	drawRefreshIcon(a.cctx, rd.startX, rd.startY, iconRadius, strokeColor)
+}
+
+// drawRefreshIcon draws a circular-arrow refresh icon centred at (cx, cy)
+// with the given radius. The icon is strokes only: a single arc covering
+// ~290° (leaving a gap at the top-right) with a small chevron arrowhead at
+// the open end pointing in the direction of rotation (clockwise).
+// Style: 2px line, round lineCap and lineJoin, matching drawURLBackButton.
+func drawRefreshIcon(c js.Value, cx, cy, radius float64, color string) {
+	c.Set("strokeStyle", color)
+	c.Set("lineWidth", 2.0)
+	c.Set("lineCap", "round")
+	c.Set("lineJoin", "round")
+
+	// Arc: starts at ~20° past top (top-right gap), sweeps clockwise 290°.
+	// In canvas coords y points down, so clockwise is the positive direction.
+	const gapDeg = 70.0 // degrees of gap left at the top-right
+	startAngle := (-math.Pi/2 + (gapDeg/2)*math.Pi/180) // top + half-gap offset
+	endAngle := startAngle + (360-gapDeg)*math.Pi/180
+
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, radius, startAngle, endAngle, false)
+	c.Call("stroke")
+
+	// Chevron arrowhead at the open end (endAngle), pointing tangentially
+	// in the clockwise (forward) direction.
+	// Tangent direction at endAngle going clockwise: angle = endAngle + π/2.
+	tipX := cx + math.Cos(endAngle)*radius
+	tipY := cy + math.Sin(endAngle)*radius
+	tangent := endAngle + math.Pi/2
+	const headLen = 6.0
+	const headAngle = 0.5 // ~29°
+	c.Call("beginPath")
+	c.Call("moveTo",
+		tipX+math.Cos(tangent+math.Pi+headAngle)*headLen,
+		tipY+math.Sin(tangent+math.Pi+headAngle)*headLen)
+	c.Call("lineTo", tipX, tipY)
+	c.Call("lineTo",
+		tipX+math.Cos(tangent+math.Pi-headAngle)*headLen,
+		tipY+math.Sin(tangent+math.Pi-headAngle)*headLen)
+	c.Call("stroke")
+
+	c.Set("lineWidth", 1.0)
+	c.Set("lineCap", "butt")
+	c.Set("lineJoin", "miter")
 }
 
 // drawTileHotspotOverlay paints the affordance overlay over the tile
