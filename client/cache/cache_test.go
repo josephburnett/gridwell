@@ -32,7 +32,7 @@ func TestPutAndGet(t *testing.T) {
 	}
 }
 
-func TestApplyNodeChanged(t *testing.T) {
+func TestApplyTileChanged(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
 		Kind:        rpc.EventTileChanged,
@@ -43,11 +43,11 @@ func TestApplyNodeChanged(t *testing.T) {
 	}
 	g, _ := c.Grid(1)
 	if g.Tiles[100].W != 2 {
-		t.Errorf("node not updated: %+v", g.Tiles[100])
+		t.Errorf("tile not updated: %+v", g.Tiles[100])
 	}
 }
 
-func TestApplyNodeRemoved(t *testing.T) {
+func TestApplyTileRemoved(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
 		Kind:        rpc.EventTileRemoved,
@@ -58,7 +58,7 @@ func TestApplyNodeRemoved(t *testing.T) {
 	}
 	g, _ := c.Grid(1)
 	if _, ok := g.Tiles[100]; ok {
-		t.Error("node still present")
+		t.Error("tile still present")
 	}
 	// Idempotent: removing again returns false (nothing changed).
 	if c.Apply(rpc.Event{

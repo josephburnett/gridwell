@@ -2,6 +2,32 @@ package pane
 
 import "testing"
 
+// twoPaneTree returns a new Tree with two panes: the original (a) and a
+// horizontal sibling (b). Focus remains on a.
+func twoPaneTree(t *testing.T) (tr *Tree, a, b string) {
+	t.Helper()
+	tr = NewTree()
+	a = tr.FocusedPane().ID
+	bP, err := tr.Split(Horizontal)
+	if err != nil {
+		t.Fatalf("twoPaneTree: split: %v", err)
+	}
+	return tr, a, bP.ID
+}
+
+// threePaneTree returns a new Tree with three panes: a (original), b
+// (horizontal sibling of a), and c (vertical sibling of b, focused).
+func threePaneTree(t *testing.T) (tr *Tree, a, b, c string) {
+	t.Helper()
+	tr, a, b = twoPaneTree(t)
+	_ = tr.SetFocus(b)
+	cP, err := tr.Split(Vertical)
+	if err != nil {
+		t.Fatalf("threePaneTree: split: %v", err)
+	}
+	return tr, a, b, cP.ID
+}
+
 func TestNewTreeHasOneFocusedPane(t *testing.T) {
 	tr := NewTree()
 	if tr.Count() != 1 {
@@ -308,10 +334,7 @@ func absDiff(a, b float64) float64 {
 }
 
 func TestSwapBasic(t *testing.T) {
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	bP, _ := tr.Split(Horizontal)
-	b := bP.ID
+	tr, a, b := twoPaneTree(t)
 
 	// Pre-swap: A is in slot Split.A, B is in slot Split.B.
 	if tr.Root.Split.A.Pane.ID != a || tr.Root.Split.B.Pane.ID != b {
@@ -351,13 +374,7 @@ func TestSwapUnknownIDError(t *testing.T) {
 }
 
 func TestSwapInDeepTree(t *testing.T) {
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	bP, _ := tr.Split(Horizontal)
-	b := bP.ID
-	_ = tr.SetFocus(b)
-	cP, _ := tr.Split(Vertical)
-	c := cP.ID
+	tr, a, b, c := threePaneTree(t)
 	// Tree shape:
 	//   root: H (A=a, B=split V (A=b, B=c))
 	if err := tr.Swap(a, c); err != nil {
@@ -378,10 +395,7 @@ func TestSwapInDeepTree(t *testing.T) {
 }
 
 func TestCollapseSplitDropA(t *testing.T) {
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	bP, _ := tr.Split(Horizontal)
-	b := bP.ID
+	tr, a, b := twoPaneTree(t)
 	if err := tr.CollapseSplit(tr.Root.Split, true); err != nil {
 		t.Fatal(err)
 	}
@@ -400,10 +414,7 @@ func TestCollapseSplitDropA(t *testing.T) {
 }
 
 func TestCollapseSplitDropB(t *testing.T) {
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	bP, _ := tr.Split(Horizontal)
-	b := bP.ID
+	tr, a, b := twoPaneTree(t)
 	if err := tr.CollapseSplit(tr.Root.Split, false); err != nil {
 		t.Fatal(err)
 	}
@@ -420,13 +431,7 @@ func TestCollapseSplitDropB(t *testing.T) {
 
 func TestCollapseSplitNested(t *testing.T) {
 	// root: H (A=a, B=split V (A=b, B=c))
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	bP, _ := tr.Split(Horizontal)
-	b := bP.ID
-	tr.SetFocus(b)
-	cP, _ := tr.Split(Vertical)
-	c := cP.ID
+	tr, a, b, c := threePaneTree(t)
 
 	// Collapse the OUTER split, dropping A (pane a).
 	// Surviving subtree is the inner V split (still containing b, c).

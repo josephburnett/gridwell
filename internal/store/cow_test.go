@@ -181,7 +181,7 @@ func TestCowOneLevelByteIdentity(t *testing.T) {
 		}
 		return *g, data
 	}
-	beforeGrid, beforeBytes := snap(outer.ID)
+	beforeGrid, _ := snap(outer.ID)
 
 	// Clone the outer well; its child grid is now shared.
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
@@ -219,7 +219,6 @@ func TestCowOneLevelByteIdentity(t *testing.T) {
 		t.Errorf("text on original path = %q, want %q (mutation leaked)",
 			afterBytes, original)
 	}
-	_ = beforeBytes
 }
 
 // TestCowTwoLevelByteIdentity pins fork-from-topmost-shared, NOT leaf-up.
