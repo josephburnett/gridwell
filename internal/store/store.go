@@ -184,7 +184,7 @@ func (s *Store) SetRootView(ctx context.Context, req *rpc.SetRootViewRequest) er
 	return nil
 }
 
-func rootGridID(ctx context.Context, q queryRower) (int64, error) {
+func rootGridID(ctx context.Context, q gridReader) (int64, error) {
 	var v string
 	err := q.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyRootGridID).Scan(&v)
 	if err != nil {
@@ -193,7 +193,7 @@ func rootGridID(ctx context.Context, q queryRower) (int64, error) {
 	return strconv.ParseInt(v, 10, 64)
 }
 
-func readFloatKey(ctx context.Context, q queryRower, key string) (float64, error) {
+func readFloatKey(ctx context.Context, q gridReader, key string) (float64, error) {
 	var v string
 	err := q.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, key).Scan(&v)
 	if err != nil {
@@ -239,7 +239,3 @@ func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
-// queryRower is satisfied by both *sql.DB and *sql.Tx.
-type queryRower interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}

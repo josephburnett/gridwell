@@ -217,8 +217,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 				return err
 			}
 		case rpc.KindText:
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, n.BlobID); err != nil {
+			if err := s.incBlobRefcount(ctx, tx, n.BlobID); err != nil {
 				return err
 			}
 		}
@@ -263,20 +262,8 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		events = append(events, pre.Events...)
 
 		hash := hashBytes(req.Data)
-		var newBlobID int64
-		err = tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&newBlobID)
-		if err == sql.ErrNoRows {
-			res, err := tx.ExecContext(ctx,
-				`INSERT INTO blobs (hash, size, data, refcount) VALUES (?, ?, ?, 0)`,
-				hash, len(req.Data), req.Data)
-			if err != nil {
-				return fmt.Errorf("insert blob: %w", err)
-			}
-			newBlobID, err = res.LastInsertId()
-			if err != nil {
-				return err
-			}
-		} else if err != nil {
+		newBlobID, err := putBlob(ctx, tx, hash, req.Data)
+		if err != nil {
 			return err
 		}
 
@@ -292,8 +279,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 			return err
 		}
 		if oldBlobID != newBlobID {
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, newBlobID); err != nil {
+			if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
 				return err
 			}
 			if err := s.decBlobRefcount(ctx, tx, oldBlobID); err != nil {

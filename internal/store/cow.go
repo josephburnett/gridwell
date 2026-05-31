@@ -184,13 +184,10 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		return 0, nil, err
 	}
 
-	rows, err := tx.QueryContext(ctx, `
-		SELECT id, object_id, version, kind, x, y, w, h,
-		       view_x, view_y, view_zoom, child_grid_id,
-		       text_x, text_y, text_w, text_h, text_mode, blob_id,
-		       url_string, preview_jpeg,
-		       created_at, updated_at
-		FROM tiles WHERE grid_id = ?`, oldGridID)
+	// forkColumns + ", created_at, updated_at" gives us all the columns we need.
+	// grid_id (from forkColumns) is discarded — we assign newGridID on insert.
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+forkColumns+`, created_at, updated_at FROM tiles WHERE grid_id = ?`, oldGridID)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -200,6 +197,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		oldID                int64
 		objectID             string
 		version              int64
+		oldGridID            int64 // discarded; we insert into newGridID
 		kind                 string
 		x, y, w, h           int64
 		viewX, viewY         int64
@@ -216,7 +214,8 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 	var copies []tileCopy
 	for rows.Next() {
 		var nc tileCopy
-		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.version, &nc.kind,
+		// Column order matches forkColumns (tileColumns + preview_jpeg) + created_at, updated_at.
+		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.version, &nc.oldGridID, &nc.kind,
 			&nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
 			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
@@ -258,8 +257,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			}
 		}
 		if nc.kind == rpc.KindText && nc.blob.Valid {
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, nc.blob.Int64); err != nil {
+			if err := s.incBlobRefcount(ctx, tx, nc.blob.Int64); err != nil {
 				return 0, nil, err
 			}
 		}
@@ -332,6 +330,32 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		return err
 	}
 	return nil
+}
+
+// putBlob inserts a blob row if one with the given hash doesn't already exist,
+// and returns its id. It does NOT bump the refcount — callers must do that
+// explicitly so the refcount semantics remain visible at the call site.
+func putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte) (int64, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO blobs (hash, size, data, refcount) VALUES (?, ?, ?, 0)`,
+			hash, len(data), data)
+		if err != nil {
+			return 0, fmt.Errorf("insert blob: %w", err)
+		}
+		return res.LastInsertId()
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {
+	_, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID)
+	return err
 }
 
 func (s *Store) decBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {

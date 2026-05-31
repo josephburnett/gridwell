@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -151,20 +150,8 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 		now := s.now().Unix()
 		objID := s.newID()
 
-		var blobID int64
-		err = tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&blobID)
-		if errors.Is(err, sql.ErrNoRows) {
-			res, err := tx.ExecContext(ctx,
-				`INSERT INTO blobs (hash, size, data, refcount) VALUES (?, ?, ?, 0)`,
-				hash, len(req.Data), req.Data)
-			if err != nil {
-				return fmt.Errorf("insert blob: %w", err)
-			}
-			blobID, err = res.LastInsertId()
-			if err != nil {
-				return err
-			}
-		} else if err != nil {
+		blobID, err := putBlob(ctx, tx, hash, req.Data)
+		if err != nil {
 			return err
 		}
 
@@ -180,8 +167,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID); err != nil {
+		if err := s.incBlobRefcount(ctx, tx, blobID); err != nil {
 			return err
 		}
 		if err := bumpGridVersion(ctx, tx, gridID); err != nil {

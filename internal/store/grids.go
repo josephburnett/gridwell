@@ -23,7 +23,9 @@ func (s *Store) GetGrid(ctx context.Context, gridID int64) (*rpc.GetGridResponse
 }
 
 // gridReader is the interface needed to read grid/tile rows. Both *sql.DB and
-// *sql.Tx satisfy it.
+// *sql.Tx satisfy it. It is also used by helpers that only need QueryRowContext
+// (e.g. rootGridID, readFloatKey) since *sql.DB and *sql.Tx satisfy the
+// superset anyway.
 type gridReader interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -44,11 +46,15 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 }
 
 // tileColumns is the column list for reading a tile row. Keep in sync with
-// scanTile.
+// scanTile. Add new columns here; forkColumns picks them up automatically.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
 	url_string`
+
+// forkColumns extends tileColumns with preview_jpeg. Used by forkGrid, which
+// needs to copy the frozen preview but avoids loading it on every GetGrid.
+const forkColumns = tileColumns + `, preview_jpeg`
 
 // scanTile scans a single row into an rpc.Tile. It expects the columns to
 // match tileColumns in order.
