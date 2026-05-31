@@ -2,7 +2,7 @@ package store
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -23,7 +23,7 @@ func newTestStore(t *testing.T) *Store {
 	var counter int
 	s.SetIDGenerator(func() string {
 		counter++
-		return "obj-" + strings.Repeat("0", 28-len("obj-")) + itoa(counter)
+		return fmt.Sprintf("obj-%028x", counter)
 	})
 	return s
 }
@@ -38,15 +38,6 @@ func rootID(t *testing.T, s *Store) int64 {
 	return id
 }
 
-func itoa(n int) string {
-	const hex = "0123456789abcdef"
-	out := []byte{'0', '0', '0', '0'}
-	for i := 3; i >= 0 && n > 0; i-- {
-		out[i] = hex[n&0xf]
-		n >>= 4
-	}
-	return string(out)
-}
 
 func TestOpenAppliesSchema(t *testing.T) {
 	s := newTestStore(t)

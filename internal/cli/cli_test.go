@@ -1,6 +1,9 @@
 package cli
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestReorderFlagsFirst(t *testing.T) {
 	takesValue := func(name string) bool {
@@ -25,21 +28,10 @@ func TestReorderFlagsFirst(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := reorderFlagsFirst(c.in, takesValue)
-		if !slicesEq(got, c.want) {
+		if !slices.Equal(got, c.want) {
 			t.Errorf("reorderFlagsFirst(%v) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }
 
-func slicesEq(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
 

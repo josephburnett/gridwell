@@ -50,11 +50,7 @@ func TestCloneNodeCreatesSharedChildGrid(t *testing.T) {
 	}
 
 	// Refcount on the child grid should be 2.
-	var rc int64
-	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, w.ChildGridID).Scan(&rc); err != nil {
-		t.Fatal(err)
-	}
-	if rc != 2 {
+	if rc := refcount(t, s, "grids", w.ChildGridID); rc != 2 {
 		t.Errorf("child refcount = %d, want 2", rc)
 	}
 	_ = inner
@@ -134,14 +130,11 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 	}
 
 	// Refcounts: original child should be back to 1; new forked child is 1.
-	var rcOld, rcNew int64
-	_ = s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, w.ChildGridID).Scan(&rcOld)
-	_ = s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, cloneAfter.ChildGridID).Scan(&rcNew)
-	if rcOld != 1 {
-		t.Errorf("orig child refcount = %d, want 1", rcOld)
+	if rc := refcount(t, s, "grids", w.ChildGridID); rc != 1 {
+		t.Errorf("orig child refcount = %d, want 1", rc)
 	}
-	if rcNew != 1 {
-		t.Errorf("forked child refcount = %d, want 1", rcNew)
+	if rc := refcount(t, s, "grids", cloneAfter.ChildGridID); rc != 1 {
+		t.Errorf("forked child refcount = %d, want 1", rc)
 	}
 }
 
@@ -306,12 +299,8 @@ func TestCowTwoLevelByteIdentity(t *testing.T) {
 	if a2.ChildGridID != a.ChildGridID {
 		t.Fatalf("clone should share child grid; got %d vs %d", a2.ChildGridID, a.ChildGridID)
 	}
-	var gRC int64
-	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, a.ChildGridID).Scan(&gRC); err != nil {
-		t.Fatal(err)
-	}
-	if gRC != 2 {
-		t.Fatalf("G refcount after clone = %d, want 2", gRC)
+	if rc := refcount(t, s, "grids", a.ChildGridID); rc != 2 {
+		t.Fatalf("G refcount after clone = %d, want 2", rc)
 	}
 
 	// Mutate via [A, B].
@@ -417,12 +406,8 @@ func TestCowTwoLevelByteIdentityThreeClones(t *testing.T) {
 		t.Fatalf("clone A2 -> A3: %v", err)
 	}
 
-	var gRC int64
-	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, a.ChildGridID).Scan(&gRC); err != nil {
-		t.Fatal(err)
-	}
-	if gRC != 3 {
-		t.Fatalf("G refcount after two clones = %d, want 3", gRC)
+	if rc := refcount(t, s, "grids", a.ChildGridID); rc != 3 {
+		t.Fatalf("G refcount after two clones = %d, want 3", rc)
 	}
 
 	mutated := []byte("# mutated")
@@ -486,11 +471,7 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 		t.Fatalf("clone blob id = %d, want %d (shared)", clone.BlobID, a.BlobID)
 	}
 
-	var rc int64
-	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc); err != nil {
-		t.Fatal(err)
-	}
-	if rc != 2 {
+	if rc := refcount(t, s, "blobs", a.BlobID); rc != 2 {
 		t.Fatalf("blob refcount after clone = %d, want 2", rc)
 	}
 
@@ -500,10 +481,7 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc); err != nil {
-		t.Fatalf("blob row should still exist; got %v", err)
-	}
-	if rc != 1 {
+	if rc := refcount(t, s, "blobs", a.BlobID); rc != 1 {
 		t.Errorf("blob refcount after first delete = %d, want 1", rc)
 	}
 
@@ -513,6 +491,7 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	var rc int64
 	err = s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc)
 	if err == nil {
 		t.Errorf("blob row still present after final delete (refcount=%d)", rc)
@@ -548,17 +527,10 @@ func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 	}
 	subChildGrid := sub.ChildGridID
 
-	var rc int64
-	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, mdTile.BlobID).Scan(&rc); err != nil {
-		t.Fatal(err)
-	}
-	if rc != 1 {
+	if rc := refcount(t, s, "blobs", mdTile.BlobID); rc != 1 {
 		t.Fatalf("md blob refcount = %d, want 1", rc)
 	}
-	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, subChildGrid).Scan(&rc); err != nil {
-		t.Fatal(err)
-	}
-	if rc != 1 {
+	if rc := refcount(t, s, "grids", subChildGrid); rc != 1 {
 		t.Fatalf("sub child grid refcount = %d, want 1", rc)
 	}
 
@@ -573,6 +545,7 @@ func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var rc int64
 	if err := s.db.QueryRow(`SELECT refcount FROM grids WHERE id = ?`, outer.ChildGridID).Scan(&rc); err == nil {
 		t.Errorf("outer child grid still present; refcount=%d", rc)
 	}

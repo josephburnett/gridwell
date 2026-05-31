@@ -204,11 +204,7 @@ func TestCreateTextBlobReuse(t *testing.T) {
 		t.Errorf("blob ids = %d, %d (want same)", a.BlobID, b.BlobID)
 	}
 	// Refcount should be 2.
-	var rc int64
-	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc); err != nil {
-		t.Fatal(err)
-	}
-	if rc != 2 {
+	if rc := refcount(t, s, "blobs", a.BlobID); rc != 2 {
 		t.Errorf("blob refcount = %d, want 2", rc)
 	}
 }
