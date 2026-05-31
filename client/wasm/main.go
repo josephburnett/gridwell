@@ -136,12 +136,6 @@ type App struct {
 	// pane id; multiple panes may stream concurrently.
 	urlStreams map[string]*urlStreamConn
 
-	// urlStreamLost is set when a URLStream closed unexpectedly (e.g.
-	// the server-side Chromium tab died) while the user was still
-	// descended. The renderer shows a "page no longer active" overlay;
-	// the flag clears on a new openURLStream or on ascent.
-	urlStreamLost map[string]bool
-
 	// urlUpdateScheduled is true when a debounced URL replaceState is
 	// pending. Multiple state changes within the debounce window
 	// coalesce into a single replaceState. Cleared when the timeout

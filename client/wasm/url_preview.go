@@ -80,18 +80,10 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
 	}
 
-	if a.urlStreamLost[p.ID] {
-		a.cctx.Set("fillStyle", "rgba(0,0,0,0.55)")
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("fillStyle", "#f0c674")
-		a.cctx.Set("font", "16px sans-serif")
-		a.cctx.Set("textAlign", "center")
-		a.cctx.Call("fillText", "page no longer active", x+w/2, y+h/2, w-32)
-		a.cctx.Set("fillStyle", colorMuted)
-		a.cctx.Set("font", "13px sans-serif")
-		a.cctx.Call("fillText", "press Esc to ascend", x+w/2, y+h/2+22, w-32)
-		a.cctx.Set("textAlign", "start")
-	}
+	// No "stream lost" overlay: a takeover close and an unexpected close
+	// look identical from the client side. Phase C will add a border-tint
+	// cue to distinguish live from frozen. For now, the pane just reverts
+	// to showing the JPEG when the WS closes (for any reason).
 
 	a.cctx.Call("restore")
 }
