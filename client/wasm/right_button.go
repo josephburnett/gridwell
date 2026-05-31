@@ -58,7 +58,21 @@ const (
 	// cell) defines the moving corner. New footprint = bounding box of
 	// (pin, cursor) with each side >= 1. Pin can be crossed mid-drag.
 	rightDragTileResize
+	// rightDragURLRefresh is armed when right-down lands anywhere in
+	// the content area of a pane that is descended into a URL tile.
+	// Dragging downward past urlRefreshThresholdPx commits the gesture
+	// on release, opening (or reopening) the live URL stream. Dragging
+	// back above the start point cancels. This is the "go live" gesture
+	// for URL tiles; drag upward or release before threshold to cancel.
+	rightDragURLRefresh
 )
+
+// urlRefreshThresholdPx is the downward drag distance (in screen pixels)
+// required to arm the "release to refresh" state of the URL refresh
+// gesture. 60 px ≈ one grid cell at the default zoom — large enough
+// that an accidental jitter won't commit a live session, but small
+// enough to feel responsive.
+const urlRefreshThresholdPx = 60.0
 
 // rightDragState carries everything the move and up handlers need to
 // finish (or cancel) the gesture. One discriminated struct keeps the
@@ -104,6 +118,12 @@ type rightDragState struct {
 	clickCellX, clickCellY   int64
 	tileNewX, tileNewY       int64
 	tileNewW, tileNewH       int64
+
+	// rightDragURLRefresh-only. refreshTileID is the URL tile being
+	// refreshed; refreshPaneID is the pane it lives in. Committed on
+	// release when curY > startY + urlRefreshThresholdPx.
+	refreshTileID int64
+	refreshPaneID string
 }
 
 // onRightDown classifies the right-down and arms the matching gesture
@@ -115,6 +135,27 @@ type rightDragState struct {
 // Caller has already verified there's no animation in flight and
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
+	// URL descent: right-down in the pane content area arms the refresh
+	// gesture. Pane-management regions (edges) still work normally — only
+	// the inner content area is claimed by the refresh zone.
+	if a.isURLDescent(p) && pointInPaneContent(r, sx, sy) {
+		gid := a.gridIDForPath(p.Path)
+		if g, ok := a.c.Grid(gid); ok {
+			if tile, ok := g.Tiles[p.TextFocus]; ok {
+				a.rightDrag = &rightDragState{
+					kind:          rightDragURLRefresh,
+					startX:        sx,
+					startY:        sy,
+					curX:          sx,
+					curY:          sy,
+					refreshTileID: tile.ID,
+					refreshPaneID: p.ID,
+				}
+				a.draw()
+				return
+			}
+		}
+	}
 	// Tile gesture: only valid in a grid view (not file mode).
 	if p.TextFocus == 0 {
 		if n := a.tileAtScreen(p, r, sx, sy); n != nil {
@@ -194,6 +235,9 @@ func (a *App) onRightMove(sx, sy float64) {
 		a.advanceCloneDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
+	case rightDragURLRefresh:
+		// No mid-drag mutation — the preview indicator is drawn in
+		// drawRightDragPreview; nothing changes in the tree until release.
 	}
 	a.draw()
 }
@@ -365,6 +409,8 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitTileCenter(rd, sx, sy)
 	case rightDragTileResize:
 		a.commitTileResize(rd)
+	case rightDragURLRefresh:
+		a.commitURLRefresh(rd, sx, sy)
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -651,6 +697,26 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	}
 }
 
+// commitURLRefresh commits the URL refresh gesture if the cursor was
+// dragged past urlRefreshThresholdPx downward from the right-down origin.
+// On commit, the live URL stream is opened for the descended tile.
+// Releasing before the threshold (or dragging back above origin) is a
+// silent cancel.
+func (a *App) commitURLRefresh(rd *rightDragState, sx, sy float64) {
+	_ = sx
+	if sy < rd.startY+urlRefreshThresholdPx {
+		// Threshold not reached — cancel silently.
+		return
+	}
+	p := a.tree.FindPane(rd.refreshPaneID)
+	if p == nil || p.TextFocus == 0 {
+		return
+	}
+	r := a.paneRectByID(p.ID)
+	w, h := paneStreamSize(r)
+	a.openURLStream(p, rd.refreshTileID, w, h)
+}
+
 // dividerOnSide returns the Divider directly adjacent to pane p on
 // the requested side, or nil if pane abuts the screen edge with no
 // sibling on that side.
@@ -782,7 +848,68 @@ func (a *App) drawRightDragPreview() {
 	case rightDragTileResize:
 		a.drawTileHotspotOverlay(rd)
 		a.drawTileResizePreview(rd)
+	case rightDragURLRefresh:
+		a.drawURLRefreshPreview(rd)
 	}
+}
+
+// drawURLRefreshPreview paints the refresh gesture hint inside a URL-descent
+// pane. Before the threshold is crossed, a small "↓ refresh" label appears
+// near the top of the pane content area. After the threshold is crossed, the
+// label changes to "release to refresh" so the user knows the gesture is armed.
+func (a *App) drawURLRefreshPreview(rd *rightDragState) {
+	p := a.tree.FindPane(rd.refreshPaneID)
+	if p == nil {
+		return
+	}
+	r := a.paneRectByID(p.ID)
+	cx, cy, _, _ := paneContentBox(r)
+	contentW := r.W - 2*paneBorderPx
+
+	past := rd.curY > rd.startY+urlRefreshThresholdPx
+	label := "↓ refresh"
+	if past {
+		label = "release to refresh"
+	}
+
+	// Semi-transparent pill at the top of the content area.
+	a.cctx.Set("fillStyle", "rgba(0,0,0,0.55)")
+	pillW := 160.0
+	pillH := 28.0
+	pillX := cx + contentW/2 - pillW/2
+	pillY := cy + 16
+	a.cctx.Call("beginPath")
+	a.cctx.Call("roundRect", pillX, pillY, pillW, pillH, 6)
+	a.cctx.Call("fill")
+
+	color := colorMuted
+	if past {
+		color = "#7a5a9a" // URL purple — "armed"
+	}
+	a.cctx.Set("fillStyle", color)
+	a.cctx.Set("font", "13px sans-serif")
+	a.cctx.Set("textAlign", "center")
+	a.cctx.Set("textBaseline", "middle")
+	a.cctx.Call("fillText", label, cx+contentW/2, pillY+pillH/2)
+	a.cctx.Set("textAlign", "start")
+	a.cctx.Set("textBaseline", "alphabetic")
+
+	// Thin downward-progress bar under the start point.
+	draggedDown := rd.curY - rd.startY
+	if draggedDown < 0 {
+		draggedDown = 0
+	}
+	frac := draggedDown / urlRefreshThresholdPx
+	if frac > 1 {
+		frac = 1
+	}
+	barH := frac * 4
+	barColor := colorMuted
+	if past {
+		barColor = "#7a5a9a"
+	}
+	a.cctx.Set("fillStyle", barColor)
+	a.cctx.Call("fillRect", r.X+paneBorderPx, rd.startY, r.W-2*paneBorderPx, barH)
 }
 
 // drawTileHotspotOverlay paints the affordance overlay over the tile

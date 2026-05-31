@@ -851,7 +851,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) b
 		a.startDescent(p, hit)
 		return true
 	case rpc.KindText, rpc.KindURL:
-		a.startFileDescent(p, hit)
+		a.startFileDescent(p, hit, nil)
 		return true
 	}
 	return false
@@ -1090,7 +1090,12 @@ func nonzero(x float64) float64 {
 // the path-swap, the footprint screen size = inner-box, and the live
 // TextZoom is reconstructed from the tile's intrinsic ViewZoom ratio
 // for visual continuity.
-func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
+//
+// afterDescend, if non-nil, is called after the transition completes and
+// TextFocus has been installed. Use this to chain actions that need the
+// pane to be fully descended (e.g., opening the URL stream after a new
+// URL tile is created).
+func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
 	r := paneRectFor(a, p)
@@ -1148,13 +1153,11 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile) {
 			fp.TextScrollX = 0
 			fp.TextZoom = fileFixedScale
 			a.refreshFileOverlay()
-			// URL descent always attaches a streaming WebSocket; the
-			// server creates a fresh Chromium tab for the duration of
-			// the WS. closed in startFileAscent.
-			if file.Kind == rpc.KindURL {
-				rr := a.paneRectByID(fp.ID)
-				w, h := paneStreamSize(rr)
-				a.openURLStream(fp, file.ID, w, h)
+			// URL descent shows the frozen JPEG preview by default.
+			// afterDescend fires here so the auto-go-live path (new
+			// URL tile creation) can open the stream immediately.
+			if afterDescend != nil {
+				afterDescend()
 			}
 		},
 	})
@@ -1198,11 +1201,9 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// to wait.
 	a.saveFileBeforeAscent(p, file)
 
-	// If we're ascending out of a URL tile stream, close the WS and
-	// clear any stream-lost marker.
+	// If we're ascending out of a URL tile, close the live stream (if any).
 	if file.Kind == rpc.KindURL {
 		a.closeURLStream(p.ID)
-		delete(a.urlStreamLost, p.ID)
 	}
 
 	// (Mode + framed window are persisted by saveFileBeforeAscent, which
@@ -1236,7 +1237,6 @@ func (a *App) startFileAscent(p *pane.Pane) {
 // clear TextFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.closeURLStream(p.ID) // no-op if not a URL descent
-	delete(a.urlStreamLost, p.ID)
 	saved := a.popPaneState(p.ID)
 	p.TextFocus = 0
 	if saved != nil {
@@ -1542,10 +1542,15 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 }
 
 // createURLAtCell fires CreateURL at the given cell with the given URL.
-// Footprint is 1×1.
+// Footprint is 1×1. After creation succeeds, the focused pane descends
+// into the new tile and immediately goes live — typing a URL + Enter is
+// an explicit "load this" gesture, so auto-live is the right behavior.
+// This is the only auto-go-live path; all other descents into URL tiles
+// start frozen and require an explicit refresh gesture.
 func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
+	paneID := p.ID
 	go func() {
 		req := rpc.CreateURLRequest{
 			Path:   rpc.Path{WellIDs: path},
@@ -1559,6 +1564,26 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 			return
 		}
 		a.fetchGrid(gid)
+		// Auto-descend + auto-go-live: the user just typed a URL and
+		// confirmed, which is an unambiguous "load this now" intent.
+		// Find the focused pane and descend into the new tile, then
+		// open the live stream once the transition completes.
+		tile := resp.Tile
+		fp := a.tree.FindPane(paneID)
+		if fp == nil || fp.TextFocus != 0 {
+			// Pane is gone or already descended — skip.
+			return
+		}
+		a.startFileDescent(fp, &tile, func() {
+			// afterDescend: open the URL stream so the pane goes live.
+			ffp := a.tree.FindPane(paneID)
+			if ffp == nil || ffp.TextFocus == 0 {
+				return
+			}
+			rr := a.paneRectByID(paneID)
+			w, h := paneStreamSize(rr)
+			a.openURLStream(ffp, tile.ID, w, h)
+		})
 	}()
 }
 
