@@ -155,6 +155,23 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 	return nil
 }
 
+// updateURLCursor sets the canvas CSS cursor for a URL descent pane.
+// Frozen descent: "grab" at rest, "grabbing" while dragging.
+// Live descent: default (the iframe / Chromium manages its own cursor).
+func (a *App) updateURLCursor(p *pane.Pane, _ paneRect) {
+	if a.urlStreams[p.ID] != nil {
+		// Live: restore default and let the page/browser control the cursor.
+		a.canvas.Get("style").Set("cursor", "")
+		return
+	}
+	// Frozen: grab while hovering content area.
+	if a.urlPanDragging {
+		a.canvas.Get("style").Set("cursor", "grabbing")
+	} else {
+		a.canvas.Get("style").Set("cursor", "grab")
+	}
+}
+
 func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
@@ -276,29 +293,48 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
 	if p.TextFocus != 0 {
-		// URL tile descent: clicks inside the pane content area forward
-		// to the streaming Chromium tab; clicks in the outer margin
-		// ascend. The lower-right back button is a Gridwell control
-		// and must be hit-tested before the forwarding path.
+		// URL tile descent: live panes forward clicks to Chromium; frozen
+		// panes use click+drag for pan (cover-mode overflow navigation).
+		// The lower-right back button and outer margin always belong to Gridwell.
 		if a.isURLDescent(p) {
 			if pointInPlus(r, sx, sy) {
-				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-					Kind: urldriver.InputHistoryBack,
-				})
+				// Back button: always a Gridwell control. For live panes,
+				// send history-back; for frozen, it's a no-op (the "back"
+				// button only makes sense while the page is live).
+				if a.urlStreams[p.ID] != nil {
+					a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+						Kind: urldriver.InputHistoryBack,
+					})
+				}
 				return nil
 			}
 			if !pointInPaneContent(r, sx, sy) {
 				a.startFileAscent(p)
 				return nil
 			}
-			vx, vy := paneStreamLocal(r, sx, sy)
-			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-				Kind: urldriver.InputMouseMove, X: vx, Y: vy,
-			})
-			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-				Kind: urldriver.InputMouseDown, X: vx, Y: vy,
-				Button: urldriver.MouseButtonLeft,
-			})
+			// Live pane: forward the click to the streaming Chromium tab.
+			if a.urlStreams[p.ID] != nil {
+				vx, vy := paneStreamLocal(r, sx, sy)
+				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+					Kind: urldriver.InputMouseMove, X: vx, Y: vy,
+				})
+				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+					Kind: urldriver.InputMouseDown, X: vx, Y: vy,
+					Button: urldriver.MouseButtonLeft,
+				})
+				return nil
+			}
+			// Frozen pane: start a pan drag to navigate cover-mode overflow.
+			a.urlPanDragging = true
+			a.dragging = &dragState{
+				originPaneID: p.ID,
+				tileID:       0,
+				startScreenX: sx,
+				startScreenY: sy,
+				curScreenX:   sx,
+				curScreenY:   sy,
+			}
+			a.updateURLCursor(p, r)
 			return nil
 		}
 		// The rendered/raw toggle is a DOM overlay button
@@ -427,15 +463,28 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// page would see phantom cursor activity over an empty
 			// region of its viewport.
 			if pointInPlus(r, sx, sy) {
+				a.canvas.Get("style").Set("cursor", "")
 				return nil
 			}
 			if pointInPaneContent(r, sx, sy) {
-				vx, vy := paneStreamLocal(r, sx, sy)
-				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-					Kind: urldriver.InputMouseMove, X: vx, Y: vy,
-				})
+				// Live pane: forward move to Chromium; frozen pane: set grab cursor.
+				if a.urlStreams[p.ID] != nil {
+					vx, vy := paneStreamLocal(r, sx, sy)
+					a.sendURLStreamInput(p.ID, urldriver.InputEvent{
+						Kind: urldriver.InputMouseMove, X: vx, Y: vy,
+					})
+					a.canvas.Get("style").Set("cursor", "")
+					return nil
+				}
+				// Frozen URL descent: show grab cursor.
+				a.updateURLCursor(p, r)
 				return nil
 			}
+			// Outside content area: restore default cursor.
+			a.canvas.Get("style").Set("cursor", "")
+		} else {
+			// Not hovering a URL descent pane: ensure cursor is reset.
+			a.canvas.Get("style").Set("cursor", "")
 		}
 	}
 	// Right-button gestures take precedence so a drag that started on
@@ -513,12 +562,22 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 	}
 	if d.tileID == 0 && !d.isTemplate {
-		// Pan the source pane smoothly. In file-rendered mode the drag
-		// scrolls the file's logical content; in grid mode it pans the
-		// parent-grid view.
+		// Pan the source pane smoothly. For frozen URL descents, pan
+		// translates the cover-mode crop (urlPanX/Y). In file-rendered
+		// mode the drag scrolls the file's logical content; in grid mode
+		// it pans the parent-grid view.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.TextFocus != 0 && focused.TextMode == rpc.TextModeRendered {
+			if focused.TextFocus != 0 && a.isURLDescent(focused) && a.urlStreams[focused.ID] == nil {
+				// Frozen URL descent: translate cover-crop pan. The delta
+				// is negated because dragging right should shift the image
+				// right (show left portion), i.e., decrease panX.
+				a.urlPanX[focused.ID] -= (sx - d.curScreenX)
+				a.urlPanY[focused.ID] -= (sy - d.curScreenY)
+				// Clamping is deferred to draw time (clampURLPan) because
+				// we need the image natural dimensions which may vary frame
+				// to frame as frames arrive.
+			} else if focused.TextFocus != 0 && focused.TextMode == rpc.TextModeRendered {
 				z := nonzero(focused.TextZoom)
 				focused.TextScrollX -= (sx - d.curScreenX) / z
 				focused.TextScrollY -= (sy - d.curScreenY) / z
@@ -586,13 +645,23 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		if pointInPlus(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
-		if pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
+		// Only forward mouseup to Chromium for live panes.
+		if a.urlStreams[p.ID] != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			vx, vy := paneStreamLocal(r, sx, sy)
 			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 				Kind: urldriver.InputMouseUp, X: vx, Y: vy,
 				Button: urldriver.MouseButtonLeft,
 			})
 			return nil
+		}
+	}
+	// End a frozen URL pan drag: clear the dragging flag and restore grab cursor.
+	if a.urlPanDragging && args[0].Get("button").Int() == 0 {
+		a.urlPanDragging = false
+		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
+			a.updateURLCursor(p, r)
+		} else {
+			a.canvas.Get("style").Set("cursor", "")
 		}
 	}
 	if a.dragging == nil {
@@ -1152,6 +1221,10 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextScrollY = initialScroll
 			fp.TextScrollX = 0
 			fp.TextZoom = fileFixedScale
+			// Reset URL pan state on each new descent — it's view state,
+			// not tile state, so it does not survive across descents.
+			delete(a.urlPanX, fp.ID)
+			delete(a.urlPanY, fp.ID)
 			a.refreshFileOverlay()
 			// URL descent shows the frozen JPEG preview by default.
 			// afterDescend fires here so the auto-go-live path (new

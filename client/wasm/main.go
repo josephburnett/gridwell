@@ -183,6 +183,17 @@ type App struct {
 	// urlModalOpen tracks whether the URL-entry modal is currently open.
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
+
+	// urlPanX / urlPanY hold the per-pane pan offset for frozen URL
+	// descents (keyed by pane ID). Live URL panes don't pan — clicks
+	// forward to Chromium. Reset on each new descent. Not persisted.
+	urlPanX map[string]float64
+	urlPanY map[string]float64
+
+	// urlPanDragging is true while the user is dragging inside a frozen
+	// URL descent pane. Used to switch the canvas cursor to "grabbing"
+	// during the drag and back to "grab" on release.
+	urlPanDragging bool
 }
 
 // paneState is a captured viewport: viewport center in cells (sub-cell
@@ -304,6 +315,8 @@ func main() {
 		paneStateStack: map[string][]paneState{},
 		urlPreview:     newURLPreviewCache(),
 		urlStreams:     map[string]*urlStreamConn{},
+		urlPanX:        map[string]float64{},
+		urlPanY:        map[string]float64{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")

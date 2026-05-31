@@ -44,6 +44,10 @@ const (
 	colorURLFill           = "#2b1a3a"
 	colorURLLine           = "#7a5a9a"
 	colorURLLineFaded      = "#4a3a5a"
+	// colorURLLiveLine is the pane border used when a URL tile is live
+	// (WebSocket stream open). Same purple hue as colorURLLine but brighter
+	// and more saturated so it's clearly distinct from the frozen state.
+	colorURLLiveLine = "#a07acc"
 	colorBlackHoleFill     = "#3a1c1a"
 	colorBlackHoleLine     = "#a06a5a"
 	colorLocked            = "#26262a"
@@ -292,7 +296,8 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// one of the same hue so you can still see at a glance which
 	// other panes are also "looking inside" something.
 	focused := p.ID == a.tree.Focus
-	border := paneBorderColorFor(p, g, gridOK, focused)
+	urlLive := a.urlStreams[p.ID] != nil
+	border := paneBorderColorFor(p, g, gridOK, focused, urlLive)
 	a.cctx.Set("strokeStyle", border)
 	a.cctx.Set("lineWidth", paneBorderPx)
 	half := paneBorderPx / 2
@@ -1093,19 +1098,26 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 // paneBorderColorFor picks the pane border color from the pane's
 // current state — what it's descended into (or root if nothing).
 //   - descent into a text tile → green
-//   - descent into a URL tile → purple
+//   - descent into a URL tile (frozen) → purple
+//   - descent into a URL tile (live stream) → brighter purple
 //   - descent into a well (path > 0, no file focus) → blue
 //   - root (nothing descended) → tan
 // The focused boolean picks the saturated vs faded variant of that
-// hue. If the grid containing the descended tile isn't cached yet,
-// we fall back to the generic blue so the user still sees "descended
-// into something".
-func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool) string {
+// hue. urlLive is true when an active WebSocket stream is open for
+// this pane, indicating a live Chromium tab. If the grid containing
+// the descended tile isn't cached yet, we fall back to the generic
+// blue so the user still sees "descended into something".
+func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
 	if p.TextFocus != 0 {
 		if gridOK {
 			if file, ok := g.Tiles[p.TextFocus]; ok {
 				switch file.Kind {
 				case rpc.KindURL:
+					if urlLive {
+						// Live stream: brighter/more-saturated purple to
+						// distinguish from the frozen preview state.
+						return colorURLLiveLine
+					}
 					if focused {
 						return colorURLLine
 					}

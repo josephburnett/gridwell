@@ -26,6 +26,18 @@ import (
 // subsequent renders at a different destination aspect ratio (e.g.
 // after a tile resize) crop differently from the same source frame.
 func drawImageCoverCentered(c js.Value, img js.Value, x, y, w, h float64) {
+	drawImageCover(c, img, x, y, w, h, 0, 0)
+}
+
+// drawImageCover draws img into (x,y,w,h) with cover semantics and an
+// additional (panX, panY) offset applied in destination pixels. The pan
+// shifts which portion of the scaled image is visible, clamped so the
+// image always covers the full destination rect (no empty space).
+//
+// panX > 0 slides the image left (shows right portion); panY > 0 slides
+// up (shows lower portion). Clamping is handled by the caller via
+// clampURLPan — here we only apply the raw offset.
+func drawImageCover(c js.Value, img js.Value, x, y, w, h, panX, panY float64) {
 	iw := img.Get("naturalWidth").Float()
 	ih := img.Get("naturalHeight").Float()
 	if iw <= 0 || ih <= 0 || w <= 0 || h <= 0 {
@@ -42,21 +54,62 @@ func drawImageCoverCentered(c js.Value, img js.Value, x, y, w, h float64) {
 		sw = iw
 		sh = iw / destAR
 	}
-	sx := (iw - sw) / 2
-	sy := (ih - sh) / 2
+	// Center offset, then shift by pan (converted from dest-px to src-px).
+	scale := sw / w // dest-px to source-px ratio
+	sx := (iw-sw)/2 + panX*scale
+	sy := (ih-sh)/2 + panY*scale
 	c.Call("drawImage", img, sx, sy, sw, sh, x, y, w, h)
+}
+
+// clampURLPan returns (panX, panY) clamped so the image at cover scale
+// always fills the destination rect — i.e., pan cannot expose empty
+// space beyond the image edges. iw/ih are the image's natural pixel
+// dimensions; w/h are the destination rect dimensions.
+func clampURLPan(panX, panY, iw, ih, w, h float64) (float64, float64) {
+	if iw <= 0 || ih <= 0 || w <= 0 || h <= 0 {
+		return 0, 0
+	}
+	destAR := w / h
+	imgAR := iw / ih
+	var sw, sh float64
+	if imgAR > destAR {
+		sh = ih
+		sw = ih * destAR
+	} else {
+		sw = iw
+		sh = iw / destAR
+	}
+	// scale: how many source-px per dest-px
+	scale := sw / w
+	// Maximum pan in dest-px so we don't go past the image edges.
+	// The center crop uses (iw-sw)/2 source px on each side, which is
+	// (iw-sw)/(2*scale) dest-px of overflow available.
+	maxPanX := (iw - sw) / (2 * scale)
+	maxPanY := (ih - sh) / (2 * scale)
+	if panX < -maxPanX {
+		panX = -maxPanX
+	}
+	if panX > maxPanX {
+		panX = maxPanX
+	}
+	if panY < -maxPanY {
+		panY = -maxPanY
+	}
+	if panY > maxPanY {
+		panY = maxPanY
+	}
+	return panX, panY
 }
 
 // drawURLTileInPane renders a URL tile that's currently the pane's
 // TextFocus (i.e., the user descended into it). The pane's
-// inner-rect (x, y, w, h) gets the cached preview image scaled to fit.
+// inner-rect (x, y, w, h) gets the cached preview image in cover mode.
 // While the WebSocket stream is open, frames flow into the same
 // urlPreview cache, so this draw call automatically reflects them.
 //
-// If the stream has been lost (server-side Chromium died), an overlay
-// is drawn on top of the last cached frame so the user knows the page
-// is no longer interactive — without auto-reloading and silently
-// throwing away their in-page state.
+// Frozen descents apply pan (urlPanX/Y) so the user can drag to see the
+// overflow. Live descents show the center crop (no pan — clicks forward
+// to Chromium and the page manages its own viewport).
 func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	// Keep the server-side Chromium viewport in step with the area
 	// we're painting into. notifyURLStreamSize is a no-op when the
@@ -72,18 +125,25 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	if img, ok := a.urlPreview.Get(n.ID); ok {
-		a.cctx.Call("drawImage", img, x, y, w, h)
+		live := a.urlStreams[p.ID] != nil
+		if live {
+			// Live: center-crop, no pan — the page renders at pane size.
+			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+		} else {
+			// Frozen: cover + pan so the user can drag to see overflow.
+			panX := a.urlPanX[p.ID]
+			panY := a.urlPanY[p.ID]
+			iw := img.Get("naturalWidth").Float()
+			ih := img.Get("naturalHeight").Float()
+			panX, panY = clampURLPan(panX, panY, iw, ih, w, h)
+			drawImageCover(a.cctx, img, x, y, w, h, panX, panY)
+		}
 	} else {
 		a.fetchURLPreview(n.ID)
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "16px monospace")
 		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
 	}
-
-	// No "stream lost" overlay: a takeover close and an unexpected close
-	// look identical from the client side. Phase C will add a border-tint
-	// cue to distinguish live from frozen. For now, the pane just reverts
-	// to showing the JPEG when the WS closes (for any reason).
 
 	a.cctx.Call("restore")
 }
