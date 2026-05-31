@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/rand/v2"
 	"testing"
 
@@ -65,7 +64,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	}
 
 	for i := range iters {
-		op := rng.IntN(6)
+		op := rng.IntN(5)
 		switch op {
 		case 0:
 			// Create a well at a random spot in some live well's child grid
@@ -182,9 +181,6 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				tiles = next
 			}
 		case 4:
-			// (Reserved op slot — was Redig, now unused. Skip.)
-			continue
-		case 5:
 			// Set viewport (well-only in the kind/version model).
 			if len(tiles) == 0 {
 				continue
@@ -268,8 +264,6 @@ func overlap(a, b struct {
 	}
 	return true
 }
-
-var _ = fmt.Sprintf
 
 func isBenignPropError(err error) bool {
 	return errors.Is(err, ErrInvalidPath) ||

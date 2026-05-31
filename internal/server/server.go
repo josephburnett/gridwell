@@ -146,8 +146,6 @@ func errorStatus(err error) int {
 		errors.Is(err, store.ErrNotTextTile),
 		errors.Is(err, store.ErrNotWellTile):
 		return http.StatusBadRequest
-	case errors.Is(err, store.ErrChromiumUnavailable):
-		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}

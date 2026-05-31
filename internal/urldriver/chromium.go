@@ -12,7 +12,6 @@ package urldriver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -225,8 +224,6 @@ func (d *Driver) ensureBrowserLocked() (*userBrowser, error) {
 	d.browser = b
 	return b, nil
 }
-
-var ErrUnavailable = errors.New("browser unavailable")
 
 func schemeAllowed(u string) bool {
 	return len(u) >= 7 && (u[:7] == "http://" || (len(u) >= 8 && u[:8] == "https://"))

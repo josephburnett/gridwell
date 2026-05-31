@@ -26,15 +26,14 @@ import (
 
 // Sentinel errors. Callers should use errors.Is to test for them.
 var (
-	ErrNotFound            = errors.New("not found")
-	ErrOverlap             = errors.New("footprint overlaps an existing tile")
-	ErrInvalidPath         = errors.New("descent path is invalid")
-	ErrInvalidArgument     = errors.New("invalid argument")
-	ErrChromiumUnavailable = errors.New("chromium unavailable")
-	ErrNotURLTile          = errors.New("not a URL tile")
-	ErrNotTextTile         = errors.New("not a text tile")
-	ErrNotWellTile         = errors.New("not a well tile")
-	ErrVersionConflict     = errors.New("version mismatch")
+	ErrNotFound        = errors.New("not found")
+	ErrOverlap         = errors.New("footprint overlaps an existing tile")
+	ErrInvalidPath     = errors.New("descent path is invalid")
+	ErrInvalidArgument = errors.New("invalid argument")
+	ErrNotURLTile      = errors.New("not a URL tile")
+	ErrNotTextTile     = errors.New("not a text tile")
+	ErrNotWellTile     = errors.New("not a well tile")
+	ErrVersionConflict = errors.New("version mismatch")
 )
 
 // Store wraps a SQLite database. It is safe for concurrent use.
@@ -208,12 +207,6 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// DB returns the underlying *sql.DB. Tests may use it; production code should
-// not.
-func (s *Store) DB() *sql.DB {
-	return s.db
-}
-
 // SetClock overrides the time source. Used by tests.
 func (s *Store) SetClock(now func() time.Time) {
 	s.now = now
@@ -226,9 +219,9 @@ func (s *Store) SetIDGenerator(f func() string) {
 }
 
 // SetURLDriver installs the URL-tile driver. Without one, all URL-tile
-// runtime operations (WakeURL, CaptureURL, URLStream open) return
-// ErrChromiumUnavailable. The driver is typically Chromium-backed in
-// production and a fake in tests.
+// runtime operations (WakeURL, CaptureURL, URLStream open) return an
+// unavailable error. The driver is typically Chromium-backed in production
+// and a fake in tests.
 func (s *Store) SetURLDriver(d URLDriver) {
 	s.urlDriver = d
 }

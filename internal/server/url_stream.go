@@ -12,7 +12,6 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
-	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
@@ -256,5 +255,3 @@ func messageToInputEvent(m urlStreamMessage) (urldriver.InputEvent, bool) {
 	}, true
 }
 
-var _ = errors.New
-var _ = store.ErrNotFound
