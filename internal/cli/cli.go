@@ -36,7 +36,7 @@ func reorderFlagsFirst(args []string, takesValue func(name string) bool) []strin
 				// Detect "--name=value" form: no separate value follows.
 				name := strings.TrimLeft(a, "-")
 				if _, _, hasEq := strings.Cut(name, "="); !hasEq {
-					if takesValue(stripDashes(a)) && args[i+1] != "" && args[i+1][0] != '-' {
+					if takesValue(name) && args[i+1] != "" && args[i+1][0] != '-' {
 						flagTokens = append(flagTokens, args[i+1])
 						i++
 					}
@@ -47,9 +47,4 @@ func reorderFlagsFirst(args []string, takesValue func(name string) bool) []strin
 		positional = append(positional, a)
 	}
 	return append(flagTokens, positional...)
-}
-
-func stripDashes(s string) string {
-	name, _, _ := strings.Cut(strings.TrimLeft(s, "-"), "=")
-	return name
 }
