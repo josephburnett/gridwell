@@ -119,6 +119,11 @@ func (a *App) ensureFileTextarea() {
 	style.Set("color", "#d8d9de")
 	style.Set("border", "0")
 	style.Set("outline", "none")
+	// border-box so the 8px padding fits inside the width/height
+	// fileTextareaBox returns. Without this, content-box would add
+	// 16px to each dimension and the textarea would overhang the
+	// pane's right and bottom border strokes.
+	style.Set("boxSizing", "border-box")
 	style.Set("padding", "8px")
 	style.Set("margin", "0")
 	style.Set("resize", "none")
