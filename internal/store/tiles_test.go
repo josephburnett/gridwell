@@ -37,7 +37,7 @@ func TestCreateWellHappyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(g.Tiles) != 1 {
-		t.Errorf("expected 1 node, got %d", len(g.Tiles))
+		t.Errorf("expected 1 tile, got %d", len(g.Tiles))
 	}
 }
 
@@ -235,7 +235,7 @@ func TestResizeNode(t *testing.T) {
 	if r.Version != w.Version+1 {
 		t.Errorf("version after resize = %d, want %d", r.Version, w.Version+1)
 	}
-	// Resize to overlap another node should fail.
+	// Resize to overlap another tile should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 4, Y: 0, W: 1, H: 1,
 	})

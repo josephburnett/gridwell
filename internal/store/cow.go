@@ -32,7 +32,7 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 			return gridSequence{}, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
 		}
 		if w.Kind != rpc.KindWell {
-			return gridSequence{}, fmt.Errorf("%w: node %d is not a well", ErrInvalidPath, wellID)
+			return gridSequence{}, fmt.Errorf("%w: tile %d is not a well", ErrInvalidPath, wellID)
 		}
 		if w.GridID != seq.grids[len(seq.grids)-1] {
 			return gridSequence{}, fmt.Errorf("%w: well %d not in grid %d", ErrInvalidPath, wellID, seq.grids[len(seq.grids)-1])
@@ -96,7 +96,7 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, path rpc.Path, targetT
 	if targetTileID != 0 {
 		err := tx.QueryRowContext(ctx, `SELECT object_id FROM tiles WHERE id = ?`, targetTileID).Scan(&targetObjectID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: target node %d", ErrNotFound, targetTileID)
+			return nil, fmt.Errorf("%w: target tile %d", ErrNotFound, targetTileID)
 		}
 		if err != nil {
 			return nil, err

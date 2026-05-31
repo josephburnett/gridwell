@@ -118,10 +118,10 @@ func TestCowForkOnWriteIntoSharedChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(origChildContents.Tiles) != 1 {
-		t.Fatalf("original child has %d nodes, want 1", len(origChildContents.Tiles))
+		t.Fatalf("original child has %d tiles, want 1", len(origChildContents.Tiles))
 	}
 	if origChildContents.Tiles[0].W != 1 || origChildContents.Tiles[0].H != 1 {
-		t.Errorf("original child node was mutated: %+v", origChildContents.Tiles[0])
+		t.Errorf("original child tile was mutated: %+v", origChildContents.Tiles[0])
 	}
 
 	// The clone's child grid should now be a different id from w's.

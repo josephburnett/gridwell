@@ -35,7 +35,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		}
 		srcGrid := srcSeq.grids[len(srcSeq.grids)-1]
 		if n.GridID != srcGrid {
-			return fmt.Errorf("%w: node %d not in source path leaf grid %d", ErrInvalidPath, req.TileID, srcGrid)
+			return fmt.Errorf("%w: tile %d not in source path leaf grid %d", ErrInvalidPath, req.TileID, srcGrid)
 		}
 
 		srcPre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
@@ -142,7 +142,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			return err
 		}
 		if n.GridID != srcSeq.grids[len(srcSeq.grids)-1] {
-			return fmt.Errorf("%w: node %d not in source path leaf grid", ErrInvalidPath, req.TileID)
+			return fmt.Errorf("%w: tile %d not in source path leaf grid", ErrInvalidPath, req.TileID)
 		}
 		dstSeq, err := s.buildGridSequence(ctx, tx, req.DestPath)
 		if err != nil {

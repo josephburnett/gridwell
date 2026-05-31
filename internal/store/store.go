@@ -27,7 +27,7 @@ import (
 // Sentinel errors. Callers should use errors.Is to test for them.
 var (
 	ErrNotFound            = errors.New("not found")
-	ErrOverlap             = errors.New("footprint overlaps an existing node")
+	ErrOverlap             = errors.New("footprint overlaps an existing tile")
 	ErrInvalidPath         = errors.New("descent path is invalid")
 	ErrInvalidArgument     = errors.New("invalid argument")
 	ErrChromiumUnavailable = errors.New("chromium unavailable")

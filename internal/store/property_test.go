@@ -29,7 +29,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	type liveNode struct {
+	type liveTile struct {
 		id          int64
 		kind        string
 		gridID      int64
@@ -38,9 +38,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		x, y        int64
 		childGridID int64
 	}
-	var nodes []liveNode
-	addNode := func(n *rpc.Tile, path rpc.Path) {
-		nodes = append(nodes, liveNode{
+	var tiles []liveTile
+	addTile := func(n *rpc.Tile, path rpc.Path) {
+		tiles = append(tiles, liveTile{
 			id: n.ID, kind: n.Kind, gridID: n.GridID, path: path,
 			w: n.W, h: n.H, x: n.X, y: n.Y, childGridID: n.ChildGridID,
 		})
@@ -52,7 +52,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	addNode(w0, rpc.Path{})
+	addTile(w0, rpc.Path{})
 
 	// liveVersion reads the current version of a tile id, returning 0 and
 	// reporting not-found if the row is gone.
@@ -72,8 +72,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			// or root.
 			parentPath := rpc.Path{}
 			gridID := root
-			if len(nodes) > 0 && rng.IntN(2) == 0 {
-				ln := nodes[rng.IntN(len(nodes))]
+			if len(tiles) > 0 && rng.IntN(2) == 0 {
+				ln := tiles[rng.IntN(len(tiles))]
 				if ln.kind == rpc.KindWell && ln.childGridID != 0 {
 					parentPath = rpc.Path{WellIDs: append([]int64{}, ln.path.WellIDs...)}
 					parentPath.WellIDs = append(parentPath.WellIDs, ln.id)
@@ -93,13 +93,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				}
 				continue
 			}
-			addNode(n, parentPath)
+			addTile(n, parentPath)
 		case 1:
-			// Clone a random node into root.
-			if len(nodes) == 0 {
+			// Clone a random tile into root.
+			if len(tiles) == 0 {
 				continue
 			}
-			src := nodes[rng.IntN(len(nodes))]
+			src := tiles[rng.IntN(len(tiles))]
 			ver, err := liveVersion(src.id)
 			if err != nil {
 				continue
@@ -117,14 +117,14 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				}
 				continue
 			}
-			addNode(n, rpc.Path{})
+			addTile(n, rpc.Path{})
 		case 2:
-			// Resize a random node.
-			if len(nodes) == 0 {
+			// Resize a random tile.
+			if len(tiles) == 0 {
 				continue
 			}
-			pickIdx := rng.IntN(len(nodes))
-			pick := nodes[pickIdx]
+			pickIdx := rng.IntN(len(tiles))
+			pick := tiles[pickIdx]
 			ver, err := liveVersion(pick.id)
 			if err != nil {
 				continue
@@ -141,21 +141,21 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				}
 				continue
 			}
-			nodes[pickIdx].id = n.ID
-			nodes[pickIdx].gridID = n.GridID
-			nodes[pickIdx].w = n.W
-			nodes[pickIdx].h = n.H
+			tiles[pickIdx].id = n.ID
+			tiles[pickIdx].gridID = n.GridID
+			tiles[pickIdx].w = n.W
+			tiles[pickIdx].h = n.H
 		case 3:
 			// Delete a random tile (cascades through wells).
-			if len(nodes) == 0 {
+			if len(tiles) == 0 {
 				continue
 			}
-			pickIdx := rng.IntN(len(nodes))
-			pick := nodes[pickIdx]
+			pickIdx := rng.IntN(len(tiles))
+			pick := tiles[pickIdx]
 			ver, err := liveVersion(pick.id)
 			if err != nil {
 				// gone; drop from harness
-				nodes = append(nodes[:pickIdx], nodes[pickIdx+1:]...)
+				tiles = append(tiles[:pickIdx], tiles[pickIdx+1:]...)
 				continue
 			}
 			err = s.DeleteTile(ctx, &rpc.DeleteTileRequest{
@@ -169,8 +169,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				if pick.kind == rpc.KindWell && pick.childGridID != 0 {
 					deletedGrids[pick.childGridID] = true
 				}
-				next := nodes[:0]
-				for _, n := range nodes {
+				next := tiles[:0]
+				for _, n := range tiles {
 					if n.id == pick.id {
 						continue
 					}
@@ -179,18 +179,18 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 					}
 					next = append(next, n)
 				}
-				nodes = next
+				tiles = next
 			}
 		case 4:
 			// (Reserved op slot — was Redig, now unused. Skip.)
 			continue
 		case 5:
 			// Set viewport (well-only in the kind/version model).
-			if len(nodes) == 0 {
+			if len(tiles) == 0 {
 				continue
 			}
-			pickIdx := rng.IntN(len(nodes))
-			pick := nodes[pickIdx]
+			pickIdx := rng.IntN(len(tiles))
+			pick := tiles[pickIdx]
 			if pick.kind != rpc.KindWell {
 				continue
 			}
@@ -207,7 +207,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				t.Fatalf("iter %d set well view: %v", i, err)
 			}
 			if err == nil {
-				nodes[pickIdx].id = n.ID
+				tiles[pickIdx].id = n.ID
 			}
 		}
 
@@ -249,7 +249,7 @@ func verifyNoOverlap(t *testing.T, s *Store) {
 		for i := range rs {
 			for j := i + 1; j < len(rs); j++ {
 				if overlap(rs[i], rs[j]) {
-					t.Fatalf("grid %d: nodes %d and %d overlap", g,
+					t.Fatalf("grid %d: tiles %d and %d overlap", g,
 						rs[i].id, rs[j].id)
 				}
 			}
