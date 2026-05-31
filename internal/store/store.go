@@ -239,3 +239,17 @@ func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
+// withMutation runs fn in a transaction. fn appends to the provided events
+// slice; on commit, withMutation publishes them in order.
+func (s *Store) withMutation(ctx context.Context, fn func(tx *sql.Tx, events *[]rpc.Event) error) error {
+	var events []rpc.Event
+	err := s.withTx(ctx, func(tx *sql.Tx) error { return fn(tx, &events) })
+	if err != nil {
+		return err
+	}
+	for _, ev := range events {
+		s.publish(ev)
+	}
+	return nil
+}
+

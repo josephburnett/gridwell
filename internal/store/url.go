@@ -38,8 +38,7 @@ func (d *FakeURLDriver) Available() bool {
 // SetURLPreview overwrites a URL tile's preview JPEG. Called by the
 // server's URL stream handler on WS close. Bumps the tile's version.
 func (s *Store) SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) error {
-	var out *rpc.Tile
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		t, err := s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
@@ -55,22 +54,20 @@ func (s *Store) SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) er
 		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, tileID)
-		return err
+		out, err := s.loadTile(ctx, tx, tileID)
+		if err != nil {
+			return err
+		}
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+		return nil
 	})
-	if err != nil {
-		return err
-	}
-	s.publish(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-	return nil
 }
 
 // SetURLString updates a URL tile's stored URL — called by the URLDriver
 // when the live tab navigates. Bumps the tile's version and publishes a
 // tile_changed event.
 func (s *Store) SetURLString(ctx context.Context, tileID int64, newURL string) error {
-	var out *rpc.Tile
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		t, err := s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
@@ -86,12 +83,11 @@ func (s *Store) SetURLString(ctx context.Context, tileID int64, newURL string) e
 		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, tileID)
-		return err
+		out, err := s.loadTile(ctx, tx, tileID)
+		if err != nil {
+			return err
+		}
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+		return nil
 	})
-	if err != nil {
-		return err
-	}
-	s.publish(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-	return nil
 }

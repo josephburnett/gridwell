@@ -22,8 +22,7 @@ func loadPreviewJPEG(ctx context.Context, tx *sql.Tx, tileID int64) ([]byte, err
 // MoveTile moves a tile either within its grid or across grids.
 func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
-	var events []rpc.Event
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
@@ -42,7 +41,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		if err != nil {
 			return err
 		}
-		events = append(events, srcPre.Events...)
+		*events = append(*events, srcPre.Events...)
 		tileID := srcPre.TargetTileID
 		srcGrid = srcPre.GridID
 
@@ -50,10 +49,10 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		if err != nil {
 			return err
 		}
-		dstGrid := dstSeq.grids[len(dstSeq.grids)-1]
-		if dstGrid != req.DestGridID {
-			return fmt.Errorf("%w: dest path leaf is %d not %d", ErrInvalidPath, dstGrid, req.DestGridID)
+		if err := checkLeafGrid(dstSeq, req.DestGridID); err != nil {
+			return err
 		}
+		dstGrid := dstSeq.grids[len(dstSeq.grids)-1]
 
 		crossGrid := dstGrid != srcGrid
 		if crossGrid {
@@ -61,7 +60,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			if err != nil {
 				return err
 			}
-			events = append(events, dstPre.Events...)
+			*events = append(*events, dstPre.Events...)
 			dstGrid = dstPre.GridID
 		} else {
 			dstGrid = srcGrid
@@ -108,18 +107,12 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			return err
 		}
 		if crossGrid {
-			events = append(events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: srcGrid, TileID: tileID}})
+			*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: srcGrid, TileID: tileID}})
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	for _, ev := range events {
-		s.publish(ev)
-	}
-	return out, nil
+	return out, err
 }
 
 // CloneTile duplicates a tile into a destination grid at (x, y). The new row
@@ -130,8 +123,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 // only the kind is carried over.
 func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
-	var events []rpc.Event
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
@@ -148,15 +140,15 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err != nil {
 			return err
 		}
-		if req.DestGridID != dstSeq.grids[len(dstSeq.grids)-1] {
-			return fmt.Errorf("%w: dest path leaf mismatch", ErrInvalidPath)
+		if err := checkLeafGrid(dstSeq, req.DestGridID); err != nil {
+			return err
 		}
 
 		dstPre, err := s.preWrite(ctx, tx, req.DestPath, 0)
 		if err != nil {
 			return err
 		}
-		events = append(events, dstPre.Events...)
+		*events = append(*events, dstPre.Events...)
 		dstGrid := dstPre.GridID
 
 		over, err := overlapsExisting(ctx, tx, dstGrid, req.X, req.Y, n.W, n.H)
@@ -228,16 +220,10 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	for _, ev := range events {
-		s.publish(ev)
-	}
-	return out, nil
+	return out, err
 }
 
 // UpdateText replaces a text tile's blob with new bytes.
@@ -246,8 +232,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
 	}
 	var out *rpc.Tile
-	var events []rpc.Event
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
@@ -259,7 +244,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		if err != nil {
 			return err
 		}
-		events = append(events, pre.Events...)
+		*events = append(*events, pre.Events...)
 
 		hash := hashBytes(req.Data)
 		newBlobID, err := putBlob(ctx, tx, hash, req.Data)
@@ -293,14 +278,8 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		if err != nil {
 			return err
 		}
-		events = append(events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	for _, ev := range events {
-		s.publish(ev)
-	}
-	return out, nil
+	return out, err
 }

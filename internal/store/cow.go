@@ -9,6 +9,15 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
+// checkLeafGrid returns an error if the path's leaf grid doesn't match wantGridID.
+func checkLeafGrid(seq gridSequence, wantGridID int64) error {
+	got := seq.grids[len(seq.grids)-1]
+	if got != wantGridID {
+		return fmt.Errorf("%w: path leaf grid is %d not %d", ErrInvalidPath, got, wantGridID)
+	}
+	return nil
+}
+
 // gridSequence is the sequence of grid ids from the root down to the leaf
 // grid the editing pane is in. grids[0] is always the current root grid;
 // grids[len-1] is the leaf. wells[i] is the well in grids[i] that points at
