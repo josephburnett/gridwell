@@ -170,15 +170,6 @@ func (c *urlPreviewCache) Get(tileID int64) (js.Value, bool) {
 	return img, true
 }
 
-// Pending reports whether a fetch or decode for tileID is in flight.
-// Drawing code uses this to skip the "no preview yet" placeholder
-// while the bytes are on the wire.
-func (c *urlPreviewCache) Pending(tileID int64) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.pending[tileID] || c.enqueued[tileID]
-}
-
 // MarkPending flags that a network fetch is in flight for tileID.
 // Returns false if a fetch was already in flight (caller should not
 // duplicate).
@@ -198,19 +189,6 @@ func (c *urlPreviewCache) ClearPending(tileID int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.pending, tileID)
-}
-
-// Invalidate drops the cached image for tileID (revoking its object
-// URL) so the next render forces a refetch. Used when a
-// `url_preview_updated` Subscribe event arrives.
-func (c *urlPreviewCache) Invalidate(tileID int64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if u, ok := c.urls[tileID]; ok {
-		js.Global().Get("URL").Call("revokeObjectURL", u)
-		delete(c.urls, tileID)
-	}
-	delete(c.images, tileID)
 }
 
 // Put decodes a JPEG payload into an HTMLImageElement and stores it

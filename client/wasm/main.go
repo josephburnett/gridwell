@@ -124,8 +124,7 @@ type App struct {
 
 	// urlPreview caches decoded HTMLImageElement values for URL tile
 	// previews (one image per tile, refreshed when GetTilePreview returns
-	// new bytes). Updated reactively on url_preview_updated Subscribe
-	// events.
+	// new bytes).
 	urlPreview *urlPreviewCache
 
 	// urlStreams holds the active /rpc/URLStream WebSocket connection
@@ -270,7 +269,6 @@ type dragState struct {
 	startScreenY   float64
 	curScreenX     float64
 	curScreenY     float64
-	clone          bool // no binding yet; placeholder for the clone gesture
 	started        bool
 	snapshotTile   rpc.Tile
 	originScreenX  float64

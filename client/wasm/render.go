@@ -411,7 +411,7 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
 	switch n.Kind {
 	case rpc.KindText:
-		a.drawMarkdownNode(n, x, y, w, h, parentCellSize, r, selected)
+		a.drawMarkdownNode(n, x, y, w, h, r, selected)
 		return
 	case rpc.KindURL:
 		a.drawURLTile(n, x, y, w, h, selected)
@@ -544,7 +544,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, r paneRect, selected bool) {
 	// Mode comes from the tile (persisted on the server); default to raw
 	// text for a never-opened file. A pane descended into this file
 	// overrides with its live mode.
@@ -635,7 +635,6 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h, parentCellSize float64, 
 	}
 
 	a.cctx.Call("restore")
-	_ = parentCellSize
 
 	// Outline: same palette as flat markdown fill so identity-by-color
 	// is preserved. Selected nodes get the gold outline on top.
@@ -804,8 +803,6 @@ func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY flo
 			continue
 		}
 		// Headings and paragraphs.
-		bold := b.Kind == markdown.BlockHeading1 || b.Kind == markdown.BlockHeading2 || b.Kind == markdown.BlockHeading3
-		_ = bold
 		lines := wrapInline(c, b.Spans, contentWidthLogical, fontPx, family, scale)
 		drawInlineLines(c, lines, x+st.pad*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
 		cursorY += lineHeight*float64(len(lines)) + st.gapAfter
@@ -884,7 +881,8 @@ func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
 // `w` is unused for now: text mode does not soft-wrap; long lines are
 // clipped at the right edge by the caller's clip rect.
 func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
-	_ = w
+	// w is intentionally unused: text mode does not soft-wrap; long lines
+	// are clipped at the right edge by the caller's clip rect.
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
 	lineHeight := fontPx * 1.35
@@ -1084,8 +1082,6 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 
 	// Three vertical ribs inside the body — recognisable trashcan
 	// detail even at small sizes.
-	rib := (bodyTop + bottom) / 2
-	_ = rib
 	ribSpacing := (bodyW - 2*taper) / 4
 	for i := 1; i <= 3; i++ {
 		rx := left + taper + ribSpacing*float64(i)

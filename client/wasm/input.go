@@ -498,7 +498,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					displayedCellSize: size,
 					targetCellSize:    size,
 				}
-				if d.tileID != 0 && !d.clone {
+				if d.tileID != 0 {
 					// Hide by ROW id, not ObjectID — clones share an
 					// ObjectID with the source, so a by-lineage hide
 					// makes every clone vanish whenever its sibling
@@ -696,36 +696,23 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	srcGridID := d.srcGridID
 	version := d.snapshotTile.Version
 
+	// Left-drag is always a move; clone is handled by the right-drag path
+	// (commitRightClone in right_button.go) and never reaches here.
 	go func() {
-		var status int
-		if d.clone {
-			req := rpc.CloneTileRequest{
-				Path:       rpc.Path{WellIDs: srcPath},
-				TileID:     d.tileID,
-				Version:    version,
-				DestGridID: dstGridID,
-				DestPath:   rpc.Path{WellIDs: dstPath},
-				X:          dropX,
-				Y:          dropY,
-			}
-			var resp rpc.TileResponse
-			status, _ = postJSON("/rpc/CloneTile", req, &resp)
-		} else {
-			req := rpc.MoveTileRequest{
-				Path:       rpc.Path{WellIDs: srcPath},
-				TileID:     d.tileID,
-				Version:    version,
-				DestGridID: dstGridID,
-				DestPath:   rpc.Path{WellIDs: dstPath},
-				X:          dropX,
-				Y:          dropY,
-			}
-			var resp rpc.TileResponse
-			status, _ = postJSON("/rpc/MoveTile", req, &resp)
+		req := rpc.MoveTileRequest{
+			Path:       rpc.Path{WellIDs: srcPath},
+			TileID:     d.tileID,
+			Version:    version,
+			DestGridID: dstGridID,
+			DestPath:   rpc.Path{WellIDs: dstPath},
+			X:          dropX,
+			Y:          dropY,
 		}
+		var resp rpc.TileResponse
+		status, _ := postJSON("/rpc/MoveTile", req, &resp)
 		if status != 200 {
 			if status == 409 {
-				a.refetchGridOnConflict(srcGridID, "MoveTile/CloneTile")
+				a.refetchGridOnConflict(srcGridID, "MoveTile")
 			}
 			// Server rejected the drop. Snap the ghost back to origin so
 			// the user sees the stone return rather than vanish.
@@ -1479,11 +1466,11 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	if d.template == tplURL {
 		a.ghost = nil
 		a.draw()
-		dp, dr := destPane, destRect
+		dp := destPane
 		dx, dy := dropX, dropY
 		a.openURLModal(
 			func(url string) {
-				a.createURLAtCell(dp, dr, url, dx, dy)
+				a.createURLAtCell(dp, url, dx, dy)
 				a.menuOpen = false
 				a.draw()
 			},
@@ -1505,18 +1492,17 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 
 	switch d.template {
 	case tplWell:
-		a.createWellAtCell(destPane, destRect, dropX, dropY)
+		a.createWellAtCell(destPane, dropX, dropY)
 	case tplMarkdown:
-		a.createTextAtCell(destPane, destRect, []byte{}, dropX, dropY)
+		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
 	case tplBlackHole:
-		a.createBlackHoleAtCell(destPane, destRect, dropX, dropY)
+		a.createBlackHoleAtCell(destPane, dropX, dropY)
 	}
 	a.menuOpen = false
 }
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
-func (a *App) createWellAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
-	_ = r
+func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
 	go func() {
@@ -1536,8 +1522,7 @@ func (a *App) createWellAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
 
 // createTextAtCell fires CreateText at the given cell with the given
 // initial bytes. Footprint is 1×1.
-func (a *App) createTextAtCell(p *pane.Pane, r paneRect, data []byte, cellX, cellY int64) {
-	_ = r
+func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
 	go func() {
@@ -1558,8 +1543,7 @@ func (a *App) createTextAtCell(p *pane.Pane, r paneRect, data []byte, cellX, cel
 
 // createURLAtCell fires CreateURL at the given cell with the given URL.
 // Footprint is 1×1.
-func (a *App) createURLAtCell(p *pane.Pane, r paneRect, url string, cellX, cellY int64) {
-	_ = r
+func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
 	go func() {
@@ -1580,8 +1564,7 @@ func (a *App) createURLAtCell(p *pane.Pane, r paneRect, url string, cellX, cellY
 
 // createBlackHoleAtCell fires CreateBlackHole at the given cell.
 // Footprint is 1×1.
-func (a *App) createBlackHoleAtCell(p *pane.Pane, r paneRect, cellX, cellY int64) {
-	_ = r
+func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
 	go func() {

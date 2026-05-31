@@ -12,11 +12,11 @@ import (
 // dropTarget describes where the cursor is currently pointing as a
 // destination for a drag-and-drop. Two flavors:
 //
-//   - parent-grid drop: inWell is nil; gridID is the focused leaf
-//     grid of `pane`, cellSize is the parent cell size.
-//   - well-child-grid drop: inWell is the open well that contains the
-//     cursor; gridID is well.ChildGridID, cellSize is the preview
-//     cell size, and path is the descent path into the well's interior.
+//   - parent-grid drop: gridID is the focused leaf grid of `pane`,
+//     cellSize is the parent cell size.
+//   - well-child-grid drop: gridID is the open well's ChildGridID,
+//     cellSize is the preview cell size, and path is the descent path
+//     into the well's interior.
 //
 // origin{X,Y} is the screen coordinate of cell (0, 0) in the target
 // grid — combined with cellSize and the cursor it's enough to compute
@@ -24,7 +24,6 @@ import (
 type dropTarget struct {
 	pane     *pane.Pane
 	paneRect paneRect
-	inWell   *rpc.Tile
 	gridID   int64
 	path     []int64
 	cellSize float64
@@ -78,7 +77,6 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 		return &dropTarget{
 			pane:     p,
 			paneRect: r,
-			inWell:   tileCopy(n),
 			gridID:   n.ChildGridID,
 			path:     path,
 			cellSize: cp.CellPx,

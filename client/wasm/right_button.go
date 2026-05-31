@@ -372,8 +372,8 @@ func (a *App) finishRightDrag(sx, sy float64) {
 
 // advanceCloneDrag drives the a.dragging ghost from a right-button
 // move. Same logic the left-drag onMouseMove path runs, narrowed to
-// the case we care about (d.tileID != 0, d.clone = true): cross the
-// drag threshold to materialize the ghost, then track the cursor.
+// the case we care about (d.tileID != 0): cross the drag threshold
+// to materialize the ghost, then track the cursor.
 func (a *App) advanceCloneDrag(sx, sy float64) {
 	d := a.dragging
 	if d == nil {
@@ -435,7 +435,6 @@ func (a *App) armRightClone(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float6
 	a.dragging = &dragState{
 		originPaneID:   p.ID,
 		tileID:         n.ID,
-		clone:          true,
 		startScreenX:   sx,
 		startScreenY:   sy,
 		curScreenX:     sx,
@@ -458,8 +457,7 @@ func (a *App) armRightClone(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float6
 // the threshold. If a.dragging was promoted to "started" by motion,
 // commit it as a CloneTile drop; otherwise just clear the priming
 // state so subsequent clicks aren't affected.
-func (a *App) commitTileCenter(rd *rightDragState, sx, sy float64) {
-	_ = rd
+func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
 	d := a.dragging
 	a.dragging = nil
 	if d == nil || !d.started {
@@ -806,9 +804,7 @@ func (a *App) drawTileHotspotOverlay(rd *rightDragState) {
 	tw := w / 3
 	th := h / 3
 	innerL := left + tw
-	innerR := left + 2*tw
 	innerT := top + th
-	innerB := top + 2*th
 
 	a.cctx.Set("strokeStyle", colorMuted)
 	a.cctx.Set("fillStyle", colorMuted)
@@ -848,12 +844,6 @@ func (a *App) drawTileHotspotOverlay(rd *rightDragState) {
 	drawHotspotArrow(a.cctx, left+w-tw/2, top+th/2, d, -d)
 	drawHotspotArrow(a.cctx, left+tw/2, top+h-th/2, -d, d)
 	drawHotspotArrow(a.cctx, left+w-tw/2, top+h-th/2, d, d)
-
-	// Make sure the inner-zone outline reads cleanly on top of the
-	// outer ring — it already does because we drew it second, but
-	// suppress any half-pixel bleed at the corners.
-	_ = innerR
-	_ = innerB
 }
 
 // drawHotspotArrow draws a simple line+head from (cx, cy) in direction
