@@ -6,6 +6,7 @@ import (
 	"math"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -1163,9 +1164,23 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	a.drawSplitZoneHint(rd)
 	pos, valid := splitClampedPosition(rd, rd.curX, rd.curY)
 	active := valid && splitGestureActive(rd, rd.curX, rd.curY)
+
+	// Find the pane being split for color resolution.
+	p := a.tree.FindPane(rd.splitPaneID)
+	var g *cache.Grid
+	gridOK := false
+	if p != nil {
+		gid := a.gridIDForPath(p.Path)
+		g, gridOK = a.c.Grid(gid)
+	}
+	urlLive := false
+	if p != nil {
+		urlLive = a.urlStreams[p.ID] != nil
+	}
+
 	color := colorSplitInactive
 	if active {
-		color = colorSplitActive
+		color = paneBorderColorFor(p, g, gridOK, true /* focused */, urlLive)
 	}
 	a.cctx.Set("strokeStyle", color)
 	a.cctx.Set("lineWidth", 2.0)

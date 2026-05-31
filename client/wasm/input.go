@@ -298,13 +298,22 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// The lower-right back button and outer margin always belong to Gridwell.
 		if a.isURLDescent(p) {
 			if pointInPlus(r, sx, sy) {
-				// Back button: always a Gridwell control. For live panes,
-				// send history-back; for frozen, it's a no-op (the "back"
-				// button only makes sense while the page is live).
+				// Corner button: always a Gridwell control.
+				// Live pane → history back; frozen pane → open URL stream.
 				if a.urlStreams[p.ID] != nil {
 					a.sendURLStreamInput(p.ID, urldriver.InputEvent{
 						Kind: urldriver.InputHistoryBack,
 					})
+				} else {
+					// Frozen: refresh (open URL stream), same as right-drag-down.
+					gid := a.gridIDForPath(p.Path)
+					if g, ok := a.c.Grid(gid); ok {
+						if tile, ok := g.Tiles[p.TextFocus]; ok {
+							rr := paneRectFor(a, p)
+							w, h := paneStreamSize(rr)
+							a.openURLStream(p, tile.ID, w, h)
+						}
+					}
 				}
 				return nil
 			}

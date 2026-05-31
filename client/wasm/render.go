@@ -308,7 +308,11 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	// so the text content can fill the pane.
 	if p.TextFocus != 0 {
 		if a.isURLDescent(p) {
-			a.drawURLBackButton(p, r)
+			if a.urlStreams[p.ID] != nil {
+				a.drawURLBackButton(p, r)
+			} else {
+				a.drawURLRefreshButton(p, r)
+			}
 		}
 	} else {
 		// + button is always available; gives the user an entry point
@@ -348,6 +352,24 @@ func (a *App) drawURLBackButton(_ *pane.Pane, r paneRect) {
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Set("lineCap", "butt")
 	a.cctx.Set("lineJoin", "miter")
+}
+
+// drawURLRefreshButton paints the lower-right button on a frozen URL-tile
+// descent. Click → open URL stream (same action as the right-drag-down
+// refresh gesture). Same circular chrome as drawURLBackButton so the
+// position is muscle-memory-compatible.
+func (a *App) drawURLRefreshButton(_ *pane.Pane, r paneRect) {
+	cx, cy := plusButtonCenter(r)
+	a.cctx.Set("fillStyle", colorPlusBg)
+	a.cctx.Call("beginPath")
+	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
+	a.cctx.Call("fill")
+	a.cctx.Set("strokeStyle", colorPaneBorder)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("stroke")
+
+	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
+	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPlusFg)
 }
 
 // drawGridLines paints faint lines at integer cell boundaries within the
