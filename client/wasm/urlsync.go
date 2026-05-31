@@ -122,12 +122,8 @@ func (a *App) textareaCursorRowCol() (int, int) {
 	}
 	val := a.fileTextarea.Get("value").String()
 	off := a.fileTextarea.Get("selectionStart").Int()
-	if off > len(val) {
-		off = len(val)
-	}
-	if off < 0 {
-		off = 0
-	}
+	off = min(off, len(val))
+	off = max(off, 0)
 	row := 0
 	col := 0
 	for i := 0; i < off; i++ {

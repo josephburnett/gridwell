@@ -45,12 +45,14 @@ type Tile struct {
 	Y        int64  `json:"y"`
 	W        int64  `json:"w"`
 	H        int64  `json:"h"`
-	// well-only
+	// well-only: ViewX/Y/Zoom is the child grid's framing — the preview
+	// frame, the descent target, and the ascent return value.
 	ViewX       int64   `json:"view_x,omitempty"`
 	ViewY       int64   `json:"view_y,omitempty"`
 	ViewZoom    float64 `json:"view_zoom,omitempty"`
 	ChildGridID int64   `json:"child_grid_id,omitempty"`
-	// text-only
+	// text-only: TextX/Y is the scroll offset; TextW/H is the window size;
+	// all four are doc-space px. TextMode is "rendered" or "text".
 	TextX    int64  `json:"text_x,omitempty"`
 	TextY    int64  `json:"text_y,omitempty"`
 	TextW    int64  `json:"text_w,omitempty"`

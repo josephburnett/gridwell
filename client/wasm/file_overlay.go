@@ -440,7 +440,7 @@ func (a *App) syncFileOverlayPosition() {
 // font size for pane p with rect r. Inset by fileMargin so a margin of
 // outer-ring space surrounds the textarea, and width is capped at the
 // 80-column reading width so long files don't stretch full-pane.
-func fileTextareaBox(p *pane.Pane, r paneRect) (left, top, width, height, fontPx float64) {
+func fileTextareaBox(_ *pane.Pane, r paneRect) (left, top, width, height, fontPx float64) {
 	// Fixed scale: the textarea font matches the canvas body size at
 	// fileFixedScale.
 	fontPx = 14.0 * fileFixedScale

@@ -318,7 +318,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 // drawURLBackButton paints the lower-right button on a URL-tile descent.
 // Click → history.back() on the descended Chromium tab. Same circular
 // chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton(p *pane.Pane, r paneRect) {
+func (a *App) drawURLBackButton(_ *pane.Pane, r paneRect) {
 	cx, cy := plusButtonCenter(r)
 	a.cctx.Set("fillStyle", colorPlusBg)
 	a.cctx.Call("beginPath")
@@ -544,7 +544,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, r paneRect, selected bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ paneRect, selected bool) {
 	// Mode comes from the tile (persisted on the server); default to raw
 	// text for a never-opened file. A pane descended into this file
 	// overrides with its live mode.
@@ -874,15 +874,12 @@ func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
 	c.Set("font", fmt.Sprintf("%s %s %.2fpx %s", style, weight, sizePx, family))
 }
 
-// drawMarkdownText paints `src` as raw monospace text at the same scale
-// the rendered view would use. Used both for the source-mode preview and
-// as a faint backdrop while the textarea overlay is painted on top.
-//
-// `w` is unused for now: text mode does not soft-wrap; long lines are
-// clipped at the right edge by the caller's clip rect.
-func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
-	// w is intentionally unused: text mode does not soft-wrap; long lines
-	// are clipped at the right edge by the caller's clip rect.
+// drawMarkdownText paints src as raw monospace text at the same scale the
+// rendered view would use. Used for the source-mode preview and as a faint
+// backdrop while the textarea overlay is painted on top. The w parameter is
+// unused: text mode does not soft-wrap; long lines are clipped by the
+// caller's clip rect.
+func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY float64) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
 	lineHeight := fontPx * 1.35

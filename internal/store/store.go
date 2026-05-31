@@ -219,9 +219,8 @@ func (s *Store) SetIDGenerator(f func() string) {
 }
 
 // SetURLDriver installs the URL-tile driver. Without one, all URL-tile
-// runtime operations (WakeURL, CaptureURL, URLStream open) return an
-// unavailable error. The driver is typically Chromium-backed in production
-// and a fake in tests.
+// runtime operations (preview capture, URLStream open) return an unavailable
+// error. The driver is Chromium-backed in production and a fake in tests.
 func (s *Store) SetURLDriver(d URLDriver) {
 	s.urlDriver = d
 }

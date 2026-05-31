@@ -22,8 +22,7 @@ func createURLTileForTest(t *testing.T, s *Store, root, x int64, url string) *rp
 }
 
 // TestCloneURLTile verifies that CloneTile of a URL tile carries the URL
-// and preview JPEG, and that the clone shares the source's object_id (the
-// old ForkURL semantics are gone — cloning is uniform across kinds).
+// and preview JPEG, and that the clone shares the source's object_id.
 func TestCloneURLTile(t *testing.T) {
 	s := newTestStore(t)
 	s.SetURLDriver(NewFakeURLDriver())

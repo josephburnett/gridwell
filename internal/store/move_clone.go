@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -67,10 +68,8 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		}
 
 		if n.Kind == rpc.KindWell {
-			for _, wid := range req.DestPath.WellIDs {
-				if wid == tileID {
-					return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
-				}
+			if slices.Contains(req.DestPath.WellIDs, tileID) {
+				return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
 			}
 		}
 

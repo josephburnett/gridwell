@@ -10,7 +10,7 @@ import (
 )
 
 // urlSchemeAllowed reports whether u is one of the schemes accepted by
-// URL tiles (spec §8.3 hard boundary). Only http and https.
+// URL tiles. Only http and https.
 func urlSchemeAllowed(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }

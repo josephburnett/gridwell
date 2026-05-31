@@ -1,10 +1,9 @@
 // Package markdown is the small layout pass used by the Gridwell client to
 // render markdown into a canvas.
 //
-// We do not use a full CommonMark parser because the rendering surface is a
-// canvas and the supported feature set (per spec §8.1) is intentionally tiny:
-// H1–H3, bold, italic, inline code, code blocks, blockquotes, unordered
-// lists, paragraphs. Anything else falls back to plain paragraph text.
+// The supported feature set is intentionally tiny: H1–H3, bold, italic,
+// inline code, code blocks, blockquotes, unordered lists, paragraphs.
+// Anything else falls back to plain paragraph text.
 //
 // The package is pure Go; output is a slice of layout primitives that the
 // canvas rendering code translates into fillText / fillRect calls.

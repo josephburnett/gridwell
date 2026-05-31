@@ -116,9 +116,13 @@ type App struct {
 	// swap. See right_button.go.
 	rightDrag *rightDragState
 
-	// paneStateStack is the saved (Cx, Cy, Zoom) triple for each pane,
-	// pushed on descent and popped on ascent, so ascent restores the
-	// exact viewport the user was looking at before they descended.
+	// paneStateStack stores the parent viewport (Cx, Cy, Zoom) saved
+	// just before each descent. On ascent, the saved state is popped and
+	// used to animate the parent back to where it was — so the parent
+	// grid doesn't jump. This is distinct from well.ViewX/Y/Zoom, which
+	// describes the child grid's framing and drives the preview, the
+	// descent target, and the ascent return value written back to the
+	// server. paneStateStack is session-local and not persisted.
 	// Indexed by pane id; the slice's length matches len(pane.Path).
 	paneStateStack map[string][]paneState
 
@@ -547,15 +551,15 @@ func (a *App) animationDone() {
 	a.hiddenPaneID = ""
 }
 
-// pushPaneState saves the given state on the stack for paneID. Called when
-// a descent begins so the matching ascent can restore exactly this state.
+// pushPaneState saves the parent viewport on the stack for paneID. Called at
+// the start of descent so the matching ascent can animate the parent back to
+// exactly this position.
 func (a *App) pushPaneState(paneID string, s paneState) {
 	a.paneStateStack[paneID] = append(a.paneStateStack[paneID], s)
 }
 
-// popPaneState removes and returns the most recent saved state for paneID,
-// or nil if the stack is empty (e.g. localStorage didn't carry the stack
-// across reload).
+// popPaneState removes and returns the most recent saved parent viewport for
+// paneID, or nil if the stack is empty (e.g. user reloaded mid-descent).
 func (a *App) popPaneState(paneID string) *paneState {
 	stack := a.paneStateStack[paneID]
 	if len(stack) == 0 {
@@ -588,15 +592,13 @@ func (a *App) startSSE() {
 	}))
 }
 
-// (No localStorage persistence.) The full UI state — split layout,
-// per-pane navigation, viewport — is intentionally session-local and
-// rebuilds itself from the URL on reload. The URL captures only the
-// focused pane; the layout (split tree) starts fresh as a single pane.
-//
-// In-memory state that is *not* persisted but does survive within a
-// session: paneStateStack (so within-session ascent restores the
-// exact pre-descent viewport). The rendered/raw file mode is persisted
-// on the tile (file_mode), so it survives reload.
+// Session-local state: the full UI state — split layout, per-pane
+// navigation, viewport — rebuilds from the URL on reload. The URL
+// captures only the focused pane's path and viewport; the split tree
+// starts fresh. paneStateStack survives within the session so ascent
+// restores the exact pre-descent parent viewport; it is not persisted
+// across reloads. Text tile mode (rendered/text) is persisted on the
+// tile row, so it survives reload.
 
 // gridIDForPath walks the pane's descent path and returns the grid id at the
 // leaf. Returns root if the path is empty or stale prefixes don't resolve.

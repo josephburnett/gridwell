@@ -7,6 +7,7 @@
 package cache
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -84,9 +85,7 @@ func (c *Cache) Grid(id int64) (*Grid, bool) {
 		return nil, false
 	}
 	out := &Grid{Meta: g.Meta, Tiles: make(map[int64]rpc.Tile, len(g.Tiles))}
-	for k, v := range g.Tiles {
-		out.Tiles[k] = v
-	}
+	maps.Copy(out.Tiles, g.Tiles)
 	return out, true
 }
 

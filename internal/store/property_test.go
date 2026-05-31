@@ -16,10 +16,6 @@ import (
 //
 // Where mutations need a tile version, we reload the tile right before the
 // call so we don't have to track versions through the random walk.
-//
-// A previous version of this test generated random MIME types; with the
-// new kind/version model that generator no longer makes sense and was
-// dropped.
 func TestPropertyRefcountAndOverlap(t *testing.T) {
 	const iters = 300
 	rng := rand.New(rand.NewPCG(0xa5cea5ce, 0x42))

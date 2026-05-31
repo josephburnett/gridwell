@@ -1,10 +1,8 @@
+// Package urldriver defines wire-format input events shared between the
+// wasm client and the URL-stream driver. This file has no non-stdlib imports:
+// the wasm build (GOOS=js GOARCH=wasm) compiles it, while the rod-backed
+// Driver and Session live in files guarded by //go:build !js.
 package urldriver
-
-// This file holds the wire types shared between the wasm client and
-// the server-side driver. It must NOT import anything that pulls in
-// OS-specific code, because the wasm build (GOOS=js GOARCH=wasm)
-// compiles it. The rod-backed Driver and Session live in files with
-// `//go:build !js` so they're excluded from the wasm build.
 
 // InputEventKind discriminates between mouse, key, and resize events
 // flowing from a URLStream WebSocket client into the driver.

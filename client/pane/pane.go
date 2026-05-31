@@ -11,8 +11,7 @@ import (
 )
 
 // Direction identifies a split orientation. "h" is a horizontal divider
-// (top/bottom panes); "v" is vertical (left/right). Matches the spec §10.4
-// JSON wire format.
+// (top/bottom panes); "v" is vertical (left/right).
 type Direction string
 
 const (
