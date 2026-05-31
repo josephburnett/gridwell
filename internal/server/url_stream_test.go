@@ -425,6 +425,137 @@ func (s *fakeSession) setCancelNextInputs(n int) {
 	s.cancelNextInputs = n
 }
 
+// waitForNSessions blocks until the fakeStreamer has at least n sessions,
+// then returns the nth-from-last (index n-1) session.
+func waitForNSessions(t *testing.T, fake *fakeStreamer, n int) *fakeSession {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		fake.mu.Lock()
+		count := len(fake.sessions)
+		fake.mu.Unlock()
+		if count >= n {
+			fake.mu.Lock()
+			s := fake.sessions[n-1]
+			fake.mu.Unlock()
+			return s
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("did not see %d sessions within 3s", n)
+	return nil
+}
+
+// TestURLStreamTakeoverClosesOldSession verifies that when a second WS client
+// connects for the same tile_id, the first session is closed (the old WS
+// receives a close frame) and the store persists the old session's data.
+func TestURLStreamTakeoverClosesOldSession(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, root, "https://example.com")
+
+	// Connect WS A.
+	ctxA, cancelA := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelA()
+	connA, _, err := websocket.Dial(ctxA, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial A: %v", err)
+	}
+
+	// Wait for session A to be registered.
+	sessionA := waitForSession(t, fake)
+	sessionA.setLastURL("https://example.com/fromA")
+
+	// Connect WS B for the same tile — this triggers the takeover.
+	ctxB, cancelB := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelB()
+	connB, _, err := websocket.Dial(ctxB, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial B: %v", err)
+	}
+	defer connB.Close(websocket.StatusNormalClosure, "")
+
+	// WS A must receive a close frame (takeover closes it cleanly).
+	connA.CloseRead(ctxA)
+	closedA := make(chan struct{})
+	go func() {
+		defer close(closedA)
+		_, _, _ = connA.Read(ctxA) // will return once the server sends close
+	}()
+	select {
+	case <-closedA:
+	case <-time.After(3 * time.Second):
+		t.Fatal("WS A did not receive a close frame within 3s of takeover")
+	}
+
+	// Session A must be closed and its data persisted.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !sessionA.isClosed() {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !sessionA.isClosed() {
+		t.Error("session A not closed after takeover")
+	}
+	if got := sessionA.captureCount(); got != 1 {
+		t.Errorf("session A CaptureFinal call count = %d, want 1", got)
+	}
+
+	// The store must reflect session A's last URL.
+	tile, err := srv.store.GetTile(context.Background(), tileID)
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if tile.URLString != "https://example.com/fromA" {
+		t.Errorf("tile url_string = %q, want %q", tile.URLString, "https://example.com/fromA")
+	}
+
+	// WS B is the active session — confirm a second fakeSession was created.
+	sessionB := waitForNSessions(t, fake, 2)
+	if sessionB == sessionA {
+		t.Error("session B is the same object as session A")
+	}
+	if sessionB.isClosed() {
+		t.Error("session B should still be open")
+	}
+}
+
+// TestURLStreamMinimumViewportClamp verifies that a viewport message with
+// dimensions below the minimums results in a Resize call at the clamped values.
+func TestURLStreamMinimumViewportClamp(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeStreamer()
+	srv.SetURLStreamer(fake)
+	tileID := createURLTileViaRPC(t, hs, root, "https://example.com")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, urlStreamURL(hs, tileID), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	s := waitForSession(t, fake)
+
+	// Send a viewport that is below both minimums.
+	payload, _ := json.Marshal(urlStreamMessage{Kind: "viewport", Width: 100, Height: 80})
+	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && s.resizeCount() == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := s.resizeCount(); got != 1 {
+		t.Fatalf("got %d resizes, want 1", got)
+	}
+	if w, h := s.lastResize(); w != minViewportW || h != minViewportH {
+		t.Errorf("resize = %dx%d, want %dx%d (minimums)", w, h, minViewportW, minViewportH)
+	}
+}
+
 // TestURLStreamSurvivesTransientCancel pins the fix for the first-click
 // target=_blank bug: an input that races a tab swap fails with
 // context.Canceled against the old (now-closing) tab. readLoop must NOT

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/josephburnett/gridwell/internal/store"
 )
@@ -32,6 +33,11 @@ type Server struct {
 	store       *store.Store
 	mux         *http.ServeMux
 	urlStreamer urlStreamer
+
+	// activeURLSessions tracks the single live URL session per tile_id.
+	// Protected by activeURLMu.
+	activeURLMu      sync.Mutex
+	activeURLSessions map[int64]urlSession
 }
 
 // New constructs a Server bound to the given store.

@@ -71,6 +71,9 @@ const (
 	defaultViewportW = 1280
 	defaultViewportH = 800
 
+	minViewportW = 400
+	minViewportH = 300
+
 	writeTimeout = 30 * time.Second
 )
 
@@ -106,6 +109,15 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Takeover: close any existing session for this tile before opening a new one.
+	s.activeURLMu.Lock()
+	if prev, ok := s.activeURLSessions[tileID]; ok {
+		delete(s.activeURLSessions, tileID)
+		// Close in a goroutine so we don't hold the lock during closeSession.
+		go s.closeSession(tileID, prev)
+	}
+	s.activeURLMu.Unlock()
+
 	session, err := s.urlStreamer.OpenSession(tileID, tile.URLString, defaultViewportW, defaultViewportH)
 	if err != nil {
 		log.Printf("[urlstream] open-err tile=%d err=%v", tileID, err)
@@ -113,6 +125,14 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[urlstream] open tile=%d", tileID)
+
+	// Register new session as the active one.
+	s.activeURLMu.Lock()
+	if s.activeURLSessions == nil {
+		s.activeURLSessions = make(map[int64]urlSession)
+	}
+	s.activeURLSessions[tileID] = session
+	s.activeURLMu.Unlock()
 
 	go func() {
 		<-session.Done()
@@ -127,7 +147,19 @@ func (s *Server) urlStream(w http.ResponseWriter, r *http.Request) {
 	cancel()
 	<-writerDone
 	_ = conn.Close(websocket.StatusNormalClosure, "")
-	s.closeSession(tileID, session)
+
+	// Only close-and-persist if this session is still the active one.
+	// A takeover may have already replaced it.
+	s.activeURLMu.Lock()
+	isCurrent := s.activeURLSessions[tileID] == session
+	if isCurrent {
+		delete(s.activeURLSessions, tileID)
+	}
+	s.activeURLMu.Unlock()
+
+	if isCurrent {
+		s.closeSession(tileID, session)
+	}
 }
 
 func writeLoop(ctx context.Context, conn *websocket.Conn, session urlSession, tileID int64, done chan<- struct{}) {
@@ -175,8 +207,15 @@ func readLoop(ctx context.Context, conn *websocket.Conn, session urlSession, til
 			continue
 		}
 		if msg.Kind == "viewport" {
-			if err := session.Resize(msg.Width, msg.Height); err != nil {
-				log.Printf("[urlstream] resize-err tile=%d w=%d h=%d err=%v", tileID, msg.Width, msg.Height, err)
+			w, h := msg.Width, msg.Height
+			if w < minViewportW {
+				w = minViewportW
+			}
+			if h < minViewportH {
+				h = minViewportH
+			}
+			if err := session.Resize(w, h); err != nil {
+				log.Printf("[urlstream] resize-err tile=%d w=%d h=%d err=%v", tileID, w, h, err)
 			}
 			continue
 		}
