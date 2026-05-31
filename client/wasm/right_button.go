@@ -171,14 +171,15 @@ func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
 		// through to split — keeps the gesture useful.
 		if d := a.dividerOnSide(p, region.Side()); d != nil {
 			a.rightDrag = &rightDragState{
-				kind:        rightDragResize,
-				startX:      sx,
-				startY:      sy,
-				curX:        sx,
-				curY:        sy,
-				targetSplit: d.Split,
-				splitDir:    d.Dir,
-				container:   paneRect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
+				kind:         rightDragResize,
+				startX:       sx,
+				startY:       sy,
+				curX:         sx,
+				curY:         sy,
+				originPaneID: p.ID,
+				targetSplit:  d.Split,
+				splitDir:     d.Dir,
+				container:    paneRect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
 			}
 			return
 		}
@@ -838,10 +839,13 @@ func (a *App) drawRightDragPreview() {
 	}
 	switch rd.kind {
 	case rightDragSplit:
+		a.drawPaneHotspotOverlay(rd)
 		a.drawSplitPreview(rd)
 	case rightDragSwap:
+		a.drawPaneHotspotOverlay(rd)
 		a.drawSwapPreview(rd)
 	case rightDragResize:
+		a.drawPaneHotspotOverlay(rd)
 		a.drawResizePreview(rd)
 	case rightDragTileCenter:
 		a.drawTileHotspotOverlay(rd)
@@ -849,6 +853,7 @@ func (a *App) drawRightDragPreview() {
 		a.drawTileHotspotOverlay(rd)
 		a.drawTileResizePreview(rd)
 	case rightDragURLRefresh:
+		a.drawPaneHotspotOverlay(rd)
 		a.drawURLRefreshPreview(rd)
 	}
 }
@@ -856,21 +861,17 @@ func (a *App) drawRightDragPreview() {
 // drawURLRefreshPreview paints the refresh gesture hint inside a URL-descent
 // pane. No text, no pill, no horizontal bar.
 //
-// A small circular-arrow refresh icon is drawn at the click point (rd.startX,
-// rd.startY). Below the icon, a grey filled rectangle grows downward as the
-// user drags, capped at urlRefreshThresholdPx. Colors switch from muted grey
-// to URL-purple once the drag crosses the threshold.
+// Only the dynamic grey progress fill is drawn here; the static refresh icon
+// comes from drawPaneHotspotOverlay which is painted beneath this.
 func (a *App) drawURLRefreshPreview(rd *rightDragState) {
 	const iconRadius = 14.0
-	const iconGap = 4.0   // gap between icon bottom and rect top
-	const rectW = 100.0   // width of the growing rectangle
+	const iconGap = 4.0 // gap between icon bottom and rect top
+	const rectW = 100.0 // width of the growing rectangle
 
 	past := rd.curY > rd.startY+urlRefreshThresholdPx
 
-	strokeColor := colorMuted
 	fillColor := "rgba(108,111,120,0.37)"
 	if past {
-		strokeColor = colorURLLiveLine
 		fillColor = "rgba(160,122,204,0.37)"
 	}
 
@@ -890,9 +891,96 @@ func (a *App) drawURLRefreshPreview(rd *rightDragState) {
 			rd.startX-rectW/2, rectTop,
 			rectW, rectH)
 	}
+}
 
-	// Refresh icon centred at the click point.
-	drawRefreshIcon(a.cctx, rd.startX, rd.startY, iconRadius, strokeColor)
+// drawPaneHotspotOverlay paints the affordance overlay for pane-management
+// gestures (split / swap / resize / urlRefresh). Mirrors drawTileHotspotOverlay
+// for the pane level. Strictly grey and informational — the active gesture's
+// own preview paints on top.
+//
+// Layout:
+//   - Outer rectangle outline: the pane's inner content area (inset by paneBorderPx).
+//   - Inner-third rectangle outline: the center 1/3 × 1/3 zone (matches ClassifyRegion
+//     swap zone and URL refresh zone).
+//   - Four cardinal split arrows, one per outer-edge band, pointing outward.
+//   - Center glyph: refresh icon for URL descents; swap arrows otherwise.
+func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
+	// Resolve the pane and its rect based on the gesture kind.
+	var paneID string
+	switch rd.kind {
+	case rightDragSplit:
+		paneID = rd.splitPaneID
+	case rightDragSwap:
+		paneID = rd.originPaneID
+	case rightDragResize:
+		paneID = rd.originPaneID
+	case rightDragURLRefresh:
+		paneID = rd.refreshPaneID
+	default:
+		return
+	}
+	if paneID == "" {
+		return
+	}
+	pr := a.paneRectByID(paneID)
+	if pr.W <= 0 || pr.H <= 0 {
+		return
+	}
+	p := a.tree.FindPane(paneID)
+
+	inset := paneBorderPx
+	r := paneRect{
+		X: pr.X + inset,
+		Y: pr.Y + inset,
+		W: pr.W - 2*inset,
+		H: pr.H - 2*inset,
+	}
+	if r.W <= 0 || r.H <= 0 {
+		return
+	}
+
+	a.cctx.Set("strokeStyle", colorMuted)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Set("lineCap", "round")
+	a.cctx.Set("lineJoin", "round")
+
+	// Outer rectangle outline.
+	a.cctx.Call("strokeRect", r.X+0.5, r.Y+0.5, r.W-1, r.H-1)
+
+	// Inner-third rectangle outline (matches swap / URL-refresh zone).
+	innerX := r.X + r.W/3
+	innerY := r.Y + r.H/3
+	innerW := r.W / 3
+	innerH := r.H / 3
+	a.cctx.Call("strokeRect", innerX+0.5, innerY+0.5, innerW-1, innerH-1)
+
+	// Four cardinal arrows, one in the middle of each outer-edge band,
+	// pointing outward toward the edge (communicates "drag here to split").
+	w := r.W
+	h := r.H
+	arrow := math.Min(w, h) * 0.10
+	if arrow < 8 {
+		arrow = 8
+	}
+	if arrow > 18 {
+		arrow = 18
+	}
+	drawHotspotArrow(a.cctx, r.X+w/2, r.Y+h/6, 0, -arrow)         // top
+	drawHotspotArrow(a.cctx, r.X+w/2, r.Y+h-h/6, 0, arrow)        // bottom
+	drawHotspotArrow(a.cctx, r.X+w/6, r.Y+h/2, -arrow, 0)         // left
+	drawHotspotArrow(a.cctx, r.X+w-w/6, r.Y+h/2, arrow, 0)        // right
+
+	// Center glyph.
+	cx := r.X + r.W/2
+	cy := r.Y + r.H/2
+	if p != nil && a.isURLDescent(p) {
+		drawRefreshIcon(a.cctx, cx, cy, 14.0, colorMuted)
+	} else {
+		drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
+	}
+
+	a.cctx.Set("lineCap", "butt")
+	a.cctx.Set("lineJoin", "miter")
 }
 
 // drawRefreshIcon draws a circular-arrow refresh icon centred at (cx, cy)
