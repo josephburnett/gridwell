@@ -1661,23 +1661,36 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	a.menuOpen = false
 }
 
+// postCreate fires a Create<kind> RPC in a goroutine and re-fetches the
+// grid on success. On 409 (overlap/version conflict) it forces a
+// grid refetch so the canvas reflects the server's view. `onSuccess`
+// runs after the refetch is scheduled and receives the created tile.
+//
+// `kind` is the bare method name ("CreateWell", "CreateText", …) used
+// for the URL and for the conflict-log breadcrumb.
+func (a *App) postCreate(kind string, gid int64, req any, onSuccess func(rpc.Tile)) {
+	go func() {
+		var resp rpc.TileResponse
+		status, _ := postJSON("/rpc/"+kind, req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, kind)
+			return
+		}
+		a.fetchGrid(gid)
+		if onSuccess != nil {
+			onSuccess(resp.Tile)
+		}
+	}()
+}
+
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
-	go func() {
-		req := rpc.CreateWellRequest{
-			Path:   rpc.Path{WellIDs: path},
-			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/CreateWell", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(gid, "CreateWell")
-			return
-		}
-		a.fetchGrid(gid)
-	}()
+	a.postCreate("CreateWell", gid, rpc.CreateWellRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	}, nil)
 }
 
 // createTextAtCell fires CreateText at the given cell with the given
@@ -1685,20 +1698,11 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
-	go func() {
-		req := rpc.CreateTextRequest{
-			Path:   rpc.Path{WellIDs: path},
-			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-			Data: data,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/CreateText", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(gid, "CreateText")
-			return
-		}
-		a.fetchGrid(gid)
-	}()
+	a.postCreate("CreateText", gid, rpc.CreateTextRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		Data: data,
+	}, nil)
 }
 
 // createURLAtCell fires CreateURL at the given cell with the given URL.
@@ -1711,24 +1715,15 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
 	paneID := p.ID
-	go func() {
-		req := rpc.CreateURLRequest{
-			Path:   rpc.Path{WellIDs: path},
-			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-			URL: url,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/CreateURL", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(gid, "CreateURL")
-			return
-		}
-		a.fetchGrid(gid)
+	a.postCreate("CreateURL", gid, rpc.CreateURLRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		URL: url,
+	}, func(tile rpc.Tile) {
 		// Auto-descend + auto-go-live: the user just typed a URL and
 		// confirmed, which is an unambiguous "load this now" intent.
 		// Find the focused pane and descend into the new tile, then
 		// open the live stream once the transition completes.
-		tile := resp.Tile
 		fp := a.tree.FindPane(paneID)
 		if fp == nil || fp.TextFocus != 0 {
 			// Pane is gone or already descended — skip.
@@ -1744,7 +1739,7 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 			w, h := paneStreamSize(rr)
 			a.openURLStream(ffp, tile.ID, w, h)
 		})
-	}()
+	})
 }
 
 // createBlackHoleAtCell fires CreateBlackHole at the given cell.
@@ -1752,19 +1747,10 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := append([]int64(nil), p.Path...)
-	go func() {
-		req := rpc.CreateBlackHoleRequest{
-			Path:   rpc.Path{WellIDs: path},
-			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/CreateBlackHole", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(gid, "CreateBlackHole")
-			return
-		}
-		a.fetchGrid(gid)
-	}()
+	a.postCreate("CreateBlackHole", gid, rpc.CreateBlackHoleRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	}, nil)
 }
 
 // mouseXY returns the click coordinates relative to the canvas.
