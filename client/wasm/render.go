@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -63,16 +64,6 @@ const (
 )
 
 const (
-	plusButtonRadius = 18
-	plusButtonInset  = 24
-
-	// Palette tile size clamps. The tile size in the palette tracks the
-	// pane's zoom (so the user sees roughly what they'll get), but is
-	// bounded so the palette stays usable at extreme zoom.
-	paletteMinTilePx = 48.0
-	paletteMaxTilePx = 128.0
-	paletteGapPx     = 8.0
-
 	// paneBorderPx is the visible thickness of the pane outline. Wide
 	// enough to be a target for right-drag (resize / close) without
 	// dominating the pane's interior. The right-button input layer
@@ -80,6 +71,12 @@ const (
 	// pixel-hunt the divider.
 	paneBorderPx = 6.0
 )
+
+// plusButtonRadius mirrors palette.Default().PlusRadius so the wasm
+// canvas drawing code (which arcs and fills the + button) can keep
+// using a typed numeric literal rather than reaching into the
+// palette.Config every time.
+const plusButtonRadius = 18
 
 // templateKind identifies one entry in the creation palette. Order
 // matters: it determines layout in the popover and the indices used
@@ -1398,19 +1395,38 @@ func (a *App) drawTriangle(cx, cy, angle, size float64) {
 	a.cctx.Call("fill")
 }
 
+// paletteLayoutFor builds the pure-go palette.Layout snapshot for a
+// given pane. The palette package owns the geometry; wasm only has to
+// pour the inputs in.
+func paletteLayoutFor(p *pane.Pane, r paneRect) palette.Layout {
+	return palette.Layout{
+		Cfg:      palette.Default(),
+		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
+		PaneZoom: p.Zoom,
+		NumTiles: len(templateKinds),
+	}
+}
+
 // plusButtonCenter returns the screen-space center of the + button for a
-// given pane.
+// given pane. The pane's zoom does not influence the + button, but
+// using paletteLayoutFor keeps every screen-space layout computation
+// going through one helper.
 func plusButtonCenter(r paneRect) (float64, float64) {
-	return r.X + r.W - plusButtonInset, r.Y + r.H - plusButtonInset
+	l := palette.Layout{
+		Cfg:  palette.Default(),
+		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
+	}
+	return l.PlusCenter()
 }
 
 // pointInPlus reports whether (x, y) lies within the + button for the given
 // pane rect.
 func pointInPlus(r paneRect, x, y float64) bool {
-	cx, cy := plusButtonCenter(r)
-	dx := x - cx
-	dy := y - cy
-	return dx*dx+dy*dy <= plusButtonRadius*plusButtonRadius
+	l := palette.Layout{
+		Cfg:  palette.Default(),
+		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
+	}
+	return l.PointInPlus(x, y)
 }
 
 // drawPlusButton paints the floating circular + button in the pane's lower
@@ -1441,48 +1457,16 @@ func (a *App) drawPlusButton(p *pane.Pane, r paneRect) {
 	a.cctx.Set("lineWidth", 1.0)
 }
 
-// paletteTilePx returns the per-tile size in screen pixels for the
-// palette over pane p, clamped to [paletteMinTilePx, paletteMaxTilePx].
-// Tracks the pane's current zoom so the palette tile previews roughly
-// the size of the placed tile, while staying usable at extreme zoom.
-func paletteTilePx(p *pane.Pane) float64 {
-	z := p.Zoom
-	if z <= 0 {
-		z = 1.0
-	}
-	t := cellPx * z
-	if t < paletteMinTilePx {
-		t = paletteMinTilePx
-	}
-	if t > paletteMaxTilePx {
-		t = paletteMaxTilePx
-	}
-	return t
-}
-
-// paletteRect returns the screen-space rectangle the creation palette
-// occupies for a given pane. The popover sits just above the + button,
-// anchored bottom-right (matching the pre-palette menu).
+// paletteRect is the wasm-side adapter for palette.Layout.PopoverRect.
 func paletteRect(p *pane.Pane, r paneRect) (x, y, w, h float64) {
-	tile := paletteTilePx(p)
-	w = float64(len(templateKinds))*tile + float64(len(templateKinds)+1)*paletteGapPx
-	h = tile + 2*paletteGapPx
-	cx, cy := plusButtonCenter(r)
-	x = cx + plusButtonRadius - w
-	y = cy - plusButtonRadius - h - 8
-	return
+	pop := paletteLayoutFor(p, r).PopoverRect()
+	return pop.X, pop.Y, pop.W, pop.H
 }
 
-// paletteTileRect returns the screen rect for the i'th template tile
-// inside the palette popover.
+// paletteTileRect is the wasm-side adapter for palette.Layout.TileRect.
 func paletteTileRect(p *pane.Pane, r paneRect, i int) (x, y, w, h float64) {
-	px, py, _, _ := paletteRect(p, r)
-	tile := paletteTilePx(p)
-	x = px + paletteGapPx + float64(i)*(tile+paletteGapPx)
-	y = py + paletteGapPx
-	w = tile
-	h = tile
-	return
+	tr := paletteLayoutFor(p, r).TileRect(i)
+	return tr.X, tr.Y, tr.W, tr.H
 }
 
 // drawPalette paints the creation popover: a background container and
@@ -1538,25 +1522,13 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 	}
 }
 
-// paletteTileIndexAt returns the index of the palette tile at (x, y),
-// or -1 if outside any tile (still inside palette gutter, or outside
-// the popover entirely).
+// paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.
 func paletteTileIndexAt(p *pane.Pane, r paneRect, x, y float64) int {
-	for i := range templateKinds {
-		tx, ty, tw, th := paletteTileRect(p, r, i)
-		if x >= tx && x <= tx+tw && y >= ty && y <= ty+th {
-			return i
-		}
-	}
-	return -1
+	return paletteLayoutFor(p, r).TileIndexAt(x, y)
 }
 
-// pointInPalette reports whether (x, y) lies anywhere inside the
-// palette popover (including gutters between tiles). Used to decide
-// whether a click outside the tiles should still be "swallowed" by
-// the palette (keep it open) vs. dismissing it.
+// pointInPalette is the wasm-side adapter for palette.Layout.PointInPopover.
 func pointInPalette(p *pane.Pane, r paneRect, x, y float64) bool {
-	mx, my, mw, mh := paletteRect(p, r)
-	return x >= mx && x <= mx+mw && y >= my && y <= my+mh
+	return paletteLayoutFor(p, r).PointInPopover(x, y)
 }
 
