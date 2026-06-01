@@ -69,11 +69,21 @@ func TestRawIsTheOnlyDropTarget(t *testing.T) {
 }
 
 func TestHrefForTile(t *testing.T) {
-	if got := HrefForTile(5); got != "/5" {
-		t.Errorf("HrefForTile(5) = %q, want /5", got)
+	cases := []struct {
+		origin string
+		id     int64
+		want   string
+	}{
+		{"", 5, "/5"},
+		{"http://localhost:8080", 5, "http://localhost:8080/5"},
+		{"http://localhost:8080/", 5, "http://localhost:8080/5"}, // trailing slash trimmed
+		{"https://gridwell.example.com", 12345, "https://gridwell.example.com/12345"},
 	}
-	if got := HrefForTile(12345); got != "/12345" {
-		t.Errorf("HrefForTile(12345) = %q", got)
+	for _, tc := range cases {
+		got := HrefForTile(tc.origin, tc.id)
+		if got != tc.want {
+			t.Errorf("HrefForTile(%q,%d) = %q, want %q", tc.origin, tc.id, got, tc.want)
+		}
 	}
 }
 
@@ -85,15 +95,20 @@ func TestLeafTileIDFromHref(t *testing.T) {
 		{"/5", 5},
 		{"/3/4/5", 5}, // descent path → leaf
 		{"/12345", 12345},
+		// Absolute URLs — the path component is what matters.
+		{"http://localhost:8080/5", 5},
+		{"http://localhost:8080/3/4/5", 5},
+		{"https://gridwell.example.com/42", 42},
 		{"", 0},
-		{"https://example.com", 0},      // external URL
-		{"example.com/5", 0},             // missing leading slash
+		{"https://example.com", 0},      // external URL, no path
+		{"example.com/5", 0},             // missing leading slash and no scheme
 		{"#anchor", 0},
 		{"mailto:x@example.com", 0},
 		{"/notanumber", 0},
 		{"/", 0},
 		{"/0", 0}, // tile id must be positive
 		{"  /5  ", 5}, // trims whitespace
+		{"http://localhost:8080/path/notnumeric", 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.href, func(t *testing.T) {
@@ -130,16 +145,28 @@ func TestDimensions(t *testing.T) {
 }
 
 func TestMarkdown(t *testing.T) {
-	got := Markdown(5, 192, 128, "text tile 5")
-	want := "[![text tile 5](/preview/tile/5?w=192&h=128)](/5)"
-	if got != want {
-		t.Errorf("Markdown = %q, want %q", got, want)
+	cases := []struct {
+		origin string
+		id     int64
+		alt    string
+		want   string
+	}{
+		{"", 5, "first heading", "[first heading](/5)"},
+		{"http://localhost:8080", 5, "Tab Title", "[Tab Title](http://localhost:8080/5)"},
+		{"http://localhost:8080", 5, "", "[](http://localhost:8080/5)"}, // empty alt allowed
+	}
+	for _, tc := range cases {
+		got := Markdown(tc.origin, tc.id, tc.alt)
+		if got != tc.want {
+			t.Errorf("Markdown(%q,%d,%q) = %q, want %q",
+				tc.origin, tc.id, tc.alt, got, tc.want)
+		}
 	}
 }
 
-func TestAlt(t *testing.T) {
-	if got := Alt("text", 5); got != "text tile 5" {
-		t.Errorf("Alt = %q", got)
+func TestDefaultAlt(t *testing.T) {
+	if got := DefaultAlt("text", 5); got != "text tile 5" {
+		t.Errorf("DefaultAlt = %q", got)
 	}
 }
 
@@ -297,9 +324,9 @@ func TestInsertAtComputedOffset(t *testing.T) {
 	if off != len("# heading") {
 		t.Fatalf("offset = %d, want %d", off, len("# heading"))
 	}
-	link := Markdown(5, 192, 128, "text tile 5")
+	link := Markdown("http://localhost:8080", 5, "first heading")
 	got := Insert(src, link, off)
-	wantPrefix := "# heading [![text tile 5]"
+	wantPrefix := "# heading [first heading](http://localhost:8080/5)"
 	if !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("got = %q, want prefix %q", got, wantPrefix)
 	}

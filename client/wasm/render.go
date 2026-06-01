@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -848,6 +849,12 @@ func wrapInline(c js.Value, spans []markdown.Span, contentWidthLogical, fontPx f
 			ew, _ := embedLogicalSize(sp)
 			return ew
 		}
+		// A plain link whose href is a tile path renders as an embed —
+		// measure as the embed would, not as its text label.
+		if sp.Style&markdown.StyleLink != 0 && embedpkg.LeafTileIDFromHref(sp.Href) != 0 {
+			ew, _ := embedLogicalSize(sp)
+			return ew
+		}
 		setFont(c, fontPx*scale, family, sp.Style&markdown.StyleBold != 0, sp.Style&markdown.StyleItalic != 0)
 		mt := c.Call("measureText", sp.Text)
 		// Convert measured pixels back to logical units.
@@ -902,6 +909,18 @@ func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLog
 				continue
 			}
 			if sp.Style&markdown.StyleLink != 0 {
+				// If the href looks like a tile descent path, paint a
+				// preview embed rather than a plain text link — that's
+				// how the plain `[alt](href)` form becomes an embed
+				// inside Gridwell while staying a normal link outside.
+				if drawEmbed != nil && embedpkg.LeafTileIDFromHref(sp.Href) != 0 {
+					ewLogical, ehLogical := embedLogicalSize(sp)
+					ew := ewLogical * scale
+					eh := ehLogical * scale
+					drawEmbed(curX, yBase+yPx, ew, eh, sp.Href, sp.Text)
+					curX += ew
+					continue
+				}
 				setFont(c, fontPx*scale, family,
 					sp.Style&markdown.StyleBold != 0,
 					sp.Style&markdown.StyleItalic != 0)

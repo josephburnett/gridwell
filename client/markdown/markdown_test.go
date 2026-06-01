@@ -273,6 +273,55 @@ func TestEmbedSizeFromSrcEdges(t *testing.T) {
 	}
 }
 
+func TestAltFromSource(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"empty source", "", ""},
+		{"only blanks", "\n\n\n", ""},
+		{"plain paragraph", "hello world", "hello world"},
+		{"H1 heading", "# Heading One\n\nbody", "Heading One"},
+		{"H2 heading", "## Sub", "Sub"},
+		{"first blank then paragraph", "\n\nfirst real line\nsecond line", "first real line"},
+		{"bold and italic stripped", "**bold** and *italic*", "bold and italic"},
+		{"inline code retained", "use `foo()` here", "use foo() here"},
+		{"link text retained", "click [here](https://x) please", "click here please"},
+		{"embed skipped, surrounding text kept", "before [![alt](src)](href) after", "before  after"},
+		{"clamped to 100 runes",
+			"x" + strings.Repeat("y", 200),
+			"x" + strings.Repeat("y", 99)},
+		{"heading wins over later non-blank", "# H\n\nlater", "H"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := AltFromSource(tc.src); got != tc.want {
+				t.Errorf("AltFromSource(%q) = %q, want %q", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWrapLinksAtomic(t *testing.T) {
+	// Plain markdown links should never split mid-link, even when the
+	// text is wide enough to wrap. Treats them the same as embeds.
+	spans := []Span{
+		{Text: "see ", Style: StyleNone},
+		{Text: "the first heading", Style: StyleLink, Href: "http://localhost:8080/5"},
+		{Text: " end", Style: StyleNone},
+	}
+	measure := func(sp Span) float64 { return float64(len(sp.Text)) }
+	lines := Wrap(spans, 10, measure) // forces wrap
+	for _, line := range lines {
+		for _, sp := range line {
+			if sp.Style&StyleLink != 0 && sp.Text != "the first heading" {
+				t.Errorf("link text got sliced: %+v", sp)
+			}
+		}
+	}
+}
+
 func TestWrapEmbedsAtomicNotSplit(t *testing.T) {
 	// Embed spans should never split mid-token. Confirm Wrap keeps an
 	// embed atomic even when measure returns a width larger than the

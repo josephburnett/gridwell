@@ -61,6 +61,46 @@ type Block struct {
 	Spans []Span
 }
 
+// AltFromSource derives a short, one-line alt-text from a markdown
+// document: the plain-text content of the first non-blank block, with
+// markdown markers stripped (so a "# Heading" becomes "Heading"). Used
+// to label tile-embed links when a text tile is dragged into a doc.
+// Returns "" when the source is empty or contains only blank blocks.
+//
+// The result is clamped to altMaxLen runes so long opening paragraphs
+// don't bloat the alt.
+func AltFromSource(src string) string {
+	blocks := Parse(src)
+	for _, b := range blocks {
+		if b.Kind == BlockBlank {
+			continue
+		}
+		var sb strings.Builder
+		for _, sp := range b.Spans {
+			if sp.Style&StyleEmbed != 0 {
+				continue
+			}
+			sb.WriteString(sp.Text)
+		}
+		s := strings.TrimSpace(sb.String())
+		if s == "" {
+			continue
+		}
+		return clampRunes(s, altMaxLen)
+	}
+	return ""
+}
+
+const altMaxLen = 100
+
+func clampRunes(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n])
+}
+
 // Parse splits source into Blocks. Inline parsing happens per-block.
 //
 // The parser is line-based and does not handle nested block structure
@@ -323,7 +363,11 @@ func Wrap(spans []Span, maxWidth float64, measure func(sp Span) float64) [][]Spa
 	// Embed spans pass through as a single atomic token.
 	var tokens []Span
 	for _, sp := range spans {
-		if sp.Style&StyleEmbed != 0 {
+		// Embeds and links are atomic tokens — the wrapper never splits
+		// a [text](href) mid-link, matching CommonMark's behavior and
+		// making the rendered preview embed (when the link is intercepted)
+		// not get sliced across lines.
+		if sp.Style&StyleEmbed != 0 || (sp.Style&StyleLink != 0 && sp.Href != "") {
 			tokens = append(tokens, sp)
 			continue
 		}

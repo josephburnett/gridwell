@@ -84,13 +84,16 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 // view. Matches the textarea (file_overlay.go: 14px font × 1.4 leading).
 const fileLineHeightPx = 14.0 * fileFixedScale * 1.4
 
-// commitEmbedDrop inserts a markdown image-in-link for the dragged tile
-// at the target offset and POSTs UpdateText.
+// commitEmbedDrop inserts a markdown plain link for the dragged tile at
+// the target offset and POSTs UpdateText. The link is anchored at the
+// browser's current origin so it resolves outside Gridwell too.
 func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	src := d.snapshotTile
-	width, height := embedpkg.Dimensions(src.W, src.H, int(cellPx), int(defaultEmbedW), int(defaultEmbedH))
-	alt := embedpkg.Alt(src.Kind, src.ID)
-	link := embedpkg.Markdown(src.ID, width, height, alt)
+	alt := src.AltText
+	if alt == "" {
+		alt = embedpkg.DefaultAlt(src.Kind, src.ID)
+	}
+	link := embedpkg.Markdown(browserOrigin(), src.ID, alt)
 
 	gid := a.gridIDForPath(dt.pane.Path)
 	g, hasGrid := a.c.Grid(gid)
@@ -145,6 +148,21 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 			a.refetchGridOnConflict(gid, "UpdateText")
 		}
 	}()
+}
+
+// browserOrigin returns window.location.origin (e.g.
+// "http://localhost:8080") so links can be anchored absolutely. An
+// empty result falls back to same-origin relative paths.
+func browserOrigin() string {
+	loc := js.Global().Get("location")
+	if !loc.Truthy() {
+		return ""
+	}
+	o := loc.Get("origin")
+	if !o.Truthy() {
+		return ""
+	}
+	return o.String()
 }
 
 // drawGhostLinkBadge paints the chain-link glyph over the dragged ghost

@@ -14,6 +14,7 @@ package embed
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -68,22 +69,39 @@ func ClassifyDocTarget(s PaneState) DocTarget {
 }
 
 // HrefForTile builds the markdown link href for an embed pointing at a
-// tile by id. v1 form: a leaf reference "/N". The rendered-mode click
-// handler resolves it via the same descent-path scheme used in pane
-// URLs.
-func HrefForTile(tileID int64) string {
-	return "/" + strconv.FormatInt(tileID, 10)
+// tile by id, anchored at `origin` (e.g., "http://localhost:8080") so
+// the link resolves when the doc is rendered outside Gridwell. An empty
+// origin produces a same-origin relative href ("/N").
+func HrefForTile(origin string, tileID int64) string {
+	leaf := "/" + strconv.FormatInt(tileID, 10)
+	if origin == "" {
+		return leaf
+	}
+	return strings.TrimRight(origin, "/") + leaf
 }
 
-// LeafTileIDFromHref parses a markdown link href as a Gridwell descent
-// path and returns the leaf tile id. Returns 0 for hrefs that don't
-// match the scheme (external URLs, anchors, malformed paths). Hrefs
-// that aren't a single-slash form fall back to scanning the path
-// segments for the rightmost numeric value, so a tile moved between
-// grids after a link was inserted is still resolvable by id.
+// LeafTileIDFromHref parses a markdown link href and returns the leaf
+// tile id if it looks like a Gridwell descent path. Accepts:
+//
+//   - same-origin relative paths: "/5", "/3/4/5"
+//   - absolute URLs: "http://localhost:8080/5", "https://host/3/4/5"
+//
+// Returns 0 for anything else (external links with non-numeric paths,
+// anchors, malformed input). Origin is not validated — any URL whose
+// path is a chain of positive integers is treated as a tile link.
+// Cross-origin "false positives" are rare in practice and degrade
+// gracefully: if no tile with that id exists the embed renders as
+// "missing".
 func LeafTileIDFromHref(href string) int64 {
 	href = strings.TrimSpace(href)
-	if href == "" || !strings.HasPrefix(href, "/") {
+	if href == "" {
+		return 0
+	}
+	// Strip scheme + authority if present so we work with the path.
+	if u, err := url.Parse(href); err == nil && u.Scheme != "" {
+		href = u.Path
+	}
+	if !strings.HasPrefix(href, "/") {
 		return 0
 	}
 	st, err := gwurl.Decode(href)
@@ -122,18 +140,27 @@ func Dimensions(cellsW, cellsH int64, cellPx, defaultW, defaultH int) (int, int)
 	return w, h
 }
 
-// Markdown returns the full markdown image-in-link string for an embed
-// of the given tile at the given pixel dimensions. The src URL points
-// at the /preview/tile/N server endpoint; the link href is the leaf
-// descent path. The alt text is informational (shown in external
-// renderers on broken images).
-func Markdown(tileID int64, w, h int, alt string) string {
-	return fmt.Sprintf("[![%s](/preview/tile/%d?w=%d&h=%d)](/%d)", alt, tileID, w, h, tileID)
+// Markdown returns the markdown plain-link string for an embed pointing
+// at the given tile, anchored at `origin`. Inside Gridwell the
+// rendered-mode renderer intercepts hrefs whose path looks like a
+// descent chain and paints a preview embed; outside Gridwell the link
+// renders as a normal hyperlink with the alt text as its label.
+//
+// The plain `[alt](href)` form replaces the older `[![alt](src)](href)`
+// image-in-link: the only place the image was ever fetched was an
+// external viewer (e.g. VS Code) with a local Gridwell server running,
+// and there it broke without an absolute URL anyway. Plain link with
+// absolute origin degrades cleanly: working clickable link everywhere,
+// with a preview embed reserved for the inside-Gridwell view.
+func Markdown(origin string, tileID int64, alt string) string {
+	return fmt.Sprintf("[%s](%s)", alt, HrefForTile(origin, tileID))
 }
 
-// Alt returns a human-readable alt text for an embed referencing a
-// tile of the given kind and id.
-func Alt(kind string, tileID int64) string {
+// DefaultAlt returns the fallback alt text used when a tile has no
+// stored alt yet (a freshly-created text tile, a never-visited URL).
+// Should be replaced by the per-tile stored alt at insert time when
+// available.
+func DefaultAlt(kind string, tileID int64) string {
 	return fmt.Sprintf("%s tile %d", kind, tileID)
 }
 
