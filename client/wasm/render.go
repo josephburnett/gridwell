@@ -52,6 +52,9 @@ const (
 	colorURLLiveLine = "#a07acc"
 	colorBlackHoleFill     = "#3a1c1a"
 	colorBlackHoleLine     = "#a06a5a"
+	// colorBlackHoleSwatchBg fills the palette / live blackhole swatch.
+	// Pure black so concentric grey rings read as event horizons.
+	colorBlackHoleSwatchBg = "#000000"
 	colorLocked            = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -61,7 +64,15 @@ const (
 	colorMenuBg      = "#16181f"
 	colorMenuItemHi  = "#e8e9ee"
 	colorMuted       = "#6c6f78"
+	// Inline-markdown body colors used by the rendered-markdown
+	// drawing path (drawInlineLines, drawMarkdownRendered).
+	colorMarkdownBody    = "#d8d9de"
+	colorMarkdownCodeBg2 = "#3a4658"
 )
+
+// colorBlackHoleRings is the gradient applied to the swatch's three
+// concentric outlines, outer → inner.
+var colorBlackHoleRings = [3]string{"#1f2229", "#2a2f3a", "#3a4b5a"}
 
 const (
 	// paneBorderPx is the visible thickness of the pane outline. Wide
@@ -867,7 +878,7 @@ func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLog
 				} else {
 					// Preview / no-embed context: render the alt text inline.
 					setFont(c, fontPx*scale, family, false, true)
-					c.Set("fillStyle", "#6c6f78")
+					c.Set("fillStyle", colorMuted)
 					label := sp.Alt
 					if label == "" {
 						label = "[embed]"
@@ -911,11 +922,11 @@ func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLog
 			}
 			setFont(c, fontPx*scale, family2, bold, italic)
 			if code {
-				c.Set("fillStyle", "#3a4658")
+				c.Set("fillStyle", colorMarkdownCodeBg2)
 				w := c.Call("measureText", sp.Text).Get("width").Float()
 				c.Call("fillRect", curX-2, yBase+yPx, w+4, lineHeight*scale)
 			}
-			c.Set("fillStyle", "#d8d9de")
+			c.Set("fillStyle", colorMarkdownBody)
 			c.Call("fillText", sp.Text, curX, yBase+yPx)
 			w := c.Call("measureText", sp.Text).Get("width").Float()
 			curX += w
@@ -1263,7 +1274,7 @@ func drawGlobeGlyph(c js.Value, x, y, w, h float64, color string) {
 // suggest event horizons. Used both for palette icon and for live
 // tiles in a grid. No outline — the rings imply the boundary.
 func drawBlackHoleSwatch(c js.Value, x, y, w, h float64) {
-	c.Set("fillStyle", "#000000")
+	c.Set("fillStyle", colorBlackHoleSwatchBg)
 	c.Call("fillRect", x, y, w, h)
 	cx := x + w/2
 	cy := y + h/2
@@ -1274,8 +1285,7 @@ func drawBlackHoleSwatch(c js.Value, x, y, w, h float64) {
 	c.Set("lineWidth", 1.0)
 	for i, frac := range []float64{0.85, 0.6, 0.35} {
 		r := rMax * frac
-		shade := []string{"#1f2229", "#2a2f3a", "#3a4b5a"}[i]
-		c.Set("strokeStyle", shade)
+		c.Set("strokeStyle", colorBlackHoleRings[i])
 		c.Call("beginPath")
 		c.Call("arc", cx, cy, r, 0.0, 2*math.Pi)
 		c.Call("stroke")
