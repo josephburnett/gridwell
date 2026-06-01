@@ -1201,41 +1201,32 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 // the descended tile isn't cached yet, we fall back to the generic
 // blue so the user still sees "descended into something".
 func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
-	if p.TextFocus != 0 {
-		if gridOK {
-			if file, ok := g.Tiles[p.TextFocus]; ok {
-				switch file.Kind {
-				case rpc.KindURL:
-					if urlLive {
-						// Live stream: brighter/more-saturated purple to
-						// distinguish from the frozen preview state.
-						return colorURLLiveLine
-					}
-					if focused {
-						return colorURLLine
-					}
-					return colorURLLineFaded
-				case rpc.KindText:
-					if focused {
-						return colorMarkdownLine
-					}
-					return colorMarkdownLineFaded
-				}
-			}
-		}
-		// Unknown tile kind: generic descent blue.
-		if focused {
-			return colorFocusBorder
-		}
-		return colorFocusBorderFaded
+	in := pane.BorderInput{
+		HasTextFocus: p.TextFocus != 0,
+		DescentDepth: len(p.Path),
+		Focused:      focused,
+		URLLive:      urlLive,
 	}
-	if len(p.Path) > 0 {
-		if focused {
-			return colorFocusBorder
+	if p.TextFocus != 0 && gridOK {
+		if tile, ok := g.Tiles[p.TextFocus]; ok {
+			in.TileKnown = true
+			in.TileKind = tile.Kind
 		}
-		return colorFocusBorderFaded
 	}
-	return colorRootBorder
+	return pane.BorderColor(in, paneBorderColors)
+}
+
+// paneBorderColors bundles the wasm renderer's color constants for the
+// pure pane.BorderColor decision function.
+var paneBorderColors = pane.BorderColors{
+	Focused:      colorFocusBorder,
+	FocusedFaded: colorFocusBorderFaded,
+	Root:         colorRootBorder,
+	Text:         colorMarkdownLine,
+	TextFaded:    colorMarkdownLineFaded,
+	URL:          colorURLLine,
+	URLFaded:     colorURLLineFaded,
+	URLLive:      colorURLLiveLine,
 }
 
 // drawDocumentGlyph paints a "page with text lines" icon centered in
