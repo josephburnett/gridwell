@@ -158,6 +158,20 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	}
 	newSrc := srcText[:off] + pre + link + post + srcText[off:]
 
+	// Synchronously reflect the change before the RPC roundtrip: replace
+	// the cached blob under the existing BlobID so canvas renders see
+	// fresh content immediately, and update the textarea if the focused
+	// pane is showing this same doc — otherwise the textarea keeps its
+	// stale value and the user sees the old text return on next click.
+	if tile.BlobID != 0 {
+		a.c.PutBlob(tile.BlobID, []byte(newSrc))
+	}
+	if fp := a.tree.FocusedPane(); fp != nil &&
+		fp.TextFocus == dt.tileID && fp.TextMode == rpc.TextModeText &&
+		!a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
+		a.fileTextarea.Set("value", newSrc)
+	}
+
 	path := append([]int64(nil), dt.pane.Path...)
 	go func() {
 		req := rpc.UpdateTextRequest{
@@ -167,19 +181,20 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 			Data:    []byte(newSrc),
 		}
 		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/UpdateText", req, &resp)
+		status, err := postJSON("/rpc/UpdateText", req, &resp)
+		if err == nil && status == 200 {
+			// The server's new tile has a fresh content-hashed BlobID;
+			// seed the cache under it so the post-fetch render doesn't
+			// have to round-trip for the blob.
+			a.c.PutBlob(resp.Tile.BlobID, []byte(newSrc))
+			a.fetchGrid(gid)
+			if d.srcGridID != gid {
+				a.fetchGrid(d.srcGridID)
+			}
+			return
+		}
 		if status == 409 {
 			a.refetchGridOnConflict(gid, "UpdateText")
-			return
-		}
-		if status != 200 {
-			return
-		}
-		a.fetchGrid(gid)
-		// If the source tile's grid differs, refresh it too so any
-		// follow-on updates see the latest version.
-		if d.srcGridID != gid {
-			a.fetchGrid(d.srcGridID)
 		}
 	}()
 }
