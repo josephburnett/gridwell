@@ -8,7 +8,7 @@ import (
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/zoomtrans"
+	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -40,82 +40,51 @@ func (a *App) scheduleFileSave() {
 // what limits user content in live mode, so calibrating ViewZoom
 // against it makes the preview text fill the file cell at the same
 // fraction as live text fills the inner-box.
+// fileOvertakeZoom is a thin adapter over panebox.OvertakeZoom that
+// bundles the wasm-renderer's constants (fileSideInset + cellPx).
 func fileOvertakeZoom(r pane.Rect, fileW, fileH int64) float64 {
-	innerW := r.W - 2*fileSideInset
-	innerH := r.H - 2*fileSideInset
-	if innerW <= 0 || innerH <= 0 {
-		return 1
-	}
-	return zoomtrans.Fit(fileW, fileH, innerW, innerH, cellPx)
+	return panebox.OvertakeZoom(r, fileW, fileH, fileSideInset, cellPx)
 }
-
 
 // fileInnerBox returns the screen rectangle of a file-focused pane's
 // inner area: the light-grey reading region that the textarea sits on
-// (text mode) or the rendered markdown fills (rendered mode). Bounded
-// horizontally by the 80-column reading width so wide panes don't
-// stretch text to the full pane width. The same rect is used by the
-// canvas painter, the markdown renderer, the textarea positioner, and
-// the click hit-test so the user's "inside vs. outside" mental model
-// is consistent across all three.
+// (text mode) or the rendered markdown fills (rendered mode). The same
+// rect is used by the canvas painter, the markdown renderer, the
+// textarea positioner, and the click hit-test so the user's "inside
+// vs. outside" mental model is consistent across all three.
 //
 // URL tiles use the full pane content area (paneContentBox) instead
 // of this narrower textarea-shaped box — see drawURLTileInPane and
 // the mouse/wheel handlers' isURLDescent branches.
-func fileInnerBox(p *pane.Pane, r pane.Rect) (x, y, w, h float64) {
-	left, top, width, height, _ := fileTextareaBox(p, r)
-	return left, top, width, height
+func fileInnerBox(_ *pane.Pane, r pane.Rect) (x, y, w, h float64) {
+	b := panebox.InnerBox(r, fileSideInset)
+	return b.X, b.Y, b.W, b.H
 }
 
 // paneContentBox returns the rectangle a URL tile renders into when
 // descended: the full pane minus the pane outline thickness. URL tiles
 // fill the pane edge-to-edge — the wide textarea-style margin used by
-// markdown files (fileMargin) makes no sense here, since web pages
-// have their own internal layout and want all the pixels they can get.
-// Ascent out of a URL tile is via the Escape key.
+// markdown files makes no sense here, since web pages have their own
+// internal layout and want all the pixels they can get. Ascent out of
+// a URL tile is via the Escape key.
 func paneContentBox(r pane.Rect) (x, y, w, h float64) {
-	const m = paneBorderPx
-	x = r.X + m
-	y = r.Y + m
-	w = r.W - 2*m
-	h = r.H - 2*m
-	if w < 0 {
-		w = 0
-	}
-	if h < 0 {
-		h = 0
-	}
-	return
+	b := panebox.ContentBox(r, paneBorderPx)
+	return b.X, b.Y, b.W, b.H
 }
 
-// pointInPaneContent reports whether (sx, sy) lies inside the
-// pane's full content rectangle. Mirrors pointInFileInner but for
-// the wider URL-tile content surface.
+// pointInPaneContent / pointInURLCenter / pointInFileInner are thin
+// adapters over the panebox hit-tests, supplying the wasm renderer's
+// border / inset constants.
 func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
-	x, y, w, h := paneContentBox(r)
-	return sx >= x && sx < x+w && sy >= y && sy < y+h
+	return panebox.PointInContent(r, paneBorderPx, sx, sy)
 }
 
-// pointInURLCenter reports whether (sx, sy) lies inside the middle
-// 1/3 × 1/3 of paneContentBox(r). Used by onRightDown to restrict the
-// URL refresh gesture arm zone to the centre of the content area, so
-// right-clicks in the outer band still reach the pane-management
-// region classifier (split / swap / resize).
 func pointInURLCenter(r pane.Rect, sx, sy float64) bool {
-	x, y, w, h := paneContentBox(r)
-	x1 := x + w/3
-	x2 := x + 2*w/3
-	y1 := y + h/3
-	y2 := y + 2*h/3
-	return sx >= x1 && sx < x2 && sy >= y1 && sy < y2
+	return panebox.PointInURLCenter(r, paneBorderPx, sx, sy)
 }
 
-// pointInFileInner reports whether (sx, sy) lies inside the
-// file-focused pane's inner box. Outside the box (but still inside
-// the pane) is the outer ring with grid-style mouse rules.
-func pointInFileInner(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	ix, iy, iw, ih := fileInnerBox(p, r)
-	return sx >= ix && sx < ix+iw && sy >= iy && sy < iy+ih
+func pointInFileInner(_ *pane.Pane, r pane.Rect, sx, sy float64) bool {
+	return panebox.PointInInner(r, fileSideInset, sx, sy)
 }
 
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
@@ -479,24 +448,11 @@ func (a *App) syncFileOverlayPosition() {
 }
 
 // fileTextareaBox returns the textarea overlay's screen rectangle and
-// font size for pane p with rect r. Inset by fileMargin so a margin of
-// outer-ring space surrounds the textarea, and width is capped at the
-// 80-column reading width so long files don't stretch full-pane.
+// font size for pane p with rect r. Adapter over panebox.TextareaBox
+// supplying the wasm renderer's fixed-scale constants.
 func fileTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
-	// Fixed scale: the textarea font matches the canvas body size at
-	// fileFixedScale.
-	fontPx = 14.0 * fileFixedScale
-	left = r.X + fileSideInset
-	top = r.Y + fileSideInset
-	width = r.W - 2*fileSideInset
-	height = r.H - 2*fileSideInset
-	if width < 0 {
-		width = 0
-	}
-	if height < 0 {
-		height = 0
-	}
-	return
+	b, fp := panebox.TextareaBox(r, fileSideInset, 14.0, fileFixedScale)
+	return b.X, b.Y, b.W, b.H, fp
 }
 
 // fileSideInset is the thin gap between the pane edge and the text
