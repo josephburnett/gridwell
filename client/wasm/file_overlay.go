@@ -560,18 +560,11 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 		a.c.PutBlob(file.BlobID, []byte(buf))
 	}
 	go func() {
-		req := rpc.UpdateTextRequest{
+		a.postUpdateText(gid, rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: p.Path},
 			TileID:  file.ID,
 			Version: file.Version,
 			Data:    []byte(buf),
-		}
-		var resp rpc.TileResponse
-		status, err := postJSON("/rpc/UpdateText", req, &resp)
-		if err == nil {
-			a.c.PutBlob(resp.Tile.BlobID, []byte(buf))
-		} else if status == 409 {
-			a.refetchGridOnConflict(gid, "UpdateText")
-		}
+		}, []byte(buf))
 	}()
 }

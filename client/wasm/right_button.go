@@ -605,7 +605,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 		return
 	}
 	gid := a.gridIDForPath(p.Path)
-	req := rpc.ResizeTileRequest{
+	a.postTileMutate("ResizeTile", gid, rpc.ResizeTileRequest{
 		Path:    rpc.Path{WellIDs: slices.Clone(p.Path)},
 		TileID:  n.ID,
 		Version: n.Version,
@@ -613,15 +613,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 		Y:       rd.tileNewY,
 		W:       rd.tileNewW,
 		H:       rd.tileNewH,
-	}
-	go func() {
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/ResizeTile", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(gid, "ResizeTile")
-		}
-		a.fetchGrid(gid)
-	}()
+	}, nil)
 }
 
 // commitResize applies the final ratio and, if either side is below

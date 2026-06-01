@@ -129,24 +129,18 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 
 	path := slices.Clone(dt.pane.Path)
 	go func() {
-		req := rpc.UpdateTextRequest{
+		_, ok := a.postUpdateText(gid, rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: path},
 			TileID:  dt.tileID,
 			Version: dt.version,
 			Data:    []byte(newSrc),
-		}
-		var resp rpc.TileResponse
-		status, err := postJSON("/rpc/UpdateText", req, &resp)
-		if err == nil && status == 200 {
-			a.c.PutBlob(resp.Tile.BlobID, []byte(newSrc))
-			a.fetchGrid(gid)
-			if d.srcGridID != gid {
-				a.fetchGrid(d.srcGridID)
-			}
+		}, []byte(newSrc))
+		if !ok {
 			return
 		}
-		if status == 409 {
-			a.refetchGridOnConflict(gid, "UpdateText")
+		a.fetchGrid(gid)
+		if d.srcGridID != gid {
+			a.fetchGrid(d.srcGridID)
 		}
 	}()
 }
