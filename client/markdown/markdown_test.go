@@ -216,6 +216,96 @@ func TestParseMalformedLinkPassesThrough(t *testing.T) {
 	}
 }
 
+// These exercise the error paths of the link / image / embed parsers
+// so an unterminated bracket doesn't crash and doesn't pretend to have
+// found an embed. The parser is intentionally lenient — when it finds
+// link-shaped text-in-brackets, it'll classify as a link — so the
+// strict invariant we want to pin is just "no embed span emerges from
+// shapes that lack both the bracket-paren-bracket-paren run."
+func TestParseEmbedRequiresAllTokens(t *testing.T) {
+	cases := []string{
+		"[!incomplete",
+		"[![alt](no-href",
+		"[![",
+		"![bare image with no close",
+		"![alt](unclosed",
+		"![alt no bracket close",
+		"[link no close",
+		"[link](unclosed",
+		"[link]missing-paren",
+	}
+	for _, c := range cases {
+		t.Run(c, func(t *testing.T) {
+			bs := Parse(c)
+			for _, b := range bs {
+				for _, sp := range b.Spans {
+					if sp.Style&StyleEmbed != 0 {
+						t.Errorf("malformed input produced embed span: %+v", sp)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestEmbedSizeFromSrcEdges(t *testing.T) {
+	cases := []struct {
+		src   string
+		w, h  int
+	}{
+		{"/preview/tile/5", 0, 0},          // no query
+		{"/preview/tile/5?w=192&h=128", 192, 128},
+		{"/preview/tile/5?w=0&h=0", 0, 0},     // explicit zero
+		{"/preview/tile/5?h=128", 0, 128},      // only h
+		{"/preview/tile/5?w=192", 192, 0},      // only w
+		{"/preview/tile/5?w=abc&h=128", 0, 128}, // non-numeric → 0
+		{"/preview/tile/5?w=&h=", 0, 0},          // empty values
+		{"/preview/tile/5?other=stuff", 0, 0},   // ignored params
+	}
+	for _, tc := range cases {
+		t.Run(tc.src, func(t *testing.T) {
+			gotW, gotH := embedSizeFromSrc(tc.src)
+			if gotW != tc.w || gotH != tc.h {
+				t.Errorf("embedSizeFromSrc(%q) = %d,%d; want %d,%d",
+					tc.src, gotW, gotH, tc.w, tc.h)
+			}
+		})
+	}
+}
+
+func TestWrapEmbedsAtomicNotSplit(t *testing.T) {
+	// Embed spans should never split mid-token. Confirm Wrap keeps an
+	// embed atomic even when measure returns a width larger than the
+	// available line.
+	spans := []Span{
+		{Text: "before ", Style: StyleNone},
+		{Style: StyleEmbed, Src: "/preview/tile/5?w=200&h=80",
+			Href: "/5", W: 200, H: 80},
+		{Text: " after", Style: StyleNone},
+	}
+	measure := func(sp Span) float64 {
+		if sp.Style&StyleEmbed != 0 {
+			return float64(sp.W)
+		}
+		return float64(len(sp.Text))
+	}
+	lines := Wrap(spans, 50, measure) // forces wrapping
+	embedCount := 0
+	for _, line := range lines {
+		for _, sp := range line {
+			if sp.Style&StyleEmbed != 0 {
+				embedCount++
+				if sp.W != 200 || sp.H != 80 || sp.Href != "/5" {
+					t.Errorf("embed span lost data after wrap: %+v", sp)
+				}
+			}
+		}
+	}
+	if embedCount != 1 {
+		t.Errorf("expected exactly one embed span across lines, got %d", embedCount)
+	}
+}
+
 func TestWrapNoEarlyBreakOnSpaces(t *testing.T) {
 	measure := func(sp Span) float64 { return float64(len(sp.Text)) }
 	// "abc def" with width 7 should fit on one line.
