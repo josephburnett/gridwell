@@ -842,13 +842,7 @@ func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY flo
 // the wrap matches what the caller will paint.
 func wrapInline(c js.Value, spans []markdown.Span, contentWidthLogical, fontPx float64, family string, scale float64) [][]markdown.Span {
 	measure := func(sp markdown.Span) float64 {
-		if sp.Style&markdown.StyleEmbed != 0 {
-			ew, _ := embedLogicalSize(sp)
-			return ew
-		}
-		// A plain link whose href is a tile path renders as an embed —
-		// measure as the embed would, not as its text label.
-		if sp.Style&markdown.StyleLink != 0 && embedpkg.LeafTileIDFromHref(sp.Href) != 0 {
+		if embedpkg.SpanIsEmbed(sp) {
 			ew, _ := embedLogicalSize(sp)
 			return ew
 		}
@@ -860,17 +854,10 @@ func wrapInline(c js.Value, spans []markdown.Span, contentWidthLogical, fontPx f
 	return markdown.Wrap(spans, contentWidthLogical, measure)
 }
 
-// embedLogicalSize returns the embed's W/H in logical (scale=1) pixels,
-// falling back to the inline defaults if the span didn't declare a size.
+// embedLogicalSize is the wasm-side adapter that binds the renderer's
+// defaults to the pure embed.SpanEmbedSize.
 func embedLogicalSize(sp markdown.Span) (float64, float64) {
-	w, h := float64(sp.W), float64(sp.H)
-	if w <= 0 {
-		w = defaultEmbedW
-	}
-	if h <= 0 {
-		h = defaultEmbedH
-	}
-	return w, h
+	return embedpkg.SpanEmbedSize(sp, defaultEmbedW, defaultEmbedH)
 }
 
 // drawInlineLines paints wrapped inline lines starting at logical
