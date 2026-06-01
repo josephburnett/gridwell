@@ -36,6 +36,15 @@ func (p Pane) CellToScreen(cx, cy float64) (float64, float64) {
 	return sx, sy
 }
 
+// CellAt returns the integer cell containing screen point (sx, sy)
+// using floor semantics (see FloorCellAt for the rationale). The
+// wasm hit-testers were each building this same dragdrop.Pane +
+// ScreenToCell + floor combo by hand; this one method captures it.
+func (p Pane) CellAt(sx, sy float64) (int64, int64) {
+	cx, cy := p.ScreenToCell(sx, sy)
+	return int64(math.Floor(cx)), int64(math.Floor(cy))
+}
+
 // PaneAt returns the pane (by index) under (sx, sy) given an ordered slice
 // of pane rectangles. Returns -1 if no pane covers the point. Panes are
 // expected to be axis-aligned and non-overlapping.

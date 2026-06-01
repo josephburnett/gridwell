@@ -431,3 +431,49 @@ func TestAscentMidContinuityForIntrinsicRatio(t *testing.T) {
 		}
 	}
 }
+
+func TestPanDist(t *testing.T) {
+	// (3, 4) is a 3-4-5 triangle: hypot = 5. At cellPx=64, zoom=1.0,
+	// distance should be 5*64*1 = 320.
+	got := PanDist(3, 4, 1, 64)
+	if !near(got, 320) {
+		t.Errorf("3-4 at zoom 1: got %v, want 320", got)
+	}
+	// Same delta, doubled zoom: distance doubles.
+	got = PanDist(3, 4, 2, 64)
+	if !near(got, 640) {
+		t.Errorf("3-4 at zoom 2: got %v, want 640", got)
+	}
+	// Zero delta.
+	if got := PanDist(0, 0, 1.5, 64); !near(got, 0) {
+		t.Errorf("(0,0): got %v, want 0", got)
+	}
+}
+
+func TestZoomDist(t *testing.T) {
+	// log(e/1) = 1; with factor=1, cellPx=1, distance=1.
+	if got := ZoomDist(1, math.E, 1, 1); !near(got, 1) {
+		t.Errorf("1→e at unit weight: got %v, want 1", got)
+	}
+	// Symmetric: doubling vs halving the zoom should produce the same
+	// magnitude.
+	a := ZoomDist(1, 2, 64, 4)
+	b := ZoomDist(2, 1, 64, 4)
+	if !near(a, b) {
+		t.Errorf("symmetry: 1→2 = %v, 2→1 = %v", a, b)
+	}
+	// Same start and end: zero motion.
+	if got := ZoomDist(1.5, 1.5, 64, 4); !near(got, 0) {
+		t.Errorf("identity: got %v, want 0", got)
+	}
+	// Degenerate (non-positive) inputs: zero, not NaN/-Inf.
+	if got := ZoomDist(0, 1, 64, 4); got != 0 {
+		t.Errorf("z1=0: got %v, want 0", got)
+	}
+	if got := ZoomDist(1, 0, 64, 4); got != 0 {
+		t.Errorf("z2=0: got %v, want 0", got)
+	}
+	if got := ZoomDist(-1, 1, 64, 4); got != 0 {
+		t.Errorf("z1<0: got %v, want 0", got)
+	}
+}

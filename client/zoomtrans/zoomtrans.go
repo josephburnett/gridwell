@@ -242,3 +242,24 @@ func Ascent(from Endpoints, w Well, parentPath []int64, paneW, paneH, cellPx flo
 	}
 	return
 }
+
+// PanDist returns the pan motion distance in screen pixels for a (dx,
+// dy) delta given in cell units, at the provided zoom level and base
+// cell size. Used by the descent / ascent animation timing math.
+func PanDist(dx, dy, zoom, cellPx float64) float64 {
+	return math.Hypot(dx, dy) * cellPx * zoom
+}
+
+// ZoomDist returns the log-zoom distance scaled to the same
+// px-equivalent units PanDist returns, so the two can be added when
+// blending pan + zoom into a single animation duration. factor is the
+// log-zoom-to-pixel weighting; the renderer uses 4 so zoom phases get
+// the bulk of an animation's time.
+//
+// Either zoom <= 0 makes the result 0 — degenerate, no motion.
+func ZoomDist(z1, z2, cellPx, factor float64) float64 {
+	if z1 <= 0 || z2 <= 0 {
+		return 0
+	}
+	return math.Abs(math.Log(z2/z1)) * cellPx * factor
+}

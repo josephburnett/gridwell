@@ -385,3 +385,32 @@ func TestNearPx(t *testing.T) {
 		t.Error("identical should be near")
 	}
 }
+
+func TestPaneCellAt(t *testing.T) {
+	// 1000x800 pane centered on cell (0,0), 64 px cells, zoom 1.
+	p := Pane{
+		ScreenX: 0, ScreenY: 0, ScreenW: 1000, ScreenH: 800,
+		Cx: 0, Cy: 0, Zoom: 1, CellPx: 64,
+	}
+	// Pane center -> cell (0,0). Pane center is at (500, 400).
+	cx, cy := p.CellAt(500, 400)
+	if cx != 0 || cy != 0 {
+		t.Errorf("center: got (%d,%d), want (0,0)", cx, cy)
+	}
+	// One cell right (+64 px) of center -> cell (1, 0).
+	cx, cy = p.CellAt(500+64, 400)
+	if cx != 1 || cy != 0 {
+		t.Errorf("one cell right: got (%d,%d), want (1,0)", cx, cy)
+	}
+	// Just barely into next cell.
+	cx, cy = p.CellAt(500+0.1, 400)
+	if cx != 0 || cy != 0 {
+		t.Errorf("just barely positive: got (%d,%d), want (0,0)", cx, cy)
+	}
+	// Lower-right half of cell (5,3) — floor wins, round would have advanced.
+	sx, sy := p.CellToScreen(5.8, 3.8)
+	cx, cy = p.CellAt(sx, sy)
+	if cx != 5 || cy != 3 {
+		t.Errorf("lower-right half: got (%d,%d), want (5,3)", cx, cy)
+	}
+}

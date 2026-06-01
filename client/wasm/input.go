@@ -130,12 +130,7 @@ func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, paneRect, bool) {
 // inside the given pane. Uses floor (which cell is the cursor *in?*), not
 // round — round-half made clicks in the lower-right half of a tile miss.
 func cellAtScreen(p *pane.Pane, r paneRect, sx, sy float64) (int64, int64) {
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
-	cx, cy := ps.ScreenToCell(sx, sy)
-	return int64(math.Floor(cx)), int64(math.Floor(cy))
+	return paneToDragdrop(p, r).CellAt(sx, sy)
 }
 
 // tileAtCell returns the tile in the pane's grid that covers the given cell,
@@ -992,19 +987,16 @@ const totalTransitionMs = 350.0
 // action" and the pan is "the setup".
 const zoomDistFactor = 4.0
 
-// panDist returns the pan motion distance in screen pixels at the given
-// zoom level. dx, dy are in cell units.
+// panDist is the wasm-side adapter for zoomtrans.PanDist, binding the
+// renderer's base cell size.
 func panDist(dx, dy, zoom float64) float64 {
-	return math.Hypot(dx, dy) * cellPx * zoom
+	return zoomtrans.PanDist(dx, dy, zoom, cellPx)
 }
 
-// zoomDist returns the log-zoom distance scaled to the same px-equivalent
-// units as panDist, so they can be compared directly.
+// zoomDist is the wasm-side adapter for zoomtrans.ZoomDist, binding
+// the renderer's base cell size and the zoom-vs-pan weighting factor.
 func zoomDist(z1, z2 float64) float64 {
-	if z1 <= 0 || z2 <= 0 {
-		return 0
-	}
-	return math.Abs(math.Log(z2/z1)) * cellPx * zoomDistFactor
+	return zoomtrans.ZoomDist(z1, z2, cellPx, zoomDistFactor)
 }
 
 // startAscent zooms a pane out of a child grid and back to the parent
