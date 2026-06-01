@@ -353,3 +353,58 @@ func TestSplitClampedPosition(t *testing.T) {
 		t.Error("tiny pane: should not be in valid range")
 	}
 }
+
+func TestRectContains(t *testing.T) {
+	r := Rect{X: 10, Y: 20, W: 30, H: 40}
+	cases := []struct {
+		name   string
+		x, y   float64
+		want   bool
+	}{
+		{"inside", 25, 30, true},
+		{"top-left corner — inclusive", 10, 20, true},
+		{"bottom-right corner — exclusive", 40, 60, false},
+		{"left edge — inclusive", 10, 30, true},
+		{"right edge — exclusive", 40, 30, false},
+		{"above", 25, 19, false},
+		{"left of", 9, 30, false},
+	}
+	for _, c := range cases {
+		if got := r.Contains(c.x, c.y); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRegionCategoriesAndSide(t *testing.T) {
+	type want struct {
+		isResize, isSplit, isSwap bool
+		side                      Side
+	}
+	cases := map[Region]want{
+		RegionNone:         {false, false, false, SideTop},
+		RegionSwap:         {false, false, true, SideTop},
+		RegionResizeTop:    {true, false, false, SideTop},
+		RegionResizeBottom: {true, false, false, SideBottom},
+		RegionResizeLeft:   {true, false, false, SideLeft},
+		RegionResizeRight:  {true, false, false, SideRight},
+		RegionSplitTop:     {false, true, false, SideTop},
+		RegionSplitBottom:  {false, true, false, SideBottom},
+		RegionSplitLeft:    {false, true, false, SideLeft},
+		RegionSplitRight:   {false, true, false, SideRight},
+	}
+	for r, w := range cases {
+		if got := r.IsResize(); got != w.isResize {
+			t.Errorf("%v.IsResize = %v, want %v", r, got, w.isResize)
+		}
+		if got := r.IsSplit(); got != w.isSplit {
+			t.Errorf("%v.IsSplit = %v, want %v", r, got, w.isSplit)
+		}
+		if got := r.IsSwap(); got != w.isSwap {
+			t.Errorf("%v.IsSwap = %v, want %v", r, got, w.isSwap)
+		}
+		if got := r.Side(); got != w.side {
+			t.Errorf("%v.Side = %v, want %v", r, got, w.side)
+		}
+	}
+}
