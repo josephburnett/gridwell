@@ -291,6 +291,131 @@ func TestLineEndOffsetEmptyAndTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestDecideTextareaSync(t *testing.T) {
+	cases := []struct {
+		name string
+		in   TextareaSyncInput
+		want TextareaSyncDecision
+	}{
+		{
+			// The bug the user reported: descend into new tile 7 while
+			// textarea still holds "old content" from tile 4 and the new
+			// tile's blob hasn't arrived in the cache yet. The textarea
+			// must clear so the user doesn't see 4's content as 7's
+			// default; LastTileID must advance so the blob fetch's
+			// follow-up call seeds rather than re-clears.
+			name: "different tile, blob not cached → clear and advance",
+			in: TextareaSyncInput{
+				FocusedTileID: 7,
+				LastTileID:    4,
+				CurrentValue:  "old content",
+				BlobCached:    false,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "",
+				NewLastTileID: 7,
+			},
+		},
+		{
+			name: "different tile, blob cached → seed with content",
+			in: TextareaSyncInput{
+				FocusedTileID: 7,
+				LastTileID:    4,
+				CurrentValue:  "old content",
+				BlobCached:    true,
+				BlobContent:   "tile 7 body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "tile 7 body",
+				NewLastTileID: 7,
+			},
+		},
+		{
+			name: "first focus (LastTileID 0), blob cached → seed",
+			in: TextareaSyncInput{
+				FocusedTileID: 5,
+				LastTileID:    0,
+				CurrentValue:  "",
+				BlobCached:    true,
+				BlobContent:   "first focus body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "first focus body",
+				NewLastTileID: 5,
+			},
+		},
+		{
+			name: "same tile, textarea empty (post-toggle), blob cached → seed",
+			in: TextareaSyncInput{
+				FocusedTileID: 5,
+				LastTileID:    5,
+				CurrentValue:  "",
+				BlobCached:    true,
+				BlobContent:   "tile 5 body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "tile 5 body",
+				NewLastTileID: 5,
+			},
+		},
+		{
+			name: "same tile, textarea non-empty → preserve typing",
+			in: TextareaSyncInput{
+				FocusedTileID: 5,
+				LastTileID:    5,
+				CurrentValue:  "user just typed this",
+				BlobCached:    true,
+				BlobContent:   "stale cache content",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: 5,
+			},
+		},
+		{
+			name: "same tile, textarea empty, blob still loading → wait",
+			in: TextareaSyncInput{
+				FocusedTileID: 5,
+				LastTileID:    5,
+				CurrentValue:  "",
+				BlobCached:    false,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: 5,
+			},
+		},
+		{
+			name: "different tile, blob cached but empty (fresh tile) → clear",
+			in: TextareaSyncInput{
+				FocusedTileID: 9,
+				LastTileID:    4,
+				CurrentValue:  "previous content",
+				BlobCached:    true,
+				BlobContent:   "",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "",
+				NewLastTileID: 9,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DecideTextareaSync(tc.in)
+			if got != tc.want {
+				t.Errorf("DecideTextareaSync(%+v) = %+v, want %+v",
+					tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRowAt(t *testing.T) {
 	cases := []struct {
 		name                   string

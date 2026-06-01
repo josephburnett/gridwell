@@ -212,6 +212,72 @@ func LineEndOffset(src string, row int) int {
 	return pos + nl
 }
 
+// TextareaSyncInput is the snapshot a wasm caller hands to
+// DecideTextareaSync: which tile the focus is on, which tile the
+// singleton textarea is currently bound to (from the App's tracking
+// field), what the textarea is showing right now, and whether the
+// focused tile's blob is cached and what its content is.
+type TextareaSyncInput struct {
+	FocusedTileID int64
+	LastTileID    int64
+	CurrentValue  string
+	BlobCached    bool
+	BlobContent   string
+}
+
+// TextareaSyncDecision is what to do to keep the textarea coherent with
+// the current focused tile. Apply by, in order:
+//
+//  1. If SetValue is true, write Value into the textarea.
+//  2. Always store NewLastTileID into the App's tracking field — even
+//     when SetValue is false, so a delayed blob fetch's second pass
+//     sees the correct "same tile" state.
+type TextareaSyncDecision struct {
+	SetValue      bool
+	Value         string
+	NewLastTileID int64
+}
+
+// DecideTextareaSync drives the textarea singleton's value across focus
+// shifts and async blob fetches. The rules:
+//
+//   - Different tile than last bound: clear immediately so the previous
+//     tile's buffer doesn't leak (this is the bug where "new text tile
+//     has the last edited tile's content by default"). If the blob is
+//     already cached, seed with it in the same step so the user doesn't
+//     see a flash of empty.
+//   - Same tile, textarea empty: the value was cleared by a mode toggle
+//     or by a pending blob fetch; seed when the blob arrives.
+//   - Same tile, textarea non-empty: in-progress typing — preserve.
+//
+// LastTileID always advances to FocusedTileID so the blob-fetch
+// onComplete sees the "same tile, value-driven" branch rather than
+// re-clearing the user's freshly-typed content.
+func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
+	if in.LastTileID != in.FocusedTileID {
+		val := ""
+		if in.BlobCached {
+			val = in.BlobContent
+		}
+		return TextareaSyncDecision{
+			SetValue:      true,
+			Value:         val,
+			NewLastTileID: in.FocusedTileID,
+		}
+	}
+	if in.CurrentValue == "" && in.BlobCached {
+		return TextareaSyncDecision{
+			SetValue:      true,
+			Value:         in.BlobContent,
+			NewLastTileID: in.FocusedTileID,
+		}
+	}
+	return TextareaSyncDecision{
+		SetValue:      false,
+		NewLastTileID: in.FocusedTileID,
+	}
+}
+
 // RowAt returns the line index (0-based) for a screen-relative y
 // coordinate inside a text pane. innerY is the pane's inner-box top
 // in the same coordinate space as sy; scrollY is the doc's current

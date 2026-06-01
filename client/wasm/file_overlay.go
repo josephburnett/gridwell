@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"syscall/js"
 
+	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -154,6 +155,15 @@ func (a *App) ensureFileTextarea() {
 		a.fileSaveScheduled = false
 		p := a.tree.FocusedPane()
 		if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
+			return nil
+		}
+		// Only save when the textarea is currently bound to this pane's
+		// tile. A debounced save scheduled while you were typing in
+		// tile A can otherwise fire after you've descended into tile B,
+		// reading A's stale buffer and persisting it as B's content —
+		// the exact "new tile contains the last edited tile's text"
+		// regression we just fixed in the seed path.
+		if a.lastTextareaTileID != p.TextFocus {
 			return nil
 		}
 		a.saveFileFromTextarea(p)
@@ -402,23 +412,33 @@ func (a *App) refreshFileOverlay() {
 	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
 	style.Set("display", "block")
 
-	// Seed (or re-seed) the textarea contents from the cached blob.
-	// Re-seed when the bound tile changes (focus moved to a different
-	// doc) or when the textarea was cleared by a toggle. Preserve
-	// in-progress typing when the same doc is re-focused — saveFile
-	// keeps the cache in sync with what the user has typed.
+	// Sync the textarea singleton to the focused tile. The decision
+	// lives in client/embed.DecideTextareaSync so it's natively
+	// testable — the wasm side just gathers inputs from cache + DOM
+	// and applies the result. Critically, on a tile switch we clear
+	// immediately even when the blob hasn't loaded yet, so the
+	// previous tile's buffer doesn't appear as the new tile's
+	// "default" content. The blob-fetch onComplete fires
+	// refreshFileOverlay again with the actual content.
 	gid := a.gridIDForPath(p.Path)
-	g, ok := a.c.Grid(gid)
-	if ok {
+	in := embedpkg.TextareaSyncInput{
+		FocusedTileID: p.TextFocus,
+		LastTileID:    a.lastTextareaTileID,
+		CurrentValue:  ta.Get("value").String(),
+	}
+	if g, ok := a.c.Grid(gid); ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok {
 			if blob, ok := a.c.Blob(file.BlobID); ok {
-				if a.lastTextareaTileID != p.TextFocus || ta.Get("value").String() == "" {
-					ta.Set("value", string(blob))
-					a.lastTextareaTileID = p.TextFocus
-				}
+				in.BlobCached = true
+				in.BlobContent = string(blob)
 			}
 		}
 	}
+	dec := embedpkg.DecideTextareaSync(in)
+	if dec.SetValue {
+		ta.Set("value", dec.Value)
+	}
+	a.lastTextareaTileID = dec.NewLastTileID
 	// Reflect saved scroll into the textarea; on subsequent calls the
 	// user's own scroll wins.
 	if ta.Get("scrollTop").Float() == 0 && p.TextScrollY > 0 {
