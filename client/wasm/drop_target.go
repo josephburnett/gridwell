@@ -51,10 +51,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 	parentCell := cellPx * p.Zoom
 
 	// Parent-grid origin (top-left of cell (0, 0) in screen coords).
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
 	// Look for an open well under the cursor — that promotes the
@@ -126,10 +123,7 @@ func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Tile, sx, sy
 	if !ok {
 		return nil
 	}
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	ratio := zoomtrans.EffectiveViewZoom(well.ViewZoom, zoomtrans.DefaultWellViewZoom)
 	cp := dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H, ViewX, ViewY int64

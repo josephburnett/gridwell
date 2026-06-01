@@ -451,10 +451,7 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 // We don't hide the original tile (clone=true), and the cursor offset
 // inside the tile is preserved so the grab point tracks the cursor.
 func (a *App) armRightClone(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 	cellSize := cellPx * p.Zoom
@@ -1055,10 +1052,7 @@ func drawHotspotArrow(c js.Value, cx, cy, dx, dy float64) {
 // tileScreenRect returns the on-screen rectangle of tile n as drawn
 // in pane p. Mirrors the math used by the parent-grid renderer.
 func tileScreenRect(n *rpc.Tile, p *pane.Pane, r paneRect) (left, top, w, h float64) {
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	left, top = ps.CellToScreen(float64(n.X), float64(n.Y))
 	cellSize := cellPx * p.Zoom
 	w = float64(n.W) * cellSize
@@ -1070,12 +1064,7 @@ func tileScreenRect(n *rpc.Tile, p *pane.Pane, r paneRect) (left, top, w, h floa
 // pane's screen coordinates. The original tile keeps painting in
 // place, so the preview is the new rectangle as a dashed blue stroke.
 func (a *App) drawTileResizePreview(rd *rightDragState) {
-	ps := dragdrop.Pane{
-		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
-		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
-		Cx: rd.tilePane.Cx, Cy: rd.tilePane.Cy,
-		Zoom: rd.tilePane.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(rd.tilePane, rd.tilePaneR)
 	left, top := ps.CellToScreen(float64(rd.tileNewX), float64(rd.tileNewY))
 	cellSize := cellPx * rd.tilePane.Zoom
 	w := float64(rd.tileNewW) * cellSize

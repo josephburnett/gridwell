@@ -229,10 +229,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		step = -0.5
 	}
 	factor := math.Pow(zoomFactor, -step*4)
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
 	oldZoom := p.Zoom
 	z := oldZoom * factor
@@ -411,10 +408,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	n := a.tileAtCell(p, cellX, cellY)
 	parentCell := cellPx * p.Zoom
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		tileID:       0,
@@ -939,10 +933,7 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) bool {
-	pscreen := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	pscreen := paneToDragdrop(p, r)
 	if (p.TextFocus != 0 || len(p.Path) > 0) &&
 		dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
 		if p.TextFocus != 0 {
@@ -1618,10 +1609,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.cancelDragSnapBack(d)
 		return
 	}
-	dpscreen := dragdrop.Pane{
-		ScreenX: destRect.X, ScreenY: destRect.Y, ScreenW: destRect.W, ScreenH: destRect.H,
-		Cx: destPane.Cx, Cy: destPane.Cy, Zoom: destPane.Zoom, CellPx: cellPx,
-	}
+	dpscreen := paneToDragdrop(destPane, destRect)
 	dcx, dcy := dpscreen.ScreenToCell(sx, sy)
 	dropX := dragdrop.SnapToCell(dcx - d.cellOffsetX)
 	dropY := dragdrop.SnapToCell(dcy - d.cellOffsetY)

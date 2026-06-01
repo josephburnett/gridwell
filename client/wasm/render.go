@@ -199,10 +199,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 	a.cctx.Call("rect", r.X+inset, r.Y+inset, r.W-2*inset, r.H-2*inset)
 	a.cctx.Call("clip")
 
-	pscreen := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	pscreen := paneToDragdrop(p, r)
 
 	// Grid lines render against background regardless of whether the grid
 	// has loaded — they communicate the coordinate system to the user.
