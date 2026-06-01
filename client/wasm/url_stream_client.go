@@ -3,13 +3,13 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/urlstream"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
@@ -75,7 +75,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID int64, w, h int64) {
 	conn := &urlStreamConn{ws: ws, tileID: tileID, paneID: p.ID}
 	// Queue the initial viewport so it's the first thing the server
 	// sees once the handshake completes.
-	conn.pending = append(conn.pending, viewportPayload(w, h))
+	conn.pending = append(conn.pending, urlstream.ViewportPayload(w, h))
 	conn.lastSentW, conn.lastSentH = w, h
 
 	conn.onMessage = js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -190,7 +190,7 @@ func (a *App) notifyURLStreamSize(paneID string, w, h int64) {
 		return
 	}
 	conn.lastSentW, conn.lastSentH = w, h
-	payload := viewportPayload(w, h)
+	payload := urlstream.ViewportPayload(w, h)
 	state := conn.ws.Get("readyState").Int()
 	switch state {
 	case 0: // CONNECTING — queue, flushed by onOpen
@@ -200,30 +200,15 @@ func (a *App) notifyURLStreamSize(paneID string, w, h int64) {
 	}
 }
 
-// viewportPayload returns a JSON {"kind":"viewport","width":w,"height":h}
-// message ready to send on the WS. Uses the shared rpc.URLStreamMessage
-// type so client and server agree on the wire shape.
-func viewportPayload(w, h int64) string {
-	b, _ := json.Marshal(rpc.URLStreamMessage{
-		Kind:   "viewport",
-		Width:  w,
-		Height: h,
-	})
-	return string(b)
-}
-
 // handleURLStreamText processes a JSON text message from the server.
 // Currently only `nav` (navigation events) is sent. Updates the cached
 // tile URL so re-renders show the new address.
 func (a *App) handleURLStreamText(tileID int64, payload string) {
-	var msg rpc.URLStreamServerMessage
-	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+	url, ok := urlstream.ParseNavMessage(payload)
+	if !ok {
 		return
 	}
-	if msg.Kind != "nav" {
-		return
-	}
-	a.updateCachedTileURL(tileID, msg.URL)
+	a.updateCachedTileURL(tileID, url)
 }
 
 // updateCachedTileURL walks every cached grid and rewrites the
@@ -258,16 +243,7 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	if !ok || conn.closed || !conn.ws.Truthy() {
 		return
 	}
-	payload, err := json.Marshal(rpc.URLStreamMessage{
-		Kind:      string(ev.Kind),
-		X:         ev.X,
-		Y:         ev.Y,
-		Button:    ev.Button,
-		DeltaY:    ev.DeltaY,
-		Key:       ev.Key,
-		Code:      ev.Code,
-		Modifiers: ev.Modifiers,
-	})
+	payload, err := urlstream.InputPayload(ev)
 	if err != nil {
 		return
 	}
