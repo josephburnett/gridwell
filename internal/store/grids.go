@@ -50,7 +50,7 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string`
+	url_string, alt_text`
 
 // forkColumns extends tileColumns with preview_jpeg. Used by forkGrid, which
 // needs to copy the frozen preview but avoids loading it on every GetGrid.
@@ -67,13 +67,14 @@ func scanTile(scanner interface {
 		blob      sql.NullInt64
 		urlStr    sql.NullString
 		textMode  sql.NullString
+		altText   sql.NullString
 	)
 	if err := scanner.Scan(
 		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
 		&n.X, &n.Y, &n.W, &n.H,
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
-		&urlStr,
+		&urlStr, &altText,
 	); err != nil {
 		return nil, err
 	}
@@ -88,6 +89,9 @@ func scanTile(scanner interface {
 	}
 	if textMode.Valid {
 		n.TextMode = textMode.String
+	}
+	if altText.Valid {
+		n.AltText = altText.String
 	}
 	return &n, nil
 }

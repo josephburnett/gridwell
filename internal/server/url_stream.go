@@ -29,6 +29,7 @@ type urlSession interface {
 	Navs() <-chan string
 	Done() <-chan struct{}
 	LastURL() string
+	LastTitle() string
 	CaptureFinal(ctx context.Context) ([]byte, error)
 	Close()
 }
@@ -300,6 +301,11 @@ func (s *Server) closeSession(tileID int64, session urlSession) {
 	if u := session.LastURL(); u != "" {
 		if err := s.store.SetURLString(ctx, tileID, u); err != nil {
 			log.Printf("[urlstream] save-url-err tile=%d err=%v", tileID, err)
+		}
+	}
+	if title := session.LastTitle(); title != "" {
+		if err := s.store.SetTileAlt(ctx, tileID, title); err != nil {
+			log.Printf("[urlstream] save-alt-err tile=%d err=%v", tileID, err)
 		}
 	}
 	session.Close()

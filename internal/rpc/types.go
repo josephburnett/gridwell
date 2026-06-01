@@ -61,6 +61,13 @@ type Tile struct {
 	BlobID   int64  `json:"blob_id,omitempty"`
 	// url-only
 	URLString string `json:"url_string,omitempty"`
+	// AltText is a human-readable label used as the alt of a markdown
+	// link when this tile is dropped into a doc. Populated by the
+	// server: URL tiles get the page title (captured on Chromium
+	// session close); text tiles get the first non-empty line of
+	// content (stripped of markdown markers). Other kinds and tiles
+	// with no derived alt fall back to a default at drop time.
+	AltText string `json:"alt_text,omitempty"`
 }
 
 // Bootstrap RPC: client asks for the current root grid id and root framing.

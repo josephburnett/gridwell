@@ -431,6 +431,18 @@ func (s *Session) LastURL() string {
 	return s.lastURL
 }
 
+// LastTitle returns document.title from the live page, or "" on any
+// failure. Called near session close to capture the tab's label as the
+// tile's alt-text. Best-effort: a slow page or a navigation in flight
+// returns "" rather than blocking the close path.
+func (s *Session) LastTitle() string {
+	res, err := s.page.Timeout(1 * time.Second).Eval(`() => document.title`)
+	if err != nil || res == nil {
+		return ""
+	}
+	return strings.TrimSpace(res.Value.Str())
+}
+
 func (s *Session) Frames() <-chan []byte    { return s.frames }
 func (s *Session) Navs() <-chan string      { return s.navs }
 func (s *Session) Done() <-chan struct{}    { return s.done }

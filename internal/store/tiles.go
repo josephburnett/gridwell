@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -122,6 +123,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
 	}
 	hash := hashBytes(req.Data)
+	alt := markdown.AltFromSource(string(req.Data))
 	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			blobID, err := putBlob(ctx, tx, hash, req.Data)
@@ -130,9 +132,9 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 			}
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-					blob_id, created_at, updated_at)
-				VALUES (?, ?, 'text', ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, blobID, now, now)
+					blob_id, alt_text, created_at, updated_at)
+				VALUES (?, ?, 'text', ?, ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, blobID, nullableString(alt), now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert text tile: %w", err)
 			}
@@ -145,6 +147,15 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 			}
 			return tileID, nil
 		})
+}
+
+// nullableString returns sql.NullString — empty values stored as NULL
+// keep the schema honest about "no derived alt yet."
+func nullableString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
 }
 
 // CreateURL creates a URL tile pointing at the given URL.

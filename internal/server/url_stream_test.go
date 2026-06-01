@@ -82,12 +82,13 @@ func (f *fakeStreamer) lastSession() *fakeSession {
 type fakeSession struct {
 	tileID int64
 
-	mu       sync.Mutex
-	inputs   []urldriver.InputEvent
-	resizes  [][2]int64
-	lastURL  string
-	closed   bool
-	captures int
+	mu        sync.Mutex
+	inputs    []urldriver.InputEvent
+	resizes   [][2]int64
+	lastURL   string
+	lastTitle string
+	closed    bool
+	captures  int
 	// cancelNextInputs makes the next N Input calls return
 	// context.Canceled without recording the event, simulating a tab
 	// mid-swap. Done() stays open so readLoop must treat these as
@@ -130,10 +131,22 @@ func (s *fakeSession) LastURL() string {
 	return s.lastURL
 }
 
+func (s *fakeSession) LastTitle() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastTitle
+}
+
 func (s *fakeSession) setLastURL(u string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastURL = u
+}
+
+func (s *fakeSession) setLastTitle(t string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastTitle = t
 }
 
 func (s *fakeSession) CaptureFinal(_ context.Context) ([]byte, error) {
@@ -389,6 +402,7 @@ func TestURLStreamClosesSessionAndPersists(t *testing.T) {
 
 	s := waitForSession(t, fake)
 	s.setLastURL("https://example.com/last")
+	s.setLastTitle("Example Domain")
 
 	_ = conn.Close(websocket.StatusNormalClosure, "")
 
@@ -416,6 +430,9 @@ func TestURLStreamClosesSessionAndPersists(t *testing.T) {
 	}
 	if string(jpeg) != "final-jpeg-bytes" {
 		t.Errorf("preview_jpeg = %q, want %q", string(jpeg), "final-jpeg-bytes")
+	}
+	if tile.AltText != "Example Domain" {
+		t.Errorf("alt_text = %q, want %q", tile.AltText, "Example Domain")
 	}
 }
 

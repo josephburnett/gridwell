@@ -64,6 +64,11 @@ CREATE TABLE IF NOT EXISTS tiles (
     -- url-only: the URL string and the frozen preview JPEG from last close.
     url_string    TEXT,
     preview_jpeg  BLOB,
+    -- Derived label used as the alt-text of dropped embed links. For URL
+    -- tiles: the page title captured from Chromium. For text tiles: the
+    -- first non-empty line of content with markdown stripped. NULL until
+    -- derived.
+    alt_text      TEXT,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (

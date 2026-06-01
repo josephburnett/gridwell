@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -187,13 +188,13 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, preview_jpeg,
+				url_string, alt_text, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ObjectID, n.Version, dstGrid, n.Kind, req.X, req.Y, n.W, n.H,
 			n.ViewX, n.ViewY, n.ViewZoom, child,
 			n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-			urlStr, previewJPEG,
+			urlStr, nullableString(n.AltText), previewJPEG,
 			now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)
@@ -257,9 +258,10 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		}
 		oldBlobID := current.BlobID
 
+		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET blob_id = ?, updated_at = ? WHERE id = ?`,
-			newBlobID, s.now().Unix(), pre.TargetTileID); err != nil {
+			`UPDATE tiles SET blob_id = ?, alt_text = ?, updated_at = ? WHERE id = ?`,
+			newBlobID, nullableString(alt), s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
 		if oldBlobID != newBlobID {

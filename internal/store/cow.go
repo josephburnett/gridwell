@@ -217,6 +217,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		textMode             sql.NullString
 		blob                 sql.NullInt64
 		urlString            sql.NullString
+		altText              sql.NullString
 		previewJPEG          []byte
 		createdAt, updatedAt int64
 	}
@@ -228,7 +229,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			&nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
 			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
-			&nc.urlString, &nc.previewJPEG,
+			&nc.urlString, &nc.altText, &nc.previewJPEG,
 			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
@@ -244,13 +245,13 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, preview_jpeg,
+				url_string, alt_text, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			nc.objectID, nc.version, newGridID, nc.kind, nc.x, nc.y, nc.w, nc.h,
 			nc.viewX, nc.viewY, nc.viewZoom, nc.childGrid,
 			nc.textX, nc.textY, nc.textW, nc.textH, nc.textMode, nc.blob,
-			nc.urlString, nc.previewJPEG,
+			nc.urlString, nc.altText, nc.previewJPEG,
 			nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)
