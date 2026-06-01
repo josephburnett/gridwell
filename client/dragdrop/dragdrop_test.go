@@ -98,30 +98,6 @@ func TestIsInEdgeZone(t *testing.T) {
 	}
 }
 
-func TestClosestEdge(t *testing.T) {
-	p := Pane{ScreenX: 0, ScreenY: 0, ScreenW: 100, ScreenH: 100}
-	cases := []struct {
-		name string
-		x, y float64
-		want Side
-	}{
-		{"upper third center → top", 50, 10, SideTop},
-		{"lower third center → bottom", 50, 90, SideBottom},
-		{"left third center → left", 10, 50, SideLeft},
-		{"right third center → right", 90, 50, SideRight},
-		{"upper-left corner → top (tie favors top)", 5, 5, SideTop},
-		{"upper-right corner → top (tie favors top)", 95, 5, SideTop},
-		{"dead center → top (deterministic tiebreak)", 50, 50, SideTop},
-		{"slightly above center → top", 50, 49, SideTop},
-		{"slightly below center → bottom", 50, 51, SideBottom},
-	}
-	for _, c := range cases {
-		if got := ClosestEdge(p, c.x, c.y); got != c.want {
-			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
 func TestChildPreviewRoundTrip(t *testing.T) {
 	parent := Pane{
 		ScreenX: 0, ScreenY: 0, ScreenW: 800, ScreenH: 600,

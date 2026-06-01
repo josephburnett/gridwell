@@ -147,8 +147,7 @@ func (r Region) Side() Side {
 // outer split zone, sectorized by closest edge.
 //
 // Tiebreak when multiple edges are equidistant: top, then bottom,
-// then left, then right (matches dragdrop.ClosestEdge for
-// determinism).
+// then left, then right.
 func ClassifyRegion(r Rect, bandPx, sx, sy float64) Region {
 	if r.W <= 0 || r.H <= 0 {
 		return RegionNone
