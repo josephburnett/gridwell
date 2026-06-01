@@ -8,6 +8,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
@@ -54,23 +56,38 @@ func New(s *store.Store, cfg Config) *Server {
 func (s *Server) Handler() http.Handler { return s.mux }
 
 func (s *Server) routes() {
+	st := s.store
 	s.mux.HandleFunc("/rpc/Bootstrap", s.post(s.bootstrap))
-	s.mux.HandleFunc("/rpc/GetGrid", s.post(s.getGrid))
-	s.mux.HandleFunc("/rpc/GetBlob", s.post(s.getBlob))
-	s.mux.HandleFunc("/rpc/GetTilePreview", s.post(s.getTilePreview))
+	s.mux.HandleFunc("/rpc/GetGrid", s.post(handleJSONIn(func(ctx context.Context, req *rpc.GetGridRequest) (*rpc.GetGridResponse, error) {
+		return st.GetGrid(ctx, req.GridID)
+	})))
+	s.mux.HandleFunc("/rpc/GetBlob", s.post(handleJSONIn(func(ctx context.Context, req *rpc.GetBlobRequest) (*rpc.GetBlobResponse, error) {
+		data, err := st.GetBlob(ctx, req.BlobID)
+		if err != nil {
+			return nil, err
+		}
+		return &rpc.GetBlobResponse{Data: data}, nil
+	})))
+	s.mux.HandleFunc("/rpc/GetTilePreview", s.post(handleJSONIn(func(ctx context.Context, req *rpc.GetTilePreviewRequest) (*rpc.GetTilePreviewResponse, error) {
+		jpeg, err := st.GetTilePreview(ctx, req.TileID)
+		if err != nil {
+			return nil, err
+		}
+		return &rpc.GetTilePreviewResponse{JPEG: jpeg}, nil
+	})))
 
-	s.mux.HandleFunc("/rpc/CreateWell", s.post(s.createWell))
-	s.mux.HandleFunc("/rpc/CreateText", s.post(s.createText))
-	s.mux.HandleFunc("/rpc/CreateURL", s.post(s.createURL))
-	s.mux.HandleFunc("/rpc/CreateBlackHole", s.post(s.createBlackHole))
-	s.mux.HandleFunc("/rpc/MoveTile", s.post(s.moveTile))
-	s.mux.HandleFunc("/rpc/CloneTile", s.post(s.cloneTile))
-	s.mux.HandleFunc("/rpc/ResizeTile", s.post(s.resizeTile))
-	s.mux.HandleFunc("/rpc/SetWellView", s.post(s.setWellView))
-	s.mux.HandleFunc("/rpc/SetTextView", s.post(s.setTextView))
-	s.mux.HandleFunc("/rpc/SetRootView", s.post(s.setRootView))
-	s.mux.HandleFunc("/rpc/UpdateText", s.post(s.updateText))
-	s.mux.HandleFunc("/rpc/DeleteTile", s.post(s.deleteTile))
+	s.mux.HandleFunc("/rpc/CreateWell", s.post(handleTile(st.CreateWell)))
+	s.mux.HandleFunc("/rpc/CreateText", s.post(handleTile(st.CreateText)))
+	s.mux.HandleFunc("/rpc/CreateURL", s.post(handleTile(st.CreateURL)))
+	s.mux.HandleFunc("/rpc/CreateBlackHole", s.post(handleTile(st.CreateBlackHole)))
+	s.mux.HandleFunc("/rpc/MoveTile", s.post(handleTile(st.MoveTile)))
+	s.mux.HandleFunc("/rpc/CloneTile", s.post(handleTile(st.CloneTile)))
+	s.mux.HandleFunc("/rpc/ResizeTile", s.post(handleTile(st.ResizeTile)))
+	s.mux.HandleFunc("/rpc/SetWellView", s.post(handleTile(st.SetWellView)))
+	s.mux.HandleFunc("/rpc/SetTextView", s.post(handleTile(st.SetTextView)))
+	s.mux.HandleFunc("/rpc/SetRootView", s.post(handleVoid(st.SetRootView, rpc.SetRootViewResponse{})))
+	s.mux.HandleFunc("/rpc/UpdateText", s.post(handleTile(st.UpdateText)))
+	s.mux.HandleFunc("/rpc/DeleteTile", s.post(handleVoid(st.DeleteTile, rpc.DeleteTileResponse{})))
 	s.mux.HandleFunc("/rpc/Subscribe", s.get(s.subscribe))
 	s.mux.HandleFunc("/rpc/URLStream", s.urlStream)
 
@@ -109,6 +126,68 @@ func (s *Server) post(h func(http.ResponseWriter, *http.Request)) http.HandlerFu
 			return
 		}
 		h(w, r)
+	}
+}
+
+// handleTile is the canonical JSON-RPC handler for the store methods
+// shaped (context.Context, *REQ) → (*rpc.Tile, error). The pattern
+// — read req, dispatch, wrap the returned tile in rpc.TileResponse —
+// was open-coded across every Create / Move / Clone / Resize / Set /
+// Update handler. One generic helper here folds those into a single
+// expression each at the routes table.
+func handleTile[REQ any](action func(context.Context, *REQ) (*rpc.Tile, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req REQ
+		if err := readJSON(r, &req); err != nil {
+			writeError(w, err)
+			return
+		}
+		n, err := action(r.Context(), &req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, &rpc.TileResponse{Tile: *n})
+	}
+}
+
+// handleVoid is the canonical handler for store methods shaped
+// (context.Context, *REQ) → error. The response is the caller-supplied
+// empty struct value (SetRootViewResponse, DeleteTileResponse), so
+// the wire format stays unchanged.
+func handleVoid[REQ, RES any](action func(context.Context, *REQ) error, empty RES) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req REQ
+		if err := readJSON(r, &req); err != nil {
+			writeError(w, err)
+			return
+		}
+		if err := action(r.Context(), &req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, &empty)
+	}
+}
+
+// handleJSONIn is the canonical handler for store methods shaped
+// (context.Context, *REQ) → (RES, error) where RES is the JSON
+// response value. The wrap step is the caller's job — used for
+// getGrid / getBlob / getTilePreview where the response isn't
+// uniformly *rpc.Tile.
+func handleJSONIn[REQ, RES any](action func(context.Context, *REQ) (RES, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req REQ
+		if err := readJSON(r, &req); err != nil {
+			writeError(w, err)
+			return
+		}
+		res, err := action(r.Context(), &req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, res)
 	}
 }
 
