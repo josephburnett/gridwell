@@ -47,7 +47,7 @@ func urlLog(format string, args ...any) {
 // viewport for a pane with the given screen rect. The viewport is the
 // pane's content box (rect minus margin), so the page reflows to the
 // exact area painted with frames.
-func paneStreamSize(r paneRect) (int64, int64) {
+func paneStreamSize(r pane.Rect) (int64, int64) {
 	_, _, cw, ch := paneContentBox(r)
 	if cw < 1 {
 		cw = 1
@@ -62,7 +62,7 @@ func paneStreamSize(r paneRect) (int64, int64) {
 // pane-content-local coordinates — the space the Chromium tab thinks
 // it's painting in. Pane content size = Chromium viewport size, so no
 // scaling is needed beyond the origin shift.
-func paneStreamLocal(r paneRect, sx, sy float64) (float64, float64) {
+func paneStreamLocal(r pane.Rect, sx, sy float64) (float64, float64) {
 	cx, cy, _, _ := paneContentBox(r)
 	return sx - cx, sy - cy
 }
@@ -329,7 +329,7 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 // paneRectByID looks up the screen rect for the given pane via a fresh
 // layout pass. Used by code paths (SSE handler, viewport-resize tick)
 // that don't have the rect on hand.
-func (a *App) paneRectByID(paneID string) paneRect {
+func (a *App) paneRectByID(paneID string) pane.Rect {
 	rs := a.layoutPanes()
 	return rs[paneID]
 }

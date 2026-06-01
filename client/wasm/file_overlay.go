@@ -40,7 +40,7 @@ func (a *App) scheduleFileSave() {
 // what limits user content in live mode, so calibrating ViewZoom
 // against it makes the preview text fill the file cell at the same
 // fraction as live text fills the inner-box.
-func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
+func fileOvertakeZoom(r pane.Rect, fileW, fileH int64) float64 {
 	innerW := r.W - 2*fileSideInset
 	innerH := r.H - 2*fileSideInset
 	if innerW <= 0 || innerH <= 0 {
@@ -62,7 +62,7 @@ func fileOvertakeZoom(r paneRect, fileW, fileH int64) float64 {
 // URL tiles use the full pane content area (paneContentBox) instead
 // of this narrower textarea-shaped box — see drawURLTileInPane and
 // the mouse/wheel handlers' isURLDescent branches.
-func fileInnerBox(p *pane.Pane, r paneRect) (x, y, w, h float64) {
+func fileInnerBox(p *pane.Pane, r pane.Rect) (x, y, w, h float64) {
 	left, top, width, height, _ := fileTextareaBox(p, r)
 	return left, top, width, height
 }
@@ -73,7 +73,7 @@ func fileInnerBox(p *pane.Pane, r paneRect) (x, y, w, h float64) {
 // markdown files (fileMargin) makes no sense here, since web pages
 // have their own internal layout and want all the pixels they can get.
 // Ascent out of a URL tile is via the Escape key.
-func paneContentBox(r paneRect) (x, y, w, h float64) {
+func paneContentBox(r pane.Rect) (x, y, w, h float64) {
 	const m = paneBorderPx
 	x = r.X + m
 	y = r.Y + m
@@ -91,7 +91,7 @@ func paneContentBox(r paneRect) (x, y, w, h float64) {
 // pointInPaneContent reports whether (sx, sy) lies inside the
 // pane's full content rectangle. Mirrors pointInFileInner but for
 // the wider URL-tile content surface.
-func pointInPaneContent(r paneRect, sx, sy float64) bool {
+func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
 	x, y, w, h := paneContentBox(r)
 	return sx >= x && sx < x+w && sy >= y && sy < y+h
 }
@@ -101,7 +101,7 @@ func pointInPaneContent(r paneRect, sx, sy float64) bool {
 // URL refresh gesture arm zone to the centre of the content area, so
 // right-clicks in the outer band still reach the pane-management
 // region classifier (split / swap / resize).
-func pointInURLCenter(r paneRect, sx, sy float64) bool {
+func pointInURLCenter(r pane.Rect, sx, sy float64) bool {
 	x, y, w, h := paneContentBox(r)
 	x1 := x + w/3
 	x2 := x + 2*w/3
@@ -113,7 +113,7 @@ func pointInURLCenter(r paneRect, sx, sy float64) bool {
 // pointInFileInner reports whether (sx, sy) lies inside the
 // file-focused pane's inner box. Outside the box (but still inside
 // the pane) is the outer ring with grid-style mouse rules.
-func pointInFileInner(p *pane.Pane, r paneRect, sx, sy float64) bool {
+func pointInFileInner(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	ix, iy, iw, ih := fileInnerBox(p, r)
 	return sx >= ix && sx < ix+iw && sy >= iy && sy < iy+ih
 }
@@ -482,7 +482,7 @@ func (a *App) syncFileOverlayPosition() {
 // font size for pane p with rect r. Inset by fileMargin so a margin of
 // outer-ring space surrounds the textarea, and width is capped at the
 // 80-column reading width so long files don't stretch full-pane.
-func fileTextareaBox(_ *pane.Pane, r paneRect) (left, top, width, height, fontPx float64) {
+func fileTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
 	// Fixed scale: the textarea font matches the canvas body size at
 	// fileFixedScale.
 	fontPx = 14.0 * fileFixedScale

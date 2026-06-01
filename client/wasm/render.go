@@ -154,21 +154,9 @@ func (a *App) draw() {
 	a.syncFileOverlayPosition()
 }
 
-// paneRect is a rectangle in screen coordinates. It mirrors pane.Rect
-// so the rest of the wasm code keeps using a local type while the
-// underlying layout is computed by the (testable) pane.Layout helper.
-type paneRect struct {
-	X, Y, W, H float64
-}
-
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.
-func (a *App) layoutPanes() map[string]paneRect {
-	src := pane.Layout(a.tree, pane.Rect{X: 0, Y: 0, W: a.width, H: a.height})
-	out := make(map[string]paneRect, len(src))
-	for id, r := range src {
-		out[id] = paneRect{X: r.X, Y: r.Y, W: r.W, H: r.H}
-	}
-	return out
+func (a *App) layoutPanes() map[string]pane.Rect {
+	return pane.Layout(a.tree, pane.Rect{X: 0, Y: 0, W: a.width, H: a.height})
 }
 
 // drawPane draws one pane's contents.
@@ -177,12 +165,12 @@ func (a *App) layoutPanes() map[string]paneRect {
 // the target grid hasn't loaded yet. That way the user can see the pane is
 // live and use the + button (or Home key, etc.) to recover from a stale
 // descent path.
-func (a *App) drawPane(p *pane.Pane, r paneRect) {
+func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	a.previewPaneID = p.ID
 	a.previewPaneRect = r
 	defer func() {
 		a.previewPaneID = ""
-		a.previewPaneRect = paneRect{}
+		a.previewPaneRect = pane.Rect{}
 	}()
 	gid := a.gridIDForPath(p.Path)
 	g, gridOK := a.c.Grid(gid)
@@ -324,7 +312,7 @@ func (a *App) drawPane(p *pane.Pane, r paneRect) {
 // drawURLBackButton paints the lower-right button on a URL-tile descent.
 // Click → history.back() on the descended Chromium tab. Same circular
 // chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton(_ *pane.Pane, r paneRect) {
+func (a *App) drawURLBackButton(_ *pane.Pane, r pane.Rect) {
 	cx, cy := plusButtonCenter(r)
 	a.cctx.Set("fillStyle", colorPlusBg)
 	a.cctx.Call("beginPath")
@@ -355,7 +343,7 @@ func (a *App) drawURLBackButton(_ *pane.Pane, r paneRect) {
 // descent. Click → open URL stream (same action as the right-drag-down
 // refresh gesture). Same circular chrome as drawURLBackButton so the
 // position is muscle-memory-compatible.
-func (a *App) drawURLRefreshButton(_ *pane.Pane, r paneRect) {
+func (a *App) drawURLRefreshButton(_ *pane.Pane, r pane.Rect) {
 	cx, cy := plusButtonCenter(r)
 	a.cctx.Set("fillStyle", colorPlusBg)
 	a.cctx.Call("beginPath")
@@ -372,7 +360,7 @@ func (a *App) drawURLRefreshButton(_ *pane.Pane, r paneRect) {
 // drawGridLines paints faint lines at integer cell boundaries within the
 // pane's visible region. Lines fade to invisible when cells are tiny so
 // extreme zoom-out doesn't paint a solid grey wash.
-func (a *App) drawGridLines(ps dragdrop.Pane, r paneRect) {
+func (a *App) drawGridLines(ps dragdrop.Pane, r pane.Rect) {
 	cellSize := ps.CellPx * ps.Zoom
 	originX, originY := ps.CellToScreen(0, 0)
 	drawGridLinesIn(a.cctx, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
@@ -432,7 +420,7 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, selected bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected bool) {
 	switch n.Kind {
 	case rpc.KindText:
 		a.drawMarkdownNode(n, x, y, w, h, r, selected)
@@ -568,7 +556,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ paneRect, selected bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected bool) {
 	// Mode comes from the tile (persisted on the server); default to raw
 	// text for a never-opened file. A pane descended into this file
 	// overrides with its live mode.
@@ -1093,7 +1081,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 // fades into a trashcan glyph while the size lerp shrinks it toward
 // the hole. Drag back out and frag returns to 0 — the trashcan fades
 // out and the original tile fades back in at full size.
-func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, frag float64) {
+func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
 		if a.ghost != nil && a.ghost.overDoc {
@@ -1298,7 +1286,7 @@ func drawBlackHoleSwatch(c js.Value, x, y, w, h float64) {
 // every tile whose footprint lies entirely outside the visible viewport.
 // Each marker is positioned where the ray from the viewport center to the
 // tile's center crosses the pane's inset rectangle, and points outward.
-func (a *App) drawEdgeIndicators(nodes map[int64]rpc.Tile, ps dragdrop.Pane, r paneRect) {
+func (a *App) drawEdgeIndicators(nodes map[int64]rpc.Tile, ps dragdrop.Pane, r pane.Rect) {
 	cellSize := ps.CellPx * ps.Zoom
 	const inset = 12.0
 	innerL := r.X + inset
@@ -1373,7 +1361,7 @@ func (a *App) drawTriangle(cx, cy, angle, size float64) {
 // paletteLayoutFor builds the pure-go palette.Layout snapshot for a
 // given pane. The palette package owns the geometry; wasm only has to
 // pour the inputs in.
-func paletteLayoutFor(p *pane.Pane, r paneRect) palette.Layout {
+func paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 	return palette.Layout{
 		Cfg:      palette.Default(),
 		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
@@ -1386,7 +1374,7 @@ func paletteLayoutFor(p *pane.Pane, r paneRect) palette.Layout {
 // given pane. The pane's zoom does not influence the + button, but
 // using paletteLayoutFor keeps every screen-space layout computation
 // going through one helper.
-func plusButtonCenter(r paneRect) (float64, float64) {
+func plusButtonCenter(r pane.Rect) (float64, float64) {
 	l := palette.Layout{
 		Cfg:  palette.Default(),
 		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
@@ -1396,7 +1384,7 @@ func plusButtonCenter(r paneRect) (float64, float64) {
 
 // pointInPlus reports whether (x, y) lies within the + button for the given
 // pane rect.
-func pointInPlus(r paneRect, x, y float64) bool {
+func pointInPlus(r pane.Rect, x, y float64) bool {
 	l := palette.Layout{
 		Cfg:  palette.Default(),
 		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
@@ -1406,7 +1394,7 @@ func pointInPlus(r paneRect, x, y float64) bool {
 
 // drawPlusButton paints the floating circular + button in the pane's lower
 // right.
-func (a *App) drawPlusButton(p *pane.Pane, r paneRect) {
+func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
 	cx, cy := plusButtonCenter(r)
 	bg := colorPlusBg
 	if a.menuOpen && a.menuPaneID == p.ID {
@@ -1433,20 +1421,20 @@ func (a *App) drawPlusButton(p *pane.Pane, r paneRect) {
 }
 
 // paletteRect is the wasm-side adapter for palette.Layout.PopoverRect.
-func paletteRect(p *pane.Pane, r paneRect) (x, y, w, h float64) {
+func paletteRect(p *pane.Pane, r pane.Rect) (x, y, w, h float64) {
 	pop := paletteLayoutFor(p, r).PopoverRect()
 	return pop.X, pop.Y, pop.W, pop.H
 }
 
 // paletteTileRect is the wasm-side adapter for palette.Layout.TileRect.
-func paletteTileRect(p *pane.Pane, r paneRect, i int) (x, y, w, h float64) {
+func paletteTileRect(p *pane.Pane, r pane.Rect, i int) (x, y, w, h float64) {
 	tr := paletteLayoutFor(p, r).TileRect(i)
 	return tr.X, tr.Y, tr.W, tr.H
 }
 
 // drawPalette paints the creation popover: a background container and
 // a horizontal row of preview tiles, one per templateKind.
-func (a *App) drawPalette(p *pane.Pane, r paneRect) {
+func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 	mx, my, mw, mh := paletteRect(p, r)
 	a.cctx.Set("fillStyle", colorMenuBg)
 	a.cctx.Call("fillRect", mx, my, mw, mh)
@@ -1498,12 +1486,12 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 }
 
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.
-func paletteTileIndexAt(p *pane.Pane, r paneRect, x, y float64) int {
+func paletteTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
 	return paletteLayoutFor(p, r).TileIndexAt(x, y)
 }
 
 // pointInPalette is the wasm-side adapter for palette.Layout.PointInPopover.
-func pointInPalette(p *pane.Pane, r paneRect, x, y float64) bool {
+func pointInPalette(p *pane.Pane, r pane.Rect, x, y float64) bool {
 	return paletteLayoutFor(p, r).PointInPopover(x, y)
 }
 

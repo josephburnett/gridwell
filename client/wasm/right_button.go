@@ -92,19 +92,19 @@ type rightDragState struct {
 
 	// Split-only.
 	splitPaneID string
-	splitPane   paneRect
+	splitPane   pane.Rect
 	splitSide   pane.Side
 
 	// Resize-only.
 	targetSplit *pane.Split
 	splitDir    pane.Direction
-	container   paneRect
+	container   pane.Rect
 
 	// Tile-only.
 	tilePaneID string
 	tileNode   rpc.Tile
 	tilePane   *pane.Pane // for path/grid lookups at commit time
-	tilePaneR  paneRect   // pane rect at right-down (for cell mapping)
+	tilePaneR  pane.Rect   // pane rect at right-down (for cell mapping)
 
 	// rightDragTileCenter-only. cursorInCenter tracks whether the
 	// cursor is currently inside the center zone, so the preview can
@@ -144,7 +144,7 @@ type rightDragState struct {
 //
 // Caller has already verified there's no animation in flight and
 // (sx, sy) is over pane p with screen rect r.
-func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
+func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	// Rendered text descent over an embed: arm the embed-hint gesture so
 	// the chain-link glyph surfaces. No drag, no commit — just the hint.
 	if p.TextFocus != 0 && p.TextMode == rpc.TextModeRendered {
@@ -190,7 +190,7 @@ func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
 			return
 		}
 	}
-	region := pane.ClassifyRegion(paneRectToRect(r), resizeBandPx, sx, sy)
+	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
 	switch {
 	case region.IsResize():
 		// Resize zones map to the divider on that side, if any. If
@@ -206,7 +206,7 @@ func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
 				originPaneID: p.ID,
 				targetSplit:  d.Split,
 				splitDir:     d.Dir,
-				container:    paneRect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
+				container:    pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
 			}
 			return
 		}
@@ -256,7 +256,7 @@ func (a *App) onRightMove(sx, sy float64) {
 	rd.curY = sy
 	switch rd.kind {
 	case rightDragResize:
-		newRatio := pane.RatioFromCursor(paneRectToRect(rd.container), rd.splitDir, sx, sy)
+		newRatio := pane.RatioFromCursor(rd.container, rd.splitDir, sx, sy)
 		rd.targetSplit.Ratio = newRatio
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(&rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
@@ -273,7 +273,7 @@ func (a *App) onRightMove(sx, sy float64) {
 // tileAtScreen returns the tile under (sx, sy) inside pane p, or nil.
 // Wraps cellAtScreen + tileAtCell so the tile-gesture entry is a
 // single helper rather than an inline pair.
-func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Tile {
+func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *rpc.Tile {
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	return a.tileAtCell(p, cellX, cellY)
 }
@@ -289,7 +289,7 @@ func (a *App) tileAtScreen(p *pane.Pane, r paneRect, sx, sy float64) *rpc.Tile {
 // In both cases drawRightDragPreview paints the 5-zone hotspot
 // overlay so the user can see all the affordances on the tile at a
 // glance.
-func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
+func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64) {
 	common := rightDragState{
 		startX:     sx,
 		startY:     sy,
@@ -320,16 +320,16 @@ func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float
 }
 
 // inTileCenter is a wasm-side adapter that builds the dragdrop.Pane
-// from a pane.Pane + paneRect and delegates to dragdrop.InTileCenter
+// from a pane.Pane + pane.Rect and delegates to dragdrop.InTileCenter
 // (where the geometry lives, natively tested).
-func inTileCenter(n *rpc.Tile, p *pane.Pane, r paneRect, sx, sy float64) bool {
+func inTileCenter(n *rpc.Tile, p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	ps := paneToDragdrop(p, r)
 	cx, cy := ps.ScreenToCell(sx, sy)
 	return dragdrop.InTileCenter(n.X, n.Y, n.W, n.H, cx, cy)
 }
 
 // tileResizeAnchors is the wasm-side adapter for dragdrop.ResizeAnchorsFor.
-func tileResizeAnchors(n *rpc.Tile, p *pane.Pane, r paneRect, sx, sy float64) (
+func tileResizeAnchors(n *rpc.Tile, p *pane.Pane, r pane.Rect, sx, sy float64) (
 	pinX, pinY, origMovingX, origMovingY, clickCellX, clickCellY int64,
 ) {
 	ps := paneToDragdrop(p, r)
@@ -450,7 +450,7 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 //
 // We don't hide the original tile (clone=true), and the cursor offset
 // inside the tile is preserved so the grab point tracks the cursor.
-func (a *App) armRightClone(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float64) {
+func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64) {
 	ps := paneToDragdrop(p, r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
@@ -626,7 +626,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 // commitResize applies the final ratio and, if either side is below
 // rightCloseThreshold, collapses that side.
 func (a *App) commitResize(rd *rightDragState, sx, sy float64) {
-	newRatio := pane.RatioFromCursor(paneRectToRect(rd.container), rd.splitDir, sx, sy)
+	newRatio := pane.RatioFromCursor(rd.container, rd.splitDir, sx, sy)
 	rd.targetSplit.Ratio = newRatio
 	var aSize, bSize float64
 	if rd.splitDir == pane.Horizontal {
@@ -668,7 +668,7 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if !pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, sx, sy) {
 		return
 	}
-	pos, ok := pane.SplitClampedPosition(rd.splitSide, paneRectToRect(rd.splitPane), resizeBandPx, sx, sy)
+	pos, ok := pane.SplitClampedPosition(rd.splitSide, rd.splitPane, resizeBandPx, sx, sy)
 	if !ok {
 		return
 	}
@@ -736,15 +736,10 @@ func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
 	return nil
 }
 
-// paneRectToRect converts the wasm-local paneRect to pane.Rect.
-func paneRectToRect(r paneRect) pane.Rect {
-	return pane.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}
-}
-
 // paneToDragdrop builds a dragdrop.Pane (screen rect + viewport) for
 // pane p drawn into screen rect r. Centralized so callers don't all
 // reach into the same five fields by hand.
-func paneToDragdrop(p *pane.Pane, r paneRect) dragdrop.Pane {
+func paneToDragdrop(p *pane.Pane, r pane.Rect) dragdrop.Pane {
 	return dragdrop.Pane{
 		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
@@ -870,7 +865,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	p := a.tree.FindPane(paneID)
 
 	inset := paneBorderPx
-	r := paneRect{
+	r := pane.Rect{
 		X: pr.X + inset,
 		Y: pr.Y + inset,
 		W: pr.W - 2*inset,
@@ -1051,7 +1046,7 @@ func drawHotspotArrow(c js.Value, cx, cy, dx, dy float64) {
 
 // tileScreenRect returns the on-screen rectangle of tile n as drawn
 // in pane p. Mirrors the math used by the parent-grid renderer.
-func tileScreenRect(n *rpc.Tile, p *pane.Pane, r paneRect) (left, top, w, h float64) {
+func tileScreenRect(n *rpc.Tile, p *pane.Pane, r pane.Rect) (left, top, w, h float64) {
 	ps := paneToDragdrop(p, r)
 	left, top = ps.CellToScreen(float64(n.X), float64(n.Y))
 	cellSize := cellPx * p.Zoom
@@ -1094,7 +1089,7 @@ func jsArray(vals ...float64) js.Value {
 // grey otherwise.
 func (a *App) drawSplitPreview(rd *rightDragState) {
 	a.drawSplitZoneHint(rd)
-	pos, valid := pane.SplitClampedPosition(rd.splitSide, paneRectToRect(rd.splitPane), resizeBandPx, rd.curX, rd.curY)
+	pos, valid := pane.SplitClampedPosition(rd.splitSide, rd.splitPane, resizeBandPx, rd.curX, rd.curY)
 	active := valid && pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, rd.curX, rd.curY)
 
 	// Find the pane being split for color resolution.
@@ -1339,7 +1334,7 @@ func (a *App) drawResizePreview(rd *rightDragState) {
 // splitChildRects mirrors pane.splitRect (which is unexported) for
 // use by the close-warning renderer. Inlined here rather than
 // exporting the package helper since the scope is small.
-func splitChildRects(container paneRect, dir pane.Direction, ratio float64) (a, b paneRect) {
+func splitChildRects(container pane.Rect, dir pane.Direction, ratio float64) (a, b pane.Rect) {
 	if ratio < 0 {
 		ratio = 0
 	}
@@ -1348,13 +1343,13 @@ func splitChildRects(container paneRect, dir pane.Direction, ratio float64) (a, 
 	}
 	if dir == pane.Horizontal {
 		hA := container.H * ratio
-		a = paneRect{X: container.X, Y: container.Y, W: container.W, H: hA}
-		b = paneRect{X: container.X, Y: container.Y + hA, W: container.W, H: container.H - hA}
+		a = pane.Rect{X: container.X, Y: container.Y, W: container.W, H: hA}
+		b = pane.Rect{X: container.X, Y: container.Y + hA, W: container.W, H: container.H - hA}
 		return
 	}
 	wA := container.W * ratio
-	a = paneRect{X: container.X, Y: container.Y, W: wA, H: container.H}
-	b = paneRect{X: container.X + wA, Y: container.Y, W: container.W - wA, H: container.H}
+	a = pane.Rect{X: container.X, Y: container.Y, W: wA, H: container.H}
+	b = pane.Rect{X: container.X + wA, Y: container.Y, W: container.W - wA, H: container.H}
 	return
 }
 

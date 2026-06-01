@@ -15,7 +15,7 @@ import (
 // the doc instead of moving / cloning the tile.
 type docDropTarget struct {
 	pane         *pane.Pane
-	rect         paneRect
+	rect         pane.Rect
 	tileID       int64
 	version      int64
 	insertOffset int
@@ -25,10 +25,10 @@ type docDropTarget struct {
 // descent pane underneath. The wasm-specific work is gathering the pane
 // state from the focused-pane tree; the classification rule lives in
 // client/embed.
-func (a *App) classifyDocTargetAt(sx, sy float64) (embedpkg.DocTarget, *pane.Pane, paneRect) {
+func (a *App) classifyDocTargetAt(sx, sy float64) (embedpkg.DocTarget, *pane.Pane, pane.Rect) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok || p == nil {
-		return embedpkg.DocTargetNone, nil, paneRect{}
+		return embedpkg.DocTargetNone, nil, pane.Rect{}
 	}
 	state := embedpkg.PaneState{
 		HasTextFocus: p.TextFocus != 0,

@@ -23,7 +23,7 @@ import (
 // the target cell at the cursor.
 type dropTarget struct {
 	pane     *pane.Pane
-	paneRect paneRect
+	rect     pane.Rect
 	gridID   int64
 	path     []int64
 	cellSize float64
@@ -73,7 +73,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 		path := append(append([]int64(nil), p.Path...), n.ID)
 		return &dropTarget{
 			pane:     p,
-			paneRect: r,
+			rect:     r,
 			gridID:   n.ChildGridID,
 			path:     path,
 			cellSize: cp.CellPx,
@@ -85,7 +85,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 	// Parent-grid drop.
 	return &dropTarget{
 		pane:     p,
-		paneRect: r,
+		rect:     r,
 		gridID:   a.gridIDForPath(p.Path),
 		path:     append([]int64(nil), p.Path...),
 		cellSize: parentCell,
@@ -115,7 +115,7 @@ func (t *dropTarget) cellAtCursor(sx, sy, cellOffsetX, cellOffsetY float64) (int
 // well's child preview, or nil if no tile is there. Used at mousedown
 // to decide whether a click on a well is starting a "pull out" gesture
 // on a specific child tile.
-func (a *App) childTileAtScreen(p *pane.Pane, r paneRect, well *rpc.Tile, sx, sy float64) *rpc.Tile {
+func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, sy float64) *rpc.Tile {
 	if well.Kind != rpc.KindWell || well.ChildGridID == 0 {
 		return nil
 	}

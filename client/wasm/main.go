@@ -98,7 +98,7 @@ type App struct {
 	// the pane being painted. drawNodeWithPreview reads it to compute
 	// OvertakeZoom (which depends on pane dimensions) for the
 	// preview-cell-size formula.
-	previewPaneRect paneRect
+	previewPaneRect pane.Rect
 
 	// animation is the current ghost animation, if any (snap-to-target on
 	// drop or snap-back-to-origin on failure).
@@ -316,7 +316,7 @@ type dragState struct {
 	snapshotTile   rpc.Tile
 	originScreenX  float64
 	originScreenY  float64
-	originPaneRect paneRect
+	originPaneRect pane.Rect
 
 	// Template drag from the + palette: tileID is 0 (no real node yet)
 	// but isTemplate is true and template carries the kind that was

@@ -115,21 +115,21 @@ func readModifiers(ev js.Value) int64 {
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
-// or (nil, paneRect{}, false) if no pane covers the point.
-func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, paneRect, bool) {
+// or (nil, pane.Rect{}, false) if no pane covers the point.
+func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	rects := a.layoutPanes()
 	for id, r := range rects {
 		if sx >= r.X && sy >= r.Y && sx < r.X+r.W && sy < r.Y+r.H {
 			return a.tree.FindPane(id), r, true
 		}
 	}
-	return nil, paneRect{}, false
+	return nil, pane.Rect{}, false
 }
 
 // cellAtScreen returns the integer cell that contains screen point (sx, sy)
 // inside the given pane. Uses floor (which cell is the cursor *in?*), not
 // round — round-half made clicks in the lower-right half of a tile miss.
-func cellAtScreen(p *pane.Pane, r paneRect, sx, sy float64) (int64, int64) {
+func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64) {
 	return paneToDragdrop(p, r).CellAt(sx, sy)
 }
 
@@ -153,7 +153,7 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 // updateURLCursor sets the canvas CSS cursor for a URL descent pane.
 // Frozen descent: "grab" at rest, "grabbing" while dragging.
 // Live descent: default (the iframe / Chromium manages its own cursor).
-func (a *App) updateURLCursor(p *pane.Pane, _ paneRect) {
+func (a *App) updateURLCursor(p *pane.Pane, _ pane.Rect) {
 	if a.urlStreams[p.ID] != nil {
 		// Live: restore default and let the page/browser control the cursor.
 		a.canvas.Get("style").Set("cursor", "")
@@ -907,12 +907,12 @@ func (a *App) snapBackToOrigin(d *dragState) {
 	a.scheduleFrame()
 }
 
-func paneRectFor(a *App, p *pane.Pane) paneRect {
+func paneRectFor(a *App, p *pane.Pane) pane.Rect {
 	rects := a.layoutPanes()
 	if r, ok := rects[p.ID]; ok {
 		return r
 	}
-	return paneRect{}
+	return pane.Rect{}
 }
 
 // attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
@@ -932,7 +932,7 @@ func paneRectFor(a *App, p *pane.Pane) paneRect {
 //
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
-func (a *App) attemptDescentOrAscent(p *pane.Pane, r paneRect, sx, sy float64) bool {
+func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	pscreen := paneToDragdrop(p, r)
 	if (p.TextFocus != 0 || len(p.Path) > 0) &&
 		dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
@@ -1559,7 +1559,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 // like a regular tile drag (snapshot tile + cell offset), but with
 // isTemplate=true so onMouseUp branches to creation instead of move.
 // The palette stays open during the drag — it'll close on commit.
-func (a *App) startTemplateDrag(p *pane.Pane, r paneRect, idx int, sx, sy float64) {
+func (a *App) startTemplateDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) {
 	if idx < 0 || idx >= len(templateKinds) {
 		return
 	}
