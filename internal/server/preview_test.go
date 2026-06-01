@@ -50,6 +50,23 @@ func TestPreviewTilePlaceholderText(t *testing.T) {
 	}
 }
 
+// TestPreviewTilePlaceholderBlackHole exercises the blackhole-kind glyph
+// branch of the placeholder renderer, which draws a filled disc.
+func TestPreviewTilePlaceholderBlackHole(t *testing.T) {
+	hs, root := newTestServer(t)
+	var nr rpc.TileResponse
+	if st, _ := callRPC(t, hs, "CreateBlackHole", &rpc.CreateBlackHoleRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	}, &nr); st != 200 {
+		t.Fatal("create blackhole")
+	}
+
+	st, ct, _ := getPreview(t, hs, nr.Tile.ID, 96, 96)
+	if st != 200 || ct != "image/png" {
+		t.Fatalf("status=%d ct=%q", st, ct)
+	}
+}
+
 func TestPreviewTilePlaceholderWell(t *testing.T) {
 	hs, root := newTestServer(t)
 	var nr rpc.TileResponse

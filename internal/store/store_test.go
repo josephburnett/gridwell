@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
+
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // newTestStore opens an in-memory store and seeds deterministic clocks/IDs so
@@ -74,5 +77,26 @@ func TestBootstrapRoot(t *testing.T) {
 	}
 	if id <= 0 {
 		t.Errorf("root id = %d", id)
+	}
+}
+
+// TestRootViewRoundTrip writes a root framing via SetRootView and reads
+// the same values back through RootView (which in turn exercises
+// readFloatKey on each of cx / cy / zoom).
+func TestRootViewRoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	want := &rpc.SetRootViewRequest{Cx: 3.5, Cy: -7.25, Zoom: 1.5}
+	if err := s.SetRootView(ctx, want); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cx, cy, zoom, err := s.RootView(ctx)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	const eps = 1e-9
+	if math.Abs(cx-want.Cx) > eps || math.Abs(cy-want.Cy) > eps || math.Abs(zoom-want.Zoom) > eps {
+		t.Errorf("RootView = (%v, %v, %v), want (%v, %v, %v)",
+			cx, cy, zoom, want.Cx, want.Cy, want.Zoom)
 	}
 }

@@ -44,3 +44,27 @@ func TestNewErrorsOnUnknownBrand(t *testing.T) {
 		t.Fatal("New returned nil; want error for unknown brand")
 	}
 }
+
+func TestBrandNamesEnumeratesAllBrands(t *testing.T) {
+	got := BrandNames()
+	want := map[string]bool{"chromium": true, "chrome": true, "brave": true, "edge": true}
+	if len(got) != len(want) {
+		t.Errorf("BrandNames length = %d, want %d", len(got), len(want))
+	}
+	for _, g := range got {
+		if !want[g] {
+			t.Errorf("unexpected brand %q", g)
+		}
+	}
+}
+
+func TestAvailableReportsNonNil(t *testing.T) {
+	var d *Driver
+	if d.Available() {
+		t.Error("(*Driver)(nil).Available() should be false")
+	}
+	d = &Driver{}
+	if !d.Available() {
+		t.Error("non-nil Driver.Available() should be true")
+	}
+}

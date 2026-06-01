@@ -118,6 +118,53 @@ func TestSetURLPreview(t *testing.T) {
 	}
 }
 
+func TestSetTileAlt(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	tile := createURLTileForTest(t, s, root, 0, "https://example.com")
+
+	if err := s.SetTileAlt(ctx, tile.ID, "Example Title"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	got, err := s.loadTile(ctx, s.db, tile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AltText != "Example Title" {
+		t.Errorf("AltText = %q, want %q", got.AltText, "Example Title")
+	}
+	if got.Version != tile.Version+1 {
+		t.Errorf("version after SetTileAlt = %d, want %d", got.Version, tile.Version+1)
+	}
+	// Setting back to empty clears the column.
+	if err := s.SetTileAlt(ctx, tile.ID, ""); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	got, err = s.loadTile(ctx, s.db, tile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AltText != "" {
+		t.Errorf("AltText after clear = %q, want empty", got.AltText)
+	}
+}
+
+func TestFakeURLDriverAvailable(t *testing.T) {
+	d := NewFakeURLDriver()
+	if !d.Available() {
+		t.Error("fresh FakeURLDriver should be available")
+	}
+	d.SetAvailable(false)
+	if d.Available() {
+		t.Error("after SetAvailable(false), Available() should report false")
+	}
+	d.SetAvailable(true)
+	if !d.Available() {
+		t.Error("after SetAvailable(true), Available() should report true")
+	}
+}
+
 func TestSetURLPreviewRefusesNonURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
