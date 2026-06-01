@@ -132,3 +132,47 @@ func TestBlobPutGetInvalidate(t *testing.T) {
 		t.Error("blob 7 should be gone after invalidate")
 	}
 }
+
+func TestKnownGridIDs(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{})
+	c.PutGrid(rpc.Grid{ID: 2}, []rpc.Tile{})
+
+	got := c.KnownGridIDs()
+	if len(got) != 2 {
+		t.Errorf("len = %d, want 2", len(got))
+	}
+	have := map[int64]bool{}
+	for _, id := range got {
+		have[id] = true
+	}
+	if !have[1] || !have[2] {
+		t.Errorf("KnownGridIDs missing entries: %v", got)
+	}
+}
+
+func TestUpdateTile(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: 10}, []rpc.Tile{
+		{ID: 100, GridID: 10, Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1},
+	})
+
+	// Update the existing tile: change W.
+	updated := rpc.Tile{ID: 100, GridID: 10, Kind: rpc.KindURL, X: 0, Y: 0, W: 3, H: 1}
+	c.UpdateTile(10, updated)
+
+	g, _ := c.Grid(10)
+	if g.Tiles[100].W != 3 {
+		t.Errorf("UpdateTile did not change W; got %d", g.Tiles[100].W)
+	}
+
+	// UpdateTile on an unknown grid is a no-op.
+	c.UpdateTile(999, updated)
+
+	// UpdateTile on an unknown tile id within a known grid is a no-op.
+	stranger := rpc.Tile{ID: 999, GridID: 10, Kind: rpc.KindText}
+	c.UpdateTile(10, stranger)
+	if _, ok := g.Tiles[999]; ok {
+		t.Error("UpdateTile should not insert unknown tile ids")
+	}
+}
