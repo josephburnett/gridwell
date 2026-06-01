@@ -107,16 +107,18 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	}
 	newSrc := embedpkg.Insert(string(bytes), link, dt.insertOffset)
 
-	// Synchronously reflect the change before the RPC roundtrip: replace
-	// the cached blob under the existing BlobID so canvas renders see
-	// fresh content immediately, and update the textarea if the focused
-	// pane is showing this same doc — otherwise the textarea keeps its
-	// stale value and the user sees the old text return on next click.
+	// Synchronously reflect the change before the RPC roundtrip:
+	//   - cache: replace blob under the existing BlobID so canvas
+	//     renders see fresh content immediately.
+	//   - textarea: if the singleton textarea is currently bound to this
+	//     doc (regardless of which pane has focus), push the new value
+	//     in directly. Without this, focus-shifting back to the doc
+	//     would re-display the stale buffer, and worse, a raw→rendered
+	//     toggle would save the stale buffer back over the drop.
 	if tile.BlobID != 0 {
 		a.c.PutBlob(tile.BlobID, []byte(newSrc))
 	}
-	if fp := a.tree.FocusedPane(); fp != nil &&
-		fp.TextFocus == dt.tileID && fp.TextMode == rpc.TextModeText &&
+	if a.lastTextareaTileID == dt.tileID &&
 		!a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
 		a.fileTextarea.Set("value", newSrc)
 	}

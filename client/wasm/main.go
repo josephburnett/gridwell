@@ -200,6 +200,16 @@ type App struct {
 	// appended to as embeds are painted by drawMarkdownInPane. Queried by
 	// the input handler to descend on click. See embed.go.
 	embedHits []embedHit
+
+	// lastTextareaTileID tracks which text-tile id the singleton
+	// textarea is currently bound to (i.e., whose blob it holds in its
+	// value). 0 means "bound to nothing" (textarea is hidden or never
+	// seeded). refreshFileOverlay uses this to decide whether to re-seed
+	// from the cached blob on a focus shift: same tile → preserve typing,
+	// different tile → fresh content. Embed drops also consult it to
+	// push new content into the textarea when it's already bound to the
+	// drop target.
+	lastTextareaTileID int64
 }
 
 // paneState is a captured viewport: viewport center in cells (sub-cell

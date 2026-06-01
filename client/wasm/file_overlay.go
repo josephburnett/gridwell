@@ -402,15 +402,19 @@ func (a *App) refreshFileOverlay() {
 	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
 	style.Set("display", "block")
 
-	// Initialize textarea content from the cached blob if it isn't
-	// already populated (i.e., on first show after descent).
+	// Seed (or re-seed) the textarea contents from the cached blob.
+	// Re-seed when the bound tile changes (focus moved to a different
+	// doc) or when the textarea was cleared by a toggle. Preserve
+	// in-progress typing when the same doc is re-focused — saveFile
+	// keeps the cache in sync with what the user has typed.
 	gid := a.gridIDForPath(p.Path)
 	g, ok := a.c.Grid(gid)
 	if ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok {
 			if blob, ok := a.c.Blob(file.BlobID); ok {
-				if ta.Get("value").String() == "" {
+				if a.lastTextareaTileID != p.TextFocus || ta.Get("value").String() == "" {
 					ta.Set("value", string(blob))
+					a.lastTextareaTileID = p.TextFocus
 				}
 			}
 		}
