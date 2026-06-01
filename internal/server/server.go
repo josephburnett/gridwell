@@ -74,6 +74,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/Subscribe", s.get(s.subscribe))
 	s.mux.HandleFunc("/rpc/URLStream", s.urlStream)
 
+	s.mux.HandleFunc("/preview/tile/", s.previewTile)
+
 	if s.cfg.StaticDir != "" {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticDir))
 	}
