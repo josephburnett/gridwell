@@ -3,12 +3,10 @@
 package main
 
 import (
-	"strconv"
-	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/pane"
-	gwurl "github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -40,7 +38,7 @@ const (
 // and appends to a.embedHits.
 func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
 	return func(x, y, w, h float64, href, alt string) {
-		tileID := tileIDFromHref(href)
+		tileID := embed.LeafTileIDFromHref(href)
 		var tile *rpc.Tile
 		if tileID != 0 {
 			tile = a.findTileByID(tileID)
@@ -136,29 +134,6 @@ func drawEmbedLabel(c js.Value, text string, x, y, w, h float64) {
 	c.Call("fillText", text, x+w/2, y+h/2)
 	c.Set("textAlign", "start")
 	c.Set("textBaseline", "top")
-}
-
-// tileIDFromHref parses a markdown link href as a Gridwell descent path
-// and returns the leaf tile id. Returns 0 if the href is not a parseable
-// gridwell path (e.g. an external link, a relative anchor).
-func tileIDFromHref(href string) int64 {
-	href = strings.TrimSpace(href)
-	if href == "" || !strings.HasPrefix(href, "/") {
-		return 0
-	}
-	st, err := gwurl.Decode(href)
-	if err != nil || len(st.TileIDs) == 0 {
-		// Fall back to a naive parse — split on slash and take the last
-		// numeric segment. This handles single-segment paths gracefully.
-		parts := strings.Split(strings.TrimPrefix(href, "/"), "/")
-		for i := len(parts) - 1; i >= 0; i-- {
-			if id, err := strconv.ParseInt(parts[i], 10, 64); err == nil && id > 0 {
-				return id
-			}
-		}
-		return 0
-	}
-	return st.TileIDs[len(st.TileIDs)-1]
 }
 
 // findTileByID walks the client tile cache for any cached row with the
