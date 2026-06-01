@@ -26,7 +26,9 @@ const (
 )
 
 // SpanStyle bits combine for inline formatting. A single span carries one
-// fixed style; emphasis switches mark new spans.
+// fixed style; emphasis switches mark new spans. StyleLink and StyleEmbed
+// are also surfaced here even though they describe link/image semantics
+// rather than text styling — they share the inline-span tokenizer.
 type SpanStyle uint8
 
 const (
@@ -34,12 +36,21 @@ const (
 	StyleBold   SpanStyle = 1 << 0
 	StyleItalic SpanStyle = 1 << 1
 	StyleCode   SpanStyle = 1 << 2
+	StyleLink   SpanStyle = 1 << 3
+	StyleEmbed  SpanStyle = 1 << 4
 )
 
-// Span is one styled run of text inside a block.
+// Span is one styled run of text inside a block. For link spans, Href is
+// set and Text is the link's display text. For embed spans, Src/Alt/Href
+// are set; W/H carry the declared embed pixel size (from the src URL's
+// ?w=&h= query parameters, if any).
 type Span struct {
 	Text  string
 	Style SpanStyle
+	Href  string
+	Src   string
+	Alt   string
+	W, H  int
 }
 
 // Block is the unit of vertical layout: a sequence of inline spans plus a
@@ -135,6 +146,39 @@ func parseInline(s string) []Span {
 			i = i + end + 2
 			continue
 		}
+		// Embed: [![alt](src)](href) — image wrapped in a link. This is the
+		// markdown pattern Gridwell uses for tile embeds, but the parser
+		// recognises it for any markdown source.
+		if s[i] == '[' && i+1 < len(s) && s[i+1] == '!' {
+			if end, alt, src, href, ok := parseEmbed(s, i); ok {
+				flush()
+				sp := Span{Style: StyleEmbed, Alt: alt, Src: src, Href: href}
+				sp.W, sp.H = embedSizeFromSrc(src)
+				out = append(out, sp)
+				i = end
+				continue
+			}
+		}
+		// Image alone: ![alt](src) — rendered as an embed with no href.
+		if s[i] == '!' && i+1 < len(s) && s[i+1] == '[' {
+			if end, alt, src, ok := parseImage(s, i); ok {
+				flush()
+				sp := Span{Style: StyleEmbed, Alt: alt, Src: src}
+				sp.W, sp.H = embedSizeFromSrc(src)
+				out = append(out, sp)
+				i = end
+				continue
+			}
+		}
+		// Plain link: [text](href).
+		if s[i] == '[' {
+			if end, text, href, ok := parseLink(s, i); ok {
+				flush()
+				out = append(out, Span{Text: text, Style: style | StyleLink, Href: href})
+				i = end
+				continue
+			}
+		}
 		// Bold: ** ... **
 		if i+1 < len(s) && s[i] == '*' && s[i+1] == '*' {
 			flush()
@@ -156,21 +200,133 @@ func parseInline(s string) []Span {
 	return out
 }
 
+// parseEmbed attempts to read [![alt](src)](href) starting at s[start]. On
+// success ok is true and end is the index one past the closing ).
+func parseEmbed(s string, start int) (end int, alt, src, href string, ok bool) {
+	if start >= len(s) || s[start] != '[' {
+		return 0, "", "", "", false
+	}
+	imgEnd, alt, src, imgOK := parseImage(s, start+1)
+	if !imgOK {
+		return 0, "", "", "", false
+	}
+	if imgEnd >= len(s) || s[imgEnd] != ']' {
+		return 0, "", "", "", false
+	}
+	if imgEnd+1 >= len(s) || s[imgEnd+1] != '(' {
+		return 0, "", "", "", false
+	}
+	hrefStart := imgEnd + 2
+	close := strings.IndexByte(s[hrefStart:], ')')
+	if close < 0 {
+		return 0, "", "", "", false
+	}
+	return hrefStart + close + 1, alt, src, s[hrefStart : hrefStart+close], true
+}
+
+// parseImage reads ![alt](src) starting at s[start].
+func parseImage(s string, start int) (end int, alt, src string, ok bool) {
+	if start+1 >= len(s) || s[start] != '!' || s[start+1] != '[' {
+		return 0, "", "", false
+	}
+	altStart := start + 2
+	closeBracket := strings.IndexByte(s[altStart:], ']')
+	if closeBracket < 0 {
+		return 0, "", "", false
+	}
+	alt = s[altStart : altStart+closeBracket]
+	after := altStart + closeBracket + 1
+	if after >= len(s) || s[after] != '(' {
+		return 0, "", "", false
+	}
+	srcStart := after + 1
+	closeParen := strings.IndexByte(s[srcStart:], ')')
+	if closeParen < 0 {
+		return 0, "", "", false
+	}
+	return srcStart + closeParen + 1, alt, s[srcStart : srcStart+closeParen], true
+}
+
+// parseLink reads [text](href) starting at s[start]. Does not handle nested
+// brackets in text; that's fine for the small surface we target.
+func parseLink(s string, start int) (end int, text, href string, ok bool) {
+	if start >= len(s) || s[start] != '[' {
+		return 0, "", "", false
+	}
+	textStart := start + 1
+	closeBracket := strings.IndexByte(s[textStart:], ']')
+	if closeBracket < 0 {
+		return 0, "", "", false
+	}
+	text = s[textStart : textStart+closeBracket]
+	after := textStart + closeBracket + 1
+	if after >= len(s) || s[after] != '(' {
+		return 0, "", "", false
+	}
+	hrefStart := after + 1
+	closeParen := strings.IndexByte(s[hrefStart:], ')')
+	if closeParen < 0 {
+		return 0, "", "", false
+	}
+	return hrefStart + closeParen + 1, text, s[hrefStart : hrefStart+closeParen], true
+}
+
+// embedSizeFromSrc parses ?w= and ?h= query parameters out of an embed src
+// URL. Returns (0, 0) if either is missing — the renderer falls back to
+// its own default in that case.
+func embedSizeFromSrc(src string) (int, int) {
+	_, query, ok := strings.Cut(src, "?")
+	if !ok {
+		return 0, 0
+	}
+	w, h := 0, 0
+	for kv := range strings.SplitSeq(query, "&") {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "w":
+			w = atoiSafe(v)
+		case "h":
+			h = atoiSafe(v)
+		}
+	}
+	return w, h
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+		if n > 1<<20 {
+			return 0
+		}
+	}
+	return n
+}
+
 // Wrap takes a block's spans and wraps them into lines of at most maxWidth
-// pixels. measureWidth returns the rendered pixel width of (text, style).
+// pixels. measure returns the rendered pixel width of a given span (the
+// callback may inspect Text, Style, Src, W/H to compute it).
 //
 // Wrap is deliberately byte-greedy on word boundaries; CJK and emoji are
 // not considered in v1. Trailing whitespace is preserved within a wrapped
-// line; leading whitespace on continuation lines is trimmed.
-func Wrap(spans []Span, maxWidth float64, measureWidth func(text string, style SpanStyle) float64) [][]Span {
-	type token struct {
-		text  string
-		style SpanStyle
-	}
-	// Tokenize spans on whitespace boundaries while preserving each span's
-	// style. Each token is a "run of non-space" or "single space".
-	var tokens []token
+// line; leading whitespace on continuation lines is trimmed. Embed spans
+// (StyleEmbed) are atomic — they're never split into sub-tokens.
+func Wrap(spans []Span, maxWidth float64, measure func(sp Span) float64) [][]Span {
+	// Tokenize text spans on whitespace boundaries while preserving span
+	// style. Each text-token is a "run of non-space" or "single space".
+	// Embed spans pass through as a single atomic token.
+	var tokens []Span
 	for _, sp := range spans {
+		if sp.Style&StyleEmbed != 0 {
+			tokens = append(tokens, sp)
+			continue
+		}
 		i := 0
 		for i < len(sp.Text) {
 			j := i
@@ -183,7 +339,9 @@ func Wrap(spans []Span, maxWidth float64, measureWidth func(text string, style S
 					j++
 				}
 			}
-			tokens = append(tokens, token{text: sp.Text[i:j], style: sp.Style})
+			tok := sp
+			tok.Text = sp.Text[i:j]
+			tokens = append(tokens, tok)
 			i = j
 		}
 	}
@@ -192,8 +350,8 @@ func Wrap(spans []Span, maxWidth float64, measureWidth func(text string, style S
 	var cur []Span
 	curWidth := 0.0
 	for _, tk := range tokens {
-		w := measureWidth(tk.text, tk.style)
-		isSpace := strings.TrimSpace(tk.text) == ""
+		w := measure(tk)
+		isSpace := tk.Style&StyleEmbed == 0 && strings.TrimSpace(tk.Text) == ""
 		// If a non-space token would overflow and there's already content on
 		// the line, wrap before this token.
 		if !isSpace && curWidth+w > maxWidth && len(cur) > 0 {
@@ -205,7 +363,7 @@ func Wrap(spans []Span, maxWidth float64, measureWidth func(text string, style S
 		if isSpace && len(cur) == 0 {
 			continue
 		}
-		cur = append(cur, Span{Text: tk.text, Style: tk.style})
+		cur = append(cur, tk)
 		curWidth += w
 	}
 	if len(cur) > 0 {

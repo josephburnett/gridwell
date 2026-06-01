@@ -84,13 +84,13 @@ func TestUnterminatedCodeFence(t *testing.T) {
 
 func TestWrapHonorsMaxWidth(t *testing.T) {
 	// One pixel per character.
-	measure := func(text string, _ SpanStyle) float64 { return float64(len(text)) }
+	measure := func(sp Span) float64 { return float64(len(sp.Text)) }
 	spans := []Span{{Text: "alpha bravo charlie delta echo foxtrot"}}
 	lines := Wrap(spans, 12, measure)
 	for i, l := range lines {
 		w := 0.0
 		for _, sp := range l {
-			w += measure(sp.Text, sp.Style)
+			w += measure(sp)
 		}
 		if w > 12 {
 			t.Errorf("line %d width %v > 12: %+v", i, w, l)
@@ -99,7 +99,7 @@ func TestWrapHonorsMaxWidth(t *testing.T) {
 }
 
 func TestWrapPreservesStyle(t *testing.T) {
-	measure := func(text string, _ SpanStyle) float64 { return float64(len(text)) }
+	measure := func(sp Span) float64 { return float64(len(sp.Text)) }
 	spans := []Span{
 		{Text: "hello "},
 		{Text: "WORLD", Style: StyleBold},
@@ -120,8 +120,104 @@ func TestWrapPreservesStyle(t *testing.T) {
 	}
 }
 
+func TestParseLink(t *testing.T) {
+	bs := Parse("see [example](https://example.com) for more")
+	if len(bs) != 1 {
+		t.Fatalf("blocks = %d", len(bs))
+	}
+	spans := bs[0].Spans
+	var link *Span
+	for i := range spans {
+		if spans[i].Style&StyleLink != 0 {
+			link = &spans[i]
+			break
+		}
+	}
+	if link == nil {
+		t.Fatalf("no link span: %+v", spans)
+	}
+	if link.Text != "example" {
+		t.Errorf("link text = %q", link.Text)
+	}
+	if link.Href != "https://example.com" {
+		t.Errorf("link href = %q", link.Href)
+	}
+}
+
+func TestParseEmbed(t *testing.T) {
+	src := "before [![alt](/preview/tile/5?w=192&h=128)](/3/4/5) after"
+	bs := Parse(src)
+	if len(bs) != 1 {
+		t.Fatalf("blocks = %d", len(bs))
+	}
+	var embed *Span
+	for i := range bs[0].Spans {
+		if bs[0].Spans[i].Style&StyleEmbed != 0 {
+			embed = &bs[0].Spans[i]
+			break
+		}
+	}
+	if embed == nil {
+		t.Fatalf("no embed span: %+v", bs[0].Spans)
+	}
+	if embed.Alt != "alt" {
+		t.Errorf("alt = %q", embed.Alt)
+	}
+	if embed.Src != "/preview/tile/5?w=192&h=128" {
+		t.Errorf("src = %q", embed.Src)
+	}
+	if embed.Href != "/3/4/5" {
+		t.Errorf("href = %q", embed.Href)
+	}
+	if embed.W != 192 || embed.H != 128 {
+		t.Errorf("size = %dx%d, want 192x128", embed.W, embed.H)
+	}
+}
+
+func TestParseImageAloneAsEmbed(t *testing.T) {
+	bs := Parse("![pic](/img.png)")
+	spans := bs[0].Spans
+	if len(spans) != 1 || spans[0].Style&StyleEmbed == 0 {
+		t.Fatalf("expected one embed span: %+v", spans)
+	}
+	if spans[0].Href != "" {
+		t.Errorf("expected empty href for bare image, got %q", spans[0].Href)
+	}
+	if spans[0].Src != "/img.png" {
+		t.Errorf("src = %q", spans[0].Src)
+	}
+}
+
+func TestParseLinkPreservedAroundEmphasis(t *testing.T) {
+	bs := Parse("**bold** [link](/x) *italic*")
+	var hasLink, hasBold, hasItalic bool
+	for _, sp := range bs[0].Spans {
+		if sp.Style&StyleLink != 0 && sp.Text == "link" && sp.Href == "/x" {
+			hasLink = true
+		}
+		if sp.Style&StyleBold != 0 && sp.Text == "bold" {
+			hasBold = true
+		}
+		if sp.Style&StyleItalic != 0 && sp.Text == "italic" {
+			hasItalic = true
+		}
+	}
+	if !(hasLink && hasBold && hasItalic) {
+		t.Errorf("missing one of link/bold/italic: %+v", bs[0].Spans)
+	}
+}
+
+func TestParseMalformedLinkPassesThrough(t *testing.T) {
+	bs := Parse("look at [this and then nothing")
+	for _, sp := range bs[0].Spans {
+		if sp.Style&StyleLink != 0 {
+			t.Errorf("unexpected link span: %+v", sp)
+		}
+	}
+}
+
 func TestWrapNoEarlyBreakOnSpaces(t *testing.T) {
-	measure := func(text string, _ SpanStyle) float64 { return float64(len(text)) }
+	measure := func(sp Span) float64 { return float64(len(sp.Text)) }
 	// "abc def" with width 7 should fit on one line.
 	lines := Wrap([]Span{{Text: "abc def"}}, 7, measure)
 	if len(lines) != 1 {
