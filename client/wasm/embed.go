@@ -159,10 +159,10 @@ func (a *App) findTileByID(id int64) *rpc.Tile {
 // current descended pane are followed; cross-grid embeds are a future
 // extension (they require fetching the target's parent grid chain).
 //
-// The ascent that follows lands on the doc's grid, not back on the doc
-// itself. Restoring the doc as the ascent target is future work — it
-// requires extending the pane Path concept to remember text-tile
-// breadcrumbs.
+// Ascent from the embed-target lands back on the doc with its mode and
+// scroll preserved (saved into paneState before the descent). Calling
+// startFileAscent again then leaves the doc — two ascents reach the
+// original grid, matching how a normal two-step descent works.
 func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	if hit == nil || hit.tileID == 0 {
 		return false
@@ -178,9 +178,15 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	if target.Kind != rpc.KindText && target.Kind != rpc.KindURL && target.Kind != rpc.KindWell {
 		return false
 	}
-	// Clear the current text descent so the descent machinery sees a
-	// grid-state pane, then dispatch to the appropriate descent for the
-	// target kind. The animation goes doc-overtake → target-overtake.
+	// Stash the doc's descent context before clearing it, then dispatch
+	// to the underlying descent. The well / file descent pushes its own
+	// {Cx,Cy,Zoom} state; we patch the doc context onto the top of the
+	// stack afterward so a single ascent restores the doc — TextFocus,
+	// mode, scroll, all of it.
+	savedFocus := p.TextFocus
+	savedMode := p.TextMode
+	savedScrollX := p.TextScrollX
+	savedScrollY := p.TextScrollY
 	p.TextFocus = 0
 	p.TextMode = ""
 	a.refreshFileOverlay()
@@ -188,6 +194,13 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 		a.startDescent(p, target)
 	} else {
 		a.startFileDescent(p, target, nil)
+	}
+	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		top.TextFocus = savedFocus
+		top.TextMode = savedMode
+		top.TextScrollX = savedScrollX
+		top.TextScrollY = savedScrollY
 	}
 	return true
 }

@@ -1097,6 +1097,13 @@ func (a *App) startAscent(p *pane.Pane) {
 		zoomDist(switchTo.Zoom, saved.Zoom)
 	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
 
+	// If the saved state carries a text descent (an embed click
+	// originated the descent), restore it as the ascent landing.
+	restoreFocus := saved.TextFocus
+	restoreMode := saved.TextMode
+	restoreScrollX := saved.TextScrollX
+	restoreScrollY := saved.TextScrollY
+
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
@@ -1114,6 +1121,21 @@ func (a *App) startAscent(p *pane.Pane) {
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
 				durationMs: durations[1],
 			},
+		},
+		onComplete: func() {
+			if restoreFocus == 0 {
+				return
+			}
+			fp := a.tree.FindPane(p.ID)
+			if fp == nil {
+				return
+			}
+			fp.TextFocus = restoreFocus
+			fp.TextMode = restoreMode
+			fp.TextScrollX = restoreScrollX
+			fp.TextScrollY = restoreScrollY
+			fp.TextZoom = fileFixedScale
+			a.refreshFileOverlay()
 		},
 	})
 }
@@ -1344,6 +1366,14 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	p.TextFocus = 0
 	a.refreshFileOverlay()
 
+	// If the saved state had a TextFocus, the descent originated from
+	// inside another text tile (an embed click) — restore that doc as
+	// the ascent landing on transition complete.
+	restoreFocus := saved.TextFocus
+	restoreMode := saved.TextMode
+	restoreScrollX := saved.TextScrollX
+	restoreScrollY := saved.TextScrollY
+
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
@@ -1354,6 +1384,21 @@ func (a *App) startFileAscent(p *pane.Pane) {
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
 				durationMs: totalTransitionMs,
 			},
+		},
+		onComplete: func() {
+			if restoreFocus == 0 {
+				return
+			}
+			fp := a.tree.FindPane(p.ID)
+			if fp == nil {
+				return
+			}
+			fp.TextFocus = restoreFocus
+			fp.TextMode = restoreMode
+			fp.TextScrollX = restoreScrollX
+			fp.TextScrollY = restoreScrollY
+			fp.TextZoom = fileFixedScale
+			a.refreshFileOverlay()
 		},
 	})
 }
@@ -1367,6 +1412,15 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	p.TextFocus = 0
 	if saved != nil {
 		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
+		// If the saved state captured a text descent (embed click), restore
+		// it so a single ascent lands on the doc, not the grid behind it.
+		if saved.TextFocus != 0 {
+			p.TextFocus = saved.TextFocus
+			p.TextMode = saved.TextMode
+			p.TextScrollX = saved.TextScrollX
+			p.TextScrollY = saved.TextScrollY
+			p.TextZoom = fileFixedScale
+		}
 	}
 	a.refreshFileOverlay()
 	a.draw()

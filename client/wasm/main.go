@@ -212,12 +212,23 @@ type App struct {
 	lastTextareaTileID int64
 }
 
-// paneState is a captured viewport: viewport center in cells (sub-cell
-// precision) and zoom multiplier.
+// paneState is a captured pane viewport plus, when the descent
+// originated from inside a text-tile, the text descent context to
+// restore on matching ascent.
+//
+// TextFocus == 0 means "the parent was a plain grid view" — the common
+// case. A non-zero TextFocus is set when descending out of a text tile
+// (e.g. clicking a tile-embed); on ascent the saved TextMode and scroll
+// are reinstalled so a single ascent lands back in the doc rather than
+// in the grid behind it.
 type paneState struct {
-	Cx   float64 `json:"cx"`
-	Cy   float64 `json:"cy"`
-	Zoom float64 `json:"zoom"`
+	Cx          float64 `json:"cx"`
+	Cy          float64 `json:"cy"`
+	Zoom        float64 `json:"zoom"`
+	TextFocus   int64   `json:"text_focus,omitempty"`
+	TextMode    string  `json:"text_mode,omitempty"`
+	TextScrollX float64 `json:"text_scroll_x,omitempty"`
+	TextScrollY float64 `json:"text_scroll_y,omitempty"`
 }
 
 // paneTransition is the active per-pane zoom animation. It is a series of
