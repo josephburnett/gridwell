@@ -20,16 +20,33 @@ import (
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
-// RunServe starts the HTTP server. SIGINT/SIGTERM trigger graceful shutdown.
-func RunServe(args []string) int {
+// serveFlags holds the parsed `serve` subcommand options. Split out
+// from RunServe so the flag-parsing path is unit-testable; the rest of
+// RunServe is server lifecycle that needs a real DB / Xvfb / Chromium
+// to exercise.
+type serveFlags struct {
+	DB             string
+	Bind           string
+	StaticDir      string
+	BrowserName    string
+	BrowserBin     string
+	XvfbResolution string
+	NoXvfb         bool
+}
+
+// parseServeFlags parses the `serve` flag set. Returns the populated
+// struct, or an error if flag parsing fails (so the caller can decide
+// the exit code).
+func parseServeFlags(args []string) (serveFlags, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	var f serveFlags
 	db := resolveDB(fs, "./gridwell.db")
-	bind := fs.String("bind", "127.0.0.1:8080", "HTTP listen address (default loopback only)")
-	staticDir := fs.String("static", "./web", "directory of static files served at /")
-	browserName := fs.String("browser", "chromium", "browser brand: "+strings.Join(sortedBrands(), ", "))
-	browserBin := fs.String("browser-bin", "", "explicit browser binary path (overrides --browser lookup)")
-	xvfbRes := fs.String("xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT")
-	noXvfb := fs.Bool("no-xvfb", false, "do not spawn Xvfb; inherit DISPLAY from environment")
+	fs.StringVar(&f.Bind, "bind", "127.0.0.1:8080", "HTTP listen address (default loopback only)")
+	fs.StringVar(&f.StaticDir, "static", "./web", "directory of static files served at /")
+	fs.StringVar(&f.BrowserName, "browser", "chromium", "browser brand: "+strings.Join(sortedBrands(), ", "))
+	fs.StringVar(&f.BrowserBin, "browser-bin", "", "explicit browser binary path (overrides --browser lookup)")
+	fs.StringVar(&f.XvfbResolution, "xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT")
+	fs.BoolVar(&f.NoXvfb, "no-xvfb", false, "do not spawn Xvfb; inherit DISPLAY from environment")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
 		case "db", "bind", "static", "browser", "browser-bin", "xvfb-resolution":
@@ -38,10 +55,20 @@ func RunServe(args []string) int {
 		return false
 	})
 	if err := fs.Parse(args); err != nil {
+		return serveFlags{}, err
+	}
+	f.DB = *db
+	return f, nil
+}
+
+// RunServe starts the HTTP server. SIGINT/SIGTERM trigger graceful shutdown.
+func RunServe(args []string) int {
+	f, err := parseServeFlags(args)
+	if err != nil {
 		return 2
 	}
 
-	s, err := store.Open(*db)
+	s, err := store.Open(f.DB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: open db: %v\n", err)
 		return 1
@@ -50,8 +77,8 @@ func RunServe(args []string) int {
 
 	display := ""
 	var xv *urldriver.Xvfb
-	if !*noXvfb {
-		w, h, err := parseResolution(*xvfbRes)
+	if !f.NoXvfb {
+		w, h, err := parseResolution(f.XvfbResolution)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "serve: --xvfb-resolution: %v\n", err)
 			return 2
@@ -67,8 +94,8 @@ func RunServe(args []string) int {
 	}
 
 	driver, err := urldriver.New(s, urldriver.Config{
-		Browser:        *browserName,
-		BinaryOverride: *browserBin,
+		Browser:        f.BrowserName,
+		BinaryOverride: f.BrowserBin,
 		Display:        display,
 	})
 	if err != nil {
@@ -77,16 +104,16 @@ func RunServe(args []string) int {
 	}
 	s.SetURLDriver(driver)
 	defer driver.Shutdown()
-	fmt.Printf("gridwell: %s driver ready\n", *browserName)
+	fmt.Printf("gridwell: %s driver ready\n", f.BrowserName)
 
-	srv := server.New(s, server.Config{StaticDir: *staticDir})
+	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
 
 	httpSrv := &http.Server{
-		Addr:              *bind,
+		Addr:              f.Bind,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
@@ -97,7 +124,7 @@ func RunServe(args []string) int {
 
 	errCh := make(chan error, 1)
 	go func() {
-		fmt.Printf("gridwell: serving on %s (db=%s static=%s)\n", *bind, *db, *staticDir)
+		fmt.Printf("gridwell: serving on %s (db=%s static=%s)\n", f.Bind, f.DB, f.StaticDir)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
