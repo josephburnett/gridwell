@@ -50,23 +50,14 @@ func (s *Server) SetURLStreamer(d urlStreamer) {
 	s.urlStreamer = d
 }
 
-type urlStreamMessage struct {
-	Kind      string  `json:"kind"`
-	X         float64 `json:"x,omitempty"`
-	Y         float64 `json:"y,omitempty"`
-	Button    string  `json:"button,omitempty"`
-	DeltaY    float64 `json:"delta_y,omitempty"`
-	Key       string  `json:"key,omitempty"`
-	Code      string  `json:"code,omitempty"`
-	Modifiers int64   `json:"modifiers,omitempty"`
-	Width     int64   `json:"width,omitempty"`
-	Height    int64   `json:"height,omitempty"`
-}
-
-type urlStreamServerMessage struct {
-	Kind string `json:"kind"`
-	URL  string `json:"url,omitempty"`
-}
+// urlStreamMessage / urlStreamServerMessage alias the shared wire
+// types in internal/rpc so the client and server marshal/unmarshal
+// identical shapes. The aliases keep call sites in this file terse
+// and let `rpc.URLStreamMessage` remain the source of truth.
+type (
+	urlStreamMessage       = rpc.URLStreamMessage
+	urlStreamServerMessage = rpc.URLStreamServerMessage
+)
 
 const (
 	defaultViewportW = 1280

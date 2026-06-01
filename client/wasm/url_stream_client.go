@@ -201,13 +201,14 @@ func (a *App) notifyURLStreamSize(paneID string, w, h int64) {
 }
 
 // viewportPayload returns a JSON {"kind":"viewport","width":w,"height":h}
-// message ready to send on the WS.
+// message ready to send on the WS. Uses the shared rpc.URLStreamMessage
+// type so client and server agree on the wire shape.
 func viewportPayload(w, h int64) string {
-	b, _ := json.Marshal(struct {
-		Kind   string `json:"kind"`
-		Width  int64  `json:"width"`
-		Height int64  `json:"height"`
-	}{Kind: "viewport", Width: w, Height: h})
+	b, _ := json.Marshal(rpc.URLStreamMessage{
+		Kind:   "viewport",
+		Width:  w,
+		Height: h,
+	})
 	return string(b)
 }
 
@@ -215,10 +216,7 @@ func viewportPayload(w, h int64) string {
 // Currently only `nav` (navigation events) is sent. Updates the cached
 // tile URL so re-renders show the new address.
 func (a *App) handleURLStreamText(tileID int64, payload string) {
-	var msg struct {
-		Kind string `json:"kind"`
-		URL  string `json:"url,omitempty"`
-	}
+	var msg rpc.URLStreamServerMessage
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		return
 	}
@@ -260,16 +258,7 @@ func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
 	if !ok || conn.closed || !conn.ws.Truthy() {
 		return
 	}
-	payload, err := json.Marshal(struct {
-		Kind      string  `json:"kind"`
-		X         float64 `json:"x,omitempty"`
-		Y         float64 `json:"y,omitempty"`
-		Button    string  `json:"button,omitempty"`
-		DeltaY    float64 `json:"delta_y,omitempty"`
-		Key       string  `json:"key,omitempty"`
-		Code      string  `json:"code,omitempty"`
-		Modifiers int64   `json:"modifiers,omitempty"`
-	}{
+	payload, err := json.Marshal(rpc.URLStreamMessage{
 		Kind:      string(ev.Kind),
 		X:         ev.X,
 		Y:         ev.Y,
