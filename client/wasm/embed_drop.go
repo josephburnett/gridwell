@@ -3,6 +3,7 @@
 package main
 
 import (
+	"slices"
 	"syscall/js"
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
@@ -126,7 +127,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 		a.fileTextarea.Set("value", newSrc)
 	}
 
-	path := append([]int64(nil), dt.pane.Path...)
+	path := slices.Clone(dt.pane.Path)
 	go func() {
 		req := rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: path},

@@ -8,6 +8,7 @@ package pane
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // Direction identifies a split orientation. "h" is a horizontal divider
@@ -73,7 +74,7 @@ func (p *Pane) Clone(newID string) *Pane {
 	c := *p
 	c.ID = newID
 	if len(p.Path) > 0 {
-		c.Path = append([]int64(nil), p.Path...)
+		c.Path = slices.Clone(p.Path)
 	}
 	return &c
 }
@@ -451,7 +452,7 @@ func setRatio(n *TreeNode, paneID string, ratio float64) bool {
 func TruncatePathTo(p []int64, known map[int64]bool) []int64 {
 	for i := len(p); i > 0; i-- {
 		if known[p[i-1]] {
-			return append([]int64(nil), p[:i]...)
+			return slices.Clone(p[:i])
 		}
 	}
 	return nil

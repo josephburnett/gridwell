@@ -4,6 +4,7 @@ package main
 
 import (
 	"math"
+	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/anim"
@@ -419,7 +420,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// Default source = the focused pane's leaf grid; overridden
 		// below if we land on a child preview tile.
 		srcGridID:   a.gridIDForPath(p.Path),
-		srcPath:     append([]int64(nil), p.Path...),
+		srcPath:     slices.Clone(p.Path),
 		srcCellSize: parentCell,
 	}
 	if n != nil {
@@ -442,7 +443,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.originScreenY = tlY
 			a.dragging.originPaneRect = r
 			a.dragging.srcGridID = n.ChildGridID
-			a.dragging.srcPath = append(append([]int64(nil), p.Path...), n.ID)
+			a.dragging.srcPath = append(slices.Clone(p.Path), n.ID)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
 		}
@@ -801,8 +802,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	}
 	a.startSnap(targetX, targetY, snapMs)
 
-	srcPath := append([]int64(nil), d.srcPath...)
-	dstPath := append([]int64(nil), t.path...)
+	srcPath := slices.Clone(d.srcPath)
+	dstPath := slices.Clone(t.path)
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	version := d.snapshotTile.Version
@@ -1033,10 +1034,10 @@ func (a *App) startAscent(p *pane.Pane) {
 		// expects to be ascending out of the leaf grid; jumping mid-
 		// path would render badly. Snap directly to the resolved level
 		// and let the user ascend again from there if they want.
-		a.instantAscend(p, append([]int64(nil), p.Path[:level]...))
+		a.instantAscend(p, slices.Clone(p.Path[:level]))
 		return
 	}
-	parentPath := append([]int64(nil), p.Path[:level]...)
+	parentPath := slices.Clone(p.Path[:level])
 	r := paneRectFor(a, p)
 
 	// Persist the user's current center as the well's view region so
@@ -1048,7 +1049,7 @@ func (a *App) startAscent(p *pane.Pane) {
 	a.saveWellViewBeforeAscent(p, &well, parentPath)
 
 	from := zoomtrans.Endpoints{
-		Path: append([]int64(nil), p.Path...),
+		Path: slices.Clone(p.Path),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
 	w := zoomtrans.Well{
@@ -1153,7 +1154,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 
 	r := paneRectFor(a, p)
 	from := zoomtrans.Endpoints{
-		Path: append([]int64(nil), p.Path...),
+		Path: slices.Clone(p.Path),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
 	w := zoomtrans.Well{
@@ -1227,7 +1228,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 
 	r := paneRectFor(a, p)
 	from := zoomtrans.Endpoints{
-		Path: append([]int64(nil), p.Path...),
+		Path: slices.Clone(p.Path),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
 	wellCx := float64(file.X) + float64(file.W)/2
@@ -1362,7 +1363,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 		segments: []transSegment{
 			// Single combined pan+zoom segment back to the saved viewport.
 			{
-				path:   append([]int64(nil), p.Path...),
+				path:   slices.Clone(p.Path),
 				fromCx: wellCx, fromCy: wellCy, fromZoom: overtake,
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
 				durationMs: totalTransitionMs,
@@ -1449,7 +1450,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 	wellID := well.ID
 	wellVersion := well.Version
 	parentGridID := a.gridIDForPath(parentPath)
-	pp := append([]int64(nil), parentPath...)
+	pp := slices.Clone(parentPath)
 	go func() {
 		req := rpc.SetWellViewRequest{
 			Path:     rpc.Path{WellIDs: pp},
@@ -1511,7 +1512,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
 
-	path := append([]int64(nil), p.Path...)
+	path := slices.Clone(p.Path)
 	mode := p.TextMode
 	go func() {
 		curVersion := file.Version
@@ -1686,7 +1687,7 @@ func (a *App) postCreate(kind string, gid int64, req any, onSuccess func(rpc.Til
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
-	path := append([]int64(nil), p.Path...)
+	path := slices.Clone(p.Path)
 	a.postCreate("CreateWell", gid, rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
@@ -1697,7 +1698,7 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 // initial bytes. Footprint is 1×1.
 func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
-	path := append([]int64(nil), p.Path...)
+	path := slices.Clone(p.Path)
 	a.postCreate("CreateText", gid, rpc.CreateTextRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
@@ -1713,7 +1714,7 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 // start frozen and require an explicit refresh gesture.
 func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
-	path := append([]int64(nil), p.Path...)
+	path := slices.Clone(p.Path)
 	paneID := p.ID
 	a.postCreate("CreateURL", gid, rpc.CreateURLRequest{
 		Path:   rpc.Path{WellIDs: path},
@@ -1746,7 +1747,7 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 // Footprint is 1×1.
 func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
-	path := append([]int64(nil), p.Path...)
+	path := slices.Clone(p.Path)
 	a.postCreate("CreateBlackHole", gid, rpc.CreateBlackHoleRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,

@@ -14,7 +14,10 @@
 // preview, longer descent zoom. The same factor governs ascent.
 package zoomtrans
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // Endpoints describes one end of a transition: the pane state expressed
 // as descent path, viewport center in cells (sub-cell precision), and
@@ -182,7 +185,7 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 		Cy:   wellCy,
 		Zoom: zPTarget,
 	}
-	childPath := append(append([]int64(nil), from.Path...), w.ID)
+	childPath := append(slices.Clone(from.Path), w.ID)
 	// Calibrated child zoom at the swap moment: live = ratio × zPTarget.
 	// With DefaultWellViewZoom substituted for an unvisited well
 	// (1/PreviewFactor), this collapses to zPTarget/PreviewFactor — the

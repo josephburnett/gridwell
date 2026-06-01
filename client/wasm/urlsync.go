@@ -3,6 +3,7 @@
 package main
 
 import (
+	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/url"
@@ -97,7 +98,7 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	}
 	var s url.State
 	if p.TextFocus != 0 {
-		s.TileIDs = append(append([]int64(nil), p.Path...), p.TextFocus)
+		s.TileIDs = append(slices.Clone(p.Path), p.TextFocus)
 		if p.TextMode == rpc.TextModeText {
 			col, row := a.textareaCursorRowCol()
 			s.CursorMode = true
@@ -106,7 +107,7 @@ func (a *App) encodeFocusedPaneURL() url.State {
 		}
 		return s
 	}
-	s.TileIDs = append([]int64(nil), p.Path...)
+	s.TileIDs = slices.Clone(p.Path)
 	s.X = p.Cx
 	s.Y = p.Cy
 	s.Zoom = p.Zoom

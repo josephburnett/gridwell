@@ -4,6 +4,7 @@ package main
 
 import (
 	"math"
+	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/cache"
@@ -469,7 +470,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 		originScreenY:  tlY,
 		originPaneRect: r,
 		srcGridID:      a.gridIDForPath(p.Path),
-		srcPath:        append([]int64(nil), p.Path...),
+		srcPath:        slices.Clone(p.Path),
 		srcCellSize:    cellSize,
 	}
 }
@@ -527,8 +528,8 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		a.ghost.targetCellSize = t.cellSize
 	}
 	a.startSnap(targetX, targetY, snapMs)
-	srcPath := append([]int64(nil), d.srcPath...)
-	dstPath := append([]int64(nil), t.path...)
+	srcPath := slices.Clone(d.srcPath)
+	dstPath := slices.Clone(t.path)
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	tileID := d.tileID
@@ -560,7 +561,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 // runDeleteTile fires DeleteTile against the dragged source tile. Used
 // when the left-button-move gesture drops onto a black-hole sink.
 func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
-	srcPath := append([]int64(nil), d.srcPath...)
+	srcPath := slices.Clone(d.srcPath)
 	srcGridID := d.srcGridID
 	tileID := d.tileID
 	version := d.snapshotTile.Version
@@ -605,7 +606,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	}
 	gid := a.gridIDForPath(p.Path)
 	req := rpc.ResizeTileRequest{
-		Path:    rpc.Path{WellIDs: append([]int64(nil), p.Path...)},
+		Path:    rpc.Path{WellIDs: slices.Clone(p.Path)},
 		TileID:  n.ID,
 		Version: n.Version,
 		X:       rd.tileNewX,

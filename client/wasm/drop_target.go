@@ -3,6 +3,8 @@
 package main
 
 import (
+	"slices"
+
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -70,7 +72,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 			X, Y, W, H, ViewX, ViewY int64
 		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
 			ratio)
-		path := append(append([]int64(nil), p.Path...), n.ID)
+		path := append(slices.Clone(p.Path), n.ID)
 		return &dropTarget{
 			pane:     p,
 			rect:     r,
@@ -87,7 +89,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 		pane:     p,
 		rect:     r,
 		gridID:   a.gridIDForPath(p.Path),
-		path:     append([]int64(nil), p.Path...),
+		path:     slices.Clone(p.Path),
 		cellSize: parentCell,
 		originX:  parentOriginX,
 		originY:  parentOriginY,
