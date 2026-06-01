@@ -287,3 +287,101 @@ func TestHiddenMatchByTileIDNotObjectID(t *testing.T) {
 		t.Error("no active hide (hiddenTileID==0) must hide nothing")
 	}
 }
+
+func TestInTileCenter(t *testing.T) {
+	// 3x3 tile at origin: center band is cell coords [1, 2] on both axes.
+	cases := []struct {
+		name           string
+		x, y, w, h     int64
+		cellX, cellY   float64
+		wantInCenter   bool
+	}{
+		{"dead center", 0, 0, 3, 3, 1.5, 1.5, true},
+		{"on left edge of center band", 0, 0, 3, 3, 1.0, 1.5, true},
+		{"on right edge of center band", 0, 0, 3, 3, 2.0, 1.5, true},
+		{"just outside left", 0, 0, 3, 3, 0.99, 1.5, false},
+		{"just outside top", 0, 0, 3, 3, 1.5, 0.99, false},
+		{"1x1 tile, exact center", 5, 5, 1, 1, 5.5, 5.5, true},
+		{"1x1 tile, edge", 5, 5, 1, 1, 5.0, 5.0, false},
+		{"offset tile", 10, 20, 6, 6, 13, 23, true},
+	}
+	for _, c := range cases {
+		got := InTileCenter(c.x, c.y, c.w, c.h, c.cellX, c.cellY)
+		if got != c.wantInCenter {
+			t.Errorf("%s: InTileCenter = %v, want %v", c.name, got, c.wantInCenter)
+		}
+	}
+}
+
+func TestRangeFromAnchors(t *testing.T) {
+	cases := []struct {
+		name          string
+		pin, moving   int64
+		origRight     bool
+		wantS, wantL  int64
+	}{
+		{"moving > pin", 3, 8, true, 3, 5},
+		{"moving < pin", 8, 3, true, 3, 5},
+		{"degenerate, orig was right of pin", 5, 5, true, 5, 1},
+		{"degenerate, orig was left of pin", 5, 5, false, 4, 1},
+		{"negative pin", -2, 3, true, -2, 5},
+	}
+	for _, c := range cases {
+		s, l := RangeFromAnchors(c.pin, c.moving, c.origRight)
+		if s != c.wantS || l != c.wantL {
+			t.Errorf("%s: RangeFromAnchors(%d,%d,%v) = (%d,%d), want (%d,%d)",
+				c.name, c.pin, c.moving, c.origRight, s, l, c.wantS, c.wantL)
+		}
+	}
+}
+
+func TestResizeAnchorsAndCursor(t *testing.T) {
+	// Original tile: (10, 20, 4, 4). Click in BR quadrant -> pin TL.
+	br := ResizeAnchorsFor(10, 20, 4, 4, 13.7, 23.7)
+	if br.PinX != 10 || br.PinY != 20 || br.OrigMovingX != 14 || br.OrigMovingY != 24 {
+		t.Errorf("BR quadrant: bad anchors %+v", br)
+	}
+	if br.ClickCellX != 14 || br.ClickCellY != 24 {
+		t.Errorf("BR quadrant: bad click cell %+v", br)
+	}
+	// No cursor movement => same tile.
+	x, y, w, h := ResizeFromCursor(br, br.ClickCellX, br.ClickCellY)
+	if x != 10 || y != 20 || w != 4 || h != 4 {
+		t.Errorf("BR + no movement: got (%d,%d,%d,%d), want (10,20,4,4)", x, y, w, h)
+	}
+	// Drag cursor 2 cells right + 1 down => grow tile by (2, 1) on the BR.
+	x, y, w, h = ResizeFromCursor(br, br.ClickCellX+2, br.ClickCellY+1)
+	if x != 10 || y != 20 || w != 6 || h != 5 {
+		t.Errorf("BR + (+2,+1): got (%d,%d,%d,%d), want (10,20,6,5)", x, y, w, h)
+	}
+	// Crossover: drag back past the pin so the cursor cell is at PinX-1.
+	x, y, w, h = ResizeFromCursor(br, br.PinX-1, br.PinY-1)
+	if w < 1 || h < 1 {
+		t.Errorf("crossover should keep w,h >= 1; got (%d,%d,%d,%d)", x, y, w, h)
+	}
+
+	// Click in TL quadrant -> pin BR.
+	tl := ResizeAnchorsFor(10, 20, 4, 4, 10.2, 20.2)
+	if tl.PinX != 14 || tl.PinY != 24 || tl.OrigMovingX != 10 || tl.OrigMovingY != 20 {
+		t.Errorf("TL quadrant: bad anchors %+v", tl)
+	}
+	x, y, w, h = ResizeFromCursor(tl, tl.ClickCellX-1, tl.ClickCellY-1)
+	if x != 9 || y != 19 || w != 5 || h != 5 {
+		t.Errorf("TL + (-1,-1): got (%d,%d,%d,%d), want (9,19,5,5)", x, y, w, h)
+	}
+}
+
+func TestNearPx(t *testing.T) {
+	if !NearPx(10.0, 10.4) {
+		t.Error("0.4 px apart should be near")
+	}
+	if NearPx(10.0, 10.6) {
+		t.Error("0.6 px apart should not be near")
+	}
+	if !NearPx(10.0, 9.51) {
+		t.Error("0.49 px apart should be near")
+	}
+	if !NearPx(0, 0) {
+		t.Error("identical should be near")
+	}
+}

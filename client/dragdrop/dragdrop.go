@@ -233,3 +233,96 @@ func (p Pane) FootprintFits(x, y, w, h int64) bool {
 	return float64(x) >= left && float64(x+w) <= right &&
 		float64(y) >= top && float64(y+h) <= bottom
 }
+
+// InTileCenter reports whether the cell-space point (cellX, cellY) lies
+// inside the inner 1/3 × 1/3 of the tile at (x, y, w, h). The center
+// region scales with the tile so it's always 1/9 of the footprint, even
+// on 1×1 tiles, and the right-button "clone grab handle" feels the same
+// at every zoom.
+func InTileCenter(x, y, w, h int64, cellX, cellY float64) bool {
+	xf, yf := float64(x), float64(y)
+	wf, hf := float64(w), float64(h)
+	return cellX >= xf+wf/3 && cellX <= xf+2*wf/3 &&
+		cellY >= yf+hf/3 && cellY <= yf+2*hf/3
+}
+
+// ResizeAnchors are the cell-coord state captured at the start of a
+// right-button tile resize. PinX/PinY is the corner of the original
+// tile diagonally opposite the click quadrant (clicking in the BR
+// quadrant pins TL, etc.). OrigMovingX/OrigMovingY is the corner in
+// the click quadrant — where the moving corner starts. ClickCellX/Y is
+// the cell the cursor was rounded to at the click, so that mouse
+// movement deltas can be translated cell-for-cell.
+type ResizeAnchors struct {
+	PinX, PinY               int64
+	OrigMovingX, OrigMovingY int64
+	ClickCellX, ClickCellY   int64
+}
+
+// ResizeAnchorsFor returns the anchors for a tile at (x, y, w, h) given
+// the cursor's float cell coordinates at click time. Which quadrant the
+// click lands in decides which corner is pinned (opposite) and which is
+// moving (under the cursor).
+func ResizeAnchorsFor(x, y, w, h int64, cellXf, cellYf float64) ResizeAnchors {
+	var a ResizeAnchors
+	midX := float64(x) + float64(w)/2
+	midY := float64(y) + float64(h)/2
+	if cellXf >= midX {
+		a.PinX = x
+		a.OrigMovingX = x + w
+	} else {
+		a.PinX = x + w
+		a.OrigMovingX = x
+	}
+	if cellYf >= midY {
+		a.PinY = y
+		a.OrigMovingY = y + h
+	} else {
+		a.PinY = y + h
+		a.OrigMovingY = y
+	}
+	a.ClickCellX = int64(math.Round(cellXf))
+	a.ClickCellY = int64(math.Round(cellYf))
+	return a
+}
+
+// ResizeFromCursor returns the proposed (x, y, w, h) for the tile given
+// the cursor's current rounded cell. The moving corner is
+// OrigMoving + (cur - click); the new tile is bb(pin, moving) with each
+// side at least 1.
+func ResizeFromCursor(a ResizeAnchors, curCellX, curCellY int64) (int64, int64, int64, int64) {
+	movX := a.OrigMovingX + (curCellX - a.ClickCellX)
+	movY := a.OrigMovingY + (curCellY - a.ClickCellY)
+	x, w := RangeFromAnchors(a.PinX, movX, a.OrigMovingX > a.PinX)
+	y, h := RangeFromAnchors(a.PinY, movY, a.OrigMovingY > a.PinY)
+	return x, y, w, h
+}
+
+// RangeFromAnchors returns [start, length] of a 1-D range given a pinned
+// anchor and a moving anchor in integer cells. Minimum length is 1; on
+// the degenerate moving == pin case, the 1-cell range is placed on the
+// side the user originally clicked (origRight) so the rectangle's
+// identity stays stable across the crossover.
+func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
+	if moving == pin {
+		if origRight {
+			return pin, 1
+		}
+		return pin - 1, 1
+	}
+	if moving > pin {
+		return pin, moving - pin
+	}
+	return moving, pin - moving
+}
+
+// NearPx reports whether two pixel coordinates are within half a pixel.
+// Used for "is this divider line at the same place as that one?" checks
+// where exact float equality is too brittle.
+func NearPx(a, b float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < 0.5
+}

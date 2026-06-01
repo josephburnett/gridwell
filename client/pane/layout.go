@@ -235,6 +235,63 @@ func RatioFromCursor(container Rect, dir Direction, sx, sy float64) float64 {
 	return r
 }
 
+// SplitGestureActive reports whether the cursor at (curX, curY) has
+// moved past the start (startX, startY) in the direction expected for
+// the given side: top expects a downward drag, bottom an upward drag,
+// left a rightward drag, and right a leftward drag. The "active" state
+// drives the split preview line color (blue vs grey).
+func SplitGestureActive(side Side, startX, startY, curX, curY float64) bool {
+	switch side {
+	case SideTop:
+		return curY > startY
+	case SideBottom:
+		return curY < startY
+	case SideLeft:
+		return curX > startX
+	case SideRight:
+		return curX < startX
+	}
+	return false
+}
+
+// SplitClampedPosition projects the cursor onto the split's axis and
+// clamps it to the valid range. The valid range leaves at least
+// 2*bandPx on each side so both resulting panes can hold a full resize
+// band. The second return is false when the cursor is outside the
+// valid range (or the pane is too small to split at all), letting the
+// caller render the preview in a "won't commit" style.
+func SplitClampedPosition(side Side, paneRect Rect, bandPx, curX, curY float64) (float64, bool) {
+	switch side {
+	case SideTop, SideBottom:
+		minY := paneRect.Y + 2*bandPx
+		maxY := paneRect.Y + paneRect.H - 2*bandPx
+		if minY >= maxY {
+			return 0, false
+		}
+		if curY < minY {
+			return minY, false
+		}
+		if curY > maxY {
+			return maxY, false
+		}
+		return curY, true
+	case SideLeft, SideRight:
+		minX := paneRect.X + 2*bandPx
+		maxX := paneRect.X + paneRect.W - 2*bandPx
+		if minX >= maxX {
+			return 0, false
+		}
+		if curX < minX {
+			return minX, false
+		}
+		if curX > maxX {
+			return maxX, false
+		}
+		return curX, true
+	}
+	return 0, false
+}
+
 func collectDividers(n *TreeNode, r Rect, bandPx float64, out *[]Divider) {
 	if n.IsLeaf() {
 		return

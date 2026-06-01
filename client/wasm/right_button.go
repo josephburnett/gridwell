@@ -319,100 +319,37 @@ func (a *App) armTileGesture(p *pane.Pane, r paneRect, n *rpc.Tile, sx, sy float
 	a.draw()
 }
 
-// inTileCenter reports whether (sx, sy) falls inside the inner
-// 1/3 × 1/3 cell rect of tile n. Computed in cell coordinates so the
-// zone scales with zoom and is always 1/9 of the tile's footprint
-// even on 1×1 tiles.
+// inTileCenter is a wasm-side adapter that builds the dragdrop.Pane
+// from a pane.Pane + paneRect and delegates to dragdrop.InTileCenter
+// (where the geometry lives, natively tested).
 func inTileCenter(n *rpc.Tile, p *pane.Pane, r paneRect, sx, sy float64) bool {
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	cx, cy := ps.ScreenToCell(sx, sy)
-	w := float64(n.W)
-	h := float64(n.H)
-	x := float64(n.X)
-	y := float64(n.Y)
-	return cx >= x+w/3 && cx <= x+2*w/3 && cy >= y+h/3 && cy <= y+2*h/3
+	return dragdrop.InTileCenter(n.X, n.Y, n.W, n.H, cx, cy)
 }
 
-// tileResizeAnchors returns the cell-coord anchors used by the rubber-
-// band resize math:
-//   - pin: corner of the original tile diagonally opposite the click
-//     quadrant (clicking in the BR quadrant pins TL, etc.).
-//   - origMoving: corner of the original tile in the click quadrant —
-//     where the moving corner starts at right-down.
-//   - clickCell: cell that the cursor is in at click time, rounded.
-//
-// The move handler tracks the moving corner as
-// origMoving + (cursorCell - clickCell), so right-down with no
-// movement leaves the tile unchanged.
+// tileResizeAnchors is the wasm-side adapter for dragdrop.ResizeAnchorsFor.
 func tileResizeAnchors(n *rpc.Tile, p *pane.Pane, r paneRect, sx, sy float64) (
 	pinX, pinY, origMovingX, origMovingY, clickCellX, clickCellY int64,
 ) {
-	ps := dragdrop.Pane{
-		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
-		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(p, r)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
-	midX := float64(n.X) + float64(n.W)/2
-	midY := float64(n.Y) + float64(n.H)/2
-	if cxF >= midX {
-		pinX = n.X
-		origMovingX = n.X + n.W
-	} else {
-		pinX = n.X + n.W
-		origMovingX = n.X
-	}
-	if cyF >= midY {
-		pinY = n.Y
-		origMovingY = n.Y + n.H
-	} else {
-		pinY = n.Y + n.H
-		origMovingY = n.Y
-	}
-	clickCellX = int64(math.Round(cxF))
-	clickCellY = int64(math.Round(cyF))
-	return
+	a := dragdrop.ResizeAnchorsFor(n.X, n.Y, n.W, n.H, cxF, cyF)
+	return a.PinX, a.PinY, a.OrigMovingX, a.OrigMovingY, a.ClickCellX, a.ClickCellY
 }
 
-// tileResizeFromPin computes the proposed (X, Y, W, H) for the
-// current cursor position. The moving corner is
-// origMoving + (cursorCell - clickCell); the new tile is
-// bb(pin, moving) with each side at least 1.
+// tileResizeFromPin is the wasm-side adapter for dragdrop.ResizeFromCursor.
 func tileResizeFromPin(rd *rightDragState, sx, sy float64) (int64, int64, int64, int64) {
-	ps := dragdrop.Pane{
-		ScreenX: rd.tilePaneR.X, ScreenY: rd.tilePaneR.Y,
-		ScreenW: rd.tilePaneR.W, ScreenH: rd.tilePaneR.H,
-		Cx: rd.tilePane.Cx, Cy: rd.tilePane.Cy,
-		Zoom: rd.tilePane.Zoom, CellPx: cellPx,
-	}
+	ps := paneToDragdrop(rd.tilePane, rd.tilePaneR)
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	curCellX := int64(math.Round(cxF))
 	curCellY := int64(math.Round(cyF))
-	movX := rd.origMovingX + (curCellX - rd.clickCellX)
-	movY := rd.origMovingY + (curCellY - rd.clickCellY)
-	x, w := rangeFromAnchors(rd.pinX, movX, rd.origMovingX > rd.pinX)
-	y, h := rangeFromAnchors(rd.pinY, movY, rd.origMovingY > rd.pinY)
-	return x, y, w, h
-}
-
-// rangeFromAnchors returns the [start, length] of the rectangle along
-// one axis given a fixed pin and a moving anchor in cell coords. Min
-// length is 1; when moving == pin (degenerate), the 1-cell range is
-// placed on the side `origRight` — i.e., the side the user originally
-// clicked — so the result remains stable across the crossover.
-func rangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
-	if moving == pin {
-		if origRight {
-			return pin, 1
-		}
-		return pin - 1, 1
+	a := dragdrop.ResizeAnchors{
+		PinX: rd.pinX, PinY: rd.pinY,
+		OrigMovingX: rd.origMovingX, OrigMovingY: rd.origMovingY,
+		ClickCellX: rd.clickCellX, ClickCellY: rd.clickCellY,
 	}
-	if moving > pin {
-		return pin, moving - pin
-	}
-	return moving, pin - moving
+	return dragdrop.ResizeFromCursor(a, curCellX, curCellY)
 }
 
 // finishRightDrag commits or cancels the in-flight gesture at the
@@ -731,10 +668,10 @@ func (a *App) commitSwap(rd *rightDragState, sx, sy float64) {
 //
 // Anything else is cancelled silently.
 func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
-	if !splitGestureActive(rd, sx, sy) {
+	if !pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, sx, sy) {
 		return
 	}
-	pos, ok := splitClampedPosition(rd, sx, sy)
+	pos, ok := pane.SplitClampedPosition(rd.splitSide, paneRectToRect(rd.splitPane), resizeBandPx, sx, sy)
 	if !ok {
 		return
 	}
@@ -782,19 +719,19 @@ func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
 		// edge on the requested side.
 		switch side {
 		case pane.SideTop:
-			if d.Dir == pane.Horizontal && near(d.Rect.Y+d.Rect.H/2, r.Y) {
+			if d.Dir == pane.Horizontal && dragdrop.NearPx(d.Rect.Y+d.Rect.H/2, r.Y) {
 				return &divs[i]
 			}
 		case pane.SideBottom:
-			if d.Dir == pane.Horizontal && near(d.Rect.Y+d.Rect.H/2, r.Y+r.H) {
+			if d.Dir == pane.Horizontal && dragdrop.NearPx(d.Rect.Y+d.Rect.H/2, r.Y+r.H) {
 				return &divs[i]
 			}
 		case pane.SideLeft:
-			if d.Dir == pane.Vertical && near(d.Rect.X+d.Rect.W/2, r.X) {
+			if d.Dir == pane.Vertical && dragdrop.NearPx(d.Rect.X+d.Rect.W/2, r.X) {
 				return &divs[i]
 			}
 		case pane.SideRight:
-			if d.Dir == pane.Vertical && near(d.Rect.X+d.Rect.W/2, r.X+r.W) {
+			if d.Dir == pane.Vertical && dragdrop.NearPx(d.Rect.X+d.Rect.W/2, r.X+r.W) {
 				return &divs[i]
 			}
 		}
@@ -802,77 +739,19 @@ func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
 	return nil
 }
 
-// near is a small float-tolerance equality check for pixel
-// comparisons.
-func near(a, b float64) bool {
-	d := a - b
-	if d < 0 {
-		d = -d
-	}
-	return d < 0.5
-}
-
 // paneRectToRect converts the wasm-local paneRect to pane.Rect.
 func paneRectToRect(r paneRect) pane.Rect {
 	return pane.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}
 }
 
-// splitGestureActive reports whether the current cursor position
-// represents an "active" split — past the start in the expected
-// direction. Direction is determined by the chosen side: top trapezoid
-// expects downward drag, left expects rightward, etc.
-func splitGestureActive(rd *rightDragState, sx, sy float64) bool {
-	switch rd.splitSide {
-	case pane.SideTop:
-		return sy > rd.startY
-	case pane.SideBottom:
-		return sy < rd.startY
-	case pane.SideLeft:
-		return sx > rd.startX
-	case pane.SideRight:
-		return sx < rd.startX
+// paneToDragdrop builds a dragdrop.Pane (screen rect + viewport) for
+// pane p drawn into screen rect r. Centralized so callers don't all
+// reach into the same five fields by hand.
+func paneToDragdrop(p *pane.Pane, r paneRect) dragdrop.Pane {
+	return dragdrop.Pane{
+		ScreenX: r.X, ScreenY: r.Y, ScreenW: r.W, ScreenH: r.H,
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom, CellPx: cellPx,
 	}
-	return false
-}
-
-// splitClampedPosition returns the cursor's projection onto the
-// split's axis, clamped to the valid range. The bool is false when
-// the cursor is outside the valid range — in that case the line
-// renders grey at the clamped position and a release commits nothing.
-//
-// "Valid range" leaves at least 2*resizeBandPx on each side so both
-// resulting panes can hold a full resize-band frame.
-func splitClampedPosition(rd *rightDragState, sx, sy float64) (float64, bool) {
-	r := rd.splitPane
-	switch rd.splitSide {
-	case pane.SideTop, pane.SideBottom:
-		minY := r.Y + 2*resizeBandPx
-		maxY := r.Y + r.H - 2*resizeBandPx
-		if minY >= maxY {
-			return 0, false // pane too small to split at all
-		}
-		if sy < minY {
-			return minY, false
-		}
-		if sy > maxY {
-			return maxY, false
-		}
-		return sy, true
-	case pane.SideLeft, pane.SideRight:
-		minX := r.X + 2*resizeBandPx
-		maxX := r.X + r.W - 2*resizeBandPx
-		if minX >= maxX {
-			return 0, false
-		}
-		if sx < minX {
-			return minX, false
-		}
-		if sx > maxX {
-			return maxX, false
-		}
-		return sx, true
-	}
-	return 0, false
 }
 
 // drawRightDragPreview paints the in-flight gesture's visual hint:
@@ -1226,8 +1105,8 @@ func jsArray(vals ...float64) js.Value {
 // grey otherwise.
 func (a *App) drawSplitPreview(rd *rightDragState) {
 	a.drawSplitZoneHint(rd)
-	pos, valid := splitClampedPosition(rd, rd.curX, rd.curY)
-	active := valid && splitGestureActive(rd, rd.curX, rd.curY)
+	pos, valid := pane.SplitClampedPosition(rd.splitSide, paneRectToRect(rd.splitPane), resizeBandPx, rd.curX, rd.curY)
+	active := valid && pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, rd.curX, rd.curY)
 
 	// Find the pane being split for color resolution.
 	p := a.tree.FindPane(rd.splitPaneID)

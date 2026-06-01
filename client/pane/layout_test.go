@@ -295,3 +295,61 @@ func TestDividersThicknessDefault(t *testing.T) {
 		t.Errorf("default thickness = %v, want 4", got[0].Rect.H)
 	}
 }
+
+func TestSplitGestureActive(t *testing.T) {
+	cases := []struct {
+		name                       string
+		side                       Side
+		startX, startY, curX, curY float64
+		want                       bool
+	}{
+		{"top, dragging down -> active", SideTop, 100, 100, 100, 120, true},
+		{"top, dragging up -> not active", SideTop, 100, 100, 100, 80, false},
+		{"bottom, dragging up -> active", SideBottom, 100, 100, 100, 80, true},
+		{"bottom, dragging down -> not active", SideBottom, 100, 100, 100, 120, false},
+		{"left, dragging right -> active", SideLeft, 100, 100, 120, 100, true},
+		{"left, dragging left -> not active", SideLeft, 100, 100, 80, 100, false},
+		{"right, dragging left -> active", SideRight, 100, 100, 80, 100, true},
+		{"right, dragging right -> not active", SideRight, 100, 100, 120, 100, false},
+		{"top, no movement -> not active", SideTop, 100, 100, 100, 100, false},
+	}
+	for _, c := range cases {
+		got := SplitGestureActive(c.side, c.startX, c.startY, c.curX, c.curY)
+		if got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestSplitClampedPosition(t *testing.T) {
+	// 1000x800 pane at origin, band 10 -> valid Y range [20, 780], valid X range [20, 980].
+	pr := Rect{X: 0, Y: 0, W: 1000, H: 800}
+	band := 10.0
+
+	pos, ok := SplitClampedPosition(SideTop, pr, band, 500, 400)
+	if !ok || pos != 400 {
+		t.Errorf("top middle: got (%v,%v), want (400,true)", pos, ok)
+	}
+	pos, ok = SplitClampedPosition(SideTop, pr, band, 500, 5)
+	if ok || pos != 20 {
+		t.Errorf("top above valid: got (%v,%v), want (20,false)", pos, ok)
+	}
+	pos, ok = SplitClampedPosition(SideTop, pr, band, 500, 900)
+	if ok || pos != 780 {
+		t.Errorf("top below valid: got (%v,%v), want (780,false)", pos, ok)
+	}
+	pos, ok = SplitClampedPosition(SideLeft, pr, band, 5, 400)
+	if ok || pos != 20 {
+		t.Errorf("left of valid: got (%v,%v), want (20,false)", pos, ok)
+	}
+	pos, ok = SplitClampedPosition(SideRight, pr, band, 990, 400)
+	if ok || pos != 980 {
+		t.Errorf("right of valid: got (%v,%v), want (980,false)", pos, ok)
+	}
+	// Pane too small to split.
+	tiny := Rect{X: 0, Y: 0, W: 30, H: 30}
+	_, ok = SplitClampedPosition(SideTop, tiny, band, 15, 15)
+	if ok {
+		t.Error("tiny pane: should not be in valid range")
+	}
+}
