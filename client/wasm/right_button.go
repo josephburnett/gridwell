@@ -534,53 +534,29 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	srcGridID := d.srcGridID
 	tileID := d.tileID
 	version := d.snapshotTile.Version
-	go func() {
-		req := rpc.CloneTileRequest{
-			Path:       rpc.Path{WellIDs: srcPath},
-			TileID:     tileID,
-			Version:    version,
-			DestGridID: dstGridID,
-			DestPath:   rpc.Path{WellIDs: dstPath},
-			X:          dropX,
-			Y:          dropY,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/CloneTile", req, &resp)
-		if status != 200 {
-			if status == 409 {
-				a.refetchGridOnConflict(srcGridID, "CloneTile")
-			}
-			a.snapBackToOrigin(d)
-			return
-		}
-		a.fetchGrid(srcGridID)
-		a.fetchGrid(dstGridID)
-	}()
+	a.postCrossGridMutate("CloneTile", srcGridID, dstGridID, rpc.CloneTileRequest{
+		Path:       rpc.Path{WellIDs: srcPath},
+		TileID:     tileID,
+		Version:    version,
+		DestGridID: dstGridID,
+		DestPath:   rpc.Path{WellIDs: dstPath},
+		X:          dropX,
+		Y:          dropY,
+	}, d)
 }
 
 // runDeleteTile fires DeleteTile against the dragged source tile. Used
 // when the left-button-move gesture drops onto a black-hole sink.
 func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
-	srcPath := slices.Clone(d.srcPath)
-	srcGridID := d.srcGridID
-	tileID := d.tileID
-	version := d.snapshotTile.Version
-	go func() {
-		req := rpc.DeleteTileRequest{
-			Path:    rpc.Path{WellIDs: srcPath},
-			TileID:  tileID,
-			Version: version,
-		}
-		var resp rpc.DeleteTileResponse
-		status, _ := postJSON("/rpc/DeleteTile", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(srcGridID, "DeleteTile")
-		}
-		a.fetchGrid(srcGridID)
-		if t != nil && t.gridID != srcGridID {
-			a.fetchGrid(t.gridID)
-		}
-	}()
+	var dstGridID int64
+	if t != nil {
+		dstGridID = t.gridID
+	}
+	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, rpc.DeleteTileRequest{
+		Path:    rpc.Path{WellIDs: slices.Clone(d.srcPath)},
+		TileID:  d.tileID,
+		Version: d.snapshotTile.Version,
+	})
 }
 
 // tileAtCellInTarget returns the tile the cursor is *inside* of in

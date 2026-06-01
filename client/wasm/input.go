@@ -810,30 +810,15 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 
 	// Left-drag is always a move; clone is handled by the right-drag path
 	// (commitRightClone in right_button.go) and never reaches here.
-	go func() {
-		req := rpc.MoveTileRequest{
-			Path:       rpc.Path{WellIDs: srcPath},
-			TileID:     d.tileID,
-			Version:    version,
-			DestGridID: dstGridID,
-			DestPath:   rpc.Path{WellIDs: dstPath},
-			X:          dropX,
-			Y:          dropY,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/MoveTile", req, &resp)
-		if status != 200 {
-			if status == 409 {
-				a.refetchGridOnConflict(srcGridID, "MoveTile")
-			}
-			// Server rejected the drop. Snap the ghost back to origin so
-			// the user sees the stone return rather than vanish.
-			a.snapBackToOrigin(d)
-			return
-		}
-		a.fetchGrid(srcGridID)
-		a.fetchGrid(dstGridID)
-	}()
+	a.postCrossGridMutate("MoveTile", srcGridID, dstGridID, rpc.MoveTileRequest{
+		Path:       rpc.Path{WellIDs: srcPath},
+		TileID:     d.tileID,
+		Version:    version,
+		DestGridID: dstGridID,
+		DestPath:   rpc.Path{WellIDs: dstPath},
+		X:          dropX,
+		Y:          dropY,
+	}, d)
 	a.draw()
 	return nil
 }
@@ -1447,25 +1432,15 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 		TileChanged: &rpc.TileChanged{Tile: updated},
 	})
 
-	wellID := well.ID
-	wellVersion := well.Version
 	parentGridID := a.gridIDForPath(parentPath)
-	pp := slices.Clone(parentPath)
-	go func() {
-		req := rpc.SetWellViewRequest{
-			Path:     rpc.Path{WellIDs: pp},
-			TileID:   wellID,
-			Version:  wellVersion,
-			ViewX:    newViewX,
-			ViewY:    newViewY,
-			ViewZoom: newViewZoom,
-		}
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/SetWellView", req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(parentGridID, "SetWellView")
-		}
-	}()
+	a.postPersist("SetWellView", parentGridID, rpc.SetWellViewRequest{
+		Path:     rpc.Path{WellIDs: slices.Clone(parentPath)},
+		TileID:   well.ID,
+		Version:  well.Version,
+		ViewX:    newViewX,
+		ViewY:    newViewY,
+		ViewZoom: newViewZoom,
+	})
 }
 
 // saveFileBeforeAscent posts the editor buffer (if text mode is active)
@@ -1649,6 +1624,66 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.createBlackHoleAtCell(destPane, dropX, dropY)
 	}
 	a.menuOpen = false
+}
+
+// postCrossGridMutate is the shared body of left-drag (MoveTile) and
+// right-drag (CloneTile) ghost commits. Both POST a request that
+// touches two grids (source + destination), and both have to roll
+// the ghost back to its origin on failure so the user sees the
+// stone return instead of vanishing.
+//
+// On success it refetches both grids; on any non-200 (409 or other)
+// it triggers a refetch of the source grid and snaps the dragged
+// ghost back. `kind` is the bare method name ("MoveTile",
+// "CloneTile") used for the URL and the conflict-log breadcrumb.
+func (a *App) postCrossGridMutate(kind string, srcGridID, dstGridID int64, req any, d *dragState) {
+	go func() {
+		var resp rpc.TileResponse
+		status, _ := postJSON("/rpc/"+kind, req, &resp)
+		if status != 200 {
+			if status == 409 {
+				a.refetchGridOnConflict(srcGridID, kind)
+			}
+			a.snapBackToOrigin(d)
+			return
+		}
+		a.fetchGrid(srcGridID)
+		a.fetchGrid(dstGridID)
+	}()
+}
+
+// postPersist runs a "save my local view" RPC: the caller has already
+// patched the cache, the server-side write is the durable mirror.
+// Successful 200 needs no follow-up; a 409 refetches the grid to pull
+// the authoritative state. Used by SetWellView, where the cache has
+// already been updated optimistically before the goroutine fires.
+func (a *App) postPersist(kind string, gid int64, req any) {
+	go func() {
+		var resp rpc.TileResponse
+		status, _ := postJSON("/rpc/"+kind, req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(gid, kind)
+		}
+	}()
+}
+
+// postTwoGridMutate is the no-snapback variant of postCrossGridMutate.
+// Used by DeleteTile, where the tile is going to vanish either way —
+// a failed delete still needs the cache refreshed but there's no
+// ghost to roll back to. Skips the dstGrid refetch when it equals
+// srcGrid (delete onto a black hole in the same grid).
+func (a *App) postTwoGridMutate(kind string, srcGridID, dstGridID int64, req any) {
+	go func() {
+		var resp rpc.DeleteTileResponse
+		status, _ := postJSON("/rpc/"+kind, req, &resp)
+		if status == 409 {
+			a.refetchGridOnConflict(srcGridID, kind)
+		}
+		a.fetchGrid(srcGridID)
+		if dstGridID != 0 && dstGridID != srcGridID {
+			a.fetchGrid(dstGridID)
+		}
+	}()
 }
 
 // postUpdateText fires an UpdateText RPC and, on success, replaces the

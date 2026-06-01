@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
@@ -43,28 +44,14 @@ func urlLog(format string, args ...any) {
 	js.Global().Get("console").Call("log", msg)
 }
 
-// paneStreamSize returns the integer pixel size of the URL-stream
-// viewport for a pane with the given screen rect. The viewport is the
-// pane's content box (rect minus margin), so the page reflows to the
-// exact area painted with frames.
+// paneStreamSize / paneStreamLocal are thin wasm adapters over the
+// pure panebox helpers, binding the wasm renderer's paneBorderPx.
 func paneStreamSize(r pane.Rect) (int64, int64) {
-	_, _, cw, ch := paneContentBox(r)
-	if cw < 1 {
-		cw = 1
-	}
-	if ch < 1 {
-		ch = 1
-	}
-	return int64(cw), int64(ch)
+	return panebox.StreamViewportSize(r, paneBorderPx)
 }
 
-// paneStreamLocal returns screen coords (sx, sy) translated into
-// pane-content-local coordinates — the space the Chromium tab thinks
-// it's painting in. Pane content size = Chromium viewport size, so no
-// scaling is needed beyond the origin shift.
 func paneStreamLocal(r pane.Rect, sx, sy float64) (float64, float64) {
-	cx, cy, _, _ := paneContentBox(r)
-	return sx - cx, sy - cy
+	return panebox.StreamLocalCoords(r, paneBorderPx, sx, sy)
 }
 
 // openURLStream opens a WebSocket to /rpc/URLStream for the (pane,
