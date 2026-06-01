@@ -194,6 +194,12 @@ type App struct {
 	// URL descent pane. Used to switch the canvas cursor to "grabbing"
 	// during the drag and back to "grab" on release.
 	urlPanDragging bool
+
+	// embedHits collects click-targets for tile-embeds rendered inside
+	// text panes this frame. Reset at the start of each draw() and
+	// appended to as embeds are painted by drawMarkdownInPane. Queried by
+	// the input handler to descend on click. See embed.go.
+	embedHits []embedHit
 }
 
 // paneState is a captured viewport: viewport center in cells (sub-cell
@@ -258,6 +264,13 @@ type ghost struct {
 	// does, so dragging in and back out smoothly reassembles.
 	displayedFragmentation float64
 	targetFragmentation    float64
+
+	// overDoc is true while the cursor is hovering a raw-mode text-pane
+	// drop target (right-drag-clone semantics → insert markdown link
+	// instead of clone). The ghost renderer paints a chain-link badge
+	// over the tile so the user sees the action will be "link", not
+	// "clone".
+	overDoc bool
 }
 
 // dragState tracks an in-progress drag from a tile onto the cursor.

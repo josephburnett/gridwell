@@ -356,11 +356,21 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.startFileAscent(p)
 			return nil
 		}
-		// Rendered mode: drag pans the file content (no textarea over us).
-		// Text mode: the textarea covers most of the pane and handles drag
+		// Rendered mode: clicks may land on a tile-embed (descent into the
+		// referenced tile) or on plain content (start a pan drag). Text
+		// mode: the textarea covers most of the pane and handles drag
 		// itself. Margin clicks (text mode, narrow textarea) fall through
 		// to a no-op.
 		if p.TextMode == rpc.TextModeRendered {
+			if hit := a.embedHitAt(p.ID, sx, sy); hit != nil {
+				if a.descendIntoEmbed(p, hit) {
+					return nil
+				}
+				// Embed under cursor but unresolvable (broken link or
+				// cross-grid target): swallow the click so it doesn't start
+				// a pan that would scroll the doc away from the embed.
+				return nil
+			}
 			a.dragging = &dragState{
 				originPaneID: p.ID,
 				tileID:       0,
@@ -609,7 +619,27 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// cursor crosses pane boundaries or enters/leaves a well's
 		// preview. Position is computed from cursor − cellOffset ×
 		// displayedCellSize so the grab point stays under the cursor.
-		if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
+		a.ghost.overDoc = false
+		if dt, ok := a.docDropTargetAt(sx, sy); ok {
+			// Drag over a raw-mode text descent: insert a reference. Both
+			// left and right buttons land here — the doc isn't a placement
+			// medium, so there's no clone-vs-move distinction to honor.
+			// Left-drag is auto-promoted to "leave the source" so we never
+			// orphan a tile.
+			a.ghost.paneID = dt.pane.ID
+			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.targetFragmentation = 0.0
+			a.ghost.overDoc = true
+			a.canvas.Get("style").Set("cursor", "")
+		} else if a.docRejectAt(sx, sy) {
+			// Rendered-mode text descent: read-only, no drop allowed for
+			// either button.
+			a.ghost.paneID = d.originPaneID
+			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.targetFragmentation = 0.0
+			a.canvas.Get("style").Set("cursor", "not-allowed")
+		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
+			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = t.pane.ID
 			// Black-hole sink: if the cursor is over a black hole, the
 			// ghost shrinks AND fragments. Left-button release commits
@@ -623,6 +653,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 				a.ghost.targetFragmentation = 0.0
 			}
 		} else {
+			a.canvas.Get("style").Set("cursor", "")
 			// Off-canvas or over a file-mode pane: hold target = source
 			// size so the ghost glides back to its original scale.
 			a.ghost.paneID = d.originPaneID
@@ -678,6 +709,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	}
 	d := a.dragging
 	a.dragging = nil
+	// Reset any drag-time cursor change (e.g. "not-allowed" from
+	// hovering a doc with the left button).
+	a.canvas.Get("style").Set("cursor", "")
 	sx, sy = mouseXY(args[0], a.canvas)
 
 	// Bare click (no movement): navigation.
@@ -719,6 +753,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.scheduleURLUpdate()
 		a.scheduleRootViewSave()
 		a.draw()
+		return nil
+	}
+
+	// Doc drop: dropping a tile onto a raw-mode text descent inserts a
+	// markdown reference rather than moving the source. The doc isn't a
+	// placement medium, so left-drag auto-promotes to "leave source" —
+	// same outcome as right-drag, no tile orphaned.
+	if dt, ok := a.docDropTargetAt(sx, sy); ok {
+		a.commitEmbedDrop(d, dt)
+		a.cancelDragSnapBack(d)
 		return nil
 	}
 

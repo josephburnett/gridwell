@@ -130,6 +130,8 @@ func (a *App) draw() {
 		}
 	}
 
+	a.embedHits = a.embedHits[:0]
+
 	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", 0, 0, a.width, a.height)
 
@@ -544,7 +546,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 			drawMarkdownInRect(a.cctx, string(blob),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
-				scale, 0, mode)
+				scale, 0, mode, a.makeEmbedDrawer(p.ID))
 		} else if n.BlobID != 0 {
 			a.fetchBlob(n.BlobID)
 		}
@@ -653,7 +655,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ paneRect, sele
 			drawMarkdownInRect(a.cctx, string(blob),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
-				scale, 0, mode)
+				scale, 0, mode, nil)
 		} else if n.BlobID != 0 {
 			a.fetchBlob(n.BlobID)
 		}
@@ -684,12 +686,12 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ paneRect, sele
 // monospace).
 //
 // The rect's clip is the caller's responsibility.
-func drawMarkdownInRect(c js.Value, src string, x, y, w, h, scale, scrollY float64, mode string) {
+func drawMarkdownInRect(c js.Value, src string, x, y, w, h, scale, scrollY float64, mode string, drawEmbed embedDrawer) {
 	if mode == rpc.TextModeText {
 		drawMarkdownText(c, src, x, y, w, h, scale, scrollY)
 		return
 	}
-	drawMarkdownRendered(c, src, x, y, w, h, scale, scrollY)
+	drawMarkdownRendered(c, src, x, y, w, h, scale, scrollY, drawEmbed)
 }
 
 // markdownStyle holds the per-block-kind font/spacing parameters in
@@ -754,7 +756,7 @@ func (s markdownStyle) blockFamily(k markdown.BlockKind) string {
 // drawMarkdownRendered does block-level layout of `src` and paints it
 // scaled by `scale` into (x, y, w, h), scrolled vertically by scrollY
 // logical pixels (so scrollY=0 shows from the top).
-func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
+func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY float64, drawEmbed embedDrawer) {
 	st := defaultMarkdownStyle()
 	blocks := markdown.Parse(src)
 	contentWidthLogical := (w / scale) - 2*st.pad
@@ -811,7 +813,7 @@ func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY flo
 				c.Call("fillRect", x+st.pad*scale, y+topPx, 3*scale, blockHeight*scale)
 			}
 			c.Set("fillStyle", st.mutedColor)
-			drawInlineLines(c, lines, x+(st.pad+indent)*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
+			drawInlineLines(c, lines, x+(st.pad+indent)*scale, y, cursorY, lineHeight, fontPx, family, scale, h, drawEmbed)
 			cursorY += blockHeight + st.gapAfter
 			continue
 		case markdown.BlockListItem:
@@ -825,13 +827,13 @@ func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY flo
 				c.Set("fillStyle", st.textColor)
 				c.Call("fillText", "•", x+(st.pad+4)*scale, y+yPx)
 			}
-			drawInlineLines(c, lines, x+(st.pad+indent)*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
+			drawInlineLines(c, lines, x+(st.pad+indent)*scale, y, cursorY, lineHeight, fontPx, family, scale, h, drawEmbed)
 			cursorY += lineHeight*float64(len(lines)) + st.gapAfter
 			continue
 		}
 		// Headings and paragraphs.
 		lines := wrapInline(c, b.Spans, contentWidthLogical, fontPx, family, scale)
-		drawInlineLines(c, lines, x+st.pad*scale, y, cursorY, lineHeight, fontPx, family, scale, h)
+		drawInlineLines(c, lines, x+st.pad*scale, y, cursorY, lineHeight, fontPx, family, scale, h, drawEmbed)
 		cursorY += lineHeight*float64(len(lines)) + st.gapAfter
 	}
 }
@@ -841,19 +843,37 @@ func drawMarkdownRendered(c js.Value, src string, x, y, w, h, scale, scrollY flo
 // measureText reflects the right metrics; scale is applied uniformly so
 // the wrap matches what the caller will paint.
 func wrapInline(c js.Value, spans []markdown.Span, contentWidthLogical, fontPx float64, family string, scale float64) [][]markdown.Span {
-	measure := func(text string, style markdown.SpanStyle) float64 {
-		setFont(c, fontPx*scale, family, style&markdown.StyleBold != 0, style&markdown.StyleItalic != 0)
-		mt := c.Call("measureText", text)
+	measure := func(sp markdown.Span) float64 {
+		if sp.Style&markdown.StyleEmbed != 0 {
+			ew, _ := embedLogicalSize(sp)
+			return ew
+		}
+		setFont(c, fontPx*scale, family, sp.Style&markdown.StyleBold != 0, sp.Style&markdown.StyleItalic != 0)
+		mt := c.Call("measureText", sp.Text)
 		// Convert measured pixels back to logical units.
 		return mt.Get("width").Float() / scale
 	}
 	return markdown.Wrap(spans, contentWidthLogical, measure)
 }
 
+// embedLogicalSize returns the embed's W/H in logical (scale=1) pixels,
+// falling back to the inline defaults if the span didn't declare a size.
+func embedLogicalSize(sp markdown.Span) (float64, float64) {
+	w, h := float64(sp.W), float64(sp.H)
+	if w <= 0 {
+		w = defaultEmbedW
+	}
+	if h <= 0 {
+		h = defaultEmbedH
+	}
+	return w, h
+}
+
 // drawInlineLines paints wrapped inline lines starting at logical
 // (xPx, baseTopLogical) with the given lineHeight; clips drawing to (y, h)
-// in screen pixels.
-func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLogical, lineHeight, fontPx float64, family string, scale, h float64) {
+// in screen pixels. Embeds are dispatched to drawEmbed (when non-nil) and
+// fall back to their alt text when no drawer is supplied.
+func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLogical, lineHeight, fontPx float64, family string, scale, h float64, drawEmbed embedDrawer) {
 	for li, line := range lines {
 		yLogical := baseTopLogical + float64(li)*lineHeight
 		yPx := yLogical * scale
@@ -862,6 +882,38 @@ func drawInlineLines(c js.Value, lines [][]markdown.Span, xPx, yBase, baseTopLog
 		}
 		curX := xPx
 		for _, sp := range line {
+			if sp.Style&markdown.StyleEmbed != 0 {
+				ewLogical, ehLogical := embedLogicalSize(sp)
+				ew := ewLogical * scale
+				eh := ehLogical * scale
+				if drawEmbed != nil {
+					drawEmbed(curX, yBase+yPx, ew, eh, sp.Href, sp.Alt)
+				} else {
+					// Preview / no-embed context: render the alt text inline.
+					setFont(c, fontPx*scale, family, false, true)
+					c.Set("fillStyle", "#6c6f78")
+					label := sp.Alt
+					if label == "" {
+						label = "[embed]"
+					}
+					c.Call("fillText", label, curX, yBase+yPx)
+				}
+				curX += ew
+				continue
+			}
+			if sp.Style&markdown.StyleLink != 0 {
+				setFont(c, fontPx*scale, family,
+					sp.Style&markdown.StyleBold != 0,
+					sp.Style&markdown.StyleItalic != 0)
+				c.Set("fillStyle", colorURLLine)
+				c.Call("fillText", sp.Text, curX, yBase+yPx)
+				w := c.Call("measureText", sp.Text).Get("width").Float()
+				// Underline.
+				c.Set("fillStyle", colorURLLine)
+				c.Call("fillRect", curX, yBase+yPx+fontPx*scale*1.05, w, 1)
+				curX += w
+				continue
+			}
 			bold := sp.Style&markdown.StyleBold != 0
 			italic := sp.Style&markdown.StyleItalic != 0
 			code := sp.Style&markdown.StyleCode != 0
@@ -1044,6 +1096,9 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r paneRect, frag float64) {
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		if a.ghost != nil && a.ghost.overDoc {
+			drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
+		}
 		return
 	}
 	if frag > 1 {

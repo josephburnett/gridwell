@@ -65,6 +65,11 @@ const (
 	// back above the start point cancels. This is the "go live" gesture
 	// for URL tiles; drag upward or release before threshold to cancel.
 	rightDragURLRefresh
+	// rightDragEmbedHint is armed when right-down lands on a rendered
+	// tile-embed inside a text descent. Drag does nothing; release does
+	// nothing. The sole purpose is to surface the chain-link icon so the
+	// user discovers that "this is a reference, not a tile."
+	rightDragEmbedHint
 )
 
 // urlRefreshThresholdPx is the downward drag distance (in screen pixels)
@@ -124,6 +129,11 @@ type rightDragState struct {
 	// release when curY > startY + urlRefreshThresholdPx.
 	refreshTileID int64
 	refreshPaneID string
+
+	// rightDragEmbedHint-only. embedRect is the screen rectangle of the
+	// rendered tile-embed under the cursor; the chain-link glyph paints
+	// centered inside it.
+	embedRect [4]float64
 }
 
 // onRightDown classifies the right-down and arms the matching gesture
@@ -135,6 +145,23 @@ type rightDragState struct {
 // Caller has already verified there's no animation in flight and
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r paneRect, sx, sy float64) {
+	// Rendered text descent over an embed: arm the embed-hint gesture so
+	// the chain-link glyph surfaces. No drag, no commit — just the hint.
+	if p.TextFocus != 0 && p.TextMode == rpc.TextModeRendered {
+		if hit := a.embedHitAt(p.ID, sx, sy); hit != nil {
+			a.rightDrag = &rightDragState{
+				kind:      rightDragEmbedHint,
+				startX:    sx,
+				startY:    sy,
+				curX:      sx,
+				curY:      sy,
+				embedRect: [4]float64{hit.x, hit.y, hit.w, hit.h},
+			}
+			a.draw()
+			return
+		}
+	}
+
 	// URL descent: right-down in the pane content area arms the refresh
 	// gesture. Pane-management regions (edges) still work normally — only
 	// the inner content area is claimed by the refresh zone.
@@ -412,6 +439,9 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitTileResize(rd)
 	case rightDragURLRefresh:
 		a.commitURLRefresh(rd, sx, sy)
+	case rightDragEmbedHint:
+		// No-op: the gesture only existed to surface the chain-link glyph
+		// while the button was held. Release just clears it.
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -449,10 +479,22 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 		}
 	}
 	if a.ghost != nil {
-		if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
+		a.ghost.overDoc = false
+		if dt, ok := a.docDropTargetAt(sx, sy); ok {
+			a.ghost.paneID = dt.pane.ID
+			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.overDoc = true
+			a.canvas.Get("style").Set("cursor", "")
+		} else if a.docRejectAt(sx, sy) {
+			a.ghost.paneID = d.originPaneID
+			a.ghost.targetCellSize = d.srcCellSize
+			a.canvas.Get("style").Set("cursor", "not-allowed")
+		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
+			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = t.pane.ID
 			a.ghost.targetCellSize = t.cellSize
 		} else {
+			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = d.originPaneID
 			a.ghost.targetCellSize = d.srcCellSize
 		}
@@ -516,11 +558,20 @@ func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
 }
 
 // commitRightClone resolves the drop target at (sx, sy) and either
-// fires CloneTile or snap-backs the ghost on a rejected drop. The
-// async RPC fires in a goroutine; the local cache is patched by the
-// SSE event when it lands. Black-hole deletion is the left-button
-// path, not this one — right-click is strictly clone.
+// fires CloneTile, inserts a markdown reference into a doc, or snap-backs
+// the ghost on a rejected drop. The async RPC fires in a goroutine; the
+// local cache is patched by the SSE event when it lands. Black-hole
+// deletion is the left-button path, not this one — right-click is
+// strictly clone-or-link.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
+	// Doc drop: a raw-mode text descent under the cursor turns the gesture
+	// into "insert markdown reference". The source tile is left in place
+	// (clone semantics), the doc gains a link.
+	if dt, ok := a.docDropTargetAt(sx, sy); ok {
+		a.commitEmbedDrop(d, dt)
+		a.cancelDragSnapBack(d)
+		return
+	}
 	t, ok := a.dropTargetAt(sx, sy, d.tileID)
 	if !ok {
 		a.cancelDragSnapBack(d)
@@ -855,7 +906,21 @@ func (a *App) drawRightDragPreview() {
 	case rightDragURLRefresh:
 		a.drawPaneHotspotOverlay(rd)
 		a.drawURLRefreshPreview(rd)
+	case rightDragEmbedHint:
+		a.drawEmbedHintOverlay(rd)
 	}
+}
+
+// drawEmbedHintOverlay paints the chain-link glyph centered inside the
+// rendered embed under the cursor. Surfaces the message that this is a
+// hyperlink — nothing else right-click can do here.
+func (a *App) drawEmbedHintOverlay(rd *rightDragState) {
+	c := a.cctx
+	x, y, w, h := rd.embedRect[0], rd.embedRect[1], rd.embedRect[2], rd.embedRect[3]
+	// Dim the embed slightly so the badge reads.
+	c.Set("fillStyle", "rgba(0,0,0,0.35)")
+	c.Call("fillRect", x, y, w, h)
+	drawGhostLinkBadge(c, x+w/2, y+h/2, min(w, h))
 }
 
 // drawURLRefreshPreview paints the refresh gesture hint inside a URL-descent
