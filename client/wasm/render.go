@@ -273,7 +273,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					continue
 				}
 				nn := n
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, inSource)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected)
 				if inSource {
 					a.overlaySourceTile(&nn, left, top, w, h)
 				}
@@ -455,7 +455,7 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected, parentInSource bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected bool) {
 	switch n.Kind {
 	case rpc.KindText:
 		a.drawMarkdownNode(n, x, y, w, h, r, selected)
@@ -477,18 +477,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
 	}
-	// Source-backed wells inside another source-backed grid are flat
-	// swatches — no preview, no fetch. This stops the cascade at depth
-	// 2: a file-well at "/" shows /'s contents as a preview, but the
-	// sub-file-wells inside that preview (and inside / when descended)
-	// don't recursively fetch their grandchildren. Same one-level
-	// preview rule that regular wells follow via drawChildPreview
-	// (which uses the flat drawNode).
-	if parentInSource && (n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell) {
-		a.drawSourceWellSwatch(n, x, y, w, h, selected)
-		return
-	}
-	// Trigger prefetch if we don't have the child grid yet.
+	// Trigger prefetch if we don't have the child grid yet. Recursion
+	// stops naturally at one level because drawChildPreview paints its
+	// children via the flat drawNode — no further fetches. Off-screen
+	// culling in drawPane bounds how many top-level wells trigger a
+	// fetch on first descent.
 	child, haveChild := a.c.Grid(n.ChildGridID)
 	if !haveChild {
 		a.fetchGrid(n.ChildGridID)
@@ -556,89 +549,6 @@ func wellOutlineColor(kind string) string {
 		return colorExitBorder
 	}
 	return colorFocusBorder
-}
-
-// drawSourceWellSwatch paints a static well swatch for a file-well or
-// process-well in the parent grid: red outline + folder / process glyph
-// + label (path basename or pid). No child-grid fetch — the user
-// descends to see contents.
-func (a *App) drawSourceWellSwatch(n *rpc.Tile, x, y, w, h float64, selected bool) {
-	a.cctx.Set("fillStyle", colorBg)
-	a.cctx.Call("fillRect", x, y, w, h)
-	if n.Kind == rpc.KindFileWell {
-		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
-	} else {
-		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
-	}
-	a.cctx.Set("strokeStyle", colorExitBorder)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("strokeRect", x, y, w, h)
-	a.drawSourceWellLabel(n, x, y, w, h)
-	if selected {
-		a.cctx.Set("strokeStyle", colorSelected)
-		a.cctx.Set("lineWidth", 2.0)
-		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
-		a.cctx.Set("lineWidth", 1.0)
-	}
-}
-
-// drawSourceWellLabel writes the file-well's fs_path basename or the
-// process-well's pid at the top of the swatch so the user can tell
-// wells apart without descending.
-func (a *App) drawSourceWellLabel(n *rpc.Tile, x, y, w, h float64) {
-	var label string
-	switch n.Kind {
-	case rpc.KindFileWell:
-		label = sourceWellPathLabel(n.FSPath)
-	case rpc.KindProcessWell:
-		label = "pid " + strconv.FormatInt(n.PID, 10)
-	}
-	if label == "" {
-		return
-	}
-	const minFontPx = 9.0
-	const maxFontPx = 18.0
-	fontPx := h * 0.18
-	if fontPx < minFontPx {
-		fontPx = minFontPx
-	}
-	if fontPx > maxFontPx {
-		fontPx = maxFontPx
-	}
-	if fontPx*1.4 > h {
-		return
-	}
-	bannerH := fontPx + 4
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
-	a.cctx.Set("fillStyle", colorSourceLabelBg)
-	a.cctx.Call("fillRect", x, y, w, bannerH)
-	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true, false)
-	a.cctx.Set("fillStyle", colorExitBorder)
-	a.cctx.Set("textBaseline", "middle")
-	a.cctx.Set("textAlign", "start")
-	a.cctx.Call("fillText", label, x+4, y+bannerH/2)
-	a.cctx.Set("textBaseline", "top")
-	a.cctx.Call("restore")
-}
-
-// sourceWellPathLabel returns "/" for the filesystem root and the last
-// segment of fsPath otherwise — long paths reduce to their basename so
-// the label still fits in a small tile.
-func sourceWellPathLabel(fsPath string) string {
-	if fsPath == "" {
-		return ""
-	}
-	if fsPath == "/" {
-		return "/"
-	}
-	i := strings.LastIndexByte(fsPath, '/')
-	if i < 0 || i == len(fsPath)-1 {
-		return fsPath
-	}
-	return fsPath[i+1:]
 }
 
 // overlaySourceTile post-processes a tile inside an fs/proc grid:
@@ -1294,7 +1204,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 // out and the original tile fades back in at full size.
 func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, false)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
 		if a.ghost != nil && a.ghost.overDoc {
 			drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 		}
@@ -1306,7 +1216,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// Cross-fade: tile fades out as frag grows; trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, false)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)
