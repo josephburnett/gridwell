@@ -42,6 +42,7 @@ type serveFlags struct {
 	StaticDir      string
 	BrowserName    string
 	BrowserBin     string
+	ProfileDir     string
 	XvfbResolution string
 	NoXvfb         bool
 	Headless       bool
@@ -58,12 +59,13 @@ func parseServeFlags(args []string) (serveFlags, error) {
 	fs.StringVar(&f.StaticDir, "static", "./web", "directory of static files served at /")
 	fs.StringVar(&f.BrowserName, "browser", "chromium", "browser brand: "+strings.Join(sortedBrands(), ", "))
 	fs.StringVar(&f.BrowserBin, "browser-bin", "", "explicit browser binary path (overrides --browser lookup)")
+	fs.StringVar(&f.ProfileDir, "profile-dir", "", "explicit user-data-dir for the browser (overrides --browser's default profile path)")
 	fs.StringVar(&f.XvfbResolution, "xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT (Linux only)")
 	fs.BoolVar(&f.NoXvfb, "no-xvfb", defaultNoXvfb(), "do not spawn Xvfb; inherit DISPLAY from environment (default true on non-Linux)")
 	fs.BoolVar(&f.Headless, "headless", defaultHeadless(), "launch Chromium in headless=new mode (default true on non-Linux; required when --no-xvfb on a host with no DISPLAY)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
-		case "db", "bind", "static", "browser", "browser-bin", "xvfb-resolution":
+		case "db", "bind", "static", "browser", "browser-bin", "profile-dir", "xvfb-resolution":
 			return true
 		}
 		return false
@@ -108,10 +110,11 @@ func RunServe(args []string) int {
 	}
 
 	driver, err := urldriver.New(s, urldriver.Config{
-		Browser:        f.BrowserName,
-		BinaryOverride: f.BrowserBin,
-		Display:        display,
-		Headless:       f.Headless,
+		Browser:         f.BrowserName,
+		BinaryOverride:  f.BrowserBin,
+		ProfileOverride: f.ProfileDir,
+		Display:         display,
+		Headless:        f.Headless,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -119,7 +122,8 @@ func RunServe(args []string) int {
 	}
 	s.SetURLDriver(driver)
 	defer driver.Shutdown()
-	fmt.Printf("gridwell: %s driver ready\n", f.BrowserName)
+	fmt.Printf("gridwell: %s driver ready (binary=%s profile=%s headless=%v)\n",
+		f.BrowserName, driver.BinaryPath(), driver.ProfileDir(), f.Headless)
 
 	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))

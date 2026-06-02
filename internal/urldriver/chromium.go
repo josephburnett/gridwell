@@ -134,7 +134,7 @@ func New(store PreviewWriter, cfg Config) (*Driver, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve $HOME: %w", err)
 		}
-		profileDir = filepath.Join(home, b.userDataDir)
+		profileDir = filepath.Join(home, b.userDataPath())
 	}
 
 	return &Driver{
@@ -149,6 +149,25 @@ func New(store PreviewWriter, cfg Config) (*Driver, error) {
 // Available reports whether the driver is functional. Always true for any
 // Driver returned by New (errors are surfaced at construction time).
 func (d *Driver) Available() bool { return d != nil }
+
+// ProfileDir returns the resolved user-data-dir the driver will launch
+// the browser with. Useful for diagnostics — print at startup so users
+// can verify they're sharing the profile they expect.
+func (d *Driver) ProfileDir() string {
+	if d == nil {
+		return ""
+	}
+	return d.profileDir
+}
+
+// BinaryPath returns the resolved browser binary path. Useful alongside
+// ProfileDir() for startup diagnostics.
+func (d *Driver) BinaryPath() string {
+	if d == nil {
+		return ""
+	}
+	return d.binaryPath
+}
 
 // Shutdown tears down the Chromium subprocess.
 func (d *Driver) Shutdown() {
