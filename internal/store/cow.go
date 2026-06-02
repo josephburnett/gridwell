@@ -40,7 +40,7 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 		if err != nil {
 			return gridSequence{}, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
 		}
-		if w.Kind != rpc.KindWell {
+		if !isWellKind(w.Kind) {
 			return gridSequence{}, fmt.Errorf("%w: tile %d is not a well", ErrInvalidPath, wellID)
 		}
 		if w.GridID != seq.grids[len(seq.grids)-1] {
@@ -50,6 +50,13 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 		seq.grids = append(seq.grids, w.ChildGridID)
 	}
 	return seq, nil
+}
+
+// isWellKind reports whether a tile kind has a child grid that can be
+// descended into — the three "well" kinds (interior well, file-well,
+// process-well).
+func isWellKind(kind string) bool {
+	return kind == rpc.KindWell || kind == rpc.KindFileWell || kind == rpc.KindProcessWell
 }
 
 // preWriteResult describes the result of preWrite.

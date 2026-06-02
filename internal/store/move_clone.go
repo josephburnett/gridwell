@@ -10,6 +10,32 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
+// gridSourceKinds returns the source_kind values for two grids in one
+// pass. Empty string means a regular Gridwell-owned grid.
+func (s *Store) gridSourceKinds(ctx context.Context, tx *sql.Tx, a, b int64) (string, string, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, COALESCE(source_kind, '') FROM grids WHERE id IN (?, ?)`, a, b)
+	if err != nil {
+		return "", "", err
+	}
+	defer rows.Close()
+	var ka, kb string
+	for rows.Next() {
+		var id int64
+		var k string
+		if err := rows.Scan(&id, &k); err != nil {
+			return "", "", err
+		}
+		if id == a {
+			ka = k
+		}
+		if id == b {
+			kb = k
+		}
+	}
+	return ka, kb, rows.Err()
+}
+
 // loadPreviewJPEG reads a tile's preview_jpeg bytes inside the given
 // transaction. Returns nil for tiles with no preview.
 func loadPreviewJPEG(ctx context.Context, tx *sql.Tx, tileID int64) ([]byte, error) {
@@ -57,6 +83,20 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		dstGrid := dstSeq.grids[len(dstSeq.grids)-1]
 
 		crossGrid := dstGrid != srcGrid
+		// Cross-grid moves that touch a source-backed grid are not
+		// permitted: a file can't be moved into Gridwell ("things stay
+		// where you put them" only inside Gridwell), and host-side mv
+		// across directories is not yet implemented. The user can clone
+		// (right-drag) instead to drop a linked tile.
+		if crossGrid {
+			srcSource, dstSource, err := s.gridSourceKinds(ctx, tx, srcGrid, dstGrid)
+			if err != nil {
+				return err
+			}
+			if srcSource != "" || dstSource != "" {
+				return fmt.Errorf("%w: cross-grid move involving a source-backed grid is not allowed; clone (right-drag) to link instead", ErrInvalidArgument)
+			}
+		}
 		if crossGrid {
 			dstPre, err := s.preWrite(ctx, tx, req.DestPath, 0)
 			if err != nil {
@@ -144,6 +184,25 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			return err
 		}
 
+		srcGrid := srcSeq.grids[len(srcSeq.grids)-1]
+		dstGridRaw := dstSeq.grids[len(dstSeq.grids)-1]
+		if srcGrid != dstGridRaw {
+			srcSource, dstSource, err := s.gridSourceKinds(ctx, tx, srcGrid, dstGridRaw)
+			if err != nil {
+				return err
+			}
+			if dstSource != "" {
+				return fmt.Errorf("%w: cannot clone into a source-backed grid; its contents come from the host", ErrInvalidArgument)
+			}
+			// From a source grid, only well kinds (file-well / process-well)
+			// can be linked out — they carry their FS path / PID on the
+			// tile row. File tiles inside fs-grids only carry the basename,
+			// so a linked file tile would lose its identity.
+			if srcSource != "" && !isWellKind(n.Kind) {
+				return fmt.Errorf("%w: only file-wells and process-wells can be linked out of a source-backed grid", ErrInvalidArgument)
+			}
+		}
+
 		dstPre, err := s.preWrite(ctx, tx, req.DestPath, 0)
 		if err != nil {
 			return err
@@ -166,10 +225,18 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			urlStr      sql.NullString
 			textMode    sql.NullString
 			previewJPEG []byte
+			fsPath      sql.NullString
+			pidNS       sql.NullInt64
 		)
 		switch n.Kind {
 		case rpc.KindWell:
 			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
+		case rpc.KindFileWell:
+			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
+			fsPath = sql.NullString{String: n.FSPath, Valid: true}
+		case rpc.KindProcessWell:
+			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
+			pidNS = sql.NullInt64{Int64: n.PID, Valid: true}
 		case rpc.KindURL:
 			urlStr = sql.NullString{String: n.URLString, Valid: true}
 			previewJPEG, err = loadPreviewJPEG(ctx, tx, n.ID)
@@ -188,13 +255,13 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, alt_text, preview_jpeg,
+				url_string, fs_path, pid, alt_text, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ObjectID, n.Version, dstGrid, n.Kind, req.X, req.Y, n.W, n.H,
 			n.ViewX, n.ViewY, n.ViewZoom, child,
 			n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-			urlStr, nullableString(n.AltText), previewJPEG,
+			urlStr, fsPath, pidNS, nullableString(n.AltText), previewJPEG,
 			now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)
@@ -204,7 +271,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			return err
 		}
 		switch n.Kind {
-		case rpc.KindWell:
+		case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 			if err := s.incRefcount(ctx, tx, n.ChildGridID); err != nil {
 				return err
 			}

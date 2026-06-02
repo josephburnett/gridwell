@@ -47,6 +47,7 @@ type Store struct {
 	fsReader   FSReader
 	procReader ProcReader
 	procRoot   string // path to /proc (overridden by tests)
+	host       HostActor
 }
 
 const (
@@ -88,6 +89,7 @@ func Open(path string) (*Store, error) {
 		fsReader:   realFSReader{},
 		procReader: realProcReader{},
 		procRoot:   "/proc",
+		host:       realHostActor{},
 	}
 	if err := s.bootstrapRoot(context.Background()); err != nil {
 		db.Close()

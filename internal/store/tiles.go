@@ -309,7 +309,9 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 	return out, err
 }
 
-// DeleteTile removes a single tile by ID.
+// DeleteTile removes a single tile by ID. Tiles inside fs / proc-backed
+// grids are routed through deleteSourceTile so the host-side artifact
+// (file, directory, process) is removed too.
 func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		if _, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version); err != nil {
@@ -326,23 +328,19 @@ func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) erro
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, pre.TargetTileID); err != nil {
+		parent, err := s.loadGrid(ctx, tx, t.GridID)
+		if err != nil {
 			return err
 		}
-		if t.Kind == rpc.KindWell && t.ChildGridID != 0 {
-			if err := s.decRefcount(ctx, tx, t.ChildGridID); err != nil {
+		if parent.SourceKind != "" {
+			handled, err := s.deleteSourceTile(ctx, tx, t, parent, events)
+			if err != nil {
 				return err
 			}
-		}
-		if t.Kind == rpc.KindText && t.BlobID != 0 {
-			if err := s.decBlobRefcount(ctx, tx, t.BlobID); err != nil {
-				return err
+			if handled {
+				return nil
 			}
 		}
-		if err := bumpGridVersion(ctx, tx, pre.GridID); err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: pre.GridID, TileID: pre.TargetTileID}})
-		return nil
+		return s.dropTileRow(ctx, tx, t, events)
 	})
 }
