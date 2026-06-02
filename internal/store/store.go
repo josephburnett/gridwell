@@ -38,12 +38,15 @@ var (
 
 // Store wraps a SQLite database. It is safe for concurrent use.
 type Store struct {
-	db        *sql.DB
-	now       func() time.Time // overridden in tests
-	newID     func() string    // overridden in tests
-	mu        sync.Mutex       // protects subscriber list
-	subs      map[*subscriber]struct{}
-	urlDriver URLDriver // set via SetURLDriver; nil means Chromium-unavailable
+	db         *sql.DB
+	now        func() time.Time // overridden in tests
+	newID      func() string    // overridden in tests
+	mu         sync.Mutex       // protects subscriber list
+	subs       map[*subscriber]struct{}
+	urlDriver  URLDriver // set via SetURLDriver; nil means Chromium-unavailable
+	fsReader   FSReader
+	procReader ProcReader
+	procRoot   string // path to /proc (overridden by tests)
 }
 
 const (
@@ -78,10 +81,13 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 	s := &Store{
-		db:    db,
-		now:   time.Now,
-		newID: newUUID,
-		subs:  map[*subscriber]struct{}{},
+		db:         db,
+		now:        time.Now,
+		newID:      newUUID,
+		subs:       map[*subscriber]struct{}{},
+		fsReader:   realFSReader{},
+		procReader: realProcReader{},
+		procRoot:   "/proc",
 	}
 	if err := s.bootstrapRoot(context.Background()); err != nil {
 		db.Close()
