@@ -87,6 +87,11 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 // grid version is only bumped if a real change happened — otherwise
 // the SSE fan-out would fire on every read.
 func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, events *[]rpc.Event) error {
+	// (A mtime-based pre-check was tried first but WSL2 ext4 doesn't
+	// advance dir mtime reliably on add/remove — even at nanosecond
+	// resolution — so a stale match would hide real changes. We read
+	// the directory every time and rely on the no-change short-circuit
+	// below to avoid spurious version bumps.)
 	entries, err := s.fsReader.Read(g.SourceID)
 	if err != nil {
 		// A directory that vanished underneath us is not an error: the
