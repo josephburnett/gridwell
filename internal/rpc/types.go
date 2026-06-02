@@ -5,11 +5,26 @@
 package rpc
 
 // Tile kinds. A tile is exactly one of these.
+//
+// The four "interior" kinds — well, text, url, blackhole — live inside
+// Gridwell. file-well and process-well are "exit" kinds: their child
+// grids reflect state owned by the host (the filesystem and the process
+// table), not by Gridwell. The color grammar (red outline) follows.
 const (
-	KindWell      = "well"
-	KindText      = "text"
-	KindURL       = "url"
-	KindBlackHole = "blackhole"
+	KindWell        = "well"
+	KindText        = "text"
+	KindURL         = "url"
+	KindBlackHole   = "blackhole"
+	KindFileWell    = "file-well"
+	KindProcessWell = "process-well"
+)
+
+// Grid source kinds. NULL ("") means a regular Gridwell-owned grid. fs
+// means the grid's tile list is reconciled against a host directory; proc
+// means against the host process table. SourceID carries the path or PID.
+const (
+	GridSourceFS   = "fs"
+	GridSourceProc = "proc"
 )
 
 // Text-tile display modes.
@@ -27,10 +42,17 @@ type Path struct {
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells point at
 // child grids. The root grid has no parent.
+//
+// SourceKind is "" for a regular Gridwell-owned grid, "fs" for a grid whose
+// tile list is reconciled against a host directory, "proc" for the process
+// table. SourceID carries the path or PID; clients use SourceKind to pick
+// the red color theme on descent.
 type Grid struct {
-	ID       int64  `json:"id"`
-	ObjectID string `json:"object_id"`
-	Version  int64  `json:"version"`
+	ID         int64  `json:"id"`
+	ObjectID   string `json:"object_id"`
+	Version    int64  `json:"version"`
+	SourceKind string `json:"source_kind,omitempty"`
+	SourceID   string `json:"source_id,omitempty"`
 }
 
 // Tile is the persistent unit of content in a grid. Kind selects which subset
@@ -61,6 +83,13 @@ type Tile struct {
 	BlobID   int64  `json:"blob_id,omitempty"`
 	// url-only
 	URLString string `json:"url_string,omitempty"`
+	// file-well-only: the absolute host path the well points at.
+	FSPath string `json:"fs_path,omitempty"`
+	// file-backed text/url tiles inside an fs-grid carry the basename
+	// they were synthesized from. NULL for tiles in regular grids.
+	FSName string `json:"fs_name,omitempty"`
+	// process-well-only: the PID the well points at.
+	PID int64 `json:"pid,omitempty"`
 	// AltText is a human-readable label used as the alt of a markdown
 	// link when this tile is dropped into a doc. Populated by the
 	// server: URL tiles get the page title (captured on Chromium
@@ -147,6 +176,33 @@ type CreateBlackHoleRequest struct {
 	Y      int64 `json:"y"`
 	W      int64 `json:"w"`
 	H      int64 `json:"h"`
+}
+
+// CreateFileWellRequest creates a file-well at the given FSPath. The
+// canonical starting path from the palette is "/". The well's child grid
+// is the singleton fs-grid for FSPath: two file-wells at the same path
+// share the same backing grid (FS state is the source of truth, so
+// per-clone divergence is impossible).
+type CreateFileWellRequest struct {
+	Path   Path   `json:"path"`
+	GridID int64  `json:"grid_id"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
+	FSPath string `json:"fs_path"`
+}
+
+// CreateProcessWellRequest creates a process-well at the given PID. The
+// canonical starting PID from the palette is 1 (init).
+type CreateProcessWellRequest struct {
+	Path   Path  `json:"path"`
+	GridID int64 `json:"grid_id"`
+	X      int64 `json:"x"`
+	Y      int64 `json:"y"`
+	W      int64 `json:"w"`
+	H      int64 `json:"h"`
+	PID    int64 `json:"pid"`
 }
 
 // Mutations: Version is the claimed current version of TileID.

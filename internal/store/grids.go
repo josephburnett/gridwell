@@ -32,15 +32,25 @@ type gridReader interface {
 }
 
 func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.Grid, error) {
-	var g rpc.Grid
+	var (
+		g          rpc.Grid
+		sourceKind sql.NullString
+		sourceID   sql.NullString
+	)
 	err := q.QueryRowContext(ctx,
-		`SELECT id, object_id, version FROM grids WHERE id = ?`, gridID,
-	).Scan(&g.ID, &g.ObjectID, &g.Version)
+		`SELECT id, object_id, version, source_kind, source_id FROM grids WHERE id = ?`, gridID,
+	).Scan(&g.ID, &g.ObjectID, &g.Version, &sourceKind, &sourceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if sourceKind.Valid {
+		g.SourceKind = sourceKind.String
+	}
+	if sourceID.Valid {
+		g.SourceID = sourceID.String
 	}
 	return &g, nil
 }
@@ -50,7 +60,7 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, alt_text`
+	url_string, fs_path, pid, fs_name, alt_text`
 
 // forkColumns extends tileColumns with preview_jpeg. Used by forkGrid, which
 // needs to copy the frozen preview but avoids loading it on every GetGrid.
@@ -68,13 +78,16 @@ func scanTile(scanner interface {
 		urlStr    sql.NullString
 		textMode  sql.NullString
 		altText   sql.NullString
+		fsPath    sql.NullString
+		pidNS     sql.NullInt64
+		fsName    sql.NullString
 	)
 	if err := scanner.Scan(
 		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
 		&n.X, &n.Y, &n.W, &n.H,
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
-		&urlStr, &altText,
+		&urlStr, &fsPath, &pidNS, &fsName, &altText,
 	); err != nil {
 		return nil, err
 	}
@@ -92,6 +105,15 @@ func scanTile(scanner interface {
 	}
 	if altText.Valid {
 		n.AltText = altText.String
+	}
+	if fsPath.Valid {
+		n.FSPath = fsPath.String
+	}
+	if pidNS.Valid {
+		n.PID = pidNS.Int64
+	}
+	if fsName.Valid {
+		n.FSName = fsName.String
 	}
 	return &n, nil
 }

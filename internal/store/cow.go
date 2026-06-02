@@ -73,12 +73,24 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, path rpc.Path, targetT
 	// rc=1 descendant becomes rc=2 as soon as its parent forks, and a
 	// subsequent write through this path would leak into the other clones
 	// of the ancestor.
+	//
+	// fs/proc-backed grids are excluded: they are shared by identity (path
+	// or PID), not by COW. The host filesystem / process table is the
+	// single source of truth, so two file-wells at /foo must see the same
+	// state by design — forking would invent a divergence that the world
+	// outside Gridwell can't honor.
 	topForkIdx := -1
 	for i := 0; i < len(seq.grids); i++ {
-		var rc int64
-		err := tx.QueryRowContext(ctx, `SELECT refcount FROM grids WHERE id = ?`, seq.grids[i]).Scan(&rc)
+		var (
+			rc         int64
+			sourceKind sql.NullString
+		)
+		err := tx.QueryRowContext(ctx, `SELECT refcount, source_kind FROM grids WHERE id = ?`, seq.grids[i]).Scan(&rc, &sourceKind)
 		if err != nil {
 			return nil, err
+		}
+		if sourceKind.Valid {
+			continue
 		}
 		if rc > 1 {
 			if i == 0 {
@@ -121,6 +133,17 @@ func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, path rpc.Path, targetT
 
 	for i := topForkIdx; i < len(seq.grids); i++ {
 		oldGridID := seq.grids[i]
+		// Don't fork fs/proc grids — they're shared by identity. The
+		// well above (already remapped into parentWellID) keeps pointing
+		// at the same shared grid, which is fine. Stop walking: any
+		// further descent stays on the shared grid.
+		var sourceKind sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT source_kind FROM grids WHERE id = ?`, oldGridID).Scan(&sourceKind); err != nil {
+			return nil, err
+		}
+		if sourceKind.Valid {
+			break
+		}
 		newGridID, wellRemap, err := s.forkGrid(ctx, tx, oldGridID)
 		if err != nil {
 			return nil, fmt.Errorf("fork grid %d: %w", oldGridID, err)
@@ -217,6 +240,9 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		textMode             sql.NullString
 		blob                 sql.NullInt64
 		urlString            sql.NullString
+		fsPath               sql.NullString
+		pid                  sql.NullInt64
+		fsName               sql.NullString
 		altText              sql.NullString
 		previewJPEG          []byte
 		createdAt, updatedAt int64
@@ -229,7 +255,7 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			&nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
 			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
-			&nc.urlString, &nc.altText, &nc.previewJPEG,
+			&nc.urlString, &nc.fsPath, &nc.pid, &nc.fsName, &nc.altText, &nc.previewJPEG,
 			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
@@ -245,13 +271,13 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, alt_text, preview_jpeg,
+				url_string, fs_path, pid, fs_name, alt_text, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			nc.objectID, nc.version, newGridID, nc.kind, nc.x, nc.y, nc.w, nc.h,
 			nc.viewX, nc.viewY, nc.viewZoom, nc.childGrid,
 			nc.textX, nc.textY, nc.textW, nc.textH, nc.textMode, nc.blob,
-			nc.urlString, nc.altText, nc.previewJPEG,
+			nc.urlString, nc.fsPath, nc.pid, nc.fsName, nc.altText, nc.previewJPEG,
 			nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)
@@ -261,7 +287,10 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			return 0, nil, err
 		}
 		remap[nc.oldID] = newID
-		if nc.kind == rpc.KindWell && nc.childGrid.Valid {
+		// file-wells and process-wells share the same backing fs/proc
+		// grid across clones (identity = path/PID), so a fork still
+		// just bumps refcount — same as a regular well.
+		if (nc.kind == rpc.KindWell || nc.kind == rpc.KindFileWell || nc.kind == rpc.KindProcessWell) && nc.childGrid.Valid {
 			if err := s.incRefcount(ctx, tx, nc.childGrid.Int64); err != nil {
 				return 0, nil, err
 			}

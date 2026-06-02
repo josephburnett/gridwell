@@ -80,6 +80,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/rpc/CreateText", s.post(handleTile(st.CreateText)))
 	s.mux.HandleFunc("/rpc/CreateURL", s.post(handleTile(st.CreateURL)))
 	s.mux.HandleFunc("/rpc/CreateBlackHole", s.post(handleTile(st.CreateBlackHole)))
+	s.mux.HandleFunc("/rpc/CreateFileWell", s.post(handleTile(st.CreateFileWell)))
+	s.mux.HandleFunc("/rpc/CreateProcessWell", s.post(handleTile(st.CreateProcessWell)))
 	s.mux.HandleFunc("/rpc/MoveTile", s.post(handleTile(st.MoveTile)))
 	s.mux.HandleFunc("/rpc/CloneTile", s.post(handleTile(st.CloneTile)))
 	s.mux.HandleFunc("/rpc/ResizeTile", s.post(handleTile(st.ResizeTile)))
