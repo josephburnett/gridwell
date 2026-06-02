@@ -273,7 +273,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					continue
 				}
 				nn := n
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, inSource)
 				if inSource {
 					a.overlaySourceTile(&nn, left, top, w, h)
 				}
@@ -455,7 +455,7 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected, parentInSource bool) {
 	switch n.Kind {
 	case rpc.KindText:
 		a.drawMarkdownNode(n, x, y, w, h, r, selected)
@@ -477,14 +477,14 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
 	}
-	// Source-backed wells (file-well, process-well) render as a static
-	// swatch — folder/process glyph plus the path or pid as a label —
-	// instead of a live preview of their child grid. Showing a preview
-	// would force a server-side directory read for every visible well
-	// on every fresh descent, which cascades hard at "/" (every subdir
-	// would expand and reconcile, /proc would synthesize thousands of
-	// tiles). The user descends to see contents.
-	if n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+	// Source-backed wells inside another source-backed grid are flat
+	// swatches — no preview, no fetch. This stops the cascade at depth
+	// 2: a file-well at "/" shows /'s contents as a preview, but the
+	// sub-file-wells inside that preview (and inside / when descended)
+	// don't recursively fetch their grandchildren. Same one-level
+	// preview rule that regular wells follow via drawChildPreview
+	// (which uses the flat drawNode).
+	if parentInSource && (n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell) {
 		a.drawSourceWellSwatch(n, x, y, w, h, selected)
 		return
 	}
@@ -1294,7 +1294,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 // out and the original tile fades back in at full size.
 func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, false)
 		if a.ghost != nil && a.ghost.overDoc {
 			drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 		}
@@ -1306,7 +1306,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// Cross-fade: tile fades out as frag grows; trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, false)
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)
