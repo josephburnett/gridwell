@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -61,6 +62,10 @@ const (
 	// live container (vs blackhole's deletion sink).
 	colorExitBorder      = "#c87a5a"
 	colorExitBorderFaded = "#6a4032"
+	// colorSourceLabelBg is the translucent strip behind the name label
+	// shown at the top of a tile inside an fs/proc grid. Dark enough that
+	// the red foreground reads clearly over any underlying preview.
+	colorSourceLabelBg = "rgba(20, 12, 8, 0.78)"
 	colorLocked            = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -256,6 +261,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				}
 			}
 		} else {
+			inSource := g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc)
 			for _, n := range g.Tiles {
 				if dragdrop.HiddenMatch(a.hiddenTileID, a.hiddenPaneID, p.ID, n.ID) {
 					continue
@@ -268,6 +274,9 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				}
 				nn := n
 				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected)
+				if inSource {
+					a.overlaySourceTile(&nn, left, top, w, h)
+				}
 			}
 			a.drawEdgeIndicators(g.Tiles, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
@@ -468,6 +477,17 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
 	}
+	// Source-backed wells (file-well, process-well) render as a static
+	// swatch — folder/process glyph plus the path or pid as a label —
+	// instead of a live preview of their child grid. Showing a preview
+	// would force a server-side directory read for every visible well
+	// on every fresh descent, which cascades hard at "/" (every subdir
+	// would expand and reconcile, /proc would synthesize thousands of
+	// tiles). The user descends to see contents.
+	if n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+		a.drawSourceWellSwatch(n, x, y, w, h, selected)
+		return
+	}
 	// Trigger prefetch if we don't have the child grid yet.
 	child, haveChild := a.c.Grid(n.ChildGridID)
 	if !haveChild {
@@ -536,6 +556,158 @@ func wellOutlineColor(kind string) string {
 		return colorExitBorder
 	}
 	return colorFocusBorder
+}
+
+// drawSourceWellSwatch paints a static well swatch for a file-well or
+// process-well in the parent grid: red outline + folder / process glyph
+// + label (path basename or pid). No child-grid fetch — the user
+// descends to see contents.
+func (a *App) drawSourceWellSwatch(n *rpc.Tile, x, y, w, h float64, selected bool) {
+	a.cctx.Set("fillStyle", colorBg)
+	a.cctx.Call("fillRect", x, y, w, h)
+	if n.Kind == rpc.KindFileWell {
+		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	} else {
+		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	}
+	a.cctx.Set("strokeStyle", colorExitBorder)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("strokeRect", x, y, w, h)
+	a.drawSourceWellLabel(n, x, y, w, h)
+	if selected {
+		a.cctx.Set("strokeStyle", colorSelected)
+		a.cctx.Set("lineWidth", 2.0)
+		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
+		a.cctx.Set("lineWidth", 1.0)
+	}
+}
+
+// drawSourceWellLabel writes the file-well's fs_path basename or the
+// process-well's pid at the top of the swatch so the user can tell
+// wells apart without descending.
+func (a *App) drawSourceWellLabel(n *rpc.Tile, x, y, w, h float64) {
+	var label string
+	switch n.Kind {
+	case rpc.KindFileWell:
+		label = sourceWellPathLabel(n.FSPath)
+	case rpc.KindProcessWell:
+		label = "pid " + strconv.FormatInt(n.PID, 10)
+	}
+	if label == "" {
+		return
+	}
+	const minFontPx = 9.0
+	const maxFontPx = 18.0
+	fontPx := h * 0.18
+	if fontPx < minFontPx {
+		fontPx = minFontPx
+	}
+	if fontPx > maxFontPx {
+		fontPx = maxFontPx
+	}
+	if fontPx*1.4 > h {
+		return
+	}
+	bannerH := fontPx + 4
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+	a.cctx.Set("fillStyle", colorSourceLabelBg)
+	a.cctx.Call("fillRect", x, y, w, bannerH)
+	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true, false)
+	a.cctx.Set("fillStyle", colorExitBorder)
+	a.cctx.Set("textBaseline", "middle")
+	a.cctx.Set("textAlign", "start")
+	a.cctx.Call("fillText", label, x+4, y+bannerH/2)
+	a.cctx.Set("textBaseline", "top")
+	a.cctx.Call("restore")
+}
+
+// sourceWellPathLabel returns "/" for the filesystem root and the last
+// segment of fsPath otherwise — long paths reduce to their basename so
+// the label still fits in a small tile.
+func sourceWellPathLabel(fsPath string) string {
+	if fsPath == "" {
+		return ""
+	}
+	if fsPath == "/" {
+		return "/"
+	}
+	i := strings.LastIndexByte(fsPath, '/')
+	if i < 0 || i == len(fsPath)-1 {
+		return fsPath
+	}
+	return fsPath[i+1:]
+}
+
+// overlaySourceTile post-processes a tile inside an fs/proc grid:
+// repaints the outline in the red exit color and writes the tile's
+// name (basename for files, pid for processes, "info" for the synthetic
+// well-info tile) at the top of the cell. Applied on top of whatever
+// drawNodeWithPreview painted so the kind-specific preview survives;
+// only the framing changes to match the red color grammar.
+func (a *App) overlaySourceTile(n *rpc.Tile, x, y, w, h float64) {
+	a.cctx.Set("strokeStyle", colorExitBorder)
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Call("strokeRect", x, y, w, h)
+	a.drawSourceTileLabel(n, x, y, w, h)
+}
+
+// sourceTileLabel returns the short label drawn at the top of a
+// source-grid tile: the basename for fs entries, the pid for proc
+// children, "info" for the synthetic @info tile.
+func sourceTileLabel(n *rpc.Tile) string {
+	if n.FSName == "@info" {
+		return "info"
+	}
+	if n.FSName != "" {
+		return n.FSName
+	}
+	if n.PID > 0 {
+		return "pid " + strconv.FormatInt(n.PID, 10)
+	}
+	return ""
+}
+
+// drawSourceTileLabel paints sourceTileLabel(n) inside a small
+// translucent banner at the top of the tile. Truncates if the tile is
+// too narrow to fit the whole name.
+func (a *App) drawSourceTileLabel(n *rpc.Tile, x, y, w, h float64) {
+	label := sourceTileLabel(n)
+	if label == "" {
+		return
+	}
+	// Scale font with cell size so the label stays legible across zooms
+	// without overwhelming small tiles.
+	const minFontPx = 9.0
+	const maxFontPx = 16.0
+	fontPx := h * 0.14
+	if fontPx < minFontPx {
+		fontPx = minFontPx
+	}
+	if fontPx > maxFontPx {
+		fontPx = maxFontPx
+	}
+	if fontPx*1.4 > h {
+		// Tile too small to bother — outline alone has to carry the
+		// signal.
+		return
+	}
+	bannerH := fontPx + 4
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+	a.cctx.Set("fillStyle", colorSourceLabelBg)
+	a.cctx.Call("fillRect", x, y, w, bannerH)
+	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true, false)
+	a.cctx.Set("fillStyle", colorExitBorder)
+	a.cctx.Set("textBaseline", "middle")
+	a.cctx.Set("textAlign", "start")
+	a.cctx.Call("fillText", label, x+4, y+bannerH/2)
+	a.cctx.Set("textBaseline", "top")
+	a.cctx.Call("restore")
 }
 
 // drawMarkdownInPane renders a markdown file as the contents of the
@@ -1080,10 +1252,10 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
 func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 	switch n.Kind {
-	case rpc.KindWell:
+	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorFocusBorder)
+		c.Set("strokeStyle", wellOutlineColor(n.Kind))
 		c.Set("lineWidth", 1.0)
 		c.Call("strokeRect", x, y, w, h)
 	case rpc.KindBlackHole:

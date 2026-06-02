@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS grids (
     created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_source ON grids(source_kind, source_id) WHERE source_kind IS NOT NULL;
+-- idx_grids_source is created by applyMigrations after it has ensured
+-- the source_kind column exists. Listing it here would run against an
+-- old DB before the migration adds the column.
 
 CREATE TABLE IF NOT EXISTS blobs (
     id        INTEGER PRIMARY KEY,

@@ -941,7 +941,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 		return false
 	}
 	switch hit.Kind {
-	case rpc.KindWell:
+	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 		a.startDescent(p, hit)
 		return true
 	case rpc.KindText, rpc.KindURL:

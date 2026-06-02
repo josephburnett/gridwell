@@ -73,6 +73,12 @@ type App struct {
 	// a tight loop.
 	gridLoadFailed map[int64]bool
 
+	// gridInflight tracks grid ids with a pending GetGrid request so
+	// repeated draws (which call fetchGrid on every cache miss) don't
+	// dogpile the server. Cleared in the fetch goroutine after the
+	// response lands.
+	gridInflight map[int64]bool
+
 	// ghost is the in-flight visual representation of a node being dragged
 	// or animated to/from somewhere. The dragged node renders here at
 	// sub-cell screen precision instead of at its stored cell position.
@@ -346,6 +352,7 @@ func main() {
 		selectedTileID: map[string]int64{},
 		menuHover:      -1,
 		gridLoadFailed: map[int64]bool{},
+		gridInflight:   map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
 		urlPreview:     newURLPreviewCache(),
 		urlStreams:     map[string]*urlStreamConn{},
@@ -447,14 +454,22 @@ func (a *App) resize() {
 
 // fetchGrid issues GetGrid and stores the result in the cache. Failures are
 // recorded so the renderer can surface them and we can avoid re-issuing the
-// same request inside a render loop.
+// same request inside a render loop. In-flight requests for the same grid
+// id are deduped: drawNodeWithPreview fires fetchGrid on every cache miss
+// every frame, so without the guard a single descent into a parent of
+// many wells would dogpile the server.
 func (a *App) fetchGrid(id int64) {
+	if a.gridInflight[id] {
+		return
+	}
+	a.gridInflight[id] = true
 	// Clear any stale failure flag before attempting — a new fetch either
 	// succeeds (populates the cache) or fails (re-sets the flag). This
 	// prevents a previously-failed grid from staying locked out when an
 	// SSE GridChanged event fires and triggers a retry.
 	delete(a.gridLoadFailed, id)
 	go func() {
+		defer delete(a.gridInflight, id)
 		var resp rpc.GetGridResponse
 		status, err := postJSON("/rpc/GetGrid", rpc.GetGridRequest{GridID: id}, &resp)
 		if err != nil || status != 200 {

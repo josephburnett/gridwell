@@ -83,7 +83,9 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 // the grid's tile list against it. Subdirectories become file-well
 // tiles; everything else becomes a text tile pointing at a synthesized
 // metadata blob. Layout is sticky per fs_name: existing tiles keep
-// their positions, new tiles take the next free auto-grid cell.
+// their positions, new tiles take the next free auto-grid cell. The
+// grid version is only bumped if a real change happened — otherwise
+// the SSE fan-out would fire on every read.
 func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, events *[]rpc.Event) error {
 	entries, err := s.fsReader.Read(g.SourceID)
 	if err != nil {
@@ -98,6 +100,7 @@ func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, ev
 	now := s.now().Unix()
 	seen := make(map[string]bool, len(entries))
 	layout := newLayoutTracker(existing)
+	changed := false
 
 	for _, e := range entries {
 		seen[e.Name] = true
@@ -107,6 +110,7 @@ func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, ev
 			if err := s.insertFSGridTile(ctx, tx, g.ID, e, layout.next(), now, events); err != nil {
 				return err
 			}
+			changed = true
 			continue
 		}
 		// Existing tile: if its kind matches what the entry now needs,
@@ -119,14 +123,17 @@ func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, ev
 			if err := s.insertFSGridTile(ctx, tx, g.ID, e, position{cur.X, cur.Y}, now, events); err != nil {
 				return err
 			}
+			changed = true
 			continue
 		}
-		// File tile: refresh metadata blob if it changed.
-		if want == rpc.KindText {
-			if err := s.refreshFSFileBlob(ctx, tx, cur, e, now, events); err != nil {
-				return err
-			}
-		}
+		// V1: file tiles in fs-grids carry no content blob. Reading file
+		// contents on every reconcile would re-hash and re-store blobs
+		// for every directory entry on every GetGrid — too expensive for
+		// the "list / contents" descent. Lazy content loading is a
+		// follow-up; the structural tile is enough to render the swatch
+		// and label.
+		_ = cur
+		_ = want
 	}
 	// Remove tiles whose underlying entry is gone.
 	for name, cur := range existing {
@@ -136,6 +143,10 @@ func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, ev
 		if err := s.deleteFSGridTile(ctx, tx, cur, events); err != nil {
 			return err
 		}
+		changed = true
+	}
+	if !changed {
+		return nil
 	}
 	return bumpGridVersion(ctx, tx, g.ID)
 }
@@ -159,31 +170,37 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	if err != nil {
 		return err
 	}
+	_ = infoSelf
 	now := s.now().Unix()
 	seen := make(map[string]bool, len(children)+1)
 	layout := newLayoutTracker(existing)
+	changed := false
 
 	// Synthetic info tile for the well's own PID. Naming it "@info"
 	// (a name no real PID can collide with) keeps the same per-name
-	// reconcile lookup that fs grids use.
+	// reconcile lookup that fs grids use. V1: the @info tile has no
+	// content blob — descent shows just the label until lazy content
+	// loading lands.
 	if infoErr == nil {
 		seen["@info"] = true
-		if err := s.upsertProcInfoTile(ctx, tx, g.ID, infoSelf, existing["@info"], layout, now, events); err != nil {
-			return err
+		if _, ok := existing["@info"]; !ok {
+			if err := s.insertProcInfoTile(ctx, tx, g.ID, layout.next(), now, events); err != nil {
+				return err
+			}
+			changed = true
 		}
 	}
 
 	for _, info := range children {
 		name := strconv.FormatInt(info.PID, 10)
 		seen[name] = true
-		cur, ok := existing[name]
-		if !ok {
-			if err := s.insertProcChildTile(ctx, tx, g.ID, info, layout.next(), now, events); err != nil {
-				return err
-			}
+		if _, ok := existing[name]; ok {
 			continue
 		}
-		_ = cur // process-well tiles carry no per-reconcile state to refresh
+		if err := s.insertProcChildTile(ctx, tx, g.ID, info, layout.next(), now, events); err != nil {
+			return err
+		}
+		changed = true
 	}
 	for name, cur := range existing {
 		if seen[name] {
@@ -192,6 +209,10 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 		if err := s.deleteFSGridTile(ctx, tx, cur, events); err != nil {
 			return err
 		}
+		changed = true
+	}
+	if !changed {
+		return nil
 	}
 	return bumpGridVersion(ctx, tx, g.ID)
 }
@@ -294,23 +315,19 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
 		return nil
 	}
-	blobID, err := s.putMetadataBlob(ctx, tx, s.fsReader.MetadataMarkdown(e))
-	if err != nil {
-		return err
-	}
+	// File tile: no blob until the user actually descends and asks for
+	// content. blob_id stays NULL — the relaxed text-kind CHECK allows
+	// it.
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			blob_id, fs_name, created_at, updated_at)
-		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?, ?)`,
-		objID, gridID, pos.x, pos.y, blobID, e.Name, now, now)
+			fs_name, created_at, updated_at)
+		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?)`,
+		objID, gridID, pos.x, pos.y, e.Name, now, now)
 	if err != nil {
 		return fmt.Errorf("insert fs file tile: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		return err
-	}
-	if err := s.incBlobRefcount(ctx, tx, blobID); err != nil {
 		return err
 	}
 	t, err := s.loadTile(ctx, tx, id)
@@ -342,94 +359,29 @@ func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, e
 	return nil
 }
 
-// refreshFSFileBlob points the tile at the current metadata blob; the
-// blob system dedupes by hash so unchanged files reuse the same row.
-func (s *Store) refreshFSFileBlob(ctx context.Context, tx *sql.Tx, cur *rpc.Tile, e fssource.Entry, now int64, events *[]rpc.Event) error {
-	newBlobID, err := s.putMetadataBlob(ctx, tx, s.fsReader.MetadataMarkdown(e))
+// insertProcInfoTile inserts the synthetic "@info" tile for a
+// process-well's own PID. V1: no content blob; the descent body is
+// empty until lazy content loading is added.
+func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64, pos position, now int64, events *[]rpc.Event) error {
+	objID := s.newID()
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+			fs_name, created_at, updated_at)
+		VALUES (?, ?, 'text', ?, ?, 2, 1, '@info', ?, ?)`,
+		objID, gridID, pos.x, pos.y, now, now)
+	if err != nil {
+		return fmt.Errorf("insert proc info tile: %w", err)
+	}
+	id, err := res.LastInsertId()
 	if err != nil {
 		return err
 	}
-	if newBlobID == cur.BlobID {
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE tiles SET blob_id = ?, updated_at = ? WHERE id = ?`,
-		newBlobID, now, cur.ID); err != nil {
-		return err
-	}
-	if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-		return err
-	}
-	if cur.BlobID != 0 {
-		if err := s.decBlobRefcount(ctx, tx, cur.BlobID); err != nil {
-			return err
-		}
-	}
-	if err := bumpTileVersion(ctx, tx, cur.ID); err != nil {
-		return err
-	}
-	t, err := s.loadTile(ctx, tx, cur.ID)
+	t, err := s.loadTile(ctx, tx, id)
 	if err != nil {
 		return err
 	}
 	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
 	return nil
-}
-
-// upsertProcInfoTile inserts or refreshes the synthetic "@info" tile for
-// a process-well's own PID. Acts like a one-off file tile with name
-// "@info" and content = procsource.MetadataMarkdown.
-func (s *Store) upsertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64, info procsource.Info, cur *rpc.Tile, layout *layoutTracker, now int64, events *[]rpc.Event) error {
-	if cur == nil {
-		blobID, err := s.putMetadataBlob(ctx, tx, s.procReader.MetadataMarkdown(info))
-		if err != nil {
-			return err
-		}
-		objID := s.newID()
-		pos := layout.next()
-		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-				blob_id, fs_name, created_at, updated_at)
-			VALUES (?, ?, 'text', ?, ?, 2, 1, ?, '@info', ?, ?)`,
-			objID, gridID, pos.x, pos.y, blobID, now, now)
-		if err != nil {
-			return fmt.Errorf("insert proc info tile: %w", err)
-		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		if err := s.incBlobRefcount(ctx, tx, blobID); err != nil {
-			return err
-		}
-		t, err := s.loadTile(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
-		return nil
-	}
-	newBlobID, err := s.putMetadataBlob(ctx, tx, s.procReader.MetadataMarkdown(info))
-	if err != nil {
-		return err
-	}
-	if newBlobID == cur.BlobID {
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE tiles SET blob_id = ?, updated_at = ? WHERE id = ?`,
-		newBlobID, now, cur.ID); err != nil {
-		return err
-	}
-	if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-		return err
-	}
-	if cur.BlobID != 0 {
-		if err := s.decBlobRefcount(ctx, tx, cur.BlobID); err != nil {
-			return err
-		}
-	}
-	return bumpTileVersion(ctx, tx, cur.ID)
 }
 
 func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int64, info procsource.Info, pos position, now int64, events *[]rpc.Event) error {
@@ -458,13 +410,5 @@ func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int6
 	}
 	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
 	return nil
-}
-
-// putMetadataBlob stores a synthesized metadata-markdown blob and
-// returns its id. Dedupe falls out of the hash-keyed blobs table; an
-// unchanged Entry produces the same hash and the same blob id.
-func (s *Store) putMetadataBlob(ctx context.Context, tx *sql.Tx, md string) (int64, error) {
-	data := []byte(md)
-	return putBlob(ctx, tx, hashBytes(data), data)
 }
 

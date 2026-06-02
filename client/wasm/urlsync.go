@@ -206,7 +206,7 @@ walk:
 			continue
 		}
 		switch n.Kind {
-		case rpc.KindWell:
+		case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 			resolvedPath = append(resolvedPath, id)
 			gid = n.ChildGridID
 		case rpc.KindText, rpc.KindURL, rpc.KindBlackHole:
