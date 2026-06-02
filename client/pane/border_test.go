@@ -12,6 +12,8 @@ func testColors() BorderColors {
 		URL:          "URL",
 		URLFaded:     "URL_FADED",
 		URLLive:      "URL_LIVE",
+		Exit:         "EXIT",
+		ExitFaded:    "EXIT_FADED",
 	}
 }
 
@@ -104,6 +106,41 @@ func TestBorderColorUnknownKindFallback(t *testing.T) {
 	}
 	if got := BorderColor(in, testColors()); got != "FOCUS" {
 		t.Errorf("known non-content kind + focused: got %q, want FOCUS", got)
+	}
+}
+
+func TestBorderColorSourceGrid(t *testing.T) {
+	// Descended into an fs / proc grid but not into a content tile:
+	// the pane border switches to the red Exit color, regardless of
+	// descent depth.
+	in := BorderInput{
+		DescentDepth: 1,
+		InSourceGrid: true,
+	}
+	if got := BorderColor(in, testColors()); got != "EXIT_FADED" {
+		t.Errorf("source grid + not focused: got %q, want EXIT_FADED", got)
+	}
+	in.Focused = true
+	if got := BorderColor(in, testColors()); got != "EXIT" {
+		t.Errorf("source grid + focused: got %q, want EXIT", got)
+	}
+}
+
+func TestBorderColorSourceGridYieldsToTextFocus(t *testing.T) {
+	// Descending into a content tile (text/url) inside a source-backed
+	// grid keeps that content tile's color — InSourceGrid is only
+	// consulted when no tile is focused. (Otherwise the user would
+	// lose the "I'm in a text editor" signal.)
+	in := BorderInput{
+		HasTextFocus: true,
+		DescentDepth: 1,
+		TileKnown:    true,
+		TileKind:     "text",
+		InSourceGrid: true,
+		Focused:      true,
+	}
+	if got := BorderColor(in, testColors()); got != "TEXT" {
+		t.Errorf("text-in-source-grid + focused: got %q, want TEXT", got)
 	}
 }
 

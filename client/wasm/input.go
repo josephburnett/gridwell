@@ -1560,6 +1560,10 @@ func templateGhostNode(kind templateKind) rpc.Tile {
 		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
 	case tplBlackHole:
 		return rpc.Tile{Kind: rpc.KindBlackHole, W: 1, H: 1}
+	case tplFileWell:
+		return rpc.Tile{Kind: rpc.KindFileWell, W: 1, H: 1, FSPath: "/"}
+	case tplProcessWell:
+		return rpc.Tile{Kind: rpc.KindProcessWell, W: 1, H: 1, PID: 1}
 	}
 	return rpc.Tile{}
 }
@@ -1622,6 +1626,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
 	case tplBlackHole:
 		a.createBlackHoleAtCell(destPane, dropX, dropY)
+	case tplFileWell:
+		a.createFileWellAtCell(destPane, "/", dropX, dropY)
+	case tplProcessWell:
+		a.createProcessWellAtCell(destPane, 1, dropX, dropY)
 	}
 	a.menuOpen = false
 }
@@ -1803,6 +1811,31 @@ func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
 	a.postTileMutate("CreateBlackHole", gid, rpc.CreateBlackHoleRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	}, nil)
+}
+
+// createFileWellAtCell fires CreateFileWell at the given cell, rooted at
+// fsPath (canonical absolute). Palette default is "/" — the rest of the
+// filesystem is reached by descending.
+func (a *App) createFileWellAtCell(p *pane.Pane, fsPath string, cellX, cellY int64) {
+	gid := a.gridIDForPath(p.Path)
+	path := slices.Clone(p.Path)
+	a.postTileMutate("CreateFileWell", gid, rpc.CreateFileWellRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		FSPath: fsPath,
+	}, nil)
+}
+
+// createProcessWellAtCell fires CreateProcessWell at the given cell,
+// rooted at pid. Palette default is PID 1 (init).
+func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int64) {
+	gid := a.gridIDForPath(p.Path)
+	path := slices.Clone(p.Path)
+	a.postTileMutate("CreateProcessWell", gid, rpc.CreateProcessWellRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		PID: pid,
 	}, nil)
 }
 

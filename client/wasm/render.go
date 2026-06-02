@@ -55,6 +55,12 @@ const (
 	// colorBlackHoleSwatchBg fills the palette / live blackhole swatch.
 	// Pure black so concentric grey rings read as event horizons.
 	colorBlackHoleSwatchBg = "#000000"
+	// colorExitBorder is the outline used by file-well / process-well
+	// tiles and the pane border when descended into a source-backed
+	// grid. Same red family as blackhole but brighter so it reads as a
+	// live container (vs blackhole's deletion sink).
+	colorExitBorder      = "#c87a5a"
+	colorExitBorderFaded = "#6a4032"
 	colorLocked            = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -102,10 +108,19 @@ const (
 	// top of a black hole deletes the dropped tile — the only delete
 	// affordance in the UI.
 	tplBlackHole
+	// tplFileWell spawns a file-well rooted at "/" (the host
+	// filesystem root). Outlined red — its contents come from outside
+	// Gridwell.
+	tplFileWell
+	// tplProcessWell spawns a process-well rooted at PID 1 (init).
+	// Also red — host-owned state.
+	tplProcessWell
 )
 
-// templateKinds is the palette layout order, left to right.
-var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplBlackHole}
+// templateKinds is the palette layout order, left to right. The two
+// exit-wells go after the interior kinds so the in-Gridwell tiles stay
+// grouped on the left.
+var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplBlackHole, tplFileWell, tplProcessWell}
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
 // displayed cell size approaches its target. At 60 fps this gives a
@@ -449,7 +464,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		}
 		return
 	}
-	if n.Kind != rpc.KindWell {
+	if n.Kind != rpc.KindWell && n.Kind != rpc.KindFileWell && n.Kind != rpc.KindProcessWell {
 		drawNode(a.cctx, n, x, y, w, h, selected)
 		return
 	}
@@ -498,8 +513,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	}
 	a.cctx.Call("restore")
 
-	// Outline: bright blue, matching the focused-pane color.
-	a.cctx.Set("strokeStyle", colorFocusBorder)
+	// Outline: blue for interior wells, red for exit-wells (file-well /
+	// process-well). The kind drives the color so the color grammar
+	// is consistent whether the user sees the tile as a preview or
+	// descends into it (where the same kind drives the pane border).
+	a.cctx.Set("strokeStyle", wellOutlineColor(n.Kind))
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", x, y, w, h)
 	if selected {
@@ -508,6 +526,16 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
 		a.cctx.Set("lineWidth", 1.0)
 	}
+}
+
+// wellOutlineColor picks the well-tile outline color from its kind.
+// Blue for interior wells (Gridwell-owned), red for exit-wells whose
+// contents come from outside Gridwell.
+func wellOutlineColor(kind string) string {
+	if kind == rpc.KindFileWell || kind == rpc.KindProcessWell {
+		return colorExitBorder
+	}
+	return colorFocusBorder
 }
 
 // drawMarkdownInPane renders a markdown file as the contents of the
@@ -1196,6 +1224,9 @@ func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, 
 			in.TileKind = tile.Kind
 		}
 	}
+	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
+		in.InSourceGrid = true
+	}
 	return pane.BorderColor(in, paneBorderColors)
 }
 
@@ -1210,6 +1241,8 @@ var paneBorderColors = pane.BorderColors{
 	URL:          colorURLLine,
 	URLFaded:     colorURLLineFaded,
 	URLLive:      colorURLLiveLine,
+	Exit:         colorExitBorder,
+	ExitFaded:    colorExitBorderFaded,
 }
 
 // drawDocumentGlyph paints a "page with text lines" icon centered in
@@ -1266,6 +1299,62 @@ func drawGlobeGlyph(c js.Value, x, y, w, h float64, color string) {
 	c.Call("beginPath")
 	c.Call("ellipse", cx, cy, r*0.45, r, 0.0, 0.0, 2*math.Pi)
 	c.Call("stroke")
+	c.Set("lineWidth", 1.0)
+}
+
+// drawFolderGlyph paints a simple folder icon centered in (x, y, w, h):
+// a rectangle with a small tab on the upper-left edge. Used for the
+// file-well palette tile so the user reads "directory" at a glance.
+func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
+	c.Set("strokeStyle", color)
+	lw := math.Max(1.0, math.Min(w, h)/24)
+	c.Set("lineWidth", lw)
+	bw := w * 0.55
+	bh := h * 0.40
+	bx := x + (w-bw)/2
+	by := y + h*0.42
+	tabW := bw * 0.35
+	tabH := bh * 0.20
+	// Tab on top of folder body.
+	c.Call("beginPath")
+	c.Call("moveTo", bx, by)
+	c.Call("lineTo", bx+tabW, by)
+	c.Call("lineTo", bx+tabW+tabH, by-tabH)
+	c.Call("lineTo", bx+bw, by-tabH)
+	c.Call("stroke")
+	// Folder body rectangle.
+	c.Call("strokeRect", bx+0.5, by+0.5, bw-1, bh-1)
+	c.Set("lineWidth", 1.0)
+}
+
+// drawProcessGlyph paints a small process-tree icon centered in (x, y,
+// w, h): a parent node and two child nodes connected by lines. Used for
+// the process-well palette tile.
+func drawProcessGlyph(c js.Value, x, y, w, h float64, color string) {
+	c.Set("strokeStyle", color)
+	c.Set("fillStyle", color)
+	lw := math.Max(1.0, math.Min(w, h)/24)
+	c.Set("lineWidth", lw)
+	cx := x + w/2
+	parentY := y + h*0.32
+	childY := y + h*0.66
+	childOffset := w * 0.18
+	nodeR := math.Min(w, h) * 0.08
+	// Parent node.
+	c.Call("beginPath")
+	c.Call("arc", cx, parentY, nodeR, 0.0, 2*math.Pi)
+	c.Call("fill")
+	// Two child nodes.
+	for _, dx := range []float64{-childOffset, childOffset} {
+		c.Call("beginPath")
+		c.Call("arc", cx+dx, childY, nodeR, 0.0, 2*math.Pi)
+		c.Call("fill")
+		// Connector.
+		c.Call("beginPath")
+		c.Call("moveTo", cx, parentY+nodeR)
+		c.Call("lineTo", cx+dx, childY-nodeR)
+		c.Call("stroke")
+	}
 	c.Set("lineWidth", 1.0)
 }
 
@@ -1486,6 +1575,20 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorMenuItemHi)
 	case tplBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
+	case tplFileWell:
+		a.cctx.Set("fillStyle", colorBg)
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("strokeStyle", colorExitBorder)
+		a.cctx.Set("lineWidth", 1.0)
+		a.cctx.Call("strokeRect", x, y, w, h)
+		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	case tplProcessWell:
+		a.cctx.Set("fillStyle", colorBg)
+		a.cctx.Call("fillRect", x, y, w, h)
+		a.cctx.Set("strokeStyle", colorExitBorder)
+		a.cctx.Set("lineWidth", 1.0)
+		a.cctx.Call("strokeRect", x, y, w, h)
+		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	}
 	if hovered {
 		a.cctx.Set("strokeStyle", colorSelected)

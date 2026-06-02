@@ -1,23 +1,27 @@
 package pane
 
-// BorderColors holds the eight color strings BorderColor maps to. The
-// wasm renderer passes in its current palette; the function is pure
-// and entirely indifferent to which CSS colors they are.
+// BorderColors holds the color strings BorderColor maps to. The wasm
+// renderer passes in its current palette; the function is pure and
+// entirely indifferent to which CSS colors they are.
 //
 // The grouping reflects Gridwell's color grammar:
 //
-//	Focused / FocusedFaded — descent into a well (or a tile whose kind
-//	  isn't known yet). Saturated when this pane has the keyboard /
-//	  cursor focus, faded otherwise.
+//	Focused / FocusedFaded — descent into an interior well (or a tile
+//	  whose kind isn't known yet). Saturated when this pane has the
+//	  keyboard / cursor focus, faded otherwise.
 //	Root — the user's root grid: nothing descended.
 //	Text / TextFaded — descent into a markdown text tile.
 //	URL / URLFaded — descent into a URL tile, frozen preview.
 //	URLLive — descent into a URL tile with a live stream open.
+//	Exit / ExitFaded — descent into a source-backed (fs / proc) grid
+//	  whose contents come from outside Gridwell. Red, mirroring the
+//	  exit-well outline on the parent.
 type BorderColors struct {
-	Focused, FocusedFaded string
-	Root                  string
-	Text, TextFaded       string
+	Focused, FocusedFaded  string
+	Root                   string
+	Text, TextFaded        string
 	URL, URLFaded, URLLive string
+	Exit, ExitFaded        string
 }
 
 // BorderInput is everything BorderColor needs to know about a pane in
@@ -45,15 +49,20 @@ type BorderInput struct {
 	// a live Chromium tab into this pane. Only meaningful for a
 	// descent into a URL tile.
 	URLLive bool
+	// InSourceGrid is true when the pane's currently-viewed grid is
+	// source-backed (fs or proc). Drives the red Exit border so the
+	// outline matches the red outline of the exit-well that led here.
+	InSourceGrid bool
 }
 
 // BorderColor returns the CSS color string for the pane's outline,
 // implementing Gridwell's color grammar:
 //
-//   - Descent into a URL tile, live  → URLLive
+//   - Descent into a URL tile, live   → URLLive
 //   - Descent into a URL tile, frozen → URL or URLFaded
 //   - Descent into a text tile        → Text or TextFaded
-//   - Descent into a well (or descent target not yet cached) → Focused or FocusedFaded
+//   - View inside a source-backed grid (no tile focus) → Exit or ExitFaded
+//   - Descent into an interior well (or descent target not yet cached) → Focused or FocusedFaded
 //   - Root grid                       → Root
 //
 // The pattern is: classify by what's inside, then pick the saturated
@@ -81,6 +90,12 @@ func BorderColor(s BorderInput, c BorderColors) string {
 			return c.Focused
 		}
 		return c.FocusedFaded
+	}
+	if s.InSourceGrid {
+		if s.Focused {
+			return c.Exit
+		}
+		return c.ExitFaded
 	}
 	if s.DescentDepth > 0 {
 		if s.Focused {
