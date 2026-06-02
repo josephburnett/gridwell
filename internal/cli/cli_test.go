@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"runtime"
 	"slices"
 	"sort"
 	"testing"
@@ -68,8 +69,14 @@ func TestParseServeFlagsDefaults(t *testing.T) {
 	if f.XvfbResolution != "2560x1600" {
 		t.Errorf("XvfbResolution = %q, want default 2560x1600", f.XvfbResolution)
 	}
-	if f.NoXvfb {
-		t.Error("NoXvfb default should be false")
+	// Xvfb is Linux-only; off Linux, --no-xvfb and --headless auto-default
+	// to true so `gridwell serve` runs without flags on macOS / *BSD.
+	wantNoXvfb := runtime.GOOS != "linux"
+	if f.NoXvfb != wantNoXvfb {
+		t.Errorf("NoXvfb default = %v, want %v on %s", f.NoXvfb, wantNoXvfb, runtime.GOOS)
+	}
+	if f.Headless != wantNoXvfb {
+		t.Errorf("Headless default = %v, want %v on %s", f.Headless, wantNoXvfb, runtime.GOOS)
 	}
 }
 
@@ -82,6 +89,7 @@ func TestParseServeFlagsOverrides(t *testing.T) {
 		"--browser-bin", "/usr/bin/brave",
 		"--xvfb-resolution", "1280x720",
 		"--no-xvfb",
+		"--headless",
 	})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -94,6 +102,7 @@ func TestParseServeFlagsOverrides(t *testing.T) {
 		BrowserBin:     "/usr/bin/brave",
 		XvfbResolution: "1280x720",
 		NoXvfb:         true,
+		Headless:       true,
 	}
 	if f != want {
 		t.Errorf("got %+v, want %+v", f, want)

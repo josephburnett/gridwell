@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +20,17 @@ import (
 	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
+
+// defaultNoXvfb is true on platforms where Xvfb is unsupported. Linux is
+// the only target where Gridwell manages Xvfb; on macOS / *BSD the user
+// must drive Chromium headless. Auto-defaulting --no-xvfb (and --headless)
+// means `gridwell serve` Just Works without flags on those platforms.
+func defaultNoXvfb() bool { return runtime.GOOS != "linux" }
+
+// defaultHeadless mirrors defaultNoXvfb: headful Chromium needs a display
+// server, which only Xvfb gives us out-of-the-box on Linux. Off Linux,
+// headless is the only option.
+func defaultHeadless() bool { return runtime.GOOS != "linux" }
 
 // serveFlags holds the parsed `serve` subcommand options. Split out
 // from RunServe so the flag-parsing path is unit-testable; the rest of
@@ -32,6 +44,7 @@ type serveFlags struct {
 	BrowserBin     string
 	XvfbResolution string
 	NoXvfb         bool
+	Headless       bool
 }
 
 // parseServeFlags parses the `serve` flag set. Returns the populated
@@ -45,8 +58,9 @@ func parseServeFlags(args []string) (serveFlags, error) {
 	fs.StringVar(&f.StaticDir, "static", "./web", "directory of static files served at /")
 	fs.StringVar(&f.BrowserName, "browser", "chromium", "browser brand: "+strings.Join(sortedBrands(), ", "))
 	fs.StringVar(&f.BrowserBin, "browser-bin", "", "explicit browser binary path (overrides --browser lookup)")
-	fs.StringVar(&f.XvfbResolution, "xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT")
-	fs.BoolVar(&f.NoXvfb, "no-xvfb", false, "do not spawn Xvfb; inherit DISPLAY from environment")
+	fs.StringVar(&f.XvfbResolution, "xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT (Linux only)")
+	fs.BoolVar(&f.NoXvfb, "no-xvfb", defaultNoXvfb(), "do not spawn Xvfb; inherit DISPLAY from environment (default true on non-Linux)")
+	fs.BoolVar(&f.Headless, "headless", defaultHeadless(), "launch Chromium in headless=new mode (default true on non-Linux; required when --no-xvfb on a host with no DISPLAY)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
 		case "db", "bind", "static", "browser", "browser-bin", "xvfb-resolution":
@@ -97,6 +111,7 @@ func RunServe(args []string) int {
 		Browser:        f.BrowserName,
 		BinaryOverride: f.BrowserBin,
 		Display:        display,
+		Headless:       f.Headless,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
