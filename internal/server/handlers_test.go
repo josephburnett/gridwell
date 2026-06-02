@@ -67,6 +67,44 @@ func TestCreateBlackHoleRPC(t *testing.T) {
 	}
 }
 
+func TestCreateFileWellRPC(t *testing.T) {
+	hs, root := newTestServer(t)
+	var nr rpc.TileResponse
+	st, body := callRPC(t, hs, "CreateFileWell", &rpc.CreateFileWellRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1,
+		FSPath: "/etc",
+	}, &nr)
+	if st != 200 {
+		t.Fatalf("status %d: %s", st, body)
+	}
+	if nr.Tile.Kind != rpc.KindFileWell {
+		t.Errorf("kind = %q, want %q", nr.Tile.Kind, rpc.KindFileWell)
+	}
+	if nr.Tile.FSPath != "/etc" {
+		t.Errorf("fs_path = %q", nr.Tile.FSPath)
+	}
+}
+
+func TestCreateProcessWellRPC(t *testing.T) {
+	hs, root := newTestServer(t)
+	var nr rpc.TileResponse
+	st, body := callRPC(t, hs, "CreateProcessWell", &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1,
+		PID: 1,
+	}, &nr)
+	if st != 200 {
+		t.Fatalf("status %d: %s", st, body)
+	}
+	if nr.Tile.Kind != rpc.KindProcessWell {
+		t.Errorf("kind = %q, want %q", nr.Tile.Kind, rpc.KindProcessWell)
+	}
+	if nr.Tile.PID != 1 {
+		t.Errorf("pid = %d, want 1", nr.Tile.PID)
+	}
+}
+
 func TestResizeAndSetWellViewRPCs(t *testing.T) {
 	hs, root := newTestServer(t)
 	var nr rpc.TileResponse
