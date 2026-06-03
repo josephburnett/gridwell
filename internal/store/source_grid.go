@@ -4,12 +4,33 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
+
+// procDisplayName returns a short human-readable label for a process,
+// suitable as a tile label inside a process-grid. Prefers the kernel-
+// reported Name from /proc/<pid>/status (matches `ps` default), falling
+// back to the basename of the first cmdline arg when Name is empty
+// (e.g. some sandboxed/renamed processes), then to "" so the client can
+// fall back to "pid N".
+func procDisplayName(info procsource.Info) string {
+	if info.Name != "" {
+		return info.Name
+	}
+	if info.CmdLine != "" {
+		first := strings.Fields(info.CmdLine)[0]
+		if base := filepath.Base(first); base != "" && base != "." && base != "/" {
+			return base
+		}
+	}
+	return ""
+}
 
 // FSReader is the surface fssource implements. Stubbable for tests.
 type FSReader interface {
@@ -372,7 +393,7 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 			fs_name, created_at, updated_at)
-		VALUES (?, ?, 'text', ?, ?, 2, 1, '@info', ?, ?)`,
+		VALUES (?, ?, 'text', ?, ?, 1, 1, '@info', ?, ?)`,
 		objID, gridID, pos.x, pos.y, now, now)
 	if err != nil {
 		return fmt.Errorf("insert proc info tile: %w", err)
@@ -396,12 +417,16 @@ func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int6
 		return err
 	}
 	objID := s.newID()
+	// alt_text carries the process name for client-side labeling. fs_name
+	// stays the PID string because the reconciler dedupes by it and PIDs
+	// are the only per-parent unique identifier (two children can share
+	// Name="bash").
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 			view_x, view_y, view_zoom, child_grid_id, pid, fs_name,
-			created_at, updated_at)
-		VALUES (?, ?, 'process-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?)`,
-		objID, gridID, pos.x, pos.y, childGridID, info.PID, pidStr, now, now)
+			alt_text, created_at, updated_at)
+		VALUES (?, ?, 'process-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
+		objID, gridID, pos.x, pos.y, childGridID, info.PID, pidStr, procDisplayName(info), now, now)
 	if err != nil {
 		return fmt.Errorf("insert proc child tile: %w", err)
 	}

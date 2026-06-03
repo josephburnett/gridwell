@@ -168,14 +168,49 @@ func TestProcGridReconcile(t *testing.T) {
 		t.Fatalf("expected 3 tiles, got %d: %+v", len(g.Tiles), g.Tiles)
 	}
 	pids := map[int64]string{}
+	names := map[int64]string{}
 	for _, tile := range g.Tiles {
 		pids[tile.PID] = tile.Kind
-		if tile.FSName == "@info" && tile.Kind != rpc.KindText {
-			t.Errorf("@info tile kind = %q, want text", tile.Kind)
+		names[tile.PID] = tile.AltText
+		if tile.FSName == "@info" {
+			if tile.Kind != rpc.KindText {
+				t.Errorf("@info tile kind = %q, want text", tile.Kind)
+			}
+			// Every tile starts 1x1 — auto-grid sizing happens client-side.
+			if tile.W != 1 || tile.H != 1 {
+				t.Errorf("@info tile size = %dx%d, want 1x1", tile.W, tile.H)
+			}
 		}
 	}
 	if pids[2] != rpc.KindProcessWell || pids[100] != rpc.KindProcessWell {
 		t.Errorf("missing or wrong-kind child process tiles: %v", pids)
+	}
+	// Process children carry the kernel-reported Name in alt_text so the
+	// client can label them by command rather than PID.
+	if names[2] != "kthreadd" {
+		t.Errorf("pid 2 alt_text = %q, want %q", names[2], "kthreadd")
+	}
+	if names[100] != "bash" {
+		t.Errorf("pid 100 alt_text = %q, want %q", names[100], "bash")
+	}
+}
+
+// TestProcDisplayName covers the fallback ladder Name → cmdline basename → "".
+func TestProcDisplayName(t *testing.T) {
+	cases := []struct {
+		info procsource.Info
+		want string
+	}{
+		{procsource.Info{Name: "bash"}, "bash"},
+		{procsource.Info{Name: "", CmdLine: "/usr/bin/firefox --new-instance"}, "firefox"},
+		{procsource.Info{Name: "init", CmdLine: "/sbin/init"}, "init"}, // Name wins over cmdline.
+		{procsource.Info{}, ""},
+		{procsource.Info{Name: "", CmdLine: "/ /"}, ""}, // pathological cmdline → empty.
+	}
+	for _, c := range cases {
+		if got := procDisplayName(c.info); got != c.want {
+			t.Errorf("procDisplayName(%+v) = %q, want %q", c.info, got, c.want)
+		}
 	}
 }
 

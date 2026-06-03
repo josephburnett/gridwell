@@ -565,17 +565,26 @@ func (a *App) overlaySourceTile(n *rpc.Tile, x, y, w, h float64) {
 }
 
 // sourceTileLabel returns the short label drawn at the top of a
-// source-grid tile: the basename for fs entries, the pid for proc
-// children, "info" for the synthetic @info tile.
+// source-grid tile: the basename for fs entries, the process name for
+// proc children (PID as a fallback), "info" for the synthetic @info tile.
 func sourceTileLabel(n *rpc.Tile) string {
 	if n.FSName == "@info" {
 		return "info"
 	}
+	// Process wells: alt_text carries the kernel-reported Name, which is
+	// far more useful as a label than the PID. fs_name on a proc tile is
+	// the PID string (the reconcile dedup key) — ignore it for display.
+	if n.Kind == rpc.KindProcessWell {
+		if n.AltText != "" {
+			return n.AltText
+		}
+		if n.PID > 0 {
+			return "pid " + strconv.FormatInt(n.PID, 10)
+		}
+		return ""
+	}
 	if n.FSName != "" {
 		return n.FSName
-	}
-	if n.PID > 0 {
-		return "pid " + strconv.FormatInt(n.PID, 10)
 	}
 	return ""
 }
