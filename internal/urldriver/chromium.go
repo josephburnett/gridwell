@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -117,24 +116,16 @@ func New(store PreviewWriter, cfg Config) (*Driver, error) {
 		cfg.Browser = "chromium"
 	}
 
-	b, ok := brands[cfg.Browser]
-	if !ok {
-		return nil, fmt.Errorf("unknown browser %q (known: %v)", cfg.Browser, brandNames())
-	}
-	binaryPath := resolveBinary(cfg.BinaryOverride, b.binaryNames)
-	if binaryPath == "" {
-		if cfg.BinaryOverride != "" {
-			return nil, fmt.Errorf("browser binary not found at %q (from --browser-bin)", cfg.BinaryOverride)
-		}
-		return nil, fmt.Errorf("%s binary not found on PATH (tried %v)", cfg.Browser, b.binaryNames)
+	binaryPath, err := ResolveBinary(cfg.Browser, cfg.BinaryOverride)
+	if err != nil {
+		return nil, err
 	}
 	profileDir := cfg.ProfileOverride
 	if profileDir == "" {
-		home, err := os.UserHomeDir()
+		profileDir, err = DefaultProfileDir(cfg.Browser)
 		if err != nil {
-			return nil, fmt.Errorf("resolve $HOME: %w", err)
+			return nil, err
 		}
-		profileDir = filepath.Join(home, b.userDataDir)
 	}
 
 	return &Driver{
@@ -142,7 +133,7 @@ func New(store PreviewWriter, cfg Config) (*Driver, error) {
 		store:      store,
 		binaryPath: binaryPath,
 		profileDir: profileDir,
-		brandFlags: b.extraFlags,
+		brandFlags: BrandExtraFlags(cfg.Browser),
 	}, nil
 }
 
@@ -229,18 +220,3 @@ func schemeAllowed(u string) bool {
 	return len(u) >= 7 && (u[:7] == "http://" || (len(u) >= 8 && u[:8] == "https://"))
 }
 
-// resolveBinary returns the path to a usable browser binary.
-func resolveBinary(override string, candidates []string) string {
-	if override != "" {
-		if _, err := os.Stat(override); err == nil {
-			return override
-		}
-		return ""
-	}
-	for _, name := range candidates {
-		if p, err := exec.LookPath(name); err == nil {
-			return p
-		}
-	}
-	return ""
-}

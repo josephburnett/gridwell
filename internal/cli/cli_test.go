@@ -87,6 +87,7 @@ func TestParseServeFlagsOverrides(t *testing.T) {
 		"--static", "/srv/web",
 		"--browser", "brave",
 		"--browser-bin", "/usr/bin/brave",
+		"--profile-dir", "/tmp/profile",
 		"--xvfb-resolution", "1280x720",
 		"--no-xvfb",
 		"--headless",
@@ -100,12 +101,51 @@ func TestParseServeFlagsOverrides(t *testing.T) {
 		StaticDir:      "/srv/web",
 		BrowserName:    "brave",
 		BrowserBin:     "/usr/bin/brave",
+		ProfileDir:     "/tmp/profile",
 		XvfbResolution: "1280x720",
 		NoXvfb:         true,
 		Headless:       true,
 	}
 	if f != want {
 		t.Errorf("got %+v, want %+v", f, want)
+	}
+}
+
+func TestParseOpenBrowserFlagsDefaults(t *testing.T) {
+	f, err := parseOpenBrowserFlags(nil)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if f.BrowserName != "chromium" {
+		t.Errorf("BrowserName = %q, want default chromium", f.BrowserName)
+	}
+	if f.BrowserBin != "" || f.ProfileDir != "" {
+		t.Errorf("override defaults should be empty: %+v", f)
+	}
+}
+
+func TestParseOpenBrowserFlagsOverrides(t *testing.T) {
+	f, err := parseOpenBrowserFlags([]string{
+		"--browser", "chrome",
+		"--browser-bin", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		"--profile-dir", "/tmp/profile",
+	})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	want := openBrowserFlags{
+		BrowserName: "chrome",
+		BrowserBin:  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		ProfileDir:  "/tmp/profile",
+	}
+	if f != want {
+		t.Errorf("got %+v, want %+v", f, want)
+	}
+}
+
+func TestParseOpenBrowserFlagsRejectsUnknown(t *testing.T) {
+	if _, err := parseOpenBrowserFlags([]string{"--no-such-flag"}); err == nil {
+		t.Error("parse should reject unknown flags")
 	}
 }
 

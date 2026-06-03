@@ -2,15 +2,16 @@
 
 package urldriver
 
-// brand describes one supported Chromium-family browser.
+// brand describes one supported Chromium-family browser. The profile
+// directory is *not* a per-brand field anymore — every brand stores its
+// profile under ~/.gridwell/profiles/<brand-name>, a gridwell-owned
+// location separate from the OS's standard browser profile path. That
+// avoids Chrome 136+'s automation block (which only applies to the
+// default profile) and the SingletonLock conflict from a user's
+// interactive browser.
 type brand struct {
 	// binaryNames are candidate binary names tried in order on $PATH.
 	binaryNames []string
-	// userDataDir is the standard per-user data directory (relative to $HOME)
-	// the brand uses when launched normally from the shell. We point
-	// gridwell at the same path so extensions, cookies, and login state
-	// match the user's interactive Brave/Chrome sessions.
-	userDataDir string
 	// extraFlags are launcher CLI flags specific to this brand.
 	extraFlags []string
 }
@@ -28,29 +29,25 @@ var brands = map[string]brand{
 			"chromium", "chromium-browser",
 			"/Applications/Chromium.app/Contents/MacOS/Chromium",
 		},
-		userDataDir: ".config/chromium",
 	},
 	"chrome": {
 		binaryNames: []string{
 			"google-chrome", "google-chrome-stable", "chrome",
 			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 		},
-		userDataDir: ".config/google-chrome",
 	},
 	"brave": {
 		binaryNames: []string{
 			"brave-browser", "brave",
 			"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
 		},
-		userDataDir: ".config/BraveSoftware/Brave-Browser",
-		extraFlags:  []string{"disable-brave-update"},
+		extraFlags: []string{"disable-brave-update"},
 	},
 	"edge": {
 		binaryNames: []string{
 			"microsoft-edge", "microsoft-edge-stable",
 			"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 		},
-		userDataDir: ".config/microsoft-edge",
 	},
 }
 
