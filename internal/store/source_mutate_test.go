@@ -305,6 +305,55 @@ func TestCloneFileWellOutOfSourceGridAllowed(t *testing.T) {
 	}
 }
 
+// TestCloneFileTileOutOfSourceGridPreservesFSName covers the link case
+// for file (text) tiles inside an fs-grid. The clone must land as a
+// red-outlined reference in the destination grid — preserving fs_name
+// is what lets the client render the basename label and the exit
+// border so the link "still feels outside Gridwell."
+func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
+	})
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
+	var fileTile *rpc.Tile
+	for i := range g.Tiles {
+		if g.Tiles[i].FSName == "notes.md" {
+			fileTile = &g.Tiles[i]
+		}
+	}
+	if fileTile == nil {
+		t.Fatal("notes.md tile not found in fs-grid")
+	}
+
+	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path:       descentPath,
+		TileID:     fileTile.ID,
+		Version:    fileTile.Version,
+		DestGridID: root,
+		DestPath:   rpc.Path{},
+		X:          5, Y: 5,
+	})
+	if err != nil {
+		t.Fatalf("clone file tile out of fs-grid: %v", err)
+	}
+	if clone.Kind != rpc.KindText {
+		t.Errorf("clone kind = %q, want %q", clone.Kind, rpc.KindText)
+	}
+	if clone.FSName != "notes.md" {
+		t.Errorf("clone fs_name = %q, want %q — client labeling depends on it",
+			clone.FSName, "notes.md")
+	}
+}
+
 func TestSourceDeletePath(t *testing.T) {
 	parent := &rpc.Grid{SourceKind: rpc.GridSourceFS, SourceID: "/etc"}
 	cases := []struct {

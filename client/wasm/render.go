@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"path"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -273,10 +274,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					continue
 				}
 				nn := n
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected)
-				if inSource {
-					a.overlaySourceTile(&nn, left, top, w, h)
-				}
+				outside := tileOutside(&nn, inSource)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside)
 			}
 			a.drawEdgeIndicators(g.Tiles, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
@@ -455,13 +454,15 @@ func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, 
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected bool, outside bool) {
 	switch n.Kind {
 	case rpc.KindText:
-		a.drawMarkdownNode(n, x, y, w, h, r, selected)
+		a.drawMarkdownNode(n, x, y, w, h, r, selected, outside)
+		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindURL:
 		a.drawURLTile(n, x, y, w, h, selected)
+		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
@@ -474,7 +475,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		return
 	}
 	if n.Kind != rpc.KindWell && n.Kind != rpc.KindFileWell && n.Kind != rpc.KindProcessWell {
-		drawNode(a.cctx, n, x, y, w, h, selected)
+		drawNode(a.cctx, n, x, y, w, h, selected, outside)
 		return
 	}
 	// Trigger prefetch if we don't have the child grid yet. Recursion
@@ -539,6 +540,10 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
 		a.cctx.Set("lineWidth", 1.0)
 	}
+	// Banner: "files" / "processes" for root exit-wells, basename for
+	// non-root sub-wells. Regular Gridwell wells (KindWell) get no banner
+	// — tileBannerLabel returns "" for them.
+	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
 // wellOutlineColor picks the well-tile outline color from its kind.
@@ -551,29 +556,56 @@ func wellOutlineColor(kind string) string {
 	return colorFocusBorder
 }
 
-// overlaySourceTile post-processes a tile inside an fs/proc grid:
-// repaints the outline in the red exit color and writes the tile's
-// name (basename for files, pid for processes, "info" for the synthetic
-// well-info tile) at the top of the cell. Applied on top of whatever
-// drawNodeWithPreview painted so the kind-specific preview survives;
-// only the framing changes to match the red color grammar.
-func (a *App) overlaySourceTile(n *rpc.Tile, x, y, w, h float64) {
-	a.cctx.Set("strokeStyle", colorExitBorder)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("strokeRect", x, y, w, h)
-	a.drawSourceTileLabel(n, x, y, w, h)
+// tileOutside reports whether a tile should be rendered with the "outside
+// Gridwell" treatment (red outline / banner). True when:
+//   - the tile's parent grid is a source-backed grid (fs/proc), so every
+//     row in it represents host state, not Gridwell-owned data
+//   - the tile is itself an exit-well kind (file-well / process-well)
+//     anywhere — its child grid lives outside Gridwell regardless of
+//     where the well sits
+//   - the tile is a text tile carrying an fs_name, i.e. it was cloned
+//     out of an fs-grid and still represents an outside reference
+func tileOutside(n *rpc.Tile, parentInSource bool) bool {
+	if parentInSource {
+		return true
+	}
+	if n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+		return true
+	}
+	if n.Kind == rpc.KindText && n.FSName != "" {
+		return true
+	}
+	return false
 }
 
-// sourceTileLabel returns the short label drawn at the top of a
-// source-grid tile: the basename for fs entries, the process name for
-// proc children (PID as a fallback), "info" for the synthetic @info tile.
-func sourceTileLabel(n *rpc.Tile) string {
+// tileBannerLabel returns the short label drawn at the top of a tile,
+// or "" to suppress the banner.
+//
+// Coverage (first match wins):
+//   - @info synthetic tile inside a proc-well → "info"
+//   - root file-well (FSPath="/") → "files"
+//   - root process-well (PID=1) → "processes"
+//   - process-well anywhere → AltText (kernel-reported Name), then
+//     "pid N" if no AltText
+//   - file-well or text tile with a basename → FSName (covers synthesized
+//     children in an fs-grid and clones of those into regular grids)
+//   - file-well with FSPath but no FSName → basename of the path
+//     (covers user-dropped sub-file-wells)
+//   - plain text tile → AltText (first non-empty line of content, set by
+//     the server from markdown.AltFromSource)
+//
+// Banner text on a tile reads "what is this", at a glance, regardless of
+// which grid the tile lives in.
+func tileBannerLabel(n *rpc.Tile) string {
 	if n.FSName == "@info" {
 		return "info"
 	}
-	// Process wells: alt_text carries the kernel-reported Name, which is
-	// far more useful as a label than the PID. fs_name on a proc tile is
-	// the PID string (the reconcile dedup key) — ignore it for display.
+	if n.Kind == rpc.KindFileWell && n.FSPath == "/" {
+		return "files"
+	}
+	if n.Kind == rpc.KindProcessWell && n.PID == 1 {
+		return "processes"
+	}
 	if n.Kind == rpc.KindProcessWell {
 		if n.AltText != "" {
 			return n.AltText
@@ -586,14 +618,22 @@ func sourceTileLabel(n *rpc.Tile) string {
 	if n.FSName != "" {
 		return n.FSName
 	}
+	if n.Kind == rpc.KindFileWell && n.FSPath != "" {
+		return path.Base(n.FSPath)
+	}
+	if n.Kind == rpc.KindText && n.AltText != "" {
+		return n.AltText
+	}
 	return ""
 }
 
-// drawSourceTileLabel paints sourceTileLabel(n) inside a small
-// translucent banner at the top of the tile. Truncates if the tile is
-// too narrow to fit the whole name.
-func (a *App) drawSourceTileLabel(n *rpc.Tile, x, y, w, h float64) {
-	label := sourceTileLabel(n)
+// drawTileBannerLabel paints tileBannerLabel(n) inside a small translucent
+// banner at the top of the tile. Clipped to the tile rect so an over-long
+// label can't bleed past the cell. When outside is true, the text uses
+// the red exit color; otherwise the tile-kind color (green for text, blue
+// for wells) so the banner echoes the tile's own color grammar.
+func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool) {
+	label := tileBannerLabel(n)
 	if label == "" {
 		return
 	}
@@ -621,12 +661,30 @@ func (a *App) drawSourceTileLabel(n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Set("fillStyle", colorSourceLabelBg)
 	a.cctx.Call("fillRect", x, y, w, bannerH)
 	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true, false)
-	a.cctx.Set("fillStyle", colorExitBorder)
+	a.cctx.Set("fillStyle", bannerTextColor(n, outside))
 	a.cctx.Set("textBaseline", "middle")
 	a.cctx.Set("textAlign", "start")
 	a.cctx.Call("fillText", label, x+4, y+bannerH/2)
 	a.cctx.Set("textBaseline", "top")
 	a.cctx.Call("restore")
+}
+
+// bannerTextColor picks a banner-text color that echoes the tile's own
+// outline so the label and the border read as one. Outside-tiles
+// (anything red-bordered) win regardless of kind.
+func bannerTextColor(n *rpc.Tile, outside bool) string {
+	if outside || n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+		return colorExitBorder
+	}
+	switch n.Kind {
+	case rpc.KindWell:
+		return colorFocusBorder
+	case rpc.KindURL:
+		return colorURLLine
+	case rpc.KindText:
+		return colorMarkdownLine
+	}
+	return colorMuted
 }
 
 // drawMarkdownInPane renders a markdown file as the contents of the
@@ -686,7 +744,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected bool, outside bool) {
 	// Mode comes from the tile (persisted on the server); default to raw
 	// text for a never-opened file. A pane descended into this file
 	// overrides with its live mode.
@@ -765,10 +823,14 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 			// inner-box is wider than tall) gets clipped at the cell
 			// edge — that's the "start from the left" behavior the
 			// user asked for.
+			// Preview embeds render the same as live embeds (kind-tinted
+			// thumbnail) but skip hit registration — clicking a preview
+			// embed descends into the parent text tile, not the embed's
+			// target. Live mode wires the hit list via makeEmbedDrawer.
 			drawMarkdownInRect(a.cctx, string(blob),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
-				scale, 0, mode, nil)
+				scale, 0, mode, a.makePreviewEmbedDrawer())
 		} else if n.BlobID != 0 {
 			a.fetchBlob(n.BlobID)
 		}
@@ -778,9 +840,14 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 
 	a.cctx.Call("restore")
 
-	// Outline: same palette as flat markdown fill so identity-by-color
-	// is preserved. Selected nodes get the gold outline on top.
-	a.cctx.Set("strokeStyle", colorMarkdownLine)
+	// Outline color follows the color grammar: green for in-Gridwell text
+	// tiles, red when this tile represents something outside (clone of a
+	// source-grid file, or rendered inside a source grid).
+	outlineColor := colorMarkdownLine
+	if outside {
+		outlineColor = colorExitBorder
+	}
+	a.cctx.Set("strokeStyle", outlineColor)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", x, y, w, h)
 	if selected {
@@ -1147,6 +1214,7 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 	clipX, clipY, clipW, clipH float64,
 	hiddenTileID int64,
 ) {
+	childInSource := child != nil && (child.Meta.SourceKind == rpc.GridSourceFS || child.Meta.SourceKind == rpc.GridSourceProc)
 	for _, n := range child.Tiles {
 		if hiddenTileID != 0 && n.ID == hiddenTileID {
 			continue
@@ -1161,7 +1229,7 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 			continue
 		}
 		nn := n
-		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false)
+		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource))
 	}
 }
 
@@ -1169,7 +1237,7 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 // `selected` highlights the tile with a dedicated outline color. This is
 // the "flat" renderer used for nested previews (no recursion) and for
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
-func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
+func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outside bool) {
 	switch n.Kind {
 	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 		c.Set("fillStyle", colorBg)
@@ -1191,7 +1259,11 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 	case rpc.KindText:
 		c.Set("fillStyle", colorMarkdownFill)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorMarkdownLine)
+		line := colorMarkdownLine
+		if outside {
+			line = colorExitBorder
+		}
+		c.Set("strokeStyle", line)
 		c.Call("strokeRect", x, y, w, h)
 	default:
 		c.Set("fillStyle", colorLocked)
@@ -1212,8 +1284,12 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool) {
 // the hole. Drag back out and frag returns to 0 — the trashcan fades
 // out and the original tile fades back in at full size.
 func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
+	// The ghost is a free-floating render of one tile; treat its own
+	// kind+fs_name as the outside signal. No parent grid is in play here
+	// (the ghost is flying over the canvas).
+	outside := tileOutside(n, false)
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside)
 		if a.ghost != nil && a.ghost.overDoc {
 			drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 		}
@@ -1225,7 +1301,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// Cross-fade: tile fades out as frag grows; trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside)
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)

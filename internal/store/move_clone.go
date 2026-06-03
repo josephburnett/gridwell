@@ -194,12 +194,14 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			if dstSource != "" {
 				return fmt.Errorf("%w: cannot clone into a source-backed grid; its contents come from the host", ErrInvalidArgument)
 			}
-			// From a source grid, only well kinds (file-well / process-well)
-			// can be linked out — they carry their FS path / PID on the
-			// tile row. File tiles inside fs-grids only carry the basename,
-			// so a linked file tile would lose its identity.
-			if srcSource != "" && !isWellKind(n.Kind) {
-				return fmt.Errorf("%w: only file-wells and process-wells can be linked out of a source-backed grid", ErrInvalidArgument)
+			// From a source grid, both well kinds (file-well / process-well)
+			// and text tiles can be linked out. Wells carry their FS path /
+			// PID; text tiles (the synthesized file / @info rows) carry
+			// fs_name so the client renders the basename / "info" label and
+			// the red exit border — the clone reads as a reference to
+			// something outside Gridwell.
+			if srcSource != "" && !isWellKind(n.Kind) && n.Kind != rpc.KindText {
+				return fmt.Errorf("%w: only wells and file tiles can be linked out of a source-backed grid", ErrInvalidArgument)
 			}
 		}
 
@@ -244,7 +246,12 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 				return err
 			}
 		case rpc.KindText:
-			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
+			// File-content tiles synthesized inside fs-grids carry no
+			// blob in V1 (lazy content loading is future work) — keep
+			// blob NULL on the clone so the FK doesn't complain.
+			if n.BlobID != 0 {
+				blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
+			}
 			if n.TextMode != "" {
 				textMode = sql.NullString{String: n.TextMode, Valid: true}
 			}
@@ -255,13 +262,13 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, fs_path, pid, alt_text, preview_jpeg,
+				url_string, fs_path, pid, fs_name, alt_text, preview_jpeg,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ObjectID, n.Version, dstGrid, n.Kind, req.X, req.Y, n.W, n.H,
 			n.ViewX, n.ViewY, n.ViewZoom, child,
 			n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-			urlStr, fsPath, pidNS, nullableString(n.AltText), previewJPEG,
+			urlStr, fsPath, pidNS, nullableString(n.FSName), nullableString(n.AltText), previewJPEG,
 			now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)
@@ -276,8 +283,10 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 				return err
 			}
 		case rpc.KindText:
-			if err := s.incBlobRefcount(ctx, tx, n.BlobID); err != nil {
-				return err
+			if n.BlobID != 0 {
+				if err := s.incBlobRefcount(ctx, tx, n.BlobID); err != nil {
+					return err
+				}
 			}
 		}
 		if err := bumpGridVersion(ctx, tx, dstGrid); err != nil {

@@ -56,6 +56,22 @@ func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
 	}
 }
 
+// makePreviewEmbedDrawer returns an embedDrawer for the preview pass:
+// paints the kind-tinted thumbnail for every embed link, just like the
+// live drawer, but skips hit-list registration. Clicking the parent text
+// tile's preview should descend INTO that tile, not into an embed target
+// — so the embed area doesn't need to be a separate click target here.
+func (a *App) makePreviewEmbedDrawer() embedDrawer {
+	return func(x, y, w, h float64, href, alt string) {
+		tileID := embed.LeafTileIDFromHref(href)
+		var tile *rpc.Tile
+		if tileID != 0 {
+			tile = a.findTileByID(tileID)
+		}
+		a.drawEmbedAt(x, y, w, h, tile, alt)
+	}
+}
+
 // drawEmbedAt paints one embed into the canvas at the given screen rect.
 // If tile is nil (broken or unresolved href), the image is the missing-tile
 // placeholder. Otherwise the tile's kind drives the rendering.
