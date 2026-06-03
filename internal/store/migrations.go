@@ -42,6 +42,15 @@ func applyMigrations(db *sql.DB) error {
 	if err := rebuildTilesTableIfNeeded(db); err != nil {
 		return err
 	}
+	// One-shot reset: an earlier proc-grid reconciler inserted the
+	// synthetic "@info" tile at 2x1 instead of the 1x1 every other tile
+	// uses. Tiles the user manually resized to any other dimensions are
+	// preserved — we only touch rows still sitting on the old default.
+	if _, err := db.Exec(
+		`UPDATE tiles SET w = 1, h = 1 WHERE fs_name = '@info' AND w = 2 AND h = 1`,
+	); err != nil {
+		return fmt.Errorf("reset stale @info tile size: %w", err)
+	}
 	return nil
 }
 
