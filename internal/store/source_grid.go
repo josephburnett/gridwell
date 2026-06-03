@@ -220,7 +220,19 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	for _, info := range children {
 		name := strconv.FormatInt(info.PID, 10)
 		seen[name] = true
-		if _, ok := existing[name]; ok {
+		want := procDisplayName(info)
+		if cur, ok := existing[name]; ok {
+			// Existing tile: refresh alt_text if the live process name
+			// differs from what's on disk. Catches tiles inserted before
+			// alt_text was populated (older DBs), and the case where a
+			// process renames itself between reconciles or a PID gets
+			// reused for a different command.
+			if cur.AltText != want {
+				if err := s.updateTileAltText(ctx, tx, cur.ID, want, now, events); err != nil {
+					return err
+				}
+				changed = true
+			}
 			continue
 		}
 		if err := s.insertProcChildTile(ctx, tx, g.ID, info, layout.next(), now, events); err != nil {
@@ -357,6 +369,24 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 		return err
 	}
 	t, err := s.loadTile(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
+	return nil
+}
+
+// updateTileAltText overwrites the alt_text on one tile and emits a
+// TileChanged event. Used by the proc reconciler when an existing tile's
+// stored display name is stale (e.g. the row pre-dates alt_text being
+// populated, or a process renamed itself between reconciles).
+func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64, altText string, now int64, events *[]rpc.Event) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+		nullableString(altText), now, tileID); err != nil {
+		return fmt.Errorf("update tile alt_text: %w", err)
+	}
+	t, err := s.loadTile(ctx, tx, tileID)
 	if err != nil {
 		return err
 	}

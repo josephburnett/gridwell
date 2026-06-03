@@ -195,6 +195,62 @@ func TestProcGridReconcile(t *testing.T) {
 	}
 }
 
+// TestProcGridReconcileRefreshesAltText covers the case where an existing
+// proc tile's alt_text is stale (NULL on rows from before alt_text was
+// populated, or out-of-date after a rename / PID reuse). The reconciler
+// must overwrite it on the next GetGrid — otherwise the client keeps
+// rendering "pid N" forever.
+func TestProcGridReconcileRefreshesAltText(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	reader := &stubProcReader{
+		children: map[int64][]procsource.Info{
+			1: {{PID: 100, PPID: 1, Name: "bash"}},
+		},
+		self: map[int64]procsource.Info{
+			1: {PID: 1, PPID: 0, Name: "init"},
+		},
+	}
+	s.SetSourceReaders(nil, reader, "/proc")
+
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a stale row: blow away alt_text directly, mimicking what an
+	// upgrade from an older schema would leave behind.
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE tiles SET alt_text = NULL WHERE pid = 100`); err != nil {
+		t.Fatal(err)
+	}
+	// Process renames itself in the meantime.
+	reader.children[1] = []procsource.Info{{PID: 100, PPID: 1, Name: "zsh"}}
+
+	g, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, tile := range g.Tiles {
+		if tile.PID != 100 {
+			continue
+		}
+		found = true
+		if tile.AltText != "zsh" {
+			t.Errorf("pid 100 alt_text = %q after rename, want %q", tile.AltText, "zsh")
+		}
+	}
+	if !found {
+		t.Errorf("pid 100 tile missing from grid")
+	}
+}
+
 // TestProcDisplayName covers the fallback ladder Name → cmdline basename → "".
 func TestProcDisplayName(t *testing.T) {
 	cases := []struct {
