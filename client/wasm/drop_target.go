@@ -105,6 +105,41 @@ func tileCopy(n *rpc.Tile) *rpc.Tile {
 	return &c
 }
 
+// gridSourceKind returns the grid's source kind (fs/proc), or "" for a
+// regular Gridwell-owned grid or an unknown grid id. Wraps the cache
+// lookup so callers can use the SourceKind comparison directly without
+// repeating the Meta-field dance.
+func (a *App) gridSourceKind(gridID int64) string {
+	g, ok := a.c.Grid(gridID)
+	if !ok {
+		return ""
+	}
+	return g.Meta.SourceKind
+}
+
+// dropForbiddenForMove reports whether a left-drag (move) gesture from
+// the dragState's source grid to t's destination grid would be rejected
+// by the server. Today the server refuses any cross-grid move whose
+// endpoints have different source kinds — a source-grid tile can't
+// migrate into a regular grid (right-drag clones it instead), and
+// regular tiles can't move into a source-backed grid (host directories
+// aren't a placement medium). The UI flags those gestures so the cursor
+// and the ghost render "no entry" instead of inviting the failed drop.
+//
+// Same-grid drops are always allowed by this check (positional moves
+// inside one grid never cross the source/regular boundary).
+func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
+	if d == nil || t == nil {
+		return false
+	}
+	if d.srcGridID == t.gridID {
+		return false
+	}
+	srcKind := a.gridSourceKind(d.srcGridID)
+	dstKind := a.gridSourceKind(t.gridID)
+	return (srcKind != "") != (dstKind != "")
+}
+
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor
 // for a given drop target, taking the dragState's cell offset into
 // account so the snap point matches the grab point on the source tile.

@@ -67,6 +67,11 @@ const (
 	// shown at the top of a tile inside an fs/proc grid. Dark enough that
 	// the red foreground reads clearly over any underlying preview.
 	colorSourceLabelBg = "rgba(20, 12, 8, 0.78)"
+	// colorNoEntry{Fill,Stroke} drive the international "no entry" badge
+	// drawn on the ghost when a drop would be rejected. International
+	// convention: red disc, white ring, white diagonal slash.
+	colorNoEntryFill   = "#c93030"
+	colorNoEntryStroke = "#f6f6f6"
 	colorLocked            = "#26262a"
 	colorSelected    = "#e3b16f"
 	colorEdgeDot     = "#5a6a8a"
@@ -82,10 +87,6 @@ const (
 	colorMarkdownCodeBg2 = "#3a4658"
 )
 
-// colorBlackHoleRings is the gradient applied to the swatch's three
-// concentric outlines, outer → inner.
-var colorBlackHoleRings = [3]string{"#1f2229", "#2a2f3a", "#3a4b5a"}
-
 const (
 	// paneBorderPx is the visible thickness of the pane outline. Wide
 	// enough to be a target for right-drag (resize / close) without
@@ -93,7 +94,34 @@ const (
 	// uses a slightly larger hit-band than this so users don't have to
 	// pixel-hunt the divider.
 	paneBorderPx = 6.0
+	// tileBorderPx is the visible thickness of a tile outline. Sits
+	// entirely INSIDE the tile rect so the banner label (and the cell
+	// to the right / below) can't overlap it — every renderer reaches
+	// for strokeTileBorder rather than rolling its own strokeRect.
+	tileBorderPx = 2.0
 )
+
+// strokeTileBorder draws a tileBorderPx-thick outline at `color` that
+// sits entirely inside (x, y, w, h). Canvas centers the stroke on the
+// path, so the rect is inset by half the line width on every side.
+// Every tile-kind renderer reaches for this — keeps the border weight
+// uniform and prevents per-call lineWidth state leaks.
+func strokeTileBorder(c js.Value, x, y, w, h float64, color string) {
+	c.Set("strokeStyle", color)
+	c.Set("lineWidth", tileBorderPx)
+	half := tileBorderPx / 2
+	c.Call("strokeRect", x+half, y+half, w-tileBorderPx, h-tileBorderPx)
+}
+
+// drawSelectedTileOutline paints the gold "this tile is selected" frame
+// just outside the cell so it sits independent of the kind-specific
+// border. Pure visual chrome; no fill, no clip.
+func drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
+	c.Set("strokeStyle", colorSelected)
+	c.Set("lineWidth", 2.0)
+	c.Call("strokeRect", x-1, y-1, w+2, h+2)
+	c.Set("lineWidth", 1.0)
+}
 
 // plusButtonRadius mirrors palette.Default().PlusRadius so the wasm
 // canvas drawing code (which arcs and fills the + button) can keep
@@ -466,12 +494,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		return
 	case rpc.KindBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
+		strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder)
 		if selected {
-			a.cctx.Set("strokeStyle", colorSelected)
-			a.cctx.Set("lineWidth", 2.0)
-			a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
-			a.cctx.Set("lineWidth", 1.0)
+			drawSelectedTileOutline(a.cctx, x, y, w, h)
 		}
+		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	}
 	if n.Kind != rpc.KindWell && n.Kind != rpc.KindFileWell && n.Kind != rpc.KindProcessWell {
@@ -531,14 +558,9 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// process-well). The kind drives the color so the color grammar
 	// is consistent whether the user sees the tile as a preview or
 	// descends into it (where the same kind drives the pane border).
-	a.cctx.Set("strokeStyle", wellOutlineColor(n.Kind))
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("strokeRect", x, y, w, h)
+	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n.Kind))
 	if selected {
-		a.cctx.Set("strokeStyle", colorSelected)
-		a.cctx.Set("lineWidth", 2.0)
-		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
-		a.cctx.Set("lineWidth", 1.0)
+		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
 	// Banner: "files" / "processes" for root exit-wells, basename for
 	// non-root sub-wells. Regular Gridwell wells (KindWell) get no banner
@@ -569,7 +591,11 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 	if parentInSource {
 		return true
 	}
-	if n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+	switch n.Kind {
+	case rpc.KindFileWell, rpc.KindProcessWell, rpc.KindBlackHole:
+		// Black holes route their input to /dev/null — that's "outside"
+		// in the same color-grammar sense as a file-well: the dropped
+		// tile leaves Gridwell. Red border, "null" banner.
 		return true
 	}
 	if n.Kind == rpc.KindText && n.FSName != "" {
@@ -599,6 +625,9 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 func tileBannerLabel(n *rpc.Tile) string {
 	if n.FSName == "@info" {
 		return "info"
+	}
+	if n.Kind == rpc.KindBlackHole {
+		return "null"
 	}
 	if n.Kind == rpc.KindFileWell && n.FSPath == "/" {
 		return "files"
@@ -637,6 +666,15 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 	if label == "" {
 		return
 	}
+	// Inset by the tile border so the banner sits flush against the
+	// inside edge of the outline — no 1px overlap of border and label.
+	ix := x + tileBorderPx
+	iy := y + tileBorderPx
+	iw := w - 2*tileBorderPx
+	ih := h - 2*tileBorderPx
+	if iw <= 0 || ih <= 0 {
+		return
+	}
 	// Scale font with cell size so the label stays legible across zooms
 	// without overwhelming small tiles.
 	const minFontPx = 9.0
@@ -648,7 +686,7 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 	if fontPx > maxFontPx {
 		fontPx = maxFontPx
 	}
-	if fontPx*1.4 > h {
+	if fontPx*1.4 > ih {
 		// Tile too small to bother — outline alone has to carry the
 		// signal.
 		return
@@ -656,15 +694,15 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 	bannerH := fontPx + 4
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("rect", ix, iy, iw, ih)
 	a.cctx.Call("clip")
 	a.cctx.Set("fillStyle", colorSourceLabelBg)
-	a.cctx.Call("fillRect", x, y, w, bannerH)
+	a.cctx.Call("fillRect", ix, iy, iw, bannerH)
 	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true, false)
 	a.cctx.Set("fillStyle", bannerTextColor(n, outside))
 	a.cctx.Set("textBaseline", "middle")
 	a.cctx.Set("textAlign", "start")
-	a.cctx.Call("fillText", label, x+4, y+bannerH/2)
+	a.cctx.Call("fillText", label, ix+4, iy+bannerH/2)
 	a.cctx.Set("textBaseline", "top")
 	a.cctx.Call("restore")
 }
@@ -847,14 +885,9 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	if outside {
 		outlineColor = colorExitBorder
 	}
-	a.cctx.Set("strokeStyle", outlineColor)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("strokeRect", x, y, w, h)
+	strokeTileBorder(a.cctx, x, y, w, h, outlineColor)
 	if selected {
-		a.cctx.Set("strokeStyle", colorSelected)
-		a.cctx.Set("lineWidth", 2.0)
-		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
-		a.cctx.Set("lineWidth", 1.0)
+		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
 }
 
@@ -1238,24 +1271,20 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 // the "flat" renderer used for nested previews (no recursion) and for
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
 func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outside bool) {
+	// Fill + per-kind outline color in one pass; strokeTileBorder draws
+	// the inset 2px border for all kinds that have one.
 	switch n.Kind {
 	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", wellOutlineColor(n.Kind))
-		c.Set("lineWidth", 1.0)
-		c.Call("strokeRect", x, y, w, h)
+		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n.Kind))
 	case rpc.KindBlackHole:
-		c.Set("fillStyle", colorBlackHoleFill)
-		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorBlackHoleLine)
-		c.Call("strokeRect", x, y, w, h)
 		drawBlackHoleSwatch(c, x, y, w, h)
+		strokeTileBorder(c, x, y, w, h, colorExitBorder)
 	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)
-		c.Set("strokeStyle", colorURLLine)
-		c.Call("strokeRect", x, y, w, h)
+		strokeTileBorder(c, x, y, w, h, colorURLLine)
 	case rpc.KindText:
 		c.Set("fillStyle", colorMarkdownFill)
 		c.Call("fillRect", x, y, w, h)
@@ -1263,17 +1292,13 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		if outside {
 			line = colorExitBorder
 		}
-		c.Set("strokeStyle", line)
-		c.Call("strokeRect", x, y, w, h)
+		strokeTileBorder(c, x, y, w, h, line)
 	default:
 		c.Set("fillStyle", colorLocked)
 		c.Call("fillRect", x, y, w, h)
 	}
 	if selected {
-		c.Set("strokeStyle", colorSelected)
-		c.Set("lineWidth", 2.0)
-		c.Call("strokeRect", x-1, y-1, w+2, h+2)
-		c.Set("lineWidth", 1.0)
+		drawSelectedTileOutline(c, x, y, w, h)
 	}
 }
 
@@ -1290,8 +1315,12 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	outside := tileOutside(n, false)
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside)
-		if a.ghost != nil && a.ghost.overDoc {
-			drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
+		if a.ghost != nil {
+			if a.ghost.forbidden {
+				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
+			} else if a.ghost.overDoc {
+				drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
+			}
 		}
 		return
 	}
@@ -1470,8 +1499,10 @@ func drawGlobeGlyph(c js.Value, x, y, w, h float64, color string) {
 }
 
 // drawFolderGlyph paints a simple folder icon centered in (x, y, w, h):
-// a rectangle with a small tab on the upper-left edge. Used for the
-// file-well palette tile so the user reads "directory" at a glance.
+// a rectangle body with a slanted tab on its upper-left edge. The whole
+// outline is one closed path so the tab's right edge is part of the
+// stroke (previously a separate body strokeRect left the tab open on
+// the right).
 func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 	c.Set("strokeStyle", color)
 	lw := math.Max(1.0, math.Min(w, h)/24)
@@ -1482,15 +1513,16 @@ func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 	by := y + h*0.42
 	tabW := bw * 0.35
 	tabH := bh * 0.20
-	// Tab on top of folder body.
+	// Outer outline, clockwise from body bottom-left.
 	c.Call("beginPath")
-	c.Call("moveTo", bx, by)
-	c.Call("lineTo", bx+tabW, by)
-	c.Call("lineTo", bx+tabW+tabH, by-tabH)
-	c.Call("lineTo", bx+bw, by-tabH)
+	c.Call("moveTo", bx, by+bh)              // body bottom-left
+	c.Call("lineTo", bx, by)                 // up the body left side
+	c.Call("lineTo", bx+tabW, by)            // right along body top to tab base
+	c.Call("lineTo", bx+tabW+tabH, by-tabH)  // slanted tab edge up-right
+	c.Call("lineTo", bx+bw, by-tabH)         // across tab top
+	c.Call("lineTo", bx+bw, by+bh)           // down body right side
+	c.Call("closePath")                      // back along body bottom
 	c.Call("stroke")
-	// Folder body rectangle.
-	c.Call("strokeRect", bx+0.5, by+0.5, bw-1, bh-1)
 	c.Set("lineWidth", 1.0)
 }
 
@@ -1525,27 +1557,13 @@ func drawProcessGlyph(c js.Value, x, y, w, h float64, color string) {
 	c.Set("lineWidth", 1.0)
 }
 
-// drawBlackHoleSwatch paints the canonical black-hole tile visual into
-// (x, y, w, h): a pure-black fill with a few concentric grey rings to
-// suggest event horizons. Used both for palette icon and for live
-// tiles in a grid. No outline — the rings imply the boundary.
+// drawBlackHoleSwatch paints the canonical black-hole tile fill: a
+// pure-black rectangle. The orange border drawn by the caller carries
+// the "this is an exit" signal; the "null" banner label spells out the
+// destination. No interior glyph — the dark void is the metaphor.
 func drawBlackHoleSwatch(c js.Value, x, y, w, h float64) {
 	c.Set("fillStyle", colorBlackHoleSwatchBg)
 	c.Call("fillRect", x, y, w, h)
-	cx := x + w/2
-	cy := y + h/2
-	rMax := math.Min(w, h) / 2
-	if rMax <= 0 {
-		return
-	}
-	c.Set("lineWidth", 1.0)
-	for i, frac := range []float64{0.85, 0.6, 0.35} {
-		r := rMax * frac
-		c.Set("strokeStyle", colorBlackHoleRings[i])
-		c.Call("beginPath")
-		c.Call("arc", cx, cy, r, 0.0, 2*math.Pi)
-		c.Call("stroke")
-	}
 }
 
 // drawEdgeIndicators paints small markers along the pane's inner edge for

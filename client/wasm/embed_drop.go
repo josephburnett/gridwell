@@ -3,6 +3,7 @@
 package main
 
 import (
+	"math"
 	"slices"
 	"syscall/js"
 
@@ -173,9 +174,43 @@ func drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
 	c.Set("strokeStyle", colorPlusFg)
 	c.Set("lineWidth", stroke)
 	c.Call("beginPath")
-	c.Call("arc", cx-off, cy, r, 0.0, 2*3.14159, false)
+	c.Call("arc", cx-off, cy, r, 0.0, 2*math.Pi, false)
 	c.Call("stroke")
 	c.Call("beginPath")
-	c.Call("arc", cx+off, cy, r, 0.0, 2*3.14159, false)
+	c.Call("arc", cx+off, cy, r, 0.0, 2*math.Pi, false)
 	c.Call("stroke")
+}
+
+// drawGhostNoEntryBadge paints the international "no entry" sign (red
+// disc, white ring, white diagonal slash) centered at (cx, cy). Used as
+// a ghost overlay during drags whose drop would be rejected — most
+// notably left-drag (move) of a source-grid tile into a regular grid,
+// which the server rejects in favor of right-drag (clone/link).
+func drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
+	radius := size * 0.32
+	if radius < 14 {
+		radius = 14
+	}
+	ringW := radius * 0.18
+	// Red disc.
+	c.Set("fillStyle", colorNoEntryFill)
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, radius, 0.0, 2*math.Pi, false)
+	c.Call("fill")
+	// White ring inside the red.
+	c.Set("strokeStyle", colorNoEntryStroke)
+	c.Set("lineWidth", ringW)
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, radius-ringW/2-1, 0.0, 2*math.Pi, false)
+	c.Call("stroke")
+	// White diagonal slash (top-left → bottom-right).
+	slashR := radius - ringW*1.4
+	angle := math.Pi / 4
+	c.Set("lineCap", "round")
+	c.Call("beginPath")
+	c.Call("moveTo", cx+math.Cos(angle+math.Pi)*slashR, cy+math.Sin(angle+math.Pi)*slashR)
+	c.Call("lineTo", cx+math.Cos(angle)*slashR, cy+math.Sin(angle)*slashR)
+	c.Call("stroke")
+	c.Set("lineCap", "butt")
+	c.Set("lineWidth", 1.0)
 }

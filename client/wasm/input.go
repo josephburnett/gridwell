@@ -610,6 +610,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// preview. Position is computed from cursor − cellOffset ×
 		// displayedCellSize so the grab point stays under the cursor.
 		a.ghost.overDoc = false
+		a.ghost.forbidden = false
 		if dt, ok := a.docDropTargetAt(sx, sy); ok {
 			// Drag over a raw-mode text descent: insert a reference. Both
 			// left and right buttons land here — the doc isn't a placement
@@ -627,20 +628,36 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			a.ghost.paneID = d.originPaneID
 			a.ghost.targetCellSize = d.srcCellSize
 			a.ghost.targetFragmentation = 0.0
+			a.ghost.forbidden = true
 			a.canvas.Get("style").Set("cursor", "not-allowed")
 		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
-			a.canvas.Get("style").Set("cursor", "")
-			a.ghost.paneID = t.pane.ID
-			// Black-hole sink: if the cursor is over a black hole, the
-			// ghost shrinks AND fragments. Left-button release commits
-			// a DeleteTile. Drag back out and the lerp reassembles the
-			// ghost; release away from a sink does a normal move.
-			if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
-				a.ghost.targetCellSize = t.cellSize * 0.2
-				a.ghost.targetFragmentation = 1.0
-			} else {
-				a.ghost.targetCellSize = t.cellSize
+			// Sink check first — dropping on a black hole is a delete,
+			// not a move, so the cross-grid-move restriction doesn't apply.
+			sink := a.tileAtCellInTarget(t, sx, sy)
+			isBlackHoleSink := sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID
+			if !isBlackHoleSink && a.dropForbiddenForMove(d, t) {
+				// Cross-grid move between source-backed and regular grid:
+				// server rejects. Show the no-entry sign so the user
+				// switches to right-drag (clone/link) instead.
+				a.ghost.paneID = t.pane.ID
+				a.ghost.targetCellSize = d.srcCellSize
 				a.ghost.targetFragmentation = 0.0
+				a.ghost.forbidden = true
+				a.canvas.Get("style").Set("cursor", "not-allowed")
+			} else {
+				a.canvas.Get("style").Set("cursor", "")
+				a.ghost.paneID = t.pane.ID
+				// Black-hole sink: if the cursor is over a black hole, the
+				// ghost shrinks AND fragments. Left-button release commits
+				// a DeleteTile. Drag back out and the lerp reassembles the
+				// ghost; release away from a sink does a normal move.
+				if isBlackHoleSink {
+					a.ghost.targetCellSize = t.cellSize * 0.2
+					a.ghost.targetFragmentation = 1.0
+				} else {
+					a.ghost.targetCellSize = t.cellSize
+					a.ghost.targetFragmentation = 0.0
+				}
 			}
 		} else {
 			a.canvas.Get("style").Set("cursor", "")
@@ -769,10 +786,21 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// deletes the source instead of moving/cloning it. Skip the cell
 	// snap and overlap math — the black hole "absorbs" whatever the
 	// cursor is on, regardless of exact coords.
-	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
+	sink := a.tileAtCellInTarget(t, sx, sy)
+	isBlackHoleSink := sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID
+	if isBlackHoleSink {
 		a.runDeleteTile(d, t)
 		a.ghost = nil
 		a.draw()
+		return nil
+	}
+
+	// Forbidden move (e.g. source-grid → regular grid): the mousemove
+	// path already flagged it and showed the no-entry sign, so on
+	// release just snap back without making the round-trip to a server
+	// rejection.
+	if a.dropForbiddenForMove(d, t) {
+		a.cancelDragSnapBack(d)
 		return nil
 	}
 

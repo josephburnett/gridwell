@@ -298,6 +298,14 @@ type ghost struct {
 	// over the tile so the user sees the action will be "link", not
 	// "clone".
 	overDoc bool
+
+	// forbidden is set when the cursor is over a drop target that would
+	// be rejected: a rendered-mode doc (read-only), or a regular-grid
+	// cell while the source comes from a source-backed grid (the
+	// left-drag "move" that the server refuses — user must right-drag
+	// to clone/link instead). Renderer paints the international "no
+	// entry" badge over the ghost; mouseup snap-backs without RPC.
+	forbidden bool
 }
 
 // dragState tracks an in-progress drag from a tile onto the cursor.

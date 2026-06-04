@@ -173,14 +173,9 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 		a.fetchURLPreview(n.ID)
 	}
 
-	a.cctx.Set("strokeStyle", colorURLLine)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("strokeRect", x, y, w, h)
+	strokeTileBorder(a.cctx, x, y, w, h, colorURLLine)
 	if selected {
-		a.cctx.Set("strokeStyle", colorSelected)
-		a.cctx.Set("lineWidth", 2.0)
-		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
-		a.cctx.Set("lineWidth", 1.0)
+		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
 	a.cctx.Call("restore")
 }
