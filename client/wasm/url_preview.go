@@ -173,7 +173,7 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 		a.fetchURLPreview(n.ID)
 	}
 
-	strokeTileBorder(a.cctx, x, y, w, h, colorURLLine)
+	strokeTileBorder(a.cctx, x, y, w, h, colorURLLine, tileBorderPx)
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}

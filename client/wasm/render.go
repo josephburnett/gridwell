@@ -101,16 +101,32 @@ const (
 	tileBorderPx = 2.0
 )
 
-// strokeTileBorder draws a tileBorderPx-thick outline at `color` that
-// sits entirely inside (x, y, w, h). Canvas centers the stroke on the
-// path, so the rect is inset by half the line width on every side.
-// Every tile-kind renderer reaches for this — keeps the border weight
-// uniform and prevents per-call lineWidth state leaks.
-func strokeTileBorder(c js.Value, x, y, w, h float64, color string) {
+// strokeTileBorder draws a borderPx-thick outline at `color` that sits
+// entirely inside (x, y, w, h). Canvas centers the stroke on the path,
+// so the rect is inset by half the line width on every side. Most
+// callers pass the tileBorderPx constant; drawChildPreview scales the
+// border down so it stays proportionate to the cell at a distance.
+func strokeTileBorder(c js.Value, x, y, w, h float64, color string, borderPx float64) {
 	c.Set("strokeStyle", color)
-	c.Set("lineWidth", tileBorderPx)
-	half := tileBorderPx / 2
-	c.Call("strokeRect", x+half, y+half, w-tileBorderPx, h-tileBorderPx)
+	c.Set("lineWidth", borderPx)
+	half := borderPx / 2
+	c.Call("strokeRect", x+half, y+half, w-borderPx, h-borderPx)
+}
+
+// previewBorderPxFor scales tileBorderPx down for child-grid previews —
+// when you're looking AT a grid from a distance, the borders should
+// look proportional, not uniformly 2px regardless of cell scale.
+// previewCell is the size in screen pixels of one child cell.
+func previewBorderPxFor(previewCell float64) float64 {
+	const ref = cellPx // full-zoom parent-cell reference
+	bp := tileBorderPx * previewCell / ref
+	if bp > tileBorderPx {
+		return tileBorderPx
+	}
+	if bp < 0.5 {
+		return 0.5
+	}
+	return bp
 }
 
 // drawSelectedTileOutline paints the gold "this tile is selected" frame
@@ -494,7 +510,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		return
 	case rpc.KindBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
-		strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder)
+		strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder, tileBorderPx)
 		if selected {
 			drawSelectedTileOutline(a.cctx, x, y, w, h)
 		}
@@ -502,7 +518,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		return
 	}
 	if n.Kind != rpc.KindWell && n.Kind != rpc.KindFileWell && n.Kind != rpc.KindProcessWell {
-		drawNode(a.cctx, n, x, y, w, h, selected, outside)
+		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx)
 		return
 	}
 	// Trigger prefetch if we don't have the child grid yet. Recursion
@@ -558,7 +574,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// process-well). The kind drives the color so the color grammar
 	// is consistent whether the user sees the tile as a preview or
 	// descends into it (where the same kind drives the pane border).
-	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n.Kind))
+	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n.Kind), tileBorderPx)
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
@@ -885,7 +901,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	if outside {
 		outlineColor = colorExitBorder
 	}
-	strokeTileBorder(a.cctx, x, y, w, h, outlineColor)
+	strokeTileBorder(a.cctx, x, y, w, h, outlineColor, tileBorderPx)
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
@@ -1248,6 +1264,10 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 	hiddenTileID int64,
 ) {
 	childInSource := child != nil && (child.Meta.SourceKind == rpc.GridSourceFS || child.Meta.SourceKind == rpc.GridSourceProc)
+	// Scale the inner-tile border so a child grid viewed from a distance
+	// keeps its borders proportionate to the cells. Full-size live tiles
+	// use 2px; previews glide down with the cell scale.
+	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
 		if hiddenTileID != 0 && n.ID == hiddenTileID {
 			continue
@@ -1262,7 +1282,7 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 			continue
 		}
 		nn := n
-		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource))
+		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource), borderPx)
 	}
 }
 
@@ -1270,21 +1290,22 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 // `selected` highlights the tile with a dedicated outline color. This is
 // the "flat" renderer used for nested previews (no recursion) and for
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
-func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outside bool) {
+func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64) {
 	// Fill + per-kind outline color in one pass; strokeTileBorder draws
-	// the inset 2px border for all kinds that have one.
+	// the inset border for all kinds that have one. borderPx lets the
+	// caller scale the outline down for distant previews.
 	switch n.Kind {
 	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n.Kind))
+		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n.Kind), borderPx)
 	case rpc.KindBlackHole:
 		drawBlackHoleSwatch(c, x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorExitBorder)
+		strokeTileBorder(c, x, y, w, h, colorExitBorder, borderPx)
 	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorURLLine)
+		strokeTileBorder(c, x, y, w, h, colorURLLine, borderPx)
 	case rpc.KindText:
 		c.Set("fillStyle", colorMarkdownFill)
 		c.Call("fillRect", x, y, w, h)
@@ -1292,7 +1313,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		if outside {
 			line = colorExitBorder
 		}
-		strokeTileBorder(c, x, y, w, h, line)
+		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	default:
 		c.Set("fillStyle", colorLocked)
 		c.Call("fillRect", x, y, w, h)
@@ -1732,54 +1753,30 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 	}
 }
 
-// drawPaletteTile renders one preview tile inside the palette. Each
-// kind paints to roughly match what the user will get when they drop:
-//   - well: empty well outline (blue)
-//   - markdown: green tile with a "document" glyph (paper + text lines)
-//   - URL: purple tile with a globe glyph
-//   - black hole: dark void with concentric rings
+// drawPaletteTile renders one preview tile inside the palette. The body
+// (fill + border + banner) is shared with the live-tile renderer so a
+// palette swatch reads identical to what the user drops — same color
+// grammar, same "null"/"files"/"processes" banner. A kind-specific
+// glyph is overlaid on tile kinds where the live tile lacks a static
+// identity cue (markdown / url / file-well / process-well), so the
+// palette still reads "what is this?" before the tile has content.
 func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered bool) {
+	n := templateGhostNode(kind)
+	outside := tileOutside(&n, false)
+	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
+	a.drawTileBannerLabel(&n, x, y, w, h, outside)
 	switch kind {
-	case tplWell:
-		a.cctx.Set("fillStyle", colorBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorFocusBorder)
-		a.cctx.Set("lineWidth", 1.0)
-		a.cctx.Call("strokeRect", x, y, w, h)
 	case tplMarkdown:
-		a.cctx.Set("fillStyle", colorMarkdownFill)
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorMarkdownLine)
-		a.cctx.Call("strokeRect", x, y, w, h)
 		drawDocumentGlyph(a.cctx, x, y, w, h, colorMenuItemHi)
 	case tplURL:
-		a.cctx.Set("fillStyle", colorURLFill)
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorURLLine)
-		a.cctx.Call("strokeRect", x, y, w, h)
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorMenuItemHi)
-	case tplBlackHole:
-		drawBlackHoleSwatch(a.cctx, x, y, w, h)
 	case tplFileWell:
-		a.cctx.Set("fillStyle", colorBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorExitBorder)
-		a.cctx.Set("lineWidth", 1.0)
-		a.cctx.Call("strokeRect", x, y, w, h)
 		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	case tplProcessWell:
-		a.cctx.Set("fillStyle", colorBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-		a.cctx.Set("strokeStyle", colorExitBorder)
-		a.cctx.Set("lineWidth", 1.0)
-		a.cctx.Call("strokeRect", x, y, w, h)
 		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	}
 	if hovered {
-		a.cctx.Set("strokeStyle", colorSelected)
-		a.cctx.Set("lineWidth", 2.0)
-		a.cctx.Call("strokeRect", x-1, y-1, w+2, h+2)
-		a.cctx.Set("lineWidth", 1.0)
+		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
 }
 
