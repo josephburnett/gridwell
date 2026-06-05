@@ -132,6 +132,16 @@ Change freely if they get in the way:
 - Background fetches. The URL tile only opens a tab when the user explicitly refreshes.
 - Undo/redo today. History falls out of `version`; replaying it is future work.
 
+## Testing mode (no backward compatibility yet)
+
+Gridwell is in pre-release testing. The user will blow away the database when schema or label-derivation changes need it, so:
+
+- **Do not write migrations** for the existing DB. Don't add `addColumnIfMissing` calls, data-rewrite UPDATEs, or "if old shape then upgrade" branches. New schema goes straight into `Schema`; existing DBs are expected to be deleted.
+- **Do not write backward-compatibility shims** in the server, the RPC layer, or the wasm client. If a field changes meaning, just change it.
+- **Do not preserve old code paths** for "tiles created before X". The DB starts fresh after every behavior change that needs it.
+
+This ends when the user explicitly says we're exiting testing mode. After that, every schema change needs an idempotent migration and every wire-format change needs a compat shim. Until then, prefer the clean break.
+
 ## Horizontal navigation across clones (future work)
 
 `version` is in the schema now to enable it later.
