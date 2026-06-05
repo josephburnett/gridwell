@@ -1587,11 +1587,11 @@ func templateGhostNode(kind templateKind) rpc.Tile {
 	case tplURL:
 		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
 	case tplBlackHole:
-		return rpc.Tile{Kind: rpc.KindBlackHole, W: 1, H: 1}
+		return rpc.Tile{Kind: rpc.KindBlackHole, W: 1, H: 1, AltText: rpc.AltNull}
 	case tplFileWell:
-		return rpc.Tile{Kind: rpc.KindFileWell, W: 1, H: 1, FSPath: "/"}
+		return rpc.Tile{Kind: rpc.KindFileWell, W: 1, H: 1, FSPath: "/", AltText: rpc.AltFiles}
 	case tplProcessWell:
-		return rpc.Tile{Kind: rpc.KindProcessWell, W: 1, H: 1, PID: 1}
+		return rpc.Tile{Kind: rpc.KindProcessWell, W: 1, H: 1, PID: 1, AltText: rpc.AltProcesses}
 	}
 	return rpc.Tile{}
 }

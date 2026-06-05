@@ -251,17 +251,19 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	}
 }
 
-// TestProcDisplayName covers the fallback ladder Name → cmdline basename → "".
+// TestProcDisplayName covers the fallback ladder Name → cmdline basename
+// → "pid N". The PID fallback is what guarantees the client always sees
+// a usable label, even for processes with empty status/cmdline.
 func TestProcDisplayName(t *testing.T) {
 	cases := []struct {
 		info procsource.Info
 		want string
 	}{
-		{procsource.Info{Name: "bash"}, "bash"},
-		{procsource.Info{Name: "", CmdLine: "/usr/bin/firefox --new-instance"}, "firefox"},
-		{procsource.Info{Name: "init", CmdLine: "/sbin/init"}, "init"}, // Name wins over cmdline.
-		{procsource.Info{}, ""},
-		{procsource.Info{Name: "", CmdLine: "/ /"}, ""}, // pathological cmdline → empty.
+		{procsource.Info{PID: 200, Name: "bash"}, "bash"},
+		{procsource.Info{PID: 300, Name: "", CmdLine: "/usr/bin/firefox --new-instance"}, "firefox"},
+		{procsource.Info{PID: 1, Name: "init", CmdLine: "/sbin/init"}, "init"}, // Name wins over cmdline.
+		{procsource.Info{PID: 4242}, "pid 4242"},
+		{procsource.Info{PID: 4243, Name: "", CmdLine: "/ /"}, "pid 4243"}, // pathological cmdline → pid fallback.
 	}
 	for _, c := range cases {
 		if got := procDisplayName(c.info); got != c.want {

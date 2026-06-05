@@ -5,8 +5,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"path"
-	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -621,55 +619,13 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 }
 
 // tileBannerLabel returns the short label drawn at the top of a tile,
-// or "" to suppress the banner.
-//
-// Coverage (first match wins):
-//   - @info synthetic tile inside a proc-well → "info"
-//   - root file-well (FSPath="/") → "files"
-//   - root process-well (PID=1) → "processes"
-//   - process-well anywhere → AltText (kernel-reported Name), then
-//     "pid N" if no AltText
-//   - file-well or text tile with a basename → FSName (covers synthesized
-//     children in an fs-grid and clones of those into regular grids)
-//   - file-well with FSPath but no FSName → basename of the path
-//     (covers user-dropped sub-file-wells)
-//   - plain text tile → AltText (first non-empty line of content, set by
-//     the server from markdown.AltFromSource)
-//
-// Banner text on a tile reads "what is this", at a glance, regardless of
-// which grid the tile lives in.
+// or "" to suppress the banner. AltText is the single source of truth —
+// the server stamps it at insert time from a per-kind derivation
+// (basename for files, kernel Name for processes, "files"/"processes"
+// for the roots, "info" for the synthetic info tile, first non-empty
+// line for text content). The client has no opinion of its own here.
 func tileBannerLabel(n *rpc.Tile) string {
-	if n.FSName == "@info" {
-		return "info"
-	}
-	if n.Kind == rpc.KindBlackHole {
-		return "null"
-	}
-	if n.Kind == rpc.KindFileWell && n.FSPath == "/" {
-		return "files"
-	}
-	if n.Kind == rpc.KindProcessWell && n.PID == 1 {
-		return "processes"
-	}
-	if n.Kind == rpc.KindProcessWell {
-		if n.AltText != "" {
-			return n.AltText
-		}
-		if n.PID > 0 {
-			return "pid " + strconv.FormatInt(n.PID, 10)
-		}
-		return ""
-	}
-	if n.FSName != "" {
-		return n.FSName
-	}
-	if n.Kind == rpc.KindFileWell && n.FSPath != "" {
-		return path.Base(n.FSPath)
-	}
-	if n.Kind == rpc.KindText && n.AltText != "" {
-		return n.AltText
-	}
-	return ""
+	return n.AltText
 }
 
 // drawTileBannerLabel paints tileBannerLabel(n) inside a small translucent

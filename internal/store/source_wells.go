@@ -31,9 +31,10 @@ func (s *Store) CreateFileWell(ctx context.Context, req *rpc.CreateFileWellReque
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 					view_x, view_y, view_zoom, child_grid_id, fs_path,
-					created_at, updated_at)
-				VALUES (?, ?, 'file-well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, fsPath, now, now)
+					alt_text, created_at, updated_at)
+				VALUES (?, ?, 'file-well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, fsPath,
+				fileWellAlt(fsPath), now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert file-well: %w", err)
 			}
@@ -58,14 +59,37 @@ func (s *Store) CreateProcessWell(ctx context.Context, req *rpc.CreateProcessWel
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 					view_x, view_y, view_zoom, child_grid_id, pid,
-					created_at, updated_at)
-				VALUES (?, ?, 'process-well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, req.PID, now, now)
+					alt_text, created_at, updated_at)
+				VALUES (?, ?, 'process-well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, req.PID,
+				processWellAlt(req.PID), now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert process-well: %w", err)
 			}
 			return res.LastInsertId()
 		})
+}
+
+// fileWellAlt picks the canonical display label for a file-well at
+// fsPath. The root path collapses to the named "files" constant so the
+// palette / root tile reads identically across sessions; other paths
+// use the basename so /etc → "etc", /home/joe → "joe".
+func fileWellAlt(fsPath string) string {
+	if fsPath == "/" {
+		return rpc.AltFiles
+	}
+	return filepath.Base(fsPath)
+}
+
+// processWellAlt picks the canonical display label for a process-well
+// at pid. PID 1 (init) collapses to "processes"; other PIDs get a
+// stable "pid N" until the reconciler refreshes alt_text from the
+// kernel-reported Name on first descent.
+func processWellAlt(pid int64) string {
+	if pid == 1 {
+		return rpc.AltProcesses
+	}
+	return fmt.Sprintf("pid %d", pid)
 }
 
 // getOrCreateSourceGrid returns the grid_id of the singleton grid for

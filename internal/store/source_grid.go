@@ -17,8 +17,10 @@ import (
 // suitable as a tile label inside a process-grid. Prefers the kernel-
 // reported Name from /proc/<pid>/status (matches `ps` default), falling
 // back to the basename of the first cmdline arg when Name is empty
-// (e.g. some sandboxed/renamed processes), then to "" so the client can
-// fall back to "pid N".
+// (e.g. some sandboxed/renamed processes), then to "pid N" so callers
+// always get a usable string they can stamp into alt_text — the client
+// renders alt_text verbatim and shouldn't see an empty label for a
+// real PID.
 func procDisplayName(info procsource.Info) string {
 	if info.Name != "" {
 		return info.Name
@@ -29,7 +31,7 @@ func procDisplayName(info procsource.Info) string {
 			return base
 		}
 	}
-	return ""
+	return fmt.Sprintf("pid %d", info.PID)
 }
 
 // FSReader is the surface fssource implements. Stubbable for tests.
@@ -333,12 +335,15 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 		if err != nil {
 			return err
 		}
+		// alt_text duplicates e.Name today, but fs_name is the
+		// reconciler's dedup key (identity) and alt_text is the
+		// client-rendered label — keep the roles separate.
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id, fs_path, fs_name,
-				created_at, updated_at)
-			VALUES (?, ?, 'file-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?)`,
-			objID, gridID, pos.x, pos.y, childGridID, e.AbsPath, e.Name, now, now)
+				alt_text, created_at, updated_at)
+			VALUES (?, ?, 'file-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
+			objID, gridID, pos.x, pos.y, childGridID, e.AbsPath, e.Name, e.Name, now, now)
 		if err != nil {
 			return fmt.Errorf("insert fs sub-well: %w", err)
 		}
@@ -358,9 +363,9 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 	// it.
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			fs_name, created_at, updated_at)
-		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?)`,
-		objID, gridID, pos.x, pos.y, e.Name, now, now)
+			fs_name, alt_text, created_at, updated_at)
+		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?, ?)`,
+		objID, gridID, pos.x, pos.y, e.Name, e.Name, now, now)
 	if err != nil {
 		return fmt.Errorf("insert fs file tile: %w", err)
 	}
@@ -422,9 +427,9 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			fs_name, created_at, updated_at)
-		VALUES (?, ?, 'text', ?, ?, 1, 1, '@info', ?, ?)`,
-		objID, gridID, pos.x, pos.y, now, now)
+			fs_name, alt_text, created_at, updated_at)
+		VALUES (?, ?, 'text', ?, ?, 1, 1, '@info', ?, ?, ?)`,
+		objID, gridID, pos.x, pos.y, rpc.AltInfo, now, now)
 	if err != nil {
 		return fmt.Errorf("insert proc info tile: %w", err)
 	}

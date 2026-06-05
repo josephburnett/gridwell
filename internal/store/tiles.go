@@ -184,9 +184,9 @@ func (s *Store) CreateBlackHole(ctx context.Context, req *rpc.CreateBlackHoleReq
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-					created_at, updated_at)
-				VALUES (?, ?, 'blackhole', ?, ?, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, now, now)
+					alt_text, created_at, updated_at)
+				VALUES (?, ?, 'blackhole', ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, rpc.AltNull, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert blackhole tile: %w", err)
 			}
