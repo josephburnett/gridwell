@@ -105,7 +105,7 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 // reconcileFSGrid reads g.SourceID as a directory path and reconciles
 // the grid's tile list against it. Subdirectories become file-well
 // tiles; everything else becomes a text tile pointing at a synthesized
-// metadata blob. Layout is sticky per fs_name: existing tiles keep
+// metadata blob. Layout is sticky per source_key: existing tiles keep
 // their positions, new tiles take the next free auto-grid cell. The
 // grid version is only bumped if a real change happened — otherwise
 // the SSE fan-out would fire on every read.
@@ -267,9 +267,9 @@ func desiredFSTileKind(e fssource.Entry) string {
 	return rpc.KindText
 }
 
-// loadFSGridTilesByName returns the tiles in a grid keyed by fs_name.
+// loadFSGridTilesByName returns the tiles in a grid keyed by source_key.
 // Used only when reconciling source grids — regular grids don't set
-// fs_name.
+// source_key.
 func loadFSGridTilesByName(ctx context.Context, q gridReader, gridID int64) (map[string]*rpc.Tile, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
@@ -282,10 +282,10 @@ func loadFSGridTilesByName(ctx context.Context, q gridReader, gridID int64) (map
 		if err != nil {
 			return nil, err
 		}
-		if t.FSName == "" {
+		if t.SourceKey == "" {
 			continue
 		}
-		out[t.FSName] = t
+		out[t.SourceKey] = t
 	}
 	return out, rows.Err()
 }
@@ -335,12 +335,12 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 		if err != nil {
 			return err
 		}
-		// alt_text duplicates e.Name today, but fs_name is the
+		// alt_text duplicates e.Name today, but source_key is the
 		// reconciler's dedup key (identity) and alt_text is the
 		// client-rendered label — keep the roles separate.
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-				view_x, view_y, view_zoom, child_grid_id, fs_path, fs_name,
+				view_x, view_y, view_zoom, child_grid_id, fs_path, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'file-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
 			objID, gridID, pos.x, pos.y, childGridID, e.AbsPath, e.Name, e.Name, now, now)
@@ -363,7 +363,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 	// it.
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			fs_name, alt_text, created_at, updated_at)
+			source_key, alt_text, created_at, updated_at)
 		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?, ?)`,
 		objID, gridID, pos.x, pos.y, e.Name, e.Name, now, now)
 	if err != nil {
@@ -388,7 +388,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64, altText string, now int64, events *[]rpc.Event) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
-		nullableString(altText), now, tileID); err != nil {
+		altText, now, tileID); err != nil {
 		return fmt.Errorf("update tile alt_text: %w", err)
 	}
 	t, err := s.loadTile(ctx, tx, tileID)
@@ -427,7 +427,7 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			fs_name, alt_text, created_at, updated_at)
+			source_key, alt_text, created_at, updated_at)
 		VALUES (?, ?, 'text', ?, ?, 1, 1, '@info', ?, ?, ?)`,
 		objID, gridID, pos.x, pos.y, rpc.AltInfo, now, now)
 	if err != nil {
@@ -452,13 +452,13 @@ func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int6
 		return err
 	}
 	objID := s.newID()
-	// alt_text carries the process name for client-side labeling. fs_name
+	// alt_text carries the process name for client-side labeling. source_key
 	// stays the PID string because the reconciler dedupes by it and PIDs
 	// are the only per-parent unique identifier (two children can share
 	// Name="bash").
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			view_x, view_y, view_zoom, child_grid_id, pid, fs_name,
+			view_x, view_y, view_zoom, child_grid_id, pid, source_key,
 			alt_text, created_at, updated_at)
 		VALUES (?, ?, 'process-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
 		objID, gridID, pos.x, pos.y, childGridID, info.PID, pidStr, procDisplayName(info), now, now)
@@ -476,4 +476,3 @@ func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int6
 	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
 	return nil
 }
-

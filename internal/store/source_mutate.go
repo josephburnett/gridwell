@@ -43,14 +43,14 @@ func (s *Store) SetHostActor(a HostActor) {
 
 // sourceDeletePath computes the absolute path a fs-grid tile maps to.
 // For sub-file-wells, that's the tile's fs_path directly. For file
-// tiles (kind=text with fs_name) it's the parent grid's source_id
-// joined with the tile's fs_name.
+// tiles (kind=text with source_key) it's the parent grid's source_id
+// joined with the tile's source_key.
 func sourceDeletePath(parentGrid *rpc.Grid, t *rpc.Tile) string {
 	if t.Kind == rpc.KindFileWell {
 		return t.FSPath
 	}
-	if parentGrid != nil && parentGrid.SourceKind == rpc.GridSourceFS && t.FSName != "" {
-		return filepath.Join(parentGrid.SourceID, t.FSName)
+	if parentGrid != nil && parentGrid.SourceKind == rpc.GridSourceFS && t.SourceKey != "" {
+		return filepath.Join(parentGrid.SourceID, t.SourceKey)
 	}
 	return ""
 }
@@ -63,7 +63,7 @@ func processWellTilePID(parentGrid *rpc.Grid, t *rpc.Tile) int64 {
 	if t.PID > 0 {
 		return t.PID
 	}
-	if parentGrid != nil && parentGrid.SourceKind == rpc.GridSourceProc && t.FSName == "@info" {
+	if parentGrid != nil && parentGrid.SourceKind == rpc.GridSourceProc && t.SourceKey == "@info" {
 		pid, _ := strconv.ParseInt(parentGrid.SourceID, 10, 64)
 		return pid
 	}
@@ -126,6 +126,11 @@ func (s *Store) dropTileRow(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events
 	}
 	if t.Kind == rpc.KindText && t.BlobID != 0 {
 		if err := s.decBlobRefcount(ctx, tx, t.BlobID); err != nil {
+			return err
+		}
+	}
+	if t.Kind == rpc.KindURL && t.PreviewBlobID != 0 {
+		if err := s.decBlobRefcount(ctx, tx, t.PreviewBlobID); err != nil {
 			return err
 		}
 	}

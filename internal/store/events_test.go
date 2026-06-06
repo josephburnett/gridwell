@@ -348,7 +348,7 @@ func TestEventCowForkEmitsGridForked(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}},
+		Path:   rpc.Path{WellIDs: []int64{clone.ID}},
 		TileID: inner.ID, Version: inner.Version, W: 2, H: 2,
 	}); err != nil {
 		t.Fatal(err)

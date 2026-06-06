@@ -223,10 +223,10 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		return 0, nil, err
 	}
 
-	// forkColumns + ", created_at, updated_at" gives us all the columns we need.
-	// grid_id (from forkColumns) is discarded — we assign newGridID on insert.
+	// tileColumns + ", created_at, updated_at" gives us all the columns we need.
+	// grid_id (from tileColumns) is discarded — we assign newGridID on insert.
 	rows, err := tx.QueryContext(ctx,
-		`SELECT `+forkColumns+`, created_at, updated_at FROM tiles WHERE grid_id = ?`, oldGridID)
+		`SELECT `+tileColumns+`, created_at, updated_at FROM tiles WHERE grid_id = ?`, oldGridID)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -247,22 +247,22 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		textMode             sql.NullString
 		blob                 sql.NullInt64
 		urlString            sql.NullString
+		previewBlob          sql.NullInt64
 		fsPath               sql.NullString
 		pid                  sql.NullInt64
-		fsName               sql.NullString
-		altText              sql.NullString
-		previewJPEG          []byte
+		sourceKey            sql.NullString
+		altText              string
 		createdAt, updatedAt int64
 	}
 	var copies []tileCopy
 	for rows.Next() {
 		var nc tileCopy
-		// Column order matches forkColumns (tileColumns + preview_jpeg) + created_at, updated_at.
+		// Column order matches tileColumns + created_at, updated_at.
 		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.version, &nc.oldGridID, &nc.kind,
 			&nc.x, &nc.y, &nc.w, &nc.h,
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
 			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
-			&nc.urlString, &nc.fsPath, &nc.pid, &nc.fsName, &nc.altText, &nc.previewJPEG,
+			&nc.urlString, &nc.previewBlob, &nc.fsPath, &nc.pid, &nc.sourceKey, &nc.altText,
 			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
@@ -278,13 +278,13 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, fs_path, pid, fs_name, alt_text, preview_jpeg,
+				url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
 				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			nc.objectID, nc.version, newGridID, nc.kind, nc.x, nc.y, nc.w, nc.h,
 			nc.viewX, nc.viewY, nc.viewZoom, nc.childGrid,
 			nc.textX, nc.textY, nc.textW, nc.textH, nc.textMode, nc.blob,
-			nc.urlString, nc.fsPath, nc.pid, nc.fsName, nc.altText, nc.previewJPEG,
+			nc.urlString, nc.previewBlob, nc.fsPath, nc.pid, nc.sourceKey, nc.altText,
 			nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)
@@ -304,6 +304,11 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		}
 		if nc.kind == rpc.KindText && nc.blob.Valid {
 			if err := s.incBlobRefcount(ctx, tx, nc.blob.Int64); err != nil {
+				return 0, nil, err
+			}
+		}
+		if nc.kind == rpc.KindURL && nc.previewBlob.Valid {
+			if err := s.incBlobRefcount(ctx, tx, nc.previewBlob.Int64); err != nil {
 				return 0, nil, err
 			}
 		}
@@ -332,20 +337,21 @@ func (s *Store) decRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error
 
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, kind, child_grid_id, blob_id FROM tiles WHERE grid_id = ?`, gridID)
+		`SELECT id, kind, child_grid_id, blob_id, preview_blob_id FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
 	type ref struct {
-		id    int64
-		kind  string
-		child sql.NullInt64
-		blob  sql.NullInt64
+		id      int64
+		kind    string
+		child   sql.NullInt64
+		blob    sql.NullInt64
+		preview sql.NullInt64
 	}
 	var refs []ref
 	for rows.Next() {
 		var r ref
-		if err := rows.Scan(&r.id, &r.kind, &r.child, &r.blob); err != nil {
+		if err := rows.Scan(&r.id, &r.kind, &r.child, &r.blob, &r.preview); err != nil {
 			rows.Close()
 			return err
 		}
@@ -368,6 +374,11 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		}
 		if r.kind == rpc.KindText && r.blob.Valid {
 			if err := s.decBlobRefcount(ctx, tx, r.blob.Int64); err != nil {
+				return err
+			}
+		}
+		if r.kind == rpc.KindURL && r.preview.Valid {
+			if err := s.decBlobRefcount(ctx, tx, r.preview.Int64); err != nil {
 				return err
 			}
 		}

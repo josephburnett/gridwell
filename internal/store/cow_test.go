@@ -510,7 +510,7 @@ func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 	mdTile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{WellIDs: []int64{outer.ID}},
+		Path:   rpc.Path{WellIDs: []int64{outer.ID}},
 		GridID: outer.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 		Data: []byte("inside"),
 	})
@@ -518,7 +518,7 @@ func TestRefcountGCGridCascadesBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{WellIDs: []int64{outer.ID}},
+		Path:   rpc.Path{WellIDs: []int64{outer.ID}},
 		GridID: outer.ChildGridID, X: 5, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {

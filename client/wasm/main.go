@@ -37,7 +37,6 @@ const (
 	fileNaturalContentPx = 800.0
 )
 
-
 // app is the running client. Held in a package-level var so JS callbacks can
 // reach it without closures over reflect.Value.
 var app *App
@@ -157,7 +156,7 @@ type App struct {
 	// fileTextareaInputCb is the input event listener that mirrors the
 	// textarea's value into a per-frame redraw. Held so we can release
 	// it cleanly if the App is torn down (currently never).
-	fileTextareaInputCb js.Func
+	fileTextareaInputCb  js.Func
 	fileTextareaScrollCb js.Func
 
 	// fileToggleBtn is the floating rendered/raw toggle for a markdown
@@ -249,10 +248,10 @@ type paneState struct {
 // Ascent uses two segments: a child zoom-out to the calibrated state, then
 // a parent zoom-out from "well overtakes" back to the saved state.
 type paneTransition struct {
-	paneID          string
-	segments        []transSegment
-	currentSegment  int
-	segmentStartMs  float64
+	paneID         string
+	segments       []transSegment
+	currentSegment int
+	segmentStartMs float64
 	// onComplete, if set, runs after the last segment lands. Used by text
 	// tile descent to install pane.TextFocus only once the visual transition
 	// has reached the tile's footprint at OvertakeZoom (so the toggle
@@ -261,12 +260,11 @@ type paneTransition struct {
 }
 
 type transSegment struct {
-	path                            []int64
-	fromCx, fromCy, fromZoom        float64
-	toCx, toCy, toZoom              float64
-	durationMs                      float64
+	path                     []int64
+	fromCx, fromCy, fromZoom float64
+	toCx, toCy, toZoom       float64
+	durationMs               float64
 }
-
 
 // ghost is a transient floating render of a tile, positioned in screen
 // coordinates within a specific pane. screenX/Y is the top-left corner of
@@ -633,7 +631,6 @@ func (a *App) popPaneState(paneID string) *paneState {
 	a.paneStateStack[paneID] = stack[:len(stack)-1]
 	return &last
 }
-
 
 // startSSE opens the EventSource for /rpc/Subscribe and applies events to
 // the cache. Reconnects on close after a backoff.

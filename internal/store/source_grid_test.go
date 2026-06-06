@@ -42,7 +42,7 @@ func TestFSGridReconcileFirstDescent(t *testing.T) {
 	}
 	kinds := map[string]string{}
 	for _, tile := range g.Tiles {
-		kinds[tile.FSName] = tile.Kind
+		kinds[tile.SourceKey] = tile.Kind
 	}
 	if kinds["a.txt"] != rpc.KindText || kinds["b.txt"] != rpc.KindText {
 		t.Errorf("files not text-kind: %v", kinds)
@@ -72,13 +72,13 @@ func TestFSGridReconcileStickyPositions(t *testing.T) {
 	g1, _ := s.GetGrid(ctx, w.ChildGridID)
 	pos1 := map[string]position{}
 	for _, tile := range g1.Tiles {
-		pos1[tile.FSName] = position{tile.X, tile.Y}
+		pos1[tile.SourceKey] = position{tile.X, tile.Y}
 	}
 	g2, _ := s.GetGrid(ctx, w.ChildGridID)
 	for _, tile := range g2.Tiles {
-		if pos1[tile.FSName] != (position{tile.X, tile.Y}) {
+		if pos1[tile.SourceKey] != (position{tile.X, tile.Y}) {
 			t.Errorf("position of %q drifted: %v -> %v",
-				tile.FSName, pos1[tile.FSName], position{tile.X, tile.Y})
+				tile.SourceKey, pos1[tile.SourceKey], position{tile.X, tile.Y})
 		}
 	}
 }
@@ -172,7 +172,7 @@ func TestProcGridReconcile(t *testing.T) {
 	for _, tile := range g.Tiles {
 		pids[tile.PID] = tile.Kind
 		names[tile.PID] = tile.AltText
-		if tile.FSName == "@info" {
+		if tile.SourceKey == "@info" {
 			if tile.Kind != rpc.KindText {
 				t.Errorf("@info tile kind = %q, want text", tile.Kind)
 			}
@@ -196,10 +196,10 @@ func TestProcGridReconcile(t *testing.T) {
 }
 
 // TestProcGridReconcileRefreshesAltText covers the case where an existing
-// proc tile's alt_text is stale (NULL on rows from before alt_text was
-// populated, or out-of-date after a rename / PID reuse). The reconciler
-// must overwrite it on the next GetGrid — otherwise the client keeps
-// rendering "pid N" forever.
+// proc tile's alt_text is out of date (process renamed itself, or a PID
+// got reused for a different command). The reconciler must overwrite it
+// on the next GetGrid — otherwise the client keeps rendering the old
+// name forever.
 func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -221,12 +221,6 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
-		t.Fatal(err)
-	}
-	// Simulate a stale row: blow away alt_text directly, mimicking what an
-	// upgrade from an older schema would leave behind.
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE tiles SET alt_text = NULL WHERE pid = 100`); err != nil {
 		t.Fatal(err)
 	}
 	// Process renames itself in the meantime.
@@ -298,4 +292,3 @@ func mustWrite(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
-

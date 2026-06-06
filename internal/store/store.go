@@ -91,6 +91,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("bootstrap root: %w", err)
 	}
+	if err := s.applyMigrations(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
 	return s, nil
 }
 
@@ -259,4 +263,3 @@ func (s *Store) withMutation(ctx context.Context, fn func(tx *sql.Tx, events *[]
 	}
 	return nil
 }
-

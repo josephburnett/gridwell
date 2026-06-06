@@ -134,7 +134,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 					blob_id, alt_text, created_at, updated_at)
 				VALUES (?, ?, 'text', ?, ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, blobID, nullableString(alt), now, now)
+				objID, gridID, req.X, req.Y, req.W, req.H, blobID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert text tile: %w", err)
 			}

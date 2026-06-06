@@ -36,7 +36,9 @@ func (d *FakeURLDriver) Available() bool {
 }
 
 // SetURLPreview overwrites a URL tile's preview JPEG. Called by the
-// server's URL stream handler on WS close. Bumps the tile's version.
+// server's URL stream handler on WS close. The JPEG is hash-deduped
+// through the blobs table — two tiles whose previews happen to be
+// identical bytes share one row. Bumps the tile's version.
 func (s *Store) SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		t, err := s.loadTile(ctx, tx, tileID)
@@ -46,10 +48,35 @@ func (s *Store) SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) er
 		if t.Kind != rpc.KindURL {
 			return ErrNotURLTile
 		}
+		oldBlobID := t.PreviewBlobID
+		var newBlobID int64
+		if len(jpeg) > 0 {
+			hash := hashBytes(jpeg)
+			newBlobID, err = putBlob(ctx, tx, hash, jpeg)
+			if err != nil {
+				return err
+			}
+		}
+		var newArg any
+		if newBlobID != 0 {
+			newArg = newBlobID
+		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET preview_jpeg = ?, updated_at = ? WHERE id = ?`,
-			jpeg, s.now().Unix(), tileID); err != nil {
+			`UPDATE tiles SET preview_blob_id = ?, updated_at = ? WHERE id = ?`,
+			newArg, s.now().Unix(), tileID); err != nil {
 			return err
+		}
+		if oldBlobID != newBlobID {
+			if newBlobID != 0 {
+				if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
+					return err
+				}
+			}
+			if oldBlobID != 0 {
+				if err := s.decBlobRefcount(ctx, tx, oldBlobID); err != nil {
+					return err
+				}
+			}
 		}
 		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
 			return err
@@ -73,7 +100,7 @@ func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string) error 
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
-			sql.NullString{String: alt, Valid: alt != ""}, s.now().Unix(), tileID); err != nil {
+			alt, s.now().Unix(), tileID); err != nil {
 			return err
 		}
 		if err := bumpTileVersion(ctx, tx, tileID); err != nil {

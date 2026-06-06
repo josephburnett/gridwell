@@ -36,17 +36,6 @@ func (s *Store) gridSourceKinds(ctx context.Context, tx *sql.Tx, a, b int64) (st
 	return ka, kb, rows.Err()
 }
 
-// loadPreviewJPEG reads a tile's preview_jpeg bytes inside the given
-// transaction. Returns nil for tiles with no preview.
-func loadPreviewJPEG(ctx context.Context, tx *sql.Tx, tileID int64) ([]byte, error) {
-	var jpeg []byte
-	err := tx.QueryRowContext(ctx, `SELECT preview_jpeg FROM tiles WHERE id = ?`, tileID).Scan(&jpeg)
-	if err != nil {
-		return nil, err
-	}
-	return jpeg, nil
-}
-
 // MoveTile moves a tile either within its grid or across grids.
 func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
@@ -197,7 +186,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			// From a source grid, both well kinds (file-well / process-well)
 			// and text tiles can be linked out. Wells carry their FS path /
 			// PID; text tiles (the synthesized file / @info rows) carry
-			// fs_name so the client renders the basename / "info" label and
+			// source_key so the client renders the basename / "info" label and
 			// the red exit border — the clone reads as a reference to
 			// something outside Gridwell.
 			if srcSource != "" && !isWellKind(n.Kind) && n.Kind != rpc.KindText {
@@ -226,7 +215,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			blob        sql.NullInt64
 			urlStr      sql.NullString
 			textMode    sql.NullString
-			previewJPEG []byte
+			previewBlob sql.NullInt64
 			fsPath      sql.NullString
 			pidNS       sql.NullInt64
 		)
@@ -241,9 +230,8 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			pidNS = sql.NullInt64{Int64: n.PID, Valid: true}
 		case rpc.KindURL:
 			urlStr = sql.NullString{String: n.URLString, Valid: true}
-			previewJPEG, err = loadPreviewJPEG(ctx, tx, n.ID)
-			if err != nil {
-				return err
+			if n.PreviewBlobID != 0 {
+				previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
 			}
 		case rpc.KindText:
 			// File-content tiles synthesized inside fs-grids carry no
@@ -262,13 +250,13 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, fs_path, pid, fs_name, alt_text, preview_jpeg,
+				url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
 				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ObjectID, n.Version, dstGrid, n.Kind, req.X, req.Y, n.W, n.H,
 			n.ViewX, n.ViewY, n.ViewZoom, child,
 			n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-			urlStr, fsPath, pidNS, nullableString(n.FSName), nullableString(n.AltText), previewJPEG,
+			urlStr, previewBlob, fsPath, pidNS, nullableString(n.SourceKey), n.AltText,
 			now, now)
 		if err != nil {
 			return fmt.Errorf("insert clone: %w", err)
@@ -285,6 +273,12 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		case rpc.KindText:
 			if n.BlobID != 0 {
 				if err := s.incBlobRefcount(ctx, tx, n.BlobID); err != nil {
+					return err
+				}
+			}
+		case rpc.KindURL:
+			if n.PreviewBlobID != 0 {
+				if err := s.incBlobRefcount(ctx, tx, n.PreviewBlobID); err != nil {
 					return err
 				}
 			}
@@ -337,7 +331,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET blob_id = ?, alt_text = ?, updated_at = ? WHERE id = ?`,
-			newBlobID, nullableString(alt), s.now().Unix(), pre.TargetTileID); err != nil {
+			newBlobID, alt, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
 		if oldBlobID != newBlobID {

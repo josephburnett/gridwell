@@ -41,7 +41,6 @@ func rootID(t *testing.T, s *Store) int64 {
 	return id
 }
 
-
 func TestOpenAppliesSchema(t *testing.T) {
 	s := newTestStore(t)
 	rows, err := s.db.Query(

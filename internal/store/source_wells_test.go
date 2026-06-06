@@ -143,9 +143,9 @@ func TestCreateProcessWellRejectsZeroPID(t *testing.T) {
 // edges without touching the DB.
 func TestCanonicalFSPath(t *testing.T) {
 	cases := []struct {
-		in       string
-		want     string
-		wantErr  bool
+		in      string
+		want    string
+		wantErr bool
 	}{
 		{"/", "/", false},
 		{"/foo", "/foo", false},

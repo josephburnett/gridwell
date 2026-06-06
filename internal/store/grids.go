@@ -69,15 +69,11 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 }
 
 // tileColumns is the column list for reading a tile row. Keep in sync with
-// scanTile. Add new columns here; forkColumns picks them up automatically.
+// scanTile.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, fs_path, pid, fs_name, alt_text`
-
-// forkColumns extends tileColumns with preview_jpeg. Used by forkGrid, which
-// needs to copy the frozen preview but avoids loading it on every GetGrid.
-const forkColumns = tileColumns + `, preview_jpeg`
+	url_string, preview_blob_id, fs_path, pid, source_key, alt_text`
 
 // scanTile scans a single row into an rpc.Tile. It expects the columns to
 // match tileColumns in order.
@@ -85,22 +81,22 @@ func scanTile(scanner interface {
 	Scan(dest ...any) error
 }) (*rpc.Tile, error) {
 	var (
-		n         rpc.Tile
-		childGrid sql.NullInt64
-		blob      sql.NullInt64
-		urlStr    sql.NullString
-		textMode  sql.NullString
-		altText   sql.NullString
-		fsPath    sql.NullString
-		pidNS     sql.NullInt64
-		fsName    sql.NullString
+		n          rpc.Tile
+		childGrid  sql.NullInt64
+		blob       sql.NullInt64
+		urlStr     sql.NullString
+		previewBID sql.NullInt64
+		textMode   sql.NullString
+		fsPath     sql.NullString
+		pidNS      sql.NullInt64
+		sourceKey  sql.NullString
 	)
 	if err := scanner.Scan(
 		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
 		&n.X, &n.Y, &n.W, &n.H,
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
-		&urlStr, &fsPath, &pidNS, &fsName, &altText,
+		&urlStr, &previewBID, &fsPath, &pidNS, &sourceKey, &n.AltText,
 	); err != nil {
 		return nil, err
 	}
@@ -113,11 +109,11 @@ func scanTile(scanner interface {
 	if urlStr.Valid {
 		n.URLString = urlStr.String
 	}
+	if previewBID.Valid {
+		n.PreviewBlobID = previewBID.Int64
+	}
 	if textMode.Valid {
 		n.TextMode = textMode.String
-	}
-	if altText.Valid {
-		n.AltText = altText.String
 	}
 	if fsPath.Valid {
 		n.FSPath = fsPath.String
@@ -125,8 +121,8 @@ func scanTile(scanner interface {
 	if pidNS.Valid {
 		n.PID = pidNS.Int64
 	}
-	if fsName.Valid {
-		n.FSName = fsName.String
+	if sourceKey.Valid {
+		n.SourceKey = sourceKey.String
 	}
 	return &n, nil
 }
@@ -168,15 +164,18 @@ func (s *Store) GetTile(ctx context.Context, tileID int64) (*rpc.Tile, error) {
 // GetTilePreview returns the JPEG bytes for a URL tile's current preview.
 // Returns nil for tiles that don't have a preview yet.
 func (s *Store) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error) {
-	var jpeg []byte
-	err := s.db.QueryRowContext(ctx, `SELECT preview_jpeg FROM tiles WHERE id = ?`, tileID).Scan(&jpeg)
+	var previewBID sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ?`, tileID).Scan(&previewBID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return jpeg, nil
+	if !previewBID.Valid {
+		return nil, nil
+	}
+	return s.GetBlob(ctx, previewBID.Int64)
 }
 
 // bumpTileVersion increments a tile row's version by 1.

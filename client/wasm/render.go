@@ -33,7 +33,7 @@ const (
 	// distinct from the descent blue and the file greens / purples so
 	// it never gets read as "you're descended into something".
 	colorRootBorder = "#7a6a4a"
-	colorGridLine = "#15171d"
+	colorGridLine   = "#15171d"
 	// Content-tile colors. Each tile kind has its own identity; the
 	// user reads tiles by color at a glance and the icon / preview
 	// reveals the rest.
@@ -49,9 +49,9 @@ const (
 	// colorURLLiveLine is the pane border used when a URL tile is live
 	// (WebSocket stream open). Same purple hue as colorURLLine but brighter
 	// and more saturated so it's clearly distinct from the frozen state.
-	colorURLLiveLine = "#a07acc"
-	colorBlackHoleFill     = "#3a1c1a"
-	colorBlackHoleLine     = "#a06a5a"
+	colorURLLiveLine   = "#a07acc"
+	colorBlackHoleFill = "#3a1c1a"
+	colorBlackHoleLine = "#a06a5a"
 	// colorBlackHoleSwatchBg fills the palette / live blackhole swatch.
 	// Pure black so concentric grey rings read as event horizons.
 	colorBlackHoleSwatchBg = "#000000"
@@ -70,15 +70,15 @@ const (
 	// convention: red disc, white ring, white diagonal slash.
 	colorNoEntryFill   = "#c93030"
 	colorNoEntryStroke = "#f6f6f6"
-	colorLocked            = "#26262a"
-	colorSelected    = "#e3b16f"
-	colorEdgeDot     = "#5a6a8a"
-	colorPlusBg      = "#23252d"
-	colorPlusBgHi    = "#2d3140"
-	colorPlusFg      = "#c8c9ce"
-	colorMenuBg      = "#16181f"
-	colorMenuItemHi  = "#e8e9ee"
-	colorMuted       = "#6c6f78"
+	colorLocked        = "#26262a"
+	colorSelected      = "#e3b16f"
+	colorEdgeDot       = "#5a6a8a"
+	colorPlusBg        = "#23252d"
+	colorPlusBgHi      = "#2d3140"
+	colorPlusFg        = "#c8c9ce"
+	colorMenuBg        = "#16181f"
+	colorMenuItemHi    = "#e8e9ee"
+	colorMuted         = "#6c6f78"
 	// Inline-markdown body colors used by the rendered-markdown
 	// drawing path (drawInlineLines, drawMarkdownRendered).
 	colorMarkdownBody    = "#d8d9de"
@@ -599,7 +599,7 @@ func wellOutlineColor(kind string) string {
 //   - the tile is itself an exit-well kind (file-well / process-well)
 //     anywhere — its child grid lives outside Gridwell regardless of
 //     where the well sits
-//   - the tile is a text tile carrying an fs_name, i.e. it was cloned
+//   - the tile is a text tile carrying an source_key, i.e. it was cloned
 //     out of an fs-grid and still represents an outside reference
 func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 	if parentInSource {
@@ -612,7 +612,7 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 		// tile leaves Gridwell. Red border, "null" banner.
 		return true
 	}
-	if n.Kind == rpc.KindText && n.FSName != "" {
+	if n.Kind == rpc.KindText && n.SourceKey != "" {
 		return true
 	}
 	return false
@@ -1287,7 +1287,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 // out and the original tile fades back in at full size.
 func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
 	// The ghost is a free-floating render of one tile; treat its own
-	// kind+fs_name as the outside signal. No parent grid is in play here
+	// kind+source_key as the outside signal. No parent grid is in play here
 	// (the ghost is flying over the canvas).
 	outside := tileOutside(n, false)
 	if frag < 0.02 {
@@ -1379,6 +1379,7 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 //   - descent into a URL tile (live stream) → brighter purple
 //   - descent into a well (path > 0, no file focus) → blue
 //   - root (nothing descended) → tan
+//
 // The focused boolean picks the saturated vs faded variant of that
 // hue. urlLive is true when an active WebSocket stream is open for
 // this pane, indicating a live Chromium tab. If the grid containing
@@ -1492,13 +1493,13 @@ func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 	tabH := bh * 0.20
 	// Outer outline, clockwise from body bottom-left.
 	c.Call("beginPath")
-	c.Call("moveTo", bx, by+bh)              // body bottom-left
-	c.Call("lineTo", bx, by)                 // up the body left side
-	c.Call("lineTo", bx+tabW, by)            // right along body top to tab base
-	c.Call("lineTo", bx+tabW+tabH, by-tabH)  // slanted tab edge up-right
-	c.Call("lineTo", bx+bw, by-tabH)         // across tab top
-	c.Call("lineTo", bx+bw, by+bh)           // down body right side
-	c.Call("closePath")                      // back along body bottom
+	c.Call("moveTo", bx, by+bh)             // body bottom-left
+	c.Call("lineTo", bx, by)                // up the body left side
+	c.Call("lineTo", bx+tabW, by)           // right along body top to tab base
+	c.Call("lineTo", bx+tabW+tabH, by-tabH) // slanted tab edge up-right
+	c.Call("lineTo", bx+bw, by-tabH)        // across tab top
+	c.Call("lineTo", bx+bw, by+bh)          // down body right side
+	c.Call("closePath")                     // back along body bottom
 	c.Call("stroke")
 	c.Set("lineWidth", 1.0)
 }
@@ -1745,4 +1746,3 @@ func paletteTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
 func pointInPalette(p *pane.Pane, r pane.Rect, x, y float64) bool {
 	return paletteLayoutFor(p, r).PointInPopover(x, y)
 }
-

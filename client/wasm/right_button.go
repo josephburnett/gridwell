@@ -105,7 +105,7 @@ type rightDragState struct {
 	tilePaneID string
 	tileNode   rpc.Tile
 	tilePane   *pane.Pane // for path/grid lookups at commit time
-	tilePaneR  pane.Rect   // pane rect at right-down (for cell mapping)
+	tilePaneR  pane.Rect  // pane rect at right-down (for cell mapping)
 
 	// rightDragTileCenter-only. cursorInCenter tracks whether the
 	// cursor is currently inside the center zone, so the preview can
@@ -870,10 +870,10 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	if arrow > 18 {
 		arrow = 18
 	}
-	drawHotspotArrow(a.cctx, r.X+w/2, r.Y+h/6, 0, -arrow)         // top
-	drawHotspotArrow(a.cctx, r.X+w/2, r.Y+h-h/6, 0, arrow)        // bottom
-	drawHotspotArrow(a.cctx, r.X+w/6, r.Y+h/2, -arrow, 0)         // left
-	drawHotspotArrow(a.cctx, r.X+w-w/6, r.Y+h/2, arrow, 0)        // right
+	drawHotspotArrow(a.cctx, r.X+w/2, r.Y+h/6, 0, -arrow)  // top
+	drawHotspotArrow(a.cctx, r.X+w/2, r.Y+h-h/6, 0, arrow) // bottom
+	drawHotspotArrow(a.cctx, r.X+w/6, r.Y+h/2, -arrow, 0)  // left
+	drawHotspotArrow(a.cctx, r.X+w-w/6, r.Y+h/2, arrow, 0) // right
 
 	// Center glyph.
 	cx := r.X + r.W/2
@@ -901,7 +901,7 @@ func drawRefreshIcon(c js.Value, cx, cy, radius float64, color string) {
 
 	// Arc: starts at ~20° past top (top-right gap), sweeps clockwise 290°.
 	// In canvas coords y points down, so clockwise is the positive direction.
-	const gapDeg = 70.0 // degrees of gap left at the top-right
+	const gapDeg = 70.0                                 // degrees of gap left at the top-right
 	startAngle := (-math.Pi/2 + (gapDeg/2)*math.Pi/180) // top + half-gap offset
 	endAngle := startAngle + (360-gapDeg)*math.Pi/180
 

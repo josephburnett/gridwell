@@ -29,7 +29,6 @@ func (a *App) scheduleFileSave() {
 	js.Global().Call("setTimeout", a.fileSaveCb, fileSaveDebounceMs)
 }
 
-
 // fileOvertakeZoom returns the parent zoom at which the file tile's
 // footprint (W × H cells) exactly fits inside the inner-box dimensions
 // (textarea region) of pane rect r — the smaller inner-box dim binds.

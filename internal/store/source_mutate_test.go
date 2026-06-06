@@ -15,11 +15,11 @@ import (
 // stubHostActor records calls — tests assert against it instead of
 // touching the real host filesystem or process table.
 type stubHostActor struct {
-	mu        sync.Mutex
-	Removed   []string
+	mu         sync.Mutex
+	Removed    []string
 	RemovedAll []string
-	Killed    []killCall
-	ReturnErr error
+	Killed     []killCall
+	ReturnErr  error
 }
 
 type killCall struct {
@@ -61,7 +61,7 @@ func TestDeleteFSFileTileRemovesFile(t *testing.T) {
 	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var fileTile *rpc.Tile
 	for i := range g.Tiles {
-		if g.Tiles[i].FSName == "doomed.md" {
+		if g.Tiles[i].SourceKey == "doomed.md" {
 			fileTile = &g.Tiles[i]
 		}
 	}
@@ -100,7 +100,7 @@ func TestDeleteFSSubDirTileRemovesAll(t *testing.T) {
 	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var subWell *rpc.Tile
 	for i := range g.Tiles {
-		if g.Tiles[i].FSName == "stuff" {
+		if g.Tiles[i].SourceKey == "stuff" {
 			subWell = &g.Tiles[i]
 		}
 	}
@@ -268,7 +268,7 @@ func TestCloneFileWellOutOfSourceGridAllowed(t *testing.T) {
 	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var subWell *rpc.Tile
 	for i := range g.Tiles {
-		if g.Tiles[i].FSName == "sub" {
+		if g.Tiles[i].SourceKey == "sub" {
 			subWell = &g.Tiles[i]
 		}
 	}
@@ -307,7 +307,7 @@ func TestCloneFileWellOutOfSourceGridAllowed(t *testing.T) {
 
 // TestCloneFileTileOutOfSourceGridPreservesFSName covers the link case
 // for file (text) tiles inside an fs-grid. The clone must land as a
-// red-outlined reference in the destination grid — preserving fs_name
+// red-outlined reference in the destination grid — preserving source_key
 // is what lets the client render the basename label and the exit
 // border so the link "still feels outside Gridwell."
 func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
@@ -325,7 +325,7 @@ func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
 	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var fileTile *rpc.Tile
 	for i := range g.Tiles {
-		if g.Tiles[i].FSName == "notes.md" {
+		if g.Tiles[i].SourceKey == "notes.md" {
 			fileTile = &g.Tiles[i]
 		}
 	}
@@ -348,9 +348,9 @@ func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
 	if clone.Kind != rpc.KindText {
 		t.Errorf("clone kind = %q, want %q", clone.Kind, rpc.KindText)
 	}
-	if clone.FSName != "notes.md" {
-		t.Errorf("clone fs_name = %q, want %q — client labeling depends on it",
-			clone.FSName, "notes.md")
+	if clone.SourceKey != "notes.md" {
+		t.Errorf("clone source_key = %q, want %q — client labeling depends on it",
+			clone.SourceKey, "notes.md")
 	}
 }
 
@@ -363,16 +363,16 @@ func TestSourceDeletePath(t *testing.T) {
 	}{
 		{
 			name: "sub-file-well",
-			tile: rpc.Tile{Kind: rpc.KindFileWell, FSPath: "/etc/passwd.d", FSName: "passwd.d"},
+			tile: rpc.Tile{Kind: rpc.KindFileWell, FSPath: "/etc/passwd.d", SourceKey: "passwd.d"},
 			want: "/etc/passwd.d",
 		},
 		{
 			name: "file tile",
-			tile: rpc.Tile{Kind: rpc.KindText, FSName: "motd"},
+			tile: rpc.Tile{Kind: rpc.KindText, SourceKey: "motd"},
 			want: "/etc/motd",
 		},
 		{
-			name: "unrelated text tile (no fs_name)",
+			name: "unrelated text tile (no source_key)",
 			tile: rpc.Tile{Kind: rpc.KindText},
 			want: "",
 		},

@@ -1153,12 +1153,13 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
 // and installs a multi-segment transition into the well's child grid.
 //
 // Phases:
-//   A. Combined pan+zoom in parent to (wellCenter, OvertakeZoom).
-//   B. Atomic install of the calibrated child state at the path swap.
-//   C. (Optional) animate the child to the well's stored ViewZoom so
-//      re-descent lands at the same zoom the user left at. Only fires
-//      when well.ViewZoom > 0; the default for never-entered wells is
-//      0 (calibrated zoom).
+//
+//	A. Combined pan+zoom in parent to (wellCenter, OvertakeZoom).
+//	B. Atomic install of the calibrated child state at the path swap.
+//	C. (Optional) animate the child to the well's stored ViewZoom so
+//	   re-descent lands at the same zoom the user left at. Only fires
+//	   when well.ViewZoom > 0; the default for never-entered wells is
+//	   0 (calibrated zoom).
 //
 // Total time is split between A and C proportional to motion distance
 // so neither feels rushed. C is zero-length when ViewZoom is unset.
@@ -1210,7 +1211,6 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		},
 	})
 }
-
 
 // nonzero returns x or 1.0 if x is zero/negative. Saves a guard at every
 // call site that divides by TextZoom.

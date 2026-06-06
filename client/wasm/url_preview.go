@@ -149,10 +149,10 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 }
 
 // drawURLTile renders a URL tile in the parent grid view. Layers:
-//   1. dark-grey background (matches the file inner-bg used elsewhere)
-//   2. the cached preview JPEG cropped to the tile footprint, or a
-//      placeholder showing the URL text if no preview is loaded yet
-//   3. the tile outline + selection highlight
+//  1. dark-grey background (matches the file inner-bg used elsewhere)
+//  2. the cached preview JPEG cropped to the tile footprint, or a
+//     placeholder showing the URL text if no preview is loaded yet
+//  3. the tile outline + selection highlight
 func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")

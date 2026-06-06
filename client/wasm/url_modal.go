@@ -124,4 +124,3 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 	modal.Call("addEventListener", "mousedown", backdropCb)
 	input.Call("addEventListener", "input", inputCb)
 }
-

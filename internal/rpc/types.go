@@ -89,13 +89,21 @@ type Tile struct {
 	TextH    int64  `json:"text_h,omitempty"`
 	TextMode string `json:"text_mode,omitempty"`
 	BlobID   int64  `json:"blob_id,omitempty"`
-	// url-only
-	URLString string `json:"url_string,omitempty"`
+	// url-only: URLString is the http(s) URL. PreviewBlobID points at
+	// the blobs row holding the last-frozen JPEG preview captured at
+	// session close; 0 until the first close. The bytes are hash-
+	// deduped through the blobs table the same way text content is.
+	URLString     string `json:"url_string,omitempty"`
+	PreviewBlobID int64  `json:"preview_blob_id,omitempty"`
 	// file-well-only: the absolute host path the well points at.
 	FSPath string `json:"fs_path,omitempty"`
-	// file-backed text/url tiles inside an fs-grid carry the basename
-	// they were synthesized from. NULL for tiles in regular grids.
-	FSName string `json:"fs_name,omitempty"`
+	// SourceKey is the stable per-source identifier used by the
+	// source-grid reconciler to dedup tiles against their backing
+	// host artifact: for fs-grids, the basename of the file or
+	// directory; for proc-grids, the PID as a decimal string ("@info"
+	// for the synthetic well-self tile). Empty for tiles in regular
+	// Gridwell-owned grids.
+	SourceKey string `json:"source_key,omitempty"`
 	// process-well-only: the PID the well points at.
 	PID int64 `json:"pid,omitempty"`
 	// AltText is a human-readable label used as the alt of a markdown

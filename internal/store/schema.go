@@ -10,9 +10,9 @@ package store
 //   - url        (interior): http(s) URL + frozen JPEG preview (purple).
 //   - blackhole  (exit):     deletion sink (red).
 //   - file-well  (exit):     points at a host directory; child grid's tile
-//                            list is reconciled against that directory.
+//     list is reconciled against that directory.
 //   - process-well (exit):   points at a host PID; child grid's tile list
-//                            is reconciled against the process table.
+//     is reconciled against the process table.
 //
 // Grids carry an optional (source_kind, source_id): NULL = regular
 // Gridwell-owned, 'fs' = backed by a filesystem path, 'proc' = backed by
@@ -22,10 +22,13 @@ package store
 // Well rows carry one view rectangle (view_x, view_y, view_zoom) that is
 // at once the preview frame, the descent target, and the ascent return.
 // Text rows carry a doc-space window (text_x, text_y, text_w, text_h)
-// plus a rendered/text mode. URL rows carry a URL string and the
-// last-frozen JPEG preview captured at close. File-well rows carry
-// fs_path; process-well rows carry pid. Synthesized file-backed tiles
-// inside an fs-grid carry fs_name (their basename within the parent).
+// plus a rendered/text mode plus blob_id (the markdown source). URL rows
+// carry a URL string and preview_blob_id (the last-frozen JPEG captured
+// at close, hash-deduped through the blobs table just like text content).
+// File-well rows carry fs_path; process-well rows carry pid. Synthesized
+// file-backed tiles inside an fs-grid carry source_key (their basename
+// within the parent); proc-grid tiles carry the PID string as
+// source_key (and "@info" for the well-self tile).
 const Schema = `
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -80,29 +83,34 @@ CREATE TABLE IF NOT EXISTS tiles (
     text_h        INTEGER NOT NULL DEFAULT 0,
     text_mode     TEXT,
     blob_id       INTEGER REFERENCES blobs(id),
-    -- url-only: the URL string and the frozen preview JPEG from last close.
-    url_string    TEXT,
-    preview_jpeg  BLOB,
+    -- url-only: the URL string. The frozen JPEG preview from last close
+    -- lives in the blobs table; preview_blob_id points at it (NULL until
+    -- first close). Hash-deduped across clones the same way text content
+    -- is — clones that haven't navigated independently share one row.
+    url_string       TEXT,
+    preview_blob_id  INTEGER REFERENCES blobs(id),
     -- file-well-only / process-well-only: the FS path or PID this exit
-    -- well points at. fs_name is the basename of a file-backed tile
-    -- synthesized inside an fs-grid (NULL for tiles in regular grids).
+    -- well points at. source_key is the per-source dedup identifier
+    -- for tiles synthesized inside an fs/proc-grid — basename for fs,
+    -- PID string (or "@info" for the well-self tile) for proc. NULL
+    -- for tiles in regular Gridwell-owned grids.
     fs_path       TEXT,
     pid           INTEGER,
-    fs_name       TEXT,
-    -- Derived label used as the alt-text of dropped embed links. For URL
-    -- tiles: the page title captured from Chromium. For text tiles: the
-    -- first non-empty line of content with markdown stripped. NULL until
-    -- derived.
-    alt_text      TEXT,
+    source_key    TEXT,
+    -- Canonical display label. Stamped at insert time and refreshed by
+    -- the source-grid reconciler. The client renders alt_text verbatim
+    -- (no derivation). Empty string until something stamps it (e.g. a
+    -- URL tile before its page title is captured).
+    alt_text      TEXT NOT NULL DEFAULT '',
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
-       (kind = 'well'         AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_jpeg IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
-    OR (kind = 'text'         AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_jpeg IS NULL   AND fs_path IS NULL      AND pid IS NULL)
+       (kind = 'well'         AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
+    OR (kind = 'text'         AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND fs_path IS NULL      AND pid IS NULL)
     OR (kind = 'url'          AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL    AND fs_path IS NULL AND pid IS NULL)
-    OR (kind = 'blackhole'    AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND preview_jpeg IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
-    OR (kind = 'file-well'    AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_jpeg IS NULL AND text_mode IS NULL AND fs_path IS NOT NULL AND pid IS NULL)
-    OR (kind = 'process-well' AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_jpeg IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NOT NULL)
+    OR (kind = 'blackhole'    AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
+    OR (kind = 'file-well'    AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NOT NULL AND pid IS NULL)
+    OR (kind = 'process-well' AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NOT NULL)
     )
 );
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
