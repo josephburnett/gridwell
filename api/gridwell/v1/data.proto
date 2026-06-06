@@ -1,0 +1,327 @@
+// data.proto is the single source of truth for Gridwell's wire types and
+// the persisted record shapes. Every field in Grid / Tile maps 1:1 to a
+// column in the hand-written DDL (internal/store/schema.go); a drift-lint
+// test fails the build if they get out of sync.
+//
+// Conventions:
+//   - kind / source_kind / text_mode are string fields, not enums. The
+//     DDL CHECK constraints already pin the closed sets; carrying them
+//     as strings keeps the proto-to-column mapping mechanical and lets
+//     us add named constants alongside the generated types.
+//   - created_at / updated_at exist in the DDL but are not exposed on
+//     the wire (and not in the proto). They are pure storage metadata.
+syntax = "proto3";
+
+package gridwell.v1;
+
+option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridwellv1";
+
+// Path is the sequence of well-tile IDs walked from the root grid down
+// to the pane the request originates from. Mutations carry it so the
+// store can fork the COW spine of shared grids up to the highest one
+// still uniquely owned.
+message Path {
+  repeated int64 well_ids = 1;
+}
+
+// Grid is the persistent unit of canvas. Tiles live in grids; wells
+// point at child grids. The root grid has no parent.
+//
+// source_kind is empty for a regular Gridwell-owned grid, "fs" for a
+// grid whose tile list is reconciled against a host directory, "proc"
+// for the process table. source_id carries the path or PID.
+message Grid {
+  int64 id = 1;
+  string object_id = 2;
+  int64 version = 3;
+  string source_kind = 4;
+  string source_id = 5;
+}
+
+// Tile is the persistent unit of content in a grid. kind selects which
+// subset of the optional fields is meaningful; the DDL CHECK constraint
+// enforces it.
+message Tile {
+  int64 id = 1;
+  string object_id = 2;
+  int64 version = 3;
+  int64 grid_id = 4;
+  string kind = 5;
+  int64 x = 6;
+  int64 y = 7;
+  int64 w = 8;
+  int64 h = 9;
+
+  // well-only: the child grid's framing — at once the preview frame,
+  // the descent target, and the ascent return value.
+  int64 view_x = 10;
+  int64 view_y = 11;
+  double view_zoom = 12;
+  int64 child_grid_id = 13;
+
+  // text-only: text_x/text_y is the scroll offset; text_w/text_h is the
+  // window size; all four are doc-space px. text_mode is "rendered" or
+  // "text". blob_id points at the markdown source in the blobs table.
+  int64 text_x = 14;
+  int64 text_y = 15;
+  int64 text_w = 16;
+  int64 text_h = 17;
+  string text_mode = 18;
+  int64 blob_id = 19;
+
+  // url-only: the http(s) URL plus a pointer at the last-frozen JPEG
+  // preview (in the blobs table; hash-deduped across clones).
+  string url_string = 20;
+  int64 preview_blob_id = 21;
+
+  // file-well-only / process-well-only: the FS path or PID this exit
+  // well points at.
+  string fs_path = 22;
+  int64 pid = 23;
+
+  // source_key is the per-source dedup identifier for tiles
+  // synthesized inside an fs/proc-grid — basename for fs, PID string
+  // (or "@info" for the well-self tile) for proc. Empty for tiles in
+  // regular Gridwell-owned grids.
+  string source_key = 24;
+
+  // alt_text is the canonical display label, rendered verbatim by the
+  // client. Stamped at insert time and refreshed by the source-grid
+  // reconciler.
+  string alt_text = 25;
+}
+
+// Bootstrap returns the current root grid id and root framing.
+message BootstrapRequest {}
+message BootstrapResponse {
+  int64 root_grid_id = 1;
+  double root_view_cx = 2;
+  double root_view_cy = 3;
+  double root_zoom = 4;
+}
+
+// Reads.
+
+message GetGridRequest {
+  int64 grid_id = 1;
+}
+message GetGridResponse {
+  Grid grid = 1;
+  repeated Tile tiles = 2;
+}
+
+message GetBlobRequest {
+  int64 blob_id = 1;
+}
+message GetBlobResponse {
+  bytes data = 1;
+}
+
+message GetTilePreviewRequest {
+  int64 tile_id = 1;
+}
+message GetTilePreviewResponse {
+  bytes jpeg = 1;
+}
+
+// TileResponse is the shape returned by every tile-producing mutation.
+message TileResponse {
+  Tile tile = 1;
+}
+
+// Creates: no version (the tile doesn't exist yet).
+
+message CreateWellRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+}
+
+message CreateTextRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+  bytes data = 7;
+}
+
+message CreateURLRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+  string url = 7;
+}
+
+message CreateBlackHoleRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+}
+
+message CreateFileWellRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+  string fs_path = 7;
+}
+
+message CreateProcessWellRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+  int64 pid = 7;
+}
+
+// Mutations: version is the claimed current version of tile_id; the
+// server returns a version-conflict error if it doesn't match.
+
+message MoveTileRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  int64 dest_grid_id = 4;
+  Path dest_path = 5;
+  int64 x = 6;
+  int64 y = 7;
+}
+
+message CloneTileRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  int64 dest_grid_id = 4;
+  Path dest_path = 5;
+  int64 x = 6;
+  int64 y = 7;
+}
+
+message ResizeTileRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  int64 x = 4;
+  int64 y = 5;
+  int64 w = 6;
+  int64 h = 7;
+}
+
+message SetWellViewRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  int64 view_x = 4;
+  int64 view_y = 5;
+  double view_zoom = 6;
+}
+
+message SetTextViewRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  int64 text_x = 4;
+  int64 text_y = 5;
+  int64 text_w = 6;
+  int64 text_h = 7;
+  string text_mode = 8;
+}
+
+message SetRootViewRequest {
+  double cx = 1;
+  double cy = 2;
+  double zoom = 3;
+}
+message SetRootViewResponse {}
+
+message UpdateTextRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  bytes data = 4;
+}
+
+message DeleteTileRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+}
+message DeleteTileResponse {}
+
+// Event stream.
+
+message SubscribeRequest {}
+
+message GridChanged {
+  int64 grid_id = 1;
+}
+
+message TileChanged {
+  Tile tile = 1;
+}
+
+message TileRemoved {
+  int64 grid_id = 1;
+  int64 tile_id = 2;
+}
+
+message GridForked {
+  int64 well_id = 1;
+  int64 old_grid_id = 2;
+  int64 new_grid_id = 3;
+}
+
+// Event carries one of the change kinds. The variant tells the client
+// what changed; the variant tag IS the discriminator (no separate kind
+// string).
+message Event {
+  oneof payload {
+    GridChanged grid_changed = 1;
+    TileChanged tile_changed = 2;
+    TileRemoved tile_removed = 3;
+    GridForked grid_forked = 4;
+  }
+}
+
+// Gridwell is the RPC surface. Bootstrap + GetGrid + GetBlob +
+// GetTilePreview are reads; everything else mutates.
+service Gridwell {
+  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse);
+  rpc GetGrid(GetGridRequest) returns (GetGridResponse);
+  rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
+  rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
+
+  rpc CreateWell(CreateWellRequest) returns (TileResponse);
+  rpc CreateText(CreateTextRequest) returns (TileResponse);
+  rpc CreateURL(CreateURLRequest) returns (TileResponse);
+  rpc CreateBlackHole(CreateBlackHoleRequest) returns (TileResponse);
+  rpc CreateFileWell(CreateFileWellRequest) returns (TileResponse);
+  rpc CreateProcessWell(CreateProcessWellRequest) returns (TileResponse);
+
+  rpc MoveTile(MoveTileRequest) returns (TileResponse);
+  rpc CloneTile(CloneTileRequest) returns (TileResponse);
+  rpc ResizeTile(ResizeTileRequest) returns (TileResponse);
+
+  rpc SetWellView(SetWellViewRequest) returns (TileResponse);
+  rpc SetTextView(SetTextViewRequest) returns (TileResponse);
+  rpc SetRootView(SetRootViewRequest) returns (SetRootViewResponse);
+  rpc UpdateText(UpdateTextRequest) returns (TileResponse);
+  rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
+
+  rpc Subscribe(SubscribeRequest) returns (stream Event);
+}

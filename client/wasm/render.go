@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -1189,12 +1190,11 @@ func (a *App) fetchBlob(blobID int64) {
 		return
 	}
 	go func() {
-		var resp rpc.GetBlobResponse
-		status, err := postJSON("/rpc/GetBlob", rpc.GetBlobRequest{BlobID: blobID}, &resp)
-		if err != nil || status != 200 {
+		data, err := a.cl.GetBlob(context.Background(), blobID)
+		if err != nil {
 			return
 		}
-		a.c.PutBlob(blobID, resp.Data)
+		a.c.PutBlob(blobID, data)
 		// If the focused pane is waiting on this blob to populate its
 		// text-mode editor, seed the textarea now.
 		a.refreshFileOverlay()

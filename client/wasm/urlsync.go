@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"slices"
 	"syscall/js"
 
@@ -53,14 +54,9 @@ func (a *App) flushRootViewSave() {
 	a.rootViewCx = p.Cx
 	a.rootViewCy = p.Cy
 	a.rootViewZoom = zoom
-	req := rpc.SetRootViewRequest{
-		Cx:   p.Cx,
-		Cy:   p.Cy,
-		Zoom: zoom,
-	}
+	req := &rpc.SetRootViewRequest{Cx: p.Cx, Cy: p.Cy, Zoom: zoom}
 	go func() {
-		var resp rpc.SetRootViewResponse
-		_, _ = postJSON("/rpc/SetRootView", req, &resp)
+		_ = a.cl.SetRootView(context.Background(), req)
 	}()
 }
 
@@ -279,9 +275,8 @@ func (a *App) fetchGridSync(id int64) bool {
 	if _, ok := a.c.Grid(id); ok {
 		return true
 	}
-	var resp rpc.GetGridResponse
-	status, err := postJSON("/rpc/GetGrid", rpc.GetGridRequest{GridID: id}, &resp)
-	if err != nil || status != 200 {
+	resp, err := a.cl.GetGrid(context.Background(), id)
+	if err != nil {
 		a.gridLoadFailed[id] = true
 		return false
 	}
@@ -304,12 +299,11 @@ func (a *App) fetchBlobAndSetCursor(fileTileID int64, state url.State) {
 		return
 	}
 	go func() {
-		var resp rpc.GetBlobResponse
-		status, err := postJSON("/rpc/GetBlob", rpc.GetBlobRequest{BlobID: file.BlobID}, &resp)
-		if err != nil || status != 200 {
+		data, err := a.cl.GetBlob(context.Background(), file.BlobID)
+		if err != nil {
 			return
 		}
-		a.c.PutBlob(file.BlobID, resp.Data)
+		a.c.PutBlob(file.BlobID, data)
 		// Refresh the overlay (in text mode this seeds the textarea
 		// from the blob), then place the cursor.
 		a.refreshFileOverlay()

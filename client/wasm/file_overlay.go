@@ -515,7 +515,7 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 		a.c.PutBlob(file.BlobID, []byte(buf))
 	}
 	go func() {
-		a.postUpdateText(gid, rpc.UpdateTextRequest{
+		a.postUpdateText(gid, &rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: p.Path},
 			TileID:  file.ID,
 			Version: file.Version,

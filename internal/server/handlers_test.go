@@ -1,175 +1,167 @@
 package server
 
 import (
-	"net/http"
+	"context"
 	"testing"
+
+	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 func TestCreateTextRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateText", &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 1, Y: 1, W: 1, H: 1, Data: []byte("# hi"),
-	}, &nr)
-	if st != 200 {
-		t.Fatalf("status %d: %s", st, body)
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
+
+	tile, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: root, X: 1, Y: 1, W: 1, H: 1, Data: []byte("# hi"),
+	})
+	if err != nil {
+		t.Fatalf("create text: %v", err)
 	}
-	if nr.Tile.Kind != rpc.KindText {
-		t.Errorf("got kind %q, want %q", nr.Tile.Kind, rpc.KindText)
+	if tile.Kind != rpc.KindText {
+		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindText)
 	}
-	if nr.Tile.BlobID == 0 {
-		t.Errorf("blob_id = 0, want non-zero")
+	if tile.BlobID == 0 {
+		t.Error("blob_id = 0, want non-zero")
 	}
 
-	var br rpc.GetBlobResponse
-	st, body = callRPC(t, hs, "GetBlob", &rpc.GetBlobRequest{BlobID: nr.Tile.BlobID}, &br)
-	if st != 200 {
-		t.Fatalf("blob status %d: %s", st, body)
+	data, err := cl.GetBlob(ctx, tile.BlobID)
+	if err != nil {
+		t.Fatalf("get blob: %v", err)
 	}
-	if string(br.Data) != "# hi" {
-		t.Errorf("blob data = %q", br.Data)
+	if string(data) != "# hi" {
+		t.Errorf("blob data = %q", data)
 	}
 }
 
 func TestCreateURLRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateURL", &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
-	}, &nr)
-	if st != 200 {
-		t.Fatalf("status %d: %s", st, body)
+	_, cl, root := newTestServer(t)
+	tile, err := cl.CreateURL(context.Background(), &rpc.CreateURLRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("create url: %v", err)
 	}
-	if nr.Tile.Kind != rpc.KindURL {
-		t.Errorf("got kind %q, want %q", nr.Tile.Kind, rpc.KindURL)
+	if tile.Kind != rpc.KindURL {
+		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindURL)
 	}
-	if nr.Tile.URLString != "https://example.com" {
-		t.Errorf("url_string = %q", nr.Tile.URLString)
+	if tile.URLString != "https://example.com" {
+		t.Errorf("url_string = %q", tile.URLString)
 	}
 }
 
 func TestCreateBlackHoleRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateBlackHole", &rpc.CreateBlackHoleRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 2, Y: 2, W: 1, H: 1,
-	}, &nr)
-	if st != 200 {
-		t.Fatalf("status %d: %s", st, body)
+	_, cl, root := newTestServer(t)
+	tile, err := cl.CreateBlackHole(context.Background(), &rpc.CreateBlackHoleRequest{
+		GridID: root, X: 2, Y: 2, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("create blackhole: %v", err)
 	}
-	if nr.Tile.Kind != rpc.KindBlackHole {
-		t.Errorf("got kind %q, want %q", nr.Tile.Kind, rpc.KindBlackHole)
+	if tile.Kind != rpc.KindBlackHole {
+		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindBlackHole)
 	}
 }
 
 func TestCreateFileWellRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateFileWell", &rpc.CreateFileWellRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1,
-		FSPath: "/etc",
-	}, &nr)
-	if st != 200 {
-		t.Fatalf("status %d: %s", st, body)
+	_, cl, root := newTestServer(t)
+	tile, err := cl.CreateFileWell(context.Background(), &rpc.CreateFileWellRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
+	})
+	if err != nil {
+		t.Fatalf("create file well: %v", err)
 	}
-	if nr.Tile.Kind != rpc.KindFileWell {
-		t.Errorf("kind = %q, want %q", nr.Tile.Kind, rpc.KindFileWell)
+	if tile.Kind != rpc.KindFileWell {
+		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindFileWell)
 	}
-	if nr.Tile.FSPath != "/etc" {
-		t.Errorf("fs_path = %q", nr.Tile.FSPath)
+	if tile.FSPath != "/etc" {
+		t.Errorf("fs_path = %q", tile.FSPath)
 	}
 }
 
 func TestCreateProcessWellRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateProcessWell", &rpc.CreateProcessWellRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1,
-		PID: 1,
-	}, &nr)
-	if st != 200 {
-		t.Fatalf("status %d: %s", st, body)
+	_, cl, root := newTestServer(t)
+	tile, err := cl.CreateProcessWell(context.Background(), &rpc.CreateProcessWellRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, PID: 1,
+	})
+	if err != nil {
+		t.Fatalf("create process well: %v", err)
 	}
-	if nr.Tile.Kind != rpc.KindProcessWell {
-		t.Errorf("kind = %q, want %q", nr.Tile.Kind, rpc.KindProcessWell)
+	if tile.Kind != rpc.KindProcessWell {
+		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindProcessWell)
 	}
-	if nr.Tile.PID != 1 {
-		t.Errorf("pid = %d, want 1", nr.Tile.PID)
+	if tile.PID != 1 {
+		t.Errorf("pid = %d, want 1", tile.PID)
 	}
 }
 
 func TestResizeAndSetWellViewRPCs(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	}, &nr); st != 200 {
-		t.Fatal("create")
-	}
-	id := nr.Tile.ID
-	v := nr.Tile.Version
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
 
-	if st, body := callRPC(t, hs, "ResizeTile", &rpc.ResizeTileRequest{
-		Path: rpc.Path{}, TileID: id, Version: v, X: 0, Y: 0, W: 2, H: 2,
-	}, &nr); st != 200 {
-		t.Fatalf("resize: %d %s", st, body)
+	tile, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	v = nr.Tile.Version
+	id, v := tile.ID, tile.Version
 
-	if st, body := callRPC(t, hs, "SetWellView", &rpc.SetWellViewRequest{
-		Path: rpc.Path{}, TileID: id, Version: v, ViewX: 7, ViewY: 8, ViewZoom: 1.5,
-	}, &nr); st != 200 {
-		t.Fatalf("set well view: %d %s", st, body)
+	tile, err = cl.ResizeTile(ctx, &rpc.ResizeTileRequest{
+		TileID: id, Version: v, X: 0, Y: 0, W: 2, H: 2,
+	})
+	if err != nil {
+		t.Fatalf("resize: %v", err)
 	}
-	if nr.Tile.ViewX != 7 || nr.Tile.ViewY != 8 || nr.Tile.ViewZoom != 1.5 {
-		t.Errorf("after set well view: %+v", nr.Tile)
+	v = tile.Version
+
+	tile, err = cl.SetWellView(ctx, &rpc.SetWellViewRequest{
+		TileID: id, Version: v, ViewX: 7, ViewY: 8, ViewZoom: 1.5,
+	})
+	if err != nil {
+		t.Fatalf("set well view: %v", err)
+	}
+	if tile.ViewX != 7 || tile.ViewY != 8 || tile.ViewZoom != 1.5 {
+		t.Errorf("after set well view: %+v", tile)
 	}
 }
 
 func TestSetTextViewRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, body := callRPC(t, hs, "CreateText", &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("hi"),
-	}, &nr); st != 200 {
-		t.Fatalf("create text: %d %s", st, body)
-	}
-	id := nr.Tile.ID
-	v := nr.Tile.Version
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
 
-	if st, body := callRPC(t, hs, "SetTextView", &rpc.SetTextViewRequest{
-		Path: rpc.Path{}, TileID: id, Version: v,
+	tile, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("hi"),
+	})
+	if err != nil {
+		t.Fatalf("create text: %v", err)
+	}
+	id, v := tile.ID, tile.Version
+
+	tile, err = cl.SetTextView(ctx, &rpc.SetTextViewRequest{
+		TileID: id, Version: v,
 		TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: rpc.TextModeRendered,
-	}, &nr); st != 200 {
-		t.Fatalf("set text view: %d %s", st, body)
+	})
+	if err != nil {
+		t.Fatalf("set text view: %v", err)
 	}
-	if nr.Tile.TextX != 1 || nr.Tile.TextY != 2 || nr.Tile.TextW != 3 || nr.Tile.TextH != 4 {
-		t.Errorf("after set text view: %+v", nr.Tile)
+	if tile.TextX != 1 || tile.TextY != 2 || tile.TextW != 3 || tile.TextH != 4 {
+		t.Errorf("after set text view: %+v", tile)
 	}
-	if nr.Tile.TextMode != rpc.TextModeRendered {
-		t.Errorf("text_mode = %q, want %q", nr.Tile.TextMode, rpc.TextModeRendered)
+	if tile.TextMode != rpc.TextModeRendered {
+		t.Errorf("text_mode = %q, want %q", tile.TextMode, rpc.TextModeRendered)
 	}
 }
 
 func TestSetRootViewRPC(t *testing.T) {
-	hs, _ := newTestServer(t)
-	var resp rpc.SetRootViewResponse
-	if st, body := callRPC(t, hs, "SetRootView", &rpc.SetRootViewRequest{
-		Cx: 3, Cy: 4, Zoom: 2,
-	}, &resp); st != 200 {
-		t.Fatalf("set root view: %d %s", st, body)
-	}
+	_, cl, _ := newTestServer(t)
+	ctx := context.Background()
 
-	var br rpc.BootstrapResponse
-	if st, body := callRPC(t, hs, "Bootstrap", &rpc.BootstrapRequest{}, &br); st != 200 {
-		t.Fatalf("bootstrap: %d %s", st, body)
+	if err := cl.SetRootView(ctx, &rpc.SetRootViewRequest{Cx: 3, Cy: 4, Zoom: 2}); err != nil {
+		t.Fatalf("set root view: %v", err)
+	}
+	br, err := cl.Bootstrap(ctx)
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
 	}
 	if br.RootViewCx != 3 || br.RootViewCy != 4 || br.RootZoom != 2 {
 		t.Errorf("after SetRootView, bootstrap = %+v", br)
@@ -177,158 +169,127 @@ func TestSetRootViewRPC(t *testing.T) {
 }
 
 func TestDeleteTileRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	}, &nr); st != 200 {
-		t.Fatal("create")
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
+	tile, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	id := nr.Tile.ID
-	v := nr.Tile.Version
-
-	var dr rpc.DeleteTileResponse
-	if st, body := callRPC(t, hs, "DeleteTile", &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, TileID: id, Version: v,
-	}, &dr); st != 200 {
-		t.Fatalf("delete: %d %s", st, body)
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
+		t.Fatalf("delete: %v", err)
 	}
 }
 
 func TestUpdateTextRPC(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateText", &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("v1"),
-	}, &nr); st != 200 {
-		t.Fatal("create text")
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
+	tile, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("v1"),
+	})
+	if err != nil {
+		t.Fatalf("create text: %v", err)
 	}
-	id := nr.Tile.ID
-	v := nr.Tile.Version
-
-	if st, body := callRPC(t, hs, "UpdateText", &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: id, Version: v, Data: []byte("v2"),
-	}, &nr); st != 200 {
-		t.Fatalf("update: %d %s", st, body)
+	tile, err = cl.UpdateText(ctx, &rpc.UpdateTextRequest{
+		TileID: tile.ID, Version: tile.Version, Data: []byte("v2"),
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
 	}
-
-	var br rpc.GetBlobResponse
-	if st, _ := callRPC(t, hs, "GetBlob", &rpc.GetBlobRequest{BlobID: nr.Tile.BlobID}, &br); st != 200 {
-		t.Fatal("get blob")
+	data, err := cl.GetBlob(ctx, tile.BlobID)
+	if err != nil {
+		t.Fatalf("get blob: %v", err)
 	}
-	if string(br.Data) != "v2" {
-		t.Errorf("blob = %q, want v2", br.Data)
+	if string(data) != "v2" {
+		t.Errorf("blob = %q, want v2", data)
 	}
 }
 
 func TestCloneAndMoveRPCs(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	}, &nr); st != 200 {
-		t.Fatal("create")
-	}
-	src := nr.Tile.ID
-	srcV := nr.Tile.Version
-
-	if st, body := callRPC(t, hs, "CloneTile", &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: src, Version: srcV,
-		DestGridID: root, DestPath: rpc.Path{},
-		X: 5, Y: 5,
-	}, &nr); st != 200 {
-		t.Fatalf("clone: %d %s", st, body)
-	}
-	clone := nr.Tile.ID
-	cloneV := nr.Tile.Version
-
-	var mr rpc.TileResponse
-	if st, body := callRPC(t, hs, "MoveTile", &rpc.MoveTileRequest{
-		Path: rpc.Path{}, TileID: clone, Version: cloneV,
-		DestGridID: root, DestPath: rpc.Path{},
-		X: 8, Y: 8,
-	}, &mr); st != 200 {
-		t.Fatalf("move: %d %s", st, body)
-	}
-	if mr.Tile.X != 8 || mr.Tile.Y != 8 {
-		t.Errorf("moved to %+v", mr.Tile)
-	}
-}
-
-func TestMethodNotAllowed(t *testing.T) {
-	hs, _ := newTestServer(t)
-	r, _ := http.NewRequest(http.MethodGet, hs.URL+"/rpc/Bootstrap", nil)
-	resp, err := http.DefaultClient.Do(r)
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
+	tile, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("create: %v", err)
 	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("status = %d, want 405", resp.StatusCode)
+	clone, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: tile.ID, Version: tile.Version,
+		DestGridID: root, X: 5, Y: 5,
+	})
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	moved, err := cl.MoveTile(ctx, &rpc.MoveTileRequest{
+		TileID: clone.ID, Version: clone.Version,
+		DestGridID: root, X: 8, Y: 8,
+	})
+	if err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	if moved.X != 8 || moved.Y != 8 {
+		t.Errorf("moved to %+v", moved)
 	}
 }
 
-func TestErrorStatusMapping(t *testing.T) {
-	hs, root := newTestServer(t)
+// TestErrorCodeMapping confirms store errors surface as the right
+// Connect error codes — the wire equivalent of the old HTTP-status
+// mapping.
+func TestErrorCodeMapping(t *testing.T) {
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
 
-	// Create one tile, then create another overlapping it: ErrOverlap → 409.
-	var nr rpc.TileResponse
-	if st, body := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2,
-	}, &nr); st != 200 {
-		t.Fatalf("first create: %d %s", st, body)
+	if _, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: root, X: 0, Y: 0, W: 2, H: 2,
+	}); err != nil {
+		t.Fatalf("first create: %v", err)
 	}
-	st, _ := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 1, Y: 1, W: 1, H: 1,
-	}, nil)
-	if st != http.StatusConflict {
-		t.Errorf("overlap: status %d, want 409", st)
+	// Overlap → FailedPrecondition.
+	_, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: root, X: 1, Y: 1, W: 1, H: 1,
+	})
+	if got := errCode(err); got != connect.CodeFailedPrecondition {
+		t.Errorf("overlap: code %v, want FailedPrecondition", got)
 	}
 
-	// Invalid path: bogus well id → 400.
-	st, _ = callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
+	// Invalid path (bogus well id) → InvalidArgument.
+	_, err = cl.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []int64{99}},
 		GridID: 1, X: 10, Y: 10, W: 1, H: 1,
-	}, nil)
-	if st != http.StatusBadRequest {
-		t.Errorf("invalid path: status %d, want 400", st)
+	})
+	if got := errCode(err); got != connect.CodeInvalidArgument {
+		t.Errorf("invalid path: code %v, want InvalidArgument", got)
 	}
 
-	// Invalid argument: non-http URL → 400.
-	st, _ = callRPC(t, hs, "CreateURL", &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 10, Y: 10, W: 1, H: 1, URL: "ftp://evil.example.com",
-	}, nil)
-	if st != http.StatusBadRequest {
-		t.Errorf("bad url: status %d, want 400", st)
+	// Non-http URL → InvalidArgument.
+	_, err = cl.CreateURL(ctx, &rpc.CreateURLRequest{
+		GridID: root, X: 10, Y: 10, W: 1, H: 1, URL: "ftp://evil.example.com",
+	})
+	if got := errCode(err); got != connect.CodeInvalidArgument {
+		t.Errorf("bad url: code %v, want InvalidArgument", got)
 	}
 }
 
 func TestBootstrapIncludesRootView(t *testing.T) {
-	hs, root := newTestServer(t)
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
 
-	var resp rpc.BootstrapResponse
-	if st, body := callRPC(t, hs, "Bootstrap", &rpc.BootstrapRequest{}, &resp); st != 200 {
-		t.Fatalf("bootstrap: %d %s", st, body)
+	resp, err := cl.Bootstrap(ctx)
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
 	}
 	if resp.RootGridID != root {
 		t.Errorf("root_grid_id = %d, want %d", resp.RootGridID, root)
 	}
-	// Default seed: (0, 0, 1).
 	if resp.RootViewCx != 0 || resp.RootViewCy != 0 || resp.RootZoom != 1 {
 		t.Errorf("initial bootstrap view = (%v,%v,%v), want (0,0,1)",
 			resp.RootViewCx, resp.RootViewCy, resp.RootZoom)
 	}
 
-	if st, body := callRPC(t, hs, "SetRootView", &rpc.SetRootViewRequest{
-		Cx: 11, Cy: 22, Zoom: 3,
-	}, &rpc.SetRootViewResponse{}); st != 200 {
-		t.Fatalf("set root view: %d %s", st, body)
+	if err := cl.SetRootView(ctx, &rpc.SetRootViewRequest{Cx: 11, Cy: 22, Zoom: 3}); err != nil {
+		t.Fatalf("set root view: %v", err)
 	}
-
-	if st, body := callRPC(t, hs, "Bootstrap", &rpc.BootstrapRequest{}, &resp); st != 200 {
-		t.Fatalf("bootstrap 2: %d %s", st, body)
+	resp, err = cl.Bootstrap(ctx)
+	if err != nil {
+		t.Fatalf("bootstrap 2: %v", err)
 	}
 	if resp.RootViewCx != 11 || resp.RootViewCy != 22 || resp.RootZoom != 3 {
 		t.Errorf("after SetRootView, bootstrap = (%v,%v,%v), want (11,22,3)",
@@ -336,30 +297,29 @@ func TestBootstrapIncludesRootView(t *testing.T) {
 	}
 }
 
-func TestVersionConflictReturns409(t *testing.T) {
-	hs, root := newTestServer(t)
+func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
 
-	var nr rpc.TileResponse
-	if st, body := callRPC(t, hs, "CreateText", &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("v1"),
-	}, &nr); st != 200 {
-		t.Fatalf("create: %d %s", st, body)
+	tile, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("v1"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	id := nr.Tile.ID
-	good := nr.Tile.Version
+	good := tile.Version
 
-	// Bump version once via a successful UpdateText.
-	if st, body := callRPC(t, hs, "UpdateText", &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: id, Version: good, Data: []byte("v2"),
-	}, &nr); st != 200 {
-		t.Fatalf("first update: %d %s", st, body)
+	// Bump version via a successful UpdateText.
+	if _, err := cl.UpdateText(ctx, &rpc.UpdateTextRequest{
+		TileID: tile.ID, Version: good, Data: []byte("v2"),
+	}); err != nil {
+		t.Fatalf("first update: %v", err)
 	}
-
-	// Now retry with the stale claimed version: must 409.
-	st, body := callRPC(t, hs, "UpdateText", &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: id, Version: good, Data: []byte("v3"),
-	}, nil)
-	if st != http.StatusConflict {
-		t.Errorf("stale version: status %d body=%s, want 409", st, body)
+	// Retry with stale claimed version.
+	_, err = cl.UpdateText(ctx, &rpc.UpdateTextRequest{
+		TileID: tile.ID, Version: good, Data: []byte("v3"),
+	})
+	if got := errCode(err); got != connect.CodeFailedPrecondition {
+		t.Errorf("stale version: code %v, want FailedPrecondition", got)
 	}
 }

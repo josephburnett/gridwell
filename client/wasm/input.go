@@ -3,9 +3,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"math"
 	"slices"
 	"syscall/js"
+
+	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
@@ -838,7 +842,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 
 	// Left-drag is always a move; clone is handled by the right-drag path
 	// (commitRightClone in right_button.go) and never reaches here.
-	a.postCrossGridMutate("MoveTile", srcGridID, dstGridID, rpc.MoveTileRequest{
+	req := &rpc.MoveTileRequest{
 		Path:       rpc.Path{WellIDs: srcPath},
 		TileID:     d.tileID,
 		Version:    version,
@@ -846,6 +850,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		DestPath:   rpc.Path{WellIDs: dstPath},
 		X:          dropX,
 		Y:          dropY,
+	}
+	a.postCrossGridMutate("MoveTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.MoveTile(ctx, req)
 	}, d)
 	a.draw()
 	return nil
@@ -1461,13 +1468,16 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 	})
 
 	parentGridID := a.gridIDForPath(parentPath)
-	a.postPersist("SetWellView", parentGridID, rpc.SetWellViewRequest{
+	req := &rpc.SetWellViewRequest{
 		Path:     rpc.Path{WellIDs: slices.Clone(parentPath)},
 		TileID:   well.ID,
 		Version:  well.Version,
 		ViewX:    newViewX,
 		ViewY:    newViewY,
 		ViewZoom: newViewZoom,
+	}
+	a.postPersist("SetWellView", parentGridID, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.SetWellView(ctx, req)
 	})
 }
 
@@ -1521,7 +1531,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		curVersion := file.Version
 		// Update content first if the user was editing.
 		if hasBuf {
-			tile, ok := a.postUpdateText(gid, rpc.UpdateTextRequest{
+			tile, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
 				Path:    rpc.Path{WellIDs: path},
 				TileID:  file.ID,
 				Version: curVersion,
@@ -1534,7 +1544,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		}
 		// Persist the framed window + mode so re-descent and the preview
 		// honor "however you left it" across reloads.
-		a.doTileMutate("SetTextView", gid, rpc.SetTextViewRequest{
+		req := &rpc.SetTextViewRequest{
 			Path:     rpc.Path{WellIDs: path},
 			TileID:   file.ID,
 			Version:  curVersion,
@@ -1543,6 +1553,9 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			TextW:    viewW,
 			TextH:    viewH,
 			TextMode: mode,
+		}
+		a.doTileMutate("SetTextView", gid, func(ctx context.Context) (*rpc.Tile, error) {
+			return a.cl.SetTextView(ctx, req)
 		})
 	}()
 }
@@ -1662,23 +1675,45 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	a.menuOpen = false
 }
 
+// tileCall is the closure shape every tile-producing mutation takes.
+// Callers wrap the matching a.cl method (CreateText, MoveTile, etc.)
+// so the dispatcher helpers don't need to know the request type.
+type tileCall func(ctx context.Context) (*rpc.Tile, error)
+
+// voidCall is the closure shape for mutations that return no tile
+// (DeleteTile, SetRootView).
+type voidCall func(ctx context.Context) error
+
+// isVersionConflict reports whether an RPC error came back with the
+// FailedPrecondition code Connect uses for both ErrVersionConflict and
+// ErrOverlap. Either case warrants a cache-resync via grid refetch.
+func isVersionConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		return ce.Code() == connect.CodeFailedPrecondition
+	}
+	return false
+}
+
 // postCrossGridMutate is the shared body of left-drag (MoveTile) and
-// right-drag (CloneTile) ghost commits. Both POST a request that
-// touches two grids (source + destination), and both have to roll
-// the ghost back to its origin on failure so the user sees the
-// stone return instead of vanishing.
+// right-drag (CloneTile) ghost commits. Both call an RPC that touches
+// two grids (source + destination), and both have to roll the ghost
+// back to its origin on failure so the user sees the stone return
+// instead of vanishing.
 //
-// On success it refetches both grids; on any non-200 (409 or other)
-// it triggers a refetch of the source grid and snaps the dragged
-// ghost back. `kind` is the bare method name ("MoveTile",
-// "CloneTile") used for the URL and the conflict-log breadcrumb.
-func (a *App) postCrossGridMutate(kind string, srcGridID, dstGridID int64, req any, d *dragState) {
+// On success it refetches both grids; on any error it triggers a
+// refetch of the source grid (if version-conflict) and snaps the
+// dragged ghost back. `label` is the breadcrumb name for the
+// conflict log.
+func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID int64, call tileCall, d *dragState) {
 	go func() {
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/"+kind, req, &resp)
-		if status != 200 {
-			if status == 409 {
-				a.refetchGridOnConflict(srcGridID, kind)
+		_, err := call(context.Background())
+		if err != nil {
+			if isVersionConflict(err) {
+				a.refetchGridOnConflict(srcGridID, label)
 			}
 			a.snapBackToOrigin(d)
 			return
@@ -1689,16 +1724,13 @@ func (a *App) postCrossGridMutate(kind string, srcGridID, dstGridID int64, req a
 }
 
 // postPersist runs a "save my local view" RPC: the caller has already
-// patched the cache, the server-side write is the durable mirror.
-// Successful 200 needs no follow-up; a 409 refetches the grid to pull
-// the authoritative state. Used by SetWellView, where the cache has
-// already been updated optimistically before the goroutine fires.
-func (a *App) postPersist(kind string, gid int64, req any) {
+// patched the cache, the server-side write is the durable mirror. Used
+// by SetWellView, where the cache has already been updated
+// optimistically before the goroutine fires.
+func (a *App) postPersist(label string, gid int64, call tileCall) {
 	go func() {
-		var resp rpc.TileResponse
-		status, _ := postJSON("/rpc/"+kind, req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(gid, kind)
+		if _, err := call(context.Background()); err != nil && isVersionConflict(err) {
+			a.refetchGridOnConflict(gid, label)
 		}
 	}()
 }
@@ -1708,12 +1740,10 @@ func (a *App) postPersist(kind string, gid int64, req any) {
 // a failed delete still needs the cache refreshed but there's no
 // ghost to roll back to. Skips the dstGrid refetch when it equals
 // srcGrid (delete onto a black hole in the same grid).
-func (a *App) postTwoGridMutate(kind string, srcGridID, dstGridID int64, req any) {
+func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID int64, call voidCall) {
 	go func() {
-		var resp rpc.DeleteTileResponse
-		status, _ := postJSON("/rpc/"+kind, req, &resp)
-		if status == 409 {
-			a.refetchGridOnConflict(srcGridID, kind)
+		if err := call(context.Background()); err != nil && isVersionConflict(err) {
+			a.refetchGridOnConflict(srcGridID, label)
 		}
 		a.fetchGrid(srcGridID)
 		if dstGridID != 0 && dstGridID != srcGridID {
@@ -1723,50 +1753,45 @@ func (a *App) postTwoGridMutate(kind string, srcGridID, dstGridID int64, req any
 }
 
 // postUpdateText fires an UpdateText RPC and, on success, replaces the
-// cached blob so renderers reflect the new content immediately. On 409
-// it triggers a grid refetch. Returns the updated tile and ok=true on
-// success; ok=false on any failure (callers should stop further work).
-//
-// Callers vary in what they do *after* a successful update — bump a
-// version counter, fetch one or two grids, descend into the tile — so
-// this helper stops at the common steps (POST + PutBlob) and lets the
-// caller chain whatever else is needed.
-func (a *App) postUpdateText(gid int64, req rpc.UpdateTextRequest, newContent []byte) (rpc.Tile, bool) {
-	var resp rpc.TileResponse
-	status, _ := postJSON("/rpc/UpdateText", req, &resp)
-	if status != 200 {
-		if status == 409 {
+// cached blob so renderers reflect the new content immediately. On
+// version-conflict it triggers a grid refetch. Returns the updated
+// tile and ok=true on success; ok=false on any failure (callers
+// should stop further work).
+func (a *App) postUpdateText(gid int64, req *rpc.UpdateTextRequest, newContent []byte) (rpc.Tile, bool) {
+	tile, err := a.cl.UpdateText(context.Background(), req)
+	if err != nil {
+		if isVersionConflict(err) {
 			a.refetchGridOnConflict(gid, "UpdateText")
 		}
 		return rpc.Tile{}, false
 	}
-	a.c.PutBlob(resp.Tile.BlobID, newContent)
-	return resp.Tile, true
+	a.c.PutBlob(tile.BlobID, newContent)
+	return *tile, true
 }
 
 // doTileMutate is the synchronous core of a single-grid tile RPC.
-// It POSTs req to /rpc/<kind>, expects a TileResponse, and on 409
-// version-conflict triggers a grid refetch and returns ok=false (so
-// callers can stop early). On success it schedules a grid refetch so
-// the cache catches up to the server's authoritative tile state and
-// returns the response tile. All "Create<X>", "ResizeTile",
-// "SetTextView" calls fit this shape.
-func (a *App) doTileMutate(kind string, gid int64, req any) (rpc.Tile, bool) {
-	var resp rpc.TileResponse
-	status, _ := postJSON("/rpc/"+kind, req, &resp)
-	if status == 409 {
-		a.refetchGridOnConflict(gid, kind)
+// On version-conflict it triggers a grid refetch and returns
+// ok=false (so callers can stop early). On success it schedules a
+// grid refetch so the cache catches up to the server's authoritative
+// tile state and returns the response tile. All "Create<X>",
+// "ResizeTile", "SetTextView" calls fit this shape.
+func (a *App) doTileMutate(label string, gid int64, call tileCall) (rpc.Tile, bool) {
+	tile, err := call(context.Background())
+	if err != nil {
+		if isVersionConflict(err) {
+			a.refetchGridOnConflict(gid, label)
+		}
 		return rpc.Tile{}, false
 	}
 	a.fetchGrid(gid)
-	return resp.Tile, true
+	return *tile, true
 }
 
 // postTileMutate runs doTileMutate in a goroutine; onSuccess (if
 // non-nil) fires once the success-path refetch is scheduled.
-func (a *App) postTileMutate(kind string, gid int64, req any, onSuccess func(rpc.Tile)) {
+func (a *App) postTileMutate(label string, gid int64, call tileCall, onSuccess func(rpc.Tile)) {
 	go func() {
-		if tile, ok := a.doTileMutate(kind, gid, req); ok && onSuccess != nil {
+		if tile, ok := a.doTileMutate(label, gid, call); ok && onSuccess != nil {
 			onSuccess(tile)
 		}
 	}()
@@ -1776,9 +1801,12 @@ func (a *App) postTileMutate(kind string, gid int64, req any, onSuccess func(rpc
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
-	a.postTileMutate("CreateWell", gid, rpc.CreateWellRequest{
+	req := &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	}
+	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateWell(ctx, req)
 	}, nil)
 }
 
@@ -1787,10 +1815,13 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
-	a.postTileMutate("CreateText", gid, rpc.CreateTextRequest{
+	req := &rpc.CreateTextRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		Data: data,
+	}
+	a.postTileMutate("CreateText", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateText(ctx, req)
 	}, nil)
 }
 
@@ -1804,10 +1835,13 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
 	paneID := p.ID
-	a.postTileMutate("CreateURL", gid, rpc.CreateURLRequest{
+	req := &rpc.CreateURLRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		URL: url,
+	}
+	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateURL(ctx, req)
 	}, func(tile rpc.Tile) {
 		// Auto-descend + auto-go-live: the user just typed a URL and
 		// confirmed, which is an unambiguous "load this now" intent.
@@ -1836,9 +1870,12 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
-	a.postTileMutate("CreateBlackHole", gid, rpc.CreateBlackHoleRequest{
+	req := &rpc.CreateBlackHoleRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	}
+	a.postTileMutate("CreateBlackHole", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateBlackHole(ctx, req)
 	}, nil)
 }
 
@@ -1848,10 +1885,13 @@ func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
 func (a *App) createFileWellAtCell(p *pane.Pane, fsPath string, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
-	a.postTileMutate("CreateFileWell", gid, rpc.CreateFileWellRequest{
+	req := &rpc.CreateFileWellRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		FSPath: fsPath,
+	}
+	a.postTileMutate("CreateFileWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateFileWell(ctx, req)
 	}, nil)
 }
 
@@ -1860,10 +1900,13 @@ func (a *App) createFileWellAtCell(p *pane.Pane, fsPath string, cellX, cellY int
 func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
-	a.postTileMutate("CreateProcessWell", gid, rpc.CreateProcessWellRequest{
+	req := &rpc.CreateProcessWellRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		PID: pid,
+	}
+	a.postTileMutate("CreateProcessWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateProcessWell(ctx, req)
 	}, nil)
 }
 

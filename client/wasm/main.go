@@ -8,9 +8,10 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"strconv"
 	"syscall/js"
+	"time"
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
@@ -46,6 +47,10 @@ type App struct {
 	doc, win js.Value
 	canvas   js.Value
 	cctx     js.Value // 2d context
+
+	// cl is the Connect-RPC client pointed at the same origin we were
+	// served from. All server reads and mutations go through it.
+	cl *rpc.Client
 
 	rootGridID int64
 	// Seeded from Bootstrap and refreshed by scheduleRootViewSave.
@@ -351,9 +356,11 @@ type dragState struct {
 const dragThreshold = 4.0
 
 func main() {
+	origin := js.Global().Get("location").Get("origin").String()
 	app = &App{
 		doc:            js.Global().Get("document"),
 		win:            js.Global().Get("window"),
+		cl:             rpc.NewDefaultClient(origin),
 		c:              cache.New(),
 		selectedTileID: map[string]int64{},
 		menuHover:      -1,
@@ -398,8 +405,8 @@ func main() {
 // bootstrap fetches the current root grid id from the server, then starts
 // the rest of the client.
 func (a *App) bootstrap() {
-	var resp rpc.BootstrapResponse
-	if status, err := postJSON("/rpc/Bootstrap", rpc.BootstrapRequest{}, &resp); err != nil || status != 200 {
+	resp, err := a.cl.Bootstrap(context.Background())
+	if err != nil {
 		return
 	}
 	a.rootGridID = resp.RootGridID
@@ -476,9 +483,8 @@ func (a *App) fetchGrid(id int64) {
 	delete(a.gridLoadFailed, id)
 	go func() {
 		defer delete(a.gridInflight, id)
-		var resp rpc.GetGridResponse
-		status, err := postJSON("/rpc/GetGrid", rpc.GetGridRequest{GridID: id}, &resp)
-		if err != nil || status != 200 {
+		resp, err := a.cl.GetGrid(context.Background(), id)
+		if err != nil {
 			a.gridLoadFailed[id] = true
 			a.draw()
 			return
@@ -632,25 +638,33 @@ func (a *App) popPaneState(paneID string) *paneState {
 	return &last
 }
 
-// startSSE opens the EventSource for /rpc/Subscribe and applies events to
-// the cache. Reconnects on close after a backoff.
+// startSSE opens the Connect-streaming Subscribe RPC and applies each
+// inbound event to the local cache. Reconnects after a brief backoff on
+// stream termination so a transient server hiccup doesn't leave the UI
+// stale.
 func (a *App) startSSE() {
-	es := js.Global().Get("EventSource").New("/rpc/Subscribe")
-	es.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
-		raw := args[0].Get("data").String()
-		var ev rpc.Event
-		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-			return nil
+	for {
+		stream, err := a.cl.Subscribe(context.Background())
+		if err != nil {
+			time.Sleep(time.Second)
+			continue
 		}
-		if a.c.Apply(ev) {
-			a.draw()
+		for {
+			ev, ok, err := stream.Recv()
+			if err != nil || !ok {
+				break
+			}
+			if a.c.Apply(ev) {
+				a.draw()
+			}
+			// GridChanged: refetch the affected grid if any pane is looking at it.
+			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
+				a.fetchGrid(ev.GridChanged.GridID)
+			}
 		}
-		// GridChanged: refetch the affected grid if any pane is looking at it.
-		if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
-			a.fetchGrid(ev.GridChanged.GridID)
-		}
-		return nil
-	}))
+		stream.Close()
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // Session-local state: the full UI state — split layout, per-pane

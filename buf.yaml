@@ -1,0 +1,16 @@
+version: v2
+modules:
+  - path: api
+lint:
+  use:
+    - STANDARD
+  except:
+    # Single in-tree service; "GridwellService" reads worse than "Gridwell".
+    - SERVICE_SUFFIX
+    # Multiple Create* RPCs share TileResponse by design.
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    # Server-streaming Subscribe yields Event, not SubscribeResponse.
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE

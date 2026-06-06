@@ -32,7 +32,7 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 
 	tile, err := s.store.GetTile(r.Context(), tileID)
 	if err != nil {
-		writeError(w, err)
+		writeHTTPError(w, err)
 		return
 	}
 

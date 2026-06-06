@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"syscall/js"
 
@@ -305,12 +306,11 @@ func (a *App) fetchURLPreview(tileID int64) {
 		return
 	}
 	go func() {
-		var resp rpc.GetTilePreviewResponse
-		status, err := postJSON("/rpc/GetTilePreview", rpc.GetTilePreviewRequest{TileID: tileID}, &resp)
+		jpeg, err := a.cl.GetTilePreview(context.Background(), tileID)
 		a.urlPreview.ClearPending(tileID)
-		if err != nil || status != 200 || len(resp.JPEG) == 0 {
+		if err != nil || len(jpeg) == 0 {
 			return
 		}
-		a.urlPreview.Put(tileID, resp.JPEG, func() { a.draw() })
+		a.urlPreview.Put(tileID, jpeg, func() { a.draw() })
 	}()
 }

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"math"
 	"slices"
 	"syscall/js"
@@ -534,7 +535,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	srcGridID := d.srcGridID
 	tileID := d.tileID
 	version := d.snapshotTile.Version
-	a.postCrossGridMutate("CloneTile", srcGridID, dstGridID, rpc.CloneTileRequest{
+	req := &rpc.CloneTileRequest{
 		Path:       rpc.Path{WellIDs: srcPath},
 		TileID:     tileID,
 		Version:    version,
@@ -542,6 +543,9 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		DestPath:   rpc.Path{WellIDs: dstPath},
 		X:          dropX,
 		Y:          dropY,
+	}
+	a.postCrossGridMutate("CloneTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CloneTile(ctx, req)
 	}, d)
 }
 
@@ -552,10 +556,13 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	if t != nil {
 		dstGridID = t.gridID
 	}
-	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, rpc.DeleteTileRequest{
+	req := &rpc.DeleteTileRequest{
 		Path:    rpc.Path{WellIDs: slices.Clone(d.srcPath)},
 		TileID:  d.tileID,
 		Version: d.snapshotTile.Version,
+	}
+	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, func(ctx context.Context) error {
+		return a.cl.DeleteTile(ctx, req)
 	})
 }
 
@@ -581,7 +588,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 		return
 	}
 	gid := a.gridIDForPath(p.Path)
-	a.postTileMutate("ResizeTile", gid, rpc.ResizeTileRequest{
+	req := &rpc.ResizeTileRequest{
 		Path:    rpc.Path{WellIDs: slices.Clone(p.Path)},
 		TileID:  n.ID,
 		Version: n.Version,
@@ -589,6 +596,9 @@ func (a *App) commitTileResize(rd *rightDragState) {
 		Y:       rd.tileNewY,
 		W:       rd.tileNewW,
 		H:       rd.tileNewH,
+	}
+	a.postTileMutate("ResizeTile", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.ResizeTile(ctx, req)
 	}, nil)
 }
 

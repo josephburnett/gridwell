@@ -3,8 +3,10 @@ module github.com/josephburnett/gridwell
 go 1.26
 
 require (
+	connectrpc.com/connect v1.20.0
 	github.com/coder/websocket v1.8.14
 	github.com/go-rod/rod v0.116.2
+	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.34.4
 )
 

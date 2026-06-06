@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/coder/websocket"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -209,17 +210,14 @@ func (s *fakeSession) captureCount() int {
 // createURLTileViaRPC creates a URL tile through CreateURL.
 func createURLTileViaRPC(t *testing.T, hs *httptest.Server, root int64, url string) int64 {
 	t.Helper()
-	var resp rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateURL", &rpc.CreateURLRequest{
-		Path:   rpc.Path{},
-		GridID: root,
-		X:      0, Y: 0, W: 1, H: 1,
-		URL: url,
-	}, &resp)
-	if st != 200 {
-		t.Fatalf("CreateURL status=%d body=%s", st, body)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	tile, err := cl.CreateURL(context.Background(), &rpc.CreateURLRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: url,
+	})
+	if err != nil {
+		t.Fatalf("CreateURL: %v", err)
 	}
-	return resp.Tile.ID
+	return tile.ID
 }
 
 func urlStreamURL(hs *httptest.Server, tileID int64) string {

@@ -130,7 +130,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 
 	path := slices.Clone(dt.pane.Path)
 	go func() {
-		_, ok := a.postUpdateText(gid, rpc.UpdateTextRequest{
+		_, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: path},
 			TileID:  dt.tileID,
 			Version: dt.version,

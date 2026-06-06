@@ -1,25 +1,26 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
-// newTestServer wires up a Server backed by an in-memory store.
-// Returns the server and the bootstrapped root grid id.
-func newTestServer(t *testing.T) (*httptest.Server, int64) {
+// newTestServer wires up a Server backed by an in-memory store and
+// returns the httptest server, a typed Connect client pointed at it,
+// and the bootstrapped root grid id.
+func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, int64) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -35,43 +36,28 @@ func newTestServer(t *testing.T) (*httptest.Server, int64) {
 	srv := New(st, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
-	return hs, root
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	return hs, cl, root
 }
 
-// callRPC: encode req as JSON, POST to /rpc/<method>, decode resp.
-func callRPC(t *testing.T, hs *httptest.Server, method string, req any, resp any) (int, string) {
-	t.Helper()
-	var body bytes.Buffer
-	if req != nil {
-		if err := json.NewEncoder(&body).Encode(req); err != nil {
-			t.Fatal(err)
-		}
+// errCode extracts the Connect code from an RPC error. Returns 0 for
+// nil errors and CodeInternal for non-Connect errors.
+func errCode(err error) connect.Code {
+	if err == nil {
+		return connect.Code(0)
 	}
-	r, err := http.NewRequest(http.MethodPost, hs.URL+"/rpc/"+method, &body)
-	if err != nil {
-		t.Fatal(err)
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		return ce.Code()
 	}
-	r.Header.Set("Content-Type", "application/json")
-	got, err := http.DefaultClient.Do(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer got.Body.Close()
-	b, _ := io.ReadAll(got.Body)
-	if resp != nil && got.StatusCode == 200 {
-		if err := json.Unmarshal(b, resp); err != nil {
-			t.Fatalf("decode: %v body=%s", err, b)
-		}
-	}
-	return got.StatusCode, string(b)
+	return connect.CodeInternal
 }
 
 func TestBootstrapReturnsRoot(t *testing.T) {
-	hs, root := newTestServer(t)
-	var resp rpc.BootstrapResponse
-	st, body := callRPC(t, hs, "Bootstrap", &rpc.BootstrapRequest{}, &resp)
-	if st != 200 {
-		t.Fatalf("bootstrap status %d: %s", st, body)
+	_, cl, root := newTestServer(t)
+	resp, err := cl.Bootstrap(context.Background())
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
 	}
 	if resp.RootGridID != root {
 		t.Errorf("root_grid_id = %d, want %d", resp.RootGridID, root)
@@ -79,58 +65,66 @@ func TestBootstrapReturnsRoot(t *testing.T) {
 }
 
 func TestCreateWell(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	st, body := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path:   rpc.Path{},
+	_, cl, root := newTestServer(t)
+	tile, err := cl.CreateWell(context.Background(), &rpc.CreateWellRequest{
 		GridID: root, X: 1, Y: 2, W: 1, H: 1,
-	}, &nr)
-	if st != 200 {
-		t.Fatalf("create well: %d %s", st, body)
+	})
+	if err != nil {
+		t.Fatalf("create well: %v", err)
 	}
-	if nr.Tile.Kind != rpc.KindWell {
-		t.Errorf("got %+v", nr.Tile)
+	if tile.Kind != rpc.KindWell {
+		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindWell)
 	}
 }
 
 func TestSubscribeStreamsEvents(t *testing.T) {
-	hs, root := newTestServer(t)
+	_, cl, root := newTestServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-	r, _ := http.NewRequest(http.MethodGet, hs.URL+"/rpc/Subscribe", nil)
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("subscribe status %d", resp.StatusCode)
-	}
-
+	// Subscribe + Recv happens in a goroutine because the underlying
+	// HTTP/1.1 streaming response only flushes headers once the
+	// server sends its first frame — so cl.Subscribe blocks until the
+	// CreateWell below fires. Concurrent setup avoids the deadlock.
+	doneCh := make(chan rpc.Event, 1)
+	errCh := make(chan error, 1)
 	go func() {
-		time.Sleep(50 * time.Millisecond)
-		_, _ = callRPCAsync(hs, "CreateWell", &rpc.CreateWellRequest{
-			Path:   rpc.Path{},
-			GridID: root, X: 0, Y: 0, W: 1, H: 1,
-		})
+		stream, err := cl.Subscribe(ctx)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer stream.Close()
+		ev, ok, err := stream.Recv()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if !ok {
+			errCh <- errors.New("stream ended without an event")
+			return
+		}
+		doneCh <- ev
 	}()
 
-	buf := make([]byte, 4096)
-	doneCh := make(chan int, 1)
-	go func() {
-		n, _ := resp.Body.Read(buf)
-		doneCh <- n
-	}()
+	// Give the goroutine a moment to land its subscribe request on the
+	// server's subscriber list before triggering the event.
+	time.Sleep(100 * time.Millisecond)
+	if _, err := cl.CreateWell(context.Background(), &rpc.CreateWellRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	}); err != nil {
+		t.Fatalf("create well: %v", err)
+	}
+
 	select {
-	case n := <-doneCh:
-		if n == 0 {
-			t.Error("got 0 bytes from SSE stream")
+	case ev := <-doneCh:
+		if ev.Kind != rpc.EventTileChanged && ev.Kind != rpc.EventGridChanged {
+			t.Errorf("first event kind = %q", ev.Kind)
 		}
-		s := string(buf[:n])
-		if !strings.HasPrefix(s, "data: ") {
-			t.Errorf("expected SSE data line, got %q", s)
-		}
-	case <-time.After(2 * time.Second):
-		t.Error("SSE stream produced no event")
+	case err := <-errCh:
+		t.Errorf("stream error: %v", err)
+	case <-ctx.Done():
+		t.Error("subscribe produced no event before timeout")
 	}
 }
 
@@ -179,6 +173,9 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		}
 	}
 
+	// /rpc/ paths not registered by the server (URLStream / WebSocket
+	// is the only /rpc/ route left after the Connect cutover) must 404
+	// rather than fall through to index.html.
 	resp, err := http.Get(hs.URL + "/rpc/Bogus")
 	if err != nil {
 		t.Fatal(err)
@@ -187,19 +184,4 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("/rpc/Bogus status = %d, want 404", resp.StatusCode)
 	}
-}
-
-// callRPCAsync is like callRPC but does not run inside a *testing.T.
-func callRPCAsync(hs *httptest.Server, method string, req any) (int, string) {
-	var body bytes.Buffer
-	_ = json.NewEncoder(&body).Encode(req)
-	r, _ := http.NewRequest(http.MethodPost, hs.URL+"/rpc/"+method, &body)
-	r.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return 0, err.Error()
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, string(b)
 }

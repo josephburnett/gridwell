@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -26,15 +27,15 @@ func getPreview(t *testing.T, hs *httptest.Server, tileID int64, w, h int) (int,
 }
 
 func TestPreviewTilePlaceholderText(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, body := callRPC(t, hs, "CreateText", &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
-	}, &nr); st != 200 {
-		t.Fatalf("create: %d %s", st, body)
+	hs, cl, root := newTestServer(t)
+	tile, err := cl.CreateText(context.Background(), &rpc.CreateTextRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
 
-	st, ct, body := getPreview(t, hs, nr.Tile.ID, 64, 64)
+	st, ct, body := getPreview(t, hs, tile.ID, 64, 64)
 	if st != 200 {
 		t.Fatalf("preview status %d body=%s", st, body)
 	}
@@ -51,49 +52,46 @@ func TestPreviewTilePlaceholderText(t *testing.T) {
 }
 
 // TestPreviewTilePlaceholderBlackHole exercises the blackhole-kind glyph
-// branch of the placeholder renderer, which draws a filled disc.
+// branch of the placeholder renderer.
 func TestPreviewTilePlaceholderBlackHole(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateBlackHole", &rpc.CreateBlackHoleRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	}, &nr); st != 200 {
-		t.Fatal("create blackhole")
+	hs, cl, root := newTestServer(t)
+	tile, err := cl.CreateBlackHole(context.Background(), &rpc.CreateBlackHoleRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("create blackhole: %v", err)
 	}
-
-	st, ct, _ := getPreview(t, hs, nr.Tile.ID, 96, 96)
+	st, ct, _ := getPreview(t, hs, tile.ID, 96, 96)
 	if st != 200 || ct != "image/png" {
 		t.Fatalf("status=%d ct=%q", st, ct)
 	}
 }
 
 func TestPreviewTilePlaceholderWell(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateWell", &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	}, &nr); st != 200 {
-		t.Fatal("create well")
+	hs, cl, root := newTestServer(t)
+	tile, err := cl.CreateWell(context.Background(), &rpc.CreateWellRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("create well: %v", err)
 	}
-
-	st, ct, _ := getPreview(t, hs, nr.Tile.ID, 128, 64)
+	st, ct, _ := getPreview(t, hs, tile.ID, 128, 64)
 	if st != 200 || ct != "image/png" {
 		t.Fatalf("status=%d ct=%q", st, ct)
 	}
 }
 
 func TestPreviewTileURLNoJPEGFallsBack(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateURL", &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
-	}, &nr); st != 200 {
-		t.Fatal("create url")
+	hs, cl, root := newTestServer(t)
+	tile, err := cl.CreateURL(context.Background(), &rpc.CreateURLRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("create url: %v", err)
 	}
-
-	// No live session has run; preview_jpeg is nil. The endpoint should
-	// fall back to the kind-colored placeholder, not 404.
-	st, ct, _ := getPreview(t, hs, nr.Tile.ID, 96, 96)
+	// No live session has run; preview is empty. The endpoint falls
+	// back to the kind-colored placeholder, not 404.
+	st, ct, _ := getPreview(t, hs, tile.ID, 96, 96)
 	if st != 200 {
 		t.Fatalf("status=%d", st)
 	}
@@ -103,7 +101,7 @@ func TestPreviewTileURLNoJPEGFallsBack(t *testing.T) {
 }
 
 func TestPreviewTileBadID(t *testing.T) {
-	hs, _ := newTestServer(t)
+	hs, _, _ := newTestServer(t)
 	got, err := http.Get(hs.URL + "/preview/tile/notanumber")
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +113,7 @@ func TestPreviewTileBadID(t *testing.T) {
 }
 
 func TestPreviewTileNotFound(t *testing.T) {
-	hs, _ := newTestServer(t)
+	hs, _, _ := newTestServer(t)
 	got, err := http.Get(hs.URL + "/preview/tile/999999")
 	if err != nil {
 		t.Fatal(err)
@@ -127,16 +125,16 @@ func TestPreviewTileNotFound(t *testing.T) {
 }
 
 func TestPreviewSizeClamp(t *testing.T) {
-	hs, root := newTestServer(t)
-	var nr rpc.TileResponse
-	if st, _ := callRPC(t, hs, "CreateText", &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("hi"),
-	}, &nr); st != 200 {
-		t.Fatal("create")
+	hs, cl, root := newTestServer(t)
+	tile, err := cl.CreateText(context.Background(), &rpc.CreateTextRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("hi"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
 
 	// Empty/zero → default 192x128.
-	st, _, body := getPreview(t, hs, nr.Tile.ID, 0, 0)
+	st, _, body := getPreview(t, hs, tile.ID, 0, 0)
 	if st != 200 {
 		t.Fatalf("status %d", st)
 	}
@@ -149,7 +147,7 @@ func TestPreviewSizeClamp(t *testing.T) {
 	}
 
 	// Above clamp → 2048.
-	st, _, body = getPreview(t, hs, nr.Tile.ID, 10000, 10000)
+	st, _, body = getPreview(t, hs, tile.ID, 10000, 10000)
 	if st != 200 {
 		t.Fatalf("status %d", st)
 	}
