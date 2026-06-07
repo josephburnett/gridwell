@@ -18,9 +18,9 @@ That is the rule. It decomposes into four invariants:
 
 These are not four rules. They are one rule from four angles.
 
-## The six primitives
+## The seven primitives
 
-Gridwell has six tile kinds:
+Gridwell has seven tile kinds:
 
 - **`text`** — markdown content. Editable. Green outline.
 - **`url`** — a URL. Frozen JPEG preview by default; refresh gesture opens a live browser tab. Purple outline.
@@ -28,15 +28,16 @@ Gridwell has six tile kinds:
 - **`blackhole`** — drops what you drop on it. Deletion is a place. Red outline.
 - **`file-well`** — a view of a directory on the host filesystem. Red outline.
 - **`process-well`** — a view of host processes. Red outline.
+- **`shell`** — an interactive bash session. Frozen JPEG preview by default; refresh gesture spawns a live PTY. The cwd at freeze persists so refresh resumes in the directory the user last `cd`-ed into. Red outline.
 
-Six primitives. Move, clone, resize, and descend over these six cover everything Gridwell does.
+Seven primitives. Move, clone, resize, and descend over these seven cover everything Gridwell does.
 
 ## The color grammar
 
 The outline tells you whether the principle holds inside.
 
 - **Blue** — grid well. Inside is Gridwell.
-- **Red** — exit well. The contents come from outside Gridwell: a directory (file-well), the process table (process-well), or the bit bucket (blackhole). Descent paths still resolve, and gestures still mean the same thing. Contents reflect a world Gridwell does not own.
+- **Red** — exit well. The contents come from outside Gridwell: a directory (file-well), the process table (process-well), the bit bucket (blackhole), or an interactive bash session (shell). Descent paths still resolve, and gestures still mean the same thing. Contents reflect a world Gridwell does not own.
 - **Brown** — root grid. You cannot ascend further.
 - **Green / purple** — content tile kind. Markdown vs URL.
 
@@ -107,7 +108,7 @@ Three rendering paths have to agree for preview = descent = ascent to feel true.
 Do not change these without a real conversation:
 
 - Things stay where you put them.
-- Six primitives.
+- Seven primitives.
 - Color grammar: blue, red, brown, green, purple.
 - Preview = descent = ascent.
 - Identity is `(object_id, version)`.

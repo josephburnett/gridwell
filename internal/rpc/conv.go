@@ -87,6 +87,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		Pid:           t.PID,
 		SourceKey:     t.SourceKey,
 		AltText:       t.AltText,
+		ShellCwd:      t.ShellCwd,
 	}
 }
 
@@ -121,6 +122,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		PID:           t.Pid,
 		SourceKey:     t.SourceKey,
 		AltText:       t.AltText,
+		ShellCwd:      t.ShellCwd,
 	}
 }
 
@@ -240,6 +242,13 @@ func CreateProcessWellToProto(r *CreateProcessWellRequest) *pb.CreateProcessWell
 	return &pb.CreateProcessWellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, Pid: r.PID}
 }
 
+func CreateShellFromProto(r *pb.CreateShellRequest) *CreateShellRequest {
+	return &CreateShellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
+}
+func CreateShellToProto(r *CreateShellRequest) *pb.CreateShellRequest {
+	return &pb.CreateShellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
+}
+
 // Mutation request converters.
 
 func MoveTileFromProto(r *pb.MoveTileRequest) *MoveTileRequest {
@@ -275,6 +284,20 @@ func SetTextViewFromProto(r *pb.SetTextViewRequest) *SetTextViewRequest {
 }
 func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTextViewRequest {
 	return &pb.SetTextViewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}
+}
+
+func SetShellCwdFromProto(r *pb.SetShellCwdRequest) *SetShellCwdRequest {
+	return &SetShellCwdRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, ShellCwd: r.ShellCwd}
+}
+func SetShellCwdToProto(r *SetShellCwdRequest) *pb.SetShellCwdRequest {
+	return &pb.SetShellCwdRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, ShellCwd: r.ShellCwd}
+}
+
+func SetShellPreviewFromProto(r *pb.SetShellPreviewRequest) *SetShellPreviewRequest {
+	return &SetShellPreviewRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, JPEG: r.Jpeg}
+}
+func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetShellPreviewRequest {
+	return &pb.SetShellPreviewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, Jpeg: r.JPEG}
 }
 
 func SetRootViewFromProto(r *pb.SetRootViewRequest) *SetRootViewRequest {

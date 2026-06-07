@@ -25,6 +25,7 @@ const (
 	KindBlackHole   = "blackhole"
 	KindFileWell    = "file-well"
 	KindProcessWell = "process-well"
+	KindShell       = "shell"
 )
 
 // Grid source kinds. NULL ("") means a regular Gridwell-owned grid. fs
@@ -113,6 +114,11 @@ type Tile struct {
 	// content (stripped of markdown markers). Other kinds and tiles
 	// with no derived alt fall back to a default at drop time.
 	AltText string `json:"alt_text,omitempty"`
+	// shell-only: absolute host path the bash session will resume in on
+	// the next refresh. Stamped to $HOME at insert time and overwritten
+	// at freeze with /proc/<bash_pid>/cwd, so 'cd' survives the
+	// freeze/refresh cycle.
+	ShellCwd string `json:"shell_cwd,omitempty"`
 }
 
 // Bootstrap RPC: client asks for the current root grid id and root framing.
@@ -221,6 +227,20 @@ type CreateProcessWellRequest struct {
 	PID    int64 `json:"pid"`
 }
 
+// CreateShellRequest creates a shell tile. The bash session is not
+// started until the user refreshes (matches the URL tile model — drop
+// + descend show the frozen preview placeholder until explicitly
+// activated). The server stamps shell_cwd to $HOME so the first
+// refresh has a starting directory.
+type CreateShellRequest struct {
+	Path   Path  `json:"path"`
+	GridID int64 `json:"grid_id"`
+	X      int64 `json:"x"`
+	Y      int64 `json:"y"`
+	W      int64 `json:"w"`
+	H      int64 `json:"h"`
+}
+
 // Mutations: Version is the claimed current version of TileID.
 // Server returns 409 / ErrVersionConflict if it does not match.
 
@@ -272,6 +292,25 @@ type SetTextViewRequest struct {
 	TextW    int64  `json:"text_w"`
 	TextH    int64  `json:"text_h"`
 	TextMode string `json:"text_mode"`
+}
+
+// SetShellCwdRequest persists the bash PID's last cwd before the
+// session is killed. Called at ascent / shell-stream-close so refresh
+// resumes in the same directory.
+type SetShellCwdRequest struct {
+	Path     Path   `json:"path"`
+	TileID   int64  `json:"tile_id"`
+	Version  int64  `json:"version"`
+	ShellCwd string `json:"shell_cwd"`
+}
+
+// SetShellPreviewRequest stores the JPEG frame captured at ascent as
+// the frozen preview. Bytes are hash-deduped through the blobs table.
+type SetShellPreviewRequest struct {
+	Path    Path   `json:"path"`
+	TileID  int64  `json:"tile_id"`
+	Version int64  `json:"version"`
+	JPEG    []byte `json:"jpeg"`
 }
 
 type SetRootViewRequest struct {

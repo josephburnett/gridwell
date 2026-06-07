@@ -4,7 +4,7 @@ package store
 // is no users/groups/sessions table. The `system` KV table holds singleton
 // state (root grid id and root viewport framing).
 //
-// There are six tile kinds:
+// There are seven tile kinds:
 //   - well       (interior): points at a child Gridwell-owned grid (blue).
 //   - text       (interior): markdown blob (green).
 //   - url        (interior): http(s) URL + frozen JPEG preview (purple).
@@ -13,6 +13,10 @@ package store
 //     list is reconciled against that directory.
 //   - process-well (exit):   points at a host PID; child grid's tile list
 //     is reconciled against the process table.
+//   - shell      (exit):     interactive bash session. Live mode streams a
+//     PTY into the descent overlay; freeze captures a JPEG preview and
+//     terminates the bash process. shell_cwd persists the bash PID's last
+//     /proc/<pid>/cwd so refresh resumes in the same directory.
 //
 // Grids carry an optional (source_kind, source_id): NULL = regular
 // Gridwell-owned, 'fs' = backed by a filesystem path, 'proc' = backed by
@@ -64,7 +68,7 @@ CREATE TABLE IF NOT EXISTS tiles (
     object_id     TEXT NOT NULL,
     version       INTEGER NOT NULL DEFAULT 0,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
-    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','blackhole','file-well','process-well')),
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','blackhole','file-well','process-well','shell')),
     x             INTEGER NOT NULL,
     y             INTEGER NOT NULL,
     w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
@@ -97,6 +101,13 @@ CREATE TABLE IF NOT EXISTS tiles (
     fs_path       TEXT,
     pid           INTEGER,
     source_key    TEXT,
+    -- shell-only: absolute host path the bash session will resume in on
+    -- the next refresh. Captured at freeze time from /proc/<bash_pid>/cwd
+    -- so a session that 'cd /tmp; exit'-equivalent (frozen) still resumes
+    -- in /tmp. Empty until the first freeze; CreateShell stamps the
+    -- server's HOME at insert time so a brand-new shell tile has a
+    -- non-empty starting directory.
+    shell_cwd     TEXT NOT NULL DEFAULT '',
     -- Canonical display label. Stamped at insert time and refreshed by
     -- the source-grid reconciler. The client renders alt_text verbatim
     -- (no derivation). Empty string until something stamps it (e.g. a
@@ -111,6 +122,7 @@ CREATE TABLE IF NOT EXISTS tiles (
     OR (kind = 'blackhole'    AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
     OR (kind = 'file-well'    AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NOT NULL AND pid IS NULL)
     OR (kind = 'process-well' AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NOT NULL)
+    OR (kind = 'shell'        AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
     )
 );
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);

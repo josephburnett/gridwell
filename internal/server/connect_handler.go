@@ -96,6 +96,9 @@ func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Reques
 func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Request[pb.CreateProcessWellRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.CreateProcessWell(ctx, rpc.CreateProcessWellFromProto(req.Msg)))
 }
+func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[pb.CreateShellRequest]) (*connect.Response[pb.TileResponse], error) {
+	return tileResp(h.srv.store.CreateShell(ctx, rpc.CreateShellFromProto(req.Msg)))
+}
 
 func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.MoveTile(ctx, rpc.MoveTileFromProto(req.Msg)))
@@ -111,6 +114,12 @@ func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[p
 }
 func (h *connectHandler) SetTextView(ctx context.Context, req *connect.Request[pb.SetTextViewRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.SetTextView(ctx, rpc.SetTextViewFromProto(req.Msg)))
+}
+func (h *connectHandler) SetShellCwd(ctx context.Context, req *connect.Request[pb.SetShellCwdRequest]) (*connect.Response[pb.TileResponse], error) {
+	return tileResp(h.srv.store.SetShellCwd(ctx, rpc.SetShellCwdFromProto(req.Msg)))
+}
+func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Request[pb.SetShellPreviewRequest]) (*connect.Response[pb.TileResponse], error) {
+	return tileResp(h.srv.store.SetShellPreview(ctx, rpc.SetShellPreviewFromProto(req.Msg)))
 }
 func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
 	if err := h.srv.store.SetRootView(ctx, rpc.SetRootViewFromProto(req.Msg)); err != nil {
@@ -162,7 +171,8 @@ func asConnectError(err error) error {
 		errors.Is(err, store.ErrInvalidPath),
 		errors.Is(err, store.ErrNotURLTile),
 		errors.Is(err, store.ErrNotTextTile),
-		errors.Is(err, store.ErrNotWellTile):
+		errors.Is(err, store.ErrNotWellTile),
+		errors.Is(err, store.ErrNotShellTile):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, store.ErrOverlap),
 		errors.Is(err, store.ErrVersionConflict):

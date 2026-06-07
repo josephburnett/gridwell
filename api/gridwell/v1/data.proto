@@ -89,6 +89,12 @@ message Tile {
   // client. Stamped at insert time and refreshed by the source-grid
   // reconciler.
   string alt_text = 25;
+
+  // shell-only: absolute host path the bash session will resume in on
+  // the next refresh. Captured at freeze time from /proc/<bash_pid>/cwd;
+  // stamped to $HOME at insert time so a fresh shell tile has a starting
+  // directory before the first freeze ever runs.
+  string shell_cwd = 26;
 }
 
 // Bootstrap returns the current root grid id and root framing.
@@ -187,6 +193,40 @@ message CreateProcessWellRequest {
   int64 w = 5;
   int64 h = 6;
   int64 pid = 7;
+}
+
+// CreateShellRequest creates an interactive bash tile. Its initial
+// shell_cwd is the server's HOME; the bash session is not started until
+// the user explicitly refreshes (matches the URL tile model where the
+// Chromium tab is only opened on refresh).
+message CreateShellRequest {
+  Path path = 1;
+  int64 grid_id = 2;
+  int64 x = 3;
+  int64 y = 4;
+  int64 w = 5;
+  int64 h = 6;
+}
+
+// SetShellCwd persists the bash PID's last cwd before the session is
+// killed. Called at ascent / shell-stream-close, so refresh resumes in
+// the same directory the user last 'cd'-ed into.
+message SetShellCwdRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  string shell_cwd = 4;
+}
+
+// SetShellPreview stores the JPEG frame captured at ascent as the
+// frozen preview. Hash-deduped through the blobs table like every other
+// content blob — re-freezing an unchanged shell points at the same blob
+// row, no extra storage.
+message SetShellPreviewRequest {
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  bytes jpeg = 4;
 }
 
 // Mutations: version is the claimed current version of tile_id; the
@@ -312,6 +352,7 @@ service Gridwell {
   rpc CreateBlackHole(CreateBlackHoleRequest) returns (TileResponse);
   rpc CreateFileWell(CreateFileWellRequest) returns (TileResponse);
   rpc CreateProcessWell(CreateProcessWellRequest) returns (TileResponse);
+  rpc CreateShell(CreateShellRequest) returns (TileResponse);
 
   rpc MoveTile(MoveTileRequest) returns (TileResponse);
   rpc CloneTile(CloneTileRequest) returns (TileResponse);
@@ -319,6 +360,8 @@ service Gridwell {
 
   rpc SetWellView(SetWellViewRequest) returns (TileResponse);
   rpc SetTextView(SetTextViewRequest) returns (TileResponse);
+  rpc SetShellCwd(SetShellCwdRequest) returns (TileResponse);
+  rpc SetShellPreview(SetShellPreviewRequest) returns (TileResponse);
   rpc SetRootView(SetRootViewRequest) returns (SetRootViewResponse);
   rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);

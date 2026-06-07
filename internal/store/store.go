@@ -33,6 +33,7 @@ var (
 	ErrNotURLTile      = errors.New("not a URL tile")
 	ErrNotTextTile     = errors.New("not a text tile")
 	ErrNotWellTile     = errors.New("not a well tile")
+	ErrNotShellTile    = errors.New("not a shell tile")
 	ErrVersionConflict = errors.New("version mismatch")
 )
 

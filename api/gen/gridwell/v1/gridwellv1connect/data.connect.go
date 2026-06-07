@@ -68,6 +68,8 @@ const (
 	// GridwellCreateProcessWellProcedure is the fully-qualified name of the Gridwell's
 	// CreateProcessWell RPC.
 	GridwellCreateProcessWellProcedure = "/gridwell.v1.Gridwell/CreateProcessWell"
+	// GridwellCreateShellProcedure is the fully-qualified name of the Gridwell's CreateShell RPC.
+	GridwellCreateShellProcedure = "/gridwell.v1.Gridwell/CreateShell"
 	// GridwellMoveTileProcedure is the fully-qualified name of the Gridwell's MoveTile RPC.
 	GridwellMoveTileProcedure = "/gridwell.v1.Gridwell/MoveTile"
 	// GridwellCloneTileProcedure is the fully-qualified name of the Gridwell's CloneTile RPC.
@@ -78,6 +80,11 @@ const (
 	GridwellSetWellViewProcedure = "/gridwell.v1.Gridwell/SetWellView"
 	// GridwellSetTextViewProcedure is the fully-qualified name of the Gridwell's SetTextView RPC.
 	GridwellSetTextViewProcedure = "/gridwell.v1.Gridwell/SetTextView"
+	// GridwellSetShellCwdProcedure is the fully-qualified name of the Gridwell's SetShellCwd RPC.
+	GridwellSetShellCwdProcedure = "/gridwell.v1.Gridwell/SetShellCwd"
+	// GridwellSetShellPreviewProcedure is the fully-qualified name of the Gridwell's SetShellPreview
+	// RPC.
+	GridwellSetShellPreviewProcedure = "/gridwell.v1.Gridwell/SetShellPreview"
 	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
 	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
 	// GridwellUpdateTextProcedure is the fully-qualified name of the Gridwell's UpdateText RPC.
@@ -100,11 +107,14 @@ type GridwellClient interface {
 	CreateBlackHole(context.Context, *connect.Request[v1.CreateBlackHoleRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error)
+	CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error)
 	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
 	ResizeTile(context.Context, *connect.Request[v1.ResizeTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetWellView(context.Context, *connect.Request[v1.SetWellViewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTextView(context.Context, *connect.Request[v1.SetTextViewRequest]) (*connect.Response[v1.TileResponse], error)
+	SetShellCwd(context.Context, *connect.Request[v1.SetShellCwdRequest]) (*connect.Response[v1.TileResponse], error)
+	SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
@@ -182,6 +192,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("CreateProcessWell")),
 			connect.WithClientOptions(opts...),
 		),
+		createShell: connect.NewClient[v1.CreateShellRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellCreateShellProcedure,
+			connect.WithSchema(gridwellMethods.ByName("CreateShell")),
+			connect.WithClientOptions(opts...),
+		),
 		moveTile: connect.NewClient[v1.MoveTileRequest, v1.TileResponse](
 			httpClient,
 			baseURL+GridwellMoveTileProcedure,
@@ -210,6 +226,18 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellSetTextViewProcedure,
 			connect.WithSchema(gridwellMethods.ByName("SetTextView")),
+			connect.WithClientOptions(opts...),
+		),
+		setShellCwd: connect.NewClient[v1.SetShellCwdRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellSetShellCwdProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetShellCwd")),
+			connect.WithClientOptions(opts...),
+		),
+		setShellPreview: connect.NewClient[v1.SetShellPreviewRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellSetShellPreviewProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetShellPreview")),
 			connect.WithClientOptions(opts...),
 		),
 		setRootView: connect.NewClient[v1.SetRootViewRequest, v1.SetRootViewResponse](
@@ -251,11 +279,14 @@ type gridwellClient struct {
 	createBlackHole   *connect.Client[v1.CreateBlackHoleRequest, v1.TileResponse]
 	createFileWell    *connect.Client[v1.CreateFileWellRequest, v1.TileResponse]
 	createProcessWell *connect.Client[v1.CreateProcessWellRequest, v1.TileResponse]
+	createShell       *connect.Client[v1.CreateShellRequest, v1.TileResponse]
 	moveTile          *connect.Client[v1.MoveTileRequest, v1.TileResponse]
 	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
 	resizeTile        *connect.Client[v1.ResizeTileRequest, v1.TileResponse]
 	setWellView       *connect.Client[v1.SetWellViewRequest, v1.TileResponse]
 	setTextView       *connect.Client[v1.SetTextViewRequest, v1.TileResponse]
+	setShellCwd       *connect.Client[v1.SetShellCwdRequest, v1.TileResponse]
+	setShellPreview   *connect.Client[v1.SetShellPreviewRequest, v1.TileResponse]
 	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
 	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
@@ -312,6 +343,11 @@ func (c *gridwellClient) CreateProcessWell(ctx context.Context, req *connect.Req
 	return c.createProcessWell.CallUnary(ctx, req)
 }
 
+// CreateShell calls gridwell.v1.Gridwell.CreateShell.
+func (c *gridwellClient) CreateShell(ctx context.Context, req *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.createShell.CallUnary(ctx, req)
+}
+
 // MoveTile calls gridwell.v1.Gridwell.MoveTile.
 func (c *gridwellClient) MoveTile(ctx context.Context, req *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.moveTile.CallUnary(ctx, req)
@@ -335,6 +371,16 @@ func (c *gridwellClient) SetWellView(ctx context.Context, req *connect.Request[v
 // SetTextView calls gridwell.v1.Gridwell.SetTextView.
 func (c *gridwellClient) SetTextView(ctx context.Context, req *connect.Request[v1.SetTextViewRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.setTextView.CallUnary(ctx, req)
+}
+
+// SetShellCwd calls gridwell.v1.Gridwell.SetShellCwd.
+func (c *gridwellClient) SetShellCwd(ctx context.Context, req *connect.Request[v1.SetShellCwdRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.setShellCwd.CallUnary(ctx, req)
+}
+
+// SetShellPreview calls gridwell.v1.Gridwell.SetShellPreview.
+func (c *gridwellClient) SetShellPreview(ctx context.Context, req *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.setShellPreview.CallUnary(ctx, req)
 }
 
 // SetRootView calls gridwell.v1.Gridwell.SetRootView.
@@ -369,11 +415,14 @@ type GridwellHandler interface {
 	CreateBlackHole(context.Context, *connect.Request[v1.CreateBlackHoleRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error)
+	CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error)
 	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
 	ResizeTile(context.Context, *connect.Request[v1.ResizeTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetWellView(context.Context, *connect.Request[v1.SetWellViewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTextView(context.Context, *connect.Request[v1.SetTextViewRequest]) (*connect.Response[v1.TileResponse], error)
+	SetShellCwd(context.Context, *connect.Request[v1.SetShellCwdRequest]) (*connect.Response[v1.TileResponse], error)
+	SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
@@ -447,6 +496,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("CreateProcessWell")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellCreateShellHandler := connect.NewUnaryHandler(
+		GridwellCreateShellProcedure,
+		svc.CreateShell,
+		connect.WithSchema(gridwellMethods.ByName("CreateShell")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellMoveTileHandler := connect.NewUnaryHandler(
 		GridwellMoveTileProcedure,
 		svc.MoveTile,
@@ -475,6 +530,18 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellSetTextViewProcedure,
 		svc.SetTextView,
 		connect.WithSchema(gridwellMethods.ByName("SetTextView")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellSetShellCwdHandler := connect.NewUnaryHandler(
+		GridwellSetShellCwdProcedure,
+		svc.SetShellCwd,
+		connect.WithSchema(gridwellMethods.ByName("SetShellCwd")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellSetShellPreviewHandler := connect.NewUnaryHandler(
+		GridwellSetShellPreviewProcedure,
+		svc.SetShellPreview,
+		connect.WithSchema(gridwellMethods.ByName("SetShellPreview")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellSetRootViewHandler := connect.NewUnaryHandler(
@@ -523,6 +590,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellCreateFileWellHandler.ServeHTTP(w, r)
 		case GridwellCreateProcessWellProcedure:
 			gridwellCreateProcessWellHandler.ServeHTTP(w, r)
+		case GridwellCreateShellProcedure:
+			gridwellCreateShellHandler.ServeHTTP(w, r)
 		case GridwellMoveTileProcedure:
 			gridwellMoveTileHandler.ServeHTTP(w, r)
 		case GridwellCloneTileProcedure:
@@ -533,6 +602,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellSetWellViewHandler.ServeHTTP(w, r)
 		case GridwellSetTextViewProcedure:
 			gridwellSetTextViewHandler.ServeHTTP(w, r)
+		case GridwellSetShellCwdProcedure:
+			gridwellSetShellCwdHandler.ServeHTTP(w, r)
+		case GridwellSetShellPreviewProcedure:
+			gridwellSetShellPreviewHandler.ServeHTTP(w, r)
 		case GridwellSetRootViewProcedure:
 			gridwellSetRootViewHandler.ServeHTTP(w, r)
 		case GridwellUpdateTextProcedure:
@@ -590,6 +663,10 @@ func (UnimplementedGridwellHandler) CreateProcessWell(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateProcessWell is not implemented"))
 }
 
+func (UnimplementedGridwellHandler) CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateShell is not implemented"))
+}
+
 func (UnimplementedGridwellHandler) MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.MoveTile is not implemented"))
 }
@@ -608,6 +685,14 @@ func (UnimplementedGridwellHandler) SetWellView(context.Context, *connect.Reques
 
 func (UnimplementedGridwellHandler) SetTextView(context.Context, *connect.Request[v1.SetTextViewRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTextView is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetShellCwd(context.Context, *connect.Request[v1.SetShellCwdRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetShellCwd is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetShellPreview is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {

@@ -118,6 +118,13 @@ func (c *Client) CreateProcessWell(ctx context.Context, req *CreateProcessWellRe
 	}
 	return TileFromProto(r.Msg.Tile), nil
 }
+func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
+	r, err := c.cl.CreateShell(ctx, connect.NewRequest(CreateShellToProto(req)))
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(r.Msg.Tile), nil
+}
 
 func (c *Client) MoveTile(ctx context.Context, req *MoveTileRequest) (*Tile, error) {
 	r, err := c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req)))
@@ -149,6 +156,20 @@ func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Til
 }
 func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Tile, error) {
 	r, err := c.cl.SetTextView(ctx, connect.NewRequest(SetTextViewToProto(req)))
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(r.Msg.Tile), nil
+}
+func (c *Client) SetShellCwd(ctx context.Context, req *SetShellCwdRequest) (*Tile, error) {
+	r, err := c.cl.SetShellCwd(ctx, connect.NewRequest(SetShellCwdToProto(req)))
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(r.Msg.Tile), nil
+}
+func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewRequest) (*Tile, error) {
+	r, err := c.cl.SetShellPreview(ctx, connect.NewRequest(SetShellPreviewToProto(req)))
 	if err != nil {
 		return nil, err
 	}
