@@ -18,13 +18,34 @@ import (
 // directory; the production server passes DefaultRoot.
 const DefaultRoot = "/proc"
 
-// Info is the metadata for a single process.
+// Info is the metadata for a single process. Fields beyond the
+// identifier triple (PID/PPID/Name) come from /proc/<pid>/status and
+// /proc/<pid>/cwd; readers that can't resolve a field leave it at its
+// zero value rather than failing the read — a process is allowed to
+// hide bits of its state from a non-privileged reader.
 type Info struct {
 	PID     int64
 	PPID    int64
 	Name    string
 	CmdLine string
 	UID     int64
+	// State is the single-character /proc kernel state ("R", "S", "D",
+	// "Z", etc.) plus the human-readable label the kernel pairs it with
+	// ("R (running)"). Empty if status was unreadable.
+	State string
+	// Threads is the kernel's Threads: count for this thread group.
+	Threads int64
+	// VmRSSKB is resident set size in kilobytes (the "VmRSS:" line).
+	// VmSizeKB is total virtual memory. Both 0 for kernel threads
+	// (whose status omits these) and for processes whose status can't
+	// be read.
+	VmRSSKB  int64
+	VmSizeKB int64
+	// Cwd is the absolute path of the process's current working
+	// directory, resolved through /proc/<pid>/cwd. Empty when the
+	// symlink can't be followed (sandboxed, vanished, permission
+	// denied).
+	Cwd string
 }
 
 // Children returns the direct child processes of parentPID, sorted by
@@ -83,7 +104,11 @@ func listPIDs(procRoot string) ([]int64, error) {
 	return out, nil
 }
 
-// readInfo reads /proc/<pid>/status and /proc/<pid>/cmdline into an Info.
+// readInfo reads /proc/<pid>/status and /proc/<pid>/cmdline into an
+// Info, then resolves /proc/<pid>/cwd best-effort. Status is the only
+// hard dependency: a missing status means the process is gone. cwd
+// failures (sandbox / permission) leave Cwd empty without surfacing an
+// error.
 func readInfo(procRoot string, pid int64) (Info, error) {
 	info := Info{PID: pid}
 	dir := filepath.Join(procRoot, strconv.FormatInt(pid, 10))
@@ -92,6 +117,9 @@ func readInfo(procRoot string, pid int64) (Info, error) {
 	}
 	cmd, _ := os.ReadFile(filepath.Join(dir, "cmdline"))
 	info.CmdLine = formatCmdline(cmd)
+	if cwd, err := os.Readlink(filepath.Join(dir, "cwd")); err == nil {
+		info.Cwd = cwd
+	}
 	return info, nil
 }
 
@@ -113,22 +141,50 @@ func parseStatus(path string, out *Info) error {
 		switch k {
 		case "Name":
 			out.Name = v
+		case "State":
+			// "R (running)" — keep the whole label so callers can
+			// surface a short char (split on whitespace) or the full
+			// label depending on how much room the renderer has.
+			out.State = v
 		case "PPid":
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 				out.PPID = n
 			}
+		case "Threads":
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				out.Threads = n
+			}
+		case "VmRSS":
+			// "VmRSS:\t12345 kB" — kernel always reports in kB. Strip
+			// the unit and parse the number.
+			if n, err := strconv.ParseInt(firstField(v), 10, 64); err == nil {
+				out.VmRSSKB = n
+			}
+		case "VmSize":
+			if n, err := strconv.ParseInt(firstField(v), 10, 64); err == nil {
+				out.VmSizeKB = n
+			}
 		case "Uid":
 			// "Uid:\t1000\t1000\t1000\t1000" — the first field is the
 			// real UID, which is the one to display.
-			fields := strings.Fields(v)
-			if len(fields) > 0 {
-				if n, err := strconv.ParseInt(fields[0], 10, 64); err == nil {
-					out.UID = n
-				}
+			if n, err := strconv.ParseInt(firstField(v), 10, 64); err == nil {
+				out.UID = n
 			}
 		}
 	}
 	return scanner.Err()
+}
+
+// firstField returns the first whitespace-separated token of s, or ""
+// if s is empty. Used to extract the leading numeric column out of
+// "Uid:\t1000\t1000\t1000\t1000" and "VmRSS:\t12345 kB" style fields
+// without allocating a full Fields slice.
+func firstField(s string) string {
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 // splitKV splits a "Key:\tValue" line.
@@ -164,7 +220,14 @@ func stripTrailingNUL(b []byte) []byte {
 
 // MetadataMarkdown returns the descent body for a process info tile —
 // deterministic so its blob hash dedupes across reconciles of an
-// unchanged process.
+// unchanged process. Layout is a small markdown list because the same
+// renderer paints tile previews and descents: a bullet list reads as
+// "process detail" at any zoom without the chrome a table would force.
+//
+// Fields are emitted in stable order. Zero values for optional fields
+// (Cwd, memory, state, threads) are omitted so a tile for a kernel
+// thread doesn't show "vm-size: 0 kB" lines — the rule is "don't render
+// fields we couldn't read".
 func MetadataMarkdown(info Info) string {
 	var b strings.Builder
 	b.WriteString("# ")
@@ -177,8 +240,42 @@ func MetadataMarkdown(info Info) string {
 	fmt.Fprintf(&b, "- pid: %d\n", info.PID)
 	fmt.Fprintf(&b, "- ppid: %d\n", info.PPID)
 	fmt.Fprintf(&b, "- uid: %d\n", info.UID)
+	if info.State != "" {
+		fmt.Fprintf(&b, "- state: %s\n", info.State)
+	}
+	if info.Threads > 0 {
+		fmt.Fprintf(&b, "- threads: %d\n", info.Threads)
+	}
+	if info.VmRSSKB > 0 {
+		fmt.Fprintf(&b, "- rss: %s\n", formatKB(info.VmRSSKB))
+	}
+	if info.VmSizeKB > 0 {
+		fmt.Fprintf(&b, "- vm-size: %s\n", formatKB(info.VmSizeKB))
+	}
+	if info.Cwd != "" {
+		fmt.Fprintf(&b, "- cwd: `%s`\n", info.Cwd)
+	}
 	if info.CmdLine != "" {
 		fmt.Fprintf(&b, "- cmd: `%s`\n", info.CmdLine)
 	}
 	return b.String()
+}
+
+// formatKB turns a kilobyte count into a short human-readable string —
+// "12.3 MiB" for typical process sizes, "120 KiB" when sub-MiB, "1.4
+// GiB" for giants. Binary units because the kernel reports kB but
+// means KiB (1024-byte blocks).
+func formatKB(kb int64) string {
+	const (
+		mib = 1024
+		gib = 1024 * 1024
+	)
+	switch {
+	case kb >= gib:
+		return fmt.Sprintf("%.1f GiB", float64(kb)/float64(gib))
+	case kb >= mib:
+		return fmt.Sprintf("%.1f MiB", float64(kb)/float64(mib))
+	default:
+		return fmt.Sprintf("%d KiB", kb)
+	}
 }

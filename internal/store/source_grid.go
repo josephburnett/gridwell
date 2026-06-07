@@ -198,7 +198,6 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	if err != nil {
 		return err
 	}
-	_ = infoSelf
 	now := s.now().Unix()
 	seen := make(map[string]bool, len(children)+1)
 	layout := newLayoutTracker(existing)
@@ -206,13 +205,24 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 
 	// Synthetic info tile for the well's own PID. Naming it "@info"
 	// (a name no real PID can collide with) keeps the same per-name
-	// reconcile lookup that fs grids use. V1: the @info tile has no
-	// content blob — descent shows just the label until lazy content
-	// loading lands.
+	// reconcile lookup that fs grids use. Body is live /proc metadata
+	// rendered to markdown — refreshed on every reconcile, so each
+	// descent into the proc-well sees current state (memory, cwd,
+	// state). When the process has gone (infoErr != nil from Get) the
+	// @info tile is left as-is until the parent well itself goes away.
 	if infoErr == nil {
 		seen["@info"] = true
-		if _, ok := existing["@info"]; !ok {
-			if err := s.insertProcInfoTile(ctx, tx, g.ID, layout.next(), now, events); err != nil {
+		body := []byte(s.procReader.MetadataMarkdown(infoSelf))
+		if cur, ok := existing["@info"]; ok {
+			refreshed, err := s.refreshProcInfoBlob(ctx, tx, cur, body, now, events)
+			if err != nil {
+				return err
+			}
+			if refreshed {
+				changed = true
+			}
+		} else {
+			if err := s.insertProcInfoTile(ctx, tx, g.ID, layout.next(), body, now, events); err != nil {
 				return err
 			}
 			changed = true
@@ -421,20 +431,30 @@ func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, e
 }
 
 // insertProcInfoTile inserts the synthetic "@info" tile for a
-// process-well's own PID. V1: no content blob; the descent body is
-// empty until lazy content loading is added.
-func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64, pos position, now int64, events *[]rpc.Event) error {
+// process-well's own PID with `body` as its content blob. The blob is
+// content-hashed and refcounted exactly like a user-created text tile,
+// so future reconciles that produce identical markdown dedupe to the
+// same blob row.
+func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64, pos position, body []byte, now int64, events *[]rpc.Event) error {
+	hash := hashBytes(body)
+	blobID, err := putBlob(ctx, tx, hash, body)
+	if err != nil {
+		return err
+	}
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-			source_key, alt_text, created_at, updated_at)
-		VALUES (?, ?, 'text', ?, ?, 1, 1, '@info', ?, ?, ?)`,
-		objID, gridID, pos.x, pos.y, rpc.AltInfo, now, now)
+			blob_id, source_key, alt_text, created_at, updated_at)
+		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, '@info', ?, ?, ?)`,
+		objID, gridID, pos.x, pos.y, blobID, rpc.AltInfo, now, now)
 	if err != nil {
 		return fmt.Errorf("insert proc info tile: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
+		return err
+	}
+	if err := s.incBlobRefcount(ctx, tx, blobID); err != nil {
 		return err
 	}
 	t, err := s.loadTile(ctx, tx, id)
@@ -443,6 +463,46 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 	}
 	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
 	return nil
+}
+
+// refreshProcInfoBlob rebinds an existing @info tile to a new content
+// blob when the live /proc data has changed. Returns true if the tile
+// was rewritten (caller bumps the grid version) or false if the
+// markdown was byte-identical to what was already stored.
+//
+// Idempotent: identical input hashes resolve to the same blob row via
+// putBlob, so the dec-then-inc dance is skipped when nothing changed.
+func (s *Store) refreshProcInfoBlob(ctx context.Context, tx *sql.Tx, cur *rpc.Tile, body []byte, now int64, events *[]rpc.Event) (bool, error) {
+	hash := hashBytes(body)
+	newBlobID, err := putBlob(ctx, tx, hash, body)
+	if err != nil {
+		return false, err
+	}
+	if newBlobID == cur.BlobID {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE tiles SET blob_id = ?, updated_at = ? WHERE id = ?`,
+		newBlobID, now, cur.ID); err != nil {
+		return false, fmt.Errorf("refresh proc info blob: %w", err)
+	}
+	if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
+		return false, err
+	}
+	if cur.BlobID != 0 {
+		if err := s.decBlobRefcount(ctx, tx, cur.BlobID); err != nil {
+			return false, err
+		}
+	}
+	if err := bumpTileVersion(ctx, tx, cur.ID); err != nil {
+		return false, err
+	}
+	t, err := s.loadTile(ctx, tx, cur.ID)
+	if err != nil {
+		return false, err
+	}
+	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
+	return true, nil
 }
 
 func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int64, info procsource.Info, pos position, now int64, events *[]rpc.Event) error {

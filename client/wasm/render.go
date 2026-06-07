@@ -629,6 +629,17 @@ func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
 	return colorGridLineInterior
 }
 
+// tileReadOnly reports whether the user is allowed to edit n's text
+// content. Text tiles whose `source_key` is set are read-only views of
+// host state — file metadata reconciled from /proc, the @info tile in
+// a proc-well — produced by the server's source-grid reconciler. The
+// rendered/raw toggle, the textarea overlay, and the UpdateText round-
+// trip on ascent all consult this so the user can't type into one of
+// these, and a stale local buffer can't be silently re-posted.
+func tileReadOnly(n *rpc.Tile) bool {
+	return n.Kind == rpc.KindText && n.SourceKey != ""
+}
+
 // tileOutside reports whether a tile should be rendered with the "outside
 // Gridwell" treatment (red outline / banner). True when:
 //   - the tile's parent grid is a source-backed grid (fs/proc), so every

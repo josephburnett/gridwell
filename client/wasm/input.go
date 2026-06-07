@@ -1263,6 +1263,16 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	// path goes through urlPreview instead.
 	if file.Kind == rpc.KindText {
 		a.fetchBlob(file.BlobID)
+		// Source-backed text tiles (the @info tile in a proc-well, fs
+		// file metadata) are reconciled server-side from live host
+		// state. Trigger a parent GetGrid so the reconciler runs again
+		// — the response (and the TileChanged event it fires) repoints
+		// the tile at the freshest blob, which the next render frame
+		// fetches automatically. The user briefly sees the previous
+		// snapshot, then it snaps to current.
+		if tileReadOnly(file) {
+			a.fetchGrid(a.gridIDForPath(p.Path))
+		}
 	}
 
 	fileID := file.ID
@@ -1270,12 +1280,19 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	// URL tiles have no text/rendered modes; mode is "" for them so
 	// the textarea overlay (gated on TextMode == "text") never shows.
 	// For text tiles the mode is the one persisted on the tile (server),
-	// defaulting to raw text for a never-opened tile.
+	// defaulting to raw text for a never-opened tile. Source-backed text
+	// tiles (the @info tile, fs file metadata) are read-only — descent
+	// always shows the rendered markdown so the user never sees a
+	// blinking caret over content they can't change.
 	var mode string
 	if file.Kind == rpc.KindText {
-		mode = file.TextMode
-		if mode == "" {
-			mode = rpc.TextModeText
+		if tileReadOnly(file) {
+			mode = rpc.TextModeRendered
+		} else {
+			mode = file.TextMode
+			if mode == "" {
+				mode = rpc.TextModeText
+			}
 		}
 	}
 	a.startTransition(&paneTransition{
@@ -1491,9 +1508,14 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	scrollY := int64(p.TextScrollY + 0.5)
 
 	// Capture the textarea contents (if any) before we tear it down.
+	// Source-backed tiles are read-only — even if a stale TextMode said
+	// "text" and the textarea had a buffer, we must not post it as the
+	// new content (the server would reject it, and the local cache would
+	// be transiently wrong).
+	readOnly := tileReadOnly(&file)
 	var buf string
 	hasBuf := false
-	if p.TextMode == rpc.TextModeText {
+	if !readOnly && p.TextMode == rpc.TextModeText {
 		ta := a.fileTextarea
 		if !ta.IsNull() && !ta.IsUndefined() {
 			buf = ta.Get("value").String()

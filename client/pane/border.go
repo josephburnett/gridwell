@@ -80,6 +80,18 @@ func BorderColor(s BorderInput, c BorderColors) string {
 				}
 				return c.URLFaded
 			case "text":
+				// A text tile that lives in a source-backed grid is a
+				// read-only window onto host state (the @info tile in a
+				// proc-well, file metadata in an fs-well). Its outline
+				// belongs to the Exit family so the frame keeps echoing
+				// the red exit-well that put us here, even at the deepest
+				// text-descent.
+				if s.InSourceGrid {
+					if s.Focused {
+						return c.Exit
+					}
+					return c.ExitFaded
+				}
 				if s.Focused {
 					return c.Text
 				}

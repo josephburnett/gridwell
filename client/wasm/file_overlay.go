@@ -327,6 +327,13 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
+	if tileReadOnly(&file) {
+		// Source-backed text tiles have no editable mode to toggle to —
+		// the body is reconciler output, not user content. Hiding the
+		// glyph keeps the read-only contract visible at a glance.
+		hide()
+		return
+	}
 	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		hide()
@@ -362,6 +369,17 @@ func (a *App) refreshFileOverlay() {
 		// continue to work.
 		a.canvas.Call("focus")
 		return
+	}
+	// Source-backed text tiles are read-only — never show the textarea
+	// even if a stale TextMode says "text". (The mode is server-stored
+	// and can outlive the source-key being set, so this is the only
+	// place we can enforce the invariant client-side.)
+	if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
+		if file, ok := g.Tiles[p.TextFocus]; ok && tileReadOnly(&file) {
+			ta.Get("style").Set("display", "none")
+			a.canvas.Call("focus")
+			return
+		}
 	}
 	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
@@ -467,6 +485,13 @@ const fileSideInset = paneBorderPx
 func (a *App) onToggleFileMode(p *pane.Pane) {
 	if p.TextFocus == 0 {
 		return
+	}
+	// No editable mode for source-backed text — toggle would put us in
+	// a state with a visible textarea over a read-only blob.
+	if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
+		if file, ok := g.Tiles[p.TextFocus]; ok && tileReadOnly(&file) {
+			return
+		}
 	}
 	if p.TextMode == rpc.TextModeText {
 		// Save before switching to rendered.

@@ -310,6 +310,13 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		if n.Kind != rpc.KindText {
 			return ErrNotTextTile
 		}
+		// Source-backed text tiles (fs file metadata, the proc @info
+		// tile) are read-only views of host state: their content is
+		// produced by the reconciler, not the user. Rejecting writes
+		// here means even a misbehaving client can't poison the blob.
+		if n.SourceKey != "" {
+			return fmt.Errorf("%w: source-backed text tiles are read-only", ErrInvalidArgument)
+		}
 		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
 		if err != nil {
 			return err

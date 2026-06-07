@@ -126,11 +126,13 @@ func TestBorderColorSourceGrid(t *testing.T) {
 	}
 }
 
-func TestBorderColorSourceGridYieldsToTextFocus(t *testing.T) {
-	// Descending into a content tile (text/url) inside a source-backed
-	// grid keeps that content tile's color — InSourceGrid is only
-	// consulted when no tile is focused. (Otherwise the user would
-	// lose the "I'm in a text editor" signal.)
+func TestBorderColorTextInSourceGridIsExit(t *testing.T) {
+	// Descending into a text tile inside a source-backed grid (e.g. the
+	// @info tile in a proc-well, or a file-metadata tile in an fs-well)
+	// keeps the red Exit color — the tile is a read-only window onto
+	// host state, not an editor, so green ("I can type here") would lie
+	// to the user. URL tiles still get the URL color because a URL
+	// inside a source grid is still a URL.
 	in := BorderInput{
 		HasTextFocus: true,
 		DescentDepth: 1,
@@ -139,8 +141,12 @@ func TestBorderColorSourceGridYieldsToTextFocus(t *testing.T) {
 		InSourceGrid: true,
 		Focused:      true,
 	}
-	if got := BorderColor(in, testColors()); got != "TEXT" {
-		t.Errorf("text-in-source-grid + focused: got %q, want TEXT", got)
+	if got := BorderColor(in, testColors()); got != "EXIT" {
+		t.Errorf("text-in-source-grid + focused: got %q, want EXIT", got)
+	}
+	in.Focused = false
+	if got := BorderColor(in, testColors()); got != "EXIT_FADED" {
+		t.Errorf("text-in-source-grid + not focused: got %q, want EXIT_FADED", got)
 	}
 }
 

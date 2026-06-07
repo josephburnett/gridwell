@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/procsource"
@@ -243,6 +245,122 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	if !found {
 		t.Errorf("pid 100 tile missing from grid")
 	}
+}
+
+// TestProcInfoBlobPopulatesAndRefreshes covers the @info tile body —
+// the synthetic per-PID metadata tile inside a proc-well. On first
+// reconcile the tile must carry a populated blob with the rendered
+// process metadata; on a subsequent reconcile where the process state
+// has changed (memory grew, command changed), the blob id must move
+// and a new tile version must be observable so the SSE fan-out can
+// reach connected clients.
+func TestProcInfoBlobPopulatesAndRefreshes(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	reader := &stubProcReader{
+		self: map[int64]procsource.Info{
+			1: {PID: 1, PPID: 0, Name: "init", CmdLine: "/sbin/init", VmRSSKB: 1024},
+		},
+	}
+	s.SetSourceReaders(nil, reader, "/proc")
+
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g1, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info1 := findInfoTile(t, g1.Tiles)
+	if info1.BlobID == 0 {
+		t.Fatalf("@info blob_id = 0 after first reconcile, want populated")
+	}
+	body1, err := s.GetBlob(ctx, info1.BlobID)
+	if err != nil {
+		t.Fatalf("get @info blob: %v", err)
+	}
+	if !strings.Contains(string(body1), "init") || !strings.Contains(string(body1), "1.0 MiB") {
+		t.Errorf("@info body missing process fields, got: %q", body1)
+	}
+
+	// Process changes: memory grew, cmdline changed.
+	reader.self[1] = procsource.Info{PID: 1, PPID: 0, Name: "init", CmdLine: "/sbin/init --reload", VmRSSKB: 2048}
+	g2, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info2 := findInfoTile(t, g2.Tiles)
+	if info2.BlobID == info1.BlobID {
+		t.Errorf("@info blob_id unchanged after process state change: %d", info2.BlobID)
+	}
+	if info2.Version <= info1.Version {
+		t.Errorf("@info version did not bump: %d -> %d", info1.Version, info2.Version)
+	}
+	body2, _ := s.GetBlob(ctx, info2.BlobID)
+	if !strings.Contains(string(body2), "--reload") {
+		t.Errorf("refreshed @info body missing new cmdline: %q", body2)
+	}
+
+	// No-change reconcile must NOT bump the version (otherwise every
+	// GetGrid would fire spurious SSE noise on quiet processes).
+	g3, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info3 := findInfoTile(t, g3.Tiles)
+	if info3.Version != info2.Version {
+		t.Errorf("@info version bumped on no-op reconcile: %d -> %d", info2.Version, info3.Version)
+	}
+	if info3.BlobID != info2.BlobID {
+		t.Errorf("@info blob_id changed on no-op reconcile: %d -> %d", info2.BlobID, info3.BlobID)
+	}
+}
+
+// TestUpdateTextRejectsSourceBacked locks in the server-side read-only
+// contract for source-backed text tiles. Even a client that has the
+// correct version of the tile must not be able to overwrite its blob —
+// the body comes from the reconciler.
+func TestUpdateTextRejectsSourceBacked(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	s.SetSourceReaders(nil, &stubProcReader{
+		self: map[int64]procsource.Info{
+			1: {PID: 1, PPID: 0, Name: "init"},
+		},
+	}, "/proc")
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := findInfoTile(t, g.Tiles)
+	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		TileID: info.ID, Version: info.Version, Data: []byte("evil content"),
+	})
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("UpdateText on @info: err = %v, want ErrInvalidArgument", err)
+	}
+}
+
+func findInfoTile(t *testing.T, tiles []rpc.Tile) rpc.Tile {
+	t.Helper()
+	for _, tile := range tiles {
+		if tile.SourceKey == "@info" {
+			return tile
+		}
+	}
+	t.Fatalf("no @info tile in %d tiles", len(tiles))
+	return rpc.Tile{}
 }
 
 // TestProcDisplayName covers the fallback ladder Name → cmdline basename
