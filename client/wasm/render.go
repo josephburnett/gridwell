@@ -69,6 +69,13 @@ const (
 	// live container (vs blackhole's deletion sink).
 	colorExitBorder      = "#c87a5a"
 	colorExitBorderFaded = "#6a4032"
+	// colorExitFill is the body color for a text-kind tile that lives in
+	// or comes from a source-backed grid (the @info tile inside a
+	// process-well, file metadata tiles in fs-grids, source-key-bearing
+	// text clones). Same dark red family as colorExitBorder so the tile
+	// reads as "read-only host view" at every zoom — green fill would
+	// invite editing the body the user cannot edit.
+	colorExitFill = "#3a241a"
 	// colorSourceLabelBg is the translucent strip behind the name label
 	// shown at the top of a tile inside an fs/proc grid. Dark enough that
 	// the red foreground reads clearly over any underlying preview.
@@ -1310,12 +1317,14 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		c.Call("fillRect", x, y, w, h)
 		strokeTileBorder(c, x, y, w, h, colorURLLine, borderPx)
 	case rpc.KindText:
-		c.Set("fillStyle", colorMarkdownFill)
-		c.Call("fillRect", x, y, w, h)
+		fill := colorMarkdownFill
 		line := colorMarkdownLine
 		if outside {
+			fill = colorExitFill
 			line = colorExitBorder
 		}
+		c.Set("fillStyle", fill)
+		c.Call("fillRect", x, y, w, h)
 		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	default:
 		c.Set("fillStyle", colorLocked)
