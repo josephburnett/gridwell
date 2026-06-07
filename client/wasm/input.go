@@ -1346,16 +1346,11 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			delete(a.urlPanX, fp.ID)
 			delete(a.urlPanY, fp.ID)
 			a.refreshFileOverlay()
-			// Shell descent: if the tile has never been frozen (no
-			// preview yet) we auto-spawn the PTY so the user lands in
-			// a working bash. Subsequent descents into a frozen shell
-			// show the JPEG until the user refreshes — matches URL.
-			if file.Kind == rpc.KindShell && file.PreviewBlobID == 0 {
-				a.openShellStream(fp, file.ID)
-			}
-			// URL descent shows the frozen JPEG preview by default.
-			// afterDescend fires here so the auto-go-live path (new
-			// URL tile creation) can open the stream immediately.
+			// URL / shell descent show the frozen JPEG preview by
+			// default. afterDescend fires here so an auto-go-live
+			// path (fresh tile creation) can open the stream — the
+			// explicit-callback shape keeps the auto-spawn decision
+			// at the call site instead of mixing it into the descent.
 			if afterDescend != nil {
 				afterDescend()
 			}
@@ -1540,6 +1535,14 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 // dropped; the user will see the local state on next descent and the
 // server state otherwise.
 func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
+	// SetTextView (and the framed-window cache patch) are text-tile
+	// concerns — URL and shell tiles don't carry text_x/text_y/text_w
+	// /text_h, and the server's SetTextView rejects non-text kinds with
+	// InvalidArgument. Routing them through would surface as a 400 plus
+	// a spurious "version conflict" refetch in the wasm dispatcher.
+	if file.Kind != rpc.KindText {
+		return
+	}
 	gid := a.gridIDForPath(p.Path)
 	r := paneRectFor(a, p)
 	scrollY := int64(p.TextScrollY + 0.5)
@@ -2022,10 +2025,18 @@ func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 		if fp == nil || fp.TextFocus != 0 {
 			return
 		}
-		// Mirror createURLAtCell: descent into the fresh tile fires
-		// openShellStream from the existing startFileDescent path
-		// (PreviewBlobID == 0 means auto-go-live).
-		a.startFileDescent(fp, &tile, nil)
+		// Mirror createURLAtCell: descend, and once the transition
+		// completes, open the PTY. afterDescend runs on the main loop
+		// after onComplete sets TextFocus, so the new tile is in the
+		// cache and the pane is in file-focus mode by the time
+		// openShellStream looks for it.
+		a.startFileDescent(fp, &tile, func() {
+			ffp := a.tree.FindPane(paneID)
+			if ffp == nil || ffp.TextFocus == 0 {
+				return
+			}
+			a.openShellStream(ffp, tile.ID)
+		})
 	})
 }
 

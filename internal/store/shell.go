@@ -79,10 +79,20 @@ func (s *Store) SetShellCwd(ctx context.Context, req *rpc.SetShellCwdRequest) (*
 // deduped through the blobs table the same way URL preview bytes are.
 // Empty JPEG (length 0) clears the preview — useful as a reset after a
 // failed refresh.
+//
+// Unlike most mutations this one intentionally does NOT consult
+// req.Version. The preview is a side-channel content blob; the
+// authoritative concurrency primitive for shell tiles is the WebSocket
+// session (one live PTY per tile at a time). Without this relaxation,
+// the freeze path races itself: the server's WS-close handler bumps
+// the tile version via SetShellCwd before the client's HTTP
+// SetShellPreview round-trip can land, and the version check would
+// always fail. The field stays on the wire so clients can still
+// observe versions through TileChanged.
 func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
+		n, err := s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}

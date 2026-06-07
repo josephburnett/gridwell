@@ -150,6 +150,41 @@ func TestSetShellPreviewStoresAndDedupes(t *testing.T) {
 	}
 }
 
+// TestSetShellPreviewIgnoresStaleVersion locks in the version-
+// relaxation: the freeze path races itself (WS-close handler bumps
+// the version via SetShellCwd before the client's HTTP
+// SetShellPreview round-trip can land), so this RPC must accept any
+// version. If this regressed, ascent from a live shell would stop
+// persisting previews.
+func TestSetShellPreviewIgnoresStaleVersion(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bump the version via SetShellCwd so the tile is now at
+	// tile.Version + 1; the client still holds the old version.
+	if _, err := s.SetShellCwd(ctx, &rpc.SetShellCwdRequest{
+		TileID: tile.ID, Version: tile.Version, ShellCwd: "/tmp",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Stale-version write must succeed regardless.
+	got, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
+		TileID: tile.ID, Version: tile.Version, JPEG: []byte("frozen"),
+	})
+	if err != nil {
+		t.Fatalf("SetShellPreview with stale version: %v", err)
+	}
+	if got.PreviewBlobID == 0 {
+		t.Errorf("preview did not land")
+	}
+}
+
 // TestSetShellPreviewClearsOnEmpty: passing empty bytes clears the
 // preview pointer and drops the old blob's refcount — useful as a
 // reset after a failed refresh.
