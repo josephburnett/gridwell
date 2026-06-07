@@ -34,7 +34,14 @@ const (
 	// distinct from the descent blue and the file greens / purples so
 	// it never gets read as "you're descended into something".
 	colorRootBorder = "#7a6a4a"
-	colorGridLine   = "#15171d"
+	// Grid-line colors per grid kind. Each echoes the matching border
+	// color (root tan, focus blue, exit red) but at the same low
+	// brightness as the legacy neutral grid line, so the lines tint
+	// the canvas with the grid's identity without overwhelming the
+	// content sitting on top.
+	colorGridLineRoot     = "#2a2419"
+	colorGridLineInterior = "#1c2540"
+	colorGridLineExit     = "#3a2418"
 	// Content-tile colors. Each tile kind has its own identity; the
 	// user reads tiles by color at a glance and the icon / preview
 	// reveals the rest.
@@ -275,7 +282,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
-		a.drawGridLines(pscreen, r)
+		a.drawGridLines(paneGridLineColor(p, g, gridOK), pscreen, r)
 	}
 
 	if gridOK {
@@ -435,35 +442,37 @@ func (a *App) drawURLRefreshButton(_ *pane.Pane, r pane.Rect) {
 }
 
 // drawGridLines paints faint lines at integer cell boundaries within the
-// pane's visible region. Lines fade to invisible when cells are tiny so
-// extreme zoom-out doesn't paint a solid grey wash.
-func (a *App) drawGridLines(ps dragdrop.Pane, r pane.Rect) {
+// pane's visible region. The line color is chosen by the grid kind so
+// blue/red/brown tint matches the pane border. Lines fade to invisible
+// when cells are tiny so extreme zoom-out doesn't paint a solid wash.
+func (a *App) drawGridLines(color string, ps dragdrop.Pane, r pane.Rect) {
 	cellSize := ps.CellPx * ps.Zoom
 	originX, originY := ps.CellToScreen(0, 0)
-	drawGridLinesIn(a.cctx, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
+	drawGridLinesIn(a.cctx, color, r.X, r.Y, r.W, r.H, cellSize, originX, originY)
 }
 
-// drawGridLinesIn paints faint vertical/horizontal grid lines clipped to
+// drawGridLinesIn paints vertical/horizontal grid lines clipped to
 // (clipX, clipY, clipW, clipH), spaced at cellSize pixels and aligned so
 // integer cell (0, 0) lands at (originX, originY). Used for both the
 // parent grid and well interiors so the visual scale of a well's preview
-// is the same kind of grid the user is already seeing.
+// is the same kind of grid the user is already seeing. The color is the
+// kind-specific tint (root tan / interior blue / exit red).
 //
 // Sub-4px cell sizes draw nothing (the lines would be a solid wash).
 // Above that, opacity fades up linearly so zoom-in feels like the grid
 // "fades in" rather than appearing abruptly.
-func drawGridLinesIn(c js.Value, clipX, clipY, clipW, clipH, cellSize, originX, originY float64) {
+func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellSize, originX, originY float64) {
 	if cellSize < 4 {
 		return
 	}
 	alpha := (cellSize - 4) / 20
-	if alpha > 0.6 {
-		alpha = 0.6
+	if alpha > 0.7 {
+		alpha = 0.7
 	}
 	if alpha < 0.05 {
 		return
 	}
-	c.Set("strokeStyle", colorGridLine)
+	c.Set("strokeStyle", color)
 	c.Set("lineWidth", 1.0)
 	c.Set("globalAlpha", alpha)
 
@@ -557,7 +566,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	wellCenterY := y + h/2
 	originX := wellCenterX - viewCenterX*previewCell
 	originY := wellCenterY - viewCenterY*previewCell
-	drawGridLinesIn(a.cctx, x, y, w, h, previewCell, originX, originY)
+	drawGridLinesIn(a.cctx, wellGridLineColor(n.Kind), x, y, w, h, previewCell, originX, originY)
 
 	if haveChild && previewCell >= 0.5 {
 		var hide int64
@@ -591,6 +600,33 @@ func wellOutlineColor(kind string) string {
 		return colorExitBorder
 	}
 	return colorFocusBorder
+}
+
+// wellGridLineColor picks the grid-line color drawn inside a well's
+// preview region from the well's kind. Matches wellOutlineColor's
+// grammar one shade quieter — interior wells get a blue grid, exit
+// wells (file / process) get a red grid.
+func wellGridLineColor(kind string) string {
+	if kind == rpc.KindFileWell || kind == rpc.KindProcessWell {
+		return colorGridLineExit
+	}
+	return colorGridLineInterior
+}
+
+// paneGridLineColor picks the grid-line color for a pane's leaf grid:
+// brown at the root (zero descent depth), red when the leaf is a
+// source-backed (fs/proc) grid, blue otherwise. Mirrors the pane
+// border grammar one shade quieter. Falls back to interior blue when
+// the leaf grid hasn't loaded yet, since "we're descended into
+// something Gridwell-owned" is the safe assumption mid-load.
+func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
+	if len(p.Path) == 0 && p.TextFocus == 0 {
+		return colorGridLineRoot
+	}
+	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
+		return colorGridLineExit
+	}
+	return colorGridLineInterior
 }
 
 // tileOutside reports whether a tile should be rendered with the "outside
@@ -1721,6 +1757,20 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 	n := templateGhostNode(kind)
 	outside := tileOutside(&n, false)
 	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
+	// Well swatches get a mini-grid in their kind-tinted color so the
+	// palette preview reads the same as a live well: blue grid inside
+	// a Gridwell well, red grid inside a file / process well. Spacing
+	// matches the live drawNodeWithPreview default-view-zoom path —
+	// the swatch shows roughly DefaultWellViewZoom-scaled cells.
+	if n.Kind == rpc.KindWell || n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+		previewCell := w * zoomtrans.DefaultWellViewZoom
+		a.cctx.Call("save")
+		a.cctx.Call("beginPath")
+		a.cctx.Call("rect", x, y, w, h)
+		a.cctx.Call("clip")
+		drawGridLinesIn(a.cctx, wellGridLineColor(n.Kind), x, y, w, h, previewCell, x+w/2, y+h/2)
+		a.cctx.Call("restore")
+	}
 	a.drawTileBannerLabel(&n, x, y, w, h, outside)
 	switch kind {
 	case tplMarkdown:
