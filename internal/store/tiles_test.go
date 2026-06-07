@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
+	"github.com/josephburnett/gridwell/internal/fssource"
+	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -351,6 +354,60 @@ func TestSetWellViewRejectsNonWell(t *testing.T) {
 		t.Errorf("got %v, want ErrNotWellTile", err)
 	}
 }
+
+// TestSetWellViewAcceptsAllWellKinds locks in the contract that
+// SetWellView works on every kind that has a child grid — interior
+// wells AND the two exit-wells (file-well, process-well). Without this
+// the parent-grid framing of a file/process well snaps back to (0,0,0)
+// on every ascent because the persistence path silently bounces.
+func TestSetWellViewAcceptsAllWellKinds(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	s.SetSourceReaders(stubFSReaderEmpty{}, stubProcReaderEmpty{}, "/proc")
+
+	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 1, Y: 0, W: 1, H: 1, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []*rpc.Tile{fw, pw} {
+		got, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+			Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+			ViewX: 5, ViewY: 7, ViewZoom: 0.5,
+		})
+		if err != nil {
+			t.Fatalf("SetWellView %s: %v", w.Kind, err)
+		}
+		if got.ViewX != 5 || got.ViewY != 7 || got.ViewZoom != 0.5 {
+			t.Errorf("%s view = (%d, %d, %v), want (5, 7, 0.5)",
+				w.Kind, got.ViewX, got.ViewY, got.ViewZoom)
+		}
+	}
+}
+
+// stubFSReaderEmpty / stubProcReaderEmpty stand in for the production
+// host readers in tests that just need source-grid creation to succeed
+// without producing any tiles.
+type stubFSReaderEmpty struct{}
+
+func (stubFSReaderEmpty) Read(string) ([]fssource.Entry, error)      { return nil, nil }
+func (stubFSReaderEmpty) MetadataMarkdown(fssource.Entry) string     { return "" }
+
+type stubProcReaderEmpty struct{}
+
+func (stubProcReaderEmpty) Children(string, int64) ([]procsource.Info, error) { return nil, nil }
+func (stubProcReaderEmpty) Get(string, int64) (procsource.Info, error) {
+	return procsource.Info{}, os.ErrNotExist
+}
+func (stubProcReaderEmpty) MetadataMarkdown(procsource.Info) string { return "" }
 
 func TestSetTextViewRejectsNonText(t *testing.T) {
 	s := newTestStore(t)

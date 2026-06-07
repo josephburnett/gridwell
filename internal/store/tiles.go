@@ -244,7 +244,7 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 		if err != nil {
 			return err
 		}
-		if n.Kind != rpc.KindWell {
+		if !isWellKind(n.Kind) {
 			return ErrNotWellTile
 		}
 		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
