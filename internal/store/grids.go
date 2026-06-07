@@ -163,8 +163,10 @@ func (s *Store) GetTile(ctx context.Context, tileID int64) (*rpc.Tile, error) {
 	return s.loadTile(ctx, s.db, tileID)
 }
 
-// GetTilePreview returns the JPEG bytes for a URL tile's current preview.
-// Returns nil for tiles that don't have a preview yet.
+// GetTilePreview returns the JPEG bytes for a tile's current preview —
+// URL tiles store the last-frozen page render; shell tiles store the
+// last-frozen terminal frame. Returns nil for tiles that don't have a
+// preview yet (fresh palette drop, never refreshed).
 func (s *Store) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error) {
 	var previewBID sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ?`, tileID).Scan(&previewBID)

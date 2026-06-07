@@ -124,18 +124,19 @@ func TestTileIndexAt(t *testing.T) {
 }
 
 func TestLayoutHandlesExpandedKindCount(t *testing.T) {
-	// The current palette ships six kinds (well, markdown, url,
-	// blackhole, file-well, process-well). The layout has to widen the
-	// popover to fit them and the tile rects must stay non-overlapping.
+	// The current palette ships seven kinds (well, markdown, url,
+	// blackhole, file-well, process-well, shell). The layout has to
+	// widen the popover to fit them and the tile rects must stay
+	// non-overlapping.
 	l := makeLayout()
-	l.NumTiles = 6
+	l.NumTiles = 7
 	pop := l.PopoverRect()
 	tile := l.TilePx()
-	wantW := float64(6)*tile + float64(6+1)*l.Cfg.GapPx
+	wantW := float64(7)*tile + float64(7+1)*l.Cfg.GapPx
 	if pop.W != wantW {
 		t.Errorf("PopoverRect.W = %v, want %v", pop.W, wantW)
 	}
-	for i := 1; i < 6; i++ {
+	for i := 1; i < 7; i++ {
 		a := l.TileRect(i - 1)
 		b := l.TileRect(i)
 		if a.X+a.W > b.X {
@@ -143,8 +144,9 @@ func TestLayoutHandlesExpandedKindCount(t *testing.T) {
 				i-1, i, a.X+a.W, b.X)
 		}
 	}
-	if got := l.TileIndexAt(l.TileRect(5).X+l.TileRect(5).W/2, l.TileRect(5).Y+l.TileRect(5).H/2); got != 5 {
-		t.Errorf("TileIndexAt center of 6th tile: got %d, want 5", got)
+	last := l.NumTiles - 1
+	if got := l.TileIndexAt(l.TileRect(last).X+l.TileRect(last).W/2, l.TileRect(last).Y+l.TileRect(last).H/2); got != last {
+		t.Errorf("TileIndexAt center of last tile: got %d, want %d", got, last)
 	}
 }
 

@@ -149,6 +149,45 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Call("restore")
 }
 
+// drawShellTile renders a shell tile in the parent grid view. Same
+// pattern as drawURLTile: cached JPEG covers the cell when available,
+// otherwise a placeholder shows the cwd path on a dark fill. The
+// outline is the exit-red (shell tile lives in the red family — its
+// contents come from outside Gridwell). Reuses urlPreview as the JPEG
+// cache; the cache is keyed by tile id so URL and shell tiles can
+// share a single decode pool.
+func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+
+	a.cctx.Set("fillStyle", colorExitFill)
+	a.cctx.Call("fillRect", x, y, w, h)
+
+	if img, ok := a.urlPreview.Get(n.ID); ok {
+		drawImageCoverCentered(a.cctx, img, x, y, w, h)
+	} else if n.PreviewBlobID != 0 {
+		a.fetchURLPreview(n.ID)
+	} else if w > 20 && h > 20 {
+		// No preview yet (palette drop never refreshed) — show the
+		// stored cwd so the swatch reads as "shell in /tmp" rather
+		// than a blank red box. The shell glyph is overlaid below.
+		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		if n.ShellCwd != "" {
+			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Set("font", "10px monospace")
+			a.cctx.Call("fillText", n.ShellCwd, x+6, y+h-6, w-12)
+		}
+	}
+
+	strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder, tileBorderPx)
+	if selected {
+		drawSelectedTileOutline(a.cctx, x, y, w, h)
+	}
+	a.cctx.Call("restore")
+}
+
 // drawURLTile renders a URL tile in the parent grid view. Layers:
 //  1. dark-grey background (matches the file inner-bg used elsewhere)
 //  2. the cached preview JPEG cropped to the tile footprint, or a

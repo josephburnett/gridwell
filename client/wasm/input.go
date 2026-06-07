@@ -1627,6 +1627,8 @@ func templateGhostNode(kind templateKind) rpc.Tile {
 		return rpc.Tile{Kind: rpc.KindFileWell, W: 1, H: 1, FSPath: "/", AltText: rpc.AltFiles}
 	case tplProcessWell:
 		return rpc.Tile{Kind: rpc.KindProcessWell, W: 1, H: 1, PID: 1, AltText: rpc.AltProcesses}
+	case tplShell:
+		return rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"}
 	}
 	return rpc.Tile{}
 }
@@ -1693,6 +1695,8 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.createFileWellAtCell(destPane, "/", dropX, dropY)
 	case tplProcessWell:
 		a.createProcessWellAtCell(destPane, 1, dropX, dropY)
+	case tplShell:
+		a.createShellAtCell(destPane, dropX, dropY)
 	}
 	a.menuOpen = false
 }
@@ -1958,6 +1962,21 @@ func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int6
 	}
 	a.postTileMutate("CreateProcessWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateProcessWell(ctx, req)
+	}, nil)
+}
+
+// createShellAtCell fires CreateShell at the given cell. No options
+// up front — the bash session is not started until refresh. shell_cwd
+// is stamped to $HOME server-side.
+func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
+	gid := a.gridIDForPath(p.Path)
+	path := slices.Clone(p.Path)
+	req := &rpc.CreateShellRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	}
+	a.postTileMutate("CreateShell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateShell(ctx, req)
 	}, nil)
 }
 

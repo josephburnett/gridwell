@@ -131,6 +131,7 @@ func RunServe(args []string) int {
 
 	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))
+	srv.SetShellStreamer(server.ShellStreamerFromDriver())
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()

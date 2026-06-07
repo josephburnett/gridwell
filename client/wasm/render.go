@@ -178,12 +178,15 @@ const (
 	// tplProcessWell spawns a process-well rooted at PID 1 (init).
 	// Also red — host-owned state.
 	tplProcessWell
+	// tplShell spawns an interactive bash shell tile. Starts frozen with
+	// no preview; the user refreshes to spawn the PTY.
+	tplShell
 )
 
 // templateKinds is the palette layout order, left to right. The two
 // exit-wells go after the interior kinds so the in-Gridwell tiles stay
 // grouped on the left.
-var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplBlackHole, tplFileWell, tplProcessWell}
+var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplBlackHole, tplFileWell, tplProcessWell, tplShell}
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
 // displayed cell size approaches its target. At 60 fps this gives a
@@ -531,6 +534,10 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		}
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
+	case rpc.KindShell:
+		a.drawShellTile(n, x, y, w, h, selected)
+		a.drawTileBannerLabel(n, x, y, w, h, outside)
+		return
 	}
 	if n.Kind != rpc.KindWell && n.Kind != rpc.KindFileWell && n.Kind != rpc.KindProcessWell {
 		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx)
@@ -661,10 +668,11 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 		return true
 	}
 	switch n.Kind {
-	case rpc.KindFileWell, rpc.KindProcessWell, rpc.KindBlackHole:
+	case rpc.KindFileWell, rpc.KindProcessWell, rpc.KindBlackHole, rpc.KindShell:
 		// Black holes route their input to /dev/null — that's "outside"
 		// in the same color-grammar sense as a file-well: the dropped
-		// tile leaves Gridwell. Red border, "null" banner.
+		// tile leaves Gridwell. Red border, "null" banner. Shell is the
+		// same shape: bash runs outside Gridwell's data world.
 		return true
 	}
 	if n.Kind == rpc.KindText && n.SourceKey != "" {
@@ -738,7 +746,7 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 // outline so the label and the border read as one. Outside-tiles
 // (anything red-bordered) win regardless of kind.
 func bannerTextColor(n *rpc.Tile, outside bool) string {
-	if outside || n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell {
+	if outside || n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell || n.Kind == rpc.KindShell {
 		return colorExitBorder
 	}
 	switch n.Kind {
@@ -1316,6 +1324,10 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)
 		strokeTileBorder(c, x, y, w, h, colorURLLine, borderPx)
+	case rpc.KindShell:
+		c.Set("fillStyle", colorExitFill)
+		c.Call("fillRect", x, y, w, h)
+		strokeTileBorder(c, x, y, w, h, colorExitBorder, borderPx)
 	case rpc.KindText:
 		fill := colorMarkdownFill
 		line := colorMarkdownLine
@@ -1591,6 +1603,36 @@ func drawProcessGlyph(c js.Value, x, y, w, h float64, color string) {
 	c.Set("lineWidth", 1.0)
 }
 
+// drawShellGlyph paints a stylized terminal-prompt cue centered in
+// (x, y, w, h): the chevron "›" followed by a small filled square
+// suggesting a cursor block. Reads as "command prompt waiting for
+// input" at any zoom. Used for the shell palette swatch.
+func drawShellGlyph(c js.Value, x, y, w, h float64, color string) {
+	c.Set("strokeStyle", color)
+	c.Set("fillStyle", color)
+	lw := math.Max(1.0, math.Min(w, h)/22)
+	c.Set("lineWidth", lw)
+	c.Set("lineCap", "round")
+	c.Set("lineJoin", "round")
+	cx := x + w/2
+	cy := y + h/2
+	size := math.Min(w, h) * 0.30
+	// Chevron: ">" centered slightly left of center.
+	chevX := cx - size*0.55
+	c.Call("beginPath")
+	c.Call("moveTo", chevX-size*0.45, cy-size*0.55)
+	c.Call("lineTo", chevX+size*0.10, cy)
+	c.Call("lineTo", chevX-size*0.45, cy+size*0.55)
+	c.Call("stroke")
+	// Cursor block to the right of the chevron.
+	blockW := size * 0.55
+	blockH := size * 0.9
+	c.Call("fillRect", cx+size*0.10, cy-blockH/2, blockW, blockH)
+	c.Set("lineWidth", 1.0)
+	c.Set("lineCap", "butt")
+	c.Set("lineJoin", "miter")
+}
+
 // drawBlackHoleSwatch paints the canonical black-hole tile fill: a
 // pure-black rectangle. The orange border drawn by the caller carries
 // the "this is an exit" signal; the "null" banner label spells out the
@@ -1801,6 +1843,8 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	case tplProcessWell:
 		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	case tplShell:
+		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	}
 	if hovered {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
