@@ -30,15 +30,22 @@ type Config struct {
 // Server is the wired-up HTTP server. Construct with New and mount via
 // Server.Handler() into an http.Server.
 type Server struct {
-	cfg         Config
-	store       *store.Store
-	mux         *http.ServeMux
-	urlStreamer urlStreamer
+	cfg           Config
+	store         *store.Store
+	mux           *http.ServeMux
+	urlStreamer   urlStreamer
+	shellStreamer shellStreamer
 
 	// activeURLSessions tracks the single live URL session per tile_id.
 	// Protected by activeURLMu.
 	activeURLMu       sync.Mutex
 	activeURLSessions map[int64]*urlSessionEntry
+
+	// activeShellSessions tracks the single live shell PTY per tile_id.
+	// Same takeover semantics as URL (a refresh from another pane
+	// evicts the previous holder).
+	activeShellMu       sync.Mutex
+	activeShellSessions map[int64]*shellSessionEntry
 }
 
 // New constructs a Server bound to the given store.
@@ -63,6 +70,8 @@ func (s *Server) routes() {
 	// Live URL session is a WebSocket — Connect doesn't model it; raw
 	// HTTP route stays.
 	s.mux.HandleFunc("/rpc/URLStream", s.urlStream)
+	// Shell PTY session — same WebSocket pattern as URL.
+	s.mux.HandleFunc("/rpc/ShellStream", s.shellStream)
 
 	// Embed preview is plain image bytes for external viewers (VS Code,
 	// etc.); not RPC.
@@ -106,7 +115,8 @@ func writeHTTPError(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrInvalidPath),
 		errors.Is(err, store.ErrNotURLTile),
 		errors.Is(err, store.ErrNotTextTile),
-		errors.Is(err, store.ErrNotWellTile):
+		errors.Is(err, store.ErrNotWellTile),
+		errors.Is(err, store.ErrNotShellTile):
 		status = http.StatusBadRequest
 	case errors.Is(err, store.ErrOverlap),
 		errors.Is(err, store.ErrVersionConflict):

@@ -10,7 +10,6 @@
 package shelldriver
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,10 +55,25 @@ type Config struct {
 // All methods are safe to call concurrently. Methods that need the PTY
 // after Close has run return an error rather than panicking on a torn-
 // down file descriptor.
+// outputBufferFrames is the depth of the internal PTY-output channel.
+// Set high enough that a short gap between WS detach and re-attach
+// during a takeover doesn't drop bash output. When full, the pump
+// goroutine blocks on the PTY read, which back-pressures bash — that
+// is the correct behavior over silently dropping bytes that may form
+// part of an ANSI escape sequence.
+const outputBufferFrames = 64
+
 type Session struct {
 	cmd  *exec.Cmd
 	ptmx *os.File
 	pid  int
+
+	// outCh is the single drain point for PTY bytes. Exactly one
+	// internal pump goroutine writes to it; subscribers (one WS
+	// handler at a time) read from it. The takeover protocol relies on
+	// being able to cancel-safe select on this channel, which a
+	// blocking PTY Read could not satisfy.
+	outCh chan []byte
 
 	closeOnce sync.Once
 	closed    atomic.Bool
@@ -111,23 +125,42 @@ func Start(cfg Config) (*Session, error) {
 		cmd:    cmd,
 		ptmx:   ptmx,
 		pid:    cmd.Process.Pid,
+		outCh:  make(chan []byte, outputBufferFrames),
 		doneCh: make(chan struct{}),
 	}
 	go s.reap()
+	go s.pump()
 	return s, nil
 }
 
-// Output reads bytes from the PTY master into p. Returns io.EOF after
-// Close has been called or the bash process has exited.
-func (s *Session) Output(p []byte) (int, error) {
-	if s.closed.Load() {
-		return 0, io.EOF
+// Output returns the channel of PTY-output byte chunks. Each chunk is
+// a fresh slice owned by the receiver — no aliasing of an internal
+// buffer. The channel is closed when the bash process has exited or
+// Close has run, so a `for chunk := range s.Output() {}` loop
+// terminates naturally.
+//
+// Replaces the prior blocking Read-style API so callers can select on
+// this channel together with a context — required for cancel-safe
+// detach in the WS takeover path.
+func (s *Session) Output() <-chan []byte { return s.outCh }
+
+// pump is the single PTY reader. Runs until the master fd reports EOF
+// (i.e., bash has exited or Close has closed the fd), at which point
+// the output channel is closed so range loops exit.
+func (s *Session) pump() {
+	defer close(s.outCh)
+	buf := make([]byte, 4096)
+	for {
+		n, err := s.ptmx.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			s.outCh <- chunk
+		}
+		if err != nil {
+			return
+		}
 	}
-	n, err := s.ptmx.Read(p)
-	if errors.Is(err, os.ErrClosed) {
-		return n, io.EOF
-	}
-	return n, err
 }
 
 // Write forwards bytes to bash's stdin. Returns the number of bytes

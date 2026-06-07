@@ -33,35 +33,29 @@ func requireProc(t *testing.T) {
 	}
 }
 
-// drainUntil reads from s.Output into a buffer until either a deadline
-// fires or the buffered output contains needle. Returns whatever was
-// read so callers can include it in failure messages.
+// drainUntil reads from s.Output() into a buffer until either a
+// deadline fires or the buffered output contains needle. Returns
+// whatever was read so callers can include it in failure messages.
 func drainUntil(t *testing.T, s *Session, needle string, deadline time.Duration) []byte {
 	t.Helper()
-	deadlineAt := time.Now().Add(deadline)
+	timer := time.NewTimer(deadline)
+	defer timer.Stop()
 	var buf bytes.Buffer
-	out := make([]byte, 4096)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for time.Now().Before(deadlineAt) {
-			n, err := s.Output(out)
-			if n > 0 {
-				buf.Write(out[:n])
-				if bytes.Contains(buf.Bytes(), []byte(needle)) {
-					return
-				}
+	out := s.Output()
+	for {
+		select {
+		case chunk, ok := <-out:
+			if !ok {
+				return buf.Bytes()
 			}
-			if err != nil {
-				return
+			buf.Write(chunk)
+			if bytes.Contains(buf.Bytes(), []byte(needle)) {
+				return buf.Bytes()
 			}
+		case <-timer.C:
+			return buf.Bytes()
 		}
-	}()
-	select {
-	case <-done:
-	case <-time.After(deadline + 200*time.Millisecond):
 	}
-	return buf.Bytes()
 }
 
 // TestStartAndExit launches bash, drives it through `exit`, and
@@ -257,9 +251,8 @@ func TestWriteAfterCloseReturnsClosedPipe(t *testing.T) {
 	if _, err := s.Write([]byte("x")); !errors.Is(err, io.ErrClosedPipe) {
 		t.Errorf("Write after Close: err = %v, want io.ErrClosedPipe", err)
 	}
-	buf := make([]byte, 32)
-	if n, err := s.Output(buf); n != 0 || !errors.Is(err, io.EOF) {
-		t.Errorf("Output after Close: n=%d err=%v, want 0 / io.EOF", n, err)
+	if _, ok := <-s.Output(); ok {
+		t.Errorf("Output() channel not closed after Close()")
 	}
 }
 
