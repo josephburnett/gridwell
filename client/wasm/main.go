@@ -146,6 +146,11 @@ type App struct {
 	// pane id; multiple panes may stream concurrently.
 	urlStreams map[string]*urlStreamConn
 
+	// shellStreams mirrors urlStreams for live shell tile sessions —
+	// one /rpc/ShellStream WebSocket plus its xterm.js DOM overlay
+	// per pane descended into a live shell tile.
+	shellStreams map[string]*shellStreamConn
+
 	// urlUpdateScheduled is true when a debounced URL replaceState is
 	// pending. Multiple state changes within the debounce window
 	// coalesce into a single replaceState. Cleared when the timeout
@@ -369,6 +374,7 @@ func main() {
 		paneStateStack: map[string][]paneState{},
 		urlPreview:     newURLPreviewCache(),
 		urlStreams:     map[string]*urlStreamConn{},
+		shellStreams:   map[string]*shellStreamConn{},
 		urlPanX:        map[string]float64{},
 		urlPanY:        map[string]float64{},
 	}
@@ -392,6 +398,7 @@ func main() {
 	// might miss the preview write.
 	app.win.Call("addEventListener", "beforeunload", js.FuncOf(func(this js.Value, args []js.Value) any {
 		app.closeAllURLStreams()
+		app.closeAllShellStreams()
 		return nil
 	}))
 

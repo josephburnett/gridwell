@@ -290,6 +290,30 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
 	if p.TextFocus != 0 {
+		// Shell tile descent: the plus button refreshes a frozen
+		// shell (spawns a new bash), and the outer margin ascends.
+		// Inside the xterm overlay, clicks are captured by xterm.js
+		// itself (the DOM element absorbs them), so this path only
+		// fires for clicks on the pane chrome.
+		if a.isShellDescent(p) {
+			if pointInPlus(r, sx, sy) && !a.hasShellStream(p.ID) {
+				gid := a.gridIDForPath(p.Path)
+				if g, ok := a.c.Grid(gid); ok {
+					if tile, ok := g.Tiles[p.TextFocus]; ok {
+						a.openShellStream(p, tile.ID)
+					}
+				}
+				return nil
+			}
+			if !pointInPaneContent(r, sx, sy) {
+				a.startFileAscent(p)
+				return nil
+			}
+			// Inside the content area: clicks fall through to xterm
+			// (the overlay div is above the canvas). Live shell
+			// streams never receive clicks here in practice.
+			return nil
+		}
 		// URL tile descent: live panes forward clicks to Chromium; frozen
 		// panes use click+drag for pan (cover-mode overflow navigation).
 		// The lower-right back button and outer margin always belong to Gridwell.
@@ -979,7 +1003,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
 		a.startDescent(p, hit)
 		return true
-	case rpc.KindText, rpc.KindURL:
+	case rpc.KindText, rpc.KindURL, rpc.KindShell:
 		a.startFileDescent(p, hit, nil)
 		return true
 	}
@@ -1322,6 +1346,13 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			delete(a.urlPanX, fp.ID)
 			delete(a.urlPanY, fp.ID)
 			a.refreshFileOverlay()
+			// Shell descent: if the tile has never been frozen (no
+			// preview yet) we auto-spawn the PTY so the user lands in
+			// a working bash. Subsequent descents into a frozen shell
+			// show the JPEG until the user refreshes — matches URL.
+			if file.Kind == rpc.KindShell && file.PreviewBlobID == 0 {
+				a.openShellStream(fp, file.ID)
+			}
 			// URL descent shows the frozen JPEG preview by default.
 			// afterDescend fires here so the auto-go-live path (new
 			// URL tile creation) can open the stream immediately.
@@ -1373,6 +1404,11 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// If we're ascending out of a URL tile, close the live stream (if any).
 	if file.Kind == rpc.KindURL {
 		a.closeURLStream(p.ID)
+	}
+	// Shell ascent: capture the JPEG, persist it as the frozen
+	// preview, close the WS. closeShellStream handles all three.
+	if file.Kind == rpc.KindShell {
+		a.closeShellStream(p.ID)
 	}
 
 	// (Mode + framed window are persisted by saveFileBeforeAscent, which
@@ -1428,7 +1464,8 @@ func (a *App) startFileAscent(p *pane.Pane) {
 // cached or the text tile row vanished while we were focused on it. We just
 // clear TextFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
-	a.closeURLStream(p.ID) // no-op if not a URL descent
+	a.closeURLStream(p.ID)   // no-op if not a URL descent
+	a.closeShellStream(p.ID) // no-op if not a shell descent
 	saved := a.popPaneState(p.ID)
 	p.TextFocus = 0
 	if saved != nil {
@@ -1965,19 +2002,31 @@ func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int6
 	}, nil)
 }
 
-// createShellAtCell fires CreateShell at the given cell. No options
-// up front — the bash session is not started until refresh. shell_cwd
-// is stamped to $HOME server-side.
+// createShellAtCell fires CreateShell at the given cell, then
+// auto-descends and auto-spawns the PTY — the user dropped a shell to
+// use a shell, not to look at a placeholder. shell_cwd is stamped to
+// $HOME server-side. Subsequent ascent / re-descent into the same
+// tile shows the frozen JPEG and requires an explicit refresh.
 func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)
+	paneID := p.ID
 	req := &rpc.CreateShellRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
 	a.postTileMutate("CreateShell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateShell(ctx, req)
-	}, nil)
+	}, func(tile rpc.Tile) {
+		fp := a.tree.FindPane(paneID)
+		if fp == nil || fp.TextFocus != 0 {
+			return
+		}
+		// Mirror createURLAtCell: descent into the fresh tile fires
+		// openShellStream from the existing startFileDescent path
+		// (PreviewBlobID == 0 means auto-go-live).
+		a.startFileDescent(fp, &tile, nil)
+	})
 }
 
 // mouseXY returns the click coordinates relative to the canvas.

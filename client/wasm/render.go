@@ -244,6 +244,9 @@ func (a *App) draw() {
 	// Reposition the textarea overlay (if any) so it tracks the focused
 	// pane through resizes and pane-tree edits.
 	a.syncFileOverlayPosition()
+	// Same for any live shell overlays — xterm host divs follow their
+	// pane's screen rect each frame.
+	a.syncShellOverlayPosition()
 }
 
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.

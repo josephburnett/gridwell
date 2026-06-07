@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>Gridwell</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/vendor/xterm/xterm.min.css">
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #0c0d11; color: #d8d9de; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
     body { overflow: hidden; }
@@ -79,6 +80,9 @@
     </form>
   </div>
 
+  <script src="/vendor/xterm/xterm.min.js"></script>
+  <script src="/vendor/xterm/addon-fit.min.js"></script>
+  <script src="/vendor/xterm/addon-canvas.min.js"></script>
   <script src="/wasm_exec.js"></script>
   <script>
     (async () => {
