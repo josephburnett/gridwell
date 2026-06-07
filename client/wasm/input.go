@@ -1698,6 +1698,19 @@ func isVersionConflict(err error) bool {
 	return false
 }
 
+// logRPCError surfaces a non-nil, non-conflict RPC error to the JS
+// console so the user sees something concrete when a tile silently
+// fails to land. Conflict errors are an expected control-flow signal
+// (refetch + UI rollback) and are intentionally not logged. Every
+// dispatcher's error path goes through here so the silent-disappear
+// failure mode is closed at one choke point.
+func logRPCError(label string, err error) {
+	if err == nil || isVersionConflict(err) {
+		return
+	}
+	js.Global().Get("console").Call("error", "gridwell: "+label+" failed: "+err.Error())
+}
+
 // postCrossGridMutate is the shared body of left-drag (MoveTile) and
 // right-drag (CloneTile) ghost commits. Both call an RPC that touches
 // two grids (source + destination), and both have to roll the ghost
@@ -1714,6 +1727,8 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID int64, call
 		if err != nil {
 			if isVersionConflict(err) {
 				a.refetchGridOnConflict(srcGridID, label)
+			} else {
+				logRPCError(label, err)
 			}
 			a.snapBackToOrigin(d)
 			return
@@ -1729,9 +1744,15 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID int64, call
 // optimistically before the goroutine fires.
 func (a *App) postPersist(label string, gid int64, call tileCall) {
 	go func() {
-		if _, err := call(context.Background()); err != nil && isVersionConflict(err) {
-			a.refetchGridOnConflict(gid, label)
+		_, err := call(context.Background())
+		if err == nil {
+			return
 		}
+		if isVersionConflict(err) {
+			a.refetchGridOnConflict(gid, label)
+			return
+		}
+		logRPCError(label, err)
 	}()
 }
 
@@ -1742,8 +1763,12 @@ func (a *App) postPersist(label string, gid int64, call tileCall) {
 // srcGrid (delete onto a black hole in the same grid).
 func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID int64, call voidCall) {
 	go func() {
-		if err := call(context.Background()); err != nil && isVersionConflict(err) {
-			a.refetchGridOnConflict(srcGridID, label)
+		if err := call(context.Background()); err != nil {
+			if isVersionConflict(err) {
+				a.refetchGridOnConflict(srcGridID, label)
+			} else {
+				logRPCError(label, err)
+			}
 		}
 		a.fetchGrid(srcGridID)
 		if dstGridID != 0 && dstGridID != srcGridID {
@@ -1762,6 +1787,8 @@ func (a *App) postUpdateText(gid int64, req *rpc.UpdateTextRequest, newContent [
 	if err != nil {
 		if isVersionConflict(err) {
 			a.refetchGridOnConflict(gid, "UpdateText")
+		} else {
+			logRPCError("UpdateText", err)
 		}
 		return rpc.Tile{}, false
 	}
@@ -1780,6 +1807,8 @@ func (a *App) doTileMutate(label string, gid int64, call tileCall) (rpc.Tile, bo
 	if err != nil {
 		if isVersionConflict(err) {
 			a.refetchGridOnConflict(gid, label)
+		} else {
+			logRPCError(label, err)
 		}
 		return rpc.Tile{}, false
 	}

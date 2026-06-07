@@ -392,7 +392,17 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 // putBlob inserts a blob row if one with the given hash doesn't already exist,
 // and returns its id. It does NOT bump the refcount — callers must do that
 // explicitly so the refcount semantics remain visible at the call site.
+//
+// nil is normalized to an empty (but non-nil) slice before binding:
+// database/sql maps nil-bytes to SQL NULL, which would trip the
+// data BLOB NOT NULL constraint. Empty-content tiles are a valid use
+// case — a fresh palette drop of a markdown tile arrives here with
+// Data=nil (proto3 default-value omission round-tripped through the
+// wire as a missing field), and that path has to succeed.
 func putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte) (int64, error) {
+	if data == nil {
+		data = []byte{}
+	}
 	var id int64
 	err := tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
