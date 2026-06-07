@@ -134,6 +134,11 @@ func (s *Store) dropTileRow(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events
 			return err
 		}
 	}
+	if t.Kind == rpc.KindShell && t.PreviewBlobID != 0 {
+		if err := s.decBlobRefcount(ctx, tx, t.PreviewBlobID); err != nil {
+			return err
+		}
+	}
 	if err := bumpGridVersion(ctx, tx, t.GridID); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"testing"
@@ -177,6 +178,68 @@ func TestSetShellPreviewClearsOnEmpty(t *testing.T) {
 	if v2.PreviewBlobID != 0 {
 		t.Errorf("PreviewBlobID after clear = %d, want 0", v2.PreviewBlobID)
 	}
+}
+
+// TestDeleteShellDropsPreviewBlob: deleting a shell tile must drop the
+// refcount on its preview blob the same way URL tiles do, so deleting
+// a tile that had a preview leaks zero bytes. Guards against the
+// per-kind cleanup forgetting shell now that it shares the URL
+// preview-blob pattern.
+func TestDeleteShellDropsPreviewBlob(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamped, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
+		TileID: tile.ID, Version: tile.Version, JPEG: []byte("frozen-frame"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobID := stamped.PreviewBlobID
+	if blobID == 0 {
+		t.Fatal("preview blob never stored; setup broken")
+	}
+	rc, err := blobRefcount(ctx, s, blobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rc != 1 {
+		t.Errorf("refcount after SetShellPreview = %d, want 1", rc)
+	}
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		Path: rpc.Path{}, TileID: stamped.ID, Version: stamped.Version,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rc, err = blobRefcount(ctx, s, blobID)
+	if errors.Is(err, errBlobGone) {
+		return // blob row collected on rc=0, fine
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rc != 0 {
+		t.Errorf("refcount after DeleteTile = %d, want 0 (or row gone)", rc)
+	}
+}
+
+// blobRefcount reads the refcount column for blobID. Returns errBlobGone
+// if the row was reaped by the refcount-zero collector.
+var errBlobGone = errors.New("blob deleted")
+
+func blobRefcount(ctx context.Context, s *Store, blobID int64) (int64, error) {
+	var rc int64
+	err := s.db.QueryRowContext(ctx, `SELECT refcount FROM blobs WHERE id = ?`, blobID).Scan(&rc)
+	if err == sql.ErrNoRows {
+		return 0, errBlobGone
+	}
+	return rc, err
 }
 
 // TestUpdateTextRejectsShell: the read-only contract for text-like
