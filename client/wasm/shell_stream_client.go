@@ -77,6 +77,66 @@ func (a *App) hasShellStream(paneID string) bool {
 	return a.shellStreams[paneID] != nil
 }
 
+// shellRefreshButtonVisible decides whether the lower-right refresh
+// button should paint on a frozen shell descent. The rule (per the
+// shell-tile design):
+//
+//   - tile.PreviewBlobID == 0  → fresh tile, refresh creates a new
+//     tmux session. Always show the button.
+//   - tmux session is alive    → refresh attaches. Show the button.
+//   - cached as not alive      → no recovery possible. Hide.
+//   - unknown (probe pending)  → hide; the probe is kicked off here
+//     and a redraw fires when the result lands.
+//
+// Side effect: kicks off a ShellSessionAlive probe when the alive
+// state for tileID isn't cached and no probe is already in flight.
+func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
+	if tile == nil || tile.Kind != rpc.KindShell {
+		return false
+	}
+	if tile.PreviewBlobID == 0 {
+		return true
+	}
+	if alive, ok := a.shellAlive[tile.ID]; ok {
+		return alive
+	}
+	a.probeShellSessionAlive(tile.ID)
+	return false
+}
+
+// probeShellSessionAlive fires ShellSessionAlive RPC for tileID,
+// caches the result, and triggers a redraw on completion. Idempotent:
+// short-circuits if a probe is already in flight.
+func (a *App) probeShellSessionAlive(tileID int64) {
+	if a.shellAliveProbing[tileID] {
+		return
+	}
+	a.shellAliveProbing[tileID] = true
+	go func() {
+		res, err := a.cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: tileID})
+		// Probing flag clears regardless so a future probe can retry.
+		delete(a.shellAliveProbing, tileID)
+		if err != nil {
+			shellLog("ShellSessionAlive tile=%d err=%v", tileID, err)
+			return
+		}
+		a.shellAlive[tileID] = res.Alive
+		a.draw()
+	}()
+}
+
+// setShellAlive overrides the cached probe result for tileID. Used
+// when the wasm has firsthand knowledge: a successful WS attach
+// means the session IS alive; a WS rejection with PolicyViolation
+// means it ISN'T. Triggers a redraw.
+func (a *App) setShellAlive(tileID int64, alive bool) {
+	cur, ok := a.shellAlive[tileID]
+	a.shellAlive[tileID] = alive
+	if !ok || cur != alive {
+		a.draw()
+	}
+}
+
 // openShellStream mounts an xterm.js terminal in a DOM overlay over
 // the pane's content area, opens a WebSocket to /rpc/ShellStream, and
 // wires the two together. Idempotent: a second call for the same pane
@@ -192,6 +252,20 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 			reason = args[0].Get("reason").String()
 		}
 		shellLog("onClose pane=%s tile=%d code=%d reason=%q", p.ID, tileID, code, reason)
+		// PolicyViolation (1008) is the server's "session is gone"
+		// signal — wasm asked to attach but the tmux session no
+		// longer exists. Flip the cache so the refresh button hides
+		// on this tile until the user does something that creates
+		// a fresh session (which today is only "fresh tile, no
+		// snapshot" — i.e. never, for a snapshotted tile). Other
+		// close codes (NormalClosure, abnormal) mean the session
+		// was alive at least until the close: leave the cache as
+		// alive=true to skip a probe on the next descent.
+		if code == 1008 {
+			a.setShellAlive(tileID, false)
+		} else {
+			a.setShellAlive(tileID, true)
+		}
 		a.releaseShellStream(p.ID, conn)
 		a.draw()
 		return nil

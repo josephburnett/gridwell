@@ -299,7 +299,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			if pointInPlus(r, sx, sy) && !a.hasShellStream(p.ID) {
 				gid := a.gridIDForPath(p.Path)
 				if g, ok := a.c.Grid(gid); ok {
-					if tile, ok := g.Tiles[p.TextFocus]; ok {
+					if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
 						a.openShellStream(p, tile.ID)
 					}
 				}

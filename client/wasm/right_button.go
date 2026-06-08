@@ -561,6 +561,11 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		TileID:  d.tileID,
 		Version: d.snapshotTile.Version,
 	}
+	// Drop any cached liveness probe for this tile — the row is
+	// about to vanish and so will the tmux session the server side
+	// kills behind it.
+	delete(a.shellAlive, d.tileID)
+	delete(a.shellAliveProbing, d.tileID)
 	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, func(ctx context.Context) error {
 		return a.cl.DeleteTile(ctx, req)
 	})

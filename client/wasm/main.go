@@ -152,6 +152,15 @@ type App struct {
 	// per pane descended into a live shell tile.
 	shellStreams map[string]*shellStreamConn
 
+	// shellAlive caches the result of the ShellSessionAlive probe per
+	// tile id. The refresh button shows iff (preview_blob_id == 0)
+	// || shellAlive[id] is true. shellAliveProbing dedups in-flight
+	// probes so a rapid sequence of redraws doesn't fan out into
+	// many RPC calls. A missing key means "unknown" — the renderer
+	// kicks off a probe and hides the button until the result lands.
+	shellAlive    map[int64]bool
+	shellAliveProbing map[int64]bool
+
 	// urlUpdateScheduled is true when a debounced URL replaceState is
 	// pending. Multiple state changes within the debounce window
 	// coalesce into a single replaceState. Cleared when the timeout
@@ -376,6 +385,8 @@ func main() {
 		urlPreview:     preview.NewCache(preview.NewJSDecoder()),
 		urlStreams:     map[string]*urlStreamConn{},
 		shellStreams:   map[string]*shellStreamConn{},
+		shellAlive:        map[int64]bool{},
+		shellAliveProbing: map[int64]bool{},
 		urlPanX:        map[string]float64{},
 		urlPanY:        map[string]float64{},
 	}

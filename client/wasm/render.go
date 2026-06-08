@@ -399,10 +399,16 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				a.drawURLRefreshButton(p, r)
 			}
 		} else if a.isShellDescent(p) && !a.hasShellStream(p.ID) {
-			// Frozen shell descent: lower-right refresh button spawns
-			// a live bash session. Live descents draw no button — the
-			// xterm overlay covers the corner.
-			a.drawURLRefreshButton(p, r)
+			// Frozen shell descent: lower-right refresh button either
+			// creates a fresh tmux session (no snapshot yet) or
+			// attaches to the existing one. Hidden when the tile has
+			// a snapshot but its tmux session is gone — the JPEG is
+			// all that remains. shellRefreshButtonVisible decides and
+			// kicks off the ShellSessionAlive probe if the answer
+			// isn't cached yet.
+			if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
+				a.drawURLRefreshButton(p, r)
+			}
 		}
 	} else {
 		// + button is always available; gives the user an entry point
