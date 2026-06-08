@@ -149,6 +149,44 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Call("restore")
 }
 
+// drawShellTileInPane renders a shell tile that's currently the pane's
+// TextFocus (the user descended into it). Mirrors drawURLTileInPane:
+// the cached freeze-frame JPEG fills the pane in cover mode; when no
+// preview is loaded yet the fetch is kicked off and a hint paints the
+// stored cwd so the user sees *something* while the JPEG decodes.
+//
+// When a live shell stream is attached to the pane, the xterm.js DOM
+// overlay sits on top of this canvas — the JPEG underneath becomes
+// invisible, but painting it costs ~nothing and avoids a flash if the
+// overlay hasn't been positioned yet for the current frame.
+func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+
+	a.cctx.Set("fillStyle", colorExitFill)
+	a.cctx.Call("fillRect", x, y, w, h)
+
+	if img, ok := a.urlPreview.Get(n.ID); ok {
+		drawImageCoverCentered(a.cctx, img, x, y, w, h)
+	} else if n.PreviewBlobID != 0 {
+		a.fetchURLPreview(n.ID)
+	} else if !a.hasShellStream(p.ID) {
+		// No preview yet, no live stream — pre-refresh state. Show the
+		// shell glyph + cwd so the descent reads as "frozen shell at
+		// /tmp" rather than a blank red box.
+		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		if n.ShellCwd != "" {
+			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Set("font", "13px monospace")
+			a.cctx.Call("fillText", n.ShellCwd, x+16, y+h-16, w-32)
+		}
+	}
+
+	a.cctx.Call("restore")
+}
+
 // drawShellTile renders a shell tile in the parent grid view. Same
 // pattern as drawURLTile: cached JPEG covers the cell when available,
 // otherwise a placeholder shows the cwd path on a dark fill. The

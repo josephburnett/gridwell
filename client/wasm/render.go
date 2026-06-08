@@ -318,6 +318,9 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				case rpc.KindURL:
 					ix, iy, iw, ih := paneContentBox(r)
 					a.drawURLTileInPane(p, &file, ix, iy, iw, ih)
+				case rpc.KindShell:
+					ix, iy, iw, ih := paneContentBox(r)
+					a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
 				default:
 					ix, iy, iw, ih := fileInnerBox(p, r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
@@ -395,6 +398,11 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			} else {
 				a.drawURLRefreshButton(p, r)
 			}
+		} else if a.isShellDescent(p) && !a.hasShellStream(p.ID) {
+			// Frozen shell descent: lower-right refresh button spawns
+			// a live bash session. Live descents draw no button — the
+			// xterm overlay covers the corner.
+			a.drawURLRefreshButton(p, r)
 		}
 	} else {
 		// + button is always available; gives the user an entry point
