@@ -17,39 +17,66 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/tmux"
 )
 
 // fakeShellStreamer is an in-memory shellStreamer. Records every
-// session opened so tests can assert on tileID, initial size, and
-// freeze-time cwd.
+// OpenSession call so tests can assert on tileID, mode, and size.
+// HasSession is programmable per tile so tests can drive the
+// create / attach / reject decision in the WS handler.
 type fakeShellStreamer struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+
+	// alive maps tileID → "is there a live tmux session?". HasSession
+	// reports from this map. Defaults to false (nothing exists).
+	alive map[int64]bool
+
 	sessions []*fakeShellSession
-	// nextCwdResult, if non-empty, is what each created session's Cwd()
-	// returns — lets tests fake "user typed cd /tmp" without driving
-	// the shell.
-	nextCwdResult string
+	killed   []int64
 }
 
 func newFakeShellStreamer() *fakeShellStreamer {
-	return &fakeShellStreamer{}
+	return &fakeShellStreamer{alive: map[int64]bool{}}
 }
 
-func (f *fakeShellStreamer) OpenSession(tid int64, cwd string, cols, rows uint16) (shellSession, error) {
+// setAlive programs HasSession's answer for tileID.
+func (f *fakeShellStreamer) setAlive(tileID int64, alive bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.alive[tileID] = alive
+}
+
+func (f *fakeShellStreamer) OpenSession(tid int64, mode tmux.Mode, cols, rows uint16) (shellSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s := &fakeShellSession{
 		tileID:        tid,
-		initialCwd:    cwd,
+		openMode:      mode,
 		initialCols:   cols,
 		initialRows:   rows,
 		outCh:         make(chan []byte, 16),
 		done:          make(chan struct{}),
-		freezeCwd:     f.nextCwdResult,
 		inputReceived: make(chan struct{}, 32),
 	}
 	f.sessions = append(f.sessions, s)
+	// A successful OpenSession leaves the tmux session in alive state
+	// (whether we just created it or attached to it).
+	f.alive[tid] = true
 	return s, nil
+}
+
+func (f *fakeShellStreamer) HasSession(tileID int64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.alive[tileID], nil
+}
+
+func (f *fakeShellStreamer) Kill(tileID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.killed = append(f.killed, tileID)
+	delete(f.alive, tileID)
+	return nil
 }
 
 func (f *fakeShellStreamer) lastSession() *fakeShellSession {
@@ -67,17 +94,24 @@ func (f *fakeShellStreamer) sessionCount() int {
 	return len(f.sessions)
 }
 
+func (f *fakeShellStreamer) killedIDs() []int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]int64, len(f.killed))
+	copy(out, f.killed)
+	return out
+}
+
 type fakeShellSession struct {
 	tileID      int64
-	initialCwd  string
+	openMode    tmux.Mode
 	initialCols uint16
 	initialRows uint16
 
-	mu        sync.Mutex
-	inputs    [][]byte
-	resizes   [][2]uint16
-	closed    bool
-	freezeCwd string
+	mu      sync.Mutex
+	inputs  [][]byte
+	resizes [][2]uint16
+	closed  bool
 
 	outCh chan []byte
 	done  chan struct{}
@@ -114,18 +148,6 @@ func (s *fakeShellSession) Resize(cols, rows uint16) error {
 	return nil
 }
 
-func (s *fakeShellSession) Cwd() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.freezeCwd
-}
-
-func (s *fakeShellSession) setFreezeCwd(cwd string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.freezeCwd = cwd
-}
-
 func (s *fakeShellSession) Done() <-chan struct{} { return s.done }
 
 func (s *fakeShellSession) Close() error {
@@ -136,9 +158,6 @@ func (s *fakeShellSession) Close() error {
 	}
 	s.closed = true
 	close(s.done)
-	// Closing the output channel models the real session's pump
-	// goroutine exiting on PTY EOF — lets the server's writer loop
-	// detect the end of the stream and exit cleanly.
 	close(s.outCh)
 	return nil
 }
@@ -212,11 +231,10 @@ func TestShellStreamRefusesWhenStreamerMissing(t *testing.T) {
 
 // TestShellStreamRefusesNonShellTile: the WS handler must check the
 // tile kind before opening a session — wiring it up against a URL
-// tile would otherwise leak a PTY to the wrong tile.
+// tile would otherwise leak a session to the wrong tile.
 func TestShellStreamRefusesNonShellTile(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	srv.SetShellStreamer(newFakeShellStreamer())
-	// URL tile rather than a shell tile.
 	urlTileID := createURLTileViaRPC(t, hs, root, "https://example.com")
 	_, resp, err := websocket.Dial(context.Background(), shellStreamURL(hs, urlTileID, 80, 24), nil)
 	if err == nil {
@@ -227,24 +245,15 @@ func TestShellStreamRefusesNonShellTile(t *testing.T) {
 	}
 }
 
-// TestShellStreamOpensWithTileCwd: the WS handler must read the tile's
-// stored shell_cwd and pass it to the session, so a refresh of a
-// previously frozen shell resumes in the right directory.
-func TestShellStreamOpensWithTileCwd(t *testing.T) {
+// TestShellStreamFreshTileOpensInCreateMode: a tile with no snapshot
+// yet (PreviewBlobID == 0) is "fresh" — the WS handler must let the
+// streamer create a new tmux session. This is the only path where
+// silently spawning new bash is correct.
+func TestShellStreamFreshTileOpensInCreateMode(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
-
 	tileID := createShellTileViaRPC(t, hs, root)
-	// Stash a specific cwd on the tile to verify it round-trips.
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	tile, err := cl.SetShellCwd(context.Background(), &rpc.SetShellCwdRequest{
-		TileID: tileID, Version: 0, ShellCwd: "/tmp/work",
-	})
-	if err != nil {
-		t.Fatalf("SetShellCwd: %v", err)
-	}
-	_ = tile
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -258,16 +267,89 @@ func TestShellStreamOpensWithTileCwd(t *testing.T) {
 	if s.tileID != tileID {
 		t.Errorf("session tileID = %d, want %d", s.tileID, tileID)
 	}
-	if s.initialCwd != "/tmp/work" {
-		t.Errorf("session initialCwd = %q, want /tmp/work", s.initialCwd)
+	if s.openMode != tmux.ModeCreate {
+		t.Errorf("openMode = %v, want ModeCreate (fresh tile)", s.openMode)
 	}
 	if s.initialCols != 100 || s.initialRows != 40 {
 		t.Errorf("session size = %dx%d, want 100x40", s.initialCols, s.initialRows)
 	}
 }
 
-// TestShellStreamForwardsOutputBytes: PTY output reaches the client as
-// binary WebSocket frames, bytes intact.
+// TestShellStreamSnapshottedTileWithLiveSessionOpensInAttachMode:
+// a tile that has a JPEG snapshot AND whose tmux session is still
+// alive must attach to that session. ModeAttach (not ModeCreate)
+// guarantees we never silently spawn a new bash on top of an existing
+// session's state.
+func TestShellStreamSnapshottedTileWithLiveSessionOpensInAttachMode(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+
+	// Stash a JPEG so the tile reads as "previously activated".
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	if _, err := cl.SetShellPreview(context.Background(), &rpc.SetShellPreviewRequest{
+		TileID: tileID, JPEG: []byte("snap"),
+	}); err != nil {
+		t.Fatalf("SetShellPreview: %v", err)
+	}
+	// And mark the tmux session as alive.
+	fake.setAlive(tileID, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, shellStreamURL(hs, tileID, 80, 24), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	s := waitForShellSession(t, fake)
+	if s.openMode != tmux.ModeAttach {
+		t.Errorf("openMode = %v, want ModeAttach (snapshotted tile with live session)", s.openMode)
+	}
+}
+
+// TestShellStreamSnapshottedTileWithDeadSessionIsRejected: the
+// "session is gone, can't bring it back" case. The wasm shouldn't
+// have opened the WS at all (its ShellSessionAlive probe should have
+// told it not to show the refresh button), but if it does, the
+// server must refuse rather than silently spawning a fresh bash on
+// top of the JPEG.
+func TestShellStreamSnapshottedTileWithDeadSessionIsRejected(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+
+	// Snapshot present, but no tmux session alive.
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	if _, err := cl.SetShellPreview(context.Background(), &rpc.SetShellPreviewRequest{
+		TileID: tileID, JPEG: []byte("snap"),
+	}); err != nil {
+		t.Fatalf("SetShellPreview: %v", err)
+	}
+	fake.setAlive(tileID, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, shellStreamURL(hs, tileID, 80, 24), nil)
+	// The WS handshake itself succeeds (we accept before deciding),
+	// then the server closes with PolicyViolation. Either path is
+	// fine from the wasm's perspective. Assert we did NOT spawn a
+	// session.
+	if err == nil {
+		_ = conn.Close(websocket.StatusGoingAway, "")
+	}
+	// Drain a moment so the server can finish its decision.
+	time.Sleep(150 * time.Millisecond)
+	if fake.sessionCount() != 0 {
+		t.Errorf("session spawned on rejected refresh; sessionCount = %d", fake.sessionCount())
+	}
+}
+
+// TestShellStreamForwardsOutputBytes: PTY output reaches the client
+// as binary WebSocket frames, bytes intact.
 func TestShellStreamForwardsOutputBytes(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
@@ -297,8 +379,8 @@ func TestShellStreamForwardsOutputBytes(t *testing.T) {
 	}
 }
 
-// TestShellStreamForwardsStdinBytes: binary frames from the client are
-// passed through to the PTY stdin verbatim.
+// TestShellStreamForwardsStdinBytes: binary frames from the client
+// are passed through to the PTY stdin verbatim.
 func TestShellStreamForwardsStdinBytes(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
@@ -314,8 +396,6 @@ func TestShellStreamForwardsStdinBytes(t *testing.T) {
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	s := waitForShellSession(t, fake)
-	// Arrow keys + Ctrl-C — bytes that aren't typeable but must flow
-	// through unchanged.
 	payload := []byte("\x1b[A\x1b[B\x03")
 	if err := conn.Write(ctx, websocket.MessageBinary, payload); err != nil {
 		t.Fatalf("write: %v", err)
@@ -350,12 +430,10 @@ func TestShellStreamResizeMessage(t *testing.T) {
 
 	s := waitForShellSession(t, fake)
 
-	// Big resize: passes through unchanged.
 	big, _ := json.Marshal(rpc.ShellStreamMessage{Kind: "resize", Cols: 132, Rows: 50})
 	if err := conn.Write(ctx, websocket.MessageText, big); err != nil {
 		t.Fatalf("write big: %v", err)
 	}
-	// Tiny resize: clamped to minShellCols / minShellRows.
 	tiny, _ := json.Marshal(rpc.ShellStreamMessage{Kind: "resize", Cols: 4, Rows: 2})
 	if err := conn.Write(ctx, websocket.MessageText, tiny); err != nil {
 		t.Fatalf("write tiny: %v", err)
@@ -377,14 +455,14 @@ func TestShellStreamResizeMessage(t *testing.T) {
 	}
 }
 
-// TestShellStreamClosePersistsCwd: at WS close, the handler must read
-// session.Cwd() and persist it through SetShellCwd. This is the cwd-
-// across-freeze invariant; if it ever regresses, refresh stops
-// resuming in the user's last directory.
-func TestShellStreamClosePersistsCwd(t *testing.T) {
+// TestShellStreamCloseDetachesNotKills: at WS close (ascent), the
+// handler must close the PTY-side session (detaching the tmux
+// client) but must NOT call Kill (which would destroy the tmux
+// session and bash inside). The "bash survives ascent" invariant
+// rides entirely on this.
+func TestShellStreamCloseDetachesNotKills(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
-	fake.nextCwdResult = "/var/log"
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
 
@@ -404,29 +482,17 @@ func TestShellStreamClosePersistsCwd(t *testing.T) {
 	if !s.isClosed() {
 		t.Fatal("session never closed after WS close")
 	}
-
-	// Reload the tile and check shell_cwd was persisted.
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	gridResp, err := cl.GetGrid(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got string
-	for _, tile := range gridResp.Tiles {
-		if tile.ID == tileID {
-			got = tile.ShellCwd
-		}
-	}
-	if got != "/var/log" {
-		t.Errorf("persisted shell_cwd = %q, want /var/log", got)
+	// Kill must NOT have been called — that's the tile-delete path,
+	// not the ascent path. Bash inside tmux must keep running.
+	if killed := fake.killedIDs(); len(killed) != 0 {
+		t.Errorf("Kill called on ascent: %v; want no kills (detach only)", killed)
 	}
 }
 
-// TestShellStreamTakeoverPreservesSession: opening WS B for the same
-// tile while WS A is still attached must reuse the SAME bash process —
-// state (cwd, environment, scrollback) belongs to the bash session,
-// not the WS. WS A exits cleanly; WS B continues against the existing
-// PTY.
+// TestShellStreamTakeoverPreservesSession: opening WS B for the
+// same tile while WS A is still attached must reuse the SAME PTY —
+// state belongs to the underlying tmux session. WS A exits cleanly;
+// WS B continues against the existing session.
 func TestShellStreamTakeoverPreservesSession(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
@@ -450,7 +516,6 @@ func TestShellStreamTakeoverPreservesSession(t *testing.T) {
 	}
 	defer connB.Close(websocket.StatusNormalClosure, "")
 
-	// Only one session must have been opened.
 	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) && fake.sessionCount() < 1 {
 		time.Sleep(20 * time.Millisecond)
@@ -458,60 +523,13 @@ func TestShellStreamTakeoverPreservesSession(t *testing.T) {
 	if got := fake.sessionCount(); got != 1 {
 		t.Errorf("session count = %d, want 1 (takeover should reuse)", got)
 	}
-	// And the session must still be live (not freeze-closed by the
-	// takeover handoff).
 	if sessA.isClosed() {
 		t.Error("takeover closed the session; expected reuse")
 	}
 }
 
-// TestShellStreamClosePersistsCwdSkipsEmpty: if /proc/<pid>/cwd
-// can't be read (session already torn down, sandboxed reader), the
-// handler must NOT call SetShellCwd with the empty string — that
-// would wipe out the previously-stored cwd.
-func TestShellStreamClosePersistsCwdSkipsEmpty(t *testing.T) {
-	srv, hs, root := streamTestServer(t)
-	fake := newFakeShellStreamer()
-	fake.nextCwdResult = "" // simulate /proc-read failure
-	srv.SetShellStreamer(fake)
-	tileID := createShellTileViaRPC(t, hs, root)
-
-	// Stash a known cwd that must NOT be overwritten.
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	if _, err := cl.SetShellCwd(context.Background(), &rpc.SetShellCwdRequest{
-		TileID: tileID, Version: 0, ShellCwd: "/persistent",
-	}); err != nil {
-		t.Fatalf("preload cwd: %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	conn, _, err := websocket.Dial(ctx, shellStreamURL(hs, tileID, 80, 24), nil)
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
-	s := waitForShellSession(t, fake)
-	_ = conn.Close(websocket.StatusNormalClosure, "ascent")
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && !s.isClosed() {
-		time.Sleep(20 * time.Millisecond)
-	}
-
-	gridResp, err := cl.GetGrid(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tile := range gridResp.Tiles {
-		if tile.ID == tileID && tile.ShellCwd != "/persistent" {
-			t.Errorf("shell_cwd = %q, want /persistent (empty Cwd() should be a no-op)", tile.ShellCwd)
-		}
-	}
-}
-
 // TestShellStreamRespectsMinSize: a client that connects with
-// undersized cols/rows must have them clamped to the safety minimum so
-// bash isn't started against a degenerate winsize.
+// undersized cols/rows must have them clamped to the safety minimum.
 func TestShellStreamRespectsMinSize(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
@@ -534,9 +552,8 @@ func TestShellStreamRespectsMinSize(t *testing.T) {
 }
 
 // TestShellStreamWriteAfterCloseReturnsEOF: an internal post-close
-// Write returns io.ErrClosedPipe; Output channel closes so the writer
-// can detect end-of-stream. The WS handler must surface both as clean
-// exits without log-spam errors.
+// Write returns io.ErrClosedPipe; Output channel closes so the
+// writer can detect end-of-stream.
 func TestShellStreamWriteAfterCloseReturnsEOF(t *testing.T) {
 	s := &fakeShellSession{outCh: make(chan []byte), done: make(chan struct{})}
 	s.Close()

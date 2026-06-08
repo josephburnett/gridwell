@@ -252,7 +252,6 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 		pid                  sql.NullInt64
 		sourceKey            sql.NullString
 		altText              string
-		shellCwd             string
 		createdAt, updatedAt int64
 	}
 	var copies []tileCopy
@@ -264,7 +263,6 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
 			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
 			&nc.urlString, &nc.previewBlob, &nc.fsPath, &nc.pid, &nc.sourceKey, &nc.altText,
-			&nc.shellCwd,
 			&nc.createdAt, &nc.updatedAt); err != nil {
 			return 0, nil, err
 		}
@@ -281,14 +279,12 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
 				url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
-				shell_cwd,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			nc.objectID, nc.version, newGridID, nc.kind, nc.x, nc.y, nc.w, nc.h,
 			nc.viewX, nc.viewY, nc.viewZoom, nc.childGrid,
 			nc.textX, nc.textY, nc.textW, nc.textH, nc.textMode, nc.blob,
 			nc.urlString, nc.previewBlob, nc.fsPath, nc.pid, nc.sourceKey, nc.altText,
-			nc.shellCwd,
 			nc.createdAt, now)
 		if err != nil {
 			return 0, nil, fmt.Errorf("copy tile: %w", err)

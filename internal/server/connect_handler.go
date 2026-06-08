@@ -115,9 +115,6 @@ func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[p
 func (h *connectHandler) SetTextView(ctx context.Context, req *connect.Request[pb.SetTextViewRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.SetTextView(ctx, rpc.SetTextViewFromProto(req.Msg)))
 }
-func (h *connectHandler) SetShellCwd(ctx context.Context, req *connect.Request[pb.SetShellCwdRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.SetShellCwd(ctx, rpc.SetShellCwdFromProto(req.Msg)))
-}
 func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Request[pb.SetShellPreviewRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.SetShellPreview(ctx, rpc.SetShellPreviewFromProto(req.Msg)))
 }

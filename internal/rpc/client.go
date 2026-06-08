@@ -161,13 +161,6 @@ func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Til
 	}
 	return TileFromProto(r.Msg.Tile), nil
 }
-func (c *Client) SetShellCwd(ctx context.Context, req *SetShellCwdRequest) (*Tile, error) {
-	r, err := c.cl.SetShellCwd(ctx, connect.NewRequest(SetShellCwdToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
 func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewRequest) (*Tile, error) {
 	r, err := c.cl.SetShellPreview(ctx, connect.NewRequest(SetShellPreviewToProto(req)))
 	if err != nil {

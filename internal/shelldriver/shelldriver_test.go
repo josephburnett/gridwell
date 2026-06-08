@@ -5,8 +5,6 @@ import (
 	"errors"
 	"io"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,13 +22,6 @@ func requireBash(t *testing.T) string {
 		t.Skipf("bash not available: %v", err)
 	}
 	return path
-}
-
-func requireProc(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS != "linux" {
-		t.Skipf("/proc is Linux-only (GOOS=%s)", runtime.GOOS)
-	}
 }
 
 // drainUntil reads from s.Output() into a buffer until either a
@@ -76,9 +67,6 @@ func TestStartAndExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if s.PID() <= 0 {
-		t.Errorf("PID = %d, want > 0", s.PID())
-	}
 	if _, err := s.Write([]byte("exit\n")); err != nil {
 		t.Fatalf("Write exit: %v", err)
 	}
@@ -91,52 +79,6 @@ func TestStartAndExit(t *testing.T) {
 		// A non-zero bash exit isn't a failure here — we just want
 		// no startup/teardown error.
 		t.Logf("Close returned: %v (informational)", err)
-	}
-}
-
-// TestCwdReflectsCd is the core of the cwd-persistence story: after
-// the user types `cd /tmp`, /proc/<bash_pid>/cwd reports /tmp. The
-// freeze path captures this so the next refresh resumes there.
-func TestCwdReflectsCd(t *testing.T) {
-	bashPath := requireBash(t)
-	requireProc(t)
-	tmp := t.TempDir()
-	s, err := Start(Config{
-		Cwd:      "/",
-		Cols:     80,
-		Rows:     24,
-		BashPath: bashPath,
-		Args:     []string{"--norc", "--noprofile", "-i"},
-		Env:      []string{"PS1=READY> ", "HOME=" + tmp, "TERM=dumb"},
-	})
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer s.Close()
-
-	// Wait for the first prompt — we know bash is ready to accept
-	// commands when READY> appears on the PTY.
-	output := drainUntil(t, s, "READY>", 2*time.Second)
-	if !bytes.Contains(output, []byte("READY>")) {
-		t.Fatalf("never saw initial prompt; output so far: %q", output)
-	}
-
-	if s.Cwd() != "/" {
-		t.Errorf("initial Cwd = %q, want /", s.Cwd())
-	}
-
-	if _, err := s.Write([]byte("cd " + tmp + "\n")); err != nil {
-		t.Fatalf("Write cd: %v", err)
-	}
-	// Drive the prompt forward so bash actually processes the cd.
-	drainUntil(t, s, "READY>", 2*time.Second)
-
-	// /proc reflects the new cwd. Resolve the tempdir to the same
-	// canonical form Readlink returns (some platforms symlink /tmp).
-	want, _ := filepath.EvalSymlinks(tmp)
-	got, _ := filepath.EvalSymlinks(s.Cwd())
-	if got != want {
-		t.Errorf("after cd %s: Cwd = %q (resolved %q), want %q", tmp, s.Cwd(), got, want)
 	}
 }
 

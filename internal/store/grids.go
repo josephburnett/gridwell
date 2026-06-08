@@ -73,8 +73,7 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
-	shell_cwd`
+	url_string, preview_blob_id, fs_path, pid, source_key, alt_text`
 
 // scanTile scans a single row into an rpc.Tile. It expects the columns to
 // match tileColumns in order.
@@ -98,7 +97,6 @@ func scanTile(scanner interface {
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
 		&urlStr, &previewBID, &fsPath, &pidNS, &sourceKey, &n.AltText,
-		&n.ShellCwd,
 	); err != nil {
 		return nil, err
 	}

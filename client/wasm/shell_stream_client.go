@@ -277,10 +277,12 @@ func (c *shellStreamConn) sendText(s string) {
 	}
 }
 
-// closeShellStream is the freeze path: capture a JPEG of the terminal
-// (so the next descent shows it as the frozen preview), POST it via
-// SetShellPreview, then close the WebSocket. Server's WS-close handler
-// reads /proc/<pid>/cwd and persists shell_cwd. Idempotent.
+// closeShellStream is the freeze path: capture a JPEG of the
+// terminal (so the next descent shows it as the frozen preview),
+// POST it via SetShellPreview, then close the WebSocket. The
+// server-side WS-close just detaches the tmux client — bash keeps
+// running inside the tmux session so a future refresh reattaches to
+// the same state. Idempotent.
 func (a *App) closeShellStream(paneID string) {
 	conn, ok := a.shellStreams[paneID]
 	if !ok {

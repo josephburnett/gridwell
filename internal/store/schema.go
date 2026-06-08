@@ -13,10 +13,11 @@ package store
 //     list is reconciled against that directory.
 //   - process-well (exit):   points at a host PID; child grid's tile list
 //     is reconciled against the process table.
-//   - shell      (exit):     interactive bash session. Live mode streams a
-//     PTY into the descent overlay; freeze captures a JPEG preview and
-//     terminates the bash process. shell_cwd persists the bash PID's last
-//     /proc/<pid>/cwd so refresh resumes in the same directory.
+//   - shell      (exit):     interactive bash session inside a gridwell-
+//     private tmux session. Live mode attaches the tmux client; freeze
+//     captures a JPEG preview and detaches. The bash + scrollback live in
+//     the tmux server and persist across ascents (and gridwell restarts);
+//     they are gone only when the tile is deleted or the host reboots.
 //
 // Grids carry an optional (source_kind, source_id): NULL = regular
 // Gridwell-owned, 'fs' = backed by a filesystem path, 'proc' = backed by
@@ -101,13 +102,6 @@ CREATE TABLE IF NOT EXISTS tiles (
     fs_path       TEXT,
     pid           INTEGER,
     source_key    TEXT,
-    -- shell-only: absolute host path the bash session will resume in on
-    -- the next refresh. Captured at freeze time from /proc/<bash_pid>/cwd
-    -- so a session that 'cd /tmp; exit'-equivalent (frozen) still resumes
-    -- in /tmp. Empty until the first freeze; CreateShell stamps the
-    -- server's HOME at insert time so a brand-new shell tile has a
-    -- non-empty starting directory.
-    shell_cwd     TEXT NOT NULL DEFAULT '',
     -- Canonical display label. Stamped at insert time and refreshed by
     -- the source-grid reconciler. The client renders alt_text verbatim
     -- (no derivation). Empty string until something stamps it (e.g. a

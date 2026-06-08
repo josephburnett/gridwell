@@ -2006,10 +2006,11 @@ func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int6
 }
 
 // createShellAtCell fires CreateShell at the given cell, then
-// auto-descends and auto-spawns the PTY — the user dropped a shell to
-// use a shell, not to look at a placeholder. shell_cwd is stamped to
-// $HOME server-side. Subsequent ascent / re-descent into the same
-// tile shows the frozen JPEG and requires an explicit refresh.
+// auto-descends and auto-spawns the PTY — the user dropped a shell
+// to use a shell, not to look at a placeholder. The first refresh
+// creates the tile's gridwell-private tmux session; subsequent
+// ascent / re-descent shows the frozen JPEG and refresh reattaches
+// to the same tmux session (state preserved).
 func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPath(p.Path)
 	path := slices.Clone(p.Path)

@@ -1,12 +1,14 @@
-// Package shelldriver spawns an interactive bash process attached to a
-// PTY and bridges its stdin/stdout to a caller-supplied I/O surface.
-// The server's WebSocket shell-stream handler wraps a Session in a
-// duplex transport; tests substitute in-memory transports to exercise
-// the driver without needing a real WebSocket.
+// Package shelldriver spawns a process attached to a PTY and bridges
+// its stdin/stdout to a caller-supplied I/O surface. The server's
+// WebSocket shell-stream handler wraps a Session in a duplex
+// transport; tests substitute in-memory transports to exercise the
+// driver without needing a real WebSocket.
 //
-// Scope: one Session = one PTY = one bash process. The driver knows
-// nothing about Gridwell tiles or persistence — that mapping lives in
-// the server layer.
+// Scope: one Session = one PTY = one spawned process. Historically
+// the spawned process was bash directly; with the tmux backing it is
+// `tmux new-session` / `tmux attach-session`. The driver doesn't
+// know which: it just execs the configured binary with the
+// configured args. That mapping lives in the server layer.
 package shelldriver
 
 import (
@@ -14,8 +16,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -184,19 +184,7 @@ func (s *Session) Resize(cols, rows uint16) error {
 	return pty.Setsize(s.ptmx, &pty.Winsize{Cols: cols, Rows: rows})
 }
 
-// PID returns the bash process's PID. Used by the freeze path to read
-// /proc/<pid>/cwd.
-func (s *Session) PID() int { return s.pid }
-
-// Cwd returns the bash process's current working directory by reading
-// /proc/<pid>/cwd. Called at freeze time so the tile remembers where
-// the user 'cd'-ed to. Returns the empty string if the symlink can't
-// be read (process already exited, sandboxed reader).
-func (s *Session) Cwd() string {
-	return readProcCwd(s.pid)
-}
-
-// Done returns a channel closed when the bash process has fully
+// Done returns a channel closed when the spawned process has fully
 // exited. Tests rely on this for deterministic teardown.
 func (s *Session) Done() <-chan struct{} { return s.doneCh }
 
@@ -271,14 +259,3 @@ func dirExists(path string) bool {
 	return err == nil && st.IsDir()
 }
 
-// readProcCwd resolves /proc/<pid>/cwd as a symlink. Returns "" if the
-// process is gone or the reader isn't allowed in. Lives here (instead
-// of in procsource) so the shelldriver has no dependency on Gridwell
-// internal packages — testable in isolation.
-func readProcCwd(pid int) string {
-	target, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "cwd"))
-	if err != nil {
-		return ""
-	}
-	return target
-}

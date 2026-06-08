@@ -18,6 +18,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/internal/tmux"
 	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
@@ -129,9 +130,21 @@ func RunServe(args []string) int {
 	fmt.Printf("gridwell: %s driver ready (profile=%s headless=%v)\n",
 		f.BrowserName, profilePath, f.Headless)
 
+	// The gridwell-private tmux server backs every shell tile. One
+	// socket per gridwell process; sessions named `gridwell-<tileID>`
+	// survive ascents and gridwell restarts (bash + scrollback live
+	// in tmux). Reboots take everything with them; the snapshot
+	// remains and the wasm hides the refresh button.
+	tmuxCtrl, tmuxCleanup, err := tmux.New("gridwell", "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: tmux init: %v\n", err)
+		return 1
+	}
+	defer func() { _ = tmuxCleanup() }()
+
 	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))
-	srv.SetShellStreamer(server.ShellStreamerFromDriver())
+	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()

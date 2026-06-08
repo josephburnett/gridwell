@@ -177,15 +177,10 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 	} else if !a.hasShellStream(p.ID) {
-		// No preview yet, no live stream — pre-refresh state. Show the
-		// shell glyph + cwd so the descent reads as "frozen shell at
-		// /tmp" rather than a blank red box.
+		// No preview yet, no live stream — pre-refresh state. Show
+		// the shell glyph so the descent reads as a frozen shell
+		// rather than a blank red box.
 		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
-		if n.ShellCwd != "" {
-			a.cctx.Set("fillStyle", colorMuted)
-			a.cctx.Set("font", "13px monospace")
-			a.cctx.Call("fillText", n.ShellCwd, x+16, y+h-16, w-32)
-		}
 	}
 
 	a.cctx.Call("restore")
@@ -214,15 +209,10 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 	} else if w > 20 && h > 20 {
-		// No preview yet (palette drop never refreshed) — show the
-		// stored cwd so the swatch reads as "shell in /tmp" rather
-		// than a blank red box. The shell glyph is overlaid below.
+		// No preview yet (palette drop never refreshed) — paint the
+		// shell glyph so the swatch reads as a shell rather than a
+		// blank red box.
 		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
-		if n.ShellCwd != "" {
-			a.cctx.Set("fillStyle", colorMuted)
-			a.cctx.Set("font", "10px monospace")
-			a.cctx.Call("fillText", n.ShellCwd, x+6, y+h-6, w-12)
-		}
 	}
 
 	strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder, tileBorderPx)

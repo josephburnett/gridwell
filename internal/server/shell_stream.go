@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -14,48 +15,92 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/shelldriver"
+	"github.com/josephburnett/gridwell/internal/tmux"
 )
 
-// shellStreamer is the subset of the shell driver this handler needs.
-// Stubbed in tests so the WS handler can run against an in-memory
-// session without spawning a real PTY.
+// shellStreamer is the subset of the shell-backing layer this handler
+// needs. Stubbed in tests so the WS handler can run without spawning
+// a real tmux/PTY pair.
+//
+// OpenSession spawns a fresh PTY connected to the tile's tmux session
+// in either ModeCreate (new session if missing, attach if present) or
+// ModeAttach (attach-only; errors if the session doesn't exist). The
+// handler chooses the mode per the design: ModeCreate for tiles with
+// no snapshot yet, ModeAttach for tiles whose tmux session was
+// previously launched and might or might not still be alive.
+//
+// HasSession reports whether the tile's tmux session exists right now.
+// Used by the ShellSessionAlive RPC to gate the wasm's refresh button.
+//
+// Kill removes the tile's tmux session. Idempotent. Called from
+// DeleteTile and from the startup orphan cleanup.
 type shellStreamer interface {
-	OpenSession(tileID int64, cwd string, cols, rows uint16) (shellSession, error)
+	OpenSession(tileID int64, mode tmux.Mode, cols, rows uint16) (shellSession, error)
+	HasSession(tileID int64) (bool, error)
+	Kill(tileID int64) error
 }
 
 // shellSession is the per-tile handle the ShellStream handler holds.
 // Mirrors shelldriver.Session through an interface so tests can swap
 // in a fake. Output is a channel rather than a blocking syscall so
 // the WS write loop can cancel-safely select on it together with the
-// handler's context (required for the takeover path: when a refresh
-// from another pane evicts the current WS, we need the writer to
-// return immediately without leaving a goroutine blocked on a PTY
-// read).
+// handler's context (required for the takeover path).
 type shellSession interface {
 	Output() <-chan []byte
 	Write(p []byte) (int, error)
 	Resize(cols, rows uint16) error
-	Cwd() string
 	Done() <-chan struct{}
 	Close() error
 }
 
-// SetShellStreamer wires a streamer into the server. Production passes
-// ShellStreamerFromDriver(); tests pass an in-memory fake.
+// ErrShellSessionGone is returned by acquireShellSession when the
+// tile has been snapshotted but its tmux session is no longer alive.
+// The WS handler maps this to a 410 Gone so the wasm flips the
+// refresh button off — recovery is impossible (bash is gone, only the
+// JPEG remains).
+var ErrShellSessionGone = errors.New("shell session no longer alive")
+
+// SetShellStreamer wires a streamer into the server. Production
+// passes a streamer constructed from a tmux.Controller via
+// NewLiveShellStreamer; tests pass an in-memory fake.
 func (s *Server) SetShellStreamer(d shellStreamer) { s.shellStreamer = d }
 
-// ShellStreamerFromDriver is the production adapter — opens a real
-// PTY through shelldriver.Start.
-func ShellStreamerFromDriver() shellStreamer { return &liveShellStreamer{} }
+// NewLiveShellStreamer is the production constructor. It composes
+// tmux argv via the controller and execs that argv through
+// shelldriver, so callers get a PTY-backed tmux client that survives
+// detach via the underlying tmux server. Pass the same controller
+// the orphan cleanup uses so HasSession queries agree with session
+// reality.
+func NewLiveShellStreamer(ctrl *tmux.Controller) shellStreamer {
+	return &liveShellStreamer{ctrl: ctrl}
+}
 
-type liveShellStreamer struct{}
+type liveShellStreamer struct {
+	ctrl *tmux.Controller
+}
 
-func (liveShellStreamer) OpenSession(tileID int64, cwd string, cols, rows uint16) (shellSession, error) {
-	s, err := shelldriver.Start(shelldriver.Config{Cwd: cwd, Cols: cols, Rows: rows})
+func (l *liveShellStreamer) OpenSession(tileID int64, mode tmux.Mode, cols, rows uint16) (shellSession, error) {
+	argv := l.ctrl.Args(tileID, mode, cols, rows, "")
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("shellstream: empty tmux argv for tile %d mode %v", tileID, mode)
+	}
+	s, err := shelldriver.Start(shelldriver.Config{
+		Cols: cols, Rows: rows,
+		BashPath: argv[0],
+		Args:     argv[1:],
+	})
 	if err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func (l *liveShellStreamer) HasSession(tileID int64) (bool, error) {
+	return l.ctrl.HasSession(tileID)
+}
+
+func (l *liveShellStreamer) Kill(tileID int64) error {
+	return l.ctrl.KillSession(tileID)
 }
 
 // shellSessionEntry mirrors urlSessionEntry — the live session plus a
@@ -66,20 +111,29 @@ type shellSessionEntry struct {
 }
 
 const (
-	minShellCols       = 20
-	minShellRows       = 5
-	defaultShellCols   = 80
-	defaultShellRows   = 24
-	shellWriteTimeout  = 30 * time.Second
-	shellFreezeTimeout = 5 * time.Second
+	minShellCols      = 20
+	minShellRows      = 5
+	defaultShellCols  = 80
+	defaultShellRows  = 24
+	shellWriteTimeout = 30 * time.Second
 )
 
-// acquireShellSession returns the live session for tileID. If one
-// exists the previous WS handler is signalled to exit; the SAME bash
-// process keeps running (state isn't lost across pane swaps). Without
-// an existing session, a fresh PTY is started in the tile's stored
-// shell_cwd.
-func (s *Server) acquireShellSession(tileID int64, cwd string, cols, rows uint16) (shellSession, chan struct{}, error) {
+// acquireShellSession returns the live session for tileID. Three
+// outcomes:
+//
+//   - An active WS already holds a session: takeover. The previous
+//     handler is signalled to exit; the SAME PTY is reused. The tmux
+//     session is alive by construction (we're already talking to it).
+//   - No active WS, but a tmux session exists: open a fresh PTY in
+//     ModeAttach and return it.
+//   - No active WS, no tmux session: open in ModeCreate only if
+//     allowCreate is true. Otherwise return ErrShellSessionGone.
+//
+// allowCreate is the wasm-side intent encoded as a bool: tiles with
+// no snapshot yet have allowCreate=true (fresh tile, user expects a
+// new bash to spawn); tiles with a snapshot have allowCreate=false
+// (we won't silently fabricate state behind the JPEG).
+func (s *Server) acquireShellSession(tileID int64, allowCreate bool, cols, rows uint16) (shellSession, chan struct{}, error) {
 	s.activeShellMu.Lock()
 	defer s.activeShellMu.Unlock()
 	if entry, ok := s.activeShellSessions[tileID]; ok {
@@ -87,7 +141,20 @@ func (s *Server) acquireShellSession(tileID int64, cwd string, cols, rows uint16
 		entry.stopOld = make(chan struct{})
 		return entry.session, entry.stopOld, nil
 	}
-	sess, err := s.shellStreamer.OpenSession(tileID, cwd, cols, rows)
+
+	alive, err := s.shellStreamer.HasSession(tileID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("shellstream: probe tile %d: %w", tileID, err)
+	}
+	mode := tmux.ModeAttach
+	if !alive {
+		if !allowCreate {
+			return nil, nil, ErrShellSessionGone
+		}
+		mode = tmux.ModeCreate
+	}
+
+	sess, err := s.shellStreamer.OpenSession(tileID, mode, cols, rows)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -103,10 +170,10 @@ func (s *Server) acquireShellSession(tileID int64, cwd string, cols, rows uint16
 
 // releaseShellSession is the inverse of acquireShellSession. If this
 // handler still owns the entry (no takeover happened mid-flight), the
-// session is closed AND the freeze path runs: read /proc/<pid>/cwd
-// and persist it via store.SetShellCwd so the next refresh resumes
-// there. On takeover this is a no-op — the new WS handler takes over
-// freeze responsibility.
+// PTY-side session is closed (which kills the gridwell-spawned tmux
+// CLIENT but leaves the tmux SERVER + bash running, so the next
+// refresh re-attaches to the same state). On takeover this is a
+// no-op — the new WS handler keeps the same session.
 func (s *Server) releaseShellSession(tileID int64, mySession shellSession, myStopOld chan struct{}) {
 	s.activeShellMu.Lock()
 	entry, ok := s.activeShellSessions[tileID]
@@ -116,36 +183,9 @@ func (s *Server) releaseShellSession(tileID int64, mySession shellSession, mySto
 	}
 	s.activeShellMu.Unlock()
 	if matches {
-		s.closeShellSession(tileID, mySession)
+		log.Printf("[shellstream] detach tile=%d", tileID)
+		_ = mySession.Close()
 	}
-}
-
-// closeShellSession is the freeze path: capture cwd BEFORE Close()
-// (the PTY teardown invalidates /proc/<pid>/cwd), persist it, then
-// kill bash. Errors are logged but never block the teardown.
-func (s *Server) closeShellSession(tileID int64, session shellSession) {
-	log.Printf("[shellstream] freeze tile=%d", tileID)
-	cwd := session.Cwd()
-	if cwd != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), shellFreezeTimeout)
-		defer cancel()
-		// Reload the tile so we have a fresh version for the optimistic
-		// concurrency check; the version may have moved since this WS
-		// was opened (the client might have set the preview JPEG
-		// concurrently via the Connect SetShellPreview RPC).
-		t, err := s.store.GetTile(ctx, tileID)
-		if err != nil {
-			log.Printf("[shellstream] cwd-load-err tile=%d err=%v", tileID, err)
-		} else {
-			_, err = s.store.SetShellCwd(ctx, &rpc.SetShellCwdRequest{
-				TileID: tileID, Version: t.Version, ShellCwd: cwd,
-			})
-			if err != nil {
-				log.Printf("[shellstream] cwd-save-err tile=%d cwd=%q err=%v", tileID, cwd, err)
-			}
-		}
-	}
-	_ = session.Close()
 }
 
 // shellStream is the /rpc/ShellStream WebSocket handler. Protocol:
@@ -154,8 +194,8 @@ func (s *Server) closeShellSession(tileID int64, session shellSession) {
 //     PTY output (server→client) — raw byte passthrough.
 //   - Text frames, client→server: ShellStreamMessage (JSON), only
 //     "resize" is recognized today.
-//   - There is no server→client text channel; the PTY output stream is
-//     the only thing the client renders.
+//   - There is no server→client text channel; the PTY output stream
+//     is the only thing the client renders.
 func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 	if s.shellStreamer == nil {
 		http.Error(w, "shell driver not configured", http.StatusServiceUnavailable)
@@ -178,6 +218,14 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 	}
 	cols, rows := parseShellSize(r.URL.Query())
 
+	// Decide whether silently spawning a fresh bash is allowed. A
+	// tile with no snapshot yet (PreviewBlobID == 0) is a fresh tile
+	// the user wants a session for; a tile with a snapshot has a
+	// historical record we won't quietly overwrite by booting a new
+	// shell. acquireShellSession turns this into ModeCreate vs
+	// ModeAttach below.
+	allowCreate := tile.PreviewBlobID == 0
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
@@ -188,13 +236,17 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	session, myStopOld, err := s.acquireShellSession(tileID, tile.ShellCwd, cols, rows)
+	session, myStopOld, err := s.acquireShellSession(tileID, allowCreate, cols, rows)
 	if err != nil {
-		log.Printf("[shellstream] open-err tile=%d err=%v", tileID, err)
-		_ = conn.Close(websocket.StatusInternalError, "open session failed")
+		log.Printf("[shellstream] open-err tile=%d allowCreate=%v err=%v", tileID, allowCreate, err)
+		if errors.Is(err, ErrShellSessionGone) {
+			_ = conn.Close(websocket.StatusPolicyViolation, "shell session gone")
+		} else {
+			_ = conn.Close(websocket.StatusInternalError, "open session failed")
+		}
 		return
 	}
-	log.Printf("[shellstream] open tile=%d cwd=%q", tileID, tile.ShellCwd)
+	log.Printf("[shellstream] attach tile=%d allowCreate=%v", tileID, allowCreate)
 
 	// Cancel when the session dies, on takeover, or on client close.
 	go func() {
@@ -218,9 +270,9 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseShellSize reads cols/rows from the URL query string, clamping
-// to a minimum so a misbehaving client can't drive the PTY to a winsize
-// that breaks bash. Empty / unparseable / too-small values become the
-// shell defaults (80x24).
+// to a minimum so a misbehaving client can't drive the PTY to a
+// winsize that breaks bash. Empty / unparseable / too-small values
+// become the shell defaults (80x24).
 func parseShellSize(q map[string][]string) (uint16, uint16) {
 	parse := func(name string, dflt uint16, min uint16) uint16 {
 		vs, ok := q[name]
