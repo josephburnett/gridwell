@@ -4,10 +4,10 @@ package main
 
 import (
 	"context"
-	"sync"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -125,22 +125,24 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if img, ok := a.urlPreview.Get(n.ID); ok {
-		live := a.urlStreams[p.ID] != nil
-		if live {
-			// Live: center-crop, no pan — the page renders at pane size.
-			drawImageCoverCentered(a.cctx, img, x, y, w, h)
-		} else {
-			// Frozen: cover + pan so the user can drag to see overflow.
-			panX := a.urlPanX[p.ID]
-			panY := a.urlPanY[p.ID]
-			iw := img.Get("naturalWidth").Float()
-			ih := img.Get("naturalHeight").Float()
-			panX, panY = clampURLPan(panX, panY, iw, ih, w, h)
-			drawImageCover(a.cctx, img, x, y, w, h, panX, panY)
+	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+		if img, ok := previewImage(cached); ok {
+			live := a.urlStreams[p.ID] != nil
+			if live {
+				// Live: center-crop, no pan — the page renders at pane size.
+				drawImageCoverCentered(a.cctx, img, x, y, w, h)
+			} else {
+				// Frozen: cover + pan so the user can drag to see overflow.
+				panX := a.urlPanX[p.ID]
+				panY := a.urlPanY[p.ID]
+				iw := img.Get("naturalWidth").Float()
+				ih := img.Get("naturalHeight").Float()
+				panX, panY = clampURLPan(panX, panY, iw, ih, w, h)
+				drawImageCover(a.cctx, img, x, y, w, h, panX, panY)
+			}
 		}
 	} else {
-		a.fetchURLPreview(n.ID)
+		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "16px monospace")
 		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
@@ -168,10 +170,12 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	a.cctx.Set("fillStyle", colorExitFill)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if img, ok := a.urlPreview.Get(n.ID); ok {
-		drawImageCoverCentered(a.cctx, img, x, y, w, h)
+	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+		if img, ok := previewImage(cached); ok {
+			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+		}
 	} else if n.PreviewBlobID != 0 {
-		a.fetchURLPreview(n.ID)
+		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 	} else if !a.hasShellStream(p.ID) {
 		// No preview yet, no live stream — pre-refresh state. Show the
 		// shell glyph + cwd so the descent reads as "frozen shell at
@@ -203,10 +207,12 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Set("fillStyle", colorExitFill)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if img, ok := a.urlPreview.Get(n.ID); ok {
-		drawImageCoverCentered(a.cctx, img, x, y, w, h)
+	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+		if img, ok := previewImage(cached); ok {
+			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+		}
 	} else if n.PreviewBlobID != 0 {
-		a.fetchURLPreview(n.ID)
+		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 	} else if w > 20 && h > 20 {
 		// No preview yet (palette drop never refreshed) — show the
 		// stored cwd so the swatch reads as "shell in /tmp" rather
@@ -240,15 +246,17 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if img, ok := a.urlPreview.Get(n.ID); ok {
-		drawImageCoverCentered(a.cctx, img, x, y, w, h)
+	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+		if img, ok := previewImage(cached); ok {
+			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+		}
 	} else {
 		if w > 20 && h > 20 {
 			a.cctx.Set("fillStyle", colorMuted)
 			a.cctx.Set("font", "12px monospace")
 			a.cctx.Call("fillText", n.URLString, x+8, y+18, w-16)
 		}
-		a.fetchURLPreview(n.ID)
+		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 	}
 
 	strokeTileBorder(a.cctx, x, y, w, h, colorURLLine, tileBorderPx)
@@ -258,136 +266,43 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Call("restore")
 }
 
-// urlPreviewCache holds decoded URL-tile previews as browser
-// HTMLImageElement values keyed by tile id, plus the object URL each
-// image was loaded from so we can revoke it on replacement.
-//
-// JPEG decoding is offloaded to the browser via the Blob +
-// URL.createObjectURL + new Image() chain — Image.decode is
-// asynchronous, so callers register an onReady callback that fires
-// when the image is renderable.
-type urlPreviewCache struct {
-	mu       sync.Mutex
-	images   map[int64]js.Value // tile id → HTMLImageElement (when loaded)
-	urls     map[int64]string   // tile id → object URL (for revocation)
-	pending  map[int64]bool     // a fetch is in flight
-	enqueued map[int64]bool     // a Put is decoding
-}
-
-func newURLPreviewCache() *urlPreviewCache {
-	return &urlPreviewCache{
-		images:   map[int64]js.Value{},
-		urls:     map[int64]string{},
-		pending:  map[int64]bool{},
-		enqueued: map[int64]bool{},
-	}
-}
-
-// Get returns the decoded image for tile id and whether it's ready
-// to draw. Callers must check Truthy on the returned value.
-func (c *urlPreviewCache) Get(tileID int64) (js.Value, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	img, ok := c.images[tileID]
-	if !ok || !img.Truthy() {
+// previewImage is the wasm-side cast: the cache stores a
+// preview.Image interface, but the canvas drawing helpers want a raw
+// HTMLImageElement (js.Value) to hand to drawImage. Every Get
+// callsite funnels through this helper so the cast lives in one place.
+// Returns false when the entry's underlying type isn't a *preview.JSImage
+// (defensive; the only Decoder registered with this cache produces
+// JSImage values).
+func previewImage(img preview.Image) (js.Value, bool) {
+	ji, ok := img.(*preview.JSImage)
+	if !ok || ji == nil {
 		return js.Value{}, false
 	}
-	return img, true
+	return ji.Val(), true
 }
 
-// MarkPending flags that a network fetch is in flight for tileID.
-// Returns false if a fetch was already in flight (caller should not
-// duplicate).
-func (c *urlPreviewCache) MarkPending(tileID int64) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.pending[tileID] {
-		return false
-	}
-	c.pending[tileID] = true
-	return true
-}
-
-// ClearPending unsets the in-flight flag for tileID. Called after the
-// fetch completes (success or failure).
-func (c *urlPreviewCache) ClearPending(tileID int64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.pending, tileID)
-}
-
-// Put decodes a JPEG payload into an HTMLImageElement and stores it
-// under tileID. onReady fires (on the JS thread) once the image
-// finishes decoding and the cache entry is populated. Idempotent
-// against the same in-flight decode (subsequent Puts overwrite the
-// pending one).
-func (c *urlPreviewCache) Put(tileID int64, jpegBytes []byte, onReady func()) {
-	if len(jpegBytes) == 0 {
-		return
-	}
-	c.mu.Lock()
-	c.enqueued[tileID] = true
-	c.mu.Unlock()
-
-	// Copy the bytes into a JS Uint8Array.
-	u8 := js.Global().Get("Uint8Array").New(len(jpegBytes))
-	js.CopyBytesToJS(u8, jpegBytes)
-	blobOpts := js.Global().Get("Object").New()
-	blobOpts.Set("type", "image/jpeg")
-	parts := js.Global().Get("Array").New()
-	parts.Call("push", u8)
-	blob := js.Global().Get("Blob").New(parts, blobOpts)
-	objectURL := js.Global().Get("URL").Call("createObjectURL", blob).String()
-
-	img := js.Global().Get("Image").New()
-	var onloadFn, onerrorFn js.Func
-	onloadFn = js.FuncOf(func(this js.Value, args []js.Value) any {
-		c.mu.Lock()
-		if old, ok := c.urls[tileID]; ok {
-			js.Global().Get("URL").Call("revokeObjectURL", old)
-		}
-		c.images[tileID] = img
-		c.urls[tileID] = objectURL
-		delete(c.enqueued, tileID)
-		c.mu.Unlock()
-		onloadFn.Release()
-		onerrorFn.Release()
-		if onReady != nil {
-			onReady()
-		}
-		return nil
-	})
-	onerrorFn = js.FuncOf(func(this js.Value, args []js.Value) any {
-		js.Global().Get("URL").Call("revokeObjectURL", objectURL)
-		c.mu.Lock()
-		delete(c.enqueued, tileID)
-		c.mu.Unlock()
-		onloadFn.Release()
-		onerrorFn.Release()
-		return nil
-	})
-	img.Set("onload", onloadFn)
-	img.Set("onerror", onerrorFn)
-	img.Set("src", objectURL)
-}
-
-// fetchURLPreview asynchronously requests the JPEG for the given URL
+// fetchURLPreview asynchronously requests the JPEG for the given
 // tile, decodes it into the preview cache, and triggers a redraw on
-// completion. Idempotent: short-circuits if already in flight or
-// already cached.
-func (a *App) fetchURLPreview(tileID int64) {
-	if _, ok := a.urlPreview.Get(tileID); ok {
+// completion. Idempotent: short-circuits if a fetch is already in
+// flight, or if a cached entry is already valid for blobID. blobID
+// is the tile's current PreviewBlobID — passed through so the cache
+// can detect a server-side update and re-fetch on the next call.
+func (a *App) fetchURLPreview(tileID, blobID int64) {
+	if blobID == 0 {
 		return
 	}
-	if !a.urlPreview.MarkPending(tileID) {
+	if _, ok := a.urlPreview.Get(tileID, blobID); ok {
+		return
+	}
+	if !a.urlPreview.MarkFetching(tileID) {
 		return
 	}
 	go func() {
 		jpeg, err := a.cl.GetTilePreview(context.Background(), tileID)
-		a.urlPreview.ClearPending(tileID)
+		a.urlPreview.ClearFetching(tileID)
 		if err != nil || len(jpeg) == 0 {
 			return
 		}
-		a.urlPreview.Put(tileID, jpeg, func() { a.draw() })
+		a.urlPreview.Put(tileID, blobID, jpeg, func() { a.draw() })
 	}()
 }

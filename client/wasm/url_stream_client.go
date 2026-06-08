@@ -87,7 +87,11 @@ func (a *App) openURLStream(p *pane.Pane, tileID int64, w, h int64) {
 			u8 := js.Global().Get("Uint8Array").New(data)
 			b := make([]byte, u8.Get("length").Int())
 			js.CopyBytesToGo(b, u8)
-			a.urlPreview.Put(tileID, b, func() { a.draw() })
+			// Live URL frames don't carry the server-side blob id of
+			// the frame they correspond to; store as wildcard so any
+			// renderer Get satisfies until the next freeze writes a
+			// specific blob id.
+			a.urlPreview.PutWildcard(tileID, b, func() { a.draw() })
 		}
 		return nil
 	})

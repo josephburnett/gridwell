@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -136,10 +137,10 @@ type App struct {
 	// Indexed by pane id; the slice's length matches len(pane.Path).
 	paneStateStack map[string][]paneState
 
-	// urlPreview caches decoded HTMLImageElement values for URL tile
-	// previews (one image per tile, refreshed when GetTilePreview returns
-	// new bytes).
-	urlPreview *urlPreviewCache
+	// urlPreview caches decoded HTMLImageElement values for URL and
+	// shell tile previews. Keyed by tile id; auto-invalidates when a
+	// tile's PreviewBlobID changes server-side — see client/preview.
+	urlPreview *preview.Cache
 
 	// urlStreams holds the active /rpc/URLStream WebSocket connection
 	// for each pane that's descended into a live URL tile. One per
@@ -372,7 +373,7 @@ func main() {
 		gridLoadFailed: map[int64]bool{},
 		gridInflight:   map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
-		urlPreview:     newURLPreviewCache(),
+		urlPreview:     preview.NewCache(preview.NewJSDecoder()),
 		urlStreams:     map[string]*urlStreamConn{},
 		shellStreams:   map[string]*shellStreamConn{},
 		urlPanX:        map[string]float64{},

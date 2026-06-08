@@ -106,8 +106,10 @@ func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string) {
 	// Kind-specific preview fill before the outline so it sits inside.
 	switch tile.Kind {
 	case rpc.KindURL:
-		if img, ok := a.urlPreview.Get(tile.ID); ok && img.Truthy() {
-			drawImageCover(c, img, x, y, w, h, 0, 0)
+		if cached, ok := a.urlPreview.Get(tile.ID, tile.PreviewBlobID); ok {
+			if img, ok := previewImage(cached); ok && img.Truthy() {
+				drawImageCover(c, img, x, y, w, h, 0, 0)
+			}
 		}
 	case rpc.KindWell:
 		// Future: re-use drawChildPreview for a real flat preview. For now
