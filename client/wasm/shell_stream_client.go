@@ -292,6 +292,13 @@ func (a *App) closeShellStream(paneID string) {
 	// still persists via the server's close handler.
 	if jpegBytes := snapshotShellCanvas(conn.container); jpegBytes != nil {
 		tileID := conn.tileID
+		// Update the local preview cache immediately. Without this,
+		// urlPreview.Get keeps returning the previous descent's image
+		// and fetchURLPreview short-circuits (because the cache entry
+		// is populated), so the next ascent shows the old JPEG even
+		// though the server now has the new one. Put overwrites and
+		// triggers a redraw on decode.
+		a.urlPreview.Put(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, jpegBytes)
 	}
 	if conn.ws.Truthy() {
