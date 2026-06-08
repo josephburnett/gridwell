@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 
 	"connectrpc.com/connect"
 
@@ -118,6 +119,25 @@ func (h *connectHandler) SetTextView(ctx context.Context, req *connect.Request[p
 func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Request[pb.SetShellPreviewRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.SetShellPreview(ctx, rpc.SetShellPreviewFromProto(req.Msg)))
 }
+
+// ShellSessionAlive answers the wasm's per-descent probe by asking
+// the streamer (which delegates to the tmux controller) whether the
+// tile's session exists. An infrastructure error here is reported as
+// not-alive rather than as a Connect error — the wasm doesn't care
+// why the session isn't there, only that the refresh button should
+// hide. Returns not-alive when no streamer is wired up (defensive;
+// production always wires one).
+func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
+	in := rpc.ShellSessionAliveFromProto(req.Msg)
+	if h.srv.shellStreamer == nil {
+		return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: false})), nil
+	}
+	alive, err := h.srv.shellStreamer.HasSession(in.TileID)
+	if err != nil {
+		alive = false
+	}
+	return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: alive})), nil
+}
 func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
 	if err := h.srv.store.SetRootView(ctx, rpc.SetRootViewFromProto(req.Msg)); err != nil {
 		return nil, asConnectError(err)
@@ -128,8 +148,21 @@ func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb
 	return tileResp(h.srv.store.UpdateText(ctx, rpc.UpdateTextFromProto(req.Msg)))
 }
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
+	tileID := req.Msg.TileId
 	if err := h.srv.store.DeleteTile(ctx, rpc.DeleteTileFromProto(req.Msg)); err != nil {
 		return nil, asConnectError(err)
+	}
+	// A deleted shell tile's tmux session would otherwise survive
+	// across gridwell restarts and leak. Fire-and-forget: Kill is
+	// idempotent on the tmux side (no-op if the session doesn't
+	// exist), so we don't need to look up the tile kind first. Any
+	// error is logged but doesn't fail the delete — the row is
+	// already gone and the orphan-cleanup pass at next startup
+	// would catch a missed kill anyway.
+	if h.srv.shellStreamer != nil {
+		if err := h.srv.shellStreamer.Kill(tileID); err != nil {
+			log.Printf("[shellstream] kill-on-delete tile=%d err=%v", tileID, err)
+		}
 	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
 }

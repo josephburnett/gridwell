@@ -79,6 +79,18 @@ func (f *fakeShellStreamer) Kill(tileID int64) error {
 	return nil
 }
 
+func (f *fakeShellStreamer) ListLiveTileIDs() ([]int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var ids []int64
+	for id, alive := range f.alive {
+		if alive {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
 func (f *fakeShellStreamer) lastSession() *fakeShellSession {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -548,6 +560,123 @@ func TestShellStreamRespectsMinSize(t *testing.T) {
 	if s.initialCols < minShellCols || s.initialRows < minShellRows {
 		t.Errorf("initial size = %dx%d, want clamped to >= %dx%d",
 			s.initialCols, s.initialRows, minShellCols, minShellRows)
+	}
+}
+
+// TestCleanupOrphanedShellSessions: a tmux session whose tile id
+// has no matching shell row in the DB must be killed; sessions
+// whose tile id IS still present must be left alone. This is the
+// bound on the "crash during DeleteTile leaves a session forever"
+// leak.
+func TestCleanupOrphanedShellSessions(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+
+	// Real shell tile in the DB.
+	live := createShellTileViaRPC(t, hs, root)
+	fake.setAlive(live, true)
+	// Orphan: alive on the socket, no matching DB row.
+	const orphan int64 = 999999
+	fake.setAlive(orphan, true)
+
+	killed, err := srv.CleanupOrphanedShellSessions(context.Background())
+	if err != nil {
+		t.Fatalf("CleanupOrphanedShellSessions: %v", err)
+	}
+	if killed != 1 {
+		t.Errorf("killed = %d, want 1 (only the orphan)", killed)
+	}
+	got := fake.killedIDs()
+	if len(got) != 1 || got[0] != orphan {
+		t.Errorf("killed ids = %v, want [%d]", got, orphan)
+	}
+	// The live tile's session must still be marked alive.
+	if alive, _ := fake.HasSession(live); !alive {
+		t.Error("live tile's session was killed by orphan cleanup")
+	}
+}
+
+// TestCleanupOrphanedShellSessionsNoOpWithoutStreamer: defensive —
+// the cleanup pass runs before SetShellStreamer in some test setups
+// and must not crash.
+func TestCleanupOrphanedShellSessionsNoOpWithoutStreamer(t *testing.T) {
+	srv, _, _ := streamTestServer(t)
+	killed, err := srv.CleanupOrphanedShellSessions(context.Background())
+	if err != nil || killed != 0 {
+		t.Errorf("CleanupOrphanedShellSessions without streamer = (%d, %v); want (0, nil)", killed, err)
+	}
+}
+
+// TestDeleteTileKillsShellSession locks in the tile-delete cleanup:
+// without it, deleting a tile would leave its tmux session alive on
+// the gridwell socket, leaking bash processes and scrollback across
+// gridwell restarts. The handler calls Kill unconditionally — Kill
+// is idempotent on the tmux side, so a no-op delete of a non-shell
+// tile is fine.
+func TestDeleteTileKillsShellSession(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+	fake.setAlive(tileID, true)
+
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	if err := cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
+		TileID: tileID, Version: 0,
+	}); err != nil {
+		t.Fatalf("DeleteTile: %v", err)
+	}
+	killed := fake.killedIDs()
+	if len(killed) != 1 || killed[0] != tileID {
+		t.Errorf("Kill not called for deleted shell tile %d; got %v", tileID, killed)
+	}
+}
+
+// TestShellSessionAliveReportsStreamerProbe: the unary RPC must
+// delegate straight to shellStreamer.HasSession. Two scenarios:
+//   1. session marked alive → alive=true.
+//   2. session not alive    → alive=false.
+// This is the contract the wasm's refresh-button gating reads from.
+func TestShellSessionAliveReportsStreamerProbe(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	// Default: nothing alive yet.
+	res, err := cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: tileID})
+	if err != nil {
+		t.Fatalf("ShellSessionAlive (default): %v", err)
+	}
+	if res.Alive {
+		t.Errorf("alive = true for fresh tile; want false")
+	}
+
+	fake.setAlive(tileID, true)
+	res, err = cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: tileID})
+	if err != nil {
+		t.Fatalf("ShellSessionAlive (live): %v", err)
+	}
+	if !res.Alive {
+		t.Errorf("alive = false after setAlive(true); want true")
+	}
+}
+
+// TestShellSessionAliveWithoutStreamerReportsFalse: defensive — the
+// RPC must not crash if SetShellStreamer was never called, and it
+// must report not-alive so the wasm hides the refresh button.
+func TestShellSessionAliveWithoutStreamerReportsFalse(t *testing.T) {
+	_, hs, _ := streamTestServer(t)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	res, err := cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: 1})
+	if err != nil {
+		t.Fatalf("ShellSessionAlive: %v", err)
+	}
+	if res.Alive {
+		t.Errorf("alive = true without streamer; want false")
 	}
 }
 

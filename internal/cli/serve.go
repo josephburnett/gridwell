@@ -146,6 +146,14 @@ func RunServe(args []string) int {
 	srv.SetURLStreamer(server.StreamerFromDriver(driver))
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
+	// Bound the orphan leak: any tmux session whose tile id no longer
+	// exists is left over from a delete that raced a previous crash.
+	if killed, err := srv.CleanupOrphanedShellSessions(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "gridwell: orphan cleanup: %v\n", err)
+	} else if killed > 0 {
+		fmt.Printf("gridwell: orphan cleanup killed %d stale shell session(s)\n", killed)
+	}
+
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
 

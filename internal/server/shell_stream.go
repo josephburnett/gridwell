@@ -38,6 +38,11 @@ type shellStreamer interface {
 	OpenSession(tileID int64, mode tmux.Mode, cols, rows uint16) (shellSession, error)
 	HasSession(tileID int64) (bool, error)
 	Kill(tileID int64) error
+	// ListLiveTileIDs returns the tile ids of every gridwell-owned
+	// tmux session currently alive on the backing socket. Used by the
+	// startup orphan-cleanup pass to find sessions whose tiles no
+	// longer exist.
+	ListLiveTileIDs() ([]int64, error)
 }
 
 // shellSession is the per-tile handle the ShellStream handler holds.
@@ -103,11 +108,60 @@ func (l *liveShellStreamer) Kill(tileID int64) error {
 	return l.ctrl.KillSession(tileID)
 }
 
+func (l *liveShellStreamer) ListLiveTileIDs() ([]int64, error) {
+	return l.ctrl.ListSessions()
+}
+
 // shellSessionEntry mirrors urlSessionEntry — the live session plus a
 // stopOld channel closed when a takeover evicts the current WS holder.
 type shellSessionEntry struct {
 	session shellSession
 	stopOld chan struct{}
+}
+
+// CleanupOrphanedShellSessions kills tmux sessions on the gridwell
+// socket whose tile ids no longer exist in the store. Called once at
+// startup to bound the leak when a tile delete races a gridwell
+// crash. No-op if no streamer is wired up.
+//
+// Returns the count of sessions killed (for observability) and the
+// first error encountered (or nil). A per-session kill error doesn't
+// abort the pass — best-effort cleanup, the next startup catches
+// what this one missed.
+func (s *Server) CleanupOrphanedShellSessions(ctx context.Context) (int, error) {
+	if s.shellStreamer == nil {
+		return 0, nil
+	}
+	live, err := s.shellStreamer.ListLiveTileIDs()
+	if err != nil {
+		return 0, fmt.Errorf("list live sessions: %w", err)
+	}
+	if len(live) == 0 {
+		return 0, nil
+	}
+	tileIDs, err := s.store.AllShellTileIDs(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list shell tiles: %w", err)
+	}
+	known := make(map[int64]bool, len(tileIDs))
+	for _, id := range tileIDs {
+		known[id] = true
+	}
+	killed := 0
+	var firstErr error
+	for _, id := range live {
+		if known[id] {
+			continue
+		}
+		if err := s.shellStreamer.Kill(id); err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("kill orphan tile %d: %w", id, err)
+			}
+			continue
+		}
+		killed++
+	}
+	return killed, firstErr
 }
 
 const (

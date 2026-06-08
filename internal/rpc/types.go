@@ -299,6 +299,19 @@ type SetShellPreviewRequest struct {
 	JPEG    []byte `json:"jpeg"`
 }
 
+// ShellSessionAliveRequest asks whether the gridwell-private tmux
+// session for tile_id currently exists. The wasm side uses the
+// answer to gate the refresh button on descent — see CLAUDE.md /
+// the shell-tile design notes for the truth table.
+type ShellSessionAliveRequest struct {
+	TileID int64 `json:"tile_id"`
+}
+
+// ShellSessionAliveResponse is the answer side of the probe.
+type ShellSessionAliveResponse struct {
+	Alive bool `json:"alive"`
+}
+
 type SetRootViewRequest struct {
 	Cx   float64 `json:"cx"`
 	Cy   float64 `json:"cy"`

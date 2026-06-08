@@ -168,6 +168,13 @@ func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewReques
 	}
 	return TileFromProto(r.Msg.Tile), nil
 }
+func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
+	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(ShellSessionAliveToProto(req)))
+	if err != nil {
+		return nil, err
+	}
+	return ShellSessionAliveResponseFromProto(r.Msg), nil
+}
 func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error {
 	_, err := c.cl.SetRootView(ctx, connect.NewRequest(SetRootViewToProto(req)))
 	return err

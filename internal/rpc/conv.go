@@ -291,6 +291,19 @@ func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetShellPreviewReques
 	return &pb.SetShellPreviewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, Jpeg: r.JPEG}
 }
 
+func ShellSessionAliveFromProto(r *pb.ShellSessionAliveRequest) *ShellSessionAliveRequest {
+	return &ShellSessionAliveRequest{TileID: r.TileId}
+}
+func ShellSessionAliveToProto(r *ShellSessionAliveRequest) *pb.ShellSessionAliveRequest {
+	return &pb.ShellSessionAliveRequest{TileId: r.TileID}
+}
+func ShellSessionAliveResponseFromProto(r *pb.ShellSessionAliveResponse) *ShellSessionAliveResponse {
+	return &ShellSessionAliveResponse{Alive: r.Alive}
+}
+func ShellSessionAliveResponseToProto(r *ShellSessionAliveResponse) *pb.ShellSessionAliveResponse {
+	return &pb.ShellSessionAliveResponse{Alive: r.Alive}
+}
+
 func SetRootViewFromProto(r *pb.SetRootViewRequest) *SetRootViewRequest {
 	return &SetRootViewRequest{Cx: r.Cx, Cy: r.Cy, Zoom: r.Zoom}
 }

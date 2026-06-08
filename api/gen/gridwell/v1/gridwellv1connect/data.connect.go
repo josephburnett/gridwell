@@ -83,6 +83,9 @@ const (
 	// GridwellSetShellPreviewProcedure is the fully-qualified name of the Gridwell's SetShellPreview
 	// RPC.
 	GridwellSetShellPreviewProcedure = "/gridwell.v1.Gridwell/SetShellPreview"
+	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
+	// ShellSessionAlive RPC.
+	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
 	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
 	// GridwellUpdateTextProcedure is the fully-qualified name of the Gridwell's UpdateText RPC.
@@ -112,6 +115,7 @@ type GridwellClient interface {
 	SetWellView(context.Context, *connect.Request[v1.SetWellViewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTextView(context.Context, *connect.Request[v1.SetTextViewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error)
+	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
@@ -231,6 +235,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetShellPreview")),
 			connect.WithClientOptions(opts...),
 		),
+		shellSessionAlive: connect.NewClient[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse](
+			httpClient,
+			baseURL+GridwellShellSessionAliveProcedure,
+			connect.WithSchema(gridwellMethods.ByName("ShellSessionAlive")),
+			connect.WithClientOptions(opts...),
+		),
 		setRootView: connect.NewClient[v1.SetRootViewRequest, v1.SetRootViewResponse](
 			httpClient,
 			baseURL+GridwellSetRootViewProcedure,
@@ -277,6 +287,7 @@ type gridwellClient struct {
 	setWellView       *connect.Client[v1.SetWellViewRequest, v1.TileResponse]
 	setTextView       *connect.Client[v1.SetTextViewRequest, v1.TileResponse]
 	setShellPreview   *connect.Client[v1.SetShellPreviewRequest, v1.TileResponse]
+	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
 	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
@@ -368,6 +379,11 @@ func (c *gridwellClient) SetShellPreview(ctx context.Context, req *connect.Reque
 	return c.setShellPreview.CallUnary(ctx, req)
 }
 
+// ShellSessionAlive calls gridwell.v1.Gridwell.ShellSessionAlive.
+func (c *gridwellClient) ShellSessionAlive(ctx context.Context, req *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
+	return c.shellSessionAlive.CallUnary(ctx, req)
+}
+
 // SetRootView calls gridwell.v1.Gridwell.SetRootView.
 func (c *gridwellClient) SetRootView(ctx context.Context, req *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
 	return c.setRootView.CallUnary(ctx, req)
@@ -407,6 +423,7 @@ type GridwellHandler interface {
 	SetWellView(context.Context, *connect.Request[v1.SetWellViewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTextView(context.Context, *connect.Request[v1.SetTextViewRequest]) (*connect.Response[v1.TileResponse], error)
 	SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error)
+	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
@@ -522,6 +539,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetShellPreview")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellShellSessionAliveHandler := connect.NewUnaryHandler(
+		GridwellShellSessionAliveProcedure,
+		svc.ShellSessionAlive,
+		connect.WithSchema(gridwellMethods.ByName("ShellSessionAlive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellSetRootViewHandler := connect.NewUnaryHandler(
 		GridwellSetRootViewProcedure,
 		svc.SetRootView,
@@ -582,6 +605,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellSetTextViewHandler.ServeHTTP(w, r)
 		case GridwellSetShellPreviewProcedure:
 			gridwellSetShellPreviewHandler.ServeHTTP(w, r)
+		case GridwellShellSessionAliveProcedure:
+			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSetRootViewProcedure:
 			gridwellSetRootViewHandler.ServeHTTP(w, r)
 		case GridwellUpdateTextProcedure:
@@ -665,6 +690,10 @@ func (UnimplementedGridwellHandler) SetTextView(context.Context, *connect.Reques
 
 func (UnimplementedGridwellHandler) SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetShellPreview is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ShellSessionAlive is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
