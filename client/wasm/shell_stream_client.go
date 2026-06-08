@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -400,14 +401,13 @@ func snapshotShellCanvas(container js.Value) []byte {
 	if len(s) <= len(prefix) || s[:len(prefix)] != prefix {
 		return nil
 	}
-	// Decode base64 in JS, then copy to a Go slice — atob plus a
-	// per-char loop would be slower than letting the engine do it.
-	b64 := s[len(prefix):]
-	bin := js.Global().Call("atob", b64)
-	binStr := bin.String()
-	out := make([]byte, len(binStr))
-	for i := 0; i < len(binStr); i++ {
-		out[i] = binStr[i]
+	// Decode base64 in Go. NOT through JS atob: atob returns a "binary
+	// string" whose code units are byte values, but Go's js.Value.String()
+	// re-encodes as UTF-8, doubling every byte >= 0x80. The resulting
+	// blob is not a valid JPEG (FF D8 ... becomes C3 BF C3 98 ...).
+	out, err := base64.StdEncoding.DecodeString(s[len(prefix):])
+	if err != nil {
+		return nil
 	}
 	return out
 }
