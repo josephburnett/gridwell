@@ -229,7 +229,13 @@ func (d *Driver) ensureBrowserLocked() (*userBrowser, error) {
 	}
 
 	browserCtx, cancel := context.WithCancel(context.Background())
-	browser := rod.New().Context(browserCtx).ControlURL(controlURL)
+	// NoDefaultDevice: rod otherwise emulates devices.LaptopWithMDPIScreen on
+	// every new page, which pins navigator.userAgent to a stale "Chrome/114"
+	// and blanks the Client Hints brands. On a real Chrome 14x engine that
+	// UA/feature mismatch is a loud bot signal. Disabling it lets pages report
+	// the browser's genuine UA and brands; gridwell still sizes pages itself
+	// via SetViewport, so we lose nothing.
+	browser := rod.New().Context(browserCtx).ControlURL(controlURL).NoDefaultDevice()
 	if err := browser.Connect(); err != nil {
 		cancel()
 		l.Kill()
