@@ -69,6 +69,11 @@ type Driver struct {
 	binaryPath string
 	brandFlags []string
 	profileDir string
+	// profileDirectory is the Chrome sub-profile (e.g. "Default" or
+	// "Profile 1") inside profileDir to launch — the most recently created
+	// profile, so headless serve targets the profile an interactive
+	// open-browser sign-in most likely landed in. See ResolveProfileDirectory.
+	profileDirectory string
 
 	mu      sync.Mutex
 	browser *userBrowser
@@ -129,13 +134,19 @@ func New(store PreviewWriter, cfg Config) (*Driver, error) {
 	}
 
 	return &Driver{
-		cfg:        cfg,
-		store:      store,
-		binaryPath: binaryPath,
-		profileDir: profileDir,
-		brandFlags: BrandExtraFlags(cfg.Browser),
+		cfg:              cfg,
+		store:            store,
+		binaryPath:       binaryPath,
+		profileDir:       profileDir,
+		profileDirectory: ResolveProfileDirectory(profileDir),
+		brandFlags:       BrandExtraFlags(cfg.Browser),
 	}, nil
 }
+
+// ProfileDirectory reports the resolved Chrome sub-profile the driver
+// launches into (e.g. "Default" or "Profile 1"). Exposed so `serve` can log
+// which profile auto-resolution selected.
+func (d *Driver) ProfileDirectory() string { return d.profileDirectory }
 
 // Available reports whether the driver is functional. Always true for any
 // Driver returned by New (errors are surfaced at construction time).
@@ -169,6 +180,7 @@ func (d *Driver) ensureBrowserLocked() (*userBrowser, error) {
 	l := launcher.New().
 		Bin(d.binaryPath).
 		UserDataDir(d.profileDir).
+		Set("profile-directory", d.profileDirectory).
 		Set("mute-audio").
 		Set("deny-permission-prompts")
 	if d.cfg.Headless {

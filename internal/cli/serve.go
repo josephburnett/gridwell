@@ -127,8 +127,8 @@ func RunServe(args []string) int {
 	if f.ProfileDir != "" {
 		profilePath = f.ProfileDir
 	}
-	fmt.Printf("gridwell: %s driver ready (profile=%s headless=%v)\n",
-		f.BrowserName, profilePath, f.Headless)
+	fmt.Printf("gridwell: %s driver ready (profile=%s profile-directory=%q headless=%v)\n",
+		f.BrowserName, profilePath, driver.ProfileDirectory(), f.Headless)
 
 	// The gridwell-private tmux server backs every shell tile. One
 	// socket per gridwell process; sessions named `gridwell-<tileID>`

@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // DefaultProfileDir returns the gridwell-owned user-data-dir for the
@@ -50,6 +52,63 @@ func ResolveBinary(brandName, override string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s binary not found on PATH (tried %v)", brandName, b.binaryNames)
+}
+
+// DefaultProfileDirectory is the Chrome sub-profile a fresh --user-data-dir
+// starts with, and what Chrome selects when no --profile-directory is given.
+const DefaultProfileDirectory = "Default"
+
+// ResolveProfileDirectory picks which Chrome sub-profile inside userDataDir
+// (e.g. "Default" or "Profile 1") to launch, and returns it for passing as
+// --profile-directory.
+//
+// A Chrome --user-data-dir is a *container* of profiles, not a profile: it
+// holds "Default" plus a "Profile N" directory for each additional profile.
+// A headless launch with no --profile-directory always picks "Default", which
+// may not be where the user did their interactive sign-in — Chrome can add a
+// fresh profile when an account signs in. We close that gap with one generic
+// heuristic: use the most recently created profile.
+//
+// Chrome creates "Default" first, then "Profile 1", "Profile 2", ... in
+// increasing order, so the highest-numbered profile directory is the most
+// recently created one. No site-, account-, or vendor-specific logic.
+//
+// Never fatal: if userDataDir can't be read or holds no profile directories,
+// this returns "Default" — exactly what Chrome itself would launch.
+func ResolveProfileDirectory(userDataDir string) string {
+	entries, err := os.ReadDir(userDataDir)
+	if err != nil {
+		return DefaultProfileDirectory
+	}
+	best := DefaultProfileDirectory
+	bestRank := -1
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if r := profileCreationRank(e.Name()); r > bestRank {
+			bestRank = r
+			best = e.Name()
+		}
+	}
+	return best
+}
+
+// profileCreationRank orders Chrome profile directories by creation: "Default"
+// is created first (rank 0), then "Profile 1", "Profile 2", ... (rank N), so a
+// higher rank means more recently created. Directories that aren't Chrome
+// profiles (e.g. "Guest Profile", "System Profile", caches) return -1.
+func profileCreationRank(name string) int {
+	if name == DefaultProfileDirectory {
+		return 0
+	}
+	const prefix = "Profile "
+	if strings.HasPrefix(name, prefix) {
+		if n, err := strconv.Atoi(name[len(prefix):]); err == nil && n > 0 {
+			return n
+		}
+	}
+	return -1
 }
 
 // BrandExtraFlags returns the CLI flags Gridwell adds for the given

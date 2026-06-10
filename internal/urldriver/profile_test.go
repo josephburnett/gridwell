@@ -67,6 +67,90 @@ func TestResolveBinaryRejectsMissingOverride(t *testing.T) {
 	}
 }
 
+// makeProfileDirs creates a user-data-dir with the given sub-profile
+// directories (plus a stray non-profile dir and a file, to prove they're
+// ignored) and returns its path.
+func makeProfileDirs(t *testing.T, profiles ...string) string {
+	t.Helper()
+	udd := t.TempDir()
+	for _, p := range profiles {
+		if err := os.MkdirAll(filepath.Join(udd, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+	// Decoys: a non-profile directory and a file that happens to look numbered.
+	if err := os.MkdirAll(filepath.Join(udd, "GPUCache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(udd, "Local State"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return udd
+}
+
+func TestResolveProfileDirectory(t *testing.T) {
+	tests := []struct {
+		name     string
+		profiles []string
+		want     string
+	}{
+		{
+			name:     "only Default",
+			profiles: []string{"Default"},
+			want:     "Default",
+		},
+		{
+			// The real-world case: a sign-in forked "Profile 1".
+			name:     "Default plus one added profile",
+			profiles: []string{"Default", "Profile 1"},
+			want:     "Profile 1",
+		},
+		{
+			name:     "highest-numbered profile wins",
+			profiles: []string{"Default", "Profile 1", "Profile 2"},
+			want:     "Profile 2",
+		},
+		{
+			name:     "numeric not lexical ordering",
+			profiles: []string{"Default", "Profile 2", "Profile 10"},
+			want:     "Profile 10",
+		},
+		{
+			name:     "Guest and System profiles are ignored",
+			profiles: []string{"Default", "Profile 1", "Guest Profile", "System Profile"},
+			want:     "Profile 1",
+		},
+		{
+			name:     "added profile without a Default still resolves",
+			profiles: []string{"Profile 1"},
+			want:     "Profile 1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			udd := makeProfileDirs(t, tt.profiles...)
+			if got := ResolveProfileDirectory(udd); got != tt.want {
+				t.Errorf("ResolveProfileDirectory = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveProfileDirectoryFallsBackToDefault(t *testing.T) {
+	// Unreadable / nonexistent user-data-dir.
+	if got := ResolveProfileDirectory(filepath.Join(t.TempDir(), "does-not-exist")); got != "Default" {
+		t.Errorf("missing user-data-dir: got %q, want Default", got)
+	}
+	// Exists but contains no profile directories at all.
+	empty := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(empty, "GPUCache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := ResolveProfileDirectory(empty); got != "Default" {
+		t.Errorf("no profiles: got %q, want Default", got)
+	}
+}
+
 func TestBrandExtraFlagsBraveOnly(t *testing.T) {
 	// brave gets disable-brave-update; the others have no extras today.
 	flags := BrandExtraFlags("brave")
