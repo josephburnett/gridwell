@@ -85,22 +85,32 @@ type userBrowser struct {
 	cancel   context.CancelFunc
 }
 
-const hardeningJS = `
+// fullscreenGuardJS keeps an embedded page from taking over the screen
+// WITHOUT tampering any native API. The previous hardening overrode
+// window.open and requestFullscreen with plain JS functions, whose
+// toString() ("function(){ ... }" instead of "[native code]") betrayed
+// automation to bot-detection. Instead we only *listen*: when a page enters
+// fullscreen (always behind a user gesture) we immediately exit through the
+// genuine, still-native exitFullscreen. Adding a listener leaves no
+// page-observable trace and every native function stays byte-for-byte native.
+//
+// What we dropped and why it's safe:
+//   - window.open: gridwell already follows and adopts script-opened tabs
+//     (see swapToTarget), so the old null-override fought its own popup
+//     handling. Removing it lets that logic work.
+//   - window.close: per the HTML spec it is a no-op for a top-level tab not
+//     opened by script — and ours is created via CDP, not script — so the
+//     override was inert.
+const fullscreenGuardJS = `
 (function(){
-  try { window.open = function(){ return null; }; } catch (e) {}
-  try { window.close = function(){}; } catch (e) {}
-  try {
-    if (Element.prototype.requestFullscreen) {
-      Element.prototype.requestFullscreen = function(){
-        return Promise.reject(new Error('blocked by gridwell'));
-      };
-    }
-    if (document.exitFullscreen) {
-      document.exitFullscreen = function(){
-        return Promise.reject(new Error('blocked by gridwell'));
-      };
-    }
-  } catch (e) {}
+  var exit = function(){
+    try {
+      var el = document.fullscreenElement || document.webkitFullscreenElement;
+      if (el && document.exitFullscreen) { document.exitFullscreen(); }
+    } catch (e) {}
+  };
+  document.addEventListener('fullscreenchange', exit, true);
+  document.addEventListener('webkitfullscreenchange', exit, true);
 })();
 `
 
@@ -182,7 +192,15 @@ func (d *Driver) ensureBrowserLocked() (*userBrowser, error) {
 		UserDataDir(d.profileDir).
 		Set("profile-directory", d.profileDirectory).
 		Set("mute-audio").
-		Set("deny-permission-prompts")
+		Set("deny-permission-prompts").
+		// Reduce the automation fingerprint. rod launches with
+		// --enable-automation, which makes navigator.webdriver report true —
+		// the signal bot-detection (e.g. Cloudflare) keys on first. Dropping
+		// the flag and masking the blink feature flips webdriver back to
+		// false. Verified empirically: both are required; deleting
+		// enable-automation alone leaves webdriver true.
+		Delete("enable-automation").
+		Set("disable-blink-features", "AutomationControlled")
 	if d.cfg.Headless {
 		l = l.HeadlessNew(true)
 	} else {

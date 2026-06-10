@@ -98,8 +98,8 @@ func (d *Driver) OpenSession(tileID int64, initialURL string, w, h int64) (*Sess
 	}); err != nil {
 		log.Printf("[urldriver] set viewport failed tile=%d err=%v", tileID, err)
 	}
-	if _, err := page.EvalOnNewDocument(hardeningJS); err != nil {
-		log.Printf("[urldriver] inject hardening failed tile=%d err=%v", tileID, err)
+	if _, err := page.EvalOnNewDocument(fullscreenGuardJS); err != nil {
+		log.Printf("[urldriver] inject fullscreen guard failed tile=%d err=%v", tileID, err)
 	}
 	if err := page.Timeout(20 * time.Second).Navigate(initialURL); err != nil {
 		log.Printf("[urldriver] navigate failed tile=%d err=%v", tileID, err)
@@ -232,11 +232,11 @@ func (s *Session) swapToTarget(newTargetID proto.TargetTargetID, initialURL stri
 		}
 	}
 
-	// Inject hardening into the new tab. The initial nav of the new tab
-	// is already in flight and may not see this, but any subsequent
+	// Install the fullscreen guard on the new tab. The initial nav of the
+	// new tab is already in flight and may not see this, but any subsequent
 	// in-tab nav will. Best-effort.
-	if _, err := newPage.EvalOnNewDocument(hardeningJS); err != nil {
-		log.Printf("[urldriver] hardening on new tab tile=%d: %v", s.tileID, err)
+	if _, err := newPage.EvalOnNewDocument(fullscreenGuardJS); err != nil {
+		log.Printf("[urldriver] fullscreen guard on new tab tile=%d: %v", s.tileID, err)
 	}
 
 	// Wire up dialog + nav listeners on the new page first, THEN cancel
