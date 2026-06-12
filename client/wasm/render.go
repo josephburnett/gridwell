@@ -247,6 +247,9 @@ func (a *App) draw() {
 	// Same for any live shell overlays — xterm host divs follow their
 	// pane's screen rect each frame.
 	a.syncShellOverlayPosition()
+	// And any live URL tiles — native WebContentsViews follow their pane's
+	// content box and park off-screen during canvas-overlay gestures.
+	a.syncURLViews()
 }
 
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.

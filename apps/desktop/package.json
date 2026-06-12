@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "npm run build && electron .",
     "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts",
-    "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js --no-sandbox"
+    "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js --no-sandbox",
+    "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js --no-sandbox"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -25,6 +25,11 @@ export function createRootWindow(origin: string): RootWindow {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // sandbox:false lets the preload require its sibling ipc module for
+      // the channel constants. Safe here: single-tenant, loopback-only, and
+      // the preload is first-party. (Phase 5 can bundle the preload to a
+      // self-contained file and re-enable the sandbox.)
+      sandbox: false,
     },
   });
 

@@ -142,10 +142,12 @@ type App struct {
 	// tile's PreviewBlobID changes server-side — see client/preview.
 	urlPreview *preview.Cache
 
-	// urlStreams holds the active /rpc/URLStream WebSocket connection
-	// for each pane that's descended into a live URL tile. One per
-	// pane id; multiple panes may stream concurrently.
-	urlStreams map[string]*urlStreamConn
+	// urlStreams holds the live native WebContentsView handle for each
+	// pane descended into a live URL tile. One per pane id; multiple panes
+	// may host views concurrently. Named "streams" for historical reasons
+	// (it was the /rpc/URLStream WebSocket map); it now drives the Electron
+	// webview bridge.
+	urlStreams map[string]*urlView
 
 	// shellStreams mirrors urlStreams for live shell tile sessions —
 	// one /rpc/ShellStream WebSocket plus its xterm.js DOM overlay
@@ -383,7 +385,7 @@ func main() {
 		gridInflight:   map[int64]bool{},
 		paneStateStack: map[string][]paneState{},
 		urlPreview:     preview.NewCache(preview.NewJSDecoder()),
-		urlStreams:     map[string]*urlStreamConn{},
+		urlStreams:     map[string]*urlView{},
 		shellStreams:   map[string]*shellStreamConn{},
 		shellAlive:        map[int64]bool{},
 		shellAliveProbing: map[int64]bool{},
@@ -415,6 +417,7 @@ func main() {
 	}))
 
 	app.installCanvasInput()
+	app.installWebviewListeners()
 
 	go app.bootstrap()
 
