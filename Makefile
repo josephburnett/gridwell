@@ -1,4 +1,4 @@
-.PHONY: build bin wasm test test-cover serve clean desktop desktop-dev desktop-dist
+.PHONY: build bin wasm test test-cover serve clean launch desktop desktop-dev desktop-dist
 
 BIN := ./gridwell
 WASM := ./web/gridwell.wasm
@@ -43,11 +43,23 @@ serve: build
 # `make serve SERVE_FLAGS="--bind 0.0.0.0:8080"`.
 SERVE_FLAGS ?=
 
-# Desktop app (Electron shell). `desktop-dev` runs it against this repo's
-# freshly built sidecar + wasm; `desktop-dist` packages an unpacked app that
-# bundles the host-arch sidecar + web assets under resources/. Cross-platform
-# packaging cross-compiles the sidecar first (GOOS/GOARCH) before electron-
-# builder — see apps/desktop/README.md.
+# `make launch` is the one-shot dev run: build the sidecar + wasm, install the
+# desktop deps (no-op once present), compile the TS, and launch the Electron
+# app against this repo's gridwell.db so your existing grids are right there.
+# --no-sandbox is required on WSL/Linux and harmless elsewhere.
+#
+#   make launch                         # use ./gridwell.db
+#   make launch LAUNCH_DB=/path/to.db   # use another db
+LAUNCH_DB ?= $(CURDIR)/gridwell.db
+launch: build
+	cd apps/desktop && npm install && npm run build && \
+		GRIDWELL_DB="$(LAUNCH_DB)" ./node_modules/.bin/electron . --no-sandbox
+
+# Desktop app (Electron shell). `desktop-dev` runs it against a fresh userData
+# db; `desktop-dist` packages an unpacked app that bundles the host-arch
+# sidecar + web assets under resources/. Cross-platform packaging cross-
+# compiles the sidecar first (GOOS/GOARCH) before electron-builder — see
+# apps/desktop/README.md.
 desktop: build
 	cd apps/desktop && npm install && npm run build
 
