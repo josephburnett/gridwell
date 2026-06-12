@@ -78,7 +78,7 @@ func (l Layout) PointInPlus(x, y float64) bool {
 // preview of the placed tile's on-screen size. (The drag ghost resizes to
 // the destination zoom on drop, the same as dragging a tile across wells.)
 func (l Layout) TilePx() float64 {
-	return l.Cfg.CellPx * 0.5
+	return l.Cfg.CellPx * 0.75
 }
 
 // PopoverRect returns the screen rect of the entire palette popover,

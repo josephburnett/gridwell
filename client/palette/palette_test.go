@@ -48,11 +48,11 @@ func TestPointInPlus(t *testing.T) {
 func TestTilePxFixedAcrossZoom(t *testing.T) {
 	l := makeLayout()
 
-	// Fixed at half a default cell (CellPx 64 -> 32), regardless of zoom.
+	// Fixed at 3/4 of a default cell (CellPx 64 -> 48), regardless of zoom.
 	for _, z := range []float64{1, 0.5, 10.0, 0} {
 		l.PaneZoom = z
-		if got := l.TilePx(); got != 32 {
-			t.Errorf("zoom %v: TilePx = %v, want 32 (fixed)", z, got)
+		if got := l.TilePx(); got != 48 {
+			t.Errorf("zoom %v: TilePx = %v, want 48 (fixed)", z, got)
 		}
 	}
 }
@@ -60,13 +60,13 @@ func TestTilePxFixedAcrossZoom(t *testing.T) {
 func TestPopoverAndTileRects(t *testing.T) {
 	l := makeLayout()
 	pop := l.PopoverRect()
-	// 4 tiles, each 32 wide (fixed = CellPx/2), 5 gaps of 8 = 128+40 = 168.
-	if pop.W != 168 {
-		t.Errorf("PopoverRect width = %v, want 168", pop.W)
+	// 4 tiles, each 48 wide (fixed = CellPx*0.75), 5 gaps of 8 = 192+40 = 232.
+	if pop.W != 232 {
+		t.Errorf("PopoverRect width = %v, want 232", pop.W)
 	}
-	// Height = tile + 2*gap = 32+16 = 48.
-	if pop.H != 48 {
-		t.Errorf("PopoverRect height = %v, want 48", pop.H)
+	// Height = tile + 2*gap = 48+16 = 64.
+	if pop.H != 64 {
+		t.Errorf("PopoverRect height = %v, want 64", pop.H)
 	}
 	// Anchor: bottom-right corner of popover aligns with PlusRadius right of plus center.
 	cx, cy := l.PlusCenter()
@@ -81,8 +81,8 @@ func TestPopoverAndTileRects(t *testing.T) {
 	}
 	// Tiles are tile+gap apart.
 	t1 := l.TileRect(1)
-	if t1.X-t0.X != 40 {
-		t.Errorf("TileRect spacing = %v, want 40 (32+8)", t1.X-t0.X)
+	if t1.X-t0.X != 56 {
+		t.Errorf("TileRect spacing = %v, want 56 (48+8)", t1.X-t0.X)
 	}
 	_ = cy
 }
