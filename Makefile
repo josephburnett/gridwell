@@ -1,17 +1,32 @@
-.PHONY: build bin wasm test test-cover serve clean launch desktop desktop-dev desktop-dist
+.PHONY: build bin wasm test test-cover serve clean launch vendor dist node-modules
 
 BIN := ./gridwell
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
 
+DESKTOP := apps/desktop
+
+# Repo-local caches. A single online `make vendor` populates them; after that
+# every `make dist` (and `make launch`) is fully offline — no GitHub, no npm
+# registry, no network at all. Work on a plane. The vars are exported so the
+# npm / electron / electron-builder toolchain underneath honours them.
+CACHE := $(CURDIR)/$(DESKTOP)/.cache
+NPM_CACHE := $(CACHE)/npm
+export electron_config_cache := $(CACHE)/electron
+export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
+
 # `bin` and `wasm` are phony so they always invoke `go build`. Go's
 # build cache makes this fast when nothing changed, but it guarantees
 # we never serve a stale binary or wasm artifact.
 build: bin wasm
 
+# CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
+# pure Go, so nothing pulls cgo and the result has no libc-version coupling.
+# The AppImage bundles this binary as-is — it's the one piece of Gridwell that
+# genuinely has zero system dependencies.
 bin:
-	go build -o $(BIN) ./cmd/gridwell
+	CGO_ENABLED=0 go build -o $(BIN) ./cmd/gridwell
 
 wasm: $(WASM_EXEC)
 	mkdir -p web
@@ -43,32 +58,46 @@ serve: build
 # `make serve SERVE_FLAGS="--bind 0.0.0.0:8080"`.
 SERVE_FLAGS ?=
 
-# `make launch` is the one-shot dev run: build the sidecar + wasm, install the
-# desktop deps (no-op once present), compile the TS, and launch the Electron
-# app against this repo's gridwell.db so your existing grids are right there.
-# --no-sandbox is required on WSL/Linux and harmless elsewhere.
+# vendor is the ONE online step. It pins and caches everything the desktop
+# build needs — npm packages (into $(NPM_CACHE) + node_modules), the Electron
+# runtime zip (into electron_config_cache), and the electron-builder helper
+# binaries incl. the AppImage runtime (into ELECTRON_BUILDER_CACHE) — by
+# running `npm ci` against the committed lockfile and then building the
+# AppImage once. After this completes, `make dist` needs no network.
+vendor: bin wasm
+	cd $(DESKTOP) && npm ci --cache $(NPM_CACHE)
+	$(MAKE) dist
+	@echo "vendored: caches warm under $(CACHE); 'make dist' is now offline"
+
+# dist is the offline AppImage build. It assumes a prior `make vendor` warmed
+# the caches and installed node_modules. Produces a single self-contained
+# Gridwell-<ver>.AppImage under $(DESKTOP)/out/ that bundles the Electron
+# runtime, the static Go sidecar, and the wasm assets.
+dist: bin wasm node-modules
+	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron-builder --linux AppImage
+	@echo "AppImage: $(DESKTOP)/out/"
+
+# `make launch` is the one-shot dev run: build the sidecar + wasm, compile the
+# TS, and launch Electron against this repo's gridwell.db so your existing
+# grids are right there. --no-sandbox is required on WSL/Linux and harmless
+# elsewhere. Needs a prior `make vendor` for node_modules.
 #
 #   make launch                         # use ./gridwell.db
 #   make launch LAUNCH_DB=/path/to.db   # use another db
 LAUNCH_DB ?= $(CURDIR)/gridwell.db
-launch: build
-	cd apps/desktop && npm install && npm run build && \
+launch: build node-modules
+	cd $(DESKTOP) && npm run build && \
 		GRIDWELL_DB="$(LAUNCH_DB)" ./node_modules/.bin/electron . --no-sandbox
 
-# Desktop app (Electron shell). `desktop-dev` runs it against a fresh userData
-# db; `desktop-dist` packages an unpacked app that bundles the host-arch
-# sidecar + web assets under resources/. Cross-platform packaging cross-
-# compiles the sidecar first (GOOS/GOARCH) before electron-builder — see
-# apps/desktop/README.md.
-desktop: build
-	cd apps/desktop && npm install && npm run build
-
-desktop-dev: build
-	cd apps/desktop && npm install && npm start
-
-desktop-dist: build
-	cd apps/desktop && npm install && npm run dist:dir
+# node-modules guards the offline targets: if the desktop deps aren't present,
+# point the user at the single online bootstrap instead of silently reaching
+# for the network.
+node-modules:
+	@test -d $(DESKTOP)/node_modules || { \
+		echo "$(DESKTOP)/node_modules missing — run 'make vendor' once (online) first"; \
+		exit 1; \
+	}
 
 clean:
 	rm -f $(BIN) $(WASM) $(WASM_EXEC)
-	rm -rf apps/desktop/dist apps/desktop/out
+	rm -rf $(DESKTOP)/dist $(DESKTOP)/out
