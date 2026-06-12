@@ -31,8 +31,9 @@ async function boot(): Promise<void> {
     app.exit(1);
     return;
   }
-  const { win, root } = createRootWindow(sidecar.origin);
-  const reg = new WebviewRegistry(win, { onNav: makeNavForwarder(root.webContents) });
+  const { win } = createRootWindow(sidecar.origin);
+  const rootWC = win.webContents;
+  const reg = new WebviewRegistry(win, { onNav: makeNavForwarder(rootWC) });
   registry = reg;
   registerWebviewIpc(reg);
 
@@ -44,7 +45,7 @@ async function boot(): Promise<void> {
       const jpeg = await reg.capture(paneId);
       const tileId = reg.tileIdFor(paneId);
       if (jpeg && tileId !== undefined) {
-        sendFrame(root.webContents, paneId, tileId, jpeg);
+        sendFrame(rootWC, paneId, tileId, jpeg);
       }
     }
   });

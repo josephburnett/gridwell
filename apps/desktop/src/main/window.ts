@@ -1,66 +1,55 @@
-import { BaseWindow, WebContentsView, Menu } from 'electron';
+import { BrowserWindow, Menu } from 'electron';
 import * as path from 'node:path';
 
 export interface RootWindow {
-  win: BaseWindow;
-  root: WebContentsView;
+  win: BrowserWindow;
 }
 
-// createRootWindow builds the top-level BaseWindow and a single root
-// WebContentsView that fills it and loads the Gridwell renderer (the
-// WASM canvas app served by the sidecar). Future phases add more
-// WebContentsViews as siblings for live URL tiles; starting on
-// BaseWindow + WebContentsView now means that's a pure addition, not a
-// rework.
+// createRootWindow builds the top-level window that hosts the Gridwell
+// renderer (the WASM canvas app served by the sidecar).
+//
+// It's a BrowserWindow, not a bare BaseWindow + manually-sized
+// WebContentsView: a BrowserWindow's web contents auto-fills the window, so
+// the canvas always matches the window size. The manual-layout approach was
+// fragile under tiling / HiDPI window managers (e.g. WSLg), which could leave
+// the canvas stuck at a stale size with bare window background showing.
+//
+// Live URL tiles are still WebContentsView children added to win.contentView
+// (BrowserWindow inherits contentView from BaseWindow); they paint on top of
+// the canvas. The WebviewRegistry takes this window unchanged.
 export function createRootWindow(origin: string): RootWindow {
   // Gridwell is a mouse-only canvas; the default Electron application menu
   // (File/Edit/View/…) only eats space and, on Linux, renders inside the
   // window. Remove it entirely.
   Menu.setApplicationMenu(null);
 
-  const win = new BaseWindow({
+  const win = new BrowserWindow({
     width: 1600,
     height: 1000,
     backgroundColor: '#0c0d11',
     title: 'Gridwell',
     autoHideMenuBar: true,
-  });
-
-  const root = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      // sandbox:false lets the preload require its sibling ipc module for
-      // the channel constants. Safe here: single-tenant, loopback-only, and
-      // the preload is first-party. (Phase 5 can bundle the preload to a
-      // self-contained file and re-enable the sandbox.)
+      // sandbox:false lets the preload require its sibling ipc module for the
+      // channel constants. Safe here: single-tenant, loopback-only, first-party.
       sandbox: false,
     },
   });
 
-  win.contentView.addChildView(root);
-  layoutRoot(win, root);
+  void win.loadURL(origin + '/');
 
-  // The window manager (e.g. WSLg) may open or resize the window to a size
-  // other than the one we requested, and the timing of when getContentSize()
-  // reports the final size varies. Re-layout on every resize, and again
-  // shortly after creation, so the root view always fills the real content
-  // area instead of getting stuck at a stale size (which would leave the
-  // canvas clipped with bare window background showing on the bottom/right).
-  win.on('resize', () => layoutRoot(win, root));
-  setTimeout(() => layoutRoot(win, root), 0);
-  setTimeout(() => layoutRoot(win, root), 200);
+  // The default menu (which we removed) used to provide the F11 fullscreen
+  // accelerator; re-add it directly. Active when the canvas has focus — a
+  // focused URL tile's native view handles its own keys.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+    }
+  });
 
-  void root.webContents.loadURL(origin + '/');
-  return { win, root };
-}
-
-// layoutRoot keeps the root view filling the window's content area.
-function layoutRoot(win: BaseWindow, root: WebContentsView): void {
-  if (win.isDestroyed()) return;
-  const [w, h] = win.getContentSize();
-  if (w <= 0 || h <= 0) return;
-  console.log(`[window] layout root view to ${w}x${h}`);
-  root.setBounds({ x: 0, y: 0, width: w, height: h });
+  return { win };
 }
