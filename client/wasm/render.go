@@ -345,7 +345,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				}
 				nn := n
 				outside := tileOutside(&nn, inSource)
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside)
+				dashed := !inSource && isLinkTile(&nn)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside, dashed)
 			}
 			a.drawEdgeIndicators(g.Tiles, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
@@ -537,10 +538,10 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected bool, outside bool) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected, outside, dashed bool) {
 	switch n.Kind {
 	case rpc.KindText:
-		a.drawMarkdownNode(n, x, y, w, h, r, selected, outside)
+		a.drawMarkdownNode(n, x, y, w, h, r, selected, outside, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindURL:
@@ -618,7 +619,14 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// process-well). The kind drives the color so the color grammar
 	// is consistent whether the user sees the tile as a preview or
 	// descends into it (where the same kind drives the pane border).
+	// Dashed when this well is a link in a regular grid (see isLinkTile).
+	if dashed {
+		setTileDash(a.cctx)
+	}
 	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n.Kind), tileBorderPx)
+	if dashed {
+		clearTileDash(a.cctx)
+	}
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
@@ -702,6 +710,28 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 	}
 	return false
 }
+
+// isLinkTile reports whether n is a reference to content outside Gridwell:
+// a file-well, a process-well, or a file dragged out of a source grid (a
+// text tile carrying a SourceKey). In a REGULAR grid these render with a
+// dashed border, and dropping one on /dev/null only unlinks it (drops the
+// tile row). The same entities INSIDE their source well render solid, and
+// dropping them on /dev/null deletes for real (rm / SIGTERM) — the store's
+// DeleteTile already routes on the parent grid's source_kind.
+func isLinkTile(n *rpc.Tile) bool {
+	switch n.Kind {
+	case rpc.KindFileWell, rpc.KindProcessWell:
+		return true
+	case rpc.KindText:
+		return n.SourceKey != ""
+	}
+	return false
+}
+
+// tileBorderDash is the dash pattern for link-tile borders: short on/off so
+// a 1–2px outline still reads clearly as "dashed = a link, safe to unlink."
+func setTileDash(c js.Value) { c.Call("setLineDash", jsArray(5, 3)) }
+func clearTileDash(c js.Value) { c.Call("setLineDash", jsArray()) }
 
 // tileBannerLabel returns the short label drawn at the top of a tile,
 // or "" to suppress the banner. AltText is the single source of truth —
@@ -839,7 +869,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 //
 // In both modes the parent grid lines remain visible behind the text
 // (no fill), and an outline marks the footprint.
-func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected bool, outside bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected, outside, dashed bool) {
 	// Mode comes from the tile (persisted on the server); default to raw
 	// text for a never-opened file. A pane descended into this file
 	// overrides with its live mode.
@@ -942,7 +972,14 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	if outside {
 		outlineColor = colorExitBorder
 	}
+	// Dashed when this is a file dragged out as a link into a regular grid.
+	if dashed {
+		setTileDash(a.cctx)
+	}
 	strokeTileBorder(a.cctx, x, y, w, h, outlineColor, tileBorderPx)
+	if dashed {
+		clearTileDash(a.cctx)
+	}
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
@@ -1380,8 +1417,12 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// kind+source_key as the outside signal. No parent grid is in play here
 	// (the ghost is flying over the canvas).
 	outside := tileOutside(n, false)
+	// A dragged link (file-well / process-well / file) shows dashed too, so
+	// you can see what you're carrying. The ghost is always over a regular
+	// surface (no source grid in play), so dashed == isLinkTile.
+	dashed := isLinkTile(n)
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed)
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
@@ -1397,7 +1438,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// Cross-fade: tile fades out as frag grows; trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed)
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)
