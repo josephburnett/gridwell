@@ -1,6 +1,8 @@
 import { app } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
+import { WebviewRegistry } from './webviews';
+import { registerWebviewIpc, makeNavForwarder } from './register';
 
 // Gridwell desktop entry. Boot order:
 //   1. spawn the Go sidecar (--no-browser) and wait for it to listen
@@ -10,6 +12,7 @@ import { createRootWindow } from './window';
 // Single-tenant, loopback-only: there is no remote endpoint and no auth.
 
 let sidecar: Sidecar | null = null;
+let registry: WebviewRegistry | null = null;
 
 async function boot(): Promise<void> {
   try {
@@ -19,7 +22,9 @@ async function boot(): Promise<void> {
     app.exit(1);
     return;
   }
-  createRootWindow(sidecar.origin);
+  const { win, root } = createRootWindow(sidecar.origin);
+  registry = new WebviewRegistry(win, { onNav: makeNavForwarder(root.webContents) });
+  registerWebviewIpc(registry);
 }
 
 app.whenReady().then(boot);
@@ -32,6 +37,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (registry) {
+    void registry.removeAll();
+    registry = null;
+  }
   if (sidecar) {
     sidecar.stop();
     sidecar = null;

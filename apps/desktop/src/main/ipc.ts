@@ -1,0 +1,83 @@
+// The renderer↔main IPC contract for native URL tiles. Both the main
+// process (ipcMain handlers) and the preload bridge import this module for
+// the channel names and payload types, so the two sides can't drift.
+//
+// Geometry: `bounds` is the URL tile's content box in CSS pixels, relative
+// to the window's content area — exactly what the WASM canvas computes via
+// panebox.ContentBox. Electron's WebContentsView.setBounds takes DIP, which
+// equals CSS px in the renderer's coordinate space, so the mapping is 1:1
+// (DPR scaling of page content is handled inside the view).
+
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Renderer → main (invoke/handle, awaitable).
+export const CH = {
+  place: 'gw:place',       // PlaceArgs → void
+  setBounds: 'gw:setBounds', // SetBoundsArgs → void
+  setHidden: 'gw:setHidden', // SetHiddenArgs → void
+  remove: 'gw:remove',     // RemoveArgs → FreezeResult
+  goBack: 'gw:goBack',     // PaneRef → void
+  reload: 'gw:reload',     // PaneRef → void
+} as const;
+
+// Main → renderer (send, fire-and-forget).
+export const EV = {
+  frame: 'gw:frame', // FrameEvent
+  nav: 'gw:nav',     // NavEvent
+} as const;
+
+export interface PaneRef {
+  paneId: string;
+}
+
+export interface PlaceArgs {
+  paneId: string;
+  tileId: number;
+  // objectId keys the session partition so a tile's cookies/login persist
+  // across panes and across freeze/live cycles. Two views of the same tile
+  // share a cookie jar; different tiles never do.
+  objectId: string;
+  url: string;
+  bounds: Bounds;
+}
+
+export interface SetBoundsArgs {
+  paneId: string;
+  bounds: Bounds;
+}
+
+export interface SetHiddenArgs {
+  paneId: string;
+  hidden: boolean;
+}
+
+export interface RemoveArgs {
+  paneId: string;
+}
+
+// FreezeResult is returned by `remove`: the final capture + the page's last
+// URL/title, so the renderer can persist the frozen preview via SetURLState.
+export interface FreezeResult {
+  // JPEG bytes of the final frame, base64-encoded (empty if capture failed).
+  jpegBase64: string;
+  url: string;
+  title: string;
+}
+
+export interface FrameEvent {
+  paneId: string;
+  tileId: number;
+  jpegBase64: string;
+}
+
+export interface NavEvent {
+  paneId: string;
+  tileId: number;
+  url: string;
+  title: string;
+}
