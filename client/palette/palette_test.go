@@ -45,43 +45,28 @@ func TestPointInPlus(t *testing.T) {
 	}
 }
 
-func TestTilePxClamping(t *testing.T) {
+func TestTilePxFixedAcrossZoom(t *testing.T) {
 	l := makeLayout()
 
-	// At zoom 1, CellPx*1 = 64, between 48 and 128 -> 64.
-	if got := l.TilePx(); got != 64 {
-		t.Errorf("zoom 1: TilePx = %v, want 64", got)
-	}
-
-	l.PaneZoom = 0.5
-	// 64*0.5 = 32 → clamped up to 48.
-	if got := l.TilePx(); got != 48 {
-		t.Errorf("zoom 0.5: TilePx = %v, want 48", got)
-	}
-
-	l.PaneZoom = 10.0
-	// 64*10 = 640 → clamped down to 128.
-	if got := l.TilePx(); got != 128 {
-		t.Errorf("zoom 10: TilePx = %v, want 128", got)
-	}
-
-	l.PaneZoom = 0
-	// 0 zoom is degenerate -> treated as 1 -> 64.
-	if got := l.TilePx(); got != 64 {
-		t.Errorf("zoom 0: TilePx = %v, want 64", got)
+	// Fixed at half a default cell (CellPx 64 -> 32), regardless of zoom.
+	for _, z := range []float64{1, 0.5, 10.0, 0} {
+		l.PaneZoom = z
+		if got := l.TilePx(); got != 32 {
+			t.Errorf("zoom %v: TilePx = %v, want 32 (fixed)", z, got)
+		}
 	}
 }
 
 func TestPopoverAndTileRects(t *testing.T) {
 	l := makeLayout()
 	pop := l.PopoverRect()
-	// 4 tiles, each 64 wide, 5 gaps of 8 = 256+40 = 296.
-	if pop.W != 296 {
-		t.Errorf("PopoverRect width = %v, want 296", pop.W)
+	// 4 tiles, each 32 wide (fixed = CellPx/2), 5 gaps of 8 = 128+40 = 168.
+	if pop.W != 168 {
+		t.Errorf("PopoverRect width = %v, want 168", pop.W)
 	}
-	// Height = tile + 2*gap = 64+16 = 80.
-	if pop.H != 80 {
-		t.Errorf("PopoverRect height = %v, want 80", pop.H)
+	// Height = tile + 2*gap = 32+16 = 48.
+	if pop.H != 48 {
+		t.Errorf("PopoverRect height = %v, want 48", pop.H)
 	}
 	// Anchor: bottom-right corner of popover aligns with PlusRadius right of plus center.
 	cx, cy := l.PlusCenter()
@@ -96,8 +81,8 @@ func TestPopoverAndTileRects(t *testing.T) {
 	}
 	// Tiles are tile+gap apart.
 	t1 := l.TileRect(1)
-	if t1.X-t0.X != 72 {
-		t.Errorf("TileRect spacing = %v, want 72 (64+8)", t1.X-t0.X)
+	if t1.X-t0.X != 40 {
+		t.Errorf("TileRect spacing = %v, want 40 (32+8)", t1.X-t0.X)
 	}
 	_ = cy
 }

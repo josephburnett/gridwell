@@ -72,22 +72,13 @@ func (l Layout) PointInPlus(x, y float64) bool {
 	return dx*dx+dy*dy <= l.Cfg.PlusRadius*l.Cfg.PlusRadius
 }
 
-// TilePx returns the per-tile size in screen pixels for the palette,
-// clamped to [TileMinPx, TileMaxPx]. Tracks paneZoom so the previews
-// look roughly the size of the tile they'll create.
+// TilePx returns the per-tile size in screen pixels for the palette.
+// Fixed at half a default cell and independent of pane zoom: the creation
+// menu is a constant-size affordance — a row of icons, not a literal
+// preview of the placed tile's on-screen size. (The drag ghost resizes to
+// the destination zoom on drop, the same as dragging a tile across wells.)
 func (l Layout) TilePx() float64 {
-	z := l.PaneZoom
-	if z <= 0 {
-		z = 1
-	}
-	t := l.Cfg.CellPx * z
-	if t < l.Cfg.TileMinPx {
-		t = l.Cfg.TileMinPx
-	}
-	if t > l.Cfg.TileMaxPx {
-		t = l.Cfg.TileMaxPx
-	}
-	return t
+	return l.Cfg.CellPx * 0.5
 }
 
 // PopoverRect returns the screen rect of the entire palette popover,

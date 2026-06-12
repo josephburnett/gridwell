@@ -232,6 +232,23 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
+	// The creation palette floats above every pane, so a click in its
+	// popover wins — even where it overflows a neighbouring pane (which
+	// would otherwise pan/grab). Resolve against the MENU pane, not the
+	// pane under the cursor, so grabbing a swatch from the overflow region
+	// starts a template drag instead of scrolling the pane beneath.
+	if a.menuOpen {
+		if mp := a.tree.FindPane(a.menuPaneID); mp != nil {
+			mr := paneRectFor(a, mp)
+			if pointInPalette(mp, mr, sx, sy) {
+				if idx := paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
+					a.startTemplateDrag(mp, mr, idx, sx, sy)
+				}
+				return nil // swallow; missing a swatch keeps the palette open
+			}
+		}
+	}
+
 	// Left-drag on a pane boundary resizes the divider — same divider math
 	// as the right-button resize, but it never closes a pane (clamped to a
 	// recoverable minimum). Checked first so a grab near the edge wins over
@@ -1595,7 +1612,7 @@ func (a *App) startTemplateDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float
 		return
 	}
 	kind := templateKinds[idx]
-	tx, ty, _, _ := paletteTileRect(p, r, idx)
+	tx, ty, tw, _ := paletteTileRect(p, r, idx)
 	a.dragging = &dragState{
 		originPaneID:   p.ID,
 		isTemplate:     true,
@@ -1610,6 +1627,11 @@ func (a *App) startTemplateDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float
 		originScreenX:  tx,
 		originScreenY:  ty,
 		originPaneRect: r,
+		// Start the ghost at the (fixed, zoom-independent) swatch size; the
+		// drop-target machinery grows/shrinks it to the destination grid's
+		// cell size as the cursor moves over a pane, and back to the swatch
+		// size when off-grid — same lerp as dragging a tile across wells.
+		srcCellSize: tw,
 	}
 }
 
