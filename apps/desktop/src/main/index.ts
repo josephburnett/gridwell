@@ -13,7 +13,7 @@ import { MirrorPump } from './capture';
 const MIRROR_INTERVAL_MS = 250;
 
 // Gridwell desktop entry. Boot order:
-//   1. spawn the Go sidecar (--no-browser) and wait for it to listen
+//   1. spawn the Go sidecar and wait for it to listen
 //   2. open the root window pointing at the sidecar's loopback origin
 //   3. tear the sidecar down on quit
 //

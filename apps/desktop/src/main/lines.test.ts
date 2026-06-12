@@ -4,7 +4,7 @@ import { isReadyLine, makeLineSplitter } from './lines';
 
 test('isReadyLine matches the serve banner', () => {
   assert.ok(isReadyLine('gridwell: serving on 127.0.0.1:8099 (db=/x static=./web)'));
-  assert.ok(!isReadyLine('gridwell: --no-browser: live URL tiles disabled (Electron hosts them)'));
+  assert.ok(!isReadyLine('gridwell: opening sqlite store at /x/gridwell.db'));
   assert.ok(!isReadyLine('gridwell: orphan cleanup killed 1 stale shell session(s)'));
   assert.ok(!isReadyLine(''));
 });

@@ -21,7 +21,7 @@ export interface StartOptions {
   onLog?: (line: string) => void;
 }
 
-// startSidecar spawns the Go backend in --no-browser mode and resolves once
+// startSidecar spawns the Go backend (loopback HTTP/SSE/WS) and resolves once
 // it reports listening. Rejects if the process exits first or the timeout
 // elapses. The returned stop() terminates the child.
 export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
