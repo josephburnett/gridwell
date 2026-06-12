@@ -235,6 +235,16 @@ func (a *App) draw() {
 		a.drawPane(p, r)
 	}
 
+	// The creation palette floats above every pane: draw it last, after all
+	// panes, so it isn't painted over by a neighbour it overflows into.
+	if a.menuOpen {
+		if mp := a.tree.FindPane(a.menuPaneID); mp != nil {
+			if mr, ok := rects[mp.ID]; ok {
+				a.drawPalette(mp, mr)
+			}
+		}
+	}
+
 	// In-flight right-button gesture preview (split line, swap arrow,
 	// red close-warning border). Drawn on top of all panes but below
 	// the textarea overlay (which lives in DOM, not canvas).
@@ -418,10 +428,9 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	} else {
 		// + button is always available; gives the user an entry point
 		// even when the grid is unreachable (they can still ascend, etc).
+		// The palette popover itself is drawn after every pane (see draw)
+		// so it floats above neighbouring panes it overflows into.
 		a.drawPlusButton(p, r)
-		if a.menuOpen && a.menuPaneID == p.ID {
-			a.drawPalette(p, r)
-		}
 	}
 }
 
