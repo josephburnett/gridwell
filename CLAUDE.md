@@ -71,17 +71,18 @@ The URL captures the focused pane's path and viewport so a single link can descr
 Mouse-only. No modifiers.
 
 - **Descend** — left-click a well or content tile.
-- **Ascend** — left-click the pane's edge band.
+- **Ascend** — middle-click anywhere in a pane, or right-click the pane's corner circle (drag out of the circle to cancel). The colored edge band no longer ascends — it's a thin 1px frame now.
 - **Move** — left-click + drag a tile.
 - **Clone** — right-click + drag from a tile's center.
 - **Resize** — right-click + drag a tile's outer ring.
 - **Delete** — drag a tile onto a blackhole.
 - **Create** — drag a tile out of the palette.
 - **Pan** — left-click + drag empty space.
+- **Resize pane (no close)** — left-click + drag a pane boundary. Clamps to a recoverable minimum; never closes a pane (so live tiles stay put).
 - **Zoom** — wheel.
 - **Scroll** (inside a text tile) — wheel.
 - **Refresh URL** — right-click + drag down inside a URL descent. Goes live if frozen; reloads if already live.
-- **Split / swap / resize / close pane** — right-click + drag in the pane regions.
+- **Split / swap / resize / close pane** — right-click + drag in the pane regions. A newly split pane auto-ascends one level so it isn't a duplicate view.
 
 Text tiles take keyboard input because text is being edited. URL tiles forward keystrokes to the embedded page. The canvas itself reads no modifier keys.
 
