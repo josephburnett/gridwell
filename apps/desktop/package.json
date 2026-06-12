@@ -2,6 +2,7 @@
   "name": "gridwell-desktop",
   "version": "0.0.0",
   "description": "Gridwell desktop shell (Electron). Hosts the Go sidecar and native WebContentsView URL tiles.",
+  "author": "Joseph Burnett <josephburnett@fastmail.com>",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
@@ -17,7 +18,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.3",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
@@ -26,6 +27,10 @@
     "productName": "Gridwell",
     "directories": {
       "output": "out"
+    },
+    "electronDownload": {
+      "cache": ".cache/electron",
+      "isVerifyChecksum": false
     },
     "files": [
       "dist/main/**/*",
@@ -43,18 +48,18 @@
     ],
     "linux": {
       "target": [
-        "dir"
+        "AppImage"
       ],
       "category": "Utility"
     },
     "mac": {
       "target": [
-        "dir"
+        "dmg"
       ]
     },
     "win": {
       "target": [
-        "dir"
+        "nsis"
       ]
     }
   }
