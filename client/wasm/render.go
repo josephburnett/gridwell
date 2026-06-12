@@ -549,6 +549,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		return
 	case rpc.KindBlackHole:
 		drawBlackHoleSwatch(a.cctx, x, y, w, h)
+		drawBlackHoleGlyph(a.cctx, x, y, w, h, colorExitBorder)
 		strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder, tileBorderPx)
 		if selected {
 			drawSelectedTileOutline(a.cctx, x, y, w, h)
@@ -1516,14 +1517,17 @@ var paneBorderColors = pane.BorderColors{
 
 // glyphLineWidth is the shared stroke weight, tied to tile size so icons
 // scale with their swatch but always read at the same relative weight.
+// Deliberately thin — fat strokes read as cartoonish.
 func glyphLineWidth(w, h float64) float64 {
-	return math.Max(1.25, math.Min(w, h)/16)
+	return math.Max(1.0, math.Min(w, h)/34)
 }
 
 // glyphBox returns the centered square footprint (center + half-extent)
 // every glyph draws within, so they sit at a uniform size side by side.
+// half is ~13% of the smaller side — a small, restrained icon (half the
+// previous size).
 func glyphBox(x, y, w, h float64) (cx, cy, half float64) {
-	return x + w/2, y + h/2, math.Min(w, h) * 0.26
+	return x + w/2, y + h/2, math.Min(w, h) * 0.13
 }
 
 // beginGlyph sets the shared stroke/fill color and round line ends.
