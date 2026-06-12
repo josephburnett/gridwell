@@ -41,6 +41,8 @@ The outline tells you whether the principle holds inside.
 - **Brown** — root grid. You cannot ascend further.
 - **Green / purple** — content tile kind. Markdown vs URL.
 
+The *line style* says whether the tile is owned or a link. **Solid** — the tile is the real thing; deleting it (drag onto `/dev/null`) deletes for real (`rm` a file, `SIGTERM` a process). **Dashed** — the tile is a link to outside Gridwell: a file-well, process-well, or a file dragged out of a source well into a regular grid. Deleting a dashed tile only *unlinks* it (drops the tile row); the real file/process is untouched. The same entity is solid inside its source well and dashed once dragged into a regular grid — `DeleteTile` routes on the parent grid's `source_kind`.
+
 ## Identity is `(object_id, version)`
 
 Every tile and every grid has two identities:
