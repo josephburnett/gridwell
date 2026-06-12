@@ -1,0 +1,19 @@
+{
+  "name": "gridwell-desktop",
+  "version": "0.0.0",
+  "description": "Gridwell desktop shell (Electron). Hosts the Go sidecar and native WebContentsView URL tiles.",
+  "private": true,
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "npm run build && electron .",
+    "test": "node --test --import tsx ./src/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "electron": "^33.2.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
