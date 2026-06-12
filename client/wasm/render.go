@@ -1574,10 +1574,11 @@ func glyphLineWidth(w, h float64) float64 {
 
 // glyphBox returns the centered square footprint (center + half-extent)
 // every glyph draws within, so they sit at a uniform size side by side.
-// half is ~13% of the smaller side — a small, restrained icon (half the
-// previous size).
+// half is ~38% of the smaller side, so a glyph mostly fills its tile (the
+// strokes stay thin via glyphLineWidth, so a big glyph still reads as a
+// clean line icon, not a cartoon).
 func glyphBox(x, y, w, h float64) (cx, cy, half float64) {
-	return x + w/2, y + h/2, math.Min(w, h) * 0.13
+	return x + w/2, y + h/2, math.Min(w, h) * 0.38
 }
 
 // beginGlyph sets the shared stroke/fill color and round line ends.
@@ -1937,10 +1938,10 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 	n := templateGhostNode(kind)
 	outside := tileOutside(&n, false)
 	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
-	a.drawTileBannerLabel(&n, x, y, w, h, outside)
-	// One consistent line glyph per kind, in that kind's own color, so the
-	// creation menu reads as a coherent set (see beginGlyph). The well's
-	// glyph replaces the old mini-grid swatch.
+	// No banner in the palette — the glyph alone identifies the kind. (Placed
+	// exit tiles still carry their "/dev/null" / "files" / … label.) One
+	// consistent line glyph per kind, in that kind's own color, sized to
+	// mostly fill the swatch.
 	switch kind {
 	case tplWell:
 		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
