@@ -5,11 +5,55 @@ import { captureJpegBase64 } from './capture';
 
 interface Entry {
   view: WebContentsView;
+  // control is a small native button view floated on TOP of `view` at the
+  // corner. A canvas-drawn button can't paint above a native WebContentsView,
+  // so the corner control (back / ascend) is itself a tiny native view.
+  control: WebContentsView;
   tileId: number;
   objectId: string;
   bounds: Bounds;
   hidden: boolean;
 }
+
+// CONTROL_SIZE / CONTROL_MARGIN place the corner button at the bottom-right
+// of the URL view, matching the canvas circle's position on frozen panes.
+const CONTROL_SIZE = 36;
+const CONTROL_MARGIN = 6;
+
+// CONTROL_HTML is the corner button's page: a circular back-arrow chip. Its
+// inline script (nodeIntegration — first-party data: URL only) forwards
+// left/right mousedown to main, which routes left→back and right→ascend.
+const CONTROL_HTML =
+  'data:text/html,' +
+  encodeURIComponent(
+    `<!doctype html><meta charset=utf8><style>
+     html,body{margin:0;height:100%;overflow:hidden;-webkit-user-select:none;
+       background:transparent;display:flex;align-items:center;justify-content:center}
+     #b{width:30px;height:30px;border-radius:50%;background:#1b1f29;
+       border:1px solid #3a4150;color:#cdd2dd;display:flex;align-items:center;
+       justify-content:center;font:18px/1 sans-serif;cursor:pointer}
+     #b:hover{background:#252b38}</style>
+     <div id=b>‹</div>
+     <script>
+     const {ipcRenderer}=require('electron');
+     addEventListener('mousedown',e=>{e.preventDefault();
+       ipcRenderer.send('gw:control-click',e.button)});
+     addEventListener('contextmenu',e=>e.preventDefault());
+     </script>`,
+  );
+
+// controlBounds positions the corner button at the bottom-right of a view's
+// content box.
+function controlBounds(b: Bounds): Bounds {
+  return {
+    x: b.x + b.width - CONTROL_SIZE - CONTROL_MARGIN,
+    y: b.y + b.height - CONTROL_SIZE - CONTROL_MARGIN,
+    width: CONTROL_SIZE,
+    height: CONTROL_SIZE,
+  };
+}
+
+const OFFSCREEN = { x: -100000, y: -100000 };
 
 export interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation (URL/title change),
@@ -68,10 +112,20 @@ export class WebviewRegistry {
           nodeIntegration: false,
         },
       });
-      e = { view, tileId, objectId, bounds: rounded, hidden: false };
+      // The corner button is its own tiny native view layered ON TOP of the
+      // URL view (added after it). First-party data: URL, so nodeIntegration
+      // is acceptable for its inline IPC forwarder.
+      const control = new WebContentsView({
+        webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
+      });
+      e = { view, control, tileId, objectId, bounds: rounded, hidden: false };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(rounded);
+      this.win.contentView.addChildView(control);
+      control.setBackgroundColor('#00000000');
+      control.setBounds(roundBounds(controlBounds(rounded)));
+      void control.webContents.loadURL(CONTROL_HTML);
       this.wireNav(paneId, e);
       this.applyMinWidthZoom(e);
       void view.webContents.loadURL(url);
@@ -83,6 +137,7 @@ export class WebviewRegistry {
     if (!boundsEqual(e.bounds, rounded)) {
       e.bounds = rounded;
       e.view.setBounds(rounded);
+      e.control.setBounds(roundBounds(controlBounds(rounded)));
     }
     const current = e.view.webContents.getURL();
     if (current !== url && url) {
@@ -96,8 +151,20 @@ export class WebviewRegistry {
     const rounded = roundBounds(bounds);
     if (boundsEqual(e.bounds, rounded)) return;
     e.bounds = rounded;
-    if (!e.hidden) e.view.setBounds(rounded);
+    if (!e.hidden) {
+      e.view.setBounds(rounded);
+      e.control.setBounds(roundBounds(controlBounds(rounded)));
+    }
     this.applyMinWidthZoom(e);
+  }
+
+  // controlPaneFor resolves a control view's webContents id back to its pane,
+  // so the IPC handler knows which tile a corner-button click came from.
+  controlPaneFor(webContentsId: number): string | undefined {
+    for (const [paneId, e] of this.entries) {
+      if (e.control.webContents.id === webContentsId) return paneId;
+    }
+    return undefined;
   }
 
   // applyMinWidthZoom keeps a narrow URL pane from reflowing the page to a
@@ -126,9 +193,11 @@ export class WebviewRegistry {
     if (!e || e.hidden === hidden) return;
     e.hidden = hidden;
     if (hidden) {
-      e.view.setBounds({ x: -100000, y: -100000, width: e.bounds.width, height: e.bounds.height });
+      e.view.setBounds({ ...OFFSCREEN, width: e.bounds.width, height: e.bounds.height });
+      e.control.setBounds({ ...OFFSCREEN, width: CONTROL_SIZE, height: CONTROL_SIZE });
     } else {
       e.view.setBounds(e.bounds);
+      e.control.setBounds(roundBounds(controlBounds(e.bounds)));
     }
   }
 
@@ -157,6 +226,8 @@ export class WebviewRegistry {
       try {
         this.win.contentView.removeChildView(e.view);
         e.view.webContents.close();
+        this.win.contentView.removeChildView(e.control);
+        e.control.webContents.close();
       } catch {
         // ignore
       }

@@ -50,7 +50,7 @@ app.whenReady().then(() => {
   root.setBounds({ x: 0, y: 0, width: 800, height: 600 });
 
   const registry = new WebviewRegistry(win);
-  registerWebviewIpc(registry);
+  registerWebviewIpc(registry, root.webContents);
 
   root.webContents.on('console-message', (_e, _level, message) => {
     if (!message.startsWith('BRIDGE_RESULT ')) return;

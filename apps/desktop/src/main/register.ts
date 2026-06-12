@@ -1,6 +1,7 @@
 import { ipcMain, WebContents } from 'electron';
 import {
   CH,
+  CTRL,
   EV,
   PlaceArgs,
   SetBoundsArgs,
@@ -12,8 +13,22 @@ import {
 import { WebviewRegistry } from './webviews';
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the
-// registry. Call once after the root window is created.
-export function registerWebviewIpc(registry: WebviewRegistry): void {
+// registry. Call once after the root window is created. rootWC is the
+// renderer's web contents, used to forward corner-button ascend clicks.
+export function registerWebviewIpc(registry: WebviewRegistry, rootWC: WebContents): void {
+  // Corner-button overlay click: resolve the sender view back to its pane,
+  // then route left→back (handled natively) and right/middle→ascend (the
+  // ascent animation lives in the renderer, so forward it there).
+  ipcMain.on(CTRL.click, (event, button: number): void => {
+    const paneId = registry.controlPaneFor(event.sender.id);
+    if (!paneId) return;
+    if (button === 0) {
+      registry.goBack(paneId);
+    } else if (!rootWC.isDestroyed()) {
+      rootWC.send(EV.controlAscend, { paneId });
+    }
+  });
+
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): void => {
     registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds);
   });

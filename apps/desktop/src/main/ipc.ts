@@ -25,10 +25,17 @@ export const CH = {
   reload: 'gw:reload',     // PaneRef → void
 } as const;
 
+// Control overlay (the corner-button view) → main (send, fire-and-forget).
+// Payload is the mouse button (0 = left → back, else → ascend).
+export const CTRL = {
+  click: 'gw:control-click',
+} as const;
+
 // Main → renderer (send, fire-and-forget).
 export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
+  controlAscend: 'gw:control-ascend', // PaneRef — corner button right-clicked
 } as const;
 
 export interface PaneRef {

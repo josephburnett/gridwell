@@ -159,8 +159,19 @@ func (a *App) installWebviewListeners() {
 		}
 		return nil
 	})
+	// The live URL tile's corner button is a native overlay view; a
+	// right/middle click on it routes here so the ascent (which freezes the
+	// tile + tears the view down) runs in the renderer like any other ascend.
+	onControlAscend := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		paneID := jsString(p[0].Get("paneId"))
+		if fp := a.tree.FindPane(paneID); fp != nil {
+			a.ascendPane(fp)
+		}
+		return nil
+	})
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
+	g.Call("onControlAscend", onControlAscend)
 	// Listeners live for the lifetime of the app; no Release.
 }
 
