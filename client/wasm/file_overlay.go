@@ -287,18 +287,34 @@ func (a *App) ensureFileToggle() {
 	btn.Set("textContent", "a")
 
 	a.fileToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) > 0 {
-			args[0].Call("preventDefault")
-			args[0].Call("stopPropagation")
+		if len(args) == 0 {
+			return nil
 		}
+		ev := args[0]
+		ev.Call("preventDefault")
+		ev.Call("stopPropagation")
 		p := a.tree.FocusedPane()
 		if p == nil || p.TextFocus == 0 {
+			return nil
+		}
+		// Right-click on the round button ascends, like every other corner
+		// circle. Left-click toggles rendered/raw.
+		if ev.Get("button").Int() == 2 {
+			a.ascendPane(p)
 			return nil
 		}
 		a.onToggleFileMode(p)
 		return nil
 	})
 	btn.Call("addEventListener", "mousedown", a.fileToggleCb)
+	// Suppress the browser context menu so right-click reads purely as the
+	// ascend gesture above.
+	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) > 0 {
+			args[0].Call("preventDefault")
+		}
+		return nil
+	}))
 	a.doc.Get("body").Call("appendChild", btn)
 	a.fileToggleBtn = btn
 }
