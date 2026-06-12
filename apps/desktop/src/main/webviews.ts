@@ -73,6 +73,7 @@ export class WebviewRegistry {
       this.win.contentView.addChildView(view);
       view.setBounds(rounded);
       this.wireNav(paneId, e);
+      this.applyMinWidthZoom(e);
       void view.webContents.loadURL(url);
       return;
     }
@@ -96,6 +97,24 @@ export class WebviewRegistry {
     if (boundsEqual(e.bounds, rounded)) return;
     e.bounds = rounded;
     if (!e.hidden) e.view.setBounds(rounded);
+    this.applyMinWidthZoom(e);
+  }
+
+  // applyMinWidthZoom keeps a narrow URL pane from reflowing the page to a
+  // cramped (mobile) layout: below URL_MIN_LAYOUT_WIDTH we zoom the page out
+  // so it still lays out at the min width and scales to fit, instead of
+  // re-flowing. A native WebContentsView can't render wider than its bounds
+  // and be clipped to the pane, so this scale-to-fit is the closest thing to
+  // "min width + horizontal scroll" without offscreen rendering. zoomFactor
+  // resets on cross-origin navigation, so wireNav re-applies it on load.
+  private applyMinWidthZoom(e: Entry): void {
+    const w = e.bounds.width;
+    const z = w >= URL_MIN_LAYOUT_WIDTH ? 1 : Math.max(0.25, w / URL_MIN_LAYOUT_WIDTH);
+    try {
+      e.view.webContents.setZoomFactor(z);
+    } catch {
+      // webContents not ready yet — wireNav re-applies on did-finish-load.
+    }
   }
 
   // setHidden hides/shows the view without destroying it. Used during drag
@@ -191,8 +210,16 @@ export class WebviewRegistry {
     e.view.webContents.on('did-navigate', emit);
     e.view.webContents.on('did-navigate-in-page', emit);
     e.view.webContents.on('page-title-updated', emit);
+    // zoomFactor resets across (cross-origin) navigations — re-apply the
+    // min-width zoom once the new document has loaded.
+    e.view.webContents.on('did-finish-load', () => this.applyMinWidthZoom(e));
   }
 }
+
+// URL_MIN_LAYOUT_WIDTH is the narrowest layout width a live URL view renders
+// at; below this the page is zoomed to fit rather than reflowed. See
+// applyMinWidthZoom.
+const URL_MIN_LAYOUT_WIDTH = 640;
 
 // clearPersistedSession wipes a tile's stored cookies/storage. Not used yet
 // (a future "log out this tile" gesture); exposed so the partition naming
