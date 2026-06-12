@@ -783,8 +783,17 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 		return
 	}
 	_ = a.tree.SetFocus(p.ID)
-	if _, err := a.tree.SplitOnSideAt(rd.splitSide, ratio); err != nil {
+	np, err := a.tree.SplitOnSideAt(rd.splitSide, ratio)
+	if err != nil {
 		return
+	}
+	// A new pane is a clone of the source, so without this it would just
+	// duplicate the current view. Auto-ascend it one level: split off a
+	// URL/text descent and the new pane shows the parent grid (not a
+	// second copy of the page); split off a child grid and it shows the
+	// grid above. At root there's nowhere to ascend, so it stays put.
+	if np != nil && a.canAscend(np) {
+		a.ascendPane(np)
 	}
 }
 
