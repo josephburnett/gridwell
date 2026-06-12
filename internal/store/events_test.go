@@ -299,7 +299,6 @@ func TestEventUpdateTextEmitsTileChanged(t *testing.T) {
 
 func TestEventCloneURLEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
-	s.SetURLDriver(NewFakeURLDriver())
 	root := rootID(t, s)
 	ctx := context.Background()
 	src := createURLTileForTest(t, s, root, 0, "https://example.com")

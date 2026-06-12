@@ -3,37 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
-	"sync"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
-
-// URLDriver is the abstraction the store uses for URL-tile presence.
-type URLDriver interface {
-	Available() bool
-}
-
-// FakeURLDriver is an in-memory URLDriver for tests.
-type FakeURLDriver struct {
-	mu        sync.Mutex
-	available bool
-}
-
-func NewFakeURLDriver() *FakeURLDriver {
-	return &FakeURLDriver{available: true}
-}
-
-func (d *FakeURLDriver) SetAvailable(v bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.available = v
-}
-
-func (d *FakeURLDriver) Available() bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.available
-}
 
 // SetURLPreview overwrites a URL tile's preview JPEG. Called by the
 // server's URL stream handler on WS close. The JPEG is hash-deduped

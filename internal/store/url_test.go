@@ -25,7 +25,6 @@ func createURLTileForTest(t *testing.T, s *Store, root, x int64, url string) *rp
 // and preview JPEG, and that the clone shares the source's object_id.
 func TestCloneURLTile(t *testing.T) {
 	s := newTestStore(t)
-	s.SetURLDriver(NewFakeURLDriver())
 	root := rootID(t, s)
 	ctx := context.Background()
 	src := createURLTileForTest(t, s, root, 0, "https://example.com/a")
@@ -229,20 +228,6 @@ func TestSetURLStateRefusesNonURLTile(t *testing.T) {
 	}
 }
 
-func TestFakeURLDriverAvailable(t *testing.T) {
-	d := NewFakeURLDriver()
-	if !d.Available() {
-		t.Error("fresh FakeURLDriver should be available")
-	}
-	d.SetAvailable(false)
-	if d.Available() {
-		t.Error("after SetAvailable(false), Available() should report false")
-	}
-	d.SetAvailable(true)
-	if !d.Available() {
-		t.Error("after SetAvailable(true), Available() should report true")
-	}
-}
 
 func TestSetURLPreviewRefusesNonURLTile(t *testing.T) {
 	s := newTestStore(t)

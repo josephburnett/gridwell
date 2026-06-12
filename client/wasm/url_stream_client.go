@@ -10,7 +10,6 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/internal/rpc"
-	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
 // urlView is the renderer-side handle for one live URL tile — a native
@@ -31,15 +30,11 @@ func urlLog(format string, args ...any) {
 	js.Global().Get("console").Call("log", msg)
 }
 
-// paneStreamSize / paneStreamLocal are thin wasm adapters over the pure
-// panebox helpers, binding the wasm renderer's paneBorderPx. Retained for
-// the input callsites that still compute content-box geometry.
+// paneStreamSize is a thin wasm adapter over the pure panebox helper,
+// binding the renderer's paneBorderPx. Retained for the refresh-gesture
+// callsites that pass a content size into openURLStream.
 func paneStreamSize(r pane.Rect) (int64, int64) {
 	return panebox.StreamViewportSize(r, paneBorderPx)
-}
-
-func paneStreamLocal(r pane.Rect, sx, sy float64) (float64, float64) {
-	return panebox.StreamLocalCoords(r, paneBorderPx, sx, sy)
 }
 
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
@@ -161,24 +156,6 @@ func (a *App) syncURLViews() {
 // on the canvas over a tile must hide the view first.
 func (a *App) urlViewsHidden() bool {
 	return a.dragging != nil || a.rightDrag != nil || a.menuOpen
-}
-
-// notifyURLStreamSize is retained as a no-op: bounds are now pushed by
-// syncURLViews every frame, not on demand from the draw path.
-func (a *App) notifyURLStreamSize(paneID string, w, h int64) {
-	_ = paneID
-	_ = w
-	_ = h
-}
-
-// sendURLStreamInput is retained as a no-op: a live URL tile is a native
-// WebContentsView sitting over the content box, so it receives mouse,
-// keyboard, and wheel input directly from the OS. The canvas never sees
-// those events, so the old forward-to-rod path is dead. The signature is
-// kept so the input handlers compile unchanged until Phase 4 removes them.
-func (a *App) sendURLStreamInput(paneID string, ev urldriver.InputEvent) {
-	_ = paneID
-	_ = ev
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL

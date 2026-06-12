@@ -16,7 +16,6 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
-	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
 // Animation durations in milliseconds. Tuned for "stone settling" feel.
@@ -57,67 +56,14 @@ func (a *App) installCanvasInput() {
 	a.win.Call("addEventListener", "keyup", js.FuncOf(a.onKeyUp))
 }
 
-// onKeyDown / onKeyUp forward keystrokes to the remote Chromium tab
-// when the focused pane is descended into a URL tile. They do nothing
-// otherwise — keystrokes that don't go to a remote tab pass through to
-// the browser unchanged.
-//
-// Every forwarded key is preventDefault'd so browser-chrome shortcuts
-// (Ctrl+W, Ctrl+T, Ctrl+R, F5, F11, F12, ...) act on the remote tab
-// instead of the gridwell tab. The OS-level effect of some shortcuts
-// (e.g. Cmd+Q on macOS) can't be suppressed from JS — this is
-// best-effort, but covers everything the browser itself listens to.
-func (a *App) onKeyDown(this js.Value, args []js.Value) any {
-	p := a.tree.FocusedPane()
-	if p == nil || !a.isURLDescent(p) {
-		return nil
-	}
-	ev := args[0]
-	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-		Kind:      urldriver.InputKeyDown,
-		Key:       ev.Get("key").String(),
-		Code:      ev.Get("code").String(),
-		Modifiers: readModifiers(ev),
-	})
-	ev.Call("preventDefault")
-	return nil
-}
+// onKeyDown / onKeyUp are no-ops. When a pane is descended into a live URL
+// tile, the native WebContentsView floated over the content box has OS
+// keyboard focus and handles its own input — the gridwell canvas never sees
+// those keystrokes. The handlers remain registered (and harmlessly inert) so
+// the listener wiring in installCanvasInput is unchanged.
+func (a *App) onKeyDown(this js.Value, args []js.Value) any { return nil }
 
-func (a *App) onKeyUp(this js.Value, args []js.Value) any {
-	p := a.tree.FocusedPane()
-	if p == nil || !a.isURLDescent(p) {
-		return nil
-	}
-	ev := args[0]
-	a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-		Kind:      urldriver.InputKeyUp,
-		Key:       ev.Get("key").String(),
-		Code:      ev.Get("code").String(),
-		Modifiers: readModifiers(ev),
-	})
-	ev.Call("preventDefault")
-	return nil
-}
-
-// readModifiers packs the DOM key-event modifier booleans into the
-// CDP bit field that Input.dispatchKeyEvent expects: Alt=1, Ctrl=2,
-// Meta=4, Shift=8.
-func readModifiers(ev js.Value) int64 {
-	var m int64
-	if ev.Get("altKey").Bool() {
-		m |= 1
-	}
-	if ev.Get("ctrlKey").Bool() {
-		m |= 2
-	}
-	if ev.Get("metaKey").Bool() {
-		m |= 4
-	}
-	if ev.Get("shiftKey").Bool() {
-		m |= 8
-	}
-	return m
-}
+func (a *App) onKeyUp(this js.Value, args []js.Value) any { return nil }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
 // or (nil, pane.Rect{}, false) if no pane covers the point.
@@ -186,27 +132,16 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// textarea natively (text mode — those events never reach the
 	// canvas listener).
 	if p.TextFocus != 0 {
-		// URL stream: forward wheel as mouse_wheel.
+		// URL descent: a live tile is a native WebContentsView over the
+		// content box and scrolls itself (the canvas never sees those wheel
+		// events). When live, swallow any stray wheel that does reach the
+		// canvas so it doesn't zoom the pane underneath; otherwise fall
+		// through to the pane-wide gridwell wheel (zoom) like other files.
 		if a.isURLDescent(p) {
-			if pointInPlus(r, sx, sy) {
-				// Wheel over the back-button chrome is swallowed: it's
-				// our UI, not the page's content.
+			if a.urlStreams[p.ID] != nil && pointInPaneContent(r, sx, sy) {
 				args[0].Call("preventDefault")
 				return nil
 			}
-			if pointInPaneContent(r, sx, sy) {
-				vx, vy := paneStreamLocal(r, sx, sy)
-				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-					Kind:   urldriver.InputMouseWheel,
-					X:      vx,
-					Y:      vy,
-					DeltaY: dy,
-				})
-				args[0].Call("preventDefault")
-				return nil
-			}
-			// Outside inner: fall through to pane-wide gridwell wheel
-			// (zoom), same as other file types.
 		}
 		// Text file: fixed scale, no zoom. The wheel only scrolls the
 		// window vertically (rendered mode). In text mode the textarea
@@ -314,19 +249,18 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// streams never receive clicks here in practice.
 			return nil
 		}
-		// URL tile descent: live panes forward clicks to Chromium; frozen
-		// panes use click+drag for pan (cover-mode overflow navigation).
-		// The lower-right back button and outer margin always belong to Gridwell.
+		// URL tile descent. A live tile is a native WebContentsView over the
+		// content box; it owns its own clicks (the canvas never sees them).
+		// The canvas only gets events here when the pane is frozen, or in the
+		// pane-border band. The outer margin ascends; the corner button goes
+		// live (frozen) or navigates back (live, if a stray click reaches us).
 		if a.isURLDescent(p) {
 			if pointInPlus(r, sx, sy) {
-				// Corner button: always a Gridwell control.
-				// Live pane → history back; frozen pane → open URL stream.
 				if a.urlStreams[p.ID] != nil {
-					a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-						Kind: urldriver.InputHistoryBack,
-					})
+					bridgeGoBack(p.ID)
 				} else {
-					// Frozen: refresh (open URL stream), same as right-drag-down.
+					// Frozen: go live (place the native view), same as
+					// right-drag-down.
 					gid := a.gridIDForPath(p.Path)
 					if g, ok := a.c.Grid(gid); ok {
 						if tile, ok := g.Tiles[p.TextFocus]; ok {
@@ -342,16 +276,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				a.startFileAscent(p)
 				return nil
 			}
-			// Live pane: forward the click to the streaming Chromium tab.
+			// Live pane: the native view owns content clicks; nothing to do.
 			if a.urlStreams[p.ID] != nil {
-				vx, vy := paneStreamLocal(r, sx, sy)
-				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-					Kind: urldriver.InputMouseMove, X: vx, Y: vy,
-				})
-				a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-					Kind: urldriver.InputMouseDown, X: vx, Y: vy,
-					Button: urldriver.MouseButtonLeft,
-				})
 				return nil
 			}
 			// Frozen pane: start a pan drag to navigate cover-mode overflow.
@@ -504,12 +430,9 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 				return nil
 			}
 			if pointInPaneContent(r, sx, sy) {
-				// Live pane: forward move to Chromium; frozen pane: set grab cursor.
+				// Live pane: the native view owns the cursor (the canvas
+				// won't get moves over it anyway). Frozen pane: grab cursor.
 				if a.urlStreams[p.ID] != nil {
-					vx, vy := paneStreamLocal(r, sx, sy)
-					a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-						Kind: urldriver.InputMouseMove, X: vx, Y: vy,
-					})
 					a.canvas.Get("style").Set("cursor", "")
 					return nil
 				}
@@ -712,21 +635,15 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishRightDrag(sx, sy)
 		return nil
 	}
-	// URL-stream forwarding for the corresponding mouseup.
+	// URL descent: the corner button and live content box are handled on
+	// mousedown / by the native view; swallow the matching mouseup over them
+	// so it doesn't leak into a gridwell gesture.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		// Back-button hit area: swallow the mouseup so the remote
-		// page doesn't receive a phantom release.
 		if pointInPlus(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
-		// Only forward mouseup to Chromium for live panes.
 		if a.urlStreams[p.ID] != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
-			vx, vy := paneStreamLocal(r, sx, sy)
-			a.sendURLStreamInput(p.ID, urldriver.InputEvent{
-				Kind: urldriver.InputMouseUp, X: vx, Y: vy,
-				Button: urldriver.MouseButtonLeft,
-			})
 			return nil
 		}
 	}

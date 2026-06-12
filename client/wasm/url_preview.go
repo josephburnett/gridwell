@@ -112,10 +112,10 @@ func clampURLPan(panX, panY, iw, ih, w, h float64) (float64, float64) {
 // overflow. Live descents show the center crop (no pan — clicks forward
 // to Chromium and the page manages its own viewport).
 func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
-	// Keep the server-side Chromium viewport in step with the area
-	// we're painting into. notifyURLStreamSize is a no-op when the
-	// size hasn't changed, so this is cheap to call every frame.
-	a.notifyURLStreamSize(p.ID, int64(w), int64(h))
+	// When live, the native WebContentsView paints over this content box;
+	// the JPEG drawn here is the fallback shown while the view is parked
+	// during a gesture, and the frozen preview otherwise. Its bounds are
+	// tracked by syncURLViews, not from this draw path.
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")

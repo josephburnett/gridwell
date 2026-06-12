@@ -33,13 +33,7 @@ type Server struct {
 	cfg           Config
 	store         *store.Store
 	mux           *http.ServeMux
-	urlStreamer   urlStreamer
 	shellStreamer shellStreamer
-
-	// activeURLSessions tracks the single live URL session per tile_id.
-	// Protected by activeURLMu.
-	activeURLMu       sync.Mutex
-	activeURLSessions map[int64]*urlSessionEntry
 
 	// activeShellSessions tracks the single live shell PTY per tile_id.
 	// Same takeover semantics as URL (a refresh from another pane
@@ -67,10 +61,9 @@ func (s *Server) routes() {
 	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(s))
 	s.mux.Handle(path, handler)
 
-	// Live URL session is a WebSocket — Connect doesn't model it; raw
-	// HTTP route stays.
-	s.mux.HandleFunc("/rpc/URLStream", s.urlStream)
-	// Shell PTY session — same WebSocket pattern as URL.
+	// Shell PTY session is a WebSocket — Connect doesn't model it; raw
+	// HTTP route stays. (Live URL tiles are hosted natively by the Electron
+	// shell, so there is no URL WebSocket anymore.)
 	s.mux.HandleFunc("/rpc/ShellStream", s.shellStream)
 
 	// Embed preview is plain image bytes for external viewers (VS Code,

@@ -9,45 +9,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
-	"sort"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/internal/tmux"
-	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
-// defaultNoXvfb is true on platforms where Xvfb is unsupported. Linux is
-// the only target where Gridwell manages Xvfb; on macOS / *BSD the user
-// must drive Chromium headless. Auto-defaulting --no-xvfb (and --headless)
-// means `gridwell serve` Just Works without flags on those platforms.
-func defaultNoXvfb() bool { return runtime.GOOS != "linux" }
-
-// defaultHeadless mirrors defaultNoXvfb: headful Chromium needs a display
-// server, which only Xvfb gives us out-of-the-box on Linux. Off Linux,
-// headless is the only option.
-func defaultHeadless() bool { return runtime.GOOS != "linux" }
-
-// serveFlags holds the parsed `serve` subcommand options. Split out
-// from RunServe so the flag-parsing path is unit-testable; the rest of
-// RunServe is server lifecycle that needs a real DB / Xvfb / Chromium
-// to exercise.
+// serveFlags holds the parsed `serve` subcommand options. Split out from
+// RunServe so the flag-parsing path is unit-testable.
 type serveFlags struct {
-	DB             string
-	Bind           string
-	StaticDir      string
-	BrowserName    string
-	BrowserBin     string
-	ProfileDir     string
-	XvfbResolution string
-	NoXvfb         bool
-	Headless       bool
-	NoBrowser      bool
+	DB        string
+	Bind      string
+	StaticDir string
 }
 
 // parseServeFlags parses the `serve` flag set. Returns the populated
@@ -59,16 +34,9 @@ func parseServeFlags(args []string) (serveFlags, error) {
 	db := resolveDB(fs, "./gridwell.db")
 	fs.StringVar(&f.Bind, "bind", "127.0.0.1:8080", "HTTP listen address (default loopback only)")
 	fs.StringVar(&f.StaticDir, "static", "./web", "directory of static files served at /")
-	fs.StringVar(&f.BrowserName, "browser", "chromium", "browser brand: "+strings.Join(sortedBrands(), ", "))
-	fs.StringVar(&f.BrowserBin, "browser-bin", "", "explicit browser binary path (overrides --browser lookup)")
-	fs.StringVar(&f.ProfileDir, "profile-dir", "", "explicit user-data-dir (overrides ~/.gridwell/profiles/<browser>)")
-	fs.StringVar(&f.XvfbResolution, "xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT (Linux only)")
-	fs.BoolVar(&f.NoXvfb, "no-xvfb", defaultNoXvfb(), "do not spawn Xvfb; inherit DISPLAY from environment (default true on non-Linux)")
-	fs.BoolVar(&f.Headless, "headless", defaultHeadless(), "launch Chromium in headless=new mode (default true on non-Linux; required when --no-xvfb on a host with no DISPLAY)")
-	fs.BoolVar(&f.NoBrowser, "no-browser", false, "do not start the rod URL driver or Xvfb; live URL tiles are disabled (used when an Electron shell hosts URL tiles natively)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
-		case "db", "bind", "static", "browser", "browser-bin", "profile-dir", "xvfb-resolution":
+		case "db", "bind", "static":
 			return true
 		}
 		return false
@@ -80,7 +48,11 @@ func parseServeFlags(args []string) (serveFlags, error) {
 	return f, nil
 }
 
-// RunServe starts the HTTP server. SIGINT/SIGTERM trigger graceful shutdown.
+// RunServe starts the backend HTTP server — the loopback data plane for the
+// Gridwell desktop app: Connect-RPC, the SSE event stream, the wasm client,
+// and shell PTYs. Live URL tiles are hosted natively by the Electron shell,
+// so there is no browser driver here. SIGINT/SIGTERM trigger graceful
+// shutdown.
 func RunServe(args []string) int {
 	f, err := parseServeFlags(args)
 	if err != nil {
@@ -93,53 +65,6 @@ func RunServe(args []string) int {
 		return 1
 	}
 	defer s.Close()
-
-	// In --no-browser mode the URL driver, Xvfb, and Chromium are never
-	// started: the driver stays nil, the URLStream handler returns 503,
-	// and the wasm client falls back to the frozen preview. An Electron
-	// shell that hosts URL tiles natively runs the sidecar this way.
-	var driver *urldriver.Driver
-	if !f.NoBrowser {
-		display := ""
-		if !f.NoXvfb {
-			w, h, err := parseResolution(f.XvfbResolution)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "serve: --xvfb-resolution: %v\n", err)
-				return 2
-			}
-			xv, err := urldriver.StartXvfb(w, h)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "serve: xvfb: %v\n", err)
-				return 1
-			}
-			defer xv.Stop()
-			display = xv.Display()
-			fmt.Printf("gridwell: Xvfb ready on %s (%dx%d)\n", display, w, h)
-		}
-
-		d, err := urldriver.New(s, urldriver.Config{
-			Browser:         f.BrowserName,
-			BinaryOverride:  f.BrowserBin,
-			ProfileOverride: f.ProfileDir,
-			Display:         display,
-			Headless:        f.Headless,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-			return 1
-		}
-		driver = d
-		s.SetURLDriver(driver)
-		defer driver.Shutdown()
-		profilePath, _ := urldriver.DefaultProfileDir(f.BrowserName)
-		if f.ProfileDir != "" {
-			profilePath = f.ProfileDir
-		}
-		fmt.Printf("gridwell: %s driver ready (profile=%s profile-directory=%q headless=%v)\n",
-			f.BrowserName, profilePath, driver.ProfileDirectory(), f.Headless)
-	} else {
-		fmt.Println("gridwell: --no-browser: live URL tiles disabled (Electron hosts them)")
-	}
 
 	// The gridwell-private tmux server backs every shell tile. One
 	// socket per gridwell process; sessions named `gridwell-<tileID>`
@@ -154,9 +79,6 @@ func RunServe(args []string) int {
 	defer func() { _ = tmuxCleanup() }()
 
 	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
-	if driver != nil {
-		srv.SetURLStreamer(server.StreamerFromDriver(driver))
-	}
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	// Bound the orphan leak: any tmux session whose tile id no longer
@@ -203,26 +125,4 @@ func RunServe(args []string) int {
 		return 1
 	}
 	return 0
-}
-
-func sortedBrands() []string {
-	out := urldriver.BrandNames()
-	sort.Strings(out)
-	return out
-}
-
-func parseResolution(s string) (int, int, error) {
-	parts := strings.SplitN(s, "x", 2)
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("expected WIDTHxHEIGHT, got %q", s)
-	}
-	w, err := strconv.Atoi(parts[0])
-	if err != nil || w <= 0 {
-		return 0, 0, fmt.Errorf("bad width %q", parts[0])
-	}
-	h, err := strconv.Atoi(parts[1])
-	if err != nil || h <= 0 {
-		return 0, 0, fmt.Errorf("bad height %q", parts[1])
-	}
-	return w, h, nil
 }

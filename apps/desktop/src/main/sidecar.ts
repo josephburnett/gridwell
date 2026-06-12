@@ -36,7 +36,6 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const onLog = opts.onLog ?? ((l: string) => console.log('[sidecar]', l));
   const args = [
     'serve',
-    '--no-browser',
     '--bind', `127.0.0.1:${port}`,
     '--db', db,
     '--static', staticDir(),

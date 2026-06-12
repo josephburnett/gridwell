@@ -1,12 +1,8 @@
 package cli
 
 import (
-	"runtime"
 	"slices"
-	"sort"
 	"testing"
-
-	"github.com/josephburnett/gridwell/internal/urldriver"
 )
 
 func TestReorderFlagsFirst(t *testing.T) {
@@ -38,17 +34,6 @@ func TestReorderFlagsFirst(t *testing.T) {
 	}
 }
 
-func TestSortedBrands(t *testing.T) {
-	got := sortedBrands()
-	if !sort.StringsAreSorted(got) {
-		t.Errorf("sortedBrands not sorted: %v", got)
-	}
-	// Must include every registered brand.
-	if len(got) != len(urldriver.BrandNames()) {
-		t.Errorf("sortedBrands length = %d, want %d", len(got), len(urldriver.BrandNames()))
-	}
-}
-
 func TestParseServeFlagsDefaults(t *testing.T) {
 	f, err := parseServeFlags(nil)
 	if err != nil {
@@ -63,21 +48,6 @@ func TestParseServeFlagsDefaults(t *testing.T) {
 	if f.StaticDir != "./web" {
 		t.Errorf("StaticDir = %q, want default ./web", f.StaticDir)
 	}
-	if f.BrowserName != "chromium" {
-		t.Errorf("BrowserName = %q, want default chromium", f.BrowserName)
-	}
-	if f.XvfbResolution != "2560x1600" {
-		t.Errorf("XvfbResolution = %q, want default 2560x1600", f.XvfbResolution)
-	}
-	// Xvfb is Linux-only; off Linux, --no-xvfb and --headless auto-default
-	// to true so `gridwell serve` runs without flags on macOS / *BSD.
-	wantNoXvfb := runtime.GOOS != "linux"
-	if f.NoXvfb != wantNoXvfb {
-		t.Errorf("NoXvfb default = %v, want %v on %s", f.NoXvfb, wantNoXvfb, runtime.GOOS)
-	}
-	if f.Headless != wantNoXvfb {
-		t.Errorf("Headless default = %v, want %v on %s", f.Headless, wantNoXvfb, runtime.GOOS)
-	}
 }
 
 func TestParseServeFlagsOverrides(t *testing.T) {
@@ -85,67 +55,17 @@ func TestParseServeFlagsOverrides(t *testing.T) {
 		"--db", "/tmp/x.db",
 		"--bind", ":9000",
 		"--static", "/srv/web",
-		"--browser", "brave",
-		"--browser-bin", "/usr/bin/brave",
-		"--profile-dir", "/tmp/profile",
-		"--xvfb-resolution", "1280x720",
-		"--no-xvfb",
-		"--headless",
 	})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	want := serveFlags{
-		DB:             "/tmp/x.db",
-		Bind:           ":9000",
-		StaticDir:      "/srv/web",
-		BrowserName:    "brave",
-		BrowserBin:     "/usr/bin/brave",
-		ProfileDir:     "/tmp/profile",
-		XvfbResolution: "1280x720",
-		NoXvfb:         true,
-		Headless:       true,
+		DB:        "/tmp/x.db",
+		Bind:      ":9000",
+		StaticDir: "/srv/web",
 	}
 	if f != want {
 		t.Errorf("got %+v, want %+v", f, want)
-	}
-}
-
-func TestParseOpenBrowserFlagsDefaults(t *testing.T) {
-	f, err := parseOpenBrowserFlags(nil)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if f.BrowserName != "chromium" {
-		t.Errorf("BrowserName = %q, want default chromium", f.BrowserName)
-	}
-	if f.BrowserBin != "" || f.ProfileDir != "" {
-		t.Errorf("override defaults should be empty: %+v", f)
-	}
-}
-
-func TestParseOpenBrowserFlagsOverrides(t *testing.T) {
-	f, err := parseOpenBrowserFlags([]string{
-		"--browser", "chrome",
-		"--browser-bin", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-		"--profile-dir", "/tmp/profile",
-	})
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	want := openBrowserFlags{
-		BrowserName: "chrome",
-		BrowserBin:  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-		ProfileDir:  "/tmp/profile",
-	}
-	if f != want {
-		t.Errorf("got %+v, want %+v", f, want)
-	}
-}
-
-func TestParseOpenBrowserFlagsRejectsUnknown(t *testing.T) {
-	if _, err := parseOpenBrowserFlags([]string{"--no-such-flag"}); err == nil {
-		t.Error("parse should reject unknown flags")
 	}
 }
 
@@ -167,35 +87,3 @@ func TestParseServeFlagsRejectsUnknown(t *testing.T) {
 		t.Error("parse should reject unknown flags")
 	}
 }
-
-func TestParseResolution(t *testing.T) {
-	cases := []struct {
-		in      string
-		w, h    int
-		wantErr bool
-	}{
-		{"1280x720", 1280, 720, false},
-		{"800x600", 800, 600, false},
-		{"1x1", 1, 1, false},
-		{"", 0, 0, true},
-		{"abc", 0, 0, true},
-		{"1280", 0, 0, true},
-		{"x720", 0, 0, true},
-		{"1280x", 0, 0, true},
-		{"-1x720", 0, 0, true},
-		{"1280x0", 0, 0, true},
-		{"1280xabc", 0, 0, true},
-	}
-	for _, c := range cases {
-		w, h, err := parseResolution(c.in)
-		if (err != nil) != c.wantErr {
-			t.Errorf("parseResolution(%q) err = %v, wantErr = %v", c.in, err, c.wantErr)
-			continue
-		}
-		if !c.wantErr && (w != c.w || h != c.h) {
-			t.Errorf("parseResolution(%q) = (%d, %d), want (%d, %d)", c.in, w, h, c.w, c.h)
-		}
-	}
-}
-
-

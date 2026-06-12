@@ -44,7 +44,6 @@ type Store struct {
 	newID      func() string    // overridden in tests
 	mu         sync.Mutex       // protects subscriber list
 	subs       map[*subscriber]struct{}
-	urlDriver  URLDriver // set via SetURLDriver; nil means Chromium-unavailable
 	fsReader   FSReader
 	procReader ProcReader
 	procRoot   string // path to /proc (overridden by tests)
@@ -229,13 +228,6 @@ func (s *Store) SetClock(now func() time.Time) {
 // object_ids.
 func (s *Store) SetIDGenerator(f func() string) {
 	s.newID = f
-}
-
-// SetURLDriver installs the URL-tile driver. Without one, all URL-tile
-// runtime operations (preview capture, URLStream open) return an unavailable
-// error. The driver is Chromium-backed in production and a fake in tests.
-func (s *Store) SetURLDriver(d URLDriver) {
-	s.urlDriver = d
 }
 
 // withTx runs fn inside a transaction.
