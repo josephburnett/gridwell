@@ -291,6 +291,13 @@ func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetShellPreviewReques
 	return &pb.SetShellPreviewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, Jpeg: r.JPEG}
 }
 
+func SetURLStateFromProto(r *pb.SetURLStateRequest) *SetURLStateRequest {
+	return &SetURLStateRequest{TileID: r.TileId, JPEG: r.Jpeg, URL: r.Url, Title: r.Title}
+}
+func SetURLStateToProto(r *SetURLStateRequest) *pb.SetURLStateRequest {
+	return &pb.SetURLStateRequest{TileId: r.TileID, Jpeg: r.JPEG, Url: r.URL, Title: r.Title}
+}
+
 func ShellSessionAliveFromProto(r *pb.ShellSessionAliveRequest) *ShellSessionAliveRequest {
 	return &ShellSessionAliveRequest{TileID: r.TileId}
 }

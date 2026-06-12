@@ -88,6 +88,8 @@ const (
 	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
 	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
+	// GridwellSetURLStateProcedure is the fully-qualified name of the Gridwell's SetURLState RPC.
+	GridwellSetURLStateProcedure = "/gridwell.v1.Gridwell/SetURLState"
 	// GridwellUpdateTextProcedure is the fully-qualified name of the Gridwell's UpdateText RPC.
 	GridwellUpdateTextProcedure = "/gridwell.v1.Gridwell/UpdateText"
 	// GridwellDeleteTileProcedure is the fully-qualified name of the Gridwell's DeleteTile RPC.
@@ -117,6 +119,7 @@ type GridwellClient interface {
 	SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error)
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
+	SetURLState(context.Context, *connect.Request[v1.SetURLStateRequest]) (*connect.Response[v1.TileResponse], error)
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
@@ -247,6 +250,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetRootView")),
 			connect.WithClientOptions(opts...),
 		),
+		setURLState: connect.NewClient[v1.SetURLStateRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellSetURLStateProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetURLState")),
+			connect.WithClientOptions(opts...),
+		),
 		updateText: connect.NewClient[v1.UpdateTextRequest, v1.TileResponse](
 			httpClient,
 			baseURL+GridwellUpdateTextProcedure,
@@ -289,6 +298,7 @@ type gridwellClient struct {
 	setShellPreview   *connect.Client[v1.SetShellPreviewRequest, v1.TileResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
+	setURLState       *connect.Client[v1.SetURLStateRequest, v1.TileResponse]
 	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
@@ -389,6 +399,11 @@ func (c *gridwellClient) SetRootView(ctx context.Context, req *connect.Request[v
 	return c.setRootView.CallUnary(ctx, req)
 }
 
+// SetURLState calls gridwell.v1.Gridwell.SetURLState.
+func (c *gridwellClient) SetURLState(ctx context.Context, req *connect.Request[v1.SetURLStateRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.setURLState.CallUnary(ctx, req)
+}
+
 // UpdateText calls gridwell.v1.Gridwell.UpdateText.
 func (c *gridwellClient) UpdateText(ctx context.Context, req *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.updateText.CallUnary(ctx, req)
@@ -425,6 +440,7 @@ type GridwellHandler interface {
 	SetShellPreview(context.Context, *connect.Request[v1.SetShellPreviewRequest]) (*connect.Response[v1.TileResponse], error)
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
+	SetURLState(context.Context, *connect.Request[v1.SetURLStateRequest]) (*connect.Response[v1.TileResponse], error)
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
@@ -551,6 +567,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetRootView")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellSetURLStateHandler := connect.NewUnaryHandler(
+		GridwellSetURLStateProcedure,
+		svc.SetURLState,
+		connect.WithSchema(gridwellMethods.ByName("SetURLState")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellUpdateTextHandler := connect.NewUnaryHandler(
 		GridwellUpdateTextProcedure,
 		svc.UpdateText,
@@ -609,6 +631,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSetRootViewProcedure:
 			gridwellSetRootViewHandler.ServeHTTP(w, r)
+		case GridwellSetURLStateProcedure:
+			gridwellSetURLStateHandler.ServeHTTP(w, r)
 		case GridwellUpdateTextProcedure:
 			gridwellUpdateTextHandler.ServeHTTP(w, r)
 		case GridwellDeleteTileProcedure:
@@ -698,6 +722,10 @@ func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.
 
 func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetRootView is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetURLState(context.Context, *connect.Request[v1.SetURLStateRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetURLState is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error) {

@@ -150,6 +150,85 @@ func TestSetTileAlt(t *testing.T) {
 	}
 }
 
+func TestSetURLState(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	tile := createURLTileForTest(t, s, root, 0, "https://example.com/a")
+
+	out, err := s.SetURLState(ctx, tile.ID, []byte("frozenjpeg"), "https://example.com/b", "Example B")
+	if err != nil {
+		t.Fatalf("SetURLState: %v", err)
+	}
+	// Returned tile reflects all three writes and a single version bump.
+	if out.URLString != "https://example.com/b" {
+		t.Errorf("URLString = %q, want https://example.com/b", out.URLString)
+	}
+	if out.AltText != "Example B" {
+		t.Errorf("AltText = %q, want %q", out.AltText, "Example B")
+	}
+	if out.Version != tile.Version+1 {
+		t.Errorf("version after SetURLState = %d, want %d (single bump)", out.Version, tile.Version+1)
+	}
+	jpeg, err := s.GetTilePreview(ctx, tile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(jpeg) != "frozenjpeg" {
+		t.Errorf("preview = %q, want frozenjpeg", string(jpeg))
+	}
+}
+
+func TestSetURLStateSkipsEmptyFields(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	tile := createURLTileForTest(t, s, root, 0, "https://example.com/keep")
+	// Seed preview + title we expect to survive an empty-field update.
+	if _, err := s.SetURLState(ctx, tile.ID, []byte("keepjpeg"), "", "Keep Title"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// A capture that failed (empty jpeg) and reported no url/title must not
+	// clobber the good state.
+	if _, err := s.SetURLState(ctx, tile.ID, nil, "", ""); err != nil {
+		t.Fatalf("empty update: %v", err)
+	}
+	got, err := s.loadTile(ctx, s.db, tile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.URLString != "https://example.com/keep" {
+		t.Errorf("URLString = %q, want preserved", got.URLString)
+	}
+	if got.AltText != "Keep Title" {
+		t.Errorf("AltText = %q, want preserved", got.AltText)
+	}
+	jpeg, err := s.GetTilePreview(ctx, tile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(jpeg) != "keepjpeg" {
+		t.Errorf("preview = %q, want preserved keepjpeg", string(jpeg))
+	}
+}
+
+func TestSetURLStateRefusesNonURLTile(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	w, err := s.CreateWell(context.Background(), &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root,
+		X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.SetURLState(context.Background(), w.ID, []byte("x"), "", "")
+	if !errors.Is(err, ErrNotURLTile) {
+		t.Errorf("got %v, want ErrNotURLTile", err)
+	}
+}
+
 func TestFakeURLDriverAvailable(t *testing.T) {
 	d := NewFakeURLDriver()
 	if !d.Available() {

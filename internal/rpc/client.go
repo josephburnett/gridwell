@@ -179,6 +179,13 @@ func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error
 	_, err := c.cl.SetRootView(ctx, connect.NewRequest(SetRootViewToProto(req)))
 	return err
 }
+func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Tile, error) {
+	r, err := c.cl.SetURLState(ctx, connect.NewRequest(SetURLStateToProto(req)))
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(r.Msg.Tile), nil
+}
 func (c *Client) UpdateText(ctx context.Context, req *UpdateTextRequest) (*Tile, error) {
 	r, err := c.cl.UpdateText(ctx, connect.NewRequest(UpdateTextToProto(req)))
 	if err != nil {

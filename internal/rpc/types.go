@@ -319,6 +319,16 @@ type SetRootViewRequest struct {
 }
 type SetRootViewResponse struct{}
 
+// SetURLStateRequest freezes a live URL tile (preview JPEG + address +
+// title) when its Electron WebContentsView is torn down on ascend.
+// Last-writer-wins by tile id; empty fields are skipped.
+type SetURLStateRequest struct {
+	TileID int64  `json:"tile_id"`
+	JPEG   []byte `json:"jpeg"`
+	URL    string `json:"url"`
+	Title  string `json:"title"`
+}
+
 type UpdateTextRequest struct {
 	Path    Path   `json:"path"`
 	TileID  int64  `json:"tile_id"`

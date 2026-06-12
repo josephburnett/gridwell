@@ -289,6 +289,18 @@ message SetRootViewRequest {
 }
 message SetRootViewResponse {}
 
+// SetURLStateRequest freezes a live URL tile: it bakes the latest preview
+// JPEG, address, and page title into the tile when an Electron-hosted
+// WebContentsView is torn down on ascend. Last-writer-wins by tile id (no
+// path/version) — same semantics as the old server-side rod freeze. Empty
+// fields are skipped so a partial capture never clobbers good state.
+message SetURLStateRequest {
+  int64 tile_id = 1;
+  bytes jpeg = 2;
+  string url = 3;
+  string title = 4;
+}
+
 message UpdateTextRequest {
   Path path = 1;
   int64 tile_id = 2;
@@ -363,6 +375,7 @@ service Gridwell {
   rpc SetShellPreview(SetShellPreviewRequest) returns (TileResponse);
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);
   rpc SetRootView(SetRootViewRequest) returns (SetRootViewResponse);
+  rpc SetURLState(SetURLStateRequest) returns (TileResponse);
   rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
 
