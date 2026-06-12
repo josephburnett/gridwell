@@ -14,7 +14,7 @@ const (
 	// Canonical alt-text strings stamped into a tile's alt_text at insert
 	// time. The client renders tile.AltText verbatim — no derivation —
 	// so server and client always agree on what a tile is called.
-	AltNull      = "null"      // blackhole tiles
+	AltNull      = "/dev/null" // blackhole tiles
 	AltFiles     = "files"     // root file-well (FSPath == "/")
 	AltProcesses = "processes" // root process-well (PID == 1)
 	AltInfo      = "info"      // synthetic @info tile inside a proc-well
