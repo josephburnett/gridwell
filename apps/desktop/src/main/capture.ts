@@ -10,10 +10,32 @@ const JPEG_QUALITY = 70;
 // on the visible, attached view (no offscreen-rendering mode needed) — the
 // live pane shows native pixels; this capture only feeds the *other* panes'
 // frozen previews and the freeze-on-ascend snapshot.
-export async function captureJpegBase64(view: WebContentsView): Promise<string> {
-  const image = await view.webContents.capturePage();
-  if (image.isEmpty()) return '';
+//
+// capturePage is time-boxed: a parked/offscreen or busy renderer can leave
+// the promise pending indefinitely, and the freeze path detaches the view
+// only after this resolves — an unbounded wait there would strand the native
+// view on top of the pane the user just ascended out of. On timeout we return
+// '' (no frame) so teardown proceeds.
+export async function captureJpegBase64(view: WebContentsView, timeoutMs = 1500): Promise<string> {
+  const image = await withTimeout(view.webContents.capturePage(), timeoutMs);
+  if (!image || image.isEmpty()) return '';
   return image.toJPEG(JPEG_QUALITY).toString('base64');
+}
+
+// withTimeout resolves to null if p hasn't settled within ms (rather than
+// rejecting), so callers can treat a slow capture as "no frame" and move on.
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise<T | null>((resolve) => {
+    let done = false;
+    const finish = (v: T | null) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(null), ms);
+    p.then((v) => finish(v), () => finish(null));
+  });
 }
 
 // MirrorPump periodically captures a set of live panes and pushes frames to

@@ -129,13 +129,18 @@ export class WebviewRegistry {
       jpegBase64 = await captureJpegBase64(e.view);
     } catch {
       // Best-effort: a crashed/destroyed view yields an empty freeze.
-    }
-    try {
-      this.win.contentView.removeChildView(e.view);
-      // Free the underlying renderer process.
-      e.view.webContents.close();
-    } catch {
-      // ignore
+    } finally {
+      // Detach + free the view no matter what the capture did. This MUST
+      // run even if the capture above threw or timed out: the renderer has
+      // already dropped this pane from its live set, so a view left attached
+      // here would sit blank on top of the pane the user just ascended out
+      // of, while every other pane shows the frozen preview fine.
+      try {
+        this.win.contentView.removeChildView(e.view);
+        e.view.webContents.close();
+      } catch {
+        // ignore
+      }
     }
     return { jpegBase64, url, title };
   }
