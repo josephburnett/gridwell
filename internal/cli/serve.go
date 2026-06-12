@@ -47,6 +47,7 @@ type serveFlags struct {
 	XvfbResolution string
 	NoXvfb         bool
 	Headless       bool
+	NoBrowser      bool
 }
 
 // parseServeFlags parses the `serve` flag set. Returns the populated
@@ -64,6 +65,7 @@ func parseServeFlags(args []string) (serveFlags, error) {
 	fs.StringVar(&f.XvfbResolution, "xvfb-resolution", "2560x1600", "Xvfb screen resolution WIDTHxHEIGHT (Linux only)")
 	fs.BoolVar(&f.NoXvfb, "no-xvfb", defaultNoXvfb(), "do not spawn Xvfb; inherit DISPLAY from environment (default true on non-Linux)")
 	fs.BoolVar(&f.Headless, "headless", defaultHeadless(), "launch Chromium in headless=new mode (default true on non-Linux; required when --no-xvfb on a host with no DISPLAY)")
+	fs.BoolVar(&f.NoBrowser, "no-browser", false, "do not start the rod URL driver or Xvfb; live URL tiles are disabled (used when an Electron shell hosts URL tiles natively)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
 		case "db", "bind", "static", "browser", "browser-bin", "profile-dir", "xvfb-resolution":
@@ -92,43 +94,52 @@ func RunServe(args []string) int {
 	}
 	defer s.Close()
 
-	display := ""
-	var xv *urldriver.Xvfb
-	if !f.NoXvfb {
-		w, h, err := parseResolution(f.XvfbResolution)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "serve: --xvfb-resolution: %v\n", err)
-			return 2
+	// In --no-browser mode the URL driver, Xvfb, and Chromium are never
+	// started: the driver stays nil, the URLStream handler returns 503,
+	// and the wasm client falls back to the frozen preview. An Electron
+	// shell that hosts URL tiles natively runs the sidecar this way.
+	var driver *urldriver.Driver
+	if !f.NoBrowser {
+		display := ""
+		if !f.NoXvfb {
+			w, h, err := parseResolution(f.XvfbResolution)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "serve: --xvfb-resolution: %v\n", err)
+				return 2
+			}
+			xv, err := urldriver.StartXvfb(w, h)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "serve: xvfb: %v\n", err)
+				return 1
+			}
+			defer xv.Stop()
+			display = xv.Display()
+			fmt.Printf("gridwell: Xvfb ready on %s (%dx%d)\n", display, w, h)
 		}
-		xv, err = urldriver.StartXvfb(w, h)
+
+		d, err := urldriver.New(s, urldriver.Config{
+			Browser:         f.BrowserName,
+			BinaryOverride:  f.BrowserBin,
+			ProfileOverride: f.ProfileDir,
+			Display:         display,
+			Headless:        f.Headless,
+		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "serve: xvfb: %v\n", err)
+			fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 			return 1
 		}
-		defer xv.Stop()
-		display = xv.Display()
-		fmt.Printf("gridwell: Xvfb ready on %s (%dx%d)\n", display, w, h)
+		driver = d
+		s.SetURLDriver(driver)
+		defer driver.Shutdown()
+		profilePath, _ := urldriver.DefaultProfileDir(f.BrowserName)
+		if f.ProfileDir != "" {
+			profilePath = f.ProfileDir
+		}
+		fmt.Printf("gridwell: %s driver ready (profile=%s profile-directory=%q headless=%v)\n",
+			f.BrowserName, profilePath, driver.ProfileDirectory(), f.Headless)
+	} else {
+		fmt.Println("gridwell: --no-browser: live URL tiles disabled (Electron hosts them)")
 	}
-
-	driver, err := urldriver.New(s, urldriver.Config{
-		Browser:         f.BrowserName,
-		BinaryOverride:  f.BrowserBin,
-		ProfileOverride: f.ProfileDir,
-		Display:         display,
-		Headless:        f.Headless,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
-	}
-	s.SetURLDriver(driver)
-	defer driver.Shutdown()
-	profilePath, _ := urldriver.DefaultProfileDir(f.BrowserName)
-	if f.ProfileDir != "" {
-		profilePath = f.ProfileDir
-	}
-	fmt.Printf("gridwell: %s driver ready (profile=%s profile-directory=%q headless=%v)\n",
-		f.BrowserName, profilePath, driver.ProfileDirectory(), f.Headless)
 
 	// The gridwell-private tmux server backs every shell tile. One
 	// socket per gridwell process; sessions named `gridwell-<tileID>`
@@ -143,7 +154,9 @@ func RunServe(args []string) int {
 	defer func() { _ = tmuxCleanup() }()
 
 	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
-	srv.SetURLStreamer(server.StreamerFromDriver(driver))
+	if driver != nil {
+		srv.SetURLStreamer(server.StreamerFromDriver(driver))
+	}
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	// Bound the orphan leak: any tmux session whose tile id no longer
