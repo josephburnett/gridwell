@@ -33,6 +33,9 @@ type fakeShellStreamer struct {
 
 	sessions []*fakeShellSession
 	killed   []int64
+
+	// paneCommand is the canned PaneCommand answer (the foreground program).
+	paneCommand string
 }
 
 func newFakeShellStreamer() *fakeShellStreamer {
@@ -89,6 +92,12 @@ func (f *fakeShellStreamer) ListLiveTileIDs() ([]int64, error) {
 		}
 	}
 	return ids, nil
+}
+
+func (f *fakeShellStreamer) PaneCommand(tileID int64) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.paneCommand, nil
 }
 
 func (f *fakeShellStreamer) lastSession() *fakeShellSession {
@@ -238,6 +247,27 @@ func TestShellStreamRefusesWhenStreamerMissing(t *testing.T) {
 	}
 	if resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("status = %v, want 503", resp)
+	}
+}
+
+// TestCaptureShellTitleStampsLabel: on detach the server stamps the
+// tmux foreground command (e.g. "claude") into the tile's label, the way
+// URL tiles capture the page title.
+func TestCaptureShellTitleStampsLabel(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	fake.paneCommand = "claude"
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+
+	srv.captureShellTitle(tileID)
+
+	tile, err := srv.store.GetTile(context.Background(), tileID)
+	if err != nil {
+		t.Fatalf("get tile: %v", err)
+	}
+	if tile.AltText != "claude" {
+		t.Errorf("alt_text = %q, want %q", tile.AltText, "claude")
 	}
 }
 

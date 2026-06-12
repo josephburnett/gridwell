@@ -43,6 +43,11 @@ type shellStreamer interface {
 	// startup orphan-cleanup pass to find sessions whose tiles no
 	// longer exist.
 	ListLiveTileIDs() ([]int64, error)
+	// PaneCommand returns the foreground command of the tile's session
+	// (e.g. "claude", "vim", "bash"), or "" if the session is gone. Used
+	// to label the frozen shell tile on detach, the way URL tiles capture
+	// the page title.
+	PaneCommand(tileID int64) (string, error)
 }
 
 // shellSession is the per-tile handle the ShellStream handler holds.
@@ -110,6 +115,10 @@ func (l *liveShellStreamer) Kill(tileID int64) error {
 
 func (l *liveShellStreamer) ListLiveTileIDs() ([]int64, error) {
 	return l.ctrl.ListSessions()
+}
+
+func (l *liveShellStreamer) PaneCommand(tileID int64) (string, error) {
+	return l.ctrl.PaneCommand(tileID)
 }
 
 // shellSessionEntry mirrors urlSessionEntry — the live session plus a
@@ -239,6 +248,26 @@ func (s *Server) releaseShellSession(tileID int64, mySession shellSession, mySto
 	if matches {
 		log.Printf("[shellstream] detach tile=%d", tileID)
 		_ = mySession.Close()
+		// Capture the foreground program (e.g. "claude") into the tile's
+		// label, the way URL tiles capture the page title on close. The
+		// bash + tmux server keep running after Close, so the query still
+		// resolves. Best-effort and async so detach isn't blocked on it.
+		go s.captureShellTitle(tileID)
+	}
+}
+
+// captureShellTitle stamps the tile's label with its tmux session's
+// foreground command. No-op if the session is gone or the query fails.
+func (s *Server) captureShellTitle(tileID int64) {
+	if s.shellStreamer == nil {
+		return
+	}
+	cmd, err := s.shellStreamer.PaneCommand(tileID)
+	if err != nil || cmd == "" {
+		return
+	}
+	if err := s.store.SetTileAlt(context.Background(), tileID, cmd); err != nil {
+		log.Printf("[shellstream] set-title tile=%d cmd=%q err=%v", tileID, cmd, err)
 	}
 }
 

@@ -235,6 +235,22 @@ func (c *Controller) ListSessions() ([]int64, error) {
 	return ids, nil
 }
 
+// PaneCommand returns the command running in the foreground of the tile's
+// tmux session — what tmux shows as the window's automatic name (e.g.
+// "claude", "vim", "bash"). Returns "" with no error when the session is
+// gone or the server isn't running, so callers can simply skip relabeling.
+func (c *Controller) PaneCommand(tileID int64) (string, error) {
+	name := SessionName(tileID)
+	out, err := c.run("display-message", "-t", name, "-p", "#{pane_current_command}")
+	if err != nil {
+		if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("tmux display-message %s: %w", name, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // run executes `tmux -L <socket> -f <config> <args...>`. Returns
 // combined stdout+stderr so callers can sniff for "no session" /
 // "no server" sentinels. Inherits the parent process's environment
