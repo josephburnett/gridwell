@@ -672,6 +672,83 @@ func (a *App) commitResize(rd *rightDragState, sx, sy float64) {
 	}
 }
 
+// leftResizeState carries the in-flight left-button pane-boundary resize.
+// Mirrors the resize-only fields of rightDragState; the left button keeps
+// its own state so the right-button routing (which keys off button 2)
+// stays untouched.
+type leftResizeState struct {
+	targetSplit *pane.Split
+	splitDir    pane.Direction
+	container   pane.Rect
+}
+
+// armLeftResize starts a left-button boundary resize if (sx, sy) sits in a
+// resize band of pane p that has a divider on that side. Returns true if a
+// resize was armed (caller should stop interpreting the click).
+func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
+	// The corner circle (bottom-right) can overlap a resize band when the
+	// pane has a sibling; its left-click action always wins.
+	if pointInPlus(r, sx, sy) {
+		return false
+	}
+	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
+	if !region.IsResize() {
+		return false
+	}
+	d := a.dividerOnSide(p, region.Side())
+	if d == nil {
+		return false
+	}
+	a.leftResize = &leftResizeState{
+		targetSplit: d.Split,
+		splitDir:    d.Dir,
+		container:   pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
+	}
+	return true
+}
+
+// onLeftResizeMove applies the live divider ratio for the in-flight
+// left-button resize, clamped so neither side shrinks past leftResizeMinPx
+// — the left button never closes a pane.
+func (a *App) onLeftResizeMove(sx, sy float64) {
+	lr := a.leftResize
+	if lr == nil {
+		return
+	}
+	ratio := pane.RatioFromCursor(lr.container, lr.splitDir, sx, sy)
+	lr.targetSplit.Ratio = clampResizeRatio(lr.container, lr.splitDir, ratio)
+	a.draw()
+}
+
+// leftResizeMinPx is the smallest a pane side may shrink to under a
+// left-drag resize. Unlike the right-button resize (which collapses a side
+// below rightCloseThreshold), the left button clamps here so a minimized
+// pane is always recoverable.
+const leftResizeMinPx = 32.0
+
+// clampResizeRatio keeps a split ratio within [minR, 1-minR], reserving
+// leftResizeMinPx along the split axis for each side.
+func clampResizeRatio(container pane.Rect, dir pane.Direction, ratio float64) float64 {
+	extent := container.W
+	if dir == pane.Horizontal {
+		extent = container.H
+	}
+	if extent <= 0 {
+		return ratio
+	}
+	minR := leftResizeMinPx / extent
+	if minR > 0.5 {
+		minR = 0.5
+	}
+	if ratio < minR {
+		return minR
+	}
+	if ratio > 1-minR {
+		return 1 - minR
+	}
+	return ratio
+}
+
 // commitSwap exchanges the origin pane with whatever pane the cursor
 // is over at release. Same-pane release = no-op (cancel). Off-canvas
 // release = no-op.

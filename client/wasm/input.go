@@ -232,6 +232,14 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
+	// Left-drag on a pane boundary resizes the divider — same divider math
+	// as the right-button resize, but it never closes a pane (clamped to a
+	// recoverable minimum). Checked first so a grab near the edge wins over
+	// content interactions. No divider on that side → falls through.
+	if a.armLeftResize(p, r, sx, sy) {
+		return nil
+	}
+
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
 	if p.TextFocus != 0 {
@@ -429,6 +437,17 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
+	// Left-button pane resize takes precedence over everything else.
+	if a.leftResize != nil {
+		if args[0].Get("buttons").Int()&1 == 0 {
+			// Left button released somewhere we didn't see — finish.
+			a.leftResize = nil
+			a.draw()
+			return nil
+		}
+		a.onLeftResizeMove(sx, sy)
+		return nil
+	}
 	// URL-stream forwarding: if the cursor is over a pane that's
 	// descended into a live URL tile, the move belongs to the page.
 	// Any in-flight drag (left or right button) keeps gridwell in
@@ -647,6 +666,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	if a.rightDrag != nil && args[0].Get("button").Int() == 2 {
 		sx, sy := mouseXY(args[0], a.canvas)
 		a.finishRightDrag(sx, sy)
+		return nil
+	}
+	// Left-button release ends an in-flight pane-boundary resize. The ratio
+	// was applied live during the move; nothing to commit, just clear.
+	if a.leftResize != nil && args[0].Get("button").Int() == 0 {
+		a.leftResize = nil
+		a.draw()
+		a.scheduleURLUpdate()
 		return nil
 	}
 	// URL descent: the corner button and live content box are handled on

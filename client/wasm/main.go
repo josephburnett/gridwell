@@ -127,6 +127,12 @@ type App struct {
 	// swap. See right_button.go.
 	rightDrag *rightDragState
 
+	// leftResize is the in-flight left-button pane-boundary resize, if
+	// any. Same divider math as the right-button resize but it never
+	// closes a pane (clamps to a recoverable minimum), so the left button
+	// can shuffle / minimize pane sizes without risking a live tile.
+	leftResize *leftResizeState
+
 	// paneStateStack stores the parent viewport (Cx, Cy, Zoom) saved
 	// just before each descent. On ascent, the saved state is popped and
 	// used to animate the parent back to where it was — so the parent

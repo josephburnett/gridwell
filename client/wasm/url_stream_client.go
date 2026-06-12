@@ -172,7 +172,7 @@ func (a *App) syncURLViews() {
 // native view always paints above the canvas, so any gesture that previews
 // on the canvas over a tile must hide the view first.
 func (a *App) urlViewsHidden() bool {
-	return a.dragging != nil || a.rightDrag != nil || a.menuOpen
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menuOpen
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL
