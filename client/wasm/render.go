@@ -101,12 +101,13 @@ const (
 )
 
 const (
-	// paneBorderPx is the visible thickness of the pane outline. Wide
-	// enough to be a target for right-drag (resize / close) without
-	// dominating the pane's interior. The right-button input layer
-	// uses a slightly larger hit-band than this so users don't have to
-	// pixel-hunt the divider.
-	paneBorderPx = 6.0
+	// paneBorderPx is the visible thickness of the pane outline (the
+	// kind-colored frame). It is purely cosmetic now that ascent moved
+	// off the edge band to the middle button / corner circle, so it's a
+	// thin 1px line. Pane resize/split still works: the right- and
+	// left-button input layers use their own wider hit-band (resizeBandPx)
+	// independent of this visible thickness.
+	paneBorderPx = 1.0
 	// tileBorderPx is the visible thickness of a tile outline. Sits
 	// entirely INSIDE the tile rect so the banner label (and the cell
 	// to the right / below) can't overlap it — every renderer reaches

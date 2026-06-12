@@ -218,6 +218,16 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		a.onRightDown(p, r, sx, sy)
 		return nil
 	}
+	if button == 1 {
+		// Middle (third) button ascends the pane under the cursor. The
+		// edge band no longer ascends; this is one of the two new ascent
+		// gestures (the other is right-click on the corner circle).
+		// preventDefault suppresses the browser's middle-click autoscroll.
+		args[0].Call("preventDefault")
+		a.menuOpen = false
+		a.ascendPane(p)
+		return nil
+	}
 	if button != 0 {
 		return nil
 	}
@@ -241,7 +251,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				return nil
 			}
 			if !pointInPaneContent(r, sx, sy) {
-				a.startFileAscent(p)
+				// Outer margin: ascent moved to the middle button / a
+				// right-click on the corner circle. Swallow so a margin
+				// click doesn't start anything.
 				return nil
 			}
 			// Inside the content area: clicks fall through to xterm
@@ -273,7 +285,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				return nil
 			}
 			if !pointInPaneContent(r, sx, sy) {
-				a.startFileAscent(p)
+				// Outer margin: ascent moved to the middle button / a
+				// right-click on the corner circle. Swallow it.
 				return nil
 			}
 			// Live pane: the native view owns content clicks; nothing to do.
@@ -300,7 +313,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// clicks inside in text mode; rendered mode falls through to
 		// pan below.
 		if !pointInFileInner(p, r, sx, sy) {
-			a.startFileAscent(p)
+			// Outer ring: ascent moved to the middle button / a right-click
+			// on the corner circle. Swallow it.
 			return nil
 		}
 		// Rendered mode: clicks may land on a tile-embed (descent into the
@@ -878,37 +892,22 @@ func paneRectFor(a *App, p *pane.Pane) pane.Rect {
 }
 
 // attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
-// inside pane p to the right navigation gesture.
+// inside pane p to the right navigation gesture. Left-click only ever
+// descends now; ascent is the middle button or a right-click on the
+// corner circle (see ascendPane).
 //
-//   - In the edge band (when there's somewhere to ascend to): ascend
-//     (file ascent if file-focused; well ascent otherwise). At the
-//     user's root, the edge band has no meaning — clicks fall through.
 //   - On a well: descend into the well.
 //   - On a markdown file: descend into the file.
 //   - Otherwise: no-op (selection is handled by the bare-click path
 //     in onMouseUp before this is invoked).
 //
-// Edge takes priority over tile hits when ascent is available, so the
-// user always has a reachable ascent target even when a tile sits
-// along the edge.
-//
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	pscreen := paneToDragdrop(p, r)
-	if (p.TextFocus != 0 || len(p.Path) > 0) &&
-		dragdrop.IsInEdgeZone(pscreen, sx, sy, dragdrop.EdgeBand(pscreen)) {
-		if p.TextFocus != 0 {
-			a.startFileAscent(p)
-		} else {
-			a.startAscent(p)
-		}
-		return true
-	}
 	if p.TextFocus != 0 {
-		// Inside a file, a click that's not on the toggle and not on the
-		// edge isn't navigation — it's either pan-drag (handled in
-		// mousemove) or a non-action click.
+		// Inside a text/url/shell descent, a bare click isn't navigation:
+		// ascent moved to the middle button / a right-click on the corner
+		// circle. Pan-drag (rendered mode) is handled in mousemove.
 		return false
 	}
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
@@ -950,6 +949,26 @@ func panDist(dx, dy, zoom float64) float64 {
 // the renderer's base cell size and the zoom-vs-pan weighting factor.
 func zoomDist(z1, z2 float64) float64 {
 	return zoomtrans.ZoomDist(z1, z2, cellPx, zoomDistFactor)
+}
+
+// canAscend reports whether pane p has somewhere to ascend to: it's
+// descended into a text/url/shell tile (TextFocus) or into a child grid
+// (non-empty Path). At the user's root neither holds.
+func (a *App) canAscend(p *pane.Pane) bool {
+	return p.TextFocus != 0 || len(p.Path) > 0
+}
+
+// ascendPane performs the appropriate ascent for pane p: a file ascent
+// when it's descended into a text/url/shell tile, a well ascent when
+// it's in a child grid, nothing at the user's root. This is the single
+// entry point for both ascent gestures (middle button, right-click on
+// the corner circle).
+func (a *App) ascendPane(p *pane.Pane) {
+	if p.TextFocus != 0 {
+		a.startFileAscent(p)
+	} else if len(p.Path) > 0 {
+		a.startAscent(p)
+	}
 }
 
 // startAscent zooms a pane out of a child grid and back to the parent

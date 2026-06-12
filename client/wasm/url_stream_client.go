@@ -37,10 +37,27 @@ func paneStreamSize(r pane.Rect) (int64, int64) {
 	return panebox.StreamViewportSize(r, paneBorderPx)
 }
 
+// urlCircleGapPx is the gap between the live URL view's bottom and the top
+// of the corner circle reserved by contentViewBounds.
+const urlCircleGapPx = 6.0
+
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
-// hosted webview should occupy — the pane minus its border band, in CSS px.
+// hosted webview should occupy — the pane minus its border band, in CSS px —
+// with a thin gutter reserved at the bottom for the corner circle.
+//
+// A native WebContentsView always paints above the canvas and intercepts its
+// own clicks, so if it covered the corner circle (ascend / back / refresh)
+// the user could neither see nor click it. Since the circle is now the
+// ascent target for live URL panes, we keep the view's bottom above it.
 func contentViewBounds(r pane.Rect) viewBounds {
 	b := panebox.ContentBox(r, paneBorderPx)
+	_, cy := plusButtonCenter(r)
+	gutterTop := cy - float64(plusButtonRadius) - urlCircleGapPx
+	if bottom := b.Y + b.H; bottom > gutterTop {
+		if b.H = gutterTop - b.Y; b.H < 0 {
+			b.H = 0
+		}
+	}
 	return viewBounds{X: b.X, Y: b.Y, W: b.W, H: b.H}
 }
 

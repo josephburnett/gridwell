@@ -72,6 +72,13 @@ const (
 	// nothing. The sole purpose is to surface the chain-link icon so the
 	// user discovers that "this is a reference, not a tile."
 	rightDragEmbedHint
+	// rightDragAscend is armed when right-down lands on the corner circle
+	// (the +/refresh/back button) of a pane that has somewhere to ascend
+	// to. Release inside the circle ascends; dragging out of the circle
+	// cancels (cursorInCircle tracks this so the preview can show the
+	// armed/cancel state). This is the discoverable ascent gesture; the
+	// middle button is the shortcut.
+	rightDragAscend
 )
 
 // urlRefreshThresholdPx is the downward drag distance (in screen pixels)
@@ -136,6 +143,12 @@ type rightDragState struct {
 	// rendered tile-embed under the cursor; the chain-link glyph paints
 	// centered inside it.
 	embedRect [4]float64
+
+	// rightDragAscend-only. ascendPaneID is the pane to ascend; the
+	// release ascends only if cursorInCircle is still true (the cursor is
+	// inside the corner circle), otherwise the gesture is cancelled.
+	ascendPaneID   string
+	cursorInCircle bool
 }
 
 // onRightDown classifies the right-down and arms the matching gesture
@@ -162,6 +175,24 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 			a.draw()
 			return
 		}
+	}
+
+	// Right-down on the corner circle ascends, whatever icon the circle
+	// is showing (+/refresh/back). Only when there's somewhere to ascend
+	// to — at root the circle is just the creation +. Release inside the
+	// circle commits; dragging out cancels.
+	if pointInPlus(r, sx, sy) && a.canAscend(p) {
+		a.rightDrag = &rightDragState{
+			kind:           rightDragAscend,
+			startX:         sx,
+			startY:         sy,
+			curX:           sx,
+			curY:           sy,
+			ascendPaneID:   p.ID,
+			cursorInCircle: true,
+		}
+		a.draw()
+		return
 	}
 
 	// URL descent: right-down in the pane content area arms the refresh
@@ -268,6 +299,11 @@ func (a *App) onRightMove(sx, sy float64) {
 	case rightDragURLRefresh:
 		// No mid-drag mutation — the preview indicator is drawn in
 		// drawRightDragPreview; nothing changes in the tree until release.
+	case rightDragAscend:
+		// Track whether the cursor is still over the circle so the
+		// preview can show armed-vs-cancel, and release knows what to do.
+		pr := a.paneRectByID(rd.ascendPaneID)
+		rd.cursorInCircle = pr.W > 0 && pointInPlus(pr, sx, sy)
 	}
 	a.draw()
 }
@@ -381,6 +417,14 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	case rightDragEmbedHint:
 		// No-op: the gesture only existed to surface the chain-link glyph
 		// while the button was held. Release just clears it.
+	case rightDragAscend:
+		// Commit only if the cursor is still inside the circle; dragging
+		// out of it cancels.
+		if rd.cursorInCircle {
+			if p := a.tree.FindPane(rd.ascendPaneID); p != nil {
+				a.ascendPane(p)
+			}
+		}
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -763,7 +807,44 @@ func (a *App) drawRightDragPreview() {
 		a.drawURLRefreshPreview(rd)
 	case rightDragEmbedHint:
 		a.drawEmbedHintOverlay(rd)
+	case rightDragAscend:
+		a.drawAscendPreview(rd)
 	}
+}
+
+// drawAscendPreview paints the ascent hint over the corner circle while a
+// right-click-to-ascend gesture is in flight: a highlighted circle with
+// an upward chevron when armed (cursor still inside the circle), dimmed
+// grey when the cursor has dragged out and release would cancel.
+func (a *App) drawAscendPreview(rd *rightDragState) {
+	pr := a.paneRectByID(rd.ascendPaneID)
+	if pr.W <= 0 || pr.H <= 0 {
+		return
+	}
+	c := a.cctx
+	cx, cy := plusButtonCenter(pr)
+	rad := float64(plusButtonRadius)
+
+	fill := colorSwapArrow // blue == armed (same "active gesture" blue)
+	if !rd.cursorInCircle {
+		fill = colorSplitInactive // grey == release-to-cancel
+	}
+	c.Set("fillStyle", fill)
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, rad, 0, 2*math.Pi)
+	c.Call("fill")
+
+	// Upward chevron == ascend.
+	c.Set("strokeStyle", "#ffffff")
+	c.Set("lineWidth", 2.5)
+	c.Set("lineCap", "round")
+	c.Call("beginPath")
+	c.Call("moveTo", cx-7, cy+4)
+	c.Call("lineTo", cx, cy-5)
+	c.Call("lineTo", cx+7, cy+4)
+	c.Call("stroke")
+	c.Set("lineCap", "butt")
+	c.Set("lineWidth", 1.0)
 }
 
 // drawEmbedHintOverlay paints the chain-link glyph centered inside the

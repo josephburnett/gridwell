@@ -472,11 +472,12 @@ func fileTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontP
 	return b.X, b.Y, b.W, b.H, fp
 }
 
-// fileSideInset is the thin gap between the pane edge and the text
-// content — just the pane border, so content fills the pane instead of
-// floating in a wide reading margin. The rendered/raw toggle is a DOM
-// overlay button (refreshFileToggle), so no strip is reserved for it.
-const fileSideInset = paneBorderPx
+// fileSideInset is the gap between the pane edge and the text content —
+// a small reading margin so glyphs don't touch the frame. Kept fixed
+// (independent of the now-1px paneBorderPx) so thinning the colored
+// border didn't cram text against the edge. The rendered/raw toggle is a
+// DOM overlay button (refreshFileToggle), so no strip is reserved for it.
+const fileSideInset = 6.0
 
 // onToggleFileMode flips the focused pane between text and rendered
 // modes. Going text→rendered saves the current buffer first; going
