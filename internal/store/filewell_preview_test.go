@@ -52,3 +52,48 @@ func TestFileWellChildGridDistinctFromWell(t *testing.T) {
 		t.Fatalf("file-well child grid source = (%q,%q), want (fs,/)", srcKind, srcID)
 	}
 }
+
+// TestGridIDNotReusedAfterDelete is the root-cause guard for the file-well
+// cross-wiring: a deleted grid's id must never be handed to a new grid, or
+// the client (which caches grids by id) would render the deleted grid's
+// stale tiles under the new one. AUTOINCREMENT on grids.id enforces this.
+func TestGridIDNotReusedAfterDelete(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("create well A: %v", err)
+	}
+	deletedChild := a.ChildGridID
+
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
+	}); err != nil {
+		t.Fatalf("delete well A: %v", err)
+	}
+
+	// The deleted well's child grid must actually be gone (refcount hit 0),
+	// otherwise there's no freed id to reuse and this test proves nothing.
+	var n int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM grids WHERE id = ?`, deletedChild).Scan(&n); err != nil {
+		t.Fatalf("query deleted grid: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("child grid %d not deleted (refcount > 0); test wouldn't exercise id reuse", deletedChild)
+	}
+
+	b, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("create well B: %v", err)
+	}
+	if b.ChildGridID == deletedChild {
+		t.Fatalf("new grid reused deleted grid id %d", deletedChild)
+	}
+}

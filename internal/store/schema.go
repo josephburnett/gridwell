@@ -45,7 +45,13 @@ CREATE TABLE IF NOT EXISTS system (
 -- Keys: root_grid_id, root_view_cx, root_view_cy, root_zoom.
 
 CREATE TABLE IF NOT EXISTS grids (
-    id          INTEGER PRIMARY KEY,
+    -- AUTOINCREMENT so a deleted grid's id is never reused. Without it,
+    -- SQLite recycles the rowid of a deleted grid (e.g. a grid-well whose
+    -- refcount hit 0), and a new grid taking that id would collide with the
+    -- client's still-cached copy of the old grid — making a fresh file-well
+    -- render the deleted grid-well's tiles. Fresh ids keep the client cache
+    -- (keyed by id) honest.
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id   TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 0,
     refcount    INTEGER NOT NULL DEFAULT 1,
@@ -57,7 +63,9 @@ CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_source ON grids(source_kind, source_id) WHERE source_kind IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS blobs (
-    id        INTEGER PRIMARY KEY,
+    -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
+    -- cache key, so a recycled blob id could serve stale image bytes.
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
     hash      TEXT NOT NULL UNIQUE,
     size      INTEGER NOT NULL,
     data      BLOB NOT NULL,
@@ -65,7 +73,10 @@ CREATE TABLE IF NOT EXISTS blobs (
 );
 
 CREATE TABLE IF NOT EXISTS tiles (
-    id            INTEGER PRIMARY KEY,
+    -- AUTOINCREMENT for the same reason as grids: a reused tile id would
+    -- collide with the client's per-tile caches (e.g. the URL preview cache
+    -- keyed by tile id), showing a deleted tile's frozen frame on a new one.
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id     TEXT NOT NULL,
     version       INTEGER NOT NULL DEFAULT 0,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
