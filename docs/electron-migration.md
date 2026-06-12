@@ -1,6 +1,9 @@
 # Gridwell → Electron migration
 
-Status: in progress (branch `electron-pivot`).
+Status: **complete** (branch `electron-pivot`). All five phases landed; the
+app runs as an Electron desktop shell, URL tiles are native WebContentsViews,
+and rod is gone. The one remaining validation is L4 manual GUI testing on a
+real display (descend a URL tile, navigate, ascend, mirror to a 2nd pane).
 
 ## Why
 

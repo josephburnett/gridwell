@@ -40,6 +40,11 @@ export class WebviewRegistry {
     return [...this.entries.keys()];
   }
 
+  // tileIdFor returns the tile id hosted in paneId, or undefined.
+  tileIdFor(paneId: string): number | undefined {
+    return this.entries.get(paneId)?.tileId;
+  }
+
   // place creates (or re-targets) the view for paneId. If a view already
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the

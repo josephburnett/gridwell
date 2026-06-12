@@ -10,12 +10,52 @@
     "start": "npm run build && electron .",
     "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts",
     "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js --no-sandbox",
-    "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js --no-sandbox"
+    "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js --no-sandbox",
+    "dist": "npm run build && electron-builder",
+    "dist:dir": "npm run build && electron-builder --dir"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
+  },
+  "build": {
+    "appId": "com.josephburnett.gridwell",
+    "productName": "Gridwell",
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/main/**/*",
+      "dist/preload/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../gridwell",
+        "to": "gridwell"
+      },
+      {
+        "from": "../../web",
+        "to": "web"
+      }
+    ],
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "category": "Utility"
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ]
+    },
+    "win": {
+      "target": [
+        "dir"
+      ]
+    }
   }
 }

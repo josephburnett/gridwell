@@ -1,4 +1,4 @@
-.PHONY: build bin wasm test test-cover serve clean
+.PHONY: build bin wasm test test-cover serve clean desktop desktop-dev desktop-dist
 
 BIN := ./gridwell
 WASM := ./web/gridwell.wasm
@@ -33,13 +33,30 @@ test:
 test-cover:
 	go test -cover ./...
 
+# serve runs the backend on its own (the desktop app spawns it as a sidecar;
+# this target is for poking at the RPC/SSE surface or loading the wasm client
+# in a plain browser — note live URL tiles only work inside the Electron app).
 serve: build
-	$(BIN) serve --db ./gridwell.db --browser $(BROWSER) $(SERVE_FLAGS)
+	$(BIN) serve --db ./gridwell.db $(SERVE_FLAGS)
 
-# `make serve BROWSER=brave` selects the browser brand. SERVE_FLAGS passes any
-# extra flags through, e.g. `make serve BROWSER=brave SERVE_FLAGS="--bind 0.0.0.0:8080"`.
-BROWSER ?= chromium
+# SERVE_FLAGS passes extra flags through, e.g.
+# `make serve SERVE_FLAGS="--bind 0.0.0.0:8080"`.
 SERVE_FLAGS ?=
+
+# Desktop app (Electron shell). `desktop-dev` runs it against this repo's
+# freshly built sidecar + wasm; `desktop-dist` packages an unpacked app that
+# bundles the host-arch sidecar + web assets under resources/. Cross-platform
+# packaging cross-compiles the sidecar first (GOOS/GOARCH) before electron-
+# builder — see apps/desktop/README.md.
+desktop: build
+	cd apps/desktop && npm install && npm run build
+
+desktop-dev: build
+	cd apps/desktop && npm install && npm start
+
+desktop-dist: build
+	cd apps/desktop && npm install && npm run dist:dir
 
 clean:
 	rm -f $(BIN) $(WASM) $(WASM_EXEC)
+	rm -rf apps/desktop/dist apps/desktop/out
