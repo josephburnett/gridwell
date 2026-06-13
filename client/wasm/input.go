@@ -717,6 +717,16 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	if a.dragging == nil {
 		return nil
 	}
+	// A right-button clone drag commits only through the right-button
+	// release path (finishRightDrag → commitRightClone), which clears
+	// a.dragging before reaching here. Reaching the move-commit with a clone
+	// still armed means a non-right button came up mid-drag (e.g. the user
+	// pressed and released the left button while right-dragging). Ignore it
+	// so the clone is never silently committed as a move — the gesture stays
+	// armed and the eventual right-button release still clones.
+	if a.dragging.clone {
+		return nil
+	}
 	d := a.dragging
 	a.dragging = nil
 	// Reset any drag-time cursor change (e.g. "not-allowed" from

@@ -504,6 +504,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 	a.dragging = &dragState{
 		originPaneID:   p.ID,
 		tileID:         n.ID,
+		clone:          true,
 		startScreenX:   sx,
 		startScreenY:   sy,
 		curScreenX:     sx,

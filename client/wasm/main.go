@@ -353,6 +353,11 @@ type dragState struct {
 	curScreenX     float64
 	curScreenY     float64
 	started        bool
+	// clone marks a right-button clone drag (armed by armRightClone). Such
+	// a drag commits only through the right-button release path; the
+	// left-button move-commit must refuse it so a stray non-right release
+	// can't silently turn the clone into a move.
+	clone          bool
 	snapshotTile   rpc.Tile
 	originScreenX  float64
 	originScreenY  float64
