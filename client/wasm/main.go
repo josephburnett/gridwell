@@ -115,9 +115,11 @@ type App struct {
 	// drop or snap-back-to-origin on failure).
 	animation *anim.Animation
 
-	// rafScheduled tracks whether we have a pending requestAnimationFrame
-	// callback so we don't queue redundant frames.
-	rafScheduled bool
+	// sched holds the debounce / requestAnimationFrame bookkeeping: each
+	// "Scheduled" bool guards a pending callback so repeated triggers
+	// coalesce into one, and each retained js.Func is allocated once so
+	// re-scheduling never leaks handles. See scheduler below.
+	sched scheduler
 
 	// transition is the active descent/ascent zoom animation, if any.
 	transition *paneTransition
@@ -166,14 +168,8 @@ type App struct {
 	// probes so a rapid sequence of redraws doesn't fan out into
 	// many RPC calls. A missing key means "unknown" — the renderer
 	// kicks off a probe and hides the button until the result lands.
-	shellAlive    map[int64]bool
+	shellAlive        map[int64]bool
 	shellAliveProbing map[int64]bool
-
-	// urlUpdateScheduled is true when a debounced URL replaceState is
-	// pending. Multiple state changes within the debounce window
-	// coalesce into a single replaceState. Cleared when the timeout
-	// fires.
-	urlUpdateScheduled bool
 
 	// fileTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
@@ -193,25 +189,6 @@ type App struct {
 	// edge-to-edge instead of reserving a strip for a canvas button.
 	fileToggleBtn js.Value
 	fileToggleCb  js.Func
-
-	// fileSaveScheduled is true when a debounced save is pending; the
-	// timer is in flight via setTimeout. fileSaveCb is the bound
-	// callback (allocated once, retained so JS can call it repeatedly).
-	fileSaveScheduled bool
-	fileSaveCb        js.Func
-
-	// rootViewSaveScheduled is the same pattern for the root-grid
-	// default-view persistence. Saves only when the focused pane is
-	// at the user's root (path empty); descents into wells persist
-	// their framing via SetWellView on ascent instead, so this only
-	// ever updates the root.
-	rootViewSaveScheduled bool
-	rootViewSaveCb        js.Func
-
-	// urlUpdateCb is the debounce callback for scheduleURLUpdate.
-	// Allocated once during bootstrap and reused on every call so
-	// repeated scheduleURLUpdate invocations don't leak js.Func handles.
-	urlUpdateCb js.Func
 
 	// urlModalOpen tracks whether the URL-entry modal is currently open.
 	// A second openURLModal call while this is true is a no-op.
@@ -243,6 +220,31 @@ type App struct {
 	// push new content into the textarea when it's already bound to the
 	// drop target.
 	lastTextareaTileID int64
+}
+
+// scheduler holds the App's debounce / requestAnimationFrame bookkeeping.
+// Each "Scheduled" bool guards a pending callback so repeated triggers
+// coalesce into a single deferred run; each js.Func is allocated once and
+// retained so re-scheduling never leaks handles.
+type scheduler struct {
+	// rafScheduled tracks a pending requestAnimationFrame so we don't
+	// queue redundant frames.
+	rafScheduled bool
+
+	// urlUpdateScheduled / urlUpdateCb debounce the URL replaceState:
+	// multiple state changes within the window coalesce into one.
+	urlUpdateScheduled bool
+	urlUpdateCb        js.Func
+
+	// fileSaveScheduled / fileSaveCb debounce the text-tile content save.
+	fileSaveScheduled bool
+	fileSaveCb        js.Func
+
+	// rootViewSaveScheduled / rootViewSaveCb debounce the root-grid
+	// default-view persistence (only fires when the focused pane is at the
+	// user's root; well descents persist via SetWellView on ascent).
+	rootViewSaveScheduled bool
+	rootViewSaveCb        js.Func
 }
 
 // paneState is a captured pane viewport plus, when the descent
@@ -344,15 +346,15 @@ type ghost struct {
 // we can render a smooth ghost at the cursor and animate snap-back to the
 // original position if the drop is rejected.
 type dragState struct {
-	originPaneID   string
-	tileID         int64
-	cellOffsetX    float64
-	cellOffsetY    float64
-	startScreenX   float64
-	startScreenY   float64
-	curScreenX     float64
-	curScreenY     float64
-	started        bool
+	originPaneID string
+	tileID       int64
+	cellOffsetX  float64
+	cellOffsetY  float64
+	startScreenX float64
+	startScreenY float64
+	curScreenX   float64
+	curScreenY   float64
+	started      bool
 	// clone marks a right-button clone drag (armed by armRightClone). Such
 	// a drag commits only through the right-button release path; the
 	// left-button move-commit must refuse it so a stray non-right release
@@ -386,22 +388,22 @@ const dragThreshold = 4.0
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
 	app = &App{
-		doc:            js.Global().Get("document"),
-		win:            js.Global().Get("window"),
-		cl:             rpc.NewDefaultClient(origin),
-		c:              cache.New(),
-		selectedTileID: map[string]int64{},
-		menuHover:      -1,
-		gridLoadFailed: map[int64]bool{},
-		gridInflight:   map[int64]bool{},
-		paneStateStack: map[string][]paneState{},
-		urlPreview:     preview.NewCache(preview.NewJSDecoder()),
-		urlStreams:     map[string]*urlView{},
-		shellStreams:   map[string]*shellStreamConn{},
+		doc:               js.Global().Get("document"),
+		win:               js.Global().Get("window"),
+		cl:                rpc.NewDefaultClient(origin),
+		c:                 cache.New(),
+		selectedTileID:    map[string]int64{},
+		menuHover:         -1,
+		gridLoadFailed:    map[int64]bool{},
+		gridInflight:      map[int64]bool{},
+		paneStateStack:    map[string][]paneState{},
+		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
+		urlStreams:        map[string]*urlView{},
+		shellStreams:      map[string]*shellStreamConn{},
 		shellAlive:        map[int64]bool{},
 		shellAliveProbing: map[int64]bool{},
-		urlPanX:        map[string]float64{},
-		urlPanY:        map[string]float64{},
+		urlPanX:           map[string]float64{},
+		urlPanY:           map[string]float64{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -462,13 +464,13 @@ func (a *App) afterBootstrap() {
 		p.Zoom = a.rootViewZoom
 	}
 
-	a.rootViewSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.rootViewSaveScheduled = false
+	a.sched.rootViewSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.rootViewSaveScheduled = false
 		a.flushRootViewSave()
 		return nil
 	})
-	a.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.urlUpdateScheduled = false
+	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.urlUpdateScheduled = false
 		a.replaceURLNow()
 		return nil
 	})
@@ -537,12 +539,12 @@ func nowMs() float64 {
 // scheduleFrame ensures a draw happens on the next animation frame. While
 // dragging or animating, the frame loop continues until the state settles.
 func (a *App) scheduleFrame() {
-	if a.rafScheduled {
+	if a.sched.rafScheduled {
 		return
 	}
-	a.rafScheduled = true
+	a.sched.rafScheduled = true
 	js.Global().Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.rafScheduled = false
+		a.sched.rafScheduled = false
 		a.frame()
 		return nil
 	}))

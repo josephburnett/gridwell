@@ -22,11 +22,11 @@ const fileSaveDebounceMs = 600
 // textarea contents. Cheap to call from every keystroke — no-op if a
 // save is already pending.
 func (a *App) scheduleFileSave() {
-	if a.fileSaveScheduled {
+	if a.sched.fileSaveScheduled {
 		return
 	}
-	a.fileSaveScheduled = true
-	js.Global().Call("setTimeout", a.fileSaveCb, fileSaveDebounceMs)
+	a.sched.fileSaveScheduled = true
+	js.Global().Call("setTimeout", a.sched.fileSaveCb, fileSaveDebounceMs)
 }
 
 // fileOvertakeZoom returns the parent zoom at which the file tile's
@@ -119,8 +119,8 @@ func (a *App) ensureFileTextarea() {
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
 
-	a.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.fileSaveScheduled = false
+	a.sched.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.fileSaveScheduled = false
 		p := a.tree.FocusedPane()
 		if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
 			return nil

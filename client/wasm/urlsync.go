@@ -27,14 +27,14 @@ const rootViewSaveDebounceMs = 600
 // grid. Cheap to call from any code path that mutates the focused pane's
 // viewport; no-op when the focused pane isn't at root.
 func (a *App) scheduleRootViewSave() {
-	if a.rootViewSaveScheduled {
+	if a.sched.rootViewSaveScheduled {
 		return
 	}
 	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.TextFocus != 0 {
 		return
 	}
-	a.rootViewSaveScheduled = true
-	js.Global().Call("setTimeout", a.rootViewSaveCb, rootViewSaveDebounceMs)
+	a.sched.rootViewSaveScheduled = true
+	js.Global().Call("setTimeout", a.sched.rootViewSaveCb, rootViewSaveDebounceMs)
 }
 
 // flushRootViewSave reads the focused pane's viewport and posts
@@ -64,11 +64,11 @@ func (a *App) flushRootViewSave() {
 // it to be replaced on the next debounce tick. Cheap to call from any
 // state-mutating code path.
 func (a *App) scheduleURLUpdate() {
-	if a.urlUpdateScheduled {
+	if a.sched.urlUpdateScheduled {
 		return
 	}
-	a.urlUpdateScheduled = true
-	js.Global().Call("setTimeout", a.urlUpdateCb, urlUpdateDebounceMs)
+	a.sched.urlUpdateScheduled = true
+	js.Global().Call("setTimeout", a.sched.urlUpdateCb, urlUpdateDebounceMs)
 }
 
 // replaceURLNow encodes the focused pane's state and calls
