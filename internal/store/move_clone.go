@@ -233,6 +233,14 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			if n.PreviewBlobID != 0 {
 				previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
 			}
+		case rpc.KindShell:
+			// A PTY can't be forked, so a cloned shell is a screenshot:
+			// carry the frozen preview blob, but not the live session. The
+			// tmux session stays keyed to the source tile's id; the clone
+			// (a fresh row id) has none until its own first refresh.
+			if n.PreviewBlobID != 0 {
+				previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
+			}
 		case rpc.KindText:
 			// File-content tiles synthesized inside fs-grids carry no
 			// blob in V1 (lazy content loading is future work) — keep
@@ -265,23 +273,8 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err != nil {
 			return err
 		}
-		switch n.Kind {
-		case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
-			if err := s.incRefcount(ctx, tx, n.ChildGridID); err != nil {
-				return err
-			}
-		case rpc.KindText:
-			if n.BlobID != 0 {
-				if err := s.incBlobRefcount(ctx, tx, n.BlobID); err != nil {
-					return err
-				}
-			}
-		case rpc.KindURL:
-			if n.PreviewBlobID != 0 {
-				if err := s.incBlobRefcount(ctx, tx, n.PreviewBlobID); err != nil {
-					return err
-				}
-			}
+		if err := s.incTileRefs(ctx, tx, n.Kind, n.ChildGridID, n.BlobID, n.PreviewBlobID); err != nil {
+			return err
 		}
 		if err := bumpGridVersion(ctx, tx, dstGrid); err != nil {
 			return err

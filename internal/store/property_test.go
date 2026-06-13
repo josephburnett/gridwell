@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"testing"
 
@@ -60,11 +61,15 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	}
 
 	for i := range iters {
-		op := rng.IntN(5)
+		op := rng.IntN(6)
 		switch op {
 		case 0:
-			// Create a well at a random spot in some live well's child grid
-			// or root.
+			// Create a tile at a random spot in some live well's child grid
+			// or root. Kind is drawn from well/text/url/shell so clone, fork,
+			// and delete get exercised across every refcounted reference a
+			// tile can hold: child grid, text blob, and url/shell preview
+			// blob. (Before this, the walk only made wells, which is exactly
+			// why the preview-blob refcount leaks went uncaught.)
 			parentPath := rpc.Path{}
 			gridID := root
 			if len(tiles) > 0 && rng.IntN(2) == 0 {
@@ -79,9 +84,30 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			y := int64(rng.IntN(20)) * 2
 			w := int64(1 + rng.IntN(2))
 			h := int64(1 + rng.IntN(2))
-			n, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-				Path: parentPath, GridID: gridID, X: x, Y: y, W: w, H: h,
-			})
+			var (
+				n   *rpc.Tile
+				err error
+			)
+			switch rng.IntN(4) {
+			case 0:
+				n, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
+					Path: parentPath, GridID: gridID, X: x, Y: y, W: w, H: h,
+				})
+			case 1:
+				n, err = s.CreateText(ctx, &rpc.CreateTextRequest{
+					Path: parentPath, GridID: gridID, X: x, Y: y, W: w, H: h,
+					Data: []byte(fmt.Sprintf("# tile %d", i)),
+				})
+			case 2:
+				n, err = s.CreateURL(ctx, &rpc.CreateURLRequest{
+					Path: parentPath, GridID: gridID, X: x, Y: y, W: w, H: h,
+					URL: fmt.Sprintf("https://example.com/%d", i),
+				})
+			case 3:
+				n, err = s.CreateShell(ctx, &rpc.CreateShellRequest{
+					Path: parentPath, GridID: gridID, X: x, Y: y, W: w, H: h,
+				})
+			}
 			if err != nil {
 				if !isBenignPropError(err) {
 					t.Fatalf("iter %d create: %v", i, err)
@@ -197,6 +223,34 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			})
 			if err != nil && !isBenignPropError(err) {
 				t.Fatalf("iter %d set well view: %v", i, err)
+			}
+			if err == nil {
+				tiles[pickIdx].id = n.ID
+			}
+		case 5:
+			// Freeze a preview onto a shell tile so preview_blob_id
+			// refcounting gets exercised when that tile is later cloned,
+			// forked, or deleted. A tiny fixed byte alphabet makes previews
+			// dedupe across tiles, so a shared preview blob reaches
+			// refcount > 1 — the case fork/clone used to mishandle.
+			if len(tiles) == 0 {
+				continue
+			}
+			pickIdx := rng.IntN(len(tiles))
+			pick := tiles[pickIdx]
+			if pick.kind != rpc.KindShell {
+				continue
+			}
+			ver, err := liveVersion(pick.id)
+			if err != nil {
+				continue
+			}
+			n, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
+				Path: pick.path, TileID: pick.id, Version: ver,
+				JPEG: []byte{byte('a' + rng.IntN(3))},
+			})
+			if err != nil && !isBenignPropError(err) {
+				t.Fatalf("iter %d set shell preview: %v", i, err)
 			}
 			if err == nil {
 				tiles[pickIdx].id = n.ID

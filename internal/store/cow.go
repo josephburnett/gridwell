@@ -294,23 +294,14 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 			return 0, nil, err
 		}
 		remap[nc.oldID] = newID
-		// file-wells and process-wells share the same backing fs/proc
-		// grid across clones (identity = path/PID), so a fork still
-		// just bumps refcount — same as a regular well.
-		if (nc.kind == rpc.KindWell || nc.kind == rpc.KindFileWell || nc.kind == rpc.KindProcessWell) && nc.childGrid.Valid {
-			if err := s.incRefcount(ctx, tx, nc.childGrid.Int64); err != nil {
-				return 0, nil, err
-			}
-		}
-		if nc.kind == rpc.KindText && nc.blob.Valid {
-			if err := s.incBlobRefcount(ctx, tx, nc.blob.Int64); err != nil {
-				return 0, nil, err
-			}
-		}
-		if nc.kind == rpc.KindURL && nc.previewBlob.Valid {
-			if err := s.incBlobRefcount(ctx, tx, nc.previewBlob.Int64); err != nil {
-				return 0, nil, err
-			}
+		// Bump the refcount on whatever this copied row also points at —
+		// child grid (well / file-well / process-well), text blob, or
+		// url/shell preview blob. file-wells and process-wells share the
+		// same backing fs/proc grid across clones (identity = path/PID),
+		// so a fork still just bumps refcount, same as a regular well.
+		if err := s.incTileRefs(ctx, tx, nc.kind,
+			nullToInt(nc.childGrid), nullToInt(nc.blob), nullToInt(nc.previewBlob)); err != nil {
+			return 0, nil, err
 		}
 	}
 	return newGridID, remap, nil
@@ -367,20 +358,14 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, r.id); err != nil {
 			return err
 		}
-		if r.kind == rpc.KindWell && r.child.Valid {
-			if err := s.decRefcount(ctx, tx, r.child.Int64); err != nil {
-				return err
-			}
-		}
-		if r.kind == rpc.KindText && r.blob.Valid {
-			if err := s.decBlobRefcount(ctx, tx, r.blob.Int64); err != nil {
-				return err
-			}
-		}
-		if r.kind == rpc.KindURL && r.preview.Valid {
-			if err := s.decBlobRefcount(ctx, tx, r.preview.Int64); err != nil {
-				return err
-			}
+		// Release every reference this row held: child grid (well /
+		// file-well / process-well), text blob, or url/shell preview blob.
+		// GC'ing a grid that holds a file-well, process-well, or shell tile
+		// used to leak the fs/proc grid refcount or the preview blob — this
+		// path now goes through the same table-driven map as fork/clone.
+		if err := s.decTileRefs(ctx, tx, r.kind,
+			nullToInt(r.child), nullToInt(r.blob), nullToInt(r.preview)); err != nil {
+			return err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM grids WHERE id = ?`, gridID); err != nil {
@@ -423,6 +408,69 @@ func putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte) (int64, 
 func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {
 	_, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID)
 	return err
+}
+
+// nullToInt unwraps a NullInt64, mapping NULL to 0 — the "no reference"
+// sentinel the refcount helpers use.
+func nullToInt(n sql.NullInt64) int64 {
+	if n.Valid {
+		return n.Int64
+	}
+	return 0
+}
+
+// tileRefs is the single source of truth for what a tile holds a refcount
+// on: the child grid (well / file-well / process-well), the text blob, or
+// the url/shell preview blob — derived from its raw child_grid_id, blob_id,
+// and preview_blob_id (0 = none). fork, clone, single-delete, and grid GC
+// all route through it so they can never drift per-kind again. They used
+// to: three hand-rolled switches disagreed, leaking shell preview blobs on
+// fork/clone and fs/proc child grids (plus shell blobs) on GC.
+func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef int64) {
+	switch kind {
+	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
+		return childGrid, 0
+	case rpc.KindText:
+		return 0, blob
+	case rpc.KindURL, rpc.KindShell:
+		return 0, previewBlob
+	}
+	return 0, 0
+}
+
+// incTileRefs bumps the refcounts a tile of the given kind holds. Called
+// when a tile row is materialized by copy (forkGrid) or clone (CloneTile).
+func (s *Store) incTileRefs(ctx context.Context, tx *sql.Tx, kind string, childGrid, blob, previewBlob int64) error {
+	g, b := tileRefs(kind, childGrid, blob, previewBlob)
+	if g != 0 {
+		if err := s.incRefcount(ctx, tx, g); err != nil {
+			return err
+		}
+	}
+	if b != 0 {
+		if err := s.incBlobRefcount(ctx, tx, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// decTileRefs releases the refcounts a tile of the given kind holds. Called
+// when a tile row is destroyed by single-delete (dropTileRow) or grid GC
+// (deleteGrid).
+func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind string, childGrid, blob, previewBlob int64) error {
+	g, b := tileRefs(kind, childGrid, blob, previewBlob)
+	if g != 0 {
+		if err := s.decRefcount(ctx, tx, g); err != nil {
+			return err
+		}
+	}
+	if b != 0 {
+		if err := s.decBlobRefcount(ctx, tx, b); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) decBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {

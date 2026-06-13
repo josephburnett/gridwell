@@ -611,7 +611,13 @@ func verifyRefcounts(t *testing.T, s *Store) {
 	}
 	for _, b := range blobs {
 		var n int64
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM tiles WHERE blob_id = ?`, b.id).Scan(&n); err != nil {
+		// A blob is referenced from two columns: text tiles via blob_id and
+		// url/shell previews via preview_blob_id. Count both — otherwise a
+		// leaked or double-released preview blob slips past this invariant.
+		if err := s.db.QueryRow(
+			`SELECT (SELECT COUNT(1) FROM tiles WHERE blob_id = ?)
+			      + (SELECT COUNT(1) FROM tiles WHERE preview_blob_id = ?)`,
+			b.id, b.id).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		if b.refcount != n {
