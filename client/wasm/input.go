@@ -1291,6 +1291,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 
 	fileID := file.ID
 	initialScroll := float64(file.TextY)
+	initialScrollX := float64(file.TextX)
 	// URL tiles have no text/rendered modes; mode is "" for them so
 	// the textarea overlay (gated on TextMode == "text") never shows.
 	// For text tiles the mode is the one persisted on the tile (server),
@@ -1329,7 +1330,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextFocus = fileID
 			fp.TextMode = mode
 			fp.TextScrollY = initialScroll
-			fp.TextScrollX = 0
+			fp.TextScrollX = initialScrollX
 			fp.TextZoom = fileFixedScale
 			// Reset URL pan state on each new descent — it's view state,
 			// not tile state, so it does not survive across descents.
@@ -1535,6 +1536,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	}
 	gid := a.gridIDForPath(p.Path)
 	r := paneRectFor(a, p)
+	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
 
 	// Capture the textarea contents (if any) before we tear it down.
@@ -1570,7 +1572,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// pane previewing this tile) reflects the framed window + mode before
 	// the server round-trip lands.
 	patched := file
-	patched.TextX = 0
+	patched.TextX = scrollX
 	patched.TextY = scrollY
 	patched.TextW = viewW
 	patched.TextH = viewH
@@ -1600,7 +1602,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			Path:     rpc.Path{WellIDs: path},
 			TileID:   file.ID,
 			Version:  curVersion,
-			TextX:    0,
+			TextX:    scrollX,
 			TextY:    scrollY,
 			TextW:    viewW,
 			TextH:    viewH,
