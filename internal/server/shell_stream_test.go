@@ -236,6 +236,58 @@ func waitForShellSession(t *testing.T, fake *fakeShellStreamer) *fakeShellSessio
 	return nil
 }
 
+// TestShellStreamRejectsCrossOriginConnect: a WebSocket carrying a
+// foreign Origin (a web page open in some browser on the machine trying
+// to reach into the bash PTY) must be refused before any session opens.
+// WebSockets aren't subject to the same-origin policy on their own — the
+// server has to enforce it. Previously InsecureSkipVerify:true skipped it.
+func TestShellStreamRejectsCrossOriginConnect(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+
+	hdr := http.Header{}
+	hdr.Set("Origin", "http://evil.example")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, resp, err := websocket.Dial(ctx, shellStreamURL(hs, tileID, 80, 24),
+		&websocket.DialOptions{HTTPHeader: hdr})
+	if err == nil {
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+		t.Fatal("cross-origin connect accepted; want rejection")
+	}
+	if resp != nil && resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", resp.StatusCode)
+	}
+	if n := fake.sessionCount(); n != 0 {
+		t.Errorf("opened %d sessions on a rejected cross-origin connect, want 0", n)
+	}
+}
+
+// TestShellStreamAllowsLoopbackOrigin: the renderer's own origin (and any
+// loopback origin) is accepted — the same-origin path the real app uses.
+func TestShellStreamAllowsLoopbackOrigin(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	tileID := createShellTileViaRPC(t, hs, root)
+
+	hdr := http.Header{}
+	// A loopback origin on a different port: not literally same-origin, but
+	// the loopback allowlist accepts it (all of 127.0.0.1 is the local host).
+	hdr.Set("Origin", "http://127.0.0.1:9999")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, shellStreamURL(hs, tileID, 80, 24),
+		&websocket.DialOptions{HTTPHeader: hdr})
+	if err != nil {
+		t.Fatalf("loopback-origin connect rejected: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	waitForShellSession(t, fake)
+}
+
 // TestShellStreamRefusesWhenStreamerMissing: until SetShellStreamer
 // has been called, the WS endpoint must 503 — same defensive shape
 // the URL endpoint uses.

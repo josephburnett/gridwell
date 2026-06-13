@@ -309,8 +309,15 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 	// ModeAttach below.
 	allowCreate := tile.PreviewBlobID == 0
 
+	// Enforce same-origin. The renderer loads from http://127.0.0.1:<port>
+	// — the same origin as this server (apps/desktop loadURL(origin+'/')) —
+	// so its WebSocket is same-origin and accepted. A non-browser client
+	// (the tests, a CLI) sends no Origin header and is also accepted. What
+	// this rejects is the real threat: any web page open in any browser on
+	// the machine cross-origin-connecting to /rpc/ShellStream to grab a bash
+	// PTY. (Previously InsecureSkipVerify:true skipped this check entirely.)
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
+		OriginPatterns: []string{"127.0.0.1:*", "localhost:*"},
 	})
 	if err != nil {
 		return
