@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"syscall"
@@ -22,14 +21,26 @@ type HostActor interface {
 	Kill(pid int64, sig syscall.Signal) error
 }
 
-// realHostActor is the production wiring: delegate to os and
-// syscall.Kill.
+// realHostActor is the production wiring. File/directory removals go to the
+// OS trash (recoverable) rather than os.Remove/os.RemoveAll — a blackhole
+// delete of a file-well should not be an irreversible rm -rf. Process kills
+// still signal for real. Both Remove and RemoveAll trash the target; the
+// split only reflects the caller's file-vs-directory intent.
 type realHostActor struct{}
 
-func (realHostActor) Remove(path string) error    { return os.Remove(path) }
-func (realHostActor) RemoveAll(path string) error { return os.RemoveAll(path) }
+func (realHostActor) Remove(path string) error    { return trashHostPath(path) }
+func (realHostActor) RemoveAll(path string) error { return trashHostPath(path) }
 func (realHostActor) Kill(pid int64, sig syscall.Signal) error {
 	return syscall.Kill(int(pid), sig)
+}
+
+// trashHostPath moves path into the freedesktop home trash.
+func trashHostPath(path string) error {
+	dir, err := trashHomeDir()
+	if err != nil {
+		return err
+	}
+	return trashFileInto(dir, path)
 }
 
 // SetHostActor overrides the actor used to apply host-side side effects
@@ -85,11 +96,11 @@ func (s *Store) deleteSourceTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, p
 		}
 		if t.Kind == rpc.KindFileWell {
 			if err := s.host.RemoveAll(path); err != nil {
-				return true, fmt.Errorf("rm -rf %s: %w", path, err)
+				return true, fmt.Errorf("trash %s: %w", path, err)
 			}
 		} else {
 			if err := s.host.Remove(path); err != nil {
-				return true, fmt.Errorf("rm %s: %w", path, err)
+				return true, fmt.Errorf("trash %s: %w", path, err)
 			}
 		}
 		if err := s.dropTileRow(ctx, tx, t, events); err != nil {
