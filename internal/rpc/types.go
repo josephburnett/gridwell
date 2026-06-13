@@ -28,6 +28,15 @@ const (
 	KindShell       = "shell"
 )
 
+// IsWellKind reports whether a tile kind has a child grid that can be
+// descended into — the three "well" kinds (interior well, file-well,
+// process-well). Shared by the store (COW path validation, refcount
+// holdings) and the client (drop-target resolution) so the three-kind
+// set is spelled out in exactly one place.
+func IsWellKind(kind string) bool {
+	return kind == KindWell || kind == KindFileWell || kind == KindProcessWell
+}
+
 // Grid source kinds. NULL ("") means a regular Gridwell-owned grid. fs
 // means the grid's tile list is reconciled against a host directory; proc
 // means against the host process table. SourceID carries the path or PID.

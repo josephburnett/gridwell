@@ -54,9 +54,10 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 
 // isWellKind reports whether a tile kind has a child grid that can be
 // descended into — the three "well" kinds (interior well, file-well,
-// process-well).
+// process-well). Thin alias for rpc.IsWellKind so the three-kind set lives
+// in one place; kept as a package-local name for the many store callsites.
 func isWellKind(kind string) bool {
-	return kind == rpc.KindWell || kind == rpc.KindFileWell || kind == rpc.KindProcessWell
+	return rpc.IsWellKind(kind)
 }
 
 // preWriteResult describes the result of preWrite.

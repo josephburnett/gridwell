@@ -62,7 +62,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 	// self and creates a parent/child cycle on the server.
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
-		(n.Kind == rpc.KindWell || n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell) &&
+		rpc.IsWellKind(n.Kind) &&
 		n.ChildGridID != 0 &&
 		n.ID != excludeTileID {
 		// Well preview math. Effective ratio resolves the unvisited
@@ -154,7 +154,7 @@ func (t *dropTarget) cellAtCursor(sx, sy, cellOffsetX, cellOffsetY float64) (int
 // to decide whether a click on a well is starting a "pull out" gesture
 // on a specific child tile.
 func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, sy float64) *rpc.Tile {
-	if (well.Kind != rpc.KindWell && well.Kind != rpc.KindFileWell && well.Kind != rpc.KindProcessWell) || well.ChildGridID == 0 {
+	if !rpc.IsWellKind(well.Kind) || well.ChildGridID == 0 {
 		return nil
 	}
 	g, ok := a.c.Grid(well.ChildGridID)
