@@ -410,6 +410,50 @@ func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) e
 	return err
 }
 
+// swapTileBlob repoints a tile's blob column at the content-addressed blob
+// for `bytes`, keeping refcounts balanced. It hashes + dedupes via putBlob;
+// when the resulting blob differs from what the column held it UPDATEs
+// tiles.<col> (+ updated_at) and inc-new / dec-old. Identical content is a
+// pure no-op — no write, no refcount churn, changed=false — which matches the
+// idempotent reconcile path and is harmless for the freeze paths (their
+// version bump is independent of updated_at).
+//
+// This is the single home for the blob-swap dance that SetShellPreview,
+// SetURLState (jpeg), UpdateText (blob), and refreshProcInfoBlob each used to
+// hand-roll. Callers keep their own version bump and any sibling-column
+// writes (alt / url / title); only the blob kernel lives here.
+//
+// col must be a trusted literal ("blob_id" / "preview_blob_id") — it is
+// interpolated into the SQL, never user input.
+func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col string, bytes []byte) (newBlobID int64, changed bool, err error) {
+	var oldBlob sql.NullInt64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT `+col+` FROM tiles WHERE id = ?`, tileID).Scan(&oldBlob); err != nil {
+		return 0, false, err
+	}
+	newBlobID, err = putBlob(ctx, tx, hashBytes(bytes), bytes)
+	if err != nil {
+		return 0, false, err
+	}
+	if oldBlob.Valid && oldBlob.Int64 == newBlobID {
+		return newBlobID, false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE tiles SET `+col+` = ?, updated_at = ? WHERE id = ?`,
+		newBlobID, s.now().Unix(), tileID); err != nil {
+		return 0, false, err
+	}
+	if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
+		return 0, false, err
+	}
+	if oldBlob.Valid && oldBlob.Int64 != 0 {
+		if err := s.decBlobRefcount(ctx, tx, oldBlob.Int64); err != nil {
+			return 0, false, err
+		}
+	}
+	return newBlobID, true, nil
+}
+
 // nullToInt unwraps a NullInt64, mapping NULL to 0 — the "no reference"
 // sentinel the refcount helpers use.
 func nullToInt(n sql.NullInt64) int64 {

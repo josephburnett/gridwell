@@ -35,31 +35,11 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 		*events = append(*events, pre.Events...)
 		tileID := pre.TargetTileID
 
-		current, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
+		// Empty JPEG is skipped (a partial capture must not clobber a good
+		// frozen frame); the blob-swap kernel handles dedup + refcounting.
 		if len(req.JPEG) > 0 {
-			oldBlobID := current.PreviewBlobID
-			hash := hashBytes(req.JPEG)
-			newBlobID, err := putBlob(ctx, tx, hash, req.JPEG)
-			if err != nil {
+			if _, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", req.JPEG); err != nil {
 				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET preview_blob_id = ?, updated_at = ? WHERE id = ?`,
-				newBlobID, s.now().Unix(), tileID); err != nil {
-				return err
-			}
-			if oldBlobID != newBlobID {
-				if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-					return err
-				}
-				if oldBlobID != 0 {
-					if err := s.decBlobRefcount(ctx, tx, oldBlobID); err != nil {
-						return err
-					}
-				}
 			}
 		}
 		if req.URL != "" {

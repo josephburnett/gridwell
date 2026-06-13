@@ -57,37 +57,26 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 		}
 		*events = append(*events, pre.Events...)
 
-		current, err := s.loadTile(ctx, tx, pre.TargetTileID)
-		if err != nil {
-			return err
-		}
-		oldBlobID := current.PreviewBlobID
-
-		var newBlobID int64
 		if len(req.JPEG) > 0 {
-			hash := hashBytes(req.JPEG)
-			newBlobID, err = putBlob(ctx, tx, hash, req.JPEG)
+			if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "preview_blob_id", req.JPEG); err != nil {
+				return err
+			}
+		} else {
+			// An empty capture (failed refresh) clears the frozen frame to
+			// NULL — unlike URL, which skips empties to preserve the last
+			// good frame. swapTileBlob can't express a NULL set, so the
+			// clear stays explicit.
+			current, err := s.loadTile(ctx, tx, pre.TargetTileID)
 			if err != nil {
 				return err
 			}
-		}
-		var newArg any
-		if newBlobID != 0 {
-			newArg = newBlobID
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET preview_blob_id = ?, updated_at = ? WHERE id = ?`,
-			newArg, s.now().Unix(), pre.TargetTileID); err != nil {
-			return err
-		}
-		if oldBlobID != newBlobID {
-			if newBlobID != 0 {
-				if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-					return err
-				}
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE tiles SET preview_blob_id = NULL, updated_at = ? WHERE id = ?`,
+				s.now().Unix(), pre.TargetTileID); err != nil {
+				return err
 			}
-			if oldBlobID != 0 {
-				if err := s.decBlobRefcount(ctx, tx, oldBlobID); err != nil {
+			if current.PreviewBlobID != 0 {
+				if err := s.decBlobRefcount(ctx, tx, current.PreviewBlobID); err != nil {
 					return err
 				}
 			}

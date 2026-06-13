@@ -316,31 +316,16 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		}
 		*events = append(*events, pre.Events...)
 
-		hash := hashBytes(req.Data)
-		newBlobID, err := putBlob(ctx, tx, hash, req.Data)
-		if err != nil {
+		if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "blob_id", req.Data); err != nil {
 			return err
 		}
-
-		current, err := s.loadTile(ctx, tx, pre.TargetTileID)
-		if err != nil {
-			return err
-		}
-		oldBlobID := current.BlobID
-
+		// alt_text is a deterministic function of the content; write it
+		// alongside (a separate statement from the blob kernel).
 		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET blob_id = ?, alt_text = ?, updated_at = ? WHERE id = ?`,
-			newBlobID, alt, s.now().Unix(), pre.TargetTileID); err != nil {
+			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+			alt, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
-		}
-		if oldBlobID != newBlobID {
-			if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-				return err
-			}
-			if err := s.decBlobRefcount(ctx, tx, oldBlobID); err != nil {
-				return err
-			}
 		}
 		if err := bumpTileVersion(ctx, tx, pre.TargetTileID); err != nil {
 			return err

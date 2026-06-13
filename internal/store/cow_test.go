@@ -2,10 +2,94 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
+
+// TestSwapTileBlob exercises the blob-swap kernel directly: a content change
+// (new blob, old released), a no-op identical write (no churn), and a dedup
+// hit (point at an existing blob row, bumping its refcount instead of
+// inserting a duplicate).
+func TestSwapTileBlob(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	tile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("orig"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	origBlob := tile.BlobID
+
+	// swap runs swapTileBlob in its own committed transaction.
+	swap := func(bytes []byte) (int64, bool) {
+		t.Helper()
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, changed, err := s.swapTileBlob(ctx, tx, tile.ID, "blob_id", bytes)
+		if err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		return id, changed
+	}
+
+	// 1. Change: new content → new blob, changed=true, old blob reaped.
+	id1, changed1 := swap([]byte("changed"))
+	if !changed1 {
+		t.Error("expected changed=true for new content")
+	}
+	if id1 == origBlob {
+		t.Errorf("expected a new blob id, got original %d", origBlob)
+	}
+	if rc, err := blobRefcount(ctx, s, origBlob); !errors.Is(err, errBlobGone) {
+		t.Errorf("orig blob refcount = %d (err %v), want gone", rc, err)
+	}
+	if rc, _ := blobRefcount(ctx, s, id1); rc != 1 {
+		t.Errorf("new blob refcount = %d, want 1", rc)
+	}
+
+	// 2. No-op: identical content → same id, changed=false, no refcount churn.
+	id2, changed2 := swap([]byte("changed"))
+	if changed2 {
+		t.Error("expected changed=false for identical content")
+	}
+	if id2 != id1 {
+		t.Errorf("no-op id = %d, want %d", id2, id1)
+	}
+	if rc, _ := blobRefcount(ctx, s, id1); rc != 1 {
+		t.Errorf("refcount after no-op = %d, want 1 (no churn)", rc)
+	}
+
+	// 3. Dedup hit: switching to bytes that already exist on another tile
+	// points at that blob row and bumps its refcount to 2.
+	other, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root, X: 2, Y: 0, W: 1, H: 1, Data: []byte("shared"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id3, changed3 := swap([]byte("shared"))
+	if !changed3 {
+		t.Error("expected changed=true switching to shared content")
+	}
+	if id3 != other.BlobID {
+		t.Errorf("dedup blob id = %d, want shared %d", id3, other.BlobID)
+	}
+	if rc, _ := blobRefcount(ctx, s, id3); rc != 2 {
+		t.Errorf("shared blob refcount = %d, want 2", rc)
+	}
+	verifyRefcounts(t, s)
+}
 
 // TestCloneNodeCreatesSharedChildGrid verifies that cloning a well produces
 // a second well tile sharing the same child grid (refcount 2 on the child)
