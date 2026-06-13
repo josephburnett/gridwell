@@ -23,12 +23,12 @@ These are not four rules. They are one rule from four angles.
 Gridwell has seven tile kinds:
 
 - **`text`** — markdown content. Editable. Green outline.
-- **`url`** — a URL. Frozen JPEG preview by default; refresh gesture opens a live browser tab. Purple outline.
+- **`url`** — a URL. Frozen JPEG preview by default; refresh gesture opens a live Electron view (WebContentsView) over the pane. Purple outline.
 - **`well`** — a tile pointing at another grid. Descend to enter the child canvas. Blue outline.
 - **`blackhole`** — drops what you drop on it. Deletion is a place. Red outline.
 - **`file-well`** — a view of a directory on the host filesystem. Red outline.
 - **`process-well`** — a view of host processes. Red outline.
-- **`shell`** — an interactive bash session. Frozen JPEG preview by default; refresh gesture spawns a live PTY. The cwd at freeze persists so refresh resumes in the directory the user last `cd`-ed into. Red outline.
+- **`shell`** — an interactive bash session. Frozen JPEG preview by default; refresh gesture attaches a live PTY. The bash lives in a gridwell-private `tmux` session (keyed by tile id), so refresh resumes in the directory the user last `cd`-ed into for as long as that tmux server is alive. Red outline.
 
 Seven primitives. Move, clone, resize, and descend over these seven cover everything Gridwell does.
 
@@ -41,14 +41,14 @@ The outline tells you whether the principle holds inside.
 - **Brown** — root grid. You cannot ascend further.
 - **Green / purple** — content tile kind. Markdown vs URL.
 
-The *line style* says whether the tile is owned or a link. **Solid** — the tile is the real thing; deleting it (drag onto `/dev/null`) deletes for real (`rm` a file, `SIGTERM` a process). **Dashed** — the tile is a link to outside Gridwell: a file-well, process-well, or a file dragged out of a source well into a regular grid. Deleting a dashed tile only *unlinks* it (drops the tile row); the real file/process is untouched. The same entity is solid inside its source well and dashed once dragged into a regular grid — `DeleteTile` routes on the parent grid's `source_kind`.
+The *line style* says whether the tile is owned or a link. **Solid** — the tile is the real thing; deleting it (drag onto `/dev/null`, with either mouse button) deletes for real: a host file or directory goes to the system trash (recoverable, not `rm -rf`), a process gets `SIGTERM`. **Dashed** — the tile is a link to outside Gridwell: a file-well, process-well, or a file dragged out of a source well into a regular grid. Deleting a dashed tile only *unlinks* it (drops the tile row); the real file/process is untouched. The same entity is solid inside its source well and dashed once dragged into a regular grid — `DeleteTile` routes on the parent grid's `source_kind`.
 
 ## Identity is `(object_id, version)`
 
 Every tile and every grid has two identities:
 
 - **`object_id`** — a UUID. Survives copy-on-write and cloning. Two clones share an `object_id`.
-- **`version`** — an integer. Bumps on every content mutation. Two clones share a version until one of them is edited.
+- **`version`** — an integer. Bumps on every content mutation. Two clones share a version until one of them is edited. Framing is *not* a content edit: panning, zooming, or scrolling a well or text tile (its `view_*` / `text_*` window) re-frames the preview but does not bump the version, so clones stay at a shared version even after you navigate one of them differently. It still forks a shared grid for write isolation — your framing lands in your clone's row only — it just doesn't count as an edit.
 
 The composite `(object_id, version)` is the unit of horizontal navigation: all instances of this tile, at this version. It is also the concurrency primitive. A mutation commits only if its claimed version matches the version on disk. Optimistic concurrency, same shape as Git.
 
@@ -102,7 +102,7 @@ Three rendering paths have to agree for preview = descent = ascent to feel true.
 
 **Text tile.** The tile row stores the document-space window it was last framed at (scroll offset + window size) and its mode, rendered or text. The preview crops the re-rendered document to that window. Descent shows the same crop. Editing scrolls within it. Ascent writes the current window back to the tile.
 
-**URL tile.** The tile carries a frozen JPEG preview and a URL string. Descent shows the preview — no fresh tab, no network. The refresh gesture opens a Chromium tab, navigates to the stored URL, and streams JPEG frames into the pane. Live frames also update the preview every other view of this tile renders, so navigation in one pane is visible in another in real time. Ascent freezes: the latest URL and JPEG persist, the tab closes. One live session per tile at a time — refreshing a frozen pane of a tile that is already live elsewhere takes over the session. The previous live pane goes frozen at its last frame; the new pane goes live, resized to fit. The frozen preview fills its pane in cover mode and the overflow dimension scrolls with click + drag. The live tab renders at the pane's size down to a minimum; below that the pane shows a clipped window. Border tint distinguishes live from frozen.
+**URL tile.** The tile carries a frozen JPEG preview and a URL string. Descent shows the preview — no fresh view, no network. The refresh gesture asks the Electron shell to float a native WebContentsView over the pane's content box, navigating to the stored URL. A capture pump mirrors the live view's frames into the frozen preview that every other view of this tile renders, so navigation in one pane is visible in another in real time. Ascent freezes through `SetURLState`: the latest URL and JPEG persist (as a versioned content edit, so a URL tile in a cloned grid forks rather than leaking into its clones) and the live view tears down. The frozen preview fills its pane in cover mode and the overflow dimension scrolls with click + drag. The live view eats all mouse input over its rect, which is why ascent/refresh route through the pane's corner circle rather than the content box. Border tint distinguishes live from frozen.
 
 **File-well / process-well.** The preview is a deterministic render of the well's contents at last close. Descent shows the current contents of the directory or process table. The view is stable in shape: same sort, same projection, same gestures. Contents may have changed underneath.
 
@@ -123,9 +123,11 @@ Change freely if they get in the way:
 
 - COW grids with refcounts.
 - SQLite as the store.
-- WebSocket for URL streaming, SSE for events.
+- A content-addressed blob store (sha256, refcounted) backing text content and the URL/shell preview JPEGs. `forkGrid`, `CloneTile`, and the delete paths all route refcount inc/dec through one table keyed on tile kind, so a new kind that holds a grid or blob can't silently leak.
+- `tmux` for shell PTYs: each shell tile gets a gridwell-private tmux session keyed by *tile id* (not `object_id`). A PTY can't be forked, so a cloned shell is a screenshot with no session; the original keeps the session. cwd persists only as long as that tmux server is alive.
+- An Electron shell hosting live URL tiles as native WebContentsViews, with a JPEG capture pump feeding the frozen previews. The live view captures all mouse input over its rect (hence the corner-circle gutter for ascent/refresh).
+- WebSocket for the shell PTY stream (same-origin enforced), SSE for store events.
 - `Path` on mutation RPCs (needed for COW spine).
-- Chromium for URL tiles.
 - The browser + WASM as the UI.
 
 ## Non-requirements
@@ -133,7 +135,7 @@ Change freely if they get in the way:
 - Multi-user. Single-tenant by design. No auth.
 - Persisted pane layout.
 - A keyboard shortcut layer over the canvas.
-- Background fetches. The URL tile only opens a tab when the user explicitly refreshes.
+- Background fetches. The URL tile only opens a live view when the user explicitly refreshes.
 - Undo/redo today. History falls out of `version`; replaying it is future work.
 
 ## Testing mode (no backward compatibility yet)

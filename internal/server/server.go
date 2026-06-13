@@ -1,9 +1,10 @@
 // Package server is the HTTP layer of Gridwell. The RPC surface is
 // served by a Connect-RPC handler at /gridwell.v1.Gridwell/<Method>
-// (binary-proto and JSON-over-proto codecs both supported). The URL
-// live-tab WebSocket stays at /rpc/URLStream as raw HTTP; the embed
-// preview JPEG/PNG endpoint stays at /preview/tile/<id>; and the
-// static web/ directory is served at /.
+// (binary-proto and JSON-over-proto codecs both supported). The shell PTY
+// is a raw-HTTP WebSocket at /rpc/ShellStream (Connect can't model it); the
+// embed preview JPEG/PNG endpoint stays at /preview/tile/<id>; and the
+// static web/ directory is served at /. Live URL tiles are hosted natively
+// by the Electron shell (WebContentsView), so there is no URL WebSocket.
 //
 // Single-tenant: no auth, no sessions, no cookies. Callers should bind
 // the listener to loopback only.
@@ -97,7 +98,7 @@ func (s *Server) staticOrSPA(dir string) http.Handler {
 
 // writeHTTPError maps a store sentinel error to the right HTTP status
 // and writes a plain-text body. Used by the non-Connect endpoints
-// (preview image, URLStream) where Connect's code mapping doesn't
+// (preview image, ShellStream) where Connect's code mapping doesn't
 // apply.
 func writeHTTPError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
