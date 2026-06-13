@@ -35,6 +35,7 @@ type shellStreamConn struct {
 	onError   js.Func
 	onData    js.Func // term.onData(bytes string) callback
 	onResize  js.Func // term.onResize({cols, rows})
+	onMouse   js.Func // container right-button → canvas gesture pipeline
 
 	pending []any // queued sends until WS is OPEN
 	closed  bool
@@ -161,6 +162,31 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 	style.Set("height", "200px")
 	doc.Get("body").Call("appendChild", container)
 
+	// The overlay paints above the canvas and would otherwise swallow the
+	// right-button mousedown that starts a pane gesture — so a split/clone/
+	// resize could only be begun from the thin border ring. Forward the
+	// right button into the same canvas gesture pipeline every other tile
+	// uses; the left button stays with xterm (typing / focus / selection).
+	// Once onMouseDown sets a right gesture, draw() parks this overlay
+	// (liveOverlaysHidden), so the rest of the drag lands on the canvas.
+	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		ev := args[0]
+		if ev.Get("type").String() == "contextmenu" {
+			ev.Call("preventDefault")
+			return nil
+		}
+		if ev.Get("button").Int() != 2 {
+			return nil // left button: let xterm handle it
+		}
+		ev.Call("preventDefault")
+		ev.Call("stopPropagation")
+		a.onMouseDown(js.Null(), args)
+		return nil
+	})
+	// Capture phase so we win over xterm's own inner listeners.
+	container.Call("addEventListener", "mousedown", onMouse, true)
+	container.Call("addEventListener", "contextmenu", onMouse, true)
+
 	// xterm.Terminal({...}). Options are tuned to match Gridwell's
 	// dark palette and the same monospace stack used elsewhere.
 	Terminal := js.Global().Get("Terminal")
@@ -217,6 +243,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 		container: container,
 		tileID:    tileID,
 		paneID:    p.ID,
+		onMouse:   onMouse,
 		lastCols:  uint16(cols),
 		lastRows:  uint16(rows),
 	}
@@ -410,6 +437,9 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	conn.onError.Release()
 	conn.onData.Release()
 	conn.onResize.Release()
+	if conn.onMouse.Truthy() {
+		conn.onMouse.Release()
+	}
 	if conn.term.Truthy() {
 		conn.term.Call("dispose")
 	}
@@ -426,6 +456,16 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 // xterm's grid dimensions follow the container.
 func (a *App) syncShellOverlayPosition() {
 	if len(a.shellStreams) == 0 {
+		return
+	}
+	// Like native URL views, the xterm host div paints above the canvas and
+	// swallows mouse input over its rect. Park every overlay during a
+	// canvas-overlay gesture so a boundary drag (or any other gesture) can
+	// cross the shell without the div eating the move/up events.
+	if a.liveOverlaysHidden() {
+		for _, conn := range a.shellStreams {
+			conn.container.Get("style").Set("display", "none")
+		}
 		return
 	}
 	rects := a.layoutPanes()

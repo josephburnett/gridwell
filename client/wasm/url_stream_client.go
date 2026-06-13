@@ -166,7 +166,7 @@ func (a *App) syncURLViews() {
 		return
 	}
 	rects := a.layoutPanes()
-	hidden := a.urlViewsHidden()
+	hidden := a.liveOverlaysHidden()
 	for paneID, v := range a.urlStreams {
 		r, ok := rects[paneID]
 		if !ok {
@@ -180,10 +180,12 @@ func (a *App) syncURLViews() {
 	}
 }
 
-// urlViewsHidden reports whether live views should be parked this frame. A
-// native view always paints above the canvas, so any gesture that previews
-// on the canvas over a tile must hide the view first.
-func (a *App) urlViewsHidden() bool {
+// liveOverlaysHidden reports whether live overlays (native URL views and the
+// xterm shell host divs) should be parked this frame. Both kinds paint above
+// the canvas and swallow mouse input over their rect, so any gesture that
+// previews on the canvas — or drags a boundary across an overlay — must hide
+// them first, else the overlay eats the move/up events and the gesture stalls.
+func (a *App) liveOverlaysHidden() bool {
 	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menuOpen
 }
 
