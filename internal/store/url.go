@@ -65,24 +65,39 @@ func (s *Store) SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) er
 // SetURLState freezes a live URL tile in one mutation: it writes the
 // preview JPEG (with blob refcounting), the address, and the page title,
 // then bumps the version once and publishes a single tile_changed event.
-// Empty arguments are skipped so a partial capture (e.g. a failed final
-// frame) never clobbers good state. This is the RPC the Electron shell
-// calls on ascend, replacing the old server-side rod closeSession freeze.
-func (s *Store) SetURLState(ctx context.Context, tileID int64, jpeg []byte, url, title string) (*rpc.Tile, error) {
+// Empty jpeg/url/title arguments are skipped so a partial capture (e.g. a
+// failed final frame) never clobbers good state. This is the RPC the
+// Electron shell calls on ascend, replacing the old server-side rod freeze.
+//
+// Freezing goes through Path + version + preWrite, exactly like a text or
+// well edit: a URL tile in a shared (cloned) grid forks the spine so the
+// frozen frame and address land in this clone's row only — they used to
+// write the shared row and leak into every clone.
+func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, err := s.loadTile(ctx, tx, tileID)
+		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
 		}
-		if t.Kind != rpc.KindURL {
+		if n.Kind != rpc.KindURL {
 			return ErrNotURLTile
 		}
+		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
+		if err != nil {
+			return err
+		}
+		*events = append(*events, pre.Events...)
+		tileID := pre.TargetTileID
 
-		if len(jpeg) > 0 {
-			oldBlobID := t.PreviewBlobID
-			hash := hashBytes(jpeg)
-			newBlobID, err := putBlob(ctx, tx, hash, jpeg)
+		current, err := s.loadTile(ctx, tx, tileID)
+		if err != nil {
+			return err
+		}
+		if len(req.JPEG) > 0 {
+			oldBlobID := current.PreviewBlobID
+			hash := hashBytes(req.JPEG)
+			newBlobID, err := putBlob(ctx, tx, hash, req.JPEG)
 			if err != nil {
 				return err
 			}
@@ -102,17 +117,17 @@ func (s *Store) SetURLState(ctx context.Context, tileID int64, jpeg []byte, url,
 				}
 			}
 		}
-		if url != "" {
+		if req.URL != "" {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET url_string = ?, updated_at = ? WHERE id = ?`,
-				url, s.now().Unix(), tileID); err != nil {
+				req.URL, s.now().Unix(), tileID); err != nil {
 				return err
 			}
 		}
-		if title != "" {
+		if req.Title != "" {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
-				title, s.now().Unix(), tileID); err != nil {
+				req.Title, s.now().Unix(), tileID); err != nil {
 				return err
 			}
 		}
@@ -133,9 +148,9 @@ func (s *Store) SetURLState(ctx context.Context, tileID int64, jpeg []byte, url,
 	return out, nil
 }
 
-// SetTileAlt updates a tile's stored alt-text. Used by the URL stream
-// handler at session close to bake the page title into the tile so
-// embed drops can carry a meaningful label. Bumps the tile's version.
+// SetTileAlt updates a tile's stored alt-text. Used by the shell stream
+// handler to bake the tmux foreground command into the tile as its label.
+// Bumps the tile's version.
 func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		if _, err := s.loadTile(ctx, tx, tileID); err != nil {
@@ -158,31 +173,7 @@ func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string) error 
 	})
 }
 
-// SetURLString updates a URL tile's stored URL — called by the URLDriver
-// when the live tab navigates. Bumps the tile's version and publishes a
-// tile_changed event.
-func (s *Store) SetURLString(ctx context.Context, tileID int64, newURL string) error {
-	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		if t.Kind != rpc.KindURL {
-			return ErrNotURLTile
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET url_string = ?, updated_at = ? WHERE id = ?`,
-			newURL, s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
-			return err
-		}
-		out, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
-	})
-}
+// Navigation no longer has its own RPC: in the Electron model the live
+// WebContentsView reports its final address back through SetURLState at
+// freeze time, so the old rod-era SetURLString (driven by a server-side
+// browser tab) had no caller and was removed.

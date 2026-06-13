@@ -291,14 +291,18 @@ message SetRootViewResponse {}
 
 // SetURLStateRequest freezes a live URL tile: it bakes the latest preview
 // JPEG, address, and page title into the tile when an Electron-hosted
-// WebContentsView is torn down on ascend. Last-writer-wins by tile id (no
-// path/version) — same semantics as the old server-side rod freeze. Empty
-// fields are skipped so a partial capture never clobbers good state.
+// WebContentsView is torn down on ascend. Carries path + version so the
+// freeze forks a shared (cloned) grid like any other content edit —
+// otherwise navigating/freezing a URL inside a clone would leak into every
+// other clone. Empty jpeg/url/title fields are skipped so a partial capture
+// never clobbers good state.
 message SetURLStateRequest {
-  int64 tile_id = 1;
-  bytes jpeg = 2;
-  string url = 3;
-  string title = 4;
+  Path path = 1;
+  int64 tile_id = 2;
+  int64 version = 3;
+  bytes jpeg = 4;
+  string url = 5;
+  string title = 6;
 }
 
 message UpdateTextRequest {

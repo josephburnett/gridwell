@@ -71,27 +71,6 @@ func TestCloneURLTile(t *testing.T) {
 	}
 }
 
-func TestSetURLString(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-	tile := createURLTileForTest(t, s, root, 0, "https://example.com/a")
-
-	if err := s.SetURLString(ctx, tile.ID, "https://example.com/b"); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	got, err := s.loadTile(ctx, s.db, tile.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.URLString != "https://example.com/b" {
-		t.Errorf("URLString = %q, want https://example.com/b", got.URLString)
-	}
-	if got.Version != tile.Version+1 {
-		t.Errorf("version after SetURLString = %d, want %d", got.Version, tile.Version+1)
-	}
-}
-
 func TestSetURLPreview(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -155,7 +134,10 @@ func TestSetURLState(t *testing.T) {
 	ctx := context.Background()
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/a")
 
-	out, err := s.SetURLState(ctx, tile.ID, []byte("frozenjpeg"), "https://example.com/b", "Example B")
+	out, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		Path: rpc.Path{}, TileID: tile.ID, Version: tile.Version,
+		JPEG: []byte("frozenjpeg"), URL: "https://example.com/b", Title: "Example B",
+	})
 	if err != nil {
 		t.Fatalf("SetURLState: %v", err)
 	}
@@ -184,13 +166,19 @@ func TestSetURLStateSkipsEmptyFields(t *testing.T) {
 	ctx := context.Background()
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/keep")
 	// Seed preview + title we expect to survive an empty-field update.
-	if _, err := s.SetURLState(ctx, tile.ID, []byte("keepjpeg"), "", "Keep Title"); err != nil {
+	seed, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		Path: rpc.Path{}, TileID: tile.ID, Version: tile.Version,
+		JPEG: []byte("keepjpeg"), Title: "Keep Title",
+	})
+	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	// A capture that failed (empty jpeg) and reported no url/title must not
 	// clobber the good state.
-	if _, err := s.SetURLState(ctx, tile.ID, nil, "", ""); err != nil {
+	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		Path: rpc.Path{}, TileID: tile.ID, Version: seed.Version,
+	}); err != nil {
 		t.Fatalf("empty update: %v", err)
 	}
 	got, err := s.loadTile(ctx, s.db, tile.ID)
@@ -222,10 +210,93 @@ func TestSetURLStateRefusesNonURLTile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.SetURLState(context.Background(), w.ID, []byte("x"), "", "")
+	_, err = s.SetURLState(context.Background(), &rpc.SetURLStateRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version, JPEG: []byte("x"),
+	})
 	if !errors.Is(err, ErrNotURLTile) {
 		t.Errorf("got %v, want ErrNotURLTile", err)
 	}
+}
+
+// TestSetURLStateForksSharedGrid: freezing a URL tile that lives in a
+// shared (cloned) grid must fork the spine so the new address + preview
+// land in this clone's row only. Regression: SetURLState wrote the raw
+// shared row, leaking navigation into every clone.
+func TestSetURLStateForksSharedGrid(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	// A well whose child grid holds a single URL tile.
+	wellA, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
+		Path: rpc.Path{WellIDs: []int64{wellA.ID}}, GridID: wellA.ChildGridID,
+		X: 0, Y: 0, W: 1, H: 1, URL: "https://a.example",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Clone the well: now wellA and wellB share one child grid (rc 2), so
+	// they share the one URL row until something forks it.
+	wellB, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, TileID: wellA.ID, Version: wellA.Version,
+		DestGridID: root, DestPath: rpc.Path{}, X: 50, Y: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Freeze through wellB's path: navigate + preview. Must fork the shared
+	// grid and touch only wellB's copy.
+	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		Path: rpc.Path{WellIDs: []int64{wellB.ID}}, TileID: url.ID, Version: url.Version,
+		JPEG: []byte("frozen-b"), URL: "https://b.example", Title: "B",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reload both wells to get their (possibly forked) child grids, then read
+	// the URL tile in each.
+	urlIn := func(well *rpc.Tile) rpc.Tile {
+		t.Helper()
+		reloaded, err := s.loadTile(ctx, s.db, well.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, err := s.GetGrid(ctx, reloaded.ChildGridID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tile := range g.Tiles {
+			if tile.Kind == rpc.KindURL {
+				return tile
+			}
+		}
+		t.Fatalf("no URL tile in grid %d", reloaded.ChildGridID)
+		return rpc.Tile{}
+	}
+
+	a := urlIn(wellA)
+	b := urlIn(wellB)
+	if a.URLString != "https://a.example" {
+		t.Errorf("wellA URL = %q, want https://a.example (must NOT see the clone's nav)", a.URLString)
+	}
+	if a.PreviewBlobID != 0 {
+		t.Errorf("wellA preview = %d, want 0 (the freeze leaked into the original)", a.PreviewBlobID)
+	}
+	if b.URLString != "https://b.example" {
+		t.Errorf("wellB URL = %q, want https://b.example", b.URLString)
+	}
+	if b.PreviewBlobID == 0 {
+		t.Error("wellB has no preview after freeze")
+	}
+	verifyRefcounts(t, s)
 }
 
 

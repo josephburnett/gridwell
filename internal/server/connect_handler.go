@@ -145,8 +145,7 @@ func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[p
 	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
 }
 func (h *connectHandler) SetURLState(ctx context.Context, req *connect.Request[pb.SetURLStateRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.SetURLStateFromProto(req.Msg)
-	return tileResp(h.srv.store.SetURLState(ctx, r.TileID, r.JPEG, r.URL, r.Title))
+	return tileResp(h.srv.store.SetURLState(ctx, rpc.SetURLStateFromProto(req.Msg)))
 }
 func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb.UpdateTextRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.UpdateText(ctx, rpc.UpdateTextFromProto(req.Msg)))

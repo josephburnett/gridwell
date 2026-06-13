@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
@@ -22,6 +23,10 @@ type urlView struct {
 	objectID string
 	paneID   string
 	bounds   viewBounds
+	// path is the descent path to the grid that holds this URL tile,
+	// captured when the view went live. The freeze (SetURLState) needs it
+	// to fork a shared grid so the write lands in this clone's row only.
+	path []int64
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -61,6 +66,20 @@ func (a *App) urlTileForPane(p *pane.Pane, tileID int64) (rpc.Tile, bool) {
 	return t, true
 }
 
+// urlTileVersion returns the cached version of the URL tile at (path,
+// tileID), or 0 if it isn't cached. Read at freeze time so SetURLState can
+// claim the right version for its COW fork.
+func (a *App) urlTileVersion(path []int64, tileID int64) int64 {
+	g, ok := a.c.Grid(a.gridIDForPath(path))
+	if !ok {
+		return 0
+	}
+	if t, ok := g.Tiles[tileID]; ok {
+		return t.Version
+	}
+	return 0
+}
+
 // openURLStream goes live: it asks the Electron main process to place a
 // native WebContentsView for (pane, tile) over the pane's content box, on
 // the tile's persistent session partition. The w/h args are vestigial (the
@@ -80,7 +99,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID int64, _, _ int64) {
 	if a.urlStreams == nil {
 		a.urlStreams = map[string]*urlView{}
 	}
-	a.urlStreams[p.ID] = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b}
+	a.urlStreams[p.ID] = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, path: slices.Clone(p.Path)}
 	urlLog("place pane=%s tile=%d obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
 	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b)
 	a.draw()
@@ -96,12 +115,19 @@ func (a *App) closeURLStream(paneID string) {
 	}
 	delete(a.urlStreams, paneID)
 	tileID := v.tileID
+	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%d", paneID, tileID)
 	bridgeRemove(paneID, func(jpeg []byte, url, title string) {
 		if len(jpeg) > 0 || url != "" || title != "" {
+			// Look up the tile's current version from cache so the freeze is
+			// a versioned content edit that forks a shared (cloned) grid.
+			version := a.urlTileVersion(path, tileID)
 			go func() {
 				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
-					TileID: tileID, JPEG: jpeg, URL: url, Title: title,
+					Path:    rpc.Path{WellIDs: path},
+					TileID:  tileID,
+					Version: version,
+					JPEG:    jpeg, URL: url, Title: title,
 				})
 				if err != nil {
 					urlLog("SetURLState tile=%d err=%v", tileID, err)
