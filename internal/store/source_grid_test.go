@@ -110,6 +110,69 @@ func TestFSGridReconcileRemovesGoneFile(t *testing.T) {
 	if len(g.Tiles) != 0 {
 		t.Errorf("expected 0 tiles after removal, got %d", len(g.Tiles))
 	}
+	verifyRefcounts(t, s)
+}
+
+// TestFSGridReconcileDeleteReleasesAllRefs drives deleteFSGridTile across
+// both reference kinds it must release — a regular file (text tile holding
+// a blob) and a subdirectory (file-well holding a child grid) — and asserts
+// no leak via verifyRefcounts. This is the safety net for the reconcile
+// delete path: it used to hand-roll per-kind decrements (and ignore
+// preview_blob_id) instead of going through the tileRefs source of truth.
+func TestFSGridReconcileDeleteReleasesAllRefs(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "file.txt"), "hello")
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(dir, "subdir", "inner.txt"), "deep")
+
+	w, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 3, H: 3, FSPath: dir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First reconcile materializes a text tile (file) + a file-well tile
+	// (subdir, with its own descended child grid).
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
+	if len(g.Tiles) != 2 {
+		t.Fatalf("expected 2 tiles (file + subdir), got %d", len(g.Tiles))
+	}
+	var sub rpc.Tile
+	for _, tl := range g.Tiles {
+		if tl.Kind == rpc.KindFileWell {
+			sub = tl
+		}
+	}
+	if sub.ID == 0 {
+		t.Fatal("no file-well tile for subdir")
+	}
+	// Descend into the subdir so its child grid is populated too — gives the
+	// reconcile delete a non-trivial spine to release.
+	if _, err := s.GetGrid(ctx, sub.ChildGridID); err != nil {
+		t.Fatal(err)
+	}
+	verifyRefcounts(t, s)
+
+	// Remove both entries on disk, then reconcile: deleteFSGridTile must fire
+	// for the text tile (release its blob) and the file-well (release its
+	// child grid).
+	if err := os.RemoveAll(filepath.Join(dir, "subdir")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "file.txt")); err != nil {
+		t.Fatal(err)
+	}
+	g, _ = s.GetGrid(ctx, w.ChildGridID)
+	if len(g.Tiles) != 0 {
+		t.Errorf("expected 0 tiles after removal, got %d", len(g.Tiles))
+	}
+	verifyRefcounts(t, s)
 }
 
 // TestFSGridReconcileNoFlapForUnchanged checks that two reads of an

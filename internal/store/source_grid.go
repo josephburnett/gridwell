@@ -214,7 +214,7 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 		seen["@info"] = true
 		body := []byte(s.procReader.MetadataMarkdown(infoSelf))
 		if cur, ok := existing["@info"]; ok {
-			refreshed, err := s.refreshProcInfoBlob(ctx, tx, cur, body, now, events)
+			refreshed, err := s.refreshProcInfoBlob(ctx, tx, cur, body, events)
 			if err != nil {
 				return err
 			}
@@ -416,15 +416,12 @@ func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, e
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
 		return err
 	}
-	if (t.Kind == rpc.KindFileWell || t.Kind == rpc.KindProcessWell || t.Kind == rpc.KindWell) && t.ChildGridID != 0 {
-		if err := s.decRefcount(ctx, tx, t.ChildGridID); err != nil {
-			return err
-		}
-	}
-	if t.Kind == rpc.KindText && t.BlobID != 0 {
-		if err := s.decBlobRefcount(ctx, tx, t.BlobID); err != nil {
-			return err
-		}
+	// Release every reference this row held through the single table-driven
+	// map (child grid / text blob / preview blob). This used to hand-roll
+	// per-kind decrements and ignored preview_blob_id, drifting from the
+	// tileRefs source of truth that fork/clone/GC use.
+	if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridID, t.BlobID, t.PreviewBlobID); err != nil {
+		return err
 	}
 	*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: t.GridID, TileID: t.ID}})
 	return nil
@@ -472,27 +469,13 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 //
 // Idempotent: identical input hashes resolve to the same blob row via
 // putBlob, so the dec-then-inc dance is skipped when nothing changed.
-func (s *Store) refreshProcInfoBlob(ctx context.Context, tx *sql.Tx, cur *rpc.Tile, body []byte, now int64, events *[]rpc.Event) (bool, error) {
-	hash := hashBytes(body)
-	newBlobID, err := putBlob(ctx, tx, hash, body)
+func (s *Store) refreshProcInfoBlob(ctx context.Context, tx *sql.Tx, cur *rpc.Tile, body []byte, events *[]rpc.Event) (bool, error) {
+	_, changed, err := s.swapTileBlob(ctx, tx, cur.ID, "blob_id", body)
 	if err != nil {
-		return false, err
-	}
-	if newBlobID == cur.BlobID {
-		return false, nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE tiles SET blob_id = ?, updated_at = ? WHERE id = ?`,
-		newBlobID, now, cur.ID); err != nil {
 		return false, fmt.Errorf("refresh proc info blob: %w", err)
 	}
-	if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-		return false, err
-	}
-	if cur.BlobID != 0 {
-		if err := s.decBlobRefcount(ctx, tx, cur.BlobID); err != nil {
-			return false, err
-		}
+	if !changed {
+		return false, nil
 	}
 	if err := bumpTileVersion(ctx, tx, cur.ID); err != nil {
 		return false, err
