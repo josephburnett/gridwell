@@ -772,38 +772,15 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 		return
 	}
 	ratio := pane.RatioFromCursor(lr.container, lr.splitDir, sx, sy)
-	lr.targetSplit.Ratio = clampResizeRatio(lr.container, lr.splitDir, ratio)
+	lr.targetSplit.Ratio = pane.ClampRatioToMinPx(lr.container, lr.splitDir, ratio, leftResizeMinPx)
 	a.draw()
 }
 
 // leftResizeMinPx is the smallest a pane side may shrink to under a
 // left-drag resize. Unlike the right-button resize (which collapses a side
 // below rightCloseThreshold), the left button clamps here so a minimized
-// pane is always recoverable.
+// pane is always recoverable. Passed into pane.ClampRatioToMinPx.
 const leftResizeMinPx = 32.0
-
-// clampResizeRatio keeps a split ratio within [minR, 1-minR], reserving
-// leftResizeMinPx along the split axis for each side.
-func clampResizeRatio(container pane.Rect, dir pane.Direction, ratio float64) float64 {
-	extent := container.W
-	if dir == pane.Horizontal {
-		extent = container.H
-	}
-	if extent <= 0 {
-		return ratio
-	}
-	minR := leftResizeMinPx / extent
-	if minR > 0.5 {
-		minR = 0.5
-	}
-	if ratio < minR {
-		return minR
-	}
-	if ratio > 1-minR {
-		return 1 - minR
-	}
-	return ratio
-}
 
 // commitSwap exchanges the origin pane with whatever pane the cursor
 // is over at release. Same-pane release = no-op (cancel). Off-canvas
@@ -833,7 +810,7 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if !ok {
 		return
 	}
-	ratio := splitRatioFromPos(rd, pos)
+	ratio := pane.SplitRatioFromPos(rd.splitSide, rd.splitPane, pos)
 	p := a.tree.FindPane(rd.splitPaneID)
 	if p == nil {
 		return
@@ -1486,7 +1463,7 @@ func drawArrowHead(a *App, cx, cy, angle, size float64) {
 func (a *App) drawResizePreview(rd *rightDragState) {
 	r := rd.container
 	ratio := rd.targetSplit.Ratio
-	aRect, bRect := splitChildRects(r, rd.splitDir, ratio)
+	aRect, bRect := pane.SplitRect(r, rd.splitDir, ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.
 	a.cctx.Set("strokeStyle", colorMuted)
@@ -1538,41 +1515,3 @@ func (a *App) drawResizePreview(rd *rightDragState) {
 	a.cctx.Set("lineWidth", 1.0)
 }
 
-// splitChildRects mirrors pane.splitRect (which is unexported) for
-// use by the close-warning renderer. Inlined here rather than
-// exporting the package helper since the scope is small.
-func splitChildRects(container pane.Rect, dir pane.Direction, ratio float64) (a, b pane.Rect) {
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-	if dir == pane.Horizontal {
-		hA := container.H * ratio
-		a = pane.Rect{X: container.X, Y: container.Y, W: container.W, H: hA}
-		b = pane.Rect{X: container.X, Y: container.Y + hA, W: container.W, H: container.H - hA}
-		return
-	}
-	wA := container.W * ratio
-	a = pane.Rect{X: container.X, Y: container.Y, W: wA, H: container.H}
-	b = pane.Rect{X: container.X + wA, Y: container.Y, W: container.W - wA, H: container.H}
-	return
-}
-
-// splitRatioFromPos converts a clamped split position back into the
-// ratio the new pane should occupy.
-func splitRatioFromPos(rd *rightDragState, pos float64) float64 {
-	r := rd.splitPane
-	switch rd.splitSide {
-	case pane.SideTop:
-		return (pos - r.Y) / r.H
-	case pane.SideBottom:
-		return ((r.Y + r.H) - pos) / r.H
-	case pane.SideLeft:
-		return (pos - r.X) / r.W
-	case pane.SideRight:
-		return ((r.X + r.W) - pos) / r.W
-	}
-	return 0.5
-}

@@ -29,15 +29,15 @@ func layoutInto(n TreeNode, r Rect, out map[string]Rect) {
 		out[n.Pane.ID] = r
 		return
 	}
-	a, b := splitRect(r, n.Split.Dir, n.Split.Ratio)
+	a, b := SplitRect(r, n.Split.Dir, n.Split.Ratio)
 	layoutInto(n.Split.A, a, out)
 	layoutInto(n.Split.B, b, out)
 }
 
-// splitRect returns the two children rectangles for the given split. A
+// SplitRect returns the two children rectangles for the given split. A
 // horizontal split divides r into top (A) / bottom (B); a vertical split
 // divides into left (A) / right (B).
-func splitRect(r Rect, dir Direction, ratio float64) (a, b Rect) {
+func SplitRect(r Rect, dir Direction, ratio float64) (a, b Rect) {
 	if ratio < 0 {
 		ratio = 0
 	}
@@ -291,11 +291,57 @@ func SplitClampedPosition(side Side, paneRect Rect, bandPx, curX, curY float64) 
 	return 0, false
 }
 
+// SplitRatioFromPos is the inverse of a clamped split position: given a
+// committed split on `side` of `paneRect`, it returns the ratio (in pane-
+// fraction terms) the NEW pane on that side should occupy. Top/Left put the
+// new pane in the A child measured from the near edge; Bottom/Right measure
+// from the far edge. Pairs with SplitClampedPosition (which produces `pos`).
+func SplitRatioFromPos(side Side, paneRect Rect, pos float64) float64 {
+	switch side {
+	case SideTop:
+		return (pos - paneRect.Y) / paneRect.H
+	case SideBottom:
+		return ((paneRect.Y + paneRect.H) - pos) / paneRect.H
+	case SideLeft:
+		return (pos - paneRect.X) / paneRect.W
+	case SideRight:
+		return ((paneRect.X + paneRect.W) - pos) / paneRect.W
+	}
+	return 0.5
+}
+
+// ClampRatioToMinPx keeps a split ratio within [minR, 1-minR], where minR is
+// minPx expressed as a fraction of the container's extent along the split
+// axis (its height for a Horizontal split, width for Vertical). This reserves
+// at least minPx for each side so neither child collapses. A degenerate
+// container (extent <= 0) returns the ratio unchanged; minR is itself capped
+// at 0.5 so the clamp range never inverts.
+func ClampRatioToMinPx(container Rect, dir Direction, ratio, minPx float64) float64 {
+	extent := container.W
+	if dir == Horizontal {
+		extent = container.H
+	}
+	if extent <= 0 {
+		return ratio
+	}
+	minR := minPx / extent
+	if minR > 0.5 {
+		minR = 0.5
+	}
+	if ratio < minR {
+		return minR
+	}
+	if ratio > 1-minR {
+		return 1 - minR
+	}
+	return ratio
+}
+
 func collectDividers(n *TreeNode, r Rect, bandPx float64, out *[]Divider) {
 	if n.IsLeaf() {
 		return
 	}
-	a, b := splitRect(r, n.Split.Dir, n.Split.Ratio)
+	a, b := SplitRect(r, n.Split.Dir, n.Split.Ratio)
 	var div Rect
 	if n.Split.Dir == Horizontal {
 		// Horizontal divider line at y = a.Y + a.H, full width.
