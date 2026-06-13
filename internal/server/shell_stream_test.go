@@ -715,6 +715,56 @@ func TestDeleteTileKillsShellSession(t *testing.T) {
 	}
 }
 
+// TestDeleteShellThroughCloneKeepsSiblingSession: deleting a shell that
+// lives in a shared (cloned) grid forks the spine and removes a fork-copy
+// (a new id, no session), while the sibling clone keeps this row id and its
+// live PTY. The handler must not reap the session on the raw request id, or
+// it tears down a shell that's still very much alive in the other clone.
+func TestDeleteShellThroughCloneKeepsSiblingSession(t *testing.T) {
+	srv, hs, root := streamTestServer(t)
+	fake := newFakeShellStreamer()
+	srv.SetShellStreamer(fake)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx := context.Background()
+
+	// A well whose child grid holds a shell tile with a live session.
+	well, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shell, err := cl.CreateShell(ctx, &rpc.CreateShellRequest{
+		Path: rpc.Path{WellIDs: []int64{well.ID}}, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.setAlive(shell.ID, true)
+
+	// Clone the well: its child grid (and the shell row) is now shared.
+	clone, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
+		DestGridID: root, DestPath: rpc.Path{}, X: 10, Y: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete the shell through the clone's path. COW forks the shared grid:
+	// the removed row is a fork-copy; shell.ID survives under the first well.
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: shell.ID, Version: shell.Version,
+	}); err != nil {
+		t.Fatalf("DeleteTile: %v", err)
+	}
+
+	if killed := fake.killedIDs(); len(killed) != 0 {
+		t.Errorf("killed sessions %v; the sibling clone's shell %d is still live", killed, shell.ID)
+	}
+	if exists, err := srv.store.ShellTileExists(ctx, shell.ID); err != nil || !exists {
+		t.Errorf("original shell %d should survive the clone-path delete (exists=%v err=%v)", shell.ID, exists, err)
+	}
+}
+
 // TestShellSessionAliveReportsStreamerProbe: the unary RPC must
 // delegate straight to shellStreamer.HasSession. Two scenarios:
 //   1. session marked alive → alive=true.

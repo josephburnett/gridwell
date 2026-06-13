@@ -155,16 +155,22 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	if err := h.srv.store.DeleteTile(ctx, rpc.DeleteTileFromProto(req.Msg)); err != nil {
 		return nil, asConnectError(err)
 	}
-	// A deleted shell tile's tmux session would otherwise survive
-	// across gridwell restarts and leak. Fire-and-forget: Kill is
-	// idempotent on the tmux side (no-op if the session doesn't
-	// exist), so we don't need to look up the tile kind first. Any
-	// error is logged but doesn't fail the delete — the row is
-	// already gone and the orphan-cleanup pass at next startup
-	// would catch a missed kill anyway.
+	// A deleted shell tile's tmux session would otherwise survive across
+	// gridwell restarts and leak. But only reap it if THIS row id is now
+	// truly gone: a delete through one clone of a shared grid forks the
+	// spine and removes a fresh fork-copy (a new id with no session) while
+	// the sibling clone keeps this id and its live PTY. Killing on the raw
+	// request id would tear down that surviving clone's shell. Fire-and-
+	// forget; a missed kill is caught by the orphan-cleanup pass at startup.
 	if h.srv.shellStreamer != nil {
-		if err := h.srv.shellStreamer.Kill(tileID); err != nil {
-			log.Printf("[shellstream] kill-on-delete tile=%d err=%v", tileID, err)
+		exists, err := h.srv.store.ShellTileExists(ctx, tileID)
+		switch {
+		case err != nil:
+			log.Printf("[shellstream] kill-on-delete existence tile=%d err=%v", tileID, err)
+		case !exists:
+			if err := h.srv.shellStreamer.Kill(tileID); err != nil {
+				log.Printf("[shellstream] kill-on-delete tile=%d err=%v", tileID, err)
+			}
 		}
 	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
