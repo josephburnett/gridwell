@@ -90,19 +90,3 @@ func OvertakeZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) fl
 	}
 	return zoomtrans.Fit(fileW, fileH, inner.W, inner.H, cellPx)
 }
-
-// StreamViewportSize returns the integer pixel size of the URL-stream
-// viewport — the content box's W and H, clamped to a minimum of 1 so
-// the Chromium tab never gets a 0×N target.
-func StreamViewportSize(r pane.Rect, borderPx float64) (int64, int64) {
-	b := ContentBox(r, borderPx)
-	w := b.W
-	h := b.H
-	if w < 1 {
-		w = 1
-	}
-	if h < 1 {
-		h = 1
-	}
-	return int64(w), int64(h)
-}

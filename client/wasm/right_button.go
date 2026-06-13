@@ -843,9 +843,7 @@ func (a *App) commitURLRefresh(rd *rightDragState, sx, sy float64) {
 	if p == nil || p.TextFocus == 0 {
 		return
 	}
-	r := a.paneRectByID(p.ID)
-	w, h := paneStreamSize(r)
-	a.openURLStream(p, rd.refreshTileID, w, h)
+	a.openURLStream(p, rd.refreshTileID)
 }
 
 // dividerOnSide returns the Divider directly adjacent to pane p on

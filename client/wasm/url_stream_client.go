@@ -35,13 +35,6 @@ func urlLog(format string, args ...any) {
 	js.Global().Get("console").Call("log", msg)
 }
 
-// paneStreamSize is a thin wasm adapter over the pure panebox helper,
-// binding the renderer's paneBorderPx. Retained for the refresh-gesture
-// callsites that pass a content size into openURLStream.
-func paneStreamSize(r pane.Rect) (int64, int64) {
-	return panebox.StreamViewportSize(r, paneBorderPx)
-}
-
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
 // hosted webview should occupy — the pane minus its border band, in CSS px.
 // The view fills the whole content box; the corner controls (ascend / back)
@@ -82,10 +75,10 @@ func (a *App) urlTileVersion(path []int64, tileID int64) int64 {
 
 // openURLStream goes live: it asks the Electron main process to place a
 // native WebContentsView for (pane, tile) over the pane's content box, on
-// the tile's persistent session partition. The w/h args are vestigial (the
-// old WebSocket viewport); bounds are computed from the pane's current rect
-// and kept in step by syncURLViews. No-op outside the Electron shell.
-func (a *App) openURLStream(p *pane.Pane, tileID int64, _, _ int64) {
+// the tile's persistent session partition. Bounds are computed from the
+// pane's current rect and kept in step by syncURLViews. No-op outside the
+// Electron shell.
+func (a *App) openURLStream(p *pane.Pane, tileID int64) {
 	if !bridgeAvailable() {
 		urlLog("no bridge; live URL unavailable (not running in Electron shell)")
 		return

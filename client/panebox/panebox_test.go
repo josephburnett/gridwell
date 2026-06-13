@@ -119,23 +119,6 @@ func TestOvertakeZoom(t *testing.T) {
 	}
 }
 
-func TestStreamViewportSize(t *testing.T) {
-	r := pane.Rect{X: 0, Y: 0, W: 200, H: 150}
-	w, h := StreamViewportSize(r, 6)
-	if w != 188 || h != 138 {
-		t.Errorf("StreamViewportSize = (%d, %d), want (188, 138)", w, h)
-	}
-}
-
-func TestStreamViewportSizeClampsTo1(t *testing.T) {
-	// 2*border == width → content goes to zero; clamp to 1×1.
-	r := pane.Rect{X: 0, Y: 0, W: 12, H: 12}
-	w, h := StreamViewportSize(r, 6)
-	if w != 1 || h != 1 {
-		t.Errorf("StreamViewportSize = (%d, %d), want (1, 1) for degenerate", w, h)
-	}
-}
-
 func TestOvertakeZoomDegenerate(t *testing.T) {
 	// Inner box collapses to zero: returns 1 (caller should still
 	// be able to render at the natural scale rather than div-by-zero).

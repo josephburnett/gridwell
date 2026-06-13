@@ -298,9 +298,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 					gid := a.gridIDForPath(p.Path)
 					if g, ok := a.c.Grid(gid); ok {
 						if tile, ok := g.Tiles[p.TextFocus]; ok {
-							rr := paneRectFor(a, p)
-							w, h := paneStreamSize(rr)
-							a.openURLStream(p, tile.ID, w, h)
+							a.openURLStream(p, tile.ID)
 						}
 					}
 				}
@@ -1796,9 +1794,7 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 			if ffp == nil || ffp.TextFocus == 0 {
 				return
 			}
-			rr := a.paneRectByID(paneID)
-			w, h := paneStreamSize(rr)
-			a.openURLStream(ffp, tile.ID, w, h)
+			a.openURLStream(ffp, tile.ID)
 		})
 	})
 }
