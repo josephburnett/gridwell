@@ -61,17 +61,17 @@ live-tile path (5) and at the very end.
 These are defined + unit-tested but have **zero production callers** (verified by
 grep). Deleting them *and their tests* removes false coverage.
 
-- [ ] `internal/store/url.go` — `SetURLPreview` (rod-era; superseded by `SetURLState`).
+- [x] `internal/store/url.go` — `SetURLPreview` (rod-era; superseded by `SetURLState`).
       Audit `url_test.go`: delete tests *of* `SetURLPreview`; any that merely use it to
       set up preview state get rehomed onto `SetURLState`.
-- [ ] `client/dragdrop/dragdrop.go` — `EdgeBand`, `IsInEdgeZone` (edge-band ascent
+- [x] `client/dragdrop/dragdrop.go` — `EdgeBand`, `IsInEdgeZone` (edge-band ascent
       removed), `PaneAt`, `FootprintFits`. Trim `dragdrop_test.go` accordingly.
-- [ ] `client/panebox/panebox.go` — `StreamLocalCoords` (old WS-URL coord map) + its test.
-- [ ] `client/anim/anim.go` — `SplitDuration` (superseded by `SplitN`), `Distance`
+- [x] `client/panebox/panebox.go` — `StreamLocalCoords` (old WS-URL coord map) + its test.
+- [x] `client/anim/anim.go` — `SplitDuration` (superseded by `SplitN`), `Distance`
       (no caller) + their tests.
-- [ ] `client/cache/cache.go` — `InvalidateBlob` + its test.
-- [ ] `client/pane/pane.go` — `SplitOnSide` (superseded by `SplitOnSideAt`) + its test.
-- [ ] `client/pane/pane.go` — `TruncatePathTo` + its test. **DECIDED: delete.** (It
+- [x] `client/cache/cache.go` — `InvalidateBlob` + its test.
+- [x] `client/pane/pane.go` — `SplitOnSide` (superseded by `SplitOnSideAt`) + its test.
+- [x] `client/pane/pane.go` — `TruncatePathTo` + its test. **DECIDED: delete.** (It
       implied a "trim stale descent path after delete" behavior that was never wired;
       revisit only if path-staleness bugs surface.)
 
@@ -293,5 +293,5 @@ Current: ~50 flat fields on `App`. Target groups (names illustrative):
 
 ## Status
 
-- Current phase: **Phase 1** (Phase 0 complete).
+- Current phase: **Phase 2** (Phases 0–1 complete).
 - Branch: `refactor/cleanup-and-testability`.
