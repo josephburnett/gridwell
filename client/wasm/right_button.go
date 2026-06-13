@@ -466,20 +466,33 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 		if dt, ok := a.docDropTargetAt(sx, sy); ok {
 			a.ghost.paneID = dt.pane.ID
 			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.targetFragmentation = 0.0
 			a.ghost.overDoc = true
 			a.canvas.Get("style").Set("cursor", "")
 		} else if a.docRejectAt(sx, sy) {
 			a.ghost.paneID = d.originPaneID
 			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.targetFragmentation = 0.0
 			a.canvas.Get("style").Set("cursor", "not-allowed")
 		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
 			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = t.pane.ID
-			a.ghost.targetCellSize = t.cellSize
+			// Dropping on a black hole deletes, whichever button armed the
+			// drag (CLAUDE.md: "drag a tile onto a black hole"). Mirror the
+			// left-drag delete preview — the ghost shrinks and fragments.
+			sink := a.tileAtCellInTarget(t, sx, sy)
+			if sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
+				a.ghost.targetCellSize = t.cellSize * 0.2
+				a.ghost.targetFragmentation = 1.0
+			} else {
+				a.ghost.targetCellSize = t.cellSize
+				a.ghost.targetFragmentation = 0.0
+			}
 		} else {
 			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = d.originPaneID
 			a.ghost.targetCellSize = d.srcCellSize
+			a.ghost.targetFragmentation = 0.0
 		}
 		size := a.ghost.displayedCellSize
 		a.ghost.screenX = sx - d.cellOffsetX*size
@@ -538,12 +551,12 @@ func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
 	a.commitRightClone(d, sx, sy)
 }
 
-// commitRightClone resolves the drop target at (sx, sy) and either
-// fires CloneTile, inserts a markdown reference into a doc, or snap-backs
-// the ghost on a rejected drop. The async RPC fires in a goroutine; the
-// local cache is patched by the SSE event when it lands. Black-hole
-// deletion is the left-button path, not this one — right-click is
-// strictly clone-or-link.
+// commitRightClone resolves the drop target at (sx, sy) and either deletes
+// (drop on a black hole), fires CloneTile, inserts a markdown reference into
+// a doc, or snap-backs the ghost on a rejected drop. The async RPC fires in
+// a goroutine; the local cache is patched by the SSE event when it lands.
+// Dropping on a black hole deletes regardless of button — the gesture is
+// button-agnostic per CLAUDE.md; otherwise right-drag is clone-or-link.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// Doc drop: a raw-mode text descent under the cursor turns the gesture
 	// into "insert markdown reference". The source tile is left in place
@@ -556,6 +569,16 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	t, ok := a.dropTargetAt(sx, sy, d.tileID)
 	if !ok {
 		a.cancelDragSnapBack(d)
+		return
+	}
+	// Black-hole sink: dropping on a black hole deletes the grabbed tile,
+	// regardless of which button armed the drag — the same gesture and
+	// outcome as the left-drag delete path. (The drop ghost previewed this
+	// in advanceCloneDrag.)
+	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
+		a.runDeleteTile(d, t)
+		a.ghost = nil
+		a.draw()
 		return
 	}
 	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
