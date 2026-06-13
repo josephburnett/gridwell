@@ -1,4 +1,4 @@
-.PHONY: build bin wasm test test-cover serve clean launch vendor dist node-modules
+.PHONY: build bin wasm test test-cover check check-electron serve clean launch vendor dist node-modules
 
 BIN := ./gridwell
 WASM := ./web/gridwell.wasm
@@ -47,6 +47,23 @@ test:
 
 test-cover:
 	go test -cover ./...
+
+# check is the per-commit verification gate: every commit must leave all four
+# green. Mirrors docs/refactor-plan.md. The wasm build catches GOOS=js breakage
+# that `go build ./...` (host arch) misses; the typecheck catches Electron-side
+# TS drift. No display or network needed.
+check:
+	go build ./...
+	go test ./...
+	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
+	cd $(DESKTOP) && npm run typecheck
+
+# check-electron runs the live-tile harnesses under a virtual display. Needed
+# only for phases that touch the URL/shell live path (and the final pass), since
+# they exercise the real Electron WebContentsView / PTY bridge. Requires xvfb +
+# a prior `make vendor` for node_modules.
+check-electron: node-modules
+	cd $(DESKTOP) && npm run test:integration && npm run test:bridge
 
 # serve runs the backend on its own (the desktop app spawns it as a sidecar;
 # this target is for poking at the RPC/SSE surface or loading the wasm client
