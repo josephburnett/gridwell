@@ -85,22 +85,24 @@ Commit grouping: one commit for store, one for client helpers (or per-package).
 
 The highest-risk code; strongest testing. No behavior change.
 
-- [ ] **Fix the invariant violation.** `source_grid.go:deleteFSGridTile` hand-rolls
+- [x] **Fix the invariant violation.** `source_grid.go:deleteFSGridTile` hand-rolls
       per-kind refcount decrements (and ignores `preview_blob_id`), directly violating
       CLAUDE.md's "never hand-roll a per-kind inc/dec." Replace its body with
       `s.decTileRefs(ctx, tx, t.Kind, t.ChildGridID, t.BlobID, t.PreviewBlobID)`.
-- [ ] **Extract `swapTileBlob`.** One helper:
+- [x] **Extract `swapTileBlob`.** One helper:
       `swapTileBlob(ctx, tx, tileID int64, col string, bytes []byte) (newBlobID int64, changed bool, err error)`
       that does `putBlob` → `UPDATE tiles SET <col> = ?` → inc-new/dec-old when changed.
       Replace the hand-rolled copies in: `SetShellPreview`, `SetURLState` (jpeg branch),
       `UpdateText` (blob branch), `refreshProcInfoBlob`. Callers keep their own
       version-bump and extra-column writes (alt/url/title); only the blob-swap kernel
       moves. (`SetURLPreview`'s copy is already deleted in Phase 1.)
-- [ ] **DRY the well-kind checks.** Replace explicit
+- [x] **DRY the well-kind checks.** Replace explicit
       `Kind == well || file-well || process-well` with `isWellKind` in `deleteFSGridTile`,
       `dropTargetAt` (client), `childTileAtScreen` (client). (Client ones can ride along
-      here or in Phase 3 — keep store and client commits separate.)
-- [ ] **Tests.** Extend `property_test.go` so the generated tile population includes a
+      here or in Phase 3 — keep store and client commits separate.) — store side done
+      (`deleteFSGridTile` now routes through `decTileRefs`, no kind check); **client
+      `dropTargetAt`/`childTileAtScreen` deferred to Phase 3.**
+- [x] **Tests.** Extend `property_test.go` so the generated tile population includes a
       source-grid (fs/proc) holding each tile kind, and `verifyRefcounts` runs after a
       reconcile-driven delete — this would have caught the `deleteFSGridTile` drift. Add
       a focused unit test for `swapTileBlob` (dedup hit, change, no-op identical bytes).
@@ -293,5 +295,6 @@ Current: ~50 flat fields on `App`. Target groups (names illustrative):
 
 ## Status
 
-- Current phase: **Phase 2** (Phases 0–1 complete).
+- Current phase: **Phase 3** (Phases 0–2 complete). Carryover into Phase 3: DRY
+  client `dropTargetAt`/`childTileAtScreen` to `isWellKind`.
 - Branch: `refactor/cleanup-and-testability`.
