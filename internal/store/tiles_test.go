@@ -287,8 +287,58 @@ func TestSetWellView(t *testing.T) {
 	if got.ViewX != 5 || got.ViewY != 7 || got.ViewZoom != 1.5 {
 		t.Errorf("view %+v", got)
 	}
-	if got.Version != w.Version+1 {
-		t.Errorf("version after set = %d, want %d", got.Version, w.Version+1)
+	// Framing is not a content edit — the version must NOT move.
+	if got.Version != w.Version {
+		t.Errorf("version after framing = %d, want %d (framing must not bump)", got.Version, w.Version)
+	}
+}
+
+// TestFramingKeepsClonesAtSharedVersion: re-framing one clone of a well
+// (descend, pan/zoom, ascend) must not bump the version, so the clones
+// still satisfy "share a version until one is edited" even though their
+// stored framing has diverged. A real content edit is what bumps it.
+func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
+		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
+		DestGridID: root, DestPath: rpc.Path{}, X: 10, Y: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clone.Version != w.Version {
+		t.Fatalf("clone starts at version %d, want %d", clone.Version, w.Version)
+	}
+	// Frame only the clone.
+	framed, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
+		Path: rpc.Path{}, TileID: clone.ID, Version: clone.Version,
+		ViewX: 3, ViewY: 4, ViewZoom: 2.0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if framed.Version != w.Version {
+		t.Errorf("framed clone version = %d, want %d (still shared)", framed.Version, w.Version)
+	}
+	// The original is untouched and at the same version: still "the same
+	// tile" by (object_id, version).
+	orig, err := s.loadTile(ctx, s.db, w.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if orig.Version != w.Version || orig.ObjectID != framed.ObjectID {
+		t.Errorf("original drifted: version=%d obj=%s vs framed obj=%s", orig.Version, orig.ObjectID, framed.ObjectID)
+	}
+	if orig.ViewX == framed.ViewX && orig.ViewY == framed.ViewY {
+		t.Error("framing did not diverge between clones")
 	}
 }
 

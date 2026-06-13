@@ -237,6 +237,14 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 }
 
 // SetWellView updates a well tile's framing (view_x/view_y/view_zoom).
+//
+// Framing is not a content edit: re-framing does NOT bump the tile version,
+// so two clones still "share a version until one is edited" (CLAUDE.md) even
+// after the user pans/zooms one of them. It still goes through preWrite,
+// though — if the well lives in a shared grid the spine forks, so the new
+// framing lands in this clone's row only. Write isolation without a version
+// bump is how "things stay where you put them" and "clones share a version"
+// both hold for framing.
 func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
@@ -257,9 +265,6 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}
-		if err := bumpTileVersion(ctx, tx, pre.TargetTileID); err != nil {
-			return err
-		}
 		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
 		if err != nil {
 			return err
@@ -271,7 +276,9 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 }
 
 // SetTextView updates a text tile's framed-document window and rendered/text
-// mode.
+// mode. Like SetWellView this is framing, not content: it forks a shared
+// spine for write isolation but does NOT bump the tile version, so clones
+// keep sharing a version until the text itself is edited (UpdateText).
 func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
@@ -294,9 +301,6 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
 			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), pre.TargetTileID); err != nil {
-			return err
-		}
-		if err := bumpTileVersion(ctx, tx, pre.TargetTileID); err != nil {
 			return err
 		}
 		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
