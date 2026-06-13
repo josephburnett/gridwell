@@ -181,6 +181,12 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
 		a.onMouseDown(js.Null(), args)
+		// onRightDown arms the gesture but doesn't redraw for a
+		// split/swap/resize. Park the overlay now (it consults
+		// liveOverlaysHidden) so the rest of the drag — every mousemove and
+		// the mouseup — lands on the canvas instead of this still-visible
+		// div, which we don't forward.
+		a.draw()
 		return nil
 	})
 	// Capture phase so we win over xterm's own inner listeners.
