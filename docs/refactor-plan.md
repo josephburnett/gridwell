@@ -214,27 +214,27 @@ gesture → per-frame position sync" tiles implemented twice.
 By now the sub-systems exist; group `App`'s ~50 flat fields into cohesive sub-structs it
 holds, and make names tell the truth.
 
-- [ ] **Field grouping.** Collapse `App`'s fields into a handful of owned structs, e.g.:
-      `dom` (doc/win/canvas/cctx, textarea, toggle), `net` (cl + grid load/inflight +
-      failed), `view` (tree, root grid id + root view, selection, menu), `drag`
-      (dragState + ghost + hidden + left/right resize), `live` (the Phase-5 manager +
-      shellAlive), `transition`, `schedulers` (the four debounce flags + callbacks),
-      `urlPan`/`embedHits`/`paneStateStack`. `App` becomes a coordinator of ~8–10
-      sub-objects, not a bag of 50 fields. Do this incrementally (one group per commit);
-      each group move is mechanical once its sub-system is already isolated.
-- [ ] **Names.** Rename the rod/WS-era misnomers now that the abstraction is settled:
-      `urlStreams`→ the live-media field name, `openURLStream/closeURLStream`→
-      `placeLive…/freezeLive…`, drop the vestigial `_, _ int64` args on `openURLStream`.
-      Update every comment that references deleted architecture (`rod`, `/rpc/URLStream`,
-      "stream" where it's now a native view).
-- [ ] **migrations.go.** Remove the speculative `migration`/`applyMigrations` machinery
-      (currently `migrations = []`); keep only the `schema_version` stamp. (Re-add a real
-      migration framework the day we exit "testing mode" — documented in CLAUDE.md.)
-- [ ] **Docs.** Update CLAUDE.md's "Architecture — where things live" to the new file
-      layout (mutate.go, gesture/, transition/, glyphs.go, the live-media manager).
+- [~] **Field grouping.** Collapse `App`'s fields into owned structs. **STARTED:** the
+      seven debounce/raf fields are now `App.sched scheduler` (one group per commit, as the
+      plan prescribes). **REMAINING (mechanical, lower priority):** `dom`, `net`, `view`,
+      `drag`, `live`, `transition`, etc. Each remaining group pins at least one extremely
+      hot field (`cctx`, `cl`, `tree`, `c` — 200+ references each), so it's a large but
+      purely-organizational, compiler-verified sweep with no behavior/correctness gain.
+      Best finished as a focused dedicated pass; the target table below is the map.
+- [~] **Names.** Dropped the vestigial `_, _ int64` args on `openURLStream` (+ the dead
+      `paneStreamSize`/`StreamViewportSize` helpers). **REMAINING:** rename
+      `urlStreams`/`openURLStream`/`closeURLStream` off the rod/WS-era "stream" vocabulary —
+      deferred to land together with the Phase-5 live-media manager (the natural home for
+      the new names) rather than churn the names twice.
+- [x] **migrations.go.** Removed the speculative `migration`/`applyMigrations` machinery;
+      kept the `schema_version` stamp + the refuse-if-stored-newer guard.
+- [x] **Docs.** Updated CLAUDE.md's "Architecture — where things live" to the new file
+      layout (mutate.go, glyphs.go, palette_draw.go, markdown_render.go, gesture_draw.go,
+      the pure client packages incl. clientsync) + the `make check` gate + swapTileBlob.
 
-**Done when:** `App` reads as a small coordinator; no name lies about what it does; no
-dead-architecture comments remain.
+**Done when:** `App` reads as a small coordinator (partial: `sched` grouped, rest mapped);
+no name lies about what it does (partial: vestigial args gone, "stream" rename pending with
+Phase 5); migrations scaffold gone; docs synced.
 
 ---
 
@@ -289,7 +289,33 @@ Current: ~50 flat fields on `App`. Target groups (names illustrative):
 
 ## Status
 
-- Current phase: **Phase 6** (Phases 0–2 complete; Phase 3 done except 3d-classifier/3e;
-  Phase 4 deferred — all behavior-rewiring of untested interaction code, no UI harness).
-- Phase 2 carryover (client `isWellKind` DRY): done via `rpc.IsWellKind`.
-- Branch: `refactor/cleanup-and-testability`.
+Branch: `refactor/cleanup-and-testability` (off `main`). Every commit leaves `make check`
+green. Summary of where each phase landed:
+
+- **Phase 0 — done.** `make check` / `make check-electron` gates; working branch.
+- **Phase 1 — done.** All grep-confirmed dead code + its tests deleted (store + 6 client pkgs).
+- **Phase 2 — done.** `swapTileBlob` kernel (blob-swap dance unified, 4 callers); fixed the
+  `deleteFSGridTile` hand-rolled-refcount invariant violation; new tests (`TestSwapTileBlob`,
+  reconcile-delete refcount net, verified to fail if the release is skipped).
+- **Phase 3 — mostly done.** 3a `mutate.go` + pure tested `clientsync`; 3b/3c render split
+  (`glyphs`, `palette_draw`, `markdown_render`); 3d-safe pure gesture geometry → `pane`
+  (tested) + `gesture_draw.go`; `rpc.IsWellKind` DRY. **Deferred:** 3d full Outcome-classifier
+  rewrite and 3e drop-unification — behavior-preserving rewrites of untested interaction code
+  with **no UI harness in this environment** to verify; their math is already pure+tested.
+  File sizes: render 1974→1116, right_button 1578→892, input 2049→~1890.
+- **Phase 4 — deferred (risk-based).** Transition math already pure+tested in `zoomtrans`/
+  `anim`; the rest is App-welded + js per-frame, unverifiable here. See Phase 4 rationale.
+- **Phase 5 — not started.** Behavior-changing (URL+shell live-media unify); needs the
+  Electron harnesses + manual L4 that this environment can't run. The store kernel it depends
+  on (`swapTileBlob`) is already shared.
+- **Phase 6 — partially done.** migrations scaffold removed; vestigial `openURLStream` args +
+  dead viewport helpers gone; CLAUDE.md synced; App `sched` group extracted (1st of ~8).
+  **Remaining:** the rest of the App field grouping (large mechanical sweep, hot fields) and
+  the `urlStreams`/"stream" rename (to land with Phase 5).
+- **Phase 7 — not started.** proto/Connect → JSON+SSE (Option B, approved). Largest blast
+  radius; needs its own sub-plan + full re-verification. Not feasible to do well at this
+  session's tail.
+
+**Next-session priorities:** (1) finish the App field grouping using the target table above;
+(2) Phase 7 with a written sub-plan; (3) the deferred interaction-code rewrites (3d/3e/4 + 5)
+once a gesture/transition/live-tile integration harness exists to verify them.
