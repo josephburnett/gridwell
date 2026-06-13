@@ -167,21 +167,20 @@ items are deferred with rationale above.
 The most complex untested logic in the client (four near-parallel `start*` methods +
 segment machinery + `onComplete` focus-restore), welded to `App` + `js`.
 
-- [ ] Extract a pure `client/transition` package (or extend `zoomtrans`): given current
-      pane endpoints + well/file geometry + saved-state stack entry + pane rect → a
-      `Plan{segments []Segment, restore *FocusRestore}` as **data**. Segments carry
-      path-at-start + from/to (Cx,Cy,Zoom) + duration; the path-swap and the
-      saved-vs-calibrated landing are computed here, not in wasm.
-- [ ] Collapse the four `startDescent`/`startAscent`/`startFileDescent`/`startFileAscent`
-      into one builder parameterized by descent-vs-ascent and well-vs-file. The wasm side
-      becomes: build `Plan` (pure) → install segments → per-frame interpolate (the only
-      js part left).
-- [ ] Table-test the planner: descent continuity (preview cell == post-swap live cell),
-      ascent landing on saved state, the "skipped missing levels → instant" fallbacks,
-      and the embed-descent focus-restore patching.
+- [ ] **DEFERRED (risk-based).** Same rationale as 3d/3e. The transition math is *already*
+      pure and tested in `zoomtrans` (`Ascent`/`Descent`), `anim.SplitN`, and
+      `zoomtrans.PanDist`/`ZoomDist` (the wasm `panDist`/`zoomDist` are one-line adapters).
+      What remains in the four `start*` methods is App-state resolution (well lookup,
+      saved-state stack, missing-level fallbacks) + mechanical `transSegment` assembly +
+      the js-coupled per-frame interpolation runner. Extracting a pure `Plan` would mostly
+      copy already-tested endpoints into a near-trivial struct, while collapsing the four
+      methods is a behavior-preserving rewrite of untested descent/ascent interaction code
+      with **no UI harness in this environment** to verify continuity/landing/fallbacks.
+      Net risk to the zero-defects goal exceeds the marginal testability gain. Revisit with
+      a transition-level integration harness.
 
-**Done when:** transition *construction* is pure and tested; per-frame interpolation is
-the only untestable remnant; the four methods are one.
+**Done when (deferred):** transition construction is pure and tested; the four methods are
+one. Not attempted blind — see rationale.
 
 ---
 
@@ -290,8 +289,7 @@ Current: ~50 flat fields on `App`. Target groups (names illustrative):
 
 ## Status
 
-- Current phase: **Phase 4** (Phases 0–2 complete; Phase 3 complete except the two
-  behavior-rewiring items 3d-classifier / 3e-drop, deferred with rationale above —
-  no UI harness in this environment to verify a rewrite of untested interaction code).
+- Current phase: **Phase 6** (Phases 0–2 complete; Phase 3 done except 3d-classifier/3e;
+  Phase 4 deferred — all behavior-rewiring of untested interaction code, no UI harness).
 - Phase 2 carryover (client `isWellKind` DRY): done via `rpc.IsWellKind`.
 - Branch: `refactor/cleanup-and-testability`.
