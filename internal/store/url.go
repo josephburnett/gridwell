@@ -7,61 +7,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// SetURLPreview overwrites a URL tile's preview JPEG. Called by the
-// server's URL stream handler on WS close. The JPEG is hash-deduped
-// through the blobs table — two tiles whose previews happen to be
-// identical bytes share one row. Bumps the tile's version.
-func (s *Store) SetURLPreview(ctx context.Context, tileID int64, jpeg []byte) error {
-	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		if t.Kind != rpc.KindURL {
-			return ErrNotURLTile
-		}
-		oldBlobID := t.PreviewBlobID
-		var newBlobID int64
-		if len(jpeg) > 0 {
-			hash := hashBytes(jpeg)
-			newBlobID, err = putBlob(ctx, tx, hash, jpeg)
-			if err != nil {
-				return err
-			}
-		}
-		var newArg any
-		if newBlobID != 0 {
-			newArg = newBlobID
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET preview_blob_id = ?, updated_at = ? WHERE id = ?`,
-			newArg, s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		if oldBlobID != newBlobID {
-			if newBlobID != 0 {
-				if err := s.incBlobRefcount(ctx, tx, newBlobID); err != nil {
-					return err
-				}
-			}
-			if oldBlobID != 0 {
-				if err := s.decBlobRefcount(ctx, tx, oldBlobID); err != nil {
-					return err
-				}
-			}
-		}
-		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
-			return err
-		}
-		out, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
-	})
-}
-
 // SetURLState freezes a live URL tile in one mutation: it writes the
 // preview JPEG (with blob refcounting), the address, and the page title,
 // then bumps the version once and publishes a single tile_changed event.

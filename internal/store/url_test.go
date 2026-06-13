@@ -28,14 +28,13 @@ func TestCloneURLTile(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	src := createURLTileForTest(t, s, root, 0, "https://example.com/a")
-	// Seed a preview so we can verify it carries over.
-	if err := s.SetURLPreview(ctx, src.ID, []byte("jpegbytes")); err != nil {
-		t.Fatalf("seed preview: %v", err)
-	}
-	// SetURLPreview bumped version; reload.
-	src, err := s.loadTile(ctx, s.db, src.ID)
+	// Seed a preview (via the freeze RPC) so we can verify it carries over.
+	src, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		Path: rpc.Path{}, TileID: src.ID, Version: src.Version,
+		JPEG: []byte("jpegbytes"),
+	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("seed preview: %v", err)
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
@@ -68,31 +67,6 @@ func TestCloneURLTile(t *testing.T) {
 	}
 	if string(jpeg) != "jpegbytes" {
 		t.Errorf("clone preview = %q, want \"jpegbytes\"", string(jpeg))
-	}
-}
-
-func TestSetURLPreview(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-	tile := createURLTileForTest(t, s, root, 0, "https://example.com")
-
-	if err := s.SetURLPreview(ctx, tile.ID, []byte("xxx")); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	got, err := s.GetTilePreview(ctx, tile.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "xxx" {
-		t.Errorf("got %q, want xxx", string(got))
-	}
-	tileAfter, err := s.loadTile(ctx, s.db, tile.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tileAfter.Version != tile.Version+1 {
-		t.Errorf("version after SetURLPreview = %d, want %d", tileAfter.Version, tile.Version+1)
 	}
 }
 
@@ -297,21 +271,4 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Error("wellB has no preview after freeze")
 	}
 	verifyRefcounts(t, s)
-}
-
-
-func TestSetURLPreviewRefusesNonURLTile(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	w, err := s.CreateWell(context.Background(), &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = s.SetURLPreview(context.Background(), w.ID, []byte("x"))
-	if !errors.Is(err, ErrNotURLTile) {
-		t.Errorf("got %v, want ErrNotURLTile", err)
-	}
 }
