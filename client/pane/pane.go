@@ -121,6 +121,12 @@ func (t *Tree) Walk(fn func(*Pane)) {
 	walk(t.Root, fn)
 }
 
+// WalkLeaves visits every leaf pane in the subtree rooted at n. Used to
+// flush (save/freeze) the panes about to vanish when a split is collapsed.
+func WalkLeaves(n TreeNode, fn func(*Pane)) {
+	walk(n, fn)
+}
+
 func walk(n TreeNode, fn func(*Pane)) {
 	if n.IsLeaf() {
 		fn(n.Pane)

@@ -688,12 +688,44 @@ func (a *App) commitResize(rd *rightDragState, sx, sy float64) {
 		aSize = rd.container.W * newRatio
 		bSize = rd.container.W * (1 - newRatio)
 	}
+	// Before a side is dropped, flush every leaf pane it holds: persist
+	// unsaved text edits and freeze any live URL/shell stream. Otherwise a
+	// collapsed pane's live view parks hidden (still running, never frozen)
+	// and recent edits are lost — the dropped pane never hit the ascent
+	// save path.
 	switch {
 	case aSize < rightCloseThreshold:
+		a.flushDroppedSubtree(rd.targetSplit.A)
 		_ = a.tree.CollapseSplit(rd.targetSplit, true)
 	case bSize < rightCloseThreshold:
+		a.flushDroppedSubtree(rd.targetSplit.B)
 		_ = a.tree.CollapseSplit(rd.targetSplit, false)
 	}
+}
+
+// flushDroppedSubtree saves/freezes every leaf pane in a subtree that's
+// about to be removed by a split collapse.
+func (a *App) flushDroppedSubtree(n pane.TreeNode) {
+	pane.WalkLeaves(n, func(p *pane.Pane) {
+		a.flushPaneBeforeDrop(p)
+	})
+}
+
+// flushPaneBeforeDrop persists a single pane's descended state before the
+// pane disappears: text edits + framed window for a text descent, and a
+// freeze for a live URL or shell stream. Each step is a no-op when it
+// doesn't apply (kind guard inside saveFileBeforeAscent; the close* helpers
+// no-op when the pane has no live stream).
+func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
+	if p.TextFocus != 0 {
+		if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
+			if file, ok := g.Tiles[p.TextFocus]; ok {
+				a.saveFileBeforeAscent(p, file)
+			}
+		}
+	}
+	a.closeURLStream(p.ID)
+	a.closeShellStream(p.ID)
 }
 
 // leftResizeState carries the in-flight left-button pane-boundary resize.
