@@ -71,11 +71,12 @@ A pane is a window into the canvas. The split tree lives in the browser session 
 
 ## Architecture — where things live
 
-- `internal/store/` — SQLite store and all invariants: `cow.go` (preWrite / forkGrid / refcounts), `tiles.go`, `move_clone.go`, `url.go`, `shell.go`, `source_*.go` (file/proc wells), `blobs.go`, `trash.go`.
+- `internal/store/` — SQLite store and all invariants: `cow.go` (preWrite / forkGrid / refcounts / `swapTileBlob` — the single blob-swap kernel), `tiles.go`, `move_clone.go`, `url.go`, `shell.go`, `source_*.go` (file/proc wells), `blobs.go`, `trash.go`.
 - `internal/server/` — Connect-RPC handlers, the shell PTY WebSocket (`/rpc/ShellStream`), the `/preview/tile/` image endpoint, SSE events.
-- `internal/rpc/` + `api/gridwell/v1/data.proto` — wire types and proto. Regenerate with `buf generate` after editing the proto.
+- `internal/rpc/` + `api/gridwell/v1/data.proto` — wire types and proto. Regenerate with `buf generate` after editing the proto. `IsWellKind` lives here (shared store+client well-kind predicate).
 - `internal/tmux/` — shell sessions.
-- `client/wasm/` — the WASM UI: `input.go` / `right_button.go` (gestures), `render.go`, `url_stream_client.go`, `shell_stream_client.go`. `client/pane/`, `client/cache/` — pane tree + client cache.
+- `client/wasm/` — the WASM UI, split by concern: `input.go` / `right_button.go` (gesture classification + commit), `gesture_draw.go` (in-flight gesture previews), `render.go` (tile/pane/grid drawing), `glyphs.go` (icon vocabulary), `palette_draw.go` (creation palette), `markdown_render.go` (markdown engine), `mutate.go` (tile-RPC dispatch), `url_stream_client.go`, `shell_stream_client.go`.
+- `client/` pure packages (host-buildable, table-tested): `pane` (tree + split/resize geometry), `cache`, `clientsync` (RPC conflict-vs-log policy), `dragdrop`, `markdown`, `zoomtrans`, `anim`, `palette`, `panebox`, `preview`, `embed`, `url`/`urlnorm`.
 - `apps/desktop/` — Electron shell (TypeScript): loads the renderer from the server's own origin, hosts live URL WebContentsViews and the JPEG capture pump.
 
 These are implementation choices — swap them freely if they get in the way: COW + refcounts, SQLite, the content-addressed blob store (sha256, refcounted), tmux, Electron, WebSocket/SSE, `Path` on RPCs, browser + WASM UI.
@@ -84,8 +85,10 @@ These are implementation choices — swap them freely if they get in the way: CO
 
 **Invariants (binding — don't break without a conversation):** things stay where you put them; seven primitives; color grammar (blue / red / brown / green / purple); preview = descent = ascent; identity is `(object_id, version)`; mouse-only, no modifiers; every gesture has a preview and a cancel zone; panes are views, not state.
 
+**Per-commit gate:** `make check` (go build, go test, the `GOOS=js` wasm build, and the desktop `tsc` typecheck) must be green on every commit. `make check-electron` (xvfb live-tile harnesses) is for changes touching the URL/shell live path.
+
 **When you touch the store:**
-- Content mutations take a `Path` + `Version`: call `preWrite` (COW fork), `checkTileVersion`, then `bumpTileVersion`. Framing mutations fork but **don't** bump the version.
+- Content mutations take a `Path` + `Version`: call `preWrite` (COW fork), `checkTileVersion`, then `bumpTileVersion`. Framing mutations fork but **don't** bump the version. The blob-swap dance (put → repoint column → inc-new/dec-old) lives only in `swapTileBlob`; reach for it instead of hand-rolling.
 - Refcounting goes through the single `tileRefs` table in `cow.go`, used by fork / clone / delete / GC alike — never hand-roll a per-kind inc/dec. A new tile kind that holds a grid or blob must be added there, and `property_test.go` must generate it. The property walk + `verifyRefcounts` (which counts both `blob_id` and `preview_blob_id`) are the safety net that catches leaks.
 - Host deletes go to the trash (`trash.go`), not `os.Remove`; process deletes `SIGTERM`.
 - Shell sessions are keyed by **tile id**, not `object_id`: a PTY can't be forked, so a cloned shell is a screenshot with no session. The shell WebSocket is same-origin — never reintroduce `InsecureSkipVerify`.
