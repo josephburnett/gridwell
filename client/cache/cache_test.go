@@ -127,10 +127,6 @@ func TestBlobPutGetInvalidate(t *testing.T) {
 	if string(got) != "world" {
 		t.Errorf("after mutating source, blob 8 = %q (cache should hold its own copy)", string(got))
 	}
-	c.InvalidateBlob(7)
-	if _, ok := c.Blob(7); ok {
-		t.Error("blob 7 should be gone after invalidate")
-	}
 }
 
 func TestKnownGridIDs(t *testing.T) {

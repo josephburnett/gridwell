@@ -136,15 +136,6 @@ func TestStreamViewportSizeClampsTo1(t *testing.T) {
 	}
 }
 
-func TestStreamLocalCoords(t *testing.T) {
-	r := pane.Rect{X: 100, Y: 200, W: 400, H: 300}
-	// borderPx=6 → content origin at (106, 206).
-	lx, ly := StreamLocalCoords(r, 6, 160, 270)
-	if lx != 54 || ly != 64 {
-		t.Errorf("StreamLocalCoords = (%v, %v), want (54, 64)", lx, ly)
-	}
-}
-
 func TestOvertakeZoomDegenerate(t *testing.T) {
 	// Inner box collapses to zero: returns 1 (caller should still
 	// be able to render at the natural scale rather than div-by-zero).

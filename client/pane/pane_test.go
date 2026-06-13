@@ -151,27 +151,6 @@ func TestSetRatio(t *testing.T) {
 	}
 }
 
-func TestTruncatePathTo(t *testing.T) {
-	known := map[int64]bool{1: true, 2: true, 3: true}
-	cases := []struct {
-		in   []int64
-		want []int64
-	}{
-		{nil, nil},
-		{[]int64{}, nil},
-		{[]int64{1, 2, 3}, []int64{1, 2, 3}},
-		{[]int64{1, 2, 99}, []int64{1, 2}},
-		{[]int64{1, 99, 99}, []int64{1}},
-		{[]int64{99, 99, 99}, nil},
-		{[]int64{99, 1}, []int64{99, 1}}, // trailing-valid: keeps everything since the deepest is valid
-	}
-	for _, c := range cases {
-		got := TruncatePathTo(c.in, known)
-		if !sliceEqual(got, c.want) {
-			t.Errorf("TruncatePathTo(%v) = %v, want %v", c.in, got, c.want)
-		}
-	}
-}
 
 // TestSetFocusUnknown returns an error.
 func TestSetFocusUnknown(t *testing.T) {
@@ -179,18 +158,6 @@ func TestSetFocusUnknown(t *testing.T) {
 	if err := tr.SetFocus("nope"); err == nil {
 		t.Error("expected error")
 	}
-}
-
-func sliceEqual(a, b []int64) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func TestCloneCarriesTextFields(t *testing.T) {
@@ -252,7 +219,7 @@ func TestSplitOnSideTopAndBottom(t *testing.T) {
 	for _, c := range cases {
 		tr := NewTree()
 		first := tr.FocusedPane().ID
-		newP, err := tr.SplitOnSide(c.side)
+		newP, err := tr.SplitOnSideAt(c.side, 0.5)
 		if err != nil {
 			t.Fatalf("side %v: %v", c.side, err)
 		}

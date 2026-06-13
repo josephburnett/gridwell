@@ -91,18 +91,6 @@ func TestAnimationAt(t *testing.T) {
 	}
 }
 
-func TestDistance(t *testing.T) {
-	if !near(Distance(0, 0, 3, 4), 5) {
-		t.Errorf("3-4-5 triangle")
-	}
-	if !near(Distance(0, 0, 0, 0), 0) {
-		t.Errorf("zero distance")
-	}
-	if !near(Distance(-1, -1, 2, 3), 5) {
-		t.Errorf("negative origin")
-	}
-}
-
 func TestSplitN(t *testing.T) {
 	// Three phases, equal distances → equal times.
 	got := SplitN([]float64{1, 1, 1}, 300)
@@ -137,34 +125,6 @@ func TestSplitN(t *testing.T) {
 	// Empty input.
 	if got := SplitN(nil, 100); len(got) != 0 {
 		t.Errorf("empty: %v", got)
-	}
-}
-
-func TestSplitDuration(t *testing.T) {
-	// Equal distances: 50/50.
-	a, b := SplitDuration(1, 1, 100)
-	if !near(a, 50) || !near(b, 50) {
-		t.Errorf("equal split: a=%v b=%v", a, b)
-	}
-	// Phase 1 dominates: it gets most of the time.
-	a, b = SplitDuration(9, 1, 100)
-	if !near(a, 90) || !near(b, 10) {
-		t.Errorf("9:1 split: a=%v b=%v", a, b)
-	}
-	// Both zero: all time in phase 2.
-	a, b = SplitDuration(0, 0, 100)
-	if a != 0 || b != 100 {
-		t.Errorf("0:0 split: a=%v b=%v", a, b)
-	}
-	// Phase 1 zero: phase 2 gets all.
-	a, b = SplitDuration(0, 1, 100)
-	if !near(a, 0) || !near(b, 100) {
-		t.Errorf("0:1 split: a=%v b=%v", a, b)
-	}
-	// Sum stays equal to totalMs.
-	a, b = SplitDuration(7, 3, 350)
-	if !near(a+b, 350) {
-		t.Errorf("sum drift: a+b=%v want 350", a+b)
 	}
 }
 

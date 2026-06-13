@@ -67,29 +67,6 @@ func (a Animation) At(nowMs float64) (x, y float64, done bool) {
 	return
 }
 
-// Distance returns the Euclidean distance between two points.
-func Distance(x1, y1, x2, y2 float64) float64 {
-	dx, dy := x2-x1, y2-y1
-	return math.Sqrt(dx*dx + dy*dy)
-}
-
-// SplitDuration apportions totalMs between two phases by their relative
-// distances. If both distances are tiny, all the time goes to phase 2.
-//
-// Used by the client's two-phase ascent animation so the perceived speed
-// stays uniform across the path-switch boundary even when one of the
-// phases has nothing to do (e.g. the user didn't move in the child grid
-// before pressing Esc, so phase 1 has zero log-zoom distance).
-func SplitDuration(d1, d2, totalMs float64) (a, b float64) {
-	if d1+d2 < 1e-6 {
-		return 0, totalMs
-	}
-	r := d1 / (d1 + d2)
-	a = totalMs * r
-	b = totalMs - a
-	return
-}
-
 // SplitN apportions totalMs across an arbitrary number of phases by their
 // relative distances. Phases with sub-epsilon distance get zero time. If
 // every phase has zero distance, the time is divided equally so the

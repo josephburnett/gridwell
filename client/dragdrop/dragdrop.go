@@ -45,19 +45,6 @@ func (p Pane) CellAt(sx, sy float64) (int64, int64) {
 	return int64(math.Floor(cx)), int64(math.Floor(cy))
 }
 
-// PaneAt returns the pane (by index) under (sx, sy) given an ordered slice
-// of pane rectangles. Returns -1 if no pane covers the point. Panes are
-// expected to be axis-aligned and non-overlapping.
-func PaneAt(panes []Pane, sx, sy float64) int {
-	for i, p := range panes {
-		if sx >= p.ScreenX && sy >= p.ScreenY &&
-			sx < p.ScreenX+p.ScreenW && sy < p.ScreenY+p.ScreenH {
-			return i
-		}
-	}
-	return -1
-}
-
 // SnapToCell rounds a floating-cell coordinate to the nearest whole cell.
 // We round-half-down (floor + 0.5) so a drag exactly on the boundary lands
 // in the lower-numbered cell. This matches typical UI expectations where
@@ -105,34 +92,6 @@ func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
 // each clone visible.
 func HiddenMatch(hiddenTileID int64, hiddenPaneID, currentPaneID string, tileID int64) bool {
 	return hiddenTileID != 0 && hiddenPaneID == currentPaneID && tileID == hiddenTileID
-}
-
-// EdgeBand returns the suggested edge-band thickness in pixels for the
-// pane: a fixed 80 px on large panes, but never more than 12% of the
-// pane's smaller dimension so the band never swallows a tiny pane.
-//
-// Used by the client to decide whether a right-click is "on the edge"
-// (which means ascend) vs. "in the middle" (which targets a tile or
-// is a no-op).
-func EdgeBand(p Pane) float64 {
-	smaller := p.ScreenW
-	if p.ScreenH < smaller {
-		smaller = p.ScreenH
-	}
-	cap := smaller * 0.12
-	if cap < 80 {
-		return cap
-	}
-	return 80
-}
-
-// IsInEdgeZone reports whether (x, y) is within `band` pixels of any
-// edge of pane p.
-func IsInEdgeZone(p Pane, x, y, band float64) bool {
-	return x-p.ScreenX < band ||
-		(p.ScreenX+p.ScreenW)-x < band ||
-		y-p.ScreenY < band ||
-		(p.ScreenY+p.ScreenH)-y < band
 }
 
 // ChildPreview describes a well's child-grid preview as drawn inside
@@ -183,22 +142,6 @@ func (cp ChildPreview) CellToScreen(cx, cy float64) (float64, float64) {
 // hits a tile inside a well preview.
 func TileContainsCell(x, y, w, h, cx, cy int64) bool {
 	return cx >= x && cx < x+w && cy >= y && cy < y+h
-}
-
-// FootprintFits reports whether a (w, h)-sized footprint at (x, y) fits
-// inside the pane's framed rectangle. The framed rect is computed from the
-// pane's screen size, zoom, and viewport center. Used by the client to gray
-// out drop targets before shipping any RPC.
-func (p Pane) FootprintFits(x, y, w, h int64) bool {
-	cellSize := p.CellPx * p.Zoom
-	visibleW := p.ScreenW / cellSize
-	visibleH := p.ScreenH / cellSize
-	left := p.Cx - visibleW/2
-	right := p.Cx + visibleW/2
-	top := p.Cy - visibleH/2
-	bottom := p.Cy + visibleH/2
-	return float64(x) >= left && float64(x+w) <= right &&
-		float64(y) >= top && float64(y+h) <= bottom
 }
 
 // InTileCenter reports whether the cell-space point (cellX, cellY) lies

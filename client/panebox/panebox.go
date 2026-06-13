@@ -106,12 +106,3 @@ func StreamViewportSize(r pane.Rect, borderPx float64) (int64, int64) {
 	}
 	return int64(w), int64(h)
 }
-
-// StreamLocalCoords translates a screen point (sx, sy) into the
-// pane's content-box-local coordinate space — the space the Chromium
-// tab thinks it's painting in (content size = viewport size, so just
-// an origin shift).
-func StreamLocalCoords(r pane.Rect, borderPx, sx, sy float64) (float64, float64) {
-	b := ContentBox(r, borderPx)
-	return sx - b.X, sy - b.Y
-}

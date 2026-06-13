@@ -54,14 +54,6 @@ func (c *Cache) Blob(blobID int64) ([]byte, bool) {
 	return b, ok
 }
 
-// InvalidateBlob removes a blob from the cache so the next render forces a
-// refetch. Called after the client itself writes new content for the file.
-func (c *Cache) InvalidateBlob(blobID int64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.blobs, blobID)
-}
-
 // PutGrid replaces a grid's metadata and tile set. Used after a fresh
 // GetGrid call.
 func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {

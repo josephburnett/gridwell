@@ -157,13 +157,6 @@ func (t *Tree) Count() int {
 // FocusedPane returns the focused pane, or nil if focus is invalid.
 func (t *Tree) FocusedPane() *Pane { return t.FindPane(t.Focus) }
 
-// SplitOnSide splits the focused pane 50/50 with the new pane on the
-// requested side, and moves focus to the new pane. Convenience wrapper
-// around SplitOnSideAt.
-func (t *Tree) SplitOnSide(side Side) (*Pane, error) {
-	return t.SplitOnSideAt(side, 0.5)
-}
-
 // SplitOnSideAt splits the focused pane such that the new pane occupies
 // the requested side at the given ratio of the parent split, and moves
 // focus to the new pane. The ratio is interpreted as "fraction of the
@@ -448,18 +441,3 @@ func setRatio(n *TreeNode, paneID string, ratio float64) bool {
 	return setRatio(&n.Split.B, paneID, ratio)
 }
 
-// TruncatePathTo returns prefix p truncated to the deepest still-valid prefix
-// given the set of currently-known well row ids. If the entire path is
-// invalid, returns nil (caller resets to root grid).
-//
-// "Valid" means the well id exists in known. The function does not validate
-// that the wells form a coherent chain — that's the server's job — it only
-// trims trailing ids that vanished.
-func TruncatePathTo(p []int64, known map[int64]bool) []int64 {
-	for i := len(p); i > 0; i-- {
-		if known[p[i-1]] {
-			return slices.Clone(p[:i])
-		}
-	}
-	return nil
-}
