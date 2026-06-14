@@ -96,15 +96,17 @@ dist: bin wasm node-modules
 
 # `make launch` is the one-shot dev run: build the sidecar + wasm, compile the
 # TS, and launch Electron against this repo's gridwell.db so your existing
-# grids are right there. --no-sandbox is required on WSL/Linux and harmless
-# elsewhere. Needs a prior `make vendor` for node_modules.
+# grids are right there. Runs WITH Chromium's OS sandbox on (this box's kernel
+# allows unprivileged user namespaces, so no setuid helper is needed) — live
+# URL tiles load untrusted web content, so the sandbox is the containment that
+# matters. Needs a prior `make vendor` for node_modules.
 #
 #   make launch                         # use ./gridwell.db
 #   make launch LAUNCH_DB=/path/to.db   # use another db
 LAUNCH_DB ?= $(CURDIR)/gridwell.db
 launch: build node-modules
 	cd $(DESKTOP) && npm run build && \
-		GRIDWELL_DB="$(LAUNCH_DB)" ./node_modules/.bin/electron . --no-sandbox
+		GRIDWELL_DB="$(LAUNCH_DB)" ./node_modules/.bin/electron .
 
 # node-modules guards the offline targets: if the desktop deps aren't present,
 # point the user at the single online bootstrap instead of silently reaching

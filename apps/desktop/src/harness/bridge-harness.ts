@@ -4,7 +4,7 @@
 // the preload bridge, which invokes ipcMain handlers, which drive the
 // registry. Proves preload exposure + IPC round-trip + capture/freeze.
 //
-//   npm run build && xvfb-run -a electron dist/harness/bridge-harness.js --no-sandbox
+//   npm run build && xvfb-run -a electron dist/harness/bridge-harness.js
 import { app, BaseWindow, WebContentsView } from 'electron';
 import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';

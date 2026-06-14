@@ -20,10 +20,12 @@ make launch LAUNCH_DB=/path.db   # against another db
 ```
 
 `make launch` builds the sidecar + wasm, compiles the TS, and runs Electron
-with `--no-sandbox` (required on WSL/Linux). The app spawns
-`<repo>/gridwell serve`, waits for it to listen on an ephemeral loopback port,
-and loads the renderer from there. The SQLite DB lives in Electron's `userData`
-dir unless `GRIDWELL_DB` overrides it.
+with Chromium's OS sandbox on (no `--no-sandbox`): live URL tiles load
+untrusted web content, so the sandbox is the containment that matters, and a
+modern Linux/WSL2 kernel with unprivileged user namespaces needs no setuid
+helper for it. The app spawns `<repo>/gridwell serve`, waits for it to listen
+on an ephemeral loopback port, and loads the renderer from there. The SQLite DB
+lives in Electron's `userData` dir unless `GRIDWELL_DB` overrides it.
 
 Overrides (env): `GRIDWELL_SIDECAR` (binary path), `GRIDWELL_STATIC`
 (web assets dir), `GRIDWELL_DB` (db path).
@@ -37,8 +39,10 @@ npm run test:integration  # xvfb: registry hosts a real WebContentsView + captur
 npm run test:bridge       # xvfb: full preload->ipcMain->registry->freeze path
 ```
 
-Launching the GUI needs a display (on a headless box, `xvfb-run -a
-electron . --no-sandbox`).
+Launching the GUI needs a display (on a display-less box, `xvfb-run -a
+electron .`). If a kernel ever lacks unprivileged user namespaces and Electron
+refuses to start, `--no-sandbox` is the escape hatch — but it disables the
+containment for untrusted URL-tile content, so prefer enabling user namespaces.
 
 ## How live URL tiles work
 

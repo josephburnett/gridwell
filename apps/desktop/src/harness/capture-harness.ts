@@ -3,7 +3,7 @@
 // data: URL, then asserts that (a) capturePage yields non-empty JPEG bytes
 // and (b) a nav event fires. Run with:
 //
-//   npm run build && xvfb-run -a electron dist/harness/capture-harness.js --no-sandbox
+//   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 //
 // Prints "HARNESS PASS" / "HARNESS FAIL: ..." and exits with 0/1.
 import { app, BaseWindow } from 'electron';
