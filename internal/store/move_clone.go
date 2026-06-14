@@ -10,30 +10,35 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// gridSourceKinds returns the source_kind values for two grids in one
-// pass. Empty string means a regular Gridwell-owned grid.
+// gridSourceKinds returns the source_kind values for two grids. Empty string
+// means a regular Gridwell-owned grid. The two grids may live in different
+// files (e.g. cloning a tile out of a cache-resident source grid into a main
+// grid), so each is looked up in its own schema.
 func (s *Store) gridSourceKinds(ctx context.Context, tx *sql.Tx, a, b int64) (string, string, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, COALESCE(source_kind, '') FROM grids WHERE id IN (?, ?)`, a, b)
+	ka, err := s.gridSourceKind(ctx, tx, a)
 	if err != nil {
 		return "", "", err
 	}
-	defer rows.Close()
-	var ka, kb string
-	for rows.Next() {
-		var id int64
-		var k string
-		if err := rows.Scan(&id, &k); err != nil {
-			return "", "", err
-		}
-		if id == a {
-			ka = k
-		}
-		if id == b {
-			kb = k
-		}
+	kb, err := s.gridSourceKind(ctx, tx, b)
+	if err != nil {
+		return "", "", err
 	}
-	return ka, kb, rows.Err()
+	return ka, kb, nil
+}
+
+// gridSourceKind returns one grid's source_kind ("" for a regular grid),
+// routed to whichever file the grid id lives in.
+func (s *Store) gridSourceKind(ctx context.Context, tx *sql.Tx, id int64) (string, error) {
+	var k sql.NullString
+	err := tx.QueryRowContext(ctx,
+		`SELECT source_kind FROM `+schemaOf(id)+`grids WHERE id = ?`, id).Scan(&k)
+	if err != nil {
+		return "", err
+	}
+	if k.Valid {
+		return k.String, nil
+	}
+	return "", nil
 }
 
 // MoveTile moves a tile either within its grid or across grids.

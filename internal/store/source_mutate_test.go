@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -206,7 +207,7 @@ func TestMoveCrossSourceGridRejected(t *testing.T) {
 	fileTile := g.Tiles[0]
 
 	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
-	if _, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
+	_, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
 		Path:    descentPath,
 		TileID:  fileTile.ID,
 		Version: fileTile.Version,
@@ -214,8 +215,12 @@ func TestMoveCrossSourceGridRejected(t *testing.T) {
 		DestGridID: root,
 		DestPath:   rpc.Path{},
 		X:          5, Y: 5,
-	}); err == nil {
-		t.Fatal("expected cross-grid move from fs-grid to be rejected")
+	})
+	// Must be rejected by the source-grid guard specifically — not by some
+	// incidental error. With source grids now in the cache file, this proves
+	// gridSourceKinds correctly identifies the cross-file source grid as 'fs'.
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("cross-grid move from fs-grid: err = %v, want ErrInvalidArgument", err)
 	}
 }
 
