@@ -59,13 +59,6 @@ const (
 	// cell) defines the moving corner. New footprint = bounding box of
 	// (pin, cursor) with each side >= 1. Pin can be crossed mid-drag.
 	rightDragTileResize
-	// rightDragURLRefresh is armed when right-down lands anywhere in
-	// the content area of a pane that is descended into a URL tile.
-	// Dragging downward past urlRefreshThresholdPx commits the gesture
-	// on release, opening (or reopening) the live URL stream. Dragging
-	// back above the start point cancels. This is the "go live" gesture
-	// for URL tiles; drag upward or release before threshold to cancel.
-	rightDragURLRefresh
 	// rightDragEmbedHint is armed when right-down lands on a rendered
 	// tile-embed inside a text descent. Drag does nothing; release does
 	// nothing. The sole purpose is to surface the chain-link icon so the
@@ -79,13 +72,6 @@ const (
 	// middle button is the shortcut.
 	rightDragAscend
 )
-
-// urlRefreshThresholdPx is the downward drag distance (in screen pixels)
-// required to arm the "release to refresh" state of the URL refresh
-// gesture. 60 px ≈ one grid cell at the default zoom — large enough
-// that an accidental jitter won't commit a live session, but small
-// enough to feel responsive.
-const urlRefreshThresholdPx = 60.0
 
 // rightDragState carries everything the move and up handlers need to
 // finish (or cancel) the gesture. One discriminated struct keeps the
@@ -132,12 +118,6 @@ type rightDragState struct {
 	tileNewX, tileNewY       int64
 	tileNewW, tileNewH       int64
 
-	// rightDragURLRefresh-only. refreshTileID is the URL tile being
-	// refreshed; refreshPaneID is the pane it lives in. Committed on
-	// release when curY > startY + urlRefreshThresholdPx.
-	refreshTileID int64
-	refreshPaneID string
-
 	// rightDragEmbedHint-only. embedRect is the screen rectangle of the
 	// rendered tile-embed under the cursor; the chain-link glyph paints
 	// centered inside it.
@@ -166,8 +146,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	in := gesture.Input{
 		OnCornerCircle: pointInPlus(r, sx, sy),
 		CanAscend:      a.canAscend(p),
-		URLDescent:     a.isURLDescent(p),
-		InURLCenter:    pointInURLCenter(r, sx, sy),
 		InGridView:     p.TextFocus == 0,
 		Region:         pane.ClassifyRegion(r, resizeBandPx, sx, sy),
 	}
@@ -217,22 +195,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 			cursorInCircle: true,
 		}
 		a.draw()
-	case gesture.URLRefresh:
-		gid := a.gridIDForPath(p.Path)
-		if g, ok := a.c.Grid(gid); ok {
-			if t, ok := g.Tiles[p.TextFocus]; ok {
-				a.rightDrag = &rightDragState{
-					kind:          rightDragURLRefresh,
-					startX:        sx,
-					startY:        sy,
-					curX:          sx,
-					curY:          sy,
-					refreshTileID: t.ID,
-					refreshPaneID: p.ID,
-				}
-				a.draw()
-			}
-		}
 	case gesture.TileCenter, gesture.TileResize:
 		// armTileGesture re-derives center-vs-resize via dragdrop and arms
 		// the matching state (and primes the clone ghost for the center).
@@ -291,9 +253,6 @@ func (a *App) onRightMove(sx, sy float64) {
 		a.advanceCloneDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
-	case rightDragURLRefresh:
-		// No mid-drag mutation — the preview indicator is drawn in
-		// drawRightDragPreview; nothing changes in the tree until release.
 	case rightDragAscend:
 		// Track whether the cursor is still over the circle so the
 		// preview can show armed-vs-cancel, and release knows what to do.
@@ -407,8 +366,6 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitTileCenter(rd, sx, sy)
 	case rightDragTileResize:
 		a.commitTileResize(rd)
-	case rightDragURLRefresh:
-		a.commitURLRefresh(rd, sx, sy)
 	case rightDragEmbedHint:
 		// No-op: the gesture only existed to surface the chain-link glyph
 		// while the button was held. Release just clears it.
@@ -811,24 +768,6 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if np != nil && a.canAscend(np) {
 		a.ascendPane(np)
 	}
-}
-
-// commitURLRefresh commits the URL refresh gesture if the cursor was
-// dragged past urlRefreshThresholdPx downward from the right-down origin.
-// On commit, the live URL stream is opened for the descended tile.
-// Releasing before the threshold (or dragging back above origin) is a
-// silent cancel.
-func (a *App) commitURLRefresh(rd *rightDragState, sx, sy float64) {
-	_ = sx
-	if !gesture.URLRefreshArmed(rd.startY, sy, urlRefreshThresholdPx) {
-		// Threshold not reached — cancel silently.
-		return
-	}
-	p := a.tree.FindPane(rd.refreshPaneID)
-	if p == nil || p.TextFocus == 0 {
-		return
-	}
-	a.openURLStream(p, rd.refreshTileID)
 }
 
 // dividerOnSide returns the Divider directly adjacent to pane p on

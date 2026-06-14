@@ -71,15 +71,10 @@ func paneContentBox(r pane.Rect) (x, y, w, h float64) {
 	return b.X, b.Y, b.W, b.H
 }
 
-// pointInPaneContent / pointInURLCenter / pointInFileInner are thin
-// adapters over the panebox hit-tests, supplying the wasm renderer's
-// border / inset constants.
+// pointInPaneContent / pointInFileInner are thin adapters over the panebox
+// hit-tests, supplying the wasm renderer's border / inset constants.
 func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
 	return panebox.PointInContent(r, paneBorderPx, sx, sy)
-}
-
-func pointInURLCenter(r pane.Rect, sx, sy float64) bool {
-	return panebox.PointInURLCenter(r, paneBorderPx, sx, sy)
 }
 
 func pointInFileInner(_ *pane.Pane, r pane.Rect, sx, sy float64) bool {

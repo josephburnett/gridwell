@@ -30,9 +30,6 @@ const (
 	// has somewhere to ascend to. Release inside the circle ascends;
 	// dragging out cancels.
 	Ascend
-	// URLRefresh is armed in the content area of a URL descent. A downward
-	// drag past the threshold goes live on release.
-	URLRefresh
 	// TileCenter is the clone grab handle: armed in a tile's inner third.
 	// Drag past the threshold clones; bare release is a no-op.
 	TileCenter
@@ -66,13 +63,6 @@ type Input struct {
 	OnCornerCircle bool
 	CanAscend      bool
 
-	// URLDescent is true when the pane is descended into a URL tile;
-	// InURLCenter is true when the cursor is in the inner content area
-	// (the edges stay available for pane management). Together they arm
-	// URLRefresh.
-	URLDescent  bool
-	InURLCenter bool
-
 	// InGridView is true when the pane shows a grid (p.TextFocus == 0) —
 	// tile gestures are only valid there. OverTile is true when the cursor
 	// is over a tile; InTileCenter is true when it's in that tile's inner
@@ -99,8 +89,6 @@ func Classify(in Input) Kind {
 		return EmbedHint
 	case in.OnCornerCircle && in.CanAscend:
 		return Ascend
-	case in.URLDescent && in.InURLCenter:
-		return URLRefresh
 	case in.InGridView && in.OverTile:
 		if in.InTileCenter {
 			return TileCenter
@@ -171,11 +159,4 @@ func ResizeOutcome(container pane.Rect, dir pane.Direction, sx, sy, closeThresho
 		return ratio, CollapseB
 	}
 	return ratio, CollapseNone
-}
-
-// URLRefreshArmed reports whether a URLRefresh gesture has been dragged
-// far enough downward from its origin to go live on release. Releasing
-// before the threshold (or above the origin) is a silent cancel.
-func URLRefreshArmed(startY, curY, thresholdPx float64) bool {
-	return curY >= startY+thresholdPx
 }

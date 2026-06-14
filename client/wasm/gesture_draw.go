@@ -44,9 +44,6 @@ func (a *App) drawRightDragPreview() {
 	case rightDragTileResize:
 		a.drawTileHotspotOverlay(rd)
 		a.drawTileResizePreview(rd)
-	case rightDragURLRefresh:
-		a.drawPaneHotspotOverlay(rd)
-		a.drawURLRefreshPreview(rd)
 	case rightDragEmbedHint:
 		a.drawEmbedHintOverlay(rd)
 	case rightDragAscend:
@@ -101,52 +98,16 @@ func (a *App) drawEmbedHintOverlay(rd *rightDragState) {
 	drawGhostLinkBadge(c, x+w/2, y+h/2, min(w, h))
 }
 
-// drawURLRefreshPreview paints the refresh gesture hint inside a URL-descent
-// pane. No text, no pill, no horizontal bar.
-//
-// Only the dynamic grey progress fill is drawn here; the static refresh icon
-// comes from drawPaneHotspotOverlay which is painted beneath this.
-func (a *App) drawURLRefreshPreview(rd *rightDragState) {
-	const iconRadius = 14.0
-	const iconGap = 4.0 // gap between icon bottom and rect top
-	const rectW = 100.0 // width of the growing rectangle
-
-	past := rd.curY > rd.startY+urlRefreshThresholdPx
-
-	fillColor := "rgba(108,111,120,0.37)"
-	if past {
-		fillColor = "rgba(160,122,204,0.37)"
-	}
-
-	// Growing rectangle: top edge sits just below the icon bottom.
-	draggedDown := rd.curY - rd.startY
-	if draggedDown < 0 {
-		draggedDown = 0
-	}
-	if draggedDown > urlRefreshThresholdPx {
-		draggedDown = urlRefreshThresholdPx
-	}
-	rectTop := rd.startY + iconRadius + iconGap
-	rectH := draggedDown
-	if rectH > 0 {
-		a.cctx.Set("fillStyle", fillColor)
-		a.cctx.Call("fillRect",
-			rd.startX-rectW/2, rectTop,
-			rectW, rectH)
-	}
-}
-
 // drawPaneHotspotOverlay paints the affordance overlay for pane-management
-// gestures (split / swap / resize / urlRefresh). Mirrors drawTileHotspotOverlay
-// for the pane level. Strictly grey and informational — the active gesture's
-// own preview paints on top.
+// gestures (split / swap / resize). Mirrors drawTileHotspotOverlay for the
+// pane level. Strictly grey and informational — the active gesture's own
+// preview paints on top.
 //
 // Layout:
 //   - Outer rectangle outline: the pane's inner content area (inset by paneBorderPx).
-//   - Inner-third rectangle outline: the center 1/3 × 1/3 zone (matches ClassifyRegion
-//     swap zone and URL refresh zone).
+//   - Inner-third rectangle outline: the center 1/3 × 1/3 swap zone.
 //   - Four cardinal split arrows, one per outer-edge band, pointing outward.
-//   - Center glyph: refresh icon for URL descents; swap arrows otherwise.
+//   - Center glyph: swap arrows — the same for every pane, URL descents included.
 func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	// Resolve the pane and its rect based on the gesture kind.
 	var paneID string
@@ -157,8 +118,6 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 		paneID = rd.originPaneID
 	case rightDragResize:
 		paneID = rd.originPaneID
-	case rightDragURLRefresh:
-		paneID = rd.refreshPaneID
 	default:
 		return
 	}
@@ -169,7 +128,6 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	if pr.W <= 0 || pr.H <= 0 {
 		return
 	}
-	p := a.tree.FindPane(paneID)
 
 	inset := paneBorderPx
 	r := pane.Rect{
@@ -190,7 +148,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	// Outer rectangle outline.
 	a.cctx.Call("strokeRect", r.X+0.5, r.Y+0.5, r.W-1, r.H-1)
 
-	// Inner-third rectangle outline (matches swap / URL-refresh zone).
+	// Inner-third rectangle outline (the swap zone).
 	innerX := r.X + r.W/3
 	innerY := r.Y + r.H/3
 	innerW := r.W / 3
@@ -213,14 +171,11 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	drawHotspotArrow(a.cctx, r.X+w/6, r.Y+h/2, -arrow, 0)  // left
 	drawHotspotArrow(a.cctx, r.X+w-w/6, r.Y+h/2, arrow, 0) // right
 
-	// Center glyph.
+	// Center glyph: swap, the same on every pane (a URL descent is no
+	// longer special — go-live lives on the corner circle).
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
-	if p != nil && a.isURLDescent(p) {
-		drawRefreshIcon(a.cctx, cx, cy, 14.0, colorMuted)
-	} else {
-		drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
-	}
+	drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
 
 	a.cctx.Set("lineCap", "butt")
 	a.cctx.Set("lineJoin", "miter")

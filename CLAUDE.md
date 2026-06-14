@@ -60,8 +60,8 @@ All three read the same stored state, so they agree:
 - **Move** — left-drag a tile. **Clone** — right-drag from a tile's center. **Resize** — right-drag a tile's outer ring.
 - **Delete** — drag a tile onto a blackhole (left or right drag).
 - **Create** — drag from the palette. **Pan** — left-drag empty space. **Zoom / text-scroll** — wheel.
-- **Refresh URL/shell** — right-drag down inside the descent (goes live if frozen, reloads if already live).
-- **Split / swap / resize / close pane** — right-drag in the pane regions; a new split auto-ascends one level. Left-drag a pane boundary resizes but never closes (live tiles stay put).
+- **Go live / refresh URL/shell** — left-click the descent's corner circle (frozen → goes live). The right button is reserved for the universal pane gestures, so a URL/shell descent has no special center behavior — its center is swap, like every pane.
+- **Split / swap / resize / close pane** — right-drag in the pane regions; a new split auto-ascends one level. Left-drag a pane boundary resizes but never closes (live tiles stay put). A live overlay is transparent to the right button (it forwards the gesture to the canvas and parks itself) — shell does this today via its DOM overlay; the native URL view will via the Electron bridge (R5).
 
 Every gesture shows a live preview of the action and where it lands before release, plus a neutral cancel zone (Esc is only a fallback). Right-click held stationary reveals what's available — the user should never have to remember a gesture. Text tiles take keyboard input (editing); URL tiles forward keys to the page; the canvas itself reads no modifiers.
 

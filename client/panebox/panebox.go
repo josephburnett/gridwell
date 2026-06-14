@@ -35,20 +35,6 @@ func PointInContent(r pane.Rect, borderPx, sx, sy float64) bool {
 	return b.Contains(sx, sy)
 }
 
-// PointInURLCenter reports whether (sx, sy) lies inside the middle
-// 1/3 × 1/3 of the content box. Used to restrict the URL refresh
-// gesture's arm zone to the center of the content area, so right-
-// clicks in the outer band still reach the split / swap / resize
-// region classifier.
-func PointInURLCenter(r pane.Rect, borderPx, sx, sy float64) bool {
-	b := ContentBox(r, borderPx)
-	x1 := b.X + b.W/3
-	x2 := b.X + 2*b.W/3
-	y1 := b.Y + b.H/3
-	y2 := b.Y + 2*b.H/3
-	return sx >= x1 && sx < x2 && sy >= y1 && sy < y2
-}
-
 // TextareaBox returns the file-overlay textarea rectangle and its
 // rendered font size, both at the application's fixed text scale.
 // `sideInset` is the gap between the pane edge and the text content;

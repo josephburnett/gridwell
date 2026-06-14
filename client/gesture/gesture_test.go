@@ -42,7 +42,6 @@ func TestClassifyPriority(t *testing.T) {
 			in: Input{
 				OverEmbed:      true,
 				OnCornerCircle: true, CanAscend: true,
-				URLDescent: true, InURLCenter: true,
 				InGridView: true, OverTile: true, InTileCenter: true,
 				Region: swap,
 			},
@@ -52,7 +51,6 @@ func TestClassifyPriority(t *testing.T) {
 			name: "corner circle ascends when can-ascend",
 			in: Input{
 				OnCornerCircle: true, CanAscend: true,
-				URLDescent: true, InURLCenter: true,
 				InGridView: true, OverTile: true,
 				Region: swap,
 			},
@@ -65,23 +63,6 @@ func TestClassifyPriority(t *testing.T) {
 				Region: swap,
 			},
 			want: Swap,
-		},
-		{
-			name: "url center refresh beats tile and region",
-			in: Input{
-				URLDescent: true, InURLCenter: true,
-				InGridView: true, OverTile: true,
-				Region: swap,
-			},
-			want: URLRefresh,
-		},
-		{
-			name: "url descent but on an edge (not center) falls to region",
-			in: Input{
-				URLDescent: true, InURLCenter: false,
-				Region: split,
-			},
-			want: Split,
 		},
 		{
 			name: "tile center is the clone handle",
@@ -190,28 +171,6 @@ func TestResizeOutcome(t *testing.T) {
 			}
 			if ratio < 0 || ratio > 1 {
 				t.Errorf("ratio = %v, want in [0,1]", ratio)
-			}
-		})
-	}
-}
-
-func TestURLRefreshArmed(t *testing.T) {
-	const threshold = 60.0
-	tests := []struct {
-		name         string
-		startY, curY float64
-		want         bool
-	}{
-		{"no movement", 100, 100, false},
-		{"upward drag", 100, 40, false},
-		{"down but short of threshold", 100, 150, false},
-		{"down exactly at threshold", 100, 160, true},
-		{"down well past threshold", 100, 300, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := URLRefreshArmed(tt.startY, tt.curY, threshold); got != tt.want {
-				t.Errorf("URLRefreshArmed(%v,%v) = %v, want %v", tt.startY, tt.curY, got, tt.want)
 			}
 		})
 	}

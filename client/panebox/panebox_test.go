@@ -52,27 +52,6 @@ func TestPointInContent(t *testing.T) {
 	}
 }
 
-func TestPointInURLCenter(t *testing.T) {
-	r := pane.Rect{X: 0, Y: 0, W: 90, H: 90}
-	// borderPx=0 → content == pane; inner third is [30,60) × [30,60).
-	cases := []struct {
-		sx, sy float64
-		want   bool
-	}{
-		{45, 45, true},
-		{30, 30, true},  // inclusive
-		{60, 45, false}, // edge of inner third
-		{29, 45, false},
-		{45, 75, false},
-	}
-	for _, c := range cases {
-		got := PointInURLCenter(r, 0, c.sx, c.sy)
-		if got != c.want {
-			t.Errorf("PointInURLCenter(%v, %v) = %v, want %v", c.sx, c.sy, got, c.want)
-		}
-	}
-}
-
 func TestTextareaBox(t *testing.T) {
 	r := pane.Rect{X: 100, Y: 200, W: 400, H: 300}
 	got, fontPx := TextareaBox(r, 6, 14, 1)
