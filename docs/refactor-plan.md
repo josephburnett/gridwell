@@ -328,16 +328,17 @@ The only remaining item with no UI risk — compiler-verified, behavior-preservi
       proof); still, land one group per commit so any surprise is bisectable.
 - Watch out: `cctx`, `cl`, `tree`, `c` are referenced 200+ times each — biggest seds.
 
-### R2 — Right-button gesture classifier → pure `client/gesture`  *(3d)*
-- [ ] **Pure (autonomous):** define `gesture` package. Inputs = (region from
-      `pane.ClassifyRegion`, tile geometry, button, down/cur positions) → typed `Kind`; on
-      release → typed `Outcome` sum type (`Split{side,ratio}`, `Swap`, `Resize{ratio,
-      collapse}`, `TileResize{x,y,w,h}`, `Clone`, `Delete`, `Ascend`, `URLRefresh`,
-      `Cancel`, `None`). Compose the *already-tested* pieces (`pane.ClassifyRegion/
-      SplitClampedPosition/RatioFromCursor/ClampRatioToMinPx`, `dragdrop.Resize*`). Table-test
-      classifier + every outcome's math (degenerate/collapse/crossover).
-- [ ] **Wiring (visual check):** rewire `onRightDown`/`onRightMove`/`finishRightDrag` to call
-      the pure classifier/outcome and only *apply* the result. `gesture_draw.go` stays.
+### R2 — Right-button gesture classifier → pure `client/gesture`  *(3d)*  — wiring landed, awaiting visual check
+- [x] **Pure (autonomous):** `client/gesture` package. `Classify(Input) Kind` orders the
+      resolved facts (embed > corner-circle ascend > URL-center refresh > tile center/resize >
+      pane region resize/swap/split); `SplitOutcome`/`ResizeOutcome`/`URLRefreshArmed` resolve
+      the pure-math gestures on release, composing the already-tested `pane.*` helpers.
+      Table-tested (priority ordering, split ratio, collapse A/B/none, refresh threshold).
+      Clone/delete drop resolution intentionally deferred to R3, not duplicated here.
+- [x] **Wiring (visual check pending):** `onRightDown` resolves facts once then dispatches on
+      `gesture.Classify`; `commitSplit`/`commitResize`/`commitURLRefresh` call the resolvers.
+      Verified behavior-preserving (dead URL-miss fallthrough removed). `gesture_draw.go` and
+      live mid-drag previews unchanged.
 - **Visual check:** over a tile — clone (center right-drag), resize (ring right-drag),
   delete (drag onto blackhole). Over a pane — split (each of 4 edges), swap, resize to
   collapse, ascend (corner circle + drag-out cancel), URL-refresh (down-drag in a URL descent).
