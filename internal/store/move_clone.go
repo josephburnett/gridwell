@@ -116,7 +116,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		}
 
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE `+schemaOf(tileID)+`tiles SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
 			dstGrid, req.X, req.Y, s.now().Unix(), tileID); err != nil {
 			return err
 		}
@@ -255,7 +255,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			// no kind-specific state
 		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
+			INSERT INTO `+schemaOf(dstGrid)+`tiles (object_id, version, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id,
 				text_x, text_y, text_w, text_h, text_mode, blob_id,
 				url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
@@ -323,7 +323,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		// alongside (a separate statement from the blob kernel).
 		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE `+schemaOf(pre.TargetTileID)+`tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
 			alt, s.now().Unix(), pre.TargetTileID); err != nil {
 			return err
 		}

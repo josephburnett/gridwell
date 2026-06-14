@@ -127,7 +127,7 @@ func (s *Store) deleteSourceTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, p
 // step, factored out so deleteSourceTile can call it without
 // duplicating the cleanup logic.
 func (s *Store) dropTileRow(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events *[]rpc.Event) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM `+schemaOf(t.ID)+`tiles WHERE id = ?`, t.ID); err != nil {
 		return err
 	}
 	if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridID, t.BlobID, t.PreviewBlobID); err != nil {

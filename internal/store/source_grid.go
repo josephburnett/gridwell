@@ -281,7 +281,7 @@ func desiredFSTileKind(e fssource.Entry) string {
 // Used only when reconciling source grids — regular grids don't set
 // source_key.
 func loadFSGridTilesByName(ctx context.Context, q gridReader, gridID int64) (map[string]*rpc.Tile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ?`, gridID)
+	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM `+schemaOf(gridID)+`tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 		// reconciler's dedup key (identity) and alt_text is the
 		// client-rendered label — keep the roles separate.
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO `+schemaOf(gridID)+`tiles (object_id, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id, fs_path, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'file-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
@@ -372,7 +372,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 	// content. blob_id stays NULL — the relaxed text-kind CHECK allows
 	// it.
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+		INSERT INTO `+schemaOf(gridID)+`tiles (object_id, grid_id, kind, x, y, w, h,
 			source_key, alt_text, created_at, updated_at)
 		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?, ?)`,
 		objID, gridID, pos.x, pos.y, e.Name, e.Name, now, now)
@@ -397,7 +397,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 // populated, or a process renamed itself between reconciles).
 func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64, altText string, now int64, events *[]rpc.Event) error {
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE `+schemaOf(tileID)+`tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
 		altText, now, tileID); err != nil {
 		return fmt.Errorf("update tile alt_text: %w", err)
 	}
@@ -413,7 +413,7 @@ func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64,
 // decrementing the child grid or blob refcount as appropriate. Mirrors
 // the kind-aware cleanup that DeleteTile does for regular tiles.
 func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events *[]rpc.Event) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM `+schemaOf(t.ID)+`tiles WHERE id = ?`, t.ID); err != nil {
 		return err
 	}
 	// Release every reference this row held through the single table-driven
@@ -434,13 +434,13 @@ func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, e
 // same blob row.
 func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64, pos position, body []byte, now int64, events *[]rpc.Event) error {
 	hash := hashBytes(body)
-	blobID, err := s.putBlob(ctx, tx, hash, body, mediaMarkdown)
+	blobID, err := s.putBlob(ctx, tx, schemaOf(gridID), hash, body, mediaMarkdown)
 	if err != nil {
 		return err
 	}
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+		INSERT INTO `+schemaOf(gridID)+`tiles (object_id, grid_id, kind, x, y, w, h,
 			blob_id, source_key, alt_text, created_at, updated_at)
 		VALUES (?, ?, 'text', ?, ?, 1, 1, ?, '@info', ?, ?, ?)`,
 		objID, gridID, pos.x, pos.y, blobID, rpc.AltInfo, now, now)
@@ -500,7 +500,7 @@ func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int6
 	// are the only per-parent unique identifier (two children can share
 	// Name="bash").
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+		INSERT INTO `+schemaOf(gridID)+`tiles (object_id, grid_id, kind, x, y, w, h,
 			view_x, view_y, view_zoom, child_grid_id, pid, source_key,
 			alt_text, created_at, updated_at)
 		VALUES (?, ?, 'process-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,

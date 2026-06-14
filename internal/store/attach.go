@@ -21,6 +21,18 @@ const cacheIDBase = 1_000_000_000_000
 // cache database rather than the durable main database.
 func isCacheID(id int64) bool { return id >= cacheIDBase }
 
+// schemaOf returns the SQL schema prefix ("" for the durable main database,
+// "cache." for the attached ephemeral one) that a grid/tile/blob id lives in.
+// Every id-keyed query interpolates it before the (unqualified) table name so
+// the one connection routes to the right file. Because cache ids are seeded
+// above cacheIDBase, the id alone says which file a row is in.
+func schemaOf(id int64) string {
+	if isCacheID(id) {
+		return "cache."
+	}
+	return ""
+}
+
 // cacheDBPath derives the ephemeral cache file that sits beside the durable
 // main DB: gridwell.db -> gridwell-cache.db. An in-memory main DB gets an
 // independent in-memory cache (ATTACH ':memory:' opens a distinct database).
