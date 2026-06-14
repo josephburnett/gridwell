@@ -48,7 +48,37 @@ id spaces would collide (both start at 1). To keep every id self-routing, the
 JSON/JS-safe integer ceiling the wasm client relies on). The client treats
 all ids uniformly; it never needs to know there are two files. The server
 routes each `loadGrid` / `loadTile` / `GetBlob` to the right schema by id
-range.
+range (`tilesTbl(id)` / `gridsTbl(id)` / `blobsTbl(id)` pick `main` or
+`cache.`).
+
+### How an exit well points across the file boundary (stage 2b mechanics)
+
+A `file-well` / `process-well` in a *main* grid keeps storing its child
+source-grid id in `child_grid_id` — but that id now names a **cache** grid
+(≥ `cacheIDBase`). So:
+
+- The `tiles.child_grid_id` **foreign key is dropped** (SQLite can't FK across
+  attached files; a regular `well`'s child is still a main grid, and the
+  refcount machinery + property test remain its integrity net).
+- The wire is unchanged: `child_grid_id` stays populated, so the client
+  descends exactly as before; `GetGrid(childId)` routes to the cache file.
+- Cache source grids are **create-on-demand and never individually GC'd**
+  (`getOrCreateSourceGrid` = find-or-create; cache is disposable, so an
+  orphaned source grid is harmless and cleared by deleting the cache file).
+  Exit wells therefore do **not** refcount their child source grid
+  (`tileRefs` returns no grid ref for them — only their durable preview blob);
+  only regular `well`s refcount their main child grid.
+- **Self-heal across a cache wipe:** because cache persists across runs, a
+  stored `child_grid_id` normally stays valid. If the cache file is deleted
+  and rebuilt, a stale `child_grid_id` won't resolve; navigation
+  (`buildGridSequence`) detects the miss, re-resolves the source grid by
+  identity (`fs_path` / `pid` → `getOrCreateSourceGrid`), and rewrites
+  `child_grid_id` to the fresh cache id. Identity (`fs_path` / `pid`), not the
+  id, is the durable link.
+
+Reconciler writes (the synthesized file/dir/process tiles, the `@info`
+markdown blob) all target the cache schema, keyed off the source grid's cache
+id. The main file thus only ever holds authored content + durable previews.
 
 ## The durability rule
 
@@ -194,10 +224,17 @@ framework is built but carries no historical migrations yet.
    are the canonical identity/version.)
 1. **Timestamps & blob self-description.** `grids.updated_at`, `blobs.created_at`,
    `blobs.media_type`; plumb `media_type` at every `putBlob` call.
-2. **Physical separation.** ATTACH `gridwell-cache.db`; seed cache id base;
-   move `fs`/`proc` grids + their tiles + arrangement into the cache file;
-   resolve exit-well child grids by identity; route loads/reconcile/navigation
-   by id range. The largest stage.
+2. **Physical separation.** The largest stage, split:
+   - **2a (done).** ATTACH `gridwell-cache.db`; prefix-parameterized table
+     DDL; seed cache id base; id-range partitioning (`isCacheID`). No behavior
+     change yet.
+   - **2b.** Route `getOrCreateSourceGrid` and the reconciler into the cache
+     schema so `fs`/`proc` grids + their tiles + arrangement + `@info` blobs
+     live in the cache file; drop the `child_grid_id` FK; range-route every
+     id-keyed load / refcount / blob op (`tilesTbl`/`gridsTbl`/`blobsTbl`);
+     stop refcounting source grids from exit wells; add self-healing
+     re-resolution in `buildGridSequence` for a wiped cache. (Mechanics
+     above.) Gated by the existing source-grid + COW property tests.
 3. **Durable exit-well previews (format).** Relax the `tiles` `CHECK` so
    `file-well` / `process-well` rows in regular grids may hold a
    `preview_blob_id`; render the frozen preview as the fallback when the host
