@@ -66,16 +66,28 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("open: %w", err)
 	}
 	// SQLite is single-writer at the file level; one connection eliminates
-	// contention and gives deterministic transaction interleaving.
+	// contention and gives deterministic transaction interleaving. It also
+	// keeps the attached cache database (below) bound to this one connection.
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(Schema); err != nil {
+	if _, err := db.Exec(pragmas); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply pragmas: %w", err)
+	}
+	if _, err := db.Exec(systemDDL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply system schema: %w", err)
+	}
+	if _, err := db.Exec(tablesDDL("")); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+	// Attach the ephemeral cache database beside the durable main one. The
+	// main file stays independently copyable as an archive; projected host
+	// state (fs/proc grids + their arrangement) lives in the cache file.
+	if err := attachCache(context.Background(), db, path); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
+		return nil, err
 	}
 	s := &Store{
 		db:         db,
