@@ -92,23 +92,25 @@ func processWellAlt(pid int64) string {
 	return fmt.Sprintf("pid %d", pid)
 }
 
-// getOrCreateSourceGrid returns the grid_id of the singleton grid for
-// (sourceKind, sourceID), creating one if necessary. The UNIQUE INDEX
-// on (source_kind, source_id) WHERE source_kind IS NOT NULL guards
-// against duplicate inserts under concurrent callers — the second one
-// races and falls through to the SELECT.
+// getOrCreateSourceGrid returns the cache grid_id of the singleton source
+// grid for (sourceKind, sourceID), creating it if necessary. Source grids
+// are projected host state, so they live in the ephemeral cache database, not
+// the durable main one. The UNIQUE INDEX on (source_kind, source_id) guards
+// against duplicate inserts under concurrent callers.
+//
+// Cache source grids are shared by identity (path / PID) and are NOT
+// refcounted: the cache is disposable, so an orphaned source grid is harmless
+// and is cleared when the cache file is deleted (see docs/storage-format.md).
+// An exit well in the main DB therefore just stores this id in child_grid_id
+// (a soft cross-file pointer, no FK), and Open re-resolves it if the cache was
+// wiped.
 func (s *Store) getOrCreateSourceGrid(ctx context.Context, tx *sql.Tx, sourceKind, sourceID string, now int64) (int64, error) {
 	var existing int64
 	err := tx.QueryRowContext(ctx,
-		`SELECT id FROM grids WHERE source_kind = ? AND source_id = ?`,
+		`SELECT id FROM cache.grids WHERE source_kind = ? AND source_id = ?`,
 		sourceKind, sourceID,
 	).Scan(&existing)
 	if err == nil {
-		// Bump refcount so this file-well/process-well counts as a holder.
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE grids SET refcount = refcount + 1 WHERE id = ?`, existing); err != nil {
-			return 0, err
-		}
 		return existing, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -116,7 +118,7 @@ func (s *Store) getOrCreateSourceGrid(ctx context.Context, tx *sql.Tx, sourceKin
 	}
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (object_id, refcount, source_kind, source_id, created_at, updated_at)
+		`INSERT INTO cache.grids (object_id, refcount, source_kind, source_id, created_at, updated_at)
 		 VALUES (?, 1, ?, ?, ?, ?)`,
 		objID, sourceKind, sourceID, now, now)
 	if err != nil {

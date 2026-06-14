@@ -107,6 +107,13 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
+	// Re-resolve durable exit wells against the (possibly freshly-created)
+	// cache database, so the canvas opens correctly even when the cache file
+	// is absent — the archival case.
+	if err := s.rebindExitWells(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("rebind exit wells: %w", err)
+	}
 	return s, nil
 }
 

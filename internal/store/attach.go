@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // cacheIDBase is the first autoincrement id used by the attached ephemeral
@@ -75,4 +78,68 @@ func attachCache(ctx context.Context, db *sql.DB, mainPath string) error {
 		}
 	}
 	return nil
+}
+
+// rebindExitWells re-resolves every durable file/process well's child_grid_id
+// against the cache database. The child id is a soft cross-file pointer with
+// no FK; normally the cache persists and the id stays valid (a no-op here),
+// but when the cache file is absent — the archival case: gridwell.db opened
+// on another machine, or the cache simply deleted — the stored id is stale.
+// Re-resolving by identity (fs_path / pid) recreates the (empty) source grid
+// and rewrites child_grid_id so descents work; the listing is reconciled
+// lazily on first GetGrid. Runs once at Open, after the cache is attached.
+func (s *Store) rebindExitWells(ctx context.Context) error {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx,
+			`SELECT id, kind, COALESCE(fs_path,''), COALESCE(pid,0), COALESCE(child_grid_id,0)
+			   FROM tiles WHERE kind IN ('file-well','process-well')`)
+		if err != nil {
+			return err
+		}
+		type exitWell struct {
+			id          int64
+			kind        string
+			fsPath      string
+			pid, child  int64
+		}
+		var wells []exitWell
+		for rows.Next() {
+			var w exitWell
+			if err := rows.Scan(&w.id, &w.kind, &w.fsPath, &w.pid, &w.child); err != nil {
+				rows.Close()
+				return err
+			}
+			wells = append(wells, w)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+
+		now := s.now().Unix()
+		for _, w := range wells {
+			var sourceKind, sourceID string
+			switch w.kind {
+			case rpc.KindFileWell:
+				sourceKind, sourceID = rpc.GridSourceFS, w.fsPath
+			case rpc.KindProcessWell:
+				sourceKind, sourceID = rpc.GridSourceProc, strconv.FormatInt(w.pid, 10)
+			}
+			if sourceID == "" {
+				continue
+			}
+			gid, err := s.getOrCreateSourceGrid(ctx, tx, sourceKind, sourceID, now)
+			if err != nil {
+				return err
+			}
+			if gid != w.child {
+				if _, err := tx.ExecContext(ctx,
+					`UPDATE tiles SET child_grid_id = ? WHERE id = ?`, gid, w.id); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }

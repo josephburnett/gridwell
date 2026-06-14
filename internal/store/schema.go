@@ -121,7 +121,11 @@ CREATE TABLE IF NOT EXISTS {{P}}tiles (
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 0,
-    child_grid_id INTEGER REFERENCES grids(id),
+    -- No FK: an interior well's child grid is in this same (main) DB, but a
+    -- file/process well in a main grid points at a source grid in the
+    -- attached cache DB, and SQLite has no cross-file foreign keys. Integrity
+    -- for interior wells rests on the refcount machinery + property test.
+    child_grid_id INTEGER,
     -- text-only: the framed window in doc-space px (scroll offset + size)
     -- plus rendered/text mode.
     text_x        INTEGER NOT NULL DEFAULT 0,

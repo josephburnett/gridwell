@@ -2,8 +2,12 @@ package store
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // schemaColumns returns the ordered column names of a table in the given
@@ -77,5 +81,93 @@ func TestCacheIDsSeededAboveBase(t *testing.T) {
 	}
 	if !isCacheID(id) {
 		t.Errorf("isCacheID(%d) = false, want true", id)
+	}
+}
+
+// TestSourceGridLivesInCacheOnly confirms a file-well's backing source grid is
+// materialized in the ephemeral cache database, never in the durable main one
+// — so the main file stays a clean archive of authored content.
+func TestSourceGridLivesInCacheOnly(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isCacheID(fw.ChildGridID) {
+		t.Errorf("file-well child grid %d not in cache (>= %d)", fw.ChildGridID, int64(cacheIDBase))
+	}
+	// The durable main DB must hold no source grid.
+	var n int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM main.grids WHERE source_kind IS NOT NULL`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("main DB has %d source grid(s); they must live only in cache", n)
+	}
+}
+
+// TestArchiveSurvivesCacheWipe is the archival guarantee: copy gridwell.db to a
+// machine with no cache file (or just delete the cache), and the canvas still
+// opens — exit wells re-resolve their disposable source grids on Open.
+func TestArchiveSurvivesCacheWipe(t *testing.T) {
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "gridwell.db")
+	cachePath := cacheDBPath(mainPath)
+	ctx := context.Background()
+
+	s, err := Open(mainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := s.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fwID := fw.ID
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wipe the cache file and its WAL sidecars — the "fresh machine" case.
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Remove(cachePath + suffix)
+	}
+
+	s2, err := Open(mainPath)
+	if err != nil {
+		t.Fatalf("reopen with wiped cache: %v", err)
+	}
+	defer s2.Close()
+
+	// The durable file-well survived, and Open rebound its child grid into the
+	// freshly-recreated cache so descent works.
+	tile, err := s2.GetTile(ctx, fwID)
+	if err != nil {
+		t.Fatalf("file-well gone after cache wipe: %v", err)
+	}
+	if tile.Kind != rpc.KindFileWell || tile.FSPath != "/etc" {
+		t.Fatalf("file-well corrupted: kind=%q fs_path=%q", tile.Kind, tile.FSPath)
+	}
+	if !isCacheID(tile.ChildGridID) {
+		t.Fatalf("child grid %d not rebound to cache", tile.ChildGridID)
+	}
+	g, err := s2.GetGrid(ctx, tile.ChildGridID)
+	if err != nil {
+		t.Fatalf("descend into rebound source grid: %v", err)
+	}
+	if g.Grid.SourceKind != rpc.GridSourceFS || g.Grid.SourceID != "/etc" {
+		t.Errorf("rebound grid source = (%q,%q), want (fs,/etc)", g.Grid.SourceKind, g.Grid.SourceID)
 	}
 }

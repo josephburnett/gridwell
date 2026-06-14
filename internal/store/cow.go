@@ -487,11 +487,17 @@ func nullToInt(n sql.NullInt64) int64 {
 // fork/clone and fs/proc child grids (plus shell blobs) on GC.
 func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch kind {
-	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
+	case rpc.KindWell:
+		// Interior wells own their child grid in the durable main DB —
+		// refcounted + GC'd.
 		return childGrid, 0
 	case rpc.KindText:
 		return 0, blob
-	case rpc.KindURL, rpc.KindShell:
+	case rpc.KindURL, rpc.KindShell, rpc.KindFileWell, rpc.KindProcessWell:
+		// file/process wells point at a disposable cache source grid that is
+		// shared by identity and never individually GC'd, so they hold no
+		// grid ref — only their own durable preview blob (if any), exactly
+		// like url/shell. See docs/storage-format.md.
 		return 0, previewBlob
 	}
 	return 0, 0
