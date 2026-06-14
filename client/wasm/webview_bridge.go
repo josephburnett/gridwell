@@ -169,9 +169,19 @@ func (a *App) installWebviewListeners() {
 		}
 		return nil
 	})
+	// A right-button press over a LIVE URL view can't reach the canvas (the
+	// native WebContentsView owns it), so the view's preload forwards it here
+	// in canvas coords. We begin the same pane gesture the canvas would, then
+	// park the view so the rest of the drag lands on the canvas.
+	onRightForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
+		return nil
+	})
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
 	g.Call("onControlAscend", onControlAscend)
+	g.Call("onRightForward", onRightForward)
 	// Listeners live for the lifetime of the app; no Release.
 }
 

@@ -234,6 +234,32 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	}
 }
 
+// onForwardedRightDown begins a right-button pane gesture at canvas
+// coordinates (sx, sy) that originated over a LIVE URL view. The native
+// WebContentsView swallows the renderer's own mouse events, so its injected
+// preload forwards the right-button press here (via main) — mirroring how the
+// shell's in-renderer xterm overlay forwards its right button. We run the same
+// onRightDown the canvas uses, then draw(): the gesture is now in flight, so
+// syncURLViews parks the view (liveOverlaysHidden), exposing the canvas so the
+// rest of the drag (move/up) lands on it natively. This is the right-button
+// half of onMouseDown, minus the DOM event (the preload already preventDefaulted).
+func (a *App) onForwardedRightDown(sx, sy float64) {
+	if a.transition != nil {
+		return
+	}
+	p, r, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		return
+	}
+	prevFocus := a.tree.Focus
+	_ = a.tree.SetFocus(p.ID)
+	if a.tree.Focus != prevFocus {
+		a.refreshFileOverlay()
+	}
+	a.onRightDown(p, r, sx, sy)
+	a.draw()
+}
+
 // onRightMove updates the cursor position and applies live changes.
 // Pane-resize is the only gesture that mutates the tree mid-drag; the
 // rest render previews that commit on release.

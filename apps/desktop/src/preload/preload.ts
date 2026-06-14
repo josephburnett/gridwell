@@ -13,6 +13,7 @@ import {
   FreezeResult,
   FrameEvent,
   NavEvent,
+  ForwardedRightdown,
 } from '../main/ipc';
 
 const api = {
@@ -56,6 +57,14 @@ const api = {
     const h = (_e: unknown, ev: PaneRef) => cb(ev);
     ipcRenderer.on(EV.controlAscend, h);
     return () => ipcRenderer.removeListener(EV.controlAscend, h);
+  },
+  // onRightForward fires when a right-button press lands on a LIVE URL view;
+  // main relays it here in canvas coords so the renderer can begin the pane
+  // gesture (and then park the view).
+  onRightForward(cb: (ev: ForwardedRightdown) => void): () => void {
+    const h = (_e: unknown, ev: ForwardedRightdown) => cb(ev);
+    ipcRenderer.on(EV.rightForward, h);
+    return () => ipcRenderer.removeListener(EV.rightForward, h);
   },
 };
 

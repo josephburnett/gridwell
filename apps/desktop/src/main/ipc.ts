@@ -31,12 +31,38 @@ export const CTRL = {
   click: 'gw:control-click',
 } as const;
 
+// Live URL view's injected preload → main (send, fire-and-forget). The view
+// swallows the renderer's own mouse events, so its preload forwards a
+// right-button press here; the renderer then begins a pane gesture over the
+// live page (mirroring the shell overlay). Left button / wheel / keys stay
+// with the page — native browsing is untouched.
+export const VIEW = {
+  rightdown: 'gw:view-rightdown', // ViewRightdown
+} as const;
+
 // Main → renderer (send, fire-and-forget).
 export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
   controlAscend: 'gw:control-ascend', // PaneRef — corner button right-clicked
+  rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
 } as const;
+
+// ViewRightdown carries the press in physical screen coordinates
+// (MouseEvent.screenX/screenY), which are independent of the page's
+// zoomFactor; main converts them to window-content coords via getContentBounds.
+export interface ViewRightdown {
+  sx: number;
+  sy: number;
+}
+
+// ForwardedRightdown carries the press in window-content coordinates, which
+// equal the renderer's canvas pixels (1:1, DIP == CSS px) — ready to feed
+// straight into the canvas gesture pipeline.
+export interface ForwardedRightdown {
+  x: number;
+  y: number;
+}
 
 export interface PaneRef {
   paneId: string;

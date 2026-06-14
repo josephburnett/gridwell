@@ -1,7 +1,13 @@
 import { BaseWindow, WebContentsView, session } from 'electron';
+import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent } from './ipc';
 import { partitionFor, roundBounds, boundsEqual } from './viewutil';
 import { captureJpegBase64 } from './capture';
+
+// urlViewPreload is the script injected into every live URL view; it forwards
+// a right-button press to main so the renderer can gesture over live content.
+// __dirname is dist/main at runtime, so the compiled preload sits one level up.
+const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js');
 
 interface Entry {
   view: WebContentsView;
@@ -110,6 +116,10 @@ export class WebviewRegistry {
           partition: partitionFor(objectId),
           contextIsolation: true,
           nodeIntegration: false,
+          // Forwards a right-button press to main → renderer so pane gestures
+          // work over live content. Safe on arbitrary pages: it only listens
+          // for button 2 and uses ipcRenderer, nothing else.
+          preload: urlViewPreload,
         },
       });
       // The corner button is its own tiny native view layered ON TOP of the

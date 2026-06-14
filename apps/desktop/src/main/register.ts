@@ -1,21 +1,28 @@
-import { ipcMain, WebContents } from 'electron';
+import { ipcMain, BaseWindow, WebContents } from 'electron';
 import {
   CH,
   CTRL,
   EV,
+  VIEW,
   PlaceArgs,
   SetBoundsArgs,
   SetHiddenArgs,
   RemoveArgs,
   PaneRef,
   FreezeResult,
+  ViewRightdown,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the
 // registry. Call once after the root window is created. rootWC is the
-// renderer's web contents, used to forward corner-button ascend clicks.
-export function registerWebviewIpc(registry: WebviewRegistry, rootWC: WebContents): void {
+// renderer's web contents; win is the root window (its content bounds convert
+// a live view's screen-space press into renderer/canvas coordinates).
+export function registerWebviewIpc(
+  registry: WebviewRegistry,
+  rootWC: WebContents,
+  win: BaseWindow,
+): void {
   // Corner-button overlay click: resolve the sender view back to its pane,
   // then route left→back (handled natively) and right/middle→ascend (the
   // ascent animation lives in the renderer, so forward it there).
@@ -27,6 +34,17 @@ export function registerWebviewIpc(registry: WebviewRegistry, rootWC: WebContent
     } else if (!rootWC.isDestroyed()) {
       rootWC.send(EV.controlAscend, { paneId });
     }
+  });
+
+  // A live URL view's preload forwards a right-button press here so the
+  // renderer can begin a pane gesture over live content. The press arrives in
+  // physical screen coords; subtract the window's content origin to get
+  // renderer/canvas coords, then relay to the renderer (which starts the
+  // gesture and parks the view so the rest of the drag lands on the canvas).
+  ipcMain.on(VIEW.rightdown, (_event, p: ViewRightdown): void => {
+    if (rootWC.isDestroyed()) return;
+    const cb = win.getContentBounds();
+    rootWC.send(EV.rightForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): void => {

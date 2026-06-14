@@ -35,7 +35,7 @@ async function boot(): Promise<void> {
   const rootWC = win.webContents;
   const reg = new WebviewRegistry(win, { onNav: makeNavForwarder(rootWC) });
   registry = reg;
-  registerWebviewIpc(reg, rootWC);
+  registerWebviewIpc(reg, rootWC, win);
 
   // Mirror live views to other panes: capture each live view on a modest
   // cadence and push the frame to the renderer, which updates the tile's
