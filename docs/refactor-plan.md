@@ -368,6 +368,12 @@ The only remaining item with no UI risk — compiler-verified, behavior-preservi
   lands back in the doc); a URL tile; a shell tile; ascend across a deleted-mid-path level.
 
 ### R5 — Unify URL + shell into a "live media tile"  *(Phase 5; behavior-touching)*
+- [x] **Early slice (pulled forward, pending L4 verify):** live-URL right-button transparency.
+      A preload (`urlview-preload.ts`) injected into each live URL view forwards a right-button
+      press (capture-phase, screen coords) → main (`register.ts`, converts via getContentBounds)
+      → renderer (`onForwardedRightDown`), which runs `onRightDown` + parks the view. Now a live
+      URL right-clicks like a live shell. The remaining unknown is the cross-process
+      park-during-drag (does the native view release the pointer) — manual click-through only.
 - [ ] **Pure (autonomous) where possible:** extract the shared lifecycle state machine
       (place/activate → freeze(capture→SetPreview) → park-during-gesture → sync-to-content-box)
       as data/predicates and table-test the parts that don't need js (which overlay to park,
