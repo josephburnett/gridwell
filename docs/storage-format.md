@@ -235,6 +235,19 @@ framework is built but carries no historical migrations yet.
      stop refcounting source grids from exit wells; add self-healing
      re-resolution in `buildGridSequence` for a wiped cache. (Mechanics
      above.) Gated by the existing source-grid + COW property tests.
+
+     **Refcount safety-net impact (the binding-invariant decision).** Today
+     source grids are refcounted and GC'd: deleting a file-well drops its
+     child grid at refcount 0 (`filewell_preview_test.go` asserts exactly
+     this), and `verifyRefcounts` is the corruption net. The target model
+     makes cache source grids disposable (create-on-demand, never
+     individually GC'd), so 2b must: (a) scope `verifyRefcounts` to the
+     durable main DB (cache refcounts are "don't care"); (b) change
+     `tileRefs` so exit wells contribute no grid ref; and (c) update the
+     file-well GC test's premise (a deleted exit well no longer deletes the
+     shared, disposable cache source grid). Because this reworks the
+     refcount net that underwrites data integrity, it's done deliberately,
+     not folded into a routing pass.
 3. **Durable exit-well previews (format).** Relax the `tiles` `CHECK` so
    `file-well` / `process-well` rows in regular grids may hold a
    `preview_blob_id`; render the frozen preview as the fallback when the host
