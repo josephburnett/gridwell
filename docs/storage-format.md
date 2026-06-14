@@ -93,9 +93,9 @@ the arrangement was never in the archive.
 
 Versioning uses SQLite's built-in header slots, not a hand-rolled table:
 
-- **`PRAGMA application_id = 0x6757656C`** ("GWeL") on the main file — marks it
-  as a Gridwell DB for `file(1)`, archival tooling, and our own open-time
-  sanity check.
+- **`PRAGMA application_id = 0x4757654C`** ("GWeL", big-endian ASCII) on the
+  main file — marks it as a Gridwell DB for `file(1)`, archival tooling, and
+  our own open-time sanity check.
 - **`PRAGMA user_version = N`** on the main file — the schema generation.
 
 On open:
@@ -131,8 +131,10 @@ non-destructive**:
 - `system` — KV singletons: `root_grid_id` and the root viewport
   (`root_view_cx/cy`, `root_zoom`). Schema version lives in `user_version`,
   not here.
-- `meta` — self-description: writer build, format-doc pointer, db-created-at.
-  (Small, human-readable, append-on-write.)
+- `meta` *(deferred — optional)* — self-description beyond what the PRAGMAs
+  carry: writer build, format-doc pointer, db-created-at. Held back for now;
+  `application_id` + `user_version` are the canonical identity/version and
+  suffice. Add only if a concrete need appears.
 - `grids` — regular Gridwell grids only. No `source_kind` / `source_id` (those
   are a cache-only concept). Carries `created_at` and `updated_at`.
 - `tiles` — tiles in regular grids: all seven kinds can appear here. Exit
@@ -188,7 +190,8 @@ framework is built but carries no historical migrations yet.
 
 0. **Canonical versioning & identity.** `application_id` + `user_version`;
    move schema version out of the `system` table; build the additive-migration
-   runner (with the open-time guards). Add the `meta` table.
+   runner (with the open-time guards). (`meta` table deferred — the PRAGMAs
+   are the canonical identity/version.)
 1. **Timestamps & blob self-description.** `grids.updated_at`, `blobs.created_at`,
    `blobs.media_type`; plumb `media_type` at every `putBlob` call.
 2. **Physical separation.** ATTACH `gridwell-cache.db`; seed cache id base;

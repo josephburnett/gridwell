@@ -2,44 +2,58 @@ package store
 
 import (
 	"context"
-	"strconv"
 	"testing"
 )
 
-// TestSchemaVersionStampedOnFreshOpen confirms Open stamps the
-// schema_version into the system table on a fresh DB. Without that
-// stamp the next Open would walk every migration from version 0,
-// reapplying schema-baseline DDL twice.
-func TestSchemaVersionStampedOnFreshOpen(t *testing.T) {
+// TestVersionStampedOnFreshOpen confirms Open stamps the Gridwell
+// application_id and the current schemaVersion into the SQLite header on a
+// fresh DB. Without the stamp the next Open couldn't tell our file from a
+// foreign one, and would re-run migrations from version 0.
+func TestVersionStampedOnFreshOpen(t *testing.T) {
 	s := newTestStore(t)
-	var v string
-	err := s.db.QueryRowContext(context.Background(),
-		`SELECT value FROM system WHERE key = ?`, systemKeySchemaVersion).Scan(&v)
+	ctx := context.Background()
+
+	appID, err := readPragmaInt(ctx, s.db, "application_id")
 	if err != nil {
-		t.Fatalf("schema_version not stamped on fresh open: %v", err)
+		t.Fatalf("read application_id: %v", err)
 	}
-	got, err := strconv.Atoi(v)
+	if appID != applicationID {
+		t.Errorf("application_id = %#x, want %#x", appID, applicationID)
+	}
+
+	ver, err := readPragmaInt(ctx, s.db, "user_version")
 	if err != nil {
-		t.Fatalf("schema_version not numeric: %q", v)
+		t.Fatalf("read user_version: %v", err)
 	}
-	if got != schemaVersion {
-		t.Errorf("stamped schema_version = %d, want %d", got, schemaVersion)
+	if ver != schemaVersion {
+		t.Errorf("user_version = %d, want %d", ver, schemaVersion)
 	}
 }
 
-// TestApplyMigrationsRejectsNewerStoredVersion confirms an Open against
-// a DB stamped with a higher schemaVersion than this binary refuses to
-// proceed — running an older binary against a future-schema DB would
-// silently miscread rows.
+// TestApplyMigrationsRejectsNewerStoredVersion confirms an Open against a DB
+// stamped with a higher user_version than this binary refuses to proceed —
+// an older binary against a future-schema DB would silently misread rows.
 func TestApplyMigrationsRejectsNewerStoredVersion(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE system SET value = ? WHERE key = ?`,
-		strconv.Itoa(schemaVersion+1), systemKeySchemaVersion); err != nil {
+	if err := s.setPragmaInt(ctx, "user_version", schemaVersion+1); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.applyMigrations(ctx); err == nil {
-		t.Fatalf("applyMigrations accepted a newer stored schema_version")
+		t.Fatalf("applyMigrations accepted a newer stored user_version")
+	}
+}
+
+// TestApplyMigrationsRejectsForeignDatabase confirms Open refuses a SQLite
+// file whose application_id isn't Gridwell's — protecting against pointing
+// the server at an unrelated database.
+func TestApplyMigrationsRejectsForeignDatabase(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if err := s.setPragmaInt(ctx, "application_id", 0x0BADF00D); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.applyMigrations(ctx); err == nil {
+		t.Fatalf("applyMigrations accepted a foreign application_id")
 	}
 }
