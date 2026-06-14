@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -158,28 +159,54 @@ type rightDragState struct {
 // Caller has already verified there's no animation in flight and
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
-	// Rendered text descent over an embed: arm the embed-hint gesture so
-	// the chain-link glyph surfaces. No drag, no commit — just the hint.
+	// Resolve the facts gesture.Classify orders, holding onto the lookups
+	// (embed hit, tile, divider, region) so the arming switch can reuse
+	// them instead of recomputing. Every lookup here is a pure read; the
+	// state edits happen only in the arming switch below.
+	in := gesture.Input{
+		OnCornerCircle: pointInPlus(r, sx, sy),
+		CanAscend:      a.canAscend(p),
+		URLDescent:     a.isURLDescent(p),
+		InURLCenter:    pointInURLCenter(r, sx, sy),
+		InGridView:     p.TextFocus == 0,
+		Region:         pane.ClassifyRegion(r, resizeBandPx, sx, sy),
+	}
+
+	var hit *embedHit
 	if p.TextFocus != 0 && p.TextMode == rpc.TextModeRendered {
-		if hit := a.embedHitAt(p.ID, sx, sy); hit != nil {
-			a.rightDrag = &rightDragState{
-				kind:      rightDragEmbedHint,
-				startX:    sx,
-				startY:    sy,
-				curX:      sx,
-				curY:      sy,
-				embedRect: [4]float64{hit.x, hit.y, hit.w, hit.h},
-			}
-			a.draw()
-			return
+		hit = a.embedHitAt(p.ID, sx, sy)
+		in.OverEmbed = hit != nil
+	}
+
+	var tile *rpc.Tile
+	if in.InGridView {
+		tile = a.tileAtScreen(p, r, sx, sy)
+		in.OverTile = tile != nil
+		if tile != nil {
+			in.InTileCenter = inTileCenter(tile, p, r, sx, sy)
 		}
 	}
 
-	// Right-down on the corner circle ascends, whatever icon the circle
-	// is showing (+/refresh/back). Only when there's somewhere to ascend
-	// to — at root the circle is just the creation +. Release inside the
-	// circle commits; dragging out cancels.
-	if pointInPlus(r, sx, sy) && a.canAscend(p) {
+	var divider *pane.Divider
+	if in.Region.IsResize() {
+		divider = a.dividerOnSide(p, in.Region.Side())
+		in.HasDividerOnSide = divider != nil
+	}
+
+	switch gesture.Classify(in) {
+	case gesture.EmbedHint:
+		// No drag, no commit — the gesture exists only to surface the
+		// chain-link glyph while the button is held.
+		a.rightDrag = &rightDragState{
+			kind:      rightDragEmbedHint,
+			startX:    sx,
+			startY:    sy,
+			curX:      sx,
+			curY:      sy,
+			embedRect: [4]float64{hit.x, hit.y, hit.w, hit.h},
+		}
+		a.draw()
+	case gesture.Ascend:
 		a.rightDrag = &rightDragState{
 			kind:           rightDragAscend,
 			startX:         sx,
@@ -190,69 +217,39 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 			cursorInCircle: true,
 		}
 		a.draw()
-		return
-	}
-
-	// URL descent: right-down in the pane content area arms the refresh
-	// gesture. Pane-management regions (edges) still work normally — only
-	// the inner content area is claimed by the refresh zone.
-	if a.isURLDescent(p) && pointInURLCenter(r, sx, sy) {
+	case gesture.URLRefresh:
 		gid := a.gridIDForPath(p.Path)
 		if g, ok := a.c.Grid(gid); ok {
-			if tile, ok := g.Tiles[p.TextFocus]; ok {
+			if t, ok := g.Tiles[p.TextFocus]; ok {
 				a.rightDrag = &rightDragState{
 					kind:          rightDragURLRefresh,
 					startX:        sx,
 					startY:        sy,
 					curX:          sx,
 					curY:          sy,
-					refreshTileID: tile.ID,
+					refreshTileID: t.ID,
 					refreshPaneID: p.ID,
 				}
 				a.draw()
-				return
 			}
 		}
-	}
-	// Tile gesture: only valid in a grid view (not file mode).
-	if p.TextFocus == 0 {
-		if n := a.tileAtScreen(p, r, sx, sy); n != nil {
-			a.armTileGesture(p, r, n, sx, sy)
-			return
-		}
-	}
-	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
-	switch {
-	case region.IsResize():
-		// Resize zones map to the divider on that side, if any. If
-		// there is no divider (the pane abuts the screen edge), fall
-		// through to split — keeps the gesture useful.
-		if d := a.dividerOnSide(p, region.Side()); d != nil {
-			a.rightDrag = &rightDragState{
-				kind:         rightDragResize,
-				startX:       sx,
-				startY:       sy,
-				curX:         sx,
-				curY:         sy,
-				originPaneID: p.ID,
-				targetSplit:  d.Split,
-				splitDir:     d.Dir,
-				container:    pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
-			}
-			return
-		}
-		// No divider on that side — fall through to split.
+	case gesture.TileCenter, gesture.TileResize:
+		// armTileGesture re-derives center-vs-resize via dragdrop and arms
+		// the matching state (and primes the clone ghost for the center).
+		a.armTileGesture(p, r, tile, sx, sy)
+	case gesture.Resize:
 		a.rightDrag = &rightDragState{
-			kind:        rightDragSplit,
-			startX:      sx,
-			startY:      sy,
-			curX:        sx,
-			curY:        sy,
-			splitPaneID: p.ID,
-			splitPane:   r,
-			splitSide:   region.Side(),
+			kind:         rightDragResize,
+			startX:       sx,
+			startY:       sy,
+			curX:         sx,
+			curY:         sy,
+			originPaneID: p.ID,
+			targetSplit:  divider.Split,
+			splitDir:     divider.Dir,
+			container:    pane.Rect{X: divider.ContainerRect.X, Y: divider.ContainerRect.Y, W: divider.ContainerRect.W, H: divider.ContainerRect.H},
 		}
-	case region.IsSwap():
+	case gesture.Swap:
 		a.rightDrag = &rightDragState{
 			kind:         rightDragSwap,
 			startX:       sx,
@@ -261,7 +258,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 			curY:         sy,
 			originPaneID: p.ID,
 		}
-	case region.IsSplit():
+	case gesture.Split:
 		a.rightDrag = &rightDragState{
 			kind:        rightDragSplit,
 			startX:      sx,
@@ -270,7 +267,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 			curY:        sy,
 			splitPaneID: p.ID,
 			splitPane:   r,
-			splitSide:   region.Side(),
+			splitSide:   in.Region.Side(),
 		}
 	}
 }
@@ -676,26 +673,18 @@ func (a *App) commitTileResize(rd *rightDragState) {
 // commitResize applies the final ratio and, if either side is below
 // rightCloseThreshold, collapses that side.
 func (a *App) commitResize(rd *rightDragState, sx, sy float64) {
-	newRatio := pane.RatioFromCursor(rd.container, rd.splitDir, sx, sy)
-	rd.targetSplit.Ratio = newRatio
-	var aSize, bSize float64
-	if rd.splitDir == pane.Horizontal {
-		aSize = rd.container.H * newRatio
-		bSize = rd.container.H * (1 - newRatio)
-	} else {
-		aSize = rd.container.W * newRatio
-		bSize = rd.container.W * (1 - newRatio)
-	}
+	ratio, collapse := gesture.ResizeOutcome(rd.container, rd.splitDir, sx, sy, rightCloseThreshold)
+	rd.targetSplit.Ratio = ratio
 	// Before a side is dropped, flush every leaf pane it holds: persist
 	// unsaved text edits and freeze any live URL/shell stream. Otherwise a
 	// collapsed pane's live view parks hidden (still running, never frozen)
 	// and recent edits are lost — the dropped pane never hit the ascent
 	// save path.
-	switch {
-	case aSize < rightCloseThreshold:
+	switch collapse {
+	case gesture.CollapseA:
 		a.flushDroppedSubtree(rd.targetSplit.A)
 		_ = a.tree.CollapseSplit(rd.targetSplit, true)
-	case bSize < rightCloseThreshold:
+	case gesture.CollapseB:
 		a.flushDroppedSubtree(rd.targetSplit.B)
 		_ = a.tree.CollapseSplit(rd.targetSplit, false)
 	}
@@ -801,14 +790,10 @@ func (a *App) commitSwap(rd *rightDragState, sx, sy float64) {
 //
 // Anything else is cancelled silently.
 func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
-	if !pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, sx, sy) {
-		return
-	}
-	pos, ok := pane.SplitClampedPosition(rd.splitSide, rd.splitPane, resizeBandPx, sx, sy)
+	ratio, ok := gesture.SplitOutcome(rd.splitSide, rd.splitPane, resizeBandPx, rd.startX, rd.startY, sx, sy)
 	if !ok {
 		return
 	}
-	ratio := pane.SplitRatioFromPos(rd.splitSide, rd.splitPane, pos)
 	p := a.tree.FindPane(rd.splitPaneID)
 	if p == nil {
 		return
@@ -835,7 +820,7 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 // silent cancel.
 func (a *App) commitURLRefresh(rd *rightDragState, sx, sy float64) {
 	_ = sx
-	if sy < rd.startY+urlRefreshThresholdPx {
+	if !gesture.URLRefreshArmed(rd.startY, sy, urlRefreshThresholdPx) {
 		// Threshold not reached — cancel silently.
 		return
 	}
