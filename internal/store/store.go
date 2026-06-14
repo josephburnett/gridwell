@@ -113,8 +113,8 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 		now := s.now().Unix()
 		objID := s.newID()
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO grids (object_id, refcount, created_at) VALUES (?, 1, ?)`,
-			objID, now)
+			`INSERT INTO grids (object_id, refcount, created_at, updated_at) VALUES (?, 1, ?, ?)`,
+			objID, now, now)
 		if err != nil {
 			return err
 		}

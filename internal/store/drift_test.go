@@ -26,7 +26,7 @@ func TestProtoMatchesDDL(t *testing.T) {
 		{
 			table:       "grids",
 			message:     (&pb.Grid{}).ProtoReflect().Descriptor(),
-			storageOnly: []string{"refcount", "created_at"},
+			storageOnly: []string{"refcount", "created_at", "updated_at"},
 		},
 		{
 			table:       "tiles",

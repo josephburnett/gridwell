@@ -74,7 +74,7 @@ func (s *Store) createTile(
 		if err != nil {
 			return err
 		}
-		if err := bumpGridVersion(ctx, tx, gid); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, gid); err != nil {
 			return err
 		}
 		out, err = s.loadTile(ctx, tx, tileID)
@@ -95,8 +95,8 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			childObj := s.newID()
 			res, err := tx.ExecContext(ctx,
-				`INSERT INTO grids (object_id, refcount, created_at) VALUES (?, 1, ?)`,
-				childObj, now)
+				`INSERT INTO grids (object_id, refcount, created_at, updated_at) VALUES (?, 1, ?, ?)`,
+				childObj, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert child grid: %w", err)
 			}
@@ -126,7 +126,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 	alt := markdown.AltFromSource(string(req.Data))
 	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
-			blobID, err := putBlob(ctx, tx, hash, req.Data)
+			blobID, err := s.putBlob(ctx, tx, hash, req.Data, mediaMarkdown)
 			if err != nil {
 				return 0, err
 			}

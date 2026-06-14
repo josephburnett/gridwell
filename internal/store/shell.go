@@ -58,7 +58,7 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 		*events = append(*events, pre.Events...)
 
 		if len(req.JPEG) > 0 {
-			if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "preview_blob_id", req.JPEG); err != nil {
+			if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
 				return err
 			}
 		} else {

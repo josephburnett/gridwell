@@ -7,6 +7,15 @@ import (
 	"fmt"
 )
 
+// IANA media types stamped on blobs so they are self-describing,
+// independent of the tile column that references them. Markdown source
+// (text blob_id) and frozen previews (url/shell preview_blob_id) are the
+// only two kinds of bytes the store holds today.
+const (
+	mediaMarkdown = "text/markdown"
+	mediaJPEG     = "image/jpeg"
+)
+
 // GetBlob returns the bytes of a blob.
 func (s *Store) GetBlob(ctx context.Context, blobID int64) ([]byte, error) {
 	var data []byte

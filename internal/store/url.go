@@ -38,7 +38,7 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 		// Empty JPEG is skipped (a partial capture must not clobber a good
 		// frozen frame); the blob-swap kernel handles dedup + refcounting.
 		if len(req.JPEG) > 0 {
-			if _, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", req.JPEG); err != nil {
+			if _, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
 				return err
 			}
 		}

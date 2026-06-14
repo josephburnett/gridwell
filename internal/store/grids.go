@@ -222,10 +222,14 @@ func bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
 	return err
 }
 
-// bumpGridVersion increments a grid row's version by 1.
-func bumpGridVersion(ctx context.Context, tx *sql.Tx, gridID int64) error {
+// bumpGridVersion increments a grid row's version by 1 and stamps
+// updated_at. A grid's version moves on structural change (tile added /
+// removed / moved, source reconcile), so this is the right place to record
+// "last touched" for the planned recency feature.
+func (s *Store) bumpGridVersion(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	_, err := tx.ExecContext(ctx,
-		`UPDATE grids SET version = version + 1 WHERE id = ?`, gridID)
+		`UPDATE grids SET version = version + 1, updated_at = ? WHERE id = ?`,
+		s.now().Unix(), gridID)
 	return err
 }
 

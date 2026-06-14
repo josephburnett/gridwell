@@ -213,9 +213,9 @@ func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int6
 
 	now := s.now().Unix()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (object_id, version, refcount, created_at)
-		 VALUES (?, ?, 0, ?)`,
-		old.ObjectID, old.Version, now)
+		`INSERT INTO grids (object_id, version, refcount, created_at, updated_at)
+		 VALUES (?, ?, 0, ?, ?)`,
+		old.ObjectID, old.Version, now, now)
 	if err != nil {
 		return 0, nil, fmt.Errorf("insert grid: %w", err)
 	}
@@ -379,13 +379,18 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 // and returns its id. It does NOT bump the refcount — callers must do that
 // explicitly so the refcount semantics remain visible at the call site.
 //
+// mediaType is the IANA type stamped on a newly-created blob so it is
+// self-describing (see schema.go). An already-present blob (same hash) keeps
+// its original media_type and created_at — content-addressed blobs are
+// immutable, so the first writer's metadata stands.
+//
 // nil is normalized to an empty (but non-nil) slice before binding:
 // database/sql maps nil-bytes to SQL NULL, which would trip the
 // data BLOB NOT NULL constraint. Empty-content tiles are a valid use
 // case — a fresh palette drop of a markdown tile arrives here with
 // Data=nil (proto3 default-value omission round-tripped through the
 // wire as a missing field), and that path has to succeed.
-func putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte) (int64, error) {
+func (s *Store) putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte, mediaType string) (int64, error) {
 	if data == nil {
 		data = []byte{}
 	}
@@ -393,8 +398,8 @@ func putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte) (int64, 
 	err := tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO blobs (hash, size, data, refcount) VALUES (?, ?, ?, 0)`,
-			hash, len(data), data)
+			`INSERT INTO blobs (hash, size, data, refcount, media_type, created_at) VALUES (?, ?, ?, 0, ?, ?)`,
+			hash, len(data), data, mediaType, s.now().Unix())
 		if err != nil {
 			return 0, fmt.Errorf("insert blob: %w", err)
 		}
@@ -425,14 +430,15 @@ func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) e
 // writes (alt / url / title); only the blob kernel lives here.
 //
 // col must be a trusted literal ("blob_id" / "preview_blob_id") — it is
-// interpolated into the SQL, never user input.
-func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col string, bytes []byte) (newBlobID int64, changed bool, err error) {
+// interpolated into the SQL, never user input. mediaType is stamped on the
+// blob if it is newly created (self-describing media).
+func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col string, bytes []byte, mediaType string) (newBlobID int64, changed bool, err error) {
 	var oldBlob sql.NullInt64
 	if err := tx.QueryRowContext(ctx,
 		`SELECT `+col+` FROM tiles WHERE id = ?`, tileID).Scan(&oldBlob); err != nil {
 		return 0, false, err
 	}
-	newBlobID, err = putBlob(ctx, tx, hashBytes(bytes), bytes)
+	newBlobID, err = s.putBlob(ctx, tx, hashBytes(bytes), bytes, mediaType)
 	if err != nil {
 		return 0, false, err
 	}

@@ -32,7 +32,7 @@ func TestSwapTileBlob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		id, changed, err := s.swapTileBlob(ctx, tx, tile.ID, "blob_id", bytes)
+		id, changed, err := s.swapTileBlob(ctx, tx, tile.ID, "blob_id", bytes, mediaMarkdown)
 		if err != nil {
 			tx.Rollback()
 			t.Fatal(err)

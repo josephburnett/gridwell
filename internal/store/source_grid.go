@@ -176,7 +176,7 @@ func (s *Store) reconcileFSGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, ev
 	if !changed {
 		return nil
 	}
-	return bumpGridVersion(ctx, tx, g.ID)
+	return s.bumpGridVersion(ctx, tx, g.ID)
 }
 
 // reconcileProcGrid mirrors reconcileFSGrid for the process tree.
@@ -264,7 +264,7 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	if !changed {
 		return nil
 	}
-	return bumpGridVersion(ctx, tx, g.ID)
+	return s.bumpGridVersion(ctx, tx, g.ID)
 }
 
 // desiredFSTileKind picks the tile kind for one fssource Entry: a
@@ -434,7 +434,7 @@ func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, e
 // same blob row.
 func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64, pos position, body []byte, now int64, events *[]rpc.Event) error {
 	hash := hashBytes(body)
-	blobID, err := putBlob(ctx, tx, hash, body)
+	blobID, err := s.putBlob(ctx, tx, hash, body, mediaMarkdown)
 	if err != nil {
 		return err
 	}
@@ -470,7 +470,7 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 // Idempotent: identical input hashes resolve to the same blob row via
 // putBlob, so the dec-then-inc dance is skipped when nothing changed.
 func (s *Store) refreshProcInfoBlob(ctx context.Context, tx *sql.Tx, cur *rpc.Tile, body []byte, events *[]rpc.Event) (bool, error) {
-	_, changed, err := s.swapTileBlob(ctx, tx, cur.ID, "blob_id", body)
+	_, changed, err := s.swapTileBlob(ctx, tx, cur.ID, "blob_id", body, mediaMarkdown)
 	if err != nil {
 		return false, fmt.Errorf("refresh proc info blob: %w", err)
 	}

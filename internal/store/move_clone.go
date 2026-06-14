@@ -124,10 +124,10 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			return err
 		}
 		if crossGrid {
-			if err := bumpGridVersion(ctx, tx, srcGrid); err != nil {
+			if err := s.bumpGridVersion(ctx, tx, srcGrid); err != nil {
 				return err
 			}
-			if err := bumpGridVersion(ctx, tx, dstGrid); err != nil {
+			if err := s.bumpGridVersion(ctx, tx, dstGrid); err != nil {
 				return err
 			}
 		}
@@ -276,7 +276,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err := s.incTileRefs(ctx, tx, n.Kind, n.ChildGridID, n.BlobID, n.PreviewBlobID); err != nil {
 			return err
 		}
-		if err := bumpGridVersion(ctx, tx, dstGrid); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, dstGrid); err != nil {
 			return err
 		}
 		out, err = s.loadTile(ctx, tx, newID)
@@ -316,7 +316,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		}
 		*events = append(*events, pre.Events...)
 
-		if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "blob_id", req.Data); err != nil {
+		if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "blob_id", req.Data, mediaMarkdown); err != nil {
 			return err
 		}
 		// alt_text is a deterministic function of the content; write it

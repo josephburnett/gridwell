@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS grids (
     refcount    INTEGER NOT NULL DEFAULT 1,
     source_kind TEXT,
     source_id   TEXT,
-    created_at  INTEGER NOT NULL
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_source ON grids(source_kind, source_id) WHERE source_kind IS NOT NULL;
@@ -65,11 +66,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_source ON grids(source_kind, source_
 CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
     -- cache key, so a recycled blob id could serve stale image bytes.
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    hash      TEXT NOT NULL UNIQUE,
-    size      INTEGER NOT NULL,
-    data      BLOB NOT NULL,
-    refcount  INTEGER NOT NULL DEFAULT 0
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    hash       TEXT NOT NULL UNIQUE,
+    size       INTEGER NOT NULL,
+    data       BLOB NOT NULL,
+    refcount   INTEGER NOT NULL DEFAULT 0,
+    -- Self-describing media: an IANA type ('text/markdown', 'image/jpeg')
+    -- so a blob is interpretable on its own, independent of the column that
+    -- points at it. created_at is first-seen time; blobs are immutable
+    -- (content-addressed), so there is no updated_at.
+    media_type TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS tiles (
