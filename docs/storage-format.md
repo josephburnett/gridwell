@@ -228,13 +228,14 @@ framework is built but carries no historical migrations yet.
    - **2a (done).** ATTACH `gridwell-cache.db`; prefix-parameterized table
      DDL; seed cache id base; id-range partitioning (`isCacheID`). No behavior
      change yet.
-   - **2b.** Route `getOrCreateSourceGrid` and the reconciler into the cache
-     schema so `fs`/`proc` grids + their tiles + arrangement + `@info` blobs
-     live in the cache file; drop the `child_grid_id` FK; range-route every
-     id-keyed load / refcount / blob op (`tilesTbl`/`gridsTbl`/`blobsTbl`);
-     stop refcounting source grids from exit wells; add self-healing
-     re-resolution in `buildGridSequence` for a wiped cache. (Mechanics
-     above.) Gated by the existing source-grid + COW property tests.
+   - **2b (done).** Route `getOrCreateSourceGrid` and the reconciler into the
+     cache schema so `fs`/`proc` grids + their tiles + arrangement + `@info`
+     blobs live in the cache file; range-route every id-keyed query by
+     `schemaOf(id)`; drop the `child_grid_id` FK; stop refcounting source
+     grids from exit wells (`tileRefs`); re-resolve durable exit wells against
+     the cache at Open (`rebindExitWells`) so the archive opens on a fresh
+     machine. Tests: source grids live only in cache; the archive survives a
+     full cache wipe; the cross-file source-grid guards fire correctly.
 
      **Refcount safety-net impact (the binding-invariant decision).** Today
      source grids are refcounted and GC'd: deleting a file-well drops its
@@ -248,10 +249,16 @@ framework is built but carries no historical migrations yet.
      shared, disposable cache source grid). Because this reworks the
      refcount net that underwrites data integrity, it's done deliberately,
      not folded into a routing pass.
-3. **Durable exit-well previews (format).** Relax the `tiles` `CHECK` so
-   `file-well` / `process-well` rows in regular grids may hold a
-   `preview_blob_id`; render the frozen preview as the fallback when the host
-   path/PID is absent.
-4. **(Follow-on) Well-preview capture pipeline.** Render a file/process-well's
-   Gridwell view to a JPEG and freeze it on ascend (the URL/shell freeze
-   analog). Out of scope for format stabilization; the format already holds it.
+3. **Durable exit-well previews — format substrate (done).** The `tiles`
+   `CHECK` already admits a `preview_blob_id` on `file-well` / `process-well`
+   rows (relaxed in 2a), and `tileRefs` refcounts an exit well's preview blob
+   like url/shell (2b). The format is ready to hold a durable well preview;
+   there is simply none to store until capture (stage 4) exists. The
+   client-side frozen-vs-live fallback render is therefore coupled to capture
+   and lands with it.
+4. **(Follow-on, deferred) Well-preview capture pipeline.** Render a
+   file/process-well's Gridwell view to a JPEG and freeze it on ascend (the
+   url/shell freeze analog), plus the client fallback that shows the frozen
+   image when the host path/PID is absent. A different layer (wasm/electron
+   render-to-image); out of scope for format stabilization, which the format
+   already accommodates.
