@@ -2,8 +2,13 @@
 
 A staged plan to drive the codebase toward: testable code, complexity removed or
 well-tested, a dismantled `App` god-object, honest names, and zero leftover cruft.
-Worked start-to-finish; each phase is self-contained and resumable after a context
-compression. **Check items off as they land.**
+
+**Where things stand:** Phases 0–2, most of Phase 3, and part of Phase 6 are **done and
+merged to `main`** (see "Done so far"). What's left is interaction code (gestures,
+transitions, live tiles) plus the wire-format swap — work that needs a human to watch the
+UI. The actionable forward plan is **"Remaining work — roadmap" (R1–R6) at the bottom**;
+start there. The Phase 0–7 sections above it are kept as the original design rationale and
+as detail the roadmap items point back to.
 
 ## Guiding principles
 
@@ -27,6 +32,18 @@ compression. **Check items off as they land.**
    `object_id`s are born only from `Create*` and the source-grid reconciler; `CloneTile`
    is the only thing that makes two rows share an `object_id`. Every refactor must keep
    this exactly; `property_test.go` guards it.
+7. **Working mode for the remaining phases (human-in-the-loop, visual checks).** The
+   remaining work is mostly interaction code (gestures, descent/ascent transitions, live
+   tiles) that **cannot be verified by the four gates alone** — it needs a human to watch
+   the UI. So each remaining unit is split into two halves and committed separately:
+   **(a) the pure half** — pull every decision/geometry/state-transition that *can* be a
+   pure function into a `client/*` package and **table-test it exhaustively** (this is
+   still done autonomously; it's the bulk of the logic and the whole point — maximize the
+   surface that's manipulable without a human). **(b) the thin wiring half** — the
+   remaining `App`/`js` glue that calls the pure half and applies its result. Keep (b) as
+   small and obvious as possible, land it in its own commit, and **pause for the user to
+   visually verify** before moving on. Never bundle a pure extraction and a behavioral
+   rewire in the same commit, and never do (b) for two units before the first is verified.
 
 ## The verification gate (run after every commit)
 
@@ -140,20 +157,16 @@ concerns. Each sub-phase is its own commit(s). No behavior change.
       table-tested in `client/pane`.
 - [x] **Drawing carved out.** Gesture previews → `gesture_draw.go`. right_button.go
       1578→892.
-- [ ] **DEFERRED (risk-based): full `Outcome` sum-type classifier rewrite.** Rewiring
-      `onRightDown/finishRightDrag` through a new pure classifier is a behavior-preserving
-      rewrite of the most intricate, **untested** interaction code, and this environment
-      has **no way to exercise the gesture UI** (the Electron harnesses don't cover it).
-      The math it would compose (`ClassifyRegion`, `RatioFromCursor`, `SplitClampedPosition`,
-      `ResizeFromCursor`, plus the three helpers above) is *already* pure and tested, so the
-      classifier would mostly re-encode an if-ladder while adding real regression risk
-      against the zero-defects goal. Revisit once a gesture-level integration harness exists.
+- [ ] **MOVED to R2 (human-in-the-loop).** The full `Outcome` sum-type classifier rewire
+      was deferred while there was no way to watch the gesture UI; it now proceeds as
+      roadmap item **R2** — pure `gesture` package + table tests (autonomous), then a thin
+      rewire of `onRightDown/finishRightDrag` that the user visually verifies.
 
 ### 3e — Unify drop resolution (kills left/right drag duplication)
-- [ ] **DEFERRED (risk-based):** same rationale as the 3d classifier — unifying the
-      move/clone drop-outcome decision means rewiring two untestable commit paths with no
-      UI harness to verify against. The pure, safe sub-win (`rpc.IsWellKind`, used by
-      `dropTargetAt`/`childTileAtScreen`) landed with the Phase-2 carryover.
+- [ ] **MOVED to R3 (human-in-the-loop).** Proceeds as roadmap item **R3** — pure
+      `DropOutcome` + table tests (autonomous), then a thin rewire of the move/clone commit
+      paths that the user visually verifies. The pure sub-win (`rpc.IsWellKind`, used by
+      `dropTargetAt`/`childTileAtScreen`) already landed with the Phase-2 carryover.
 
 **Done when:** the three files are materially smaller and split by concern (✓: render
 1974→1116, right_button 1578→892, input 2049→1895); pure logic that *can* be safely
@@ -167,20 +180,14 @@ items are deferred with rationale above.
 The most complex untested logic in the client (four near-parallel `start*` methods +
 segment machinery + `onComplete` focus-restore), welded to `App` + `js`.
 
-- [ ] **DEFERRED (risk-based).** Same rationale as 3d/3e. The transition math is *already*
-      pure and tested in `zoomtrans` (`Ascent`/`Descent`), `anim.SplitN`, and
-      `zoomtrans.PanDist`/`ZoomDist` (the wasm `panDist`/`zoomDist` are one-line adapters).
-      What remains in the four `start*` methods is App-state resolution (well lookup,
-      saved-state stack, missing-level fallbacks) + mechanical `transSegment` assembly +
-      the js-coupled per-frame interpolation runner. Extracting a pure `Plan` would mostly
-      copy already-tested endpoints into a near-trivial struct, while collapsing the four
-      methods is a behavior-preserving rewrite of untested descent/ascent interaction code
-      with **no UI harness in this environment** to verify continuity/landing/fallbacks.
-      Net risk to the zero-defects goal exceeds the marginal testability gain. Revisit with
-      a transition-level integration harness.
+- [ ] **MOVED to R4 (human-in-the-loop).** Proceeds as roadmap item **R4** — pure
+      `client/transition` `Plan` builder + table tests (autonomous; the App-state resolution,
+      duration apportioning, saved-vs-calibrated landing, and missing-level fallbacks become
+      data), then collapse the four `start*` methods into one builder + visual check. The
+      transition *math* is already pure+tested in `zoomtrans`/`anim`; R4 makes the
+      *construction* pure too, leaving per-frame interpolation as the only js remnant.
 
-**Done when (deferred):** transition construction is pure and tested; the four methods are
-one. Not attempted blind — see rationale.
+**Done when:** transition construction is pure and tested; the four methods are one — via R4.
 
 ---
 
@@ -287,35 +294,102 @@ Current: ~50 flat fields on `App`. Target groups (names illustrative):
 
 ---
 
-## Status
+## Done so far (merged to `main`)
 
-Branch: `refactor/cleanup-and-testability` (off `main`). Every commit leaves `make check`
-green. Summary of where each phase landed:
+Phases 0–2 complete; Phase 3 complete except the two interaction-rewire items (3d-classifier,
+3e-drop); Phase 6 partially complete. Highlights:
 
-- **Phase 0 — done.** `make check` / `make check-electron` gates; working branch.
-- **Phase 1 — done.** All grep-confirmed dead code + its tests deleted (store + 6 client pkgs).
-- **Phase 2 — done.** `swapTileBlob` kernel (blob-swap dance unified, 4 callers); fixed the
-  `deleteFSGridTile` hand-rolled-refcount invariant violation; new tests (`TestSwapTileBlob`,
-  reconcile-delete refcount net, verified to fail if the release is skipped).
-- **Phase 3 — mostly done.** 3a `mutate.go` + pure tested `clientsync`; 3b/3c render split
-  (`glyphs`, `palette_draw`, `markdown_render`); 3d-safe pure gesture geometry → `pane`
-  (tested) + `gesture_draw.go`; `rpc.IsWellKind` DRY. **Deferred:** 3d full Outcome-classifier
-  rewrite and 3e drop-unification — behavior-preserving rewrites of untested interaction code
-  with **no UI harness in this environment** to verify; their math is already pure+tested.
-  File sizes: render 1974→1116, right_button 1578→892, input 2049→~1890.
-- **Phase 4 — deferred (risk-based).** Transition math already pure+tested in `zoomtrans`/
-  `anim`; the rest is App-welded + js per-frame, unverifiable here. See Phase 4 rationale.
-- **Phase 5 — not started.** Behavior-changing (URL+shell live-media unify); needs the
-  Electron harnesses + manual L4 that this environment can't run. The store kernel it depends
-  on (`swapTileBlob`) is already shared.
-- **Phase 6 — partially done.** migrations scaffold removed; vestigial `openURLStream` args +
-  dead viewport helpers gone; CLAUDE.md synced; App `sched` group extracted (1st of ~8).
-  **Remaining:** the rest of the App field grouping (large mechanical sweep, hot fields) and
-  the `urlStreams`/"stream" rename (to land with Phase 5).
-- **Phase 7 — not started.** proto/Connect → JSON+SSE (Option B, approved). Largest blast
-  radius; needs its own sub-plan + full re-verification. Not feasible to do well at this
-  session's tail.
+- **Gates** — `make check` (4 gates) + `make check-electron`; every commit green.
+- **Dead code** — all 11 grep-confirmed dead symbols + tests deleted.
+- **Store correctness** — `swapTileBlob` kernel (blob-swap dance unified across 4 callers);
+  **fixed the `deleteFSGridTile` hand-rolled-refcount invariant violation**; new tests incl. a
+  reconcile-delete refcount net *verified to fail* if the release is skipped.
+- **wasm decomposition** — `mutate.go` + pure tested `clientsync`; render split into
+  `glyphs`/`palette_draw`/`markdown_render` (1974→1116); gesture geometry hoisted to tested
+  `pane` helpers + `gesture_draw.go` (right_button 1578→892); `rpc.IsWellKind`.
+- **Cleanup** — migration scaffold removed; vestigial `openURLStream` args + dead viewport
+  helpers gone; CLAUDE.md synced; App `sched` sub-struct (1st field group).
 
-**Next-session priorities:** (1) finish the App field grouping using the target table above;
-(2) Phase 7 with a written sub-plan; (3) the deferred interaction-code rewrites (3d/3e/4 + 5)
-once a gesture/transition/live-tile integration harness exists to verify them.
+---
+
+## Remaining work — roadmap (next phase: human-in-the-loop)
+
+Ordered for execution. Per **principle 7**, every item below is split into a **pure half**
+(extract → table-test, done autonomously, the priority) and a **wiring half** (thin App/js
+glue, its own commit, **paused for the user's visual check**). The visual-check column lists
+exactly what to click. Nothing here changes the store/wire model except R5/R6.
+
+### R1 — Finish the `App` field grouping  *(mostly autonomous; no visual check)*
+The only remaining item with no UI risk — compiler-verified, behavior-preserving.
+- [ ] Group the rest of `App`'s flat fields into the sub-structs in the **target table
+      above** (`dom`, `net`, `view`, `drag`, `live`, `transition`, misc), one group per
+      commit, exactly as `sched` was done. Each: declare the struct, move the fields, sed
+      `a.field`→`a.group.field`, `make check`. No visual check needed (a green build is
+      proof); still, land one group per commit so any surprise is bisectable.
+- Watch out: `cctx`, `cl`, `tree`, `c` are referenced 200+ times each — biggest seds.
+
+### R2 — Right-button gesture classifier → pure `client/gesture`  *(3d)*
+- [ ] **Pure (autonomous):** define `gesture` package. Inputs = (region from
+      `pane.ClassifyRegion`, tile geometry, button, down/cur positions) → typed `Kind`; on
+      release → typed `Outcome` sum type (`Split{side,ratio}`, `Swap`, `Resize{ratio,
+      collapse}`, `TileResize{x,y,w,h}`, `Clone`, `Delete`, `Ascend`, `URLRefresh`,
+      `Cancel`, `None`). Compose the *already-tested* pieces (`pane.ClassifyRegion/
+      SplitClampedPosition/RatioFromCursor/ClampRatioToMinPx`, `dragdrop.Resize*`). Table-test
+      classifier + every outcome's math (degenerate/collapse/crossover).
+- [ ] **Wiring (visual check):** rewire `onRightDown`/`onRightMove`/`finishRightDrag` to call
+      the pure classifier/outcome and only *apply* the result. `gesture_draw.go` stays.
+- **Visual check:** over a tile — clone (center right-drag), resize (ring right-drag),
+  delete (drag onto blackhole). Over a pane — split (each of 4 edges), swap, resize to
+  collapse, ascend (corner circle + drag-out cancel), URL-refresh (down-drag in a URL descent).
+
+### R3 — Unify drop resolution → pure `DropOutcome`  *(3e)*
+- [ ] **Pure (autonomous):** extract the "cursor → drop outcome" decision (doc-drop vs
+      blackhole-sink vs same-cell-noop vs overlap-reject vs target-cell vs into-well) into the
+      `gesture` (or a `drop`) package as a typed `DropOutcome`. Table-test it.
+- [ ] **Wiring (visual check):** `onMouseUp` (move) and `commitRightClone` (clone) both call
+      it, differing only in the final RPC; one shared ghost-target updater for the live-preview
+      branches (`onMouseMove` vs `advanceCloneDrag`).
+- **Visual check:** left-drag move within a grid and into a well preview; right-drag clone
+  same; drag onto a blackhole (both buttons); drop onto an occupied cell (reject); drag a
+  file-well tile into a regular grid (link/dashed); no-op same-cell release.
+
+### R4 — Descent/ascent transition planner → pure `client/transition`  *(Phase 4)*
+- [ ] **Pure (autonomous):** given pane endpoints + well/file geometry + saved-state-stack
+      entry + pane rect → a `Plan{segments []Segment, restore *FocusRestore}` as data
+      (segments already plain floats/paths — no js). The duration apportioning, the
+      saved-vs-calibrated landing, and the missing-level fallbacks live here. Table-test:
+      descent continuity (preview cell == post-swap live cell), ascent lands on saved state,
+      skipped-missing-levels → instant, embed-descent focus-restore.
+- [ ] **Wiring (visual check):** collapse the four `start{Descent,Ascent,FileDescent,
+      FileAscent}` into one builder that builds the `Plan` then installs segments; per-frame
+      interpolation stays the only js part.
+- **Visual check:** descend+ascend a well; a text tile (incl. via an embed click → ascent
+  lands back in the doc); a URL tile; a shell tile; ascend across a deleted-mid-path level.
+
+### R5 — Unify URL + shell into a "live media tile"  *(Phase 5; behavior-touching)*
+- [ ] **Pure (autonomous) where possible:** extract the shared lifecycle state machine
+      (place/activate → freeze(capture→SetPreview) → park-during-gesture → sync-to-content-box)
+      as data/predicates and table-test the parts that don't need js (which overlay to park,
+      when to freeze, bounds math via `panebox`). Kind-specific hooks stay: URL→Electron
+      bridge, shell→xterm + `/rpc/ShellStream`.
+- [ ] **Wiring (visual check):** collapse `syncURLViews`/`syncShellOverlayPosition`, the two
+      open/close/closeAll pairs, and `liveOverlaysHidden` consumers into the shared manager.
+      Store side: keep two RPCs, share the `swapTileBlob` kernel (already done) — don't force
+      an RPC merge. Fold the **"stream" rename** (`urlStreams`→live-media name,
+      `openURLStream/closeURLStream`→`placeLive…/freezeLive…`) in here.
+- **Verification:** `make check` + `make check-electron` + manual L4 — URL: descend→go
+  live→navigate→ascend (frozen frame persists)→mirror in a 2nd pane. Shell: descend→refresh
+  (PTY spawns)→ascend (frozen frame)→re-descend→refresh reattaches.
+
+### R6 — Replace proto/Connect with JSON-over-HTTP + SSE  *(Phase 7; Option B, APPROVED)*
+Largest blast radius; **write a short sub-plan first.** DB is unaffected (testing-mode wipe ok).
+- [ ] Delete `api/gen`, `conv.go`, `buf.*`, the `.proto`, and the `connectrpc`/`protobuf`
+      deps. Serve the `rpc.*` structs directly as JSON over HTTP; `Subscribe` becomes a small
+      hand-rolled SSE handler over the existing `rpc.Event` model. Mostly compiler- and
+      `internal/server`-test-verified.
+- **Visual check (smoke):** the client still boots, loads grids, and mutations round-trip
+  (the only part the gates can't prove is the real client↔server wire).
+
+**Suggested order:** R1 (autonomous warm-up) → R2 → R3 → R4 → R5 → R6. Do each item's pure
+half fully (and get its tests green) before its wiring half; pause after each wiring half for
+the visual check before starting the next item.
