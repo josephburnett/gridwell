@@ -10,8 +10,8 @@
 // isolation. On release, the gestures whose outcome is pure geometry
 // (Split, Resize, URLRefresh, Ascend) resolve here; the gestures whose
 // outcome is a drop resolution (TileCenter→clone, blackhole→delete) are
-// the job of the drop unification (see docs/refactor-plan.md R3) and stay
-// in the App for now.
+// the job of the (still-pending) drop unification and stay in the App for
+// now.
 package gesture
 
 import "github.com/josephburnett/gridwell/client/pane"

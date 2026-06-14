@@ -49,9 +49,9 @@ test-cover:
 	go test -cover ./...
 
 # check is the per-commit verification gate: every commit must leave all four
-# green. Mirrors docs/refactor-plan.md. The wasm build catches GOOS=js breakage
-# that `go build ./...` (host arch) misses; the typecheck catches Electron-side
-# TS drift. No display or network needed.
+# green. The wasm build catches GOOS=js breakage that `go build ./...` (host
+# arch) misses; the typecheck catches Electron-side TS drift. No display or
+# network needed.
 check:
 	go build ./...
 	go test ./...

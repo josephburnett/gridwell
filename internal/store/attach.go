@@ -17,7 +17,7 @@ import (
 // sequences are pre-seeded to this high base: any id >= cacheIDBase lives in
 // cache, anything below in main. It sits far above any realistic main id and
 // below 2^53 (the JSON/JS-safe integer ceiling the client relies on). See
-// docs/storage-format.md.
+// CLAUDE.md (Storage).
 const cacheIDBase = 1_000_000_000_000
 
 // isCacheID reports whether a grid/tile/blob id belongs to the attached

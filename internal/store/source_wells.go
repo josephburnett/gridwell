@@ -100,7 +100,7 @@ func processWellAlt(pid int64) string {
 //
 // Cache source grids are shared by identity (path / PID) and are NOT
 // refcounted: the cache is disposable, so an orphaned source grid is harmless
-// and is cleared when the cache file is deleted (see docs/storage-format.md).
+// and is cleared when the cache file is deleted (see CLAUDE.md, Storage).
 // An exit well in the main DB therefore just stores this id in child_grid_id
 // (a soft cross-file pointer, no FK), and Open re-resolves it if the cache was
 // wiped.

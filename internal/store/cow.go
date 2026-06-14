@@ -497,7 +497,7 @@ func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef
 		// file/process wells point at a disposable cache source grid that is
 		// shared by identity and never individually GC'd, so they hold no
 		// grid ref — only their own durable preview blob (if any), exactly
-		// like url/shell. See docs/storage-format.md.
+		// like url/shell. See CLAUDE.md (Storage).
 		return 0, previewBlob
 	}
 	return 0, 0

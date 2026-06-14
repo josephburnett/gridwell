@@ -9,7 +9,7 @@ import (
 // applicationID marks a database file as a Gridwell DB. It is written into
 // the SQLite header via PRAGMA application_id (the bytes "GWeL", big-endian
 // ASCII) so file(1), archival tooling, and our own open path can recognize
-// the file without reading a single row. See docs/storage-format.md.
+// the file without reading a single row. See CLAUDE.md (Storage).
 const applicationID = 0x4757654C // "GWeL"
 
 // schemaVersion is the schema generation this binary materializes. It is
