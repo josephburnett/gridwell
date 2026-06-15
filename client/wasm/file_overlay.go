@@ -195,6 +195,20 @@ func (a *App) ensureFileTextarea() {
 			a.onRightDown(p, r, sx, sy)
 			return nil
 		}
+		if button == 1 {
+			// Middle-click ascends, same as on the canvas. The textarea
+			// covers the whole pane in text mode, so the canvas listener
+			// never sees this press — forward it here.
+			ev.Call("preventDefault")
+			if a.transition != nil {
+				return nil
+			}
+			if p := a.tree.FocusedPane(); p != nil {
+				a.menuOpen = false
+				a.ascendPane(p)
+			}
+			return nil
+		}
 		if button != 0 {
 			return nil
 		}
