@@ -65,11 +65,21 @@ export function createRootWindow(origin: string): RootWindow {
   });
 
   // The default menu (which we removed) used to provide the F11 fullscreen
-  // accelerator; re-add it directly. Active when the canvas has focus — a
-  // focused URL tile's native view handles its own keys.
+  // accelerator; re-add it directly, plus a minimize accelerator. Active when
+  // the canvas has focus — a focused URL tile's native view handles its own
+  // keys (the live-URL view mirrors F11 separately in webviews.ts).
+  //
+  // Minimize (Ctrl/Cmd+M) is provided explicitly because the host window
+  // manager may not surface a minimize control in its decorations (the
+  // reported "I can only maximize / fullscreen, not minimize"); this gives a
+  // guaranteed way down regardless of the WM.
   win.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11') {
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F11') {
       win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+    } else if ((input.control || input.meta) && (input.key === 'm' || input.key === 'M')) {
+      win.minimize();
       event.preventDefault();
     }
   });
