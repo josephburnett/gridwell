@@ -51,6 +51,9 @@ func (a *App) installCanvasInput() {
 	// regardless of where in the document focus happens to sit.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
 	a.win.Call("addEventListener", "keyup", js.FuncOf(a.onKeyUp))
+	// Touch screens: translate single-finger touch into the same mouse
+	// gestures (see touch.go).
+	a.installTouchInput()
 }
 
 // onKeyDown / onKeyUp are no-ops. When a pane is descended into a live URL
