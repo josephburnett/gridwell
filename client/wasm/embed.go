@@ -27,11 +27,13 @@ type embedHit struct {
 type embedDrawer func(x, y, w, h float64, href, alt string)
 
 // defaultEmbedW/H is the fallback rendered size when an embed's href
-// didn't include ?w=&h= in its src URL. Sized to match a 3x2 tile at
-// cellPx — a reasonable inline block.
+// didn't include ?w=&h= in its src URL. Square: an embed is a preview of a
+// tile, and tiles read as squares in the grid, so the inline block is square
+// too (the drawer further centers a square preview inside whatever rect it's
+// handed, so non-default sizes still render square).
 const (
-	defaultEmbedW = 192.0
-	defaultEmbedH = 128.0
+	defaultEmbedW = 144.0
+	defaultEmbedH = 144.0
 )
 
 // makeEmbedDrawer returns an embedDrawer that renders into the named pane
@@ -73,74 +75,55 @@ func (a *App) makePreviewEmbedDrawer() embedDrawer {
 }
 
 // drawEmbedAt paints one embed into the canvas at the given screen rect.
-// If tile is nil (broken or unresolved href), the image is the missing-tile
-// placeholder. Otherwise the tile's kind drives the rendering.
+// If tile is nil (broken or unresolved href), it paints the missing-tile
+// placeholder. Otherwise it renders a real preview of the tile — the same
+// one-level preview the parent-grid renderer paints (drawNodeWithPreview):
+// a URL's frozen frame, a well's child-grid preview, a markdown render, etc.
+// — so an embed reads as a proper preview tile, not a flat colored box.
+//
+// The preview is drawn as a centered SQUARE inside (x, y, w, h): a tile is a
+// square in the grid, and the embed should look like one regardless of the
+// rect it was laid out in.
 func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string) {
 	c := a.cctx
-	c.Call("save")
-	c.Call("beginPath")
-	c.Call("rect", x, y, w, h)
-	c.Call("clip")
+
+	// Center a square of side min(w, h) inside the rect.
+	side := min(w, h)
+	sx := x + (w-side)/2
+	sy := y + (h-side)/2
 
 	if tile == nil {
 		// Broken reference: red-outlined placeholder.
+		c.Call("save")
+		c.Call("beginPath")
+		c.Call("rect", sx, sy, side, side)
+		c.Call("clip")
 		c.Set("fillStyle", colorBlackHoleFill)
-		c.Call("fillRect", x, y, w, h)
+		c.Call("fillRect", sx, sy, side, side)
 		c.Set("strokeStyle", colorBlackHoleLine)
 		c.Set("lineWidth", 2.0)
-		c.Call("strokeRect", x+1, y+1, w-2, h-2)
+		c.Call("strokeRect", sx+1, sy+1, side-2, side-2)
 		c.Set("fillStyle", colorBlackHoleLine)
 		label := alt
 		if label == "" {
 			label = "missing"
 		}
-		drawEmbedLabel(c, label, x, y, w, h)
+		drawEmbedLabel(c, label, sx, sy, side, side)
 		c.Call("restore")
 		return
 	}
 
-	bg, fg := embedBgFg(tile.Kind)
-	c.Set("fillStyle", bg)
-	c.Call("fillRect", x, y, w, h)
-
-	// Kind-specific preview fill before the outline so it sits inside.
-	switch tile.Kind {
-	case rpc.KindURL:
-		if cached, ok := a.urlPreview.Get(tile.ID, tile.PreviewBlobID); ok {
-			if img, ok := previewImage(cached); ok && img.Truthy() {
-				drawImageCover(c, img, x, y, w, h, 0, 0)
-			}
-		}
-	case rpc.KindWell:
-		// Future: re-use drawChildPreview for a real flat preview. For now
-		// the kind background + outline is the visual.
-	case rpc.KindText:
-		// Future: render markdown without recursing into embeds. For now
-		// the kind background carries the signal.
-	case rpc.KindBlackHole:
-		// Filled by background tint; nothing else to paint.
+	// parentCellSize fits the tile's footprint into the square; well previews
+	// scale their child grid by it. r is the embed's own square — only the
+	// markdown branch reads it, and only when a pane is descended into this
+	// same tile (the embed then mirrors that live framing).
+	cells := float64(max(tile.W, tile.H))
+	if cells < 1 {
+		cells = 1
 	}
-
-	c.Set("strokeStyle", fg)
-	c.Set("lineWidth", 2.0)
-	c.Call("strokeRect", x+1, y+1, w-2, h-2)
-	c.Call("restore")
-}
-
-// embedBgFg returns the (fill, stroke) colors used for embed rendering.
-// Matches the per-kind colors used by drawNode for grid-cell rendering.
-func embedBgFg(kind string) (string, string) {
-	switch kind {
-	case rpc.KindText:
-		return colorMarkdownFill, colorMarkdownLine
-	case rpc.KindWell:
-		return colorBg, colorFocusBorder
-	case rpc.KindURL:
-		return colorURLFill, colorURLLine
-	case rpc.KindBlackHole:
-		return colorBlackHoleFill, colorBlackHoleLine
-	}
-	return colorBg, colorMuted
+	parentCellSize := side / cells
+	r := pane.Rect{X: sx, Y: sy, W: side, H: side}
+	a.drawNodeWithPreview(tile, sx, sy, side, side, parentCellSize, r, false /*selected*/, false /*outside*/, false /*dashed*/)
 }
 
 // drawEmbedLabel paints a short label centered in (x, y, w, h). Used by
@@ -193,7 +176,10 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 		// Cross-grid embed targets are not yet supported.
 		return false
 	}
-	if target.Kind != rpc.KindText && target.Kind != rpc.KindURL && target.Kind != rpc.KindWell {
+	// Only descendable kinds; mirror the canonical grid-cell descent
+	// (input.go) so every kind that can be entered there can be entered
+	// from an embed too. Blackhole has nothing to descend into.
+	if target.Kind == rpc.KindBlackHole {
 		return false
 	}
 	// Stash the doc's descent context before clearing it, then dispatch
@@ -208,9 +194,10 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	p.TextFocus = 0
 	p.TextMode = ""
 	a.refreshFileOverlay()
-	if target.Kind == rpc.KindWell {
+	if rpc.IsWellKind(target.Kind) {
 		a.startDescent(p, target)
 	} else {
+		// text / url / shell
 		a.startFileDescent(p, target, nil)
 	}
 	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
