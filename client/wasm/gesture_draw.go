@@ -371,8 +371,6 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	if active {
 		color = paneBorderColorFor(p, g, gridOK, true /* focused */, urlLive)
 	}
-	a.cctx.Set("strokeStyle", color)
-	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("beginPath")
 	r := rd.splitPane
 	switch rd.splitSide {
@@ -385,6 +383,14 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 		a.cctx.Call("moveTo", pos, r.Y)
 		a.cctx.Call("lineTo", pos, r.Y+r.H)
 	}
+	// Dark casing under the line so it stays visible against the lightened
+	// split-zone hint and the grey markdown-preview background, where the
+	// inactive grey line would otherwise blend in. Same path, stroked twice.
+	a.cctx.Set("strokeStyle", "rgba(0,0,0,0.55)")
+	a.cctx.Set("lineWidth", 4.5)
+	a.cctx.Call("stroke")
+	a.cctx.Set("strokeStyle", color)
+	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("stroke")
 	a.cctx.Set("lineWidth", 1.0)
 }
