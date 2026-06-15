@@ -82,6 +82,14 @@ export class WebviewRegistry {
     this.cb = cb;
   }
 
+  // toggleFullScreen flips the host window's fullscreen state. Used by the
+  // F11 handler injected into live URL views, which would otherwise swallow
+  // the key (the canvas's own F11 handler can't see it while a native view
+  // has focus).
+  private toggleFullScreen(): void {
+    this.win.setFullScreen(!this.win.isFullScreen());
+  }
+
   has(paneId: string): boolean {
     return this.entries.has(paneId);
   }
@@ -127,6 +135,25 @@ export class WebviewRegistry {
       // is acceptable for its inline IPC forwarder.
       const control = new WebContentsView({
         webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
+      });
+      // target=_blank / window.open: follow the link in this same view
+      // instead of letting Electron spawn a detached BrowserWindow. A
+      // same-view navigation is an ordinary click as far as the server is
+      // concerned (real Chromium, the tile's persistent session), so it
+      // avoids the bot-guard friction a popup window tends to trip.
+      view.webContents.setWindowOpenHandler(({ url: target }) => {
+        if (target && target !== 'about:blank') void view.webContents.loadURL(target);
+        return { action: 'deny' };
+      });
+      // F11 fullscreen: the canvas handles F11 via window.ts, but a focused
+      // live URL view owns OS keyboard focus, so that handler never sees the
+      // key. Mirror it here so fullscreen toggles no matter which view is
+      // focused.
+      view.webContents.on('before-input-event', (event, input) => {
+        if (input.type === 'keyDown' && input.key === 'F11') {
+          this.toggleFullScreen();
+          event.preventDefault();
+        }
       });
       e = { view, control, tileId, objectId, bounds: rounded, hidden: false };
       this.entries.set(paneId, e);

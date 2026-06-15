@@ -178,10 +178,18 @@ func (a *App) installWebviewListeners() {
 		a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
+	// A middle-button press over a LIVE URL view is the ascend gesture; the
+	// native view swallows it, so main forwards it here in canvas coords.
+	onMiddleForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.onForwardedMiddleDown(ev.Get("x").Float(), ev.Get("y").Float())
+		return nil
+	})
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
 	g.Call("onControlAscend", onControlAscend)
 	g.Call("onRightForward", onRightForward)
+	g.Call("onMiddleForward", onMiddleForward)
 	// Listeners live for the lifetime of the app; no Release.
 }
 

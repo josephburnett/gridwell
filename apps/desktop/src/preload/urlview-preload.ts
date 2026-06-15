@@ -12,21 +12,32 @@
 // channel name is duplicated from ipc.ts (VIEW.rightdown) rather than imported.
 import { ipcRenderer } from 'electron';
 
-// Keep in sync with VIEW.rightdown in ../main/ipc.ts.
+// Keep in sync with VIEW.rightdown / VIEW.middledown in ../main/ipc.ts.
 const VIEW_RIGHTDOWN = 'gw:view-rightdown';
+const VIEW_MIDDLEDOWN = 'gw:view-middledown';
 
 // Capture phase at the window: this fires before any of the page's own
 // document/element listeners, so stopPropagation keeps the press from ever
 // reaching the page, and preventDefault suppresses focus/selection. screenX/
 // screenY are physical screen pixels — unaffected by the page's zoomFactor —
 // which main converts to window coords via getContentBounds.
+//
+// Right button → pane gesture; middle button → ascend (the universal ascent
+// gesture). Both are Gridwell pane controls the canvas can't see while the
+// native view owns input, so the preload forwards them. Left button and wheel
+// stay with the page.
 window.addEventListener(
   'mousedown',
   (e: MouseEvent) => {
-    if (e.button !== 2) return; // left/middle: leave them with the page
-    e.preventDefault();
-    e.stopPropagation();
-    ipcRenderer.send(VIEW_RIGHTDOWN, { sx: e.screenX, sy: e.screenY });
+    if (e.button === 2) {
+      e.preventDefault();
+      e.stopPropagation();
+      ipcRenderer.send(VIEW_RIGHTDOWN, { sx: e.screenX, sy: e.screenY });
+    } else if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      ipcRenderer.send(VIEW_MIDDLEDOWN, { sx: e.screenX, sy: e.screenY });
+    }
   },
   true,
 );

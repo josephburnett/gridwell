@@ -1,9 +1,10 @@
 import type { WebContentsView } from 'electron';
 
-// JPEG quality for mirrored/frozen frames. The frozen preview is a small
-// canvas-drawn thumbnail in most panes, so mid quality is plenty and keeps
-// the base64 payload over IPC light.
-const JPEG_QUALITY = 70;
+// JPEG quality for mirrored/frozen frames. The frozen preview is the durable
+// "screenshot" of a URL tile — it's what you see when you descend without
+// going live, and it gets zoomed in larger panes — so it's worth keeping
+// crisp. High quality; the base64 payload over IPC is still modest.
+const JPEG_QUALITY = 92;
 
 // captureJpegBase64 grabs the current rendered contents of a view as a JPEG,
 // base64-encoded for transport over IPC to the renderer. capturePage works

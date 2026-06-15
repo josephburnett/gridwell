@@ -260,6 +260,23 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	a.draw()
 }
 
+// onForwardedMiddleDown ascends the pane at canvas coordinates (sx, sy) when a
+// middle-button press originated over a LIVE URL view. Like the right button,
+// the native WebContentsView swallows the renderer's own middle clicks, so its
+// preload forwards the press here (via main). Middle-click is the universal
+// ascend gesture; this is its live-URL path, mirroring onForwardedRightDown.
+func (a *App) onForwardedMiddleDown(sx, sy float64) {
+	if a.transition != nil {
+		return
+	}
+	p, _, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		return
+	}
+	a.menuOpen = false
+	a.ascendPane(p)
+}
+
 // onRightMove updates the cursor position and applies live changes.
 // Pane-resize is the only gesture that mutates the tree mid-drag; the
 // rest render previews that commit on release.

@@ -37,7 +37,8 @@ export const CTRL = {
 // live page (mirroring the shell overlay). Left button / wheel / keys stay
 // with the page — native browsing is untouched.
 export const VIEW = {
-  rightdown: 'gw:view-rightdown', // ViewRightdown
+  rightdown: 'gw:view-rightdown',   // ViewRightdown
+  middledown: 'gw:view-middledown', // ViewRightdown (same payload: screen coords)
 } as const;
 
 // Main → renderer (send, fire-and-forget).
@@ -46,6 +47,7 @@ export const EV = {
   nav: 'gw:nav',     // NavEvent
   controlAscend: 'gw:control-ascend', // PaneRef — corner button right-clicked
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
+  middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
 } as const;
 
 // ViewRightdown carries the press in physical screen coordinates

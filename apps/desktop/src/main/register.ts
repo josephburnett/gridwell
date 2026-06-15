@@ -47,6 +47,15 @@ export function registerWebviewIpc(
     rootWC.send(EV.rightForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
+  // A middle-button press over a live URL view is the ascend gesture; the
+  // native view swallows it, so its preload forwards it here. Relay to the
+  // renderer in canvas coords, where it resolves the pane and ascends.
+  ipcMain.on(VIEW.middledown, (_event, p: ViewRightdown): void => {
+    if (rootWC.isDestroyed()) return;
+    const cb = win.getContentBounds();
+    rootWC.send(EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
+  });
+
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): void => {
     registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds);
   });

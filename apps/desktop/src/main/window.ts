@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu } from 'electron';
+import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 
 export interface RootWindow {
@@ -23,12 +23,20 @@ export function createRootWindow(origin: string): RootWindow {
   // window. Remove it entirely.
   Menu.setApplicationMenu(null);
 
+  // Size the initial bounds to the primary display's work area so a fresh
+  // launch never opens larger than the screen (the old fixed 1600x1000 could
+  // overflow a smaller display). We then maximize, but a sane initial size is
+  // the fallback if the WM ignores the maximize request.
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
   const win = new BrowserWindow({
-    width: 1600,
-    height: 1000,
+    width,
+    height,
     backgroundColor: '#0c0d11',
     title: 'Gridwell',
     autoHideMenuBar: true,
+    minimizable: true,
+    maximizable: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true,
@@ -39,7 +47,22 @@ export function createRootWindow(origin: string): RootWindow {
     },
   });
 
+  // Start maximized to fill the screen (within the WM's decorations) rather
+  // than as a free-floating window.
+  win.maximize();
+
   void win.loadURL(origin + '/');
+
+  // When the display geometry changes (rotation, resolution / aspect change)
+  // a fullscreen window can keep its old bounds and leave the canvas stretched
+  // or letterboxed. Re-fit it to the (new) bounds of the display it's on so the
+  // renderer gets a resize event and the canvas re-lays-out. Only while
+  // fullscreen — a normal window is the user's to size.
+  screen.on('display-metrics-changed', () => {
+    if (win.isDestroyed() || !win.isFullScreen()) return;
+    const d = screen.getDisplayMatching(win.getBounds());
+    win.setBounds(d.bounds);
+  });
 
   // The default menu (which we removed) used to provide the F11 fullscreen
   // accelerator; re-add it directly. Active when the canvas has focus — a

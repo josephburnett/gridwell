@@ -66,6 +66,13 @@ const api = {
     ipcRenderer.on(EV.rightForward, h);
     return () => ipcRenderer.removeListener(EV.rightForward, h);
   },
+  // onMiddleForward fires when a middle-button press lands on a LIVE URL view;
+  // main relays it here in canvas coords so the renderer can ascend the pane.
+  onMiddleForward(cb: (ev: ForwardedRightdown) => void): () => void {
+    const h = (_e: unknown, ev: ForwardedRightdown) => cb(ev);
+    ipcRenderer.on(EV.middleForward, h);
+    return () => ipcRenderer.removeListener(EV.middleForward, h);
+  },
 };
 
 export type GridwellBridge = typeof api;
