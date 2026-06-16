@@ -6,12 +6,59 @@ This file is the contract. The **Invariants** and **Rules for changes** sections
 
 ## The guiding rule: things stay where you put them
 
+**This is the deciding factor.** When a technical decision is unclear, the
+option that preserves this principle wins — over performance, over elegance,
+over implementation convenience. If a design lets something change that the
+user didn't change, the design is wrong. (See *Applying the principle* for how
+this is meant to drive concrete decisions, with a worked example.)
+
+Gridwell is a physical space. You rearrange it constantly — it is write-heavy
+and mutates freely (drop a tile, pan, capture a page, type) — but **nothing
+changes except by your explicit action.** Step out of a room and look back
+(ascent): you see it exactly as you left it. Step back in (descent): it is
+exactly the same. The round trip is idempotent, and that holds for
+*everything* — content, view framing, and layout alike. Reading never mutates.
+
 Four faces of one rule:
 
 1. **Placement is persistent.** A tile at (x, y, w, h) stays until something explicitly moves it. No auto-relayout, no resort.
-2. **Identity is persistent across clones.** Two clones are the *same* tile — shared `object_id` and `version` — until one is edited. The integer row id can change under copy-on-write; the `object_id` cannot.
-3. **Preview = descent target = ascent return.** A well's stored framing *is* its preview; descending restores it; ascending writes it back.
+2. **Identity is persistent and stable.** A tile's row id is a permanent handle: editing a tile never moves it (mutation is in-place; the id never changes), so a reference always returns *that* tile. Copies are made only by the explicit **clone** gesture — see *Identity and copy-on-clone*.
+3. **Preview = descent target = ascent return.** A well's stored framing *is* its preview; descending restores it; ascending writes it back. One value, read the same way every time.
 4. **Mutation is local and reflected.** Every change goes through the store, which fans an event to every open view.
+
+### Applying the principle (the decision method)
+
+When a design choice is in question, run it through one test: **after this
+change, does everything the user didn't touch stay byte-for-byte the same, and
+does every reference still resolve to the thing it named?** If not, reject the
+option no matter how convenient — then find the option that keeps the principle
+and pay its honest cost where the user expects to pay it.
+
+Worked example — *why clone is an eager copy* (decided 2026-06-15). The question
+was how a reference (an embedded tile, a saved URL, a bookmark) to a tile should
+behave when the structure around it is cloned and then edited.
+
+- A copy-on-write design (share a subtree on clone; fork it on the first edit)
+  is cheap to clone, but a fork **re-rows** tiles — the edited instance's id
+  moves and a sibling inherits the old id. A stored reference can then silently
+  resolve to the *wrong instance's* content. That breaks the principle: the
+  thing did not stay where you put it.
+- No patch recovers it. Object-ids can't distinguish clones (clones share them);
+  capturing the whole id-path only narrows the failure, because a fork reassigns
+  a *whole grid's* ids at once — there is no stable per-instance id to capture at
+  any level.
+- The option that keeps the principle: **never reassign ids.** Editing is
+  in-place (the id never moves); copying happens only at the explicit clone
+  gesture, as an eager, independent deep copy. A tile's row id is then a
+  permanent, durable reference.
+- The cost lands where the user asked for it: clone is O(rows) of cheap metadata
+  (≈ a few ms for ~1000 tiles; blobs are shared by content address, so no
+  content is copied), paid exactly at the "make me a copy" gesture. Edits stay
+  O(1) — which is what a write-heavy, continuously-mutating workload needs.
+
+The shape generalizes: prefer **in-place, identity-stable mutation**; make the
+expensive, identity-creating operation **explicit and eager** rather than lazy
+and silent; and pay costs at the gesture that asked for them.
 
 ## The seven primitives
 
@@ -39,19 +86,29 @@ Seven tile kinds; move / clone / resize / descend over them cover everything.
 - **Solid** — the real thing. Delete (drag onto a blackhole, either mouse button) acts for real: a host file/dir goes to the **system trash** (recoverable, never `rm -rf`); a process gets `SIGTERM`.
 - **Dashed** — a link out of Gridwell (file-well, process-well, or a file dragged into a regular grid). Delete only *unlinks* (drops the tile row); the real file/process is untouched. `DeleteTile` routes on the parent grid's `source_kind`.
 
-## Identity, version, copy-on-write
+## Identity and copy-on-clone
 
-- `object_id` (UUID) survives COW and cloning; clones share it.
-- `version` (int) bumps on every **content** mutation. Clones share a version until one is edited — that's the unit of horizontal navigation and the optimistic-concurrency key (a mutation commits only if its claimed version matches disk).
-- **Framing is not a content edit.** Panning / zooming / scrolling (the `view_*` / `text_*` window) re-frames the preview *without* bumping version. It still forks a shared grid for write isolation, so the framing lands in this clone's row only.
-- **COW:** cloning a well shares its child grid (refcount++). The first mutation through a clone's path forks the shared spine up to the highest uniquely-owned grid, then writes into the fork. Cheap clones, no write leakage between them.
+Nothing the user didn't touch ever re-rows. The consequences:
+
+- **A tile's row id is its durable identity.** Assigned once, never changed; editing a tile rewrites it **in place**. So the row id is the stable handle every reference uses — an embed, a deep-link URL, a bookmark *is* that id, and it always resolves to the same tile. (Why this and not copy-on-write: see *Applying the principle* — a fork reassigns ids and lets a reference silently land on the wrong instance.)
+- **`version` (int)** bumps on every **content** mutation: the optimistic-concurrency key (a mutation commits only if its claimed version matches disk) and the spine of edit history.
+- **Framing is not a content edit.** Panning / zooming / scrolling (the `view_*` / `text_*` window) re-frames the preview *without* bumping version. It is still a real, persisted, in-place mutation — the framing stays exactly as you left it — it just isn't a *content* change.
+- **Clone is an eager copy.** The clone gesture makes a deep, independent copy of the tile (and, for a well, its whole child subtree): new rows for the copy, **blobs shared by content address** (no bytes duplicated). There is no structural sharing of regular grids and no copy-on-write-on-edit — so an edit to one copy can never touch another, and no id is ever reassigned. Clone cost is O(rows) of metadata, paid at the gesture (≈ ms for ~1000 tiles).
+- A clone may carry the source's `object_id` as a **provenance marker** (these came from the same origin) — used only by the future horizontal-navigation gesture, never for identity or references. The row id is identity.
+
+> **Implementation status (2026-06-15):** the store still runs the old
+> copy-on-write-on-edit path (`cow.go`: `preWrite` / `forkGrid` / grid
+> refcounts). Replacing it with copy-on-clone is pending. The principle above
+> is binding for new design decisions; treat the COW machinery as legacy to be
+> removed, not deepened. (Testing mode allows the clean break — see *Rules for
+> changes*.)
 
 ## Preview = descent = ascent
 
 All three read the same stored state, so they agree:
 - **Well** — row stores `view_x/view_y/view_zoom` (a rect in child coords): preview frame, descent target, ascent return — one value, three jobs.
 - **Text** — row stores the doc-space window (scroll offset + size) and mode (rendered/text). The preview crops the re-rendered doc to that window.
-- **URL** — row carries a frozen JPEG + URL string. Descent shows the preview (no network). Refresh floats a native Electron WebContentsView; a capture pump mirrors its live frames into the frozen preview other panes render. Ascent freezes via `SetURLState` (a *versioned* edit → forks in a cloned grid, never leaks). The live view eats all mouse input over its rect, so ascent/refresh route through the pane's corner circle, not the content box.
+- **URL** — row carries a frozen JPEG + URL string. Descent shows the preview (no network). Refresh floats a native Electron WebContentsView; a capture pump mirrors its live frames into the frozen preview other panes render. Ascent freezes via `SetURLState` (a *versioned*, in-place edit of this tile). The live view eats all mouse input over its rect, so ascent/refresh route through the pane's corner circle, not the content box.
 - **File/process-well** — the listing + sticky arrangement live in the disposable cache; descent reconciles them against current host contents (which may have changed underneath). A durable frozen preview, for viewing the archive where the host is absent, is future work.
 
 ## The mutation surface — mouse-only, no modifiers
@@ -80,7 +137,7 @@ The two share one id space, partitioned at `cacheIDBase` (any id ≥ it lives in
 
 ## Architecture — where things live
 
-- `internal/store/` — SQLite store and all invariants: `schema.go` (the prefix-parameterized DDL for both files), `attach.go` (cache attach, `cacheIDBase` / `schemaOf` id routing, exit-well rebind), `migrations.go` (`application_id` / `user_version` + the additive-migration framework), `cow.go` (preWrite / forkGrid / refcounts / `swapTileBlob` — the single blob-swap kernel), `tiles.go`, `move_clone.go`, `url.go`, `shell.go`, `source_*.go` (file/proc wells), `blobs.go`, `trash.go`.
+- `internal/store/` — SQLite store and all invariants: `schema.go` (the prefix-parameterized DDL for both files), `attach.go` (cache attach, `cacheIDBase` / `schemaOf` id routing, exit-well rebind), `migrations.go` (`application_id` / `user_version` + the additive-migration framework), `cow.go` (preWrite / forkGrid / refcounts / `swapTileBlob` — the blob-swap kernel; the fork machinery is legacy, migrating to copy-on-clone), `tiles.go`, `move_clone.go`, `url.go`, `shell.go`, `source_*.go` (file/proc wells), `blobs.go`, `trash.go`.
 - `internal/server/` — Connect-RPC handlers, the shell PTY WebSocket (`/rpc/ShellStream`), the `/preview/tile/` image endpoint, SSE events.
 - `internal/rpc/` + `api/gridwell/v1/data.proto` — wire types and proto. Regenerate with `buf generate` after editing the proto. `IsWellKind` lives here (shared store+client well-kind predicate).
 - `internal/tmux/` — shell sessions.
@@ -88,17 +145,17 @@ The two share one id space, partitioned at `cacheIDBase` (any id ≥ it lives in
 - `client/` pure packages (host-buildable, table-tested): `pane` (tree + split/resize geometry), `cache`, `clientsync` (RPC conflict-vs-log policy), `dragdrop`, `markdown`, `zoomtrans`, `anim`, `palette`, `panebox`, `preview`, `embed`, `url`/`urlnorm`.
 - `apps/desktop/` — Electron shell (TypeScript): loads the renderer from the server's own origin, hosts live URL WebContentsViews and the JPEG capture pump.
 
-These are implementation choices — swap them freely if they get in the way: COW + refcounts, SQLite, the content-addressed blob store (sha256, refcounted), tmux, Electron, WebSocket/SSE, `Path` on RPCs, browser + WASM UI.
+These are implementation choices — swap them freely if they get in the way: copy-on-clone (replacing COW), SQLite, the content-addressed blob store (sha256, refcounted), tmux, Electron, WebSocket/SSE, `Path` on RPCs, browser + WASM UI. (The *principle* — things stay where you put them — is not an implementation choice; it is the contract.)
 
 ## Rules for changes
 
-**Invariants (binding — don't break without a conversation):** things stay where you put them; seven primitives; color grammar (blue / red / brown / green / purple); preview = descent = ascent; identity is `(object_id, version)`; mouse-only, no modifiers; every gesture has a preview and a cancel zone; panes are views, not state; the durable/cache split (`gridwell.db` is a complete, copyable archive of authored content; the cache is disposable, regenerable, and never required to open it).
+**Invariants (binding — don't break without a conversation):** things stay where you put them (**the deciding factor** — see *The guiding rule* / *Applying the principle*); seven primitives; color grammar (blue / red / brown / green / purple); preview = descent = ascent; a tile's row id is a permanent handle (nothing the user didn't touch re-rows; copies are made only by the clone gesture, eagerly); mouse-only, no modifiers; every gesture has a preview and a cancel zone; panes are views, not state; the durable/cache split (`gridwell.db` is a complete, copyable archive of authored content; the cache is disposable, regenerable, and never required to open it).
 
 **Per-commit gate:** `make check` (go build, go test, the `GOOS=js` wasm build, and the desktop `tsc` typecheck) must be green on every commit. `make check-electron` (xvfb live-tile harnesses) is for changes touching the URL/shell live path.
 
-**When you touch the store:**
-- Content mutations take a `Path` + `Version`: call `preWrite` (COW fork), `checkTileVersion`, then `bumpTileVersion`. Framing mutations fork but **don't** bump the version. The blob-swap dance (put → repoint column → inc-new/dec-old) lives only in `swapTileBlob`; reach for it instead of hand-rolling.
-- Refcounting goes through the single `tileRefs` table in `cow.go`, used by fork / clone / delete / GC alike — never hand-roll a per-kind inc/dec. A new tile kind that holds a grid or blob must be added there, and `property_test.go` must generate it. The property walk + `verifyRefcounts` (which counts both `blob_id` and `preview_blob_id`) are the safety net that catches leaks.
+**When you touch the store:** (the store is migrating from copy-on-write-on-edit to **copy-on-clone** — see *Identity and copy-on-clone*. New work should move toward in-place, id-stable edits + eager clone, not deepen COW. The two bullets below describe the current COW code; treat them as legacy.)
+- *(legacy)* Content mutations take a `Path` + `Version`: call `preWrite` (COW fork), `checkTileVersion`, then `bumpTileVersion`. Framing mutations fork but **don't** bump the version. The blob-swap dance (put → repoint column → inc-new/dec-old) lives only in `swapTileBlob`; reach for it instead of hand-rolling. *(Under copy-on-clone, content edits are in-place — no `preWrite`/fork — and only the clone path copies rows.)*
+- *(legacy)* Refcounting goes through the single `tileRefs` table in `cow.go`, used by fork / clone / delete / GC alike — never hand-roll a per-kind inc/dec. A new tile kind that holds a grid or blob must be added there, and `property_test.go` must generate it. The property walk + `verifyRefcounts` (which counts both `blob_id` and `preview_blob_id`) are the safety net that catches leaks. *(Under copy-on-clone, regular grids are owned 1:1 and aren't refcounted; only content-addressed blobs are.)*
 - Durable vs. cache: authored content goes in the main DB; projected host state (fs/proc grids + their tiles + arrangement + `@info` blobs) goes in the attached cache. Never write host-projected state to the main DB, and never assume the cache exists — it can be deleted between runs. Every id-keyed statement routes by `schemaOf(id)`; never hardcode a bare `grids` / `tiles` / `blobs` for a row that might live in the cache.
 - Host deletes go to the trash (`trash.go`), not `os.Remove`; process deletes `SIGTERM`.
 - Shell sessions are keyed by **tile id**, not `object_id`: a PTY can't be forked, so a cloned shell is a screenshot with no session. The shell WebSocket is same-origin — never reintroduce `InsecureSkipVerify`.
@@ -114,4 +171,9 @@ Prefer the clean break. This ends when the user declares the format **frozen** (
 
 ## Future work — horizontal navigation across clones
 
-A tile cloned twice then edited yields three rows sharing one `object_id` at versions *N*, *N+k*, *N+m*. The schema already carries `(object_id, version)` correctly; the remaining work is a gesture to jump between instances at the same version, or step through one instance's version history.
+Under copy-on-clone, a clone is an **independent** tile (its own row id) that
+carries the source's `object_id` as a provenance marker. Horizontal navigation
+is a gesture to jump between the rows that share an `object_id`; vertical
+navigation steps through one tile's version history. The row id stays stable
+throughout, so both are pure navigation over existing rows — no identity
+juggling required.
