@@ -156,12 +156,12 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 		return nil, asConnectError(err)
 	}
 	// A deleted shell tile's tmux session would otherwise survive across
-	// gridwell restarts and leak. But only reap it if THIS row id is now
-	// truly gone: a delete through one clone of a shared grid forks the
-	// spine and removes a fresh fork-copy (a new id with no session) while
-	// the sibling clone keeps this id and its live PTY. Killing on the raw
-	// request id would tear down that surviving clone's shell. Fire-and-
-	// forget; a missed kill is caught by the orphan-cleanup pass at startup.
+	// gridwell restarts and leak, so reap it once the row is gone. The
+	// ShellTileExists guard is a belt-and-braces check that this exact id
+	// really is deleted before we kill its session (a cloned shell is an
+	// independent copy with its own id and no session, so deleting a copy
+	// never touches the original's PTY). Fire-and-forget; a missed kill is
+	// caught by the orphan-cleanup pass at startup.
 	if h.srv.shellStreamer != nil {
 		exists, err := h.srv.store.ShellTileExists(ctx, tileID)
 		switch {

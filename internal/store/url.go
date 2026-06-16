@@ -14,10 +14,9 @@ import (
 // failed final frame) never clobbers good state. This is the RPC the
 // Electron shell calls on ascend, replacing the old server-side rod freeze.
 //
-// Freezing goes through Path + version + preWrite, exactly like a text or
-// well edit: a URL tile in a shared (cloned) grid forks the spine so the
-// frozen frame and address land in this clone's row only — they used to
-// write the shared row and leak into every clone.
+// Freezing is an in-place, versioned edit of this URL tile: copy-on-clone
+// keeps tiles unshared, so the frozen frame and address write straight to the
+// tile's own row.
 func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
@@ -28,12 +27,10 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 		if n.Kind != rpc.KindURL {
 			return ErrNotURLTile
 		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
-		if err != nil {
+		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
 			return err
 		}
-		*events = append(*events, pre.Events...)
-		tileID := pre.TargetTileID
+		tileID := req.TileID
 
 		// Empty JPEG is skipped (a partial capture must not clobber a good
 		// frozen frame); the blob-swap kernel handles dedup + refcounting.

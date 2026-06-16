@@ -715,12 +715,10 @@ func TestDeleteTileKillsShellSession(t *testing.T) {
 	}
 }
 
-// TestDeleteShellThroughCloneKeepsSiblingSession: deleting a shell that
-// lives in a shared (cloned) grid forks the spine and removes a fork-copy
-// (a new id, no session), while the sibling clone keeps this row id and its
-// live PTY. The handler must not reap the session on the raw request id, or
-// it tears down a shell that's still very much alive in the other clone.
-func TestDeleteShellThroughCloneKeepsSiblingSession(t *testing.T) {
+// TestDeleteShellCopyKeepsOriginalSession: a cloned shell is a screenshot —
+// its own row id, no live session. Deleting the clone's copy must reap only
+// that copy (which has no PTY) and never the original shell's live session.
+func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 	srv, hs, root := streamTestServer(t)
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
@@ -740,7 +738,9 @@ func TestDeleteShellThroughCloneKeepsSiblingSession(t *testing.T) {
 	}
 	fake.setAlive(shell.ID, true)
 
-	// Clone the well: its child grid (and the shell row) is now shared.
+	// Clone the well: copy-on-clone deep-copies its child grid, so the clone
+	// gets its OWN shell copy — a screenshot with a fresh row id and no live
+	// session (a PTY can't be copied).
 	clone, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
 		DestGridID: root, DestPath: rpc.Path{}, X: 10, Y: 0,
@@ -748,20 +748,35 @@ func TestDeleteShellThroughCloneKeepsSiblingSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cloneChild, err := srv.store.GetGrid(ctx, clone.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cloneShell rpc.Tile
+	for _, tile := range cloneChild.Tiles {
+		if tile.Kind == rpc.KindShell {
+			cloneShell = tile
+		}
+	}
+	if cloneShell.ID == 0 {
+		t.Fatalf("no shell tile in clone's child grid %d", clone.ChildGridID)
+	}
 
-	// Delete the shell through the clone's path. COW forks the shared grid:
-	// the removed row is a fork-copy; shell.ID survives under the first well.
+	// Delete the clone's shell copy. It has its own id and no session, so this
+	// must not touch the original shell or its live PTY.
 	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: shell.ID, Version: shell.Version,
+		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: cloneShell.ID, Version: cloneShell.Version,
 	}); err != nil {
 		t.Fatalf("DeleteTile: %v", err)
 	}
 
-	if killed := fake.killedIDs(); len(killed) != 0 {
-		t.Errorf("killed sessions %v; the sibling clone's shell %d is still live", killed, shell.ID)
+	for _, id := range fake.killedIDs() {
+		if id == shell.ID {
+			t.Errorf("original shell %d session was killed by deleting the clone's copy", shell.ID)
+		}
 	}
 	if exists, err := srv.store.ShellTileExists(ctx, shell.ID); err != nil || !exists {
-		t.Errorf("original shell %d should survive the clone-path delete (exists=%v err=%v)", shell.ID, exists, err)
+		t.Errorf("original shell %d should survive the clone-copy delete (exists=%v err=%v)", shell.ID, exists, err)
 	}
 }
 

@@ -71,11 +71,11 @@ func TestCloneShellCarriesScreenshot(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestForkPreservesShellPreviewRefcount: when a shared grid containing a
-// shell-with-preview is forked (COW), the copied shell row references the
-// same preview blob, so its refcount must rise to 2. Regression: forkGrid
-// had no shell case and copied the row without bumping the blob.
-func TestForkPreservesShellPreviewRefcount(t *testing.T) {
+// TestCloneCopiesShellPreviewBlob: cloning a well whose child grid holds a
+// shell-with-preview deep-copies the shell row, which references the same
+// immutable preview blob, so its refcount must rise to 2. cloneSubtree must
+// bump the preview blob for every copied tile that holds one.
+func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -99,7 +99,9 @@ func TestForkPreservesShellPreviewRefcount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Clone the well: now its child grid is shared (refcount 2).
+	// Clone the well: copy-on-clone deep-copies its child grid, re-rowing the
+	// shell-with-preview. The copy shares the immutable preview blob, so its
+	// refcount must rise to 2 — the case cloneSubtree must get right.
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
 		DestGridID: root, DestPath: rpc.Path{}, X: 50, Y: 0,
@@ -108,16 +110,21 @@ func TestForkPreservesShellPreviewRefcount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Mutate through the clone's path: this forks the shared child grid,
-	// copying the shell-with-preview into the fork.
-	if _, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path:   rpc.Path{WellIDs: []int64{clone.ID}},
-		GridID: clone.ChildGridID, X: 5, Y: 5, W: 1, H: 1, Data: []byte("forces a fork"),
-	}); err != nil {
+	// Two shell rows (original + copy) now share one preview blob.
+	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Two shell rows (original + forked copy) now share one preview blob.
+	if len(cloneChild.Tiles) != 1 || cloneChild.Tiles[0].Kind != rpc.KindShell {
+		t.Fatalf("clone child = %+v, want one shell tile", cloneChild.Tiles)
+	}
+	previewBlob := cloneChild.Tiles[0].PreviewBlobID
+	if previewBlob == 0 {
+		t.Fatal("cloned shell lost its preview blob")
+	}
+	if rc := refcount(t, s, "blobs", previewBlob); rc != 2 {
+		t.Errorf("preview blob refcount = %d, want 2", rc)
+	}
 	verifyRefcounts(t, s)
 }
 

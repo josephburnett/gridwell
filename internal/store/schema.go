@@ -70,15 +70,18 @@ func tablesDDL(schemaPrefix string) string {
 const tablesTemplate = `
 CREATE TABLE IF NOT EXISTS {{P}}grids (
     -- AUTOINCREMENT so a deleted grid's id is never reused. Without it,
-    -- SQLite recycles the rowid of a deleted grid (e.g. a grid-well whose
-    -- refcount hit 0), and a new grid taking that id would collide with the
-    -- client's still-cached copy of the old grid — making a fresh file-well
-    -- render the deleted grid-well's tiles. Fresh ids keep the client cache
-    -- (keyed by id) honest.
+    -- SQLite recycles the rowid of a deleted grid (e.g. an interior well that
+    -- was deleted, taking its owned child grid with it), and a new grid taking
+    -- that id would collide with the client's still-cached copy of the old
+    -- grid — making a fresh file-well render the deleted well's tiles. Fresh
+    -- ids keep the client cache (keyed by id) honest.
+    --
+    -- No refcount: regular grids are owned 1:1 by their parent well (copy-on-
+    -- clone never shares a grid), and host-backed source grids are shared by
+    -- identity but disposable, so neither is reference-counted. Only blobs are.
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id   TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 0,
-    refcount    INTEGER NOT NULL DEFAULT 1,
     source_kind TEXT,
     source_id   TEXT,
     created_at  INTEGER NOT NULL,

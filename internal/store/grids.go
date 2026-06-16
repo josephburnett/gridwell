@@ -204,10 +204,9 @@ func (s *Store) AllShellTileIDs(ctx context.Context) ([]int64, error) {
 
 // ShellTileExists reports whether a shell tile with the given row id is
 // still present. The DeleteTile handler uses it to decide whether the tmux
-// session keyed to that id is now orphaned. A delete through one clone of a
-// shared grid forks the spine and removes a fresh fork-copy (a new id, no
-// session) while the *sibling* clone keeps this id and its live PTY — so the
-// session must die only when this exact id is truly gone.
+// session keyed to that id is now orphaned: the session must die only when
+// this exact id is truly gone. (A cloned shell is an independent copy with
+// its own id and no session, so deleting it never affects the original.)
 func (s *Store) ShellTileExists(ctx context.Context, id int64) (bool, error) {
 	var n int64
 	err := s.db.QueryRowContext(ctx,

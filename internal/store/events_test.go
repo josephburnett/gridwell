@@ -318,7 +318,10 @@ func TestEventCloneURLEmitsTileChanged(t *testing.T) {
 // TestEventCowForkEmitsGridForked: a write into a clone-shared child grid
 // causes the spine to fork. The mutation should emit one GridForked per
 // forked grid plus the per-mutation TileChanged.
-func TestEventCowForkEmitsGridForked(t *testing.T) {
+// TestEventCloneEditEmitsOnlyTileChanged: a clone is an independent copy, so
+// editing inside it is a plain in-place mutation — just a TileChanged, no fork
+// machinery (there is no fork under copy-on-clone).
+func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -328,11 +331,10 @@ func TestEventCowForkEmitsGridForked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []int64{w.ID}},
 		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
@@ -343,18 +345,22 @@ func TestEventCowForkEmitsGridForked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cInner := cloneChild.Tiles[0]
 
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
 		Path:   rpc.Path{WellIDs: []int64{clone.ID}},
-		TileID: inner.ID, Version: inner.Version, W: 2, H: 2,
+		TileID: cInner.ID, Version: cInner.Version, W: 2, H: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "ResizeTile-with-fork", got, map[rpc.EventKind]int{
-		rpc.EventGridForked:  1,
+	assertCounts(t, "ResizeTile-in-clone", got, map[rpc.EventKind]int{
 		rpc.EventTileChanged: 1,
 	})
 }

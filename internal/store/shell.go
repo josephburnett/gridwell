@@ -51,40 +51,35 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 		if n.Kind != rpc.KindShell {
 			return ErrNotShellTile
 		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
-		if err != nil {
+		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
 			return err
 		}
-		*events = append(*events, pre.Events...)
 
 		if len(req.JPEG) > 0 {
-			if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
+			if _, _, err := s.swapTileBlob(ctx, tx, req.TileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
 				return err
 			}
 		} else {
 			// An empty capture (failed refresh) clears the frozen frame to
 			// NULL — unlike URL, which skips empties to preserve the last
 			// good frame. swapTileBlob can't express a NULL set, so the
-			// clear stays explicit.
-			current, err := s.loadTile(ctx, tx, pre.TargetTileID)
-			if err != nil {
-				return err
-			}
+			// clear stays explicit. Drop the reference (NULL) BEFORE releasing
+			// the blob, or the FK trips when decBlobRefcount GCs it.
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET preview_blob_id = NULL, updated_at = ? WHERE id = ?`,
-				s.now().Unix(), pre.TargetTileID); err != nil {
+				s.now().Unix(), req.TileID); err != nil {
 				return err
 			}
-			if current.PreviewBlobID != 0 {
-				if err := s.decBlobRefcount(ctx, tx, current.PreviewBlobID); err != nil {
+			if n.PreviewBlobID != 0 {
+				if err := s.decBlobRefcount(ctx, tx, n.PreviewBlobID); err != nil {
 					return err
 				}
 			}
 		}
-		if err := bumpTileVersion(ctx, tx, pre.TargetTileID); err != nil {
+		if err := bumpTileVersion(ctx, tx, req.TileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
+		out, err = s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}

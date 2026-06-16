@@ -208,16 +208,15 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
+	if _, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
 		Path: rpc.Path{WellIDs: []int64{wellA.ID}}, GridID: wellA.ChildGridID,
 		X: 0, Y: 0, W: 1, H: 1, URL: "https://a.example",
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Clone the well: now wellA and wellB share one child grid (rc 2), so
-	// they share the one URL row until something forks it.
+	// Clone the well: copy-on-clone deep-copies the child grid, so wellB gets
+	// its own independent URL tile (a re-rowed copy of wellA's).
 	wellB, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path: rpc.Path{}, TileID: wellA.ID, Version: wellA.Version,
 		DestGridID: root, DestPath: rpc.Path{}, X: 50, Y: 0,
@@ -226,10 +225,23 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Freeze through wellB's path: navigate + preview. Must fork the shared
-	// grid and touch only wellB's copy.
+	// Freeze through wellB's OWN copy of the URL tile. It must touch only
+	// wellB; wellA is a separate row and stays as it was.
+	bGrid, err := s.GetGrid(ctx, wellB.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bURL rpc.Tile
+	for _, tile := range bGrid.Tiles {
+		if tile.Kind == rpc.KindURL {
+			bURL = tile
+		}
+	}
+	if bURL.ID == 0 {
+		t.Fatalf("no URL tile in wellB's child grid %d", wellB.ChildGridID)
+	}
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		Path: rpc.Path{WellIDs: []int64{wellB.ID}}, TileID: url.ID, Version: url.Version,
+		Path: rpc.Path{WellIDs: []int64{wellB.ID}}, TileID: bURL.ID, Version: bURL.Version,
 		JPEG: []byte("frozen-b"), URL: "https://b.example", Title: "B",
 	}); err != nil {
 		t.Fatal(err)

@@ -34,10 +34,10 @@ func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, clai
 }
 
 // createTile is the shared scaffolding for the four Create* methods:
-// sequence validation → preWrite → overlap check → kind-specific insert →
-// grid version bump → load → publish. The insert closure receives the
-// canonical gridID, the current unix timestamp, and a fresh object_id; it
-// inserts the tile row and returns its id.
+// sequence validation → overlap check → kind-specific insert → grid version
+// bump → load → publish. The insert closure receives the canonical gridID, the
+// current unix timestamp, and a fresh object_id; it inserts the tile row and
+// returns its id.
 func (s *Store) createTile(
 	ctx context.Context,
 	path rpc.Path, gridID, x, y, w, h int64,
@@ -55,12 +55,9 @@ func (s *Store) createTile(
 		if err := checkLeafGrid(seq, gridID); err != nil {
 			return err
 		}
-		pre, err := s.preWrite(ctx, tx, path, 0)
-		if err != nil {
-			return err
-		}
-		gid := pre.GridID
-		*events = append(*events, pre.Events...)
+		// The grid the pane is in IS where the tile lands — copy-on-clone
+		// never shares a grid, so creation writes in place.
+		gid := gridID
 
 		over, err := overlapsExisting(ctx, tx, gid, x, y, w, h)
 		if err != nil {
@@ -95,7 +92,7 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			childObj := s.newID()
 			res, err := tx.ExecContext(ctx,
-				`INSERT INTO grids (object_id, refcount, created_at, updated_at) VALUES (?, 1, ?, ?)`,
+				`INSERT INTO grids (object_id, created_at, updated_at) VALUES (?, ?, ?)`,
 				childObj, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert child grid: %w", err)
@@ -201,17 +198,17 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 	}
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version); err != nil {
-			return err
-		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
+		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
 		}
-		tileID := pre.TargetTileID
-		*events = append(*events, pre.Events...)
+		gridID, err := s.checkPathLeaf(ctx, tx, req.Path, n)
+		if err != nil {
+			return err
+		}
+		tileID := req.TileID
 
-		over, err := overlapsExisting(ctx, tx, pre.GridID, req.X, req.Y, req.W, req.H, tileID)
+		over, err := overlapsExisting(ctx, tx, gridID, req.X, req.Y, req.W, req.H, tileID)
 		if err != nil {
 			return err
 		}
@@ -238,13 +235,10 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 
 // SetWellView updates a well tile's framing (view_x/view_y/view_zoom).
 //
-// Framing is not a content edit: re-framing does NOT bump the tile version,
-// so two clones still "share a version until one is edited" (CLAUDE.md) even
-// after the user pans/zooms one of them. It still goes through preWrite,
-// though — if the well lives in a shared grid the spine forks, so the new
-// framing lands in this clone's row only. Write isolation without a version
-// bump is how "things stay where you put them" and "clones share a version"
-// both hold for framing.
+// Framing is not a content edit: re-framing does NOT bump the tile version.
+// It's an in-place write to this tile's row (copy-on-clone means clones are
+// already independent, so there is nothing to fork) — the framing stays
+// exactly as you left it.
 func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
@@ -255,17 +249,15 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 		if !isWellKind(n.Kind) {
 			return ErrNotWellTile
 		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
-		if err != nil {
+		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
 			return err
 		}
-		*events = append(*events, pre.Events...)
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(pre.TargetTileID)+`tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
-			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), pre.TargetTileID); err != nil {
+			`UPDATE `+schemaOf(req.TileID)+`tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
+			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
+		out, err = s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -276,9 +268,8 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 }
 
 // SetTextView updates a text tile's framed-document window and rendered/text
-// mode. Like SetWellView this is framing, not content: it forks a shared
-// spine for write isolation but does NOT bump the tile version, so clones
-// keep sharing a version until the text itself is edited (UpdateText).
+// mode. Like SetWellView this is framing, not content: an in-place write that
+// does NOT bump the tile version.
 func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
@@ -289,21 +280,19 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 		if n.Kind != rpc.KindText {
 			return ErrNotTextTile
 		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
-		if err != nil {
+		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
 			return err
 		}
-		*events = append(*events, pre.Events...)
 		var textModeArg any
 		if req.TextMode != "" {
 			textModeArg = req.TextMode
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(pre.TargetTileID)+`tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
-			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), pre.TargetTileID); err != nil {
+			`UPDATE `+schemaOf(req.TileID)+`tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
+			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
+		out, err = s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}
@@ -318,18 +307,11 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 // (file, directory, process) is removed too.
 func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version); err != nil {
-			return err
-		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
+		t, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
 		if err != nil {
 			return err
 		}
-		*events = append(*events, pre.Events...)
-		// Reload after preWrite: if the grid was shared, the tile lives in a
-		// new row after the fork.
-		t, err := s.loadTile(ctx, tx, pre.TargetTileID)
-		if err != nil {
+		if _, err := s.checkPathLeaf(ctx, tx, req.Path, t); err != nil {
 			return err
 		}
 		parent, err := s.loadGrid(ctx, tx, t.GridID)

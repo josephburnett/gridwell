@@ -59,13 +59,9 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			return fmt.Errorf("%w: tile %d not in source path leaf grid %d", ErrInvalidPath, req.TileID, srcGrid)
 		}
 
-		srcPre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, srcPre.Events...)
-		tileID := srcPre.TargetTileID
-		srcGrid = srcPre.GridID
+		// No fork: copy-on-clone keeps tiles unshared, so a move writes the
+		// tile's row in place (its id never changes).
+		tileID := req.TileID
 
 		dstSeq, err := s.buildGridSequence(ctx, tx, req.DestPath)
 		if err != nil {
@@ -91,17 +87,6 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 				return fmt.Errorf("%w: cross-grid move involving a source-backed grid is not allowed; clone (right-drag) to link instead", ErrInvalidArgument)
 			}
 		}
-		if crossGrid {
-			dstPre, err := s.preWrite(ctx, tx, req.DestPath, 0)
-			if err != nil {
-				return err
-			}
-			*events = append(*events, dstPre.Events...)
-			dstGrid = dstPre.GridID
-		} else {
-			dstGrid = srcGrid
-		}
-
 		if n.Kind == rpc.KindWell {
 			if slices.Contains(req.DestPath.WellIDs, tileID) {
 				return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
@@ -149,12 +134,13 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 	return out, err
 }
 
-// CloneTile duplicates a tile into a destination grid at (x, y). The new row
-// shares the source's object_id and starting version. For wells, both rows
-// share the same child grid (refcount bumps). For text tiles, both rows
-// share the same blob (refcount bumps). For URL tiles, the new row copies
-// the URL string and the last-frozen preview JPEG. For blackhole tiles,
-// only the kind is carried over.
+// CloneTile duplicates a tile into a destination grid at (x, y) as an eager,
+// independent copy. The new row carries the source's object_id + version as a
+// provenance marker but gets a fresh row id. An interior well's whole child
+// subtree is deep-copied (new grid + tile rows; blobs shared); a file/process
+// well shares its host-backed source grid (identity, not COW); a text/url/shell
+// tile shares its content/preview blob (refcount bumped). Nothing is shared
+// between the two copies, so editing one can never touch the other.
 func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
@@ -199,12 +185,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			}
 		}
 
-		dstPre, err := s.preWrite(ctx, tx, req.DestPath, 0)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, dstPre.Events...)
-		dstGrid := dstPre.GridID
+		dstGrid := dstGridRaw
 
 		over, err := overlapsExisting(ctx, tx, dstGrid, req.X, req.Y, n.W, n.H)
 		if err != nil {
@@ -215,70 +196,15 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		}
 
 		now := s.now().Unix()
-		var (
-			child       sql.NullInt64
-			blob        sql.NullInt64
-			urlStr      sql.NullString
-			textMode    sql.NullString
-			previewBlob sql.NullInt64
-			fsPath      sql.NullString
-			pidNS       sql.NullInt64
-		)
-		switch n.Kind {
-		case rpc.KindWell:
-			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
-		case rpc.KindFileWell:
-			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
-			fsPath = sql.NullString{String: n.FSPath, Valid: true}
-		case rpc.KindProcessWell:
-			child = sql.NullInt64{Int64: n.ChildGridID, Valid: true}
-			pidNS = sql.NullInt64{Int64: n.PID, Valid: true}
-		case rpc.KindURL:
-			urlStr = sql.NullString{String: n.URLString, Valid: true}
-			if n.PreviewBlobID != 0 {
-				previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
-			}
-		case rpc.KindShell:
-			// A PTY can't be forked, so a cloned shell is a screenshot:
-			// carry the frozen preview blob, but not the live session. The
-			// tmux session stays keyed to the source tile's id; the clone
-			// (a fresh row id) has none until its own first refresh.
-			if n.PreviewBlobID != 0 {
-				previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
-			}
-		case rpc.KindText:
-			// File-content tiles synthesized inside fs-grids carry no
-			// blob in V1 (lazy content loading is future work) — keep
-			// blob NULL on the clone so the FK doesn't complain.
-			if n.BlobID != 0 {
-				blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
-			}
-			if n.TextMode != "" {
-				textMode = sql.NullString{String: n.TextMode, Valid: true}
-			}
-		case rpc.KindBlackHole:
-			// no kind-specific state
-		}
-		res, err := tx.ExecContext(ctx, `
-			INSERT INTO `+schemaOf(dstGrid)+`tiles (object_id, version, grid_id, kind, x, y, w, h,
-				view_x, view_y, view_zoom, child_grid_id,
-				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
-				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			n.ObjectID, n.Version, dstGrid, n.Kind, req.X, req.Y, n.W, n.H,
-			n.ViewX, n.ViewY, n.ViewZoom, child,
-			n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-			urlStr, previewBlob, fsPath, pidNS, nullableString(n.SourceKey), n.AltText,
-			now, now)
-		if err != nil {
-			return fmt.Errorf("insert clone: %w", err)
-		}
-		newID, err := res.LastInsertId()
+		// child_grid_id: an interior well gets a deep copy of its subtree
+		// (cloneSubtree); a file/process well shares the same host-backed source
+		// grid (identity, not COW); everything else has none.
+		child, err := s.childGridForClone(ctx, tx, n)
 		if err != nil {
 			return err
 		}
-		if err := s.incTileRefs(ctx, tx, n.Kind, n.ChildGridID, n.BlobID, n.PreviewBlobID); err != nil {
+		newID, err := s.insertTileCopy(ctx, tx, dstGrid, n, req.X, req.Y, child, now)
+		if err != nil {
 			return err
 		}
 		if err := s.bumpGridVersion(ctx, tx, dstGrid); err != nil {
@@ -315,27 +241,25 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		if n.SourceKey != "" {
 			return fmt.Errorf("%w: source-backed text tiles are read-only", ErrInvalidArgument)
 		}
-		pre, err := s.preWrite(ctx, tx, req.Path, req.TileID)
-		if err != nil {
+		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
 			return err
 		}
-		*events = append(*events, pre.Events...)
 
-		if _, _, err := s.swapTileBlob(ctx, tx, pre.TargetTileID, "blob_id", req.Data, mediaMarkdown); err != nil {
+		if _, _, err := s.swapTileBlob(ctx, tx, req.TileID, "blob_id", req.Data, mediaMarkdown); err != nil {
 			return err
 		}
 		// alt_text is a deterministic function of the content; write it
 		// alongside (a separate statement from the blob kernel).
 		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(pre.TargetTileID)+`tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
-			alt, s.now().Unix(), pre.TargetTileID); err != nil {
+			`UPDATE `+schemaOf(req.TileID)+`tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+			alt, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
-		if err := bumpTileVersion(ctx, tx, pre.TargetTileID); err != nil {
+		if err := bumpTileVersion(ctx, tx, req.TileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, pre.TargetTileID)
+		out, err = s.loadTile(ctx, tx, req.TileID)
 		if err != nil {
 			return err
 		}

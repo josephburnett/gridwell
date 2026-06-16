@@ -60,274 +60,158 @@ func isWellKind(kind string) bool {
 	return rpc.IsWellKind(kind)
 }
 
-// preWriteResult describes the result of preWrite.
-type preWriteResult struct {
-	GridID       int64
-	TargetTileID int64
-	Events       []rpc.Event
-}
-
-// preWrite ensures that the leaf grid in the descent path is unshared,
-// forking grids up the path as needed.
-func (s *Store) preWrite(ctx context.Context, tx *sql.Tx, path rpc.Path, targetTileID int64) (*preWriteResult, error) {
+// checkPathLeaf validates path and that `tile` lives in its leaf grid,
+// returning that leaf grid id. This is the in-place-edit replacement for the
+// old preWrite: with copy-on-clone nothing is ever shared, so a content edit
+// never forks — it writes the tile exactly where it sits. The path is still
+// validated (it's how the pane says where it is) and the tile must be in it.
+func (s *Store) checkPathLeaf(ctx context.Context, tx *sql.Tx, path rpc.Path, tile *rpc.Tile) (int64, error) {
 	seq, err := s.buildGridSequence(ctx, tx, path)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-
-	// Find the TOPMOST grid in the path whose refcount > 1. Every grid from
-	// that index down to the leaf must be forked, because forking a shared
-	// ancestor bumps the refcount of every well-child it contains — so any
-	// rc=1 descendant becomes rc=2 as soon as its parent forks, and a
-	// subsequent write through this path would leak into the other clones
-	// of the ancestor.
-	//
-	// fs/proc-backed grids are excluded: they are shared by identity (path
-	// or PID), not by COW. The host filesystem / process table is the
-	// single source of truth, so two file-wells at /foo must see the same
-	// state by design — forking would invent a divergence that the world
-	// outside Gridwell can't honor.
-	topForkIdx := -1
-	for i := 0; i < len(seq.grids); i++ {
-		var (
-			rc         int64
-			sourceKind sql.NullString
-		)
-		err := tx.QueryRowContext(ctx, `SELECT refcount, source_kind FROM `+schemaOf(seq.grids[i])+`grids WHERE id = ?`, seq.grids[i]).Scan(&rc, &sourceKind)
-		if err != nil {
-			return nil, err
-		}
-		if sourceKind.Valid {
-			continue
-		}
-		if rc > 1 {
-			if i == 0 {
-				return nil, fmt.Errorf("internal: root grid is shared (refcount=%d)", rc)
-			}
-			topForkIdx = i
-			break
-		}
+	leaf := seq.grids[len(seq.grids)-1]
+	if tile.GridID != leaf {
+		return 0, fmt.Errorf("%w: tile %d not in path leaf grid %d", ErrInvalidPath, tile.ID, leaf)
 	}
-
-	if topForkIdx == -1 {
-		return &preWriteResult{GridID: seq.grids[len(seq.grids)-1], TargetTileID: targetTileID}, nil
-	}
-
-	wellObjects := make([]string, len(seq.wells))
-	for i, wid := range seq.wells {
-		var obj string
-		if err := tx.QueryRowContext(ctx, `SELECT object_id FROM `+schemaOf(wid)+`tiles WHERE id = ?`, wid).Scan(&obj); err != nil {
-			return nil, err
-		}
-		wellObjects[i] = obj
-	}
-	var targetObjectID string
-	if targetTileID != 0 {
-		err := tx.QueryRowContext(ctx, `SELECT object_id FROM `+schemaOf(targetTileID)+`tiles WHERE id = ?`, targetTileID).Scan(&targetObjectID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: target tile %d", ErrNotFound, targetTileID)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	events := []rpc.Event{}
-
-	parentWellID := int64(0)
-	if topForkIdx > 0 {
-		parentWellID = seq.wells[topForkIdx-1]
-	}
-
-	for i := topForkIdx; i < len(seq.grids); i++ {
-		oldGridID := seq.grids[i]
-		// Don't fork fs/proc grids — they're shared by identity. The
-		// well above (already remapped into parentWellID) keeps pointing
-		// at the same shared grid, which is fine. Stop walking: any
-		// further descent stays on the shared grid.
-		var sourceKind sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT source_kind FROM `+schemaOf(oldGridID)+`grids WHERE id = ?`, oldGridID).Scan(&sourceKind); err != nil {
-			return nil, err
-		}
-		if sourceKind.Valid {
-			break
-		}
-		newGridID, wellRemap, err := s.forkGrid(ctx, tx, oldGridID)
-		if err != nil {
-			return nil, fmt.Errorf("fork grid %d: %w", oldGridID, err)
-		}
-
-		if parentWellID != 0 {
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE `+schemaOf(parentWellID)+`tiles SET child_grid_id = ?, updated_at = ? WHERE id = ?`,
-				newGridID, s.now().Unix(), parentWellID); err != nil {
-				return nil, err
-			}
-			if err := s.decRefcount(ctx, tx, oldGridID); err != nil {
-				return nil, err
-			}
-			if err := s.incRefcount(ctx, tx, newGridID); err != nil {
-				return nil, err
-			}
-			events = append(events, rpc.Event{
-				Kind:       rpc.EventGridForked,
-				GridForked: &rpc.GridForked{WellID: parentWellID, OldGridID: oldGridID, NewGridID: newGridID},
-			})
-		}
-
-		if i < len(seq.wells) {
-			oldWell := seq.wells[i]
-			newWell, ok := wellRemap[oldWell]
-			if !ok {
-				return nil, fmt.Errorf("internal: well %d (object %s) not remapped", oldWell, wellObjects[i])
-			}
-			parentWellID = newWell
-		}
-
-		seq.grids[i] = newGridID
-	}
-
-	newTargetID := targetTileID
-	if targetTileID != 0 {
-		err := tx.QueryRowContext(ctx,
-			`SELECT id FROM `+schemaOf(seq.grids[len(seq.grids)-1])+`tiles WHERE grid_id = ? AND object_id = ?`,
-			seq.grids[len(seq.grids)-1], targetObjectID).Scan(&newTargetID)
-		if err != nil {
-			return nil, fmt.Errorf("relocate target after fork: %w", err)
-		}
-	}
-
-	return &preWriteResult{
-		GridID:       seq.grids[len(seq.grids)-1],
-		TargetTileID: newTargetID,
-		Events:       events,
-	}, nil
+	return leaf, nil
 }
 
-// forkGrid creates a new grid that is a copy of oldGridID.
-func (s *Store) forkGrid(ctx context.Context, tx *sql.Tx, oldGridID int64) (int64, map[int64]int64, error) {
-	old, err := s.loadGrid(ctx, tx, oldGridID)
+// cloneSubtree deep-copies a grid and everything beneath it into fresh rows,
+// returning the new grid id. It is the eager copy the clone gesture performs
+// for an interior well: each grid and tile gets a brand-new row id (object_id
+// and version preserved as a provenance marker), so no tile is ever shared
+// between two clones — editing one can never touch the other, and no id is
+// ever reassigned. Blobs (immutable content) are shared by reference
+// (refcount bumped); host-backed source grids behind file/process wells are
+// shared by identity, not copied (see childGridForClone). "Things stay where
+// you put them": the copy is what the user explicitly asked for, the original
+// is untouched.
+func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (int64, error) {
+	old, err := s.loadGrid(ctx, tx, srcGridID)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
-
 	now := s.now().Unix()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO grids (object_id, version, refcount, created_at, updated_at)
-		 VALUES (?, ?, 0, ?, ?)`,
+		`INSERT INTO grids (object_id, version, created_at, updated_at) VALUES (?, ?, ?, ?)`,
 		old.ObjectID, old.Version, now, now)
 	if err != nil {
-		return 0, nil, fmt.Errorf("insert grid: %w", err)
+		return 0, fmt.Errorf("insert cloned grid: %w", err)
 	}
 	newGridID, err := res.LastInsertId()
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
-
-	// tileColumns + ", created_at, updated_at" gives us all the columns we need.
-	// grid_id (from tileColumns) is discarded — we assign newGridID on insert.
-	rows, err := tx.QueryContext(ctx,
-		`SELECT `+tileColumns+`, created_at, updated_at FROM tiles WHERE grid_id = ?`, oldGridID)
+	// loadTilesInGrid materializes the rows before we recurse, so we're not
+	// iterating a live cursor on the single connection while issuing nested
+	// inserts.
+	tiles, err := s.loadTilesInGrid(ctx, tx, srcGridID)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
-	defer rows.Close()
-
-	type tileCopy struct {
-		oldID                int64
-		objectID             string
-		version              int64
-		oldGridID            int64 // discarded; we insert into newGridID
-		kind                 string
-		x, y, w, h           int64
-		viewX, viewY         int64
-		viewZoom             float64
-		childGrid            sql.NullInt64
-		textX, textY         int64
-		textW, textH         int64
-		textMode             sql.NullString
-		blob                 sql.NullInt64
-		urlString            sql.NullString
-		previewBlob          sql.NullInt64
-		fsPath               sql.NullString
-		pid                  sql.NullInt64
-		sourceKey            sql.NullString
-		altText              string
-		createdAt, updatedAt int64
-	}
-	var copies []tileCopy
-	for rows.Next() {
-		var nc tileCopy
-		// Column order matches tileColumns + created_at, updated_at.
-		if err := rows.Scan(&nc.oldID, &nc.objectID, &nc.version, &nc.oldGridID, &nc.kind,
-			&nc.x, &nc.y, &nc.w, &nc.h,
-			&nc.viewX, &nc.viewY, &nc.viewZoom, &nc.childGrid,
-			&nc.textX, &nc.textY, &nc.textW, &nc.textH, &nc.textMode, &nc.blob,
-			&nc.urlString, &nc.previewBlob, &nc.fsPath, &nc.pid, &nc.sourceKey, &nc.altText,
-			&nc.createdAt, &nc.updatedAt); err != nil {
-			return 0, nil, err
-		}
-		copies = append(copies, nc)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, nil, err
-	}
-
-	remap := make(map[int64]int64, len(copies))
-	for _, nc := range copies {
-		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
-				view_x, view_y, view_zoom, child_grid_id,
-				text_x, text_y, text_w, text_h, text_mode, blob_id,
-				url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
-				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			nc.objectID, nc.version, newGridID, nc.kind, nc.x, nc.y, nc.w, nc.h,
-			nc.viewX, nc.viewY, nc.viewZoom, nc.childGrid,
-			nc.textX, nc.textY, nc.textW, nc.textH, nc.textMode, nc.blob,
-			nc.urlString, nc.previewBlob, nc.fsPath, nc.pid, nc.sourceKey, nc.altText,
-			nc.createdAt, now)
+	for i := range tiles {
+		src := &tiles[i]
+		child, err := s.childGridForClone(ctx, tx, src)
 		if err != nil {
-			return 0, nil, fmt.Errorf("copy tile: %w", err)
+			return 0, err
 		}
-		newID, err := res.LastInsertId()
+		if _, err := s.insertTileCopy(ctx, tx, newGridID, src, src.X, src.Y, child, now); err != nil {
+			return 0, err
+		}
+	}
+	return newGridID, nil
+}
+
+// childGridForClone returns the child_grid_id a copy of tile n should carry:
+//   - interior well: a deep copy of its subtree (recursive cloneSubtree);
+//   - file/process well: the SAME host-backed source grid (shared by identity
+//     — you can't deep-copy the filesystem or the process table);
+//   - everything else: none.
+func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) (sql.NullInt64, error) {
+	if n.ChildGridID == 0 {
+		return sql.NullInt64{}, nil
+	}
+	switch n.Kind {
+	case rpc.KindWell:
+		newChild, err := s.cloneSubtree(ctx, tx, n.ChildGridID)
 		if err != nil {
-			return 0, nil, err
+			return sql.NullInt64{}, err
 		}
-		remap[nc.oldID] = newID
-		// Bump the refcount on whatever this copied row also points at —
-		// child grid (well / file-well / process-well), text blob, or
-		// url/shell preview blob. file-wells and process-wells share the
-		// same backing fs/proc grid across clones (identity = path/PID),
-		// so a fork still just bumps refcount, same as a regular well.
-		if err := s.incTileRefs(ctx, tx, nc.kind,
-			nullToInt(nc.childGrid), nullToInt(nc.blob), nullToInt(nc.previewBlob)); err != nil {
-			return 0, nil, err
+		return sql.NullInt64{Int64: newChild, Valid: true}, nil
+	case rpc.KindFileWell, rpc.KindProcessWell:
+		return sql.NullInt64{Int64: n.ChildGridID, Valid: true}, nil
+	}
+	return sql.NullInt64{}, nil
+}
+
+// insertTileCopy inserts a copy of tile n into gridID at (x, y) with the given
+// child grid, preserving object_id + version (provenance) and sharing the
+// blob (refcount bumped). The per-kind column nullability mirrors the schema
+// CHECK constraint. Used by CloneTile (one tile) and cloneSubtree (every tile
+// in a subtree).
+func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *rpc.Tile, x, y int64, child sql.NullInt64, now int64) (int64, error) {
+	var (
+		blob, previewBlob, pidNS sql.NullInt64
+		urlStr, textMode, fsPath sql.NullString
+	)
+	switch n.Kind {
+	case rpc.KindFileWell:
+		fsPath = sql.NullString{String: n.FSPath, Valid: true}
+	case rpc.KindProcessWell:
+		pidNS = sql.NullInt64{Int64: n.PID, Valid: true}
+	case rpc.KindURL:
+		urlStr = sql.NullString{String: n.URLString, Valid: true}
+		if n.PreviewBlobID != 0 {
+			previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
+		}
+	case rpc.KindShell:
+		// A PTY can't be copied, so a cloned shell is a screenshot: carry the
+		// frozen preview blob, but not the live session (keyed by tile id).
+		if n.PreviewBlobID != 0 {
+			previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
+		}
+	case rpc.KindText:
+		if n.BlobID != 0 {
+			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
+		}
+		if n.TextMode != "" {
+			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
 	}
-	return newGridID, remap, nil
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO `+schemaOf(gridID)+`tiles (object_id, version, grid_id, kind, x, y, w, h,
+			view_x, view_y, view_zoom, child_grid_id,
+			text_x, text_y, text_w, text_h, text_mode, blob_id,
+			url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
+			created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ObjectID, n.Version, gridID, n.Kind, x, y, n.W, n.H,
+		n.ViewX, n.ViewY, n.ViewZoom, child,
+		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
+		urlStr, previewBlob, fsPath, pidNS, nullableString(n.SourceKey), n.AltText,
+		now, now)
+	if err != nil {
+		return 0, fmt.Errorf("insert tile copy: %w", err)
+	}
+	newID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if b := tileBlobRef(n.Kind, n.BlobID, n.PreviewBlobID); b != 0 {
+		if err := s.incBlobRefcount(ctx, tx, b); err != nil {
+			return 0, err
+		}
+	}
+	return newID, nil
 }
 
-func (s *Store) incRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error {
-	_, err := tx.ExecContext(ctx, `UPDATE `+schemaOf(gridID)+`grids SET refcount = refcount + 1 WHERE id = ?`, gridID)
-	return err
-}
-
-func (s *Store) decRefcount(ctx context.Context, tx *sql.Tx, gridID int64) error {
-	sc := schemaOf(gridID)
-	if _, err := tx.ExecContext(ctx, `UPDATE `+sc+`grids SET refcount = refcount - 1 WHERE id = ?`, gridID); err != nil {
-		return err
-	}
-	var rc int64
-	if err := tx.QueryRowContext(ctx, `SELECT refcount FROM `+sc+`grids WHERE id = ?`, gridID).Scan(&rc); err != nil {
-		return err
-	}
-	if rc <= 0 {
-		return s.deleteGrid(ctx, tx, gridID)
-	}
-	return nil
-}
-
+// deleteGrid recursively deletes a grid and everything it owns: each tile row
+// is dropped, interior-well child grids cascade (decTileRefs), and text /
+// preview blobs are released. Host-backed source grids behind file/process
+// wells are left alone — they're shared by identity and disposable. Owned
+// grids are 1:1 with their parent well, so there is no refcount to consult;
+// deleting the well deletes the grid.
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	sc := schemaOf(gridID)
 	rows, err := tx.QueryContext(ctx,
@@ -361,11 +245,6 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+sc+`tiles WHERE id = ?`, r.id); err != nil {
 			return err
 		}
-		// Release every reference this row held: child grid (well /
-		// file-well / process-well), text blob, or url/shell preview blob.
-		// GC'ing a grid that holds a file-well, process-well, or shell tile
-		// used to leak the fs/proc grid refcount or the preview blob — this
-		// path now goes through the same table-driven map as fork/clone.
 		if err := s.decTileRefs(ctx, tx, r.kind,
 			nullToInt(r.child), nullToInt(r.blob), nullToInt(r.preview)); err != nil {
 			return err
@@ -478,55 +357,41 @@ func nullToInt(n sql.NullInt64) int64 {
 	return 0
 }
 
-// tileRefs is the single source of truth for what a tile holds a refcount
-// on: the child grid (well / file-well / process-well), the text blob, or
-// the url/shell preview blob — derived from its raw child_grid_id, blob_id,
-// and preview_blob_id (0 = none). fork, clone, single-delete, and grid GC
-// all route through it so they can never drift per-kind again. They used
-// to: three hand-rolled switches disagreed, leaking shell preview blobs on
-// fork/clone and fs/proc child grids (plus shell blobs) on GC.
+// tileRefs is the single source of truth for what a tile *owns*: an interior
+// well's child grid (deep-copied on clone, recursively deleted on delete) and
+// the blob it holds a refcount on (its text body, or a url/shell preview).
+// file/process wells point at a host-backed source grid shared by identity, so
+// they own no grid — only their own preview blob (if any), exactly like
+// url/shell. Derived from the raw child_grid_id, blob_id, and preview_blob_id
+// (0 = none). clone, single-delete, and grid teardown all route through it.
 func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch kind {
 	case rpc.KindWell:
-		// Interior wells own their child grid in the durable main DB —
-		// refcounted + GC'd.
 		return childGrid, 0
 	case rpc.KindText:
 		return 0, blob
 	case rpc.KindURL, rpc.KindShell, rpc.KindFileWell, rpc.KindProcessWell:
-		// file/process wells point at a disposable cache source grid that is
-		// shared by identity and never individually GC'd, so they hold no
-		// grid ref — only their own durable preview blob (if any), exactly
-		// like url/shell. See CLAUDE.md (Storage).
 		return 0, previewBlob
 	}
 	return 0, 0
 }
 
-// incTileRefs bumps the refcounts a tile of the given kind holds. Called
-// when a tile row is materialized by copy (forkGrid) or clone (CloneTile).
-func (s *Store) incTileRefs(ctx context.Context, tx *sql.Tx, kind string, childGrid, blob, previewBlob int64) error {
-	g, b := tileRefs(kind, childGrid, blob, previewBlob)
-	if g != 0 {
-		if err := s.incRefcount(ctx, tx, g); err != nil {
-			return err
-		}
-	}
-	if b != 0 {
-		if err := s.incBlobRefcount(ctx, tx, b); err != nil {
-			return err
-		}
-	}
-	return nil
+// tileBlobRef returns the blob a tile of the given kind holds a refcount on
+// (text body or url/shell preview), or 0. The blob half of tileRefs, used when
+// materializing a copy.
+func tileBlobRef(kind string, blob, previewBlob int64) int64 {
+	_, b := tileRefs(kind, 0, blob, previewBlob)
+	return b
 }
 
-// decTileRefs releases the refcounts a tile of the given kind holds. Called
-// when a tile row is destroyed by single-delete (dropTileRow) or grid GC
-// (deleteGrid).
+// decTileRefs releases what a deleted tile owned: its interior-well child grid
+// (recursively deleted) and its blob (refcount dec, GC'd at zero). Called when
+// a tile row is destroyed by single-delete (dropTileRow / deleteFSGridTile) or
+// grid teardown (deleteGrid).
 func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind string, childGrid, blob, previewBlob int64) error {
 	g, b := tileRefs(kind, childGrid, blob, previewBlob)
 	if g != 0 {
-		if err := s.decRefcount(ctx, tx, g); err != nil {
+		if err := s.deleteGrid(ctx, tx, g); err != nil {
 			return err
 		}
 	}

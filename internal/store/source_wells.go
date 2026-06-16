@@ -118,8 +118,8 @@ func (s *Store) getOrCreateSourceGrid(ctx context.Context, tx *sql.Tx, sourceKin
 	}
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO cache.grids (object_id, refcount, source_kind, source_id, created_at, updated_at)
-		 VALUES (?, 1, ?, ?, ?, ?)`,
+		`INSERT INTO cache.grids (object_id, source_kind, source_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?)`,
 		objID, sourceKind, sourceID, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert source grid: %w", err)
