@@ -96,12 +96,7 @@ Nothing the user didn't touch ever re-rows. The consequences:
 - **Clone is an eager copy.** The clone gesture makes a deep, independent copy of the tile (and, for a well, its whole child subtree): new rows for the copy, **blobs shared by content address** (no bytes duplicated). There is no structural sharing of regular grids and no copy-on-write-on-edit — so an edit to one copy can never touch another, and no id is ever reassigned. Clone cost is O(rows) of metadata, paid at the gesture (≈ ms for ~1000 tiles).
 - A clone may carry the source's `object_id` as a **provenance marker** (these came from the same origin) — used only by the future horizontal-navigation gesture, never for identity or references. The row id is identity.
 
-> **Implementation status (2026-06-15):** the store still runs the old
-> copy-on-write-on-edit path (`cow.go`: `preWrite` / `forkGrid` / grid
-> refcounts). Replacing it with copy-on-clone is pending. The principle above
-> is binding for new design decisions; treat the COW machinery as legacy to be
-> removed, not deepened. (Testing mode allows the clean break — see *Rules for
-> changes*.)
+The store implements this directly: content edits write in place (`checkPathLeaf`, no fork), the clone gesture deep-copies (`cloneSubtree` / `insertTileCopy`), and delete cascades (`deleteGrid`). Grids aren't refcounted (owned 1:1); only blobs are.
 
 ## Preview = descent = ascent
 
@@ -137,7 +132,7 @@ The two share one id space, partitioned at `cacheIDBase` (any id ≥ it lives in
 
 ## Architecture — where things live
 
-- `internal/store/` — SQLite store and all invariants: `schema.go` (the prefix-parameterized DDL for both files), `attach.go` (cache attach, `cacheIDBase` / `schemaOf` id routing, exit-well rebind), `migrations.go` (`application_id` / `user_version` + the additive-migration framework), `cow.go` (preWrite / forkGrid / refcounts / `swapTileBlob` — the blob-swap kernel; the fork machinery is legacy, migrating to copy-on-clone), `tiles.go`, `move_clone.go`, `url.go`, `shell.go`, `source_*.go` (file/proc wells), `blobs.go`, `trash.go`.
+- `internal/store/` — SQLite store and all invariants: `schema.go` (the prefix-parameterized DDL for both files), `attach.go` (cache attach, `cacheIDBase` / `schemaOf` id routing, exit-well rebind), `migrations.go` (`application_id` / `user_version` + the additive-migration framework), `cow.go` (the copy-on-clone kernels: `checkPathLeaf`, `cloneSubtree` / `insertTileCopy` deep-copy, recursive `deleteGrid`, `tileRefs`, the `swapTileBlob` blob-swap kernel, blob refcounts), `tiles.go`, `move_clone.go`, `url.go`, `shell.go`, `source_*.go` (file/proc wells), `blobs.go`, `trash.go`.
 - `internal/server/` — Connect-RPC handlers, the shell PTY WebSocket (`/rpc/ShellStream`), the `/preview/tile/` image endpoint, SSE events.
 - `internal/rpc/` + `api/gridwell/v1/data.proto` — wire types and proto. Regenerate with `buf generate` after editing the proto. `IsWellKind` lives here (shared store+client well-kind predicate).
 - `internal/tmux/` — shell sessions.
@@ -145,7 +140,7 @@ The two share one id space, partitioned at `cacheIDBase` (any id ≥ it lives in
 - `client/` pure packages (host-buildable, table-tested): `pane` (tree + split/resize geometry), `cache`, `clientsync` (RPC conflict-vs-log policy), `dragdrop`, `markdown`, `zoomtrans`, `anim`, `palette`, `panebox`, `preview`, `embed`, `url`/`urlnorm`.
 - `apps/desktop/` — Electron shell (TypeScript): loads the renderer from the server's own origin, hosts live URL WebContentsViews and the JPEG capture pump.
 
-These are implementation choices — swap them freely if they get in the way: copy-on-clone (replacing COW), SQLite, the content-addressed blob store (sha256, refcounted), tmux, Electron, WebSocket/SSE, `Path` on RPCs, browser + WASM UI. (The *principle* — things stay where you put them — is not an implementation choice; it is the contract.)
+These are implementation choices — swap them freely if they get in the way: copy-on-clone, SQLite, the content-addressed blob store (sha256, refcounted), tmux, Electron, WebSocket/SSE, `Path` on RPCs, browser + WASM UI. (The *principle* — things stay where you put them — is not an implementation choice; it is the contract.)
 
 ## Rules for changes
 
@@ -153,9 +148,9 @@ These are implementation choices — swap them freely if they get in the way: co
 
 **Per-commit gate:** `make check` (go build, go test, the `GOOS=js` wasm build, and the desktop `tsc` typecheck) must be green on every commit. `make check-electron` (xvfb live-tile harnesses) is for changes touching the URL/shell live path.
 
-**When you touch the store:** (the store is migrating from copy-on-write-on-edit to **copy-on-clone** — see *Identity and copy-on-clone*. New work should move toward in-place, id-stable edits + eager clone, not deepen COW. The two bullets below describe the current COW code; treat them as legacy.)
-- *(legacy)* Content mutations take a `Path` + `Version`: call `preWrite` (COW fork), `checkTileVersion`, then `bumpTileVersion`. Framing mutations fork but **don't** bump the version. The blob-swap dance (put → repoint column → inc-new/dec-old) lives only in `swapTileBlob`; reach for it instead of hand-rolling. *(Under copy-on-clone, content edits are in-place — no `preWrite`/fork — and only the clone path copies rows.)*
-- *(legacy)* Refcounting goes through the single `tileRefs` table in `cow.go`, used by fork / clone / delete / GC alike — never hand-roll a per-kind inc/dec. A new tile kind that holds a grid or blob must be added there, and `property_test.go` must generate it. The property walk + `verifyRefcounts` (which counts both `blob_id` and `preview_blob_id`) are the safety net that catches leaks. *(Under copy-on-clone, regular grids are owned 1:1 and aren't refcounted; only content-addressed blobs are.)*
+**When you touch the store:**
+- Content mutations take a `Path` + `Version`: `checkTileVersion`, then `checkPathLeaf` (validates the path and that the tile lives in its leaf grid — no fork, the edit writes the tile in place), then the write + `bumpTileVersion`. Framing mutations write in place too but **don't** bump the version. The blob-swap dance (put → repoint column → inc-new/dec-old) lives only in `swapTileBlob`; reach for it instead of hand-rolling.
+- Copying happens only on the clone path: `childGridForClone` deep-copies an interior well's subtree (`cloneSubtree`) and shares host-backed source grids by identity; `insertTileCopy` shares the blob (refcount++). Delete cascades through `decTileRefs` → recursive `deleteGrid`. What a tile owns (an interior-well child grid; its text/preview blob) lives in one place — `tileRefs` — used by clone and delete alike; a new tile kind that holds a grid or blob must be added there, and `property_test.go` must generate it. Grids aren't refcounted (owned 1:1); only blobs are. `verifyRefcounts` (counting `blob_id` + `preview_blob_id`) is the leak net.
 - Durable vs. cache: authored content goes in the main DB; projected host state (fs/proc grids + their tiles + arrangement + `@info` blobs) goes in the attached cache. Never write host-projected state to the main DB, and never assume the cache exists — it can be deleted between runs. Every id-keyed statement routes by `schemaOf(id)`; never hardcode a bare `grids` / `tiles` / `blobs` for a row that might live in the cache.
 - Host deletes go to the trash (`trash.go`), not `os.Remove`; process deletes `SIGTERM`.
 - Shell sessions are keyed by **tile id**, not `object_id`: a PTY can't be forked, so a cloned shell is a screenshot with no session. The shell WebSocket is same-origin — never reintroduce `InsecureSkipVerify`.
