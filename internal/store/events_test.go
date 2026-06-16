@@ -315,9 +315,6 @@ func TestEventCloneURLEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "CloneURL", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-// TestEventCowForkEmitsGridForked: a write into a clone-shared child grid
-// causes the spine to fork. The mutation should emit one GridForked per
-// forked grid plus the per-mutation TileChanged.
 // TestEventCloneEditEmitsOnlyTileChanged: a clone is an independent copy, so
 // editing inside it is a plain in-place mutation — just a TileChanged, no fork
 // machinery (there is no fork under copy-on-clone).

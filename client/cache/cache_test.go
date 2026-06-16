@@ -69,21 +69,6 @@ func TestApplyTileRemoved(t *testing.T) {
 	}
 }
 
-func TestApplyGridForked(t *testing.T) {
-	c := seedCache(t)
-	ok := c.Apply(rpc.Event{
-		Kind:       rpc.EventGridForked,
-		GridForked: &rpc.GridForked{WellID: 100, OldGridID: 2, NewGridID: 99},
-	})
-	if !ok {
-		t.Error("Apply returned false")
-	}
-	g, _ := c.Grid(1)
-	if g.Tiles[100].ChildGridID != 99 {
-		t.Errorf("well not redirected: %+v", g.Tiles[100])
-	}
-}
-
 func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{

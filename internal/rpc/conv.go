@@ -160,12 +160,6 @@ func EventToProto(e Event) *pb.Event {
 		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: TileToProto(&e.TileChanged.Tile)}}}
 	case EventTileRemoved:
 		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: e.TileRemoved.GridID, TileId: e.TileRemoved.TileID}}}
-	case EventGridForked:
-		return &pb.Event{Payload: &pb.Event_GridForked{GridForked: &pb.GridForked{
-			WellId:    e.GridForked.WellID,
-			OldGridId: e.GridForked.OldGridID,
-			NewGridId: e.GridForked.NewGridID,
-		}}}
 	}
 	return &pb.Event{}
 }
@@ -186,12 +180,6 @@ func EventFromProto(e *pb.Event) Event {
 		return Event{Kind: EventTileChanged, TileChanged: &TileChanged{Tile: *tile}}
 	case *pb.Event_TileRemoved:
 		return Event{Kind: EventTileRemoved, TileRemoved: &TileRemoved{GridID: p.TileRemoved.GridId, TileID: p.TileRemoved.TileId}}
-	case *pb.Event_GridForked:
-		return Event{Kind: EventGridForked, GridForked: &GridForked{
-			WellID:    p.GridForked.WellId,
-			OldGridID: p.GridForked.OldGridId,
-			NewGridID: p.GridForked.NewGridId,
-		}}
 	}
 	return Event{}
 }

@@ -161,20 +161,6 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		// We can't update without a new GetGrid; signal redraw so the
 		// caller can decide whether to refetch.
 		return ev.GridChanged != nil
-	case rpc.EventGridForked:
-		// A well's child_grid_id was rewritten. Update the well node if
-		// we have it.
-		if ev.GridForked == nil {
-			return false
-		}
-		for _, g := range c.grids {
-			if n, ok := g.Tiles[ev.GridForked.WellID]; ok {
-				n.ChildGridID = ev.GridForked.NewGridID
-				g.Tiles[n.ID] = n
-				return true
-			}
-		}
-		return false
 	}
 	return false
 }

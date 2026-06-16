@@ -366,7 +366,6 @@ const (
 	EventGridChanged EventKind = "grid_changed"
 	EventTileChanged EventKind = "tile_changed"
 	EventTileRemoved EventKind = "tile_removed"
-	EventGridForked  EventKind = "grid_forked"
 )
 
 type Event struct {
@@ -374,7 +373,6 @@ type Event struct {
 	GridChanged *GridChanged `json:"grid_changed,omitempty"`
 	TileChanged *TileChanged `json:"tile_changed,omitempty"`
 	TileRemoved *TileRemoved `json:"tile_removed,omitempty"`
-	GridForked  *GridForked  `json:"grid_forked,omitempty"`
 }
 
 type GridChanged struct {
@@ -386,9 +384,4 @@ type TileChanged struct {
 type TileRemoved struct {
 	GridID int64 `json:"grid_id"`
 	TileID int64 `json:"tile_id"`
-}
-type GridForked struct {
-	WellID    int64 `json:"well_id"`
-	OldGridID int64 `json:"old_grid_id"`
-	NewGridID int64 `json:"new_grid_id"`
 }
