@@ -338,6 +338,18 @@ func (l *layoutTracker) advance() {
 	}
 }
 
+// emitInsertedTile resolves the row id from a just-executed INSERT, loads the
+// tile, and appends a TileChanged event — the shared tail of every reconcile
+// insert helper (fs file / fs sub-well / proc @info / proc child).
+func (s *Store) emitInsertedTile(ctx context.Context, tx *sql.Tx, res sql.Result, events *[]rpc.Event) error {
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	_, err = s.emitTileChanged(ctx, tx, id, events)
+	return err
+}
+
 func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, e fssource.Entry, pos position, now int64, events *[]rpc.Event) error {
 	objID := s.newID()
 	if e.Kind == fssource.KindDir {
@@ -357,16 +369,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 		if err != nil {
 			return fmt.Errorf("insert fs sub-well: %w", err)
 		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		t, err := s.loadTile(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
-		return nil
+		return s.emitInsertedTile(ctx, tx, res, events)
 	}
 	// File tile: no blob until the user actually descends and asks for
 	// content. blob_id stays NULL — the relaxed text-kind CHECK allows
@@ -379,16 +382,7 @@ func (s *Store) insertFSGridTile(ctx context.Context, tx *sql.Tx, gridID int64, 
 	if err != nil {
 		return fmt.Errorf("insert fs file tile: %w", err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
-	t, err := s.loadTile(ctx, tx, id)
-	if err != nil {
-		return err
-	}
-	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
-	return nil
+	return s.emitInsertedTile(ctx, tx, res, events)
 }
 
 // updateTileAltText overwrites the alt_text on one tile and emits a
@@ -447,19 +441,10 @@ func (s *Store) insertProcInfoTile(ctx context.Context, tx *sql.Tx, gridID int64
 	if err != nil {
 		return fmt.Errorf("insert proc info tile: %w", err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
 	if err := s.incBlobRefcount(ctx, tx, blobID); err != nil {
 		return err
 	}
-	t, err := s.loadTile(ctx, tx, id)
-	if err != nil {
-		return err
-	}
-	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
-	return nil
+	return s.emitInsertedTile(ctx, tx, res, events)
 }
 
 // refreshProcInfoBlob rebinds an existing @info tile to a new content
@@ -508,14 +493,5 @@ func (s *Store) insertProcChildTile(ctx context.Context, tx *sql.Tx, gridID int6
 	if err != nil {
 		return fmt.Errorf("insert proc child tile: %w", err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
-	t, err := s.loadTile(ctx, tx, id)
-	if err != nil {
-		return err
-	}
-	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *t}})
-	return nil
+	return s.emitInsertedTile(ctx, tx, res, events)
 }
