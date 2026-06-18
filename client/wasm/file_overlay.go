@@ -559,11 +559,12 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	// Bridge: replace the cached blob under the existing BlobID so
-	// renders that read the cached node's blob_id between now and the
-	// RPC round-trip see the user's content.
+	// Optimistic local render: repoint THIS tile at a fresh cache blob with
+	// the typed content. Must be tile-scoped (OptimisticEdit), never a PutBlob
+	// over the shared content-addressed blob — that would leak the edit into
+	// every clone sharing it (and get persisted on their next save).
 	if file.BlobID != 0 {
-		a.c.PutBlob(file.BlobID, []byte(buf))
+		a.c.OptimisticEdit(gid, file.ID, []byte(buf))
 	}
 	go func() {
 		a.postUpdateText(gid, &rpc.UpdateTextRequest{

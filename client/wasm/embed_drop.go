@@ -113,15 +113,16 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	newSrc := embedpkg.Insert(string(bytes), link, dt.insertOffset)
 
 	// Synchronously reflect the change before the RPC roundtrip:
-	//   - cache: replace blob under the existing BlobID so canvas
-	//     renders see fresh content immediately.
+	//   - cache: repoint THIS tile at a fresh optimistic blob (OptimisticEdit,
+	//     not a PutBlob over the shared content-addressed blob — that would
+	//     leak the inserted embed into every clone sharing it).
 	//   - textarea: if the singleton textarea is currently bound to this
 	//     doc (regardless of which pane has focus), push the new value
 	//     in directly. Without this, focus-shifting back to the doc
 	//     would re-display the stale buffer, and worse, a raw→rendered
 	//     toggle would save the stale buffer back over the drop.
 	if tile.BlobID != 0 {
-		a.c.PutBlob(tile.BlobID, []byte(newSrc))
+		a.c.OptimisticEdit(gid, tile.ID, []byte(newSrc))
 	}
 	if a.lastTextareaTileID == dt.tileID &&
 		!a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {

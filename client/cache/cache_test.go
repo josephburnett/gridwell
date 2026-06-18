@@ -32,6 +32,68 @@ func TestPutAndGet(t *testing.T) {
 	}
 }
 
+// TestOptimisticEditDoesNotLeakToClone is the regression for the cross-clone
+// content leak: two cloned text tiles (different ids, different grids) share
+// one content-addressed blob id. Optimistically editing one must NOT touch the
+// blob the other still points at, or the sibling renders — and then persists —
+// the wrong content (the "edit one clone, the other changed too" bug).
+func TestOptimisticEditDoesNotLeakToClone(t *testing.T) {
+	c := New()
+	// gridA/textA and gridB/textB are clones: distinct tile rows, distinct
+	// grids, but the same shared blob id 5 ("Hello World").
+	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{{ID: 10, GridID: 1, Kind: rpc.KindText, BlobID: 5}})
+	c.PutGrid(rpc.Grid{ID: 2}, []rpc.Tile{{ID: 20, GridID: 2, Kind: rpc.KindText, BlobID: 5}})
+	c.PutBlob(5, []byte("Hello World"))
+
+	if !c.OptimisticEdit(1, 10, []byte("Goodbye")) {
+		t.Fatal("OptimisticEdit returned false")
+	}
+
+	// The shared blob is untouched.
+	if b, _ := c.Blob(5); string(b) != "Hello World" {
+		t.Errorf("shared blob 5 = %q, want Hello World (edit leaked)", b)
+	}
+	// The sibling clone still points at the shared blob and renders the old
+	// content.
+	gB, _ := c.Grid(2)
+	if gB.Tiles[20].BlobID != 5 {
+		t.Errorf("sibling BlobID = %d, want 5 (unchanged)", gB.Tiles[20].BlobID)
+	}
+	// The edited tile points at a fresh local (negative) blob with the new
+	// content.
+	gA, _ := c.Grid(1)
+	newID := gA.Tiles[10].BlobID
+	if newID >= 0 {
+		t.Errorf("edited BlobID = %d, want a negative optimistic id", newID)
+	}
+	if b, _ := c.Blob(newID); string(b) != "Goodbye" {
+		t.Errorf("optimistic blob = %q, want Goodbye", b)
+	}
+}
+
+// TestOptimisticEditReconcilesOnTileChanged: once the server's TileChanged
+// arrives with the real blob id, the optimistic local blob is dropped.
+func TestOptimisticEditReconcilesOnTileChanged(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{{ID: 10, GridID: 1, Kind: rpc.KindText, BlobID: 5}})
+	c.PutBlob(5, []byte("old"))
+	c.OptimisticEdit(1, 10, []byte("new"))
+	g, _ := c.Grid(1)
+	localID := g.Tiles[10].BlobID
+
+	c.Apply(rpc.Event{
+		Kind:        rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 10, GridID: 1, Kind: rpc.KindText, BlobID: 9}},
+	})
+	if _, ok := c.Blob(localID); ok {
+		t.Errorf("optimistic blob %d survived reconciliation", localID)
+	}
+	g, _ = c.Grid(1)
+	if g.Tiles[10].BlobID != 9 {
+		t.Errorf("tile BlobID = %d, want 9 (server id)", g.Tiles[10].BlobID)
+	}
+}
+
 func TestApplyTileChanged(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{

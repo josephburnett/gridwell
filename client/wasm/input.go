@@ -1552,11 +1552,11 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			hasBuf = true
 		}
 	}
-	// Bridge: pre-write the cached blob under the file's current
-	// BlobID so the parent-grid preview rendered during the ascent
-	// transition reflects the user's edits, not the pre-edit content.
+	// Pre-write the parent-grid preview to the user's edits before the ascent
+	// transition. Tile-scoped (OptimisticEdit) so the optimistic content lands
+	// only on this tile, not on any clone that shares its content-addressed blob.
 	if hasBuf && file.BlobID != 0 {
-		a.c.PutBlob(file.BlobID, []byte(buf))
+		a.c.OptimisticEdit(gid, file.ID, []byte(buf))
 	}
 
 	// The framed window in doc px: scroll position + the inner box size
