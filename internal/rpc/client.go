@@ -76,97 +76,56 @@ func (c *Client) GetTilePreview(ctx context.Context, tileID int64) ([]byte, erro
 	return r.Msg.Jpeg, nil
 }
 
-func (c *Client) CreateWell(ctx context.Context, req *CreateWellRequest) (*Tile, error) {
-	r, err := c.cl.CreateWell(ctx, connect.NewRequest(CreateWellToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
-func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile, error) {
-	r, err := c.cl.CreateText(ctx, connect.NewRequest(CreateTextToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
-func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
-	r, err := c.cl.CreateURL(ctx, connect.NewRequest(CreateURLToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
-func (c *Client) CreateBlackHole(ctx context.Context, req *CreateBlackHoleRequest) (*Tile, error) {
-	r, err := c.cl.CreateBlackHole(ctx, connect.NewRequest(CreateBlackHoleToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
-func (c *Client) CreateFileWell(ctx context.Context, req *CreateFileWellRequest) (*Tile, error) {
-	r, err := c.cl.CreateFileWell(ctx, connect.NewRequest(CreateFileWellToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
-func (c *Client) CreateProcessWell(ctx context.Context, req *CreateProcessWellRequest) (*Tile, error) {
-	r, err := c.cl.CreateProcessWell(ctx, connect.NewRequest(CreateProcessWellToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
-}
-func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
-	r, err := c.cl.CreateShell(ctx, connect.NewRequest(CreateShellToProto(req)))
+// tileResp unwraps a TileResponse from any of the Tile-returning RPCs into a
+// Go rpc.Tile (or the transport error). The mirror of the server's tileResp:
+// every Create / Move / Clone / Resize / Set / Update method ends the same way,
+// so the unwrap lives in one place rather than being hand-copied per method.
+func tileResp(r *connect.Response[pb.TileResponse], err error) (*Tile, error) {
 	if err != nil {
 		return nil, err
 	}
 	return TileFromProto(r.Msg.Tile), nil
 }
 
+func (c *Client) CreateWell(ctx context.Context, req *CreateWellRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateWell(ctx, connect.NewRequest(CreateWellToProto(req))))
+}
+func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateText(ctx, connect.NewRequest(CreateTextToProto(req))))
+}
+func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateURL(ctx, connect.NewRequest(CreateURLToProto(req))))
+}
+func (c *Client) CreateBlackHole(ctx context.Context, req *CreateBlackHoleRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateBlackHole(ctx, connect.NewRequest(CreateBlackHoleToProto(req))))
+}
+func (c *Client) CreateFileWell(ctx context.Context, req *CreateFileWellRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateFileWell(ctx, connect.NewRequest(CreateFileWellToProto(req))))
+}
+func (c *Client) CreateProcessWell(ctx context.Context, req *CreateProcessWellRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateProcessWell(ctx, connect.NewRequest(CreateProcessWellToProto(req))))
+}
+func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateShell(ctx, connect.NewRequest(CreateShellToProto(req))))
+}
+
 func (c *Client) MoveTile(ctx context.Context, req *MoveTileRequest) (*Tile, error) {
-	r, err := c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req))))
 }
 func (c *Client) CloneTile(ctx context.Context, req *CloneTileRequest) (*Tile, error) {
-	r, err := c.cl.CloneTile(ctx, connect.NewRequest(CloneTileToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.CloneTile(ctx, connect.NewRequest(CloneTileToProto(req))))
 }
 func (c *Client) ResizeTile(ctx context.Context, req *ResizeTileRequest) (*Tile, error) {
-	r, err := c.cl.ResizeTile(ctx, connect.NewRequest(ResizeTileToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.ResizeTile(ctx, connect.NewRequest(ResizeTileToProto(req))))
 }
 func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Tile, error) {
-	r, err := c.cl.SetWellView(ctx, connect.NewRequest(SetWellViewToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.SetWellView(ctx, connect.NewRequest(SetWellViewToProto(req))))
 }
 func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Tile, error) {
-	r, err := c.cl.SetTextView(ctx, connect.NewRequest(SetTextViewToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.SetTextView(ctx, connect.NewRequest(SetTextViewToProto(req))))
 }
 func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewRequest) (*Tile, error) {
-	r, err := c.cl.SetShellPreview(ctx, connect.NewRequest(SetShellPreviewToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.SetShellPreview(ctx, connect.NewRequest(SetShellPreviewToProto(req))))
 }
 func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
 	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(ShellSessionAliveToProto(req)))
@@ -180,18 +139,10 @@ func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error
 	return err
 }
 func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Tile, error) {
-	r, err := c.cl.SetURLState(ctx, connect.NewRequest(SetURLStateToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.SetURLState(ctx, connect.NewRequest(SetURLStateToProto(req))))
 }
 func (c *Client) UpdateText(ctx context.Context, req *UpdateTextRequest) (*Tile, error) {
-	r, err := c.cl.UpdateText(ctx, connect.NewRequest(UpdateTextToProto(req)))
-	if err != nil {
-		return nil, err
-	}
-	return TileFromProto(r.Msg.Tile), nil
+	return tileResp(c.cl.UpdateText(ctx, connect.NewRequest(UpdateTextToProto(req))))
 }
 func (c *Client) DeleteTile(ctx context.Context, req *DeleteTileRequest) error {
 	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(DeleteTileToProto(req)))
