@@ -142,17 +142,6 @@ func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	}
 }
 
-func TestKnownWellIDs(t *testing.T) {
-	c := seedCache(t)
-	known := c.KnownWellIDs()
-	if !known[100] {
-		t.Errorf("well id 100 missing from known: %v", known)
-	}
-	if known[101] {
-		t.Errorf("text id 101 should not be in known wells: %v", known)
-	}
-}
-
 func TestBlobPutGetInvalidate(t *testing.T) {
 	c := New()
 	if _, ok := c.Blob(7); ok {

@@ -151,22 +151,6 @@ func (c *Cache) UpdateTile(gridID int64, t rpc.Tile) {
 	g.Tiles[t.ID] = t
 }
 
-// KnownWellIDs returns the set of well row ids the cache currently holds.
-// The pane layer uses this to truncate stale descent paths after deletes.
-func (c *Cache) KnownWellIDs() map[int64]bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := map[int64]bool{}
-	for _, g := range c.grids {
-		for id, n := range g.Tiles {
-			if n.Kind == rpc.KindWell {
-				out[id] = true
-			}
-		}
-	}
-	return out
-}
-
 // Apply consumes a Subscribe event and updates the cache. Returns true if
 // any visible state changed (so the renderer knows whether to redraw).
 //
