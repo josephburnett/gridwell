@@ -219,3 +219,35 @@ func TestUpdateTile(t *testing.T) {
 		t.Error("UpdateTile should not insert unknown tile ids")
 	}
 }
+
+// TestRemoveTileFreesOptimisticBlob is the regression for an optimistic-blob
+// leak: editing a text tile stores a client-local (negative-id) blob and
+// repoints the tile at it. If the tile is then removed (e.g. dragged onto a
+// blackhole) before the authoritative server tile arrives, the optimistic blob
+// must be dropped from the map — otherwise it strands forever, exactly the
+// unbounded growth OptimisticEdit and the EventTileChanged reconcile guard
+// against.
+func TestRemoveTileFreesOptimisticBlob(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{{ID: 10, GridID: 1, Kind: rpc.KindText, BlobID: 5}})
+	c.PutBlob(5, []byte("Hello"))
+
+	if !c.OptimisticEdit(1, 10, []byte("Goodbye")) {
+		t.Fatal("OptimisticEdit returned false")
+	}
+	// The tile now points at a negative optimistic blob id.
+	g, _ := c.Grid(1)
+	optID := g.Tiles[10].BlobID
+	if optID >= 0 {
+		t.Fatalf("expected negative optimistic blob id, got %d", optID)
+	}
+	if _, ok := c.Blob(optID); !ok {
+		t.Fatal("optimistic blob not stored")
+	}
+
+	// Removing the tile must release its optimistic blob.
+	c.Apply(rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: 1, TileID: 10}})
+	if _, ok := c.Blob(optID); ok {
+		t.Errorf("optimistic blob %d leaked after tile removal", optID)
+	}
+}

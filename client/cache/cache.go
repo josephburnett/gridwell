@@ -202,7 +202,14 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if !ok {
 			return false
 		}
-		_, present := g.Tiles[ev.TileRemoved.TileID]
+		old, present := g.Tiles[ev.TileRemoved.TileID]
+		// Release any pending optimistic blob the removed tile pointed at, so
+		// deleting a tile mid-edit doesn't strand a client-local blob in the
+		// map forever (mirrors the cleanup OptimisticEdit and the
+		// EventTileChanged reconcile already do).
+		if present && old.BlobID < 0 {
+			delete(c.blobs, old.BlobID)
+		}
 		delete(g.Tiles, ev.TileRemoved.TileID)
 		return present
 	case rpc.EventGridChanged:
