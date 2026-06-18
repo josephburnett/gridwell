@@ -25,7 +25,8 @@ type urlView struct {
 	bounds   viewBounds
 	// path is the descent path to the grid that holds this URL tile,
 	// captured when the view went live. The freeze (SetURLState) needs it
-	// to fork a shared grid so the write lands in this clone's row only.
+	// to validate the edit lands in this tile's leaf grid (copy-on-clone:
+	// tiles are unshared, so the write is in-place — no fork).
 	path []int64
 }
 
@@ -61,7 +62,7 @@ func (a *App) urlTileForPane(p *pane.Pane, tileID int64) (rpc.Tile, bool) {
 
 // urlTileVersion returns the cached version of the URL tile at (path,
 // tileID), or 0 if it isn't cached. Read at freeze time so SetURLState can
-// claim the right version for its COW fork.
+// claim the right version for its in-place, versioned content edit.
 func (a *App) urlTileVersion(path []int64, tileID int64) int64 {
 	g, ok := a.c.Grid(a.gridIDForPath(path))
 	if !ok {
@@ -113,7 +114,8 @@ func (a *App) closeURLStream(paneID string) {
 	bridgeRemove(paneID, func(jpeg []byte, url, title string) {
 		if len(jpeg) > 0 || url != "" || title != "" {
 			// Look up the tile's current version from cache so the freeze is
-			// a versioned content edit that forks a shared (cloned) grid.
+			// a versioned, in-place content edit (copy-on-clone: nothing is
+			// shared, so there is no fork — the write lands on this tile's row).
 			version := a.urlTileVersion(path, tileID)
 			go func() {
 				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{

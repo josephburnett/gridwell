@@ -30,7 +30,7 @@ const (
 
 // IsWellKind reports whether a tile kind has a child grid that can be
 // descended into — the three "well" kinds (interior well, file-well,
-// process-well). Shared by the store (COW path validation, refcount
+// process-well). Shared by the store (path validation, refcount
 // holdings) and the client (drop-target resolution) so the three-kind
 // set is spelled out in exactly one place.
 func IsWellKind(kind string) bool {
@@ -63,8 +63,9 @@ const (
 )
 
 // Path is the sequence of well-tile IDs walked from the root grid to the
-// pane the request originates from. Mutations carry it so the store can fork
-// the COW spine of shared grids up to the highest one still uniquely owned.
+// pane the request originates from. Mutations carry it so the store can
+// validate the editing pane really sits in this leaf grid (checkPathLeaf);
+// copy-on-clone keeps tiles unshared, so the edit writes in place — no fork.
 type Path struct {
 	WellIDs []int64 `json:"well_ids"`
 }
@@ -341,9 +342,9 @@ type SetRootViewResponse struct{}
 
 // SetURLStateRequest freezes a live URL tile (preview JPEG + address +
 // title) when its Electron WebContentsView is torn down on ascend. Path +
-// Version make the freeze a proper content edit: a shared (cloned) grid is
-// forked so the write lands in this clone's row, not every clone's. Empty
-// jpeg/url/title fields are skipped.
+// Version make the freeze a proper versioned content edit — an in-place
+// write to this tile's row (copy-on-clone: clones are independent, so there
+// is no fork). Empty jpeg/url/title fields are skipped.
 type SetURLStateRequest struct {
 	Path    Path   `json:"path"`
 	TileID  int64  `json:"tile_id"`
