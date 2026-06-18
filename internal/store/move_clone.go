@@ -230,6 +230,8 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		// tile) are read-only views of host state: their content is
 		// produced by the reconciler, not the user. Rejecting writes
 		// here means even a misbehaving client can't poison the blob.
+		// (Checked before checkPathLeaf so the read-only signal wins over
+		// a stale path — order matters to callers and is asserted in tests.)
 		if n.SourceKey != "" {
 			return fmt.Errorf("%w: source-backed text tiles are read-only", ErrInvalidArgument)
 		}

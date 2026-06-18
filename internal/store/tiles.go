@@ -33,6 +33,30 @@ func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, clai
 	return t, nil
 }
 
+// loadForEdit is the shared preamble for a versioned single-tile mutation:
+// version-check the tile (optimistic concurrency), optionally guard its kind,
+// and validate it lives in the path's leaf grid (the in-place-edit check — no
+// fork). wantKind == "" skips the kind guard (callers with a multi-kind rule,
+// e.g. any well, do their own check on the returned tile). Returns the loaded
+// tile plus its leaf grid id (the grid the overlap/insert checks run against).
+//
+// Folding these three steps into one call keeps the path-leaf validation from
+// being silently dropped by a new mutation that copies only the version check.
+func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, path rpc.Path, tileID, version int64, wantKind string, wrongKindErr error) (*rpc.Tile, int64, error) {
+	n, err := s.checkTileVersion(ctx, tx, tileID, version)
+	if err != nil {
+		return nil, 0, err
+	}
+	if wantKind != "" && n.Kind != wantKind {
+		return nil, 0, wrongKindErr
+	}
+	leaf, err := s.checkPathLeaf(ctx, tx, path, n)
+	if err != nil {
+		return nil, 0, err
+	}
+	return n, leaf, nil
+}
+
 // emitTileChanged reloads tileID and appends a TileChanged event for it. It is
 // the shared tail of every store write that publishes a tile. Framing setters
 // (SetWellView / SetTextView) call it directly — re-framing is NOT a content
@@ -221,11 +245,7 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 	}
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
-		if err != nil {
-			return err
-		}
-		gridID, err := s.checkPathLeaf(ctx, tx, req.Path, n)
+		_, gridID, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
@@ -258,15 +278,12 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
+		n, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
 		if !isWellKind(n.Kind) {
 			return ErrNotWellTile
-		}
-		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
-			return err
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE `+schemaOf(req.TileID)+`tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
@@ -285,14 +302,7 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
-		if err != nil {
-			return err
-		}
-		if n.Kind != rpc.KindText {
-			return ErrNotTextTile
-		}
-		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
+		if _, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, rpc.KindText, ErrNotTextTile); err != nil {
 			return err
 		}
 		var textModeArg any
@@ -304,6 +314,7 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
+		var err error
 		out, err = s.emitTileChanged(ctx, tx, req.TileID, events)
 		return err
 	})
@@ -315,11 +326,8 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 // (file, directory, process) is removed too.
 func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
+		t, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, "", nil)
 		if err != nil {
-			return err
-		}
-		if _, err := s.checkPathLeaf(ctx, tx, req.Path, t); err != nil {
 			return err
 		}
 		parent, err := s.loadGrid(ctx, tx, t.GridID)

@@ -20,14 +20,7 @@ import (
 func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*rpc.Tile, error) {
 	var out *rpc.Tile
 	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
-		if err != nil {
-			return err
-		}
-		if n.Kind != rpc.KindURL {
-			return ErrNotURLTile
-		}
-		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
+		if _, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, rpc.KindURL, ErrNotURLTile); err != nil {
 			return err
 		}
 		tileID := req.TileID
@@ -54,6 +47,7 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 			}
 		}
 
+		var err error
 		out, err = s.finishContentEdit(ctx, tx, tileID, events)
 		return err
 	})
