@@ -6,7 +6,9 @@ package procsource
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,6 +81,28 @@ func Children(procRoot string, parentPID int64) ([]Info, error) {
 // or unreadable.
 func Get(procRoot string, pid int64) (Info, error) {
 	return readInfo(procRoot, pid)
+}
+
+// Exists reports whether pid currently has an entry in the host process table
+// (a /proc/<pid> directory). It is the *presence* signal, deliberately separate
+// from Get (which reads metadata and can fail for a process that still exists):
+//
+//   - present                → (true, nil)
+//   - definitively not there  → (false, nil)   [the only "gone" answer]
+//   - couldn't determine      → (false, err)   [permission, transient I/O]
+//
+// Callers must treat a non-nil error as "unknown", never as "gone": a tile is
+// removed only on a definitive (false, nil), never on a failure to read. This
+// keeps a transiently-unreadable process from losing its tile's position/id.
+func Exists(procRoot string, pid int64) (bool, error) {
+	_, err := os.Stat(filepath.Join(procRoot, strconv.FormatInt(pid, 10)))
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }
 
 // listPIDs returns the numeric subdirectory names of procRoot as int64

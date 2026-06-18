@@ -104,7 +104,22 @@ All three read the same stored state, so they agree:
 - **Well** — row stores `view_x/view_y/view_zoom` (a rect in child coords): preview frame, descent target, ascent return — one value, three jobs.
 - **Text** — row stores the doc-space window (scroll offset + size) and mode (rendered/text). The preview crops the re-rendered doc to that window.
 - **URL** — row carries a frozen JPEG + URL string. Descent shows the preview (no network). Refresh floats a native Electron WebContentsView; a capture pump mirrors its live frames into the frozen preview other panes render. Ascent freezes via `SetURLState` (a *versioned*, in-place edit of this tile). The live view eats all mouse input over its rect, so ascent/refresh route through the pane's corner circle, not the content box.
-- **File/process-well** — the listing + sticky arrangement live in the disposable cache; descent reconciles them against current host contents (which may have changed underneath). A durable frozen preview, for viewing the archive where the host is absent, is future work.
+- **File/process-well** — the listing + sticky arrangement live in the disposable cache; descent reconciles them against current host contents (which may have changed underneath). Your arrangement is sticky: a reconcile never repositions or re-rows a tile whose host entity still exists (see *Reconcile: remove on confirmed absence, never on a failed read*). A durable frozen preview, for viewing the archive where the host is absent, is future work.
+
+### Reconcile: remove on confirmed absence, never on a failed read
+
+Source-backed grids (fs / proc) reconcile their tiles against live host state, but they still owe the user *"things stay where you put them"* for as long as the host entity exists. So the reconciler obeys one rule:
+
+**A tile is removed only when a *successful* host enumeration shows its entity is gone. A *failed read* never removes — or re-rows — a tile.**
+
+The hazard it guards against: deleting a tile and re-inserting it next pass is not free — the re-insert lands at an auto-grid cell (placement lost) with a fresh row id (identity lost, so any embed / deep-link to it breaks). A transient or permission read error must therefore preserve the tile untouched, not sweep it.
+
+Concretely:
+- **Files** — `fssource.Read` bails (changes nothing) on a directory-read error, and otherwise returns *every* dirent (a broken symlink still appears). A file is swept only when a successful `readdir` omits it.
+- **Process children** — `procsource.Children` skips any PID it couldn't read this pass, so absence from its result is *not* proof of death. The reconciler confirms a child is gone with `procsource.Exists` (a `/proc/<pid>` presence check: a clean not-present is the only "gone"; any error means "unknown" → keep) before sweeping its tile.
+- **The proc `@info` tile** — the well's own process. `Get` failing is *not* "gone" (it also fails on a transient/permission read); `@info` is swept only when `processGone` confirms the PID is definitively absent, exactly like its children.
+
+The same principle governs the live shell stream: a WebSocket close is treated as "session gone" only on the server's explicit signal (1008), never on an abnormal/transient close (`client/shellconn`).
 
 ## The mutation surface — mouse-only, no modifiers
 
@@ -153,6 +168,7 @@ These are implementation choices — swap them freely if they get in the way: co
 - Copying happens only on the clone path: `childGridForClone` deep-copies an interior well's subtree (`cloneSubtree`) and shares host-backed source grids by identity; `insertTileCopy` shares the blob (refcount++). Delete cascades through `decTileRefs` → recursive `deleteGrid`. What a tile owns (an interior-well child grid; its text/preview blob) lives in one place — `tileRefs` — used by clone and delete alike; a new tile kind that holds a grid or blob must be added there, and `property_test.go` must generate it. Grids aren't refcounted (owned 1:1); only blobs are. `verifyRefcounts` (counting `blob_id` + `preview_blob_id`) is the leak net.
 - Durable vs. cache: authored content goes in the main DB; projected host state (fs/proc grids + their tiles + arrangement + `@info` blobs) goes in the attached cache. Never write host-projected state to the main DB, and never assume the cache exists — it can be deleted between runs. Every id-keyed statement routes by `schemaOf(id)`; never hardcode a bare `grids` / `tiles` / `blobs` for a row that might live in the cache.
 - Host deletes go to the trash (`trash.go`), not `os.Remove`; process deletes `SIGTERM`.
+- Source-grid reconcile removes a tile only on *confirmed absence* from a successful host enumeration, never on a failed read (which would re-row + re-place it). Probe presence (`procsource.Exists` / a successful `readdir`), don't infer "gone" from a read error. See *Reconcile: remove on confirmed absence, never on a failed read*.
 - Shell sessions are keyed by **tile id**, not `object_id`: a PTY can't be forked, so a cloned shell is a screenshot with no session. The shell WebSocket is same-origin — never reintroduce `InsecureSkipVerify`.
 
 **Testing mode — clean breaks still allowed (versioning machinery now in place).** The canonical machinery exists — `migrations.go` stamps `application_id` + `user_version` into the SQLite header and runs an ordered, additive-only migration list (currently empty) — but we are still in testing mode: the user wipes the DB on schema/label changes, so:

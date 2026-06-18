@@ -44,6 +44,11 @@ type FSReader interface {
 type ProcReader interface {
 	Children(procRoot string, parentPID int64) ([]procsource.Info, error)
 	Get(procRoot string, pid int64) (procsource.Info, error)
+	// Exists is the presence signal: (false, nil) ONLY when the process is
+	// definitively gone; (false, err) when presence couldn't be determined.
+	// The reconciler sweeps a tile only on a definitive (false, nil), never on
+	// a read failure — so a transiently-unreadable process keeps its tile.
+	Exists(procRoot string, pid int64) (bool, error)
 	MetadataMarkdown(info procsource.Info) string
 }
 
@@ -61,6 +66,9 @@ func (realProcReader) Children(root string, ppid int64) ([]procsource.Info, erro
 }
 func (realProcReader) Get(root string, pid int64) (procsource.Info, error) {
 	return procsource.Get(root, pid)
+}
+func (realProcReader) Exists(root string, pid int64) (bool, error) {
+	return procsource.Exists(root, pid)
 }
 func (realProcReader) MetadataMarkdown(info procsource.Info) string {
 	return procsource.MetadataMarkdown(info)
@@ -206,13 +214,21 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	// Synthetic info tile for the well's own PID. Naming it "@info"
 	// (a name no real PID can collide with) keeps the same per-name
 	// reconcile lookup that fs grids use. Body is live /proc metadata
-	// rendered to markdown — refreshed on every reconcile, so each
-	// descent into the proc-well sees current state (memory, cwd,
-	// state). When the process has gone (infoErr != nil from Get) the
-	// @info tile is left as-is until the parent well itself goes away —
-	// so mark it seen unconditionally, or the removal sweep below would
-	// delete it (Children still succeeds-empty for a dead parent).
-	seen["@info"] = true
+	// rendered to markdown — refreshed on every reconcile while the
+	// process lives, so each descent sees current state (memory, cwd).
+	//
+	// Get failing does NOT by itself mean the process is gone: it also
+	// fails on a transient/permission read error, and Children
+	// succeeds-empty for a dead parent. So the @info tile is swept only
+	// when the process is *definitively* gone (processGone), never on a
+	// failed read — otherwise a transient blip would delete it and the
+	// re-insert next pass would re-row it and lose its placement.
+	if infoErr != nil && s.processGone(parentPID) {
+		// Confirmed gone: leave "@info" unseen so the removal sweep
+		// reclaims it, exactly as its (now-absent) children are reclaimed.
+	} else {
+		seen["@info"] = true
+	}
 	if infoErr == nil {
 		body := []byte(s.procReader.MetadataMarkdown(infoSelf))
 		if cur, ok := existing["@info"]; ok {
@@ -258,6 +274,17 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 		if seen[name] {
 			continue
 		}
+		// A PID absent from the readable child set is not proof it's gone:
+		// Children skips any process it couldn't read this pass (permission,
+		// transient I/O), so a still-running process can drop out of the set.
+		// Sweep a child tile only when its process is *definitively* gone, so
+		// a transient blip never deletes the tile and re-rows / re-places it
+		// on return. ("@info" was already resolved above against processGone.)
+		if name != "@info" {
+			if pid, perr := strconv.ParseInt(name, 10, 64); perr == nil && !s.processGone(pid) {
+				continue
+			}
+		}
 		if err := s.deleteFSGridTile(ctx, tx, cur, events); err != nil {
 			return err
 		}
@@ -267,6 +294,17 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 		return nil
 	}
 	return s.bumpGridVersion(ctx, tx, g.ID)
+}
+
+// processGone reports whether pid is *definitively* absent from the host
+// process table. It is the one place the "a failed read is not a deletion"
+// rule is enforced for proc grids: a clean not-present answer is the only
+// "gone" (so the tile is swept); an Exists error means presence is unknown,
+// which counts as NOT gone, so the tile is preserved. See CLAUDE.md
+// ("Reconcile removes on confirmed absence, never on a failed read").
+func (s *Store) processGone(pid int64) bool {
+	exists, err := s.procReader.Exists(s.procRoot, pid)
+	return err == nil && !exists
 }
 
 // desiredFSTileKind picks the tile kind for one fssource Entry: a

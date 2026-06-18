@@ -310,24 +310,28 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	}
 }
 
-// TestProcGridReconcileKeepsInfoWhenProcessGone is the regression for the
-// "@info vanishes when the process exits" bug. When the parent process is
-// gone, procsource.Get errors but procsource.Children still returns (nil,
-// nil) — a successful, empty read — so the reconcile proceeds. The @info
-// tile must be left as-is (the documented intent: it survives until the
-// parent well itself goes away), not swept away by the stale-tile removal
-// pass.
-func TestProcGridReconcileKeepsInfoWhenProcessGone(t *testing.T) {
+// tileBySourceKey finds a reconciled tile by its source_key ("@info" or a PID
+// string) in a grid response.
+func tileBySourceKey(tiles []rpc.Tile, key string) (rpc.Tile, bool) {
+	for _, t := range tiles {
+		if t.SourceKey == key {
+			return t, true
+		}
+	}
+	return rpc.Tile{}, false
+}
+
+// TestProcGridReconcileSweepsWhenProcessesGone: when the parent process is
+// *definitively* gone (absent from /proc, per Exists), the reconcile reclaims
+// both @info and the now-absent children — the source grid truthfully empties,
+// exactly as a deleted file's tile is swept.
+func TestProcGridReconcileSweepsWhenProcessesGone(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	reader := &stubProcReader{
-		children: map[int64][]procsource.Info{
-			1: {{PID: 100, PPID: 1, Name: "bash"}},
-		},
-		self: map[int64]procsource.Info{
-			1: {PID: 1, PPID: 0, Name: "init"},
-		},
+		children: map[int64][]procsource.Info{1: {{PID: 100, PPID: 1, Name: "bash"}}},
+		self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
 	}
 	s.SetSourceReaders(nil, reader, "/proc")
 
@@ -341,8 +345,8 @@ func TestProcGridReconcileKeepsInfoWhenProcessGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The process exits: Get now errors (no self entry) but Children is a
-	// successful empty read (no process has it as ppid).
+	// Whole subtree exits: not in self, not in children, and Exists (derived
+	// from self/children) reports both definitively gone.
 	delete(reader.self, 1)
 	reader.children[1] = nil
 
@@ -350,14 +354,132 @@ func TestProcGridReconcileKeepsInfoWhenProcessGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var hasInfo bool
-	for _, tile := range g.Tiles {
-		if tile.SourceKey == "@info" {
-			hasInfo = true
-		}
+	if len(g.Tiles) != 0 {
+		t.Errorf("expected empty grid after the process tree exited, got %d tiles: %+v", len(g.Tiles), g.Tiles)
 	}
-	if !hasInfo {
-		t.Errorf("@info tile was removed when the process exited; want it preserved (tiles=%d)", len(g.Tiles))
+}
+
+// TestProcGridReconcilePreservesInfoOnTransientReadError is the regression for
+// the over-broad "@info survives a dead process" fix: a *failed read* of a
+// still-running process (Get errors, but Exists reports present) must NOT
+// delete-and-reinsert @info. Doing so would re-row it (new id) and dump it at
+// an auto cell — losing the placement and identity the user put on it. The
+// tile must keep its exact id and position.
+func TestProcGridReconcilePreservesInfoOnTransientReadError(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	reader := &stubProcReader{
+		children: map[int64][]procsource.Info{1: {{PID: 100, PPID: 1, Name: "bash"}}},
+		self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
+	}
+	s.SetSourceReaders(nil, reader, "/proc")
+
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g0, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info0, ok := tileBySourceKey(g0.Tiles, "@info")
+	if !ok {
+		t.Fatal("no @info tile after first reconcile")
+	}
+	// Put @info somewhere deliberate.
+	if _, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
+		Path:       rpc.Path{WellIDs: []int64{w.ID}},
+		TileID:     info0.ID,
+		Version:    info0.Version,
+		DestGridID: w.ChildGridID,
+		DestPath:   rpc.Path{WellIDs: []int64{w.ID}},
+		X:          5, Y: 5,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Transient read failure: Get fails, but the process is still present.
+	reader.getErr = map[int64]error{1: os.ErrPermission}
+
+	g1, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info1, ok := tileBySourceKey(g1.Tiles, "@info")
+	if !ok {
+		t.Fatalf("@info was removed on a transient read error; want it preserved (tiles=%d)", len(g1.Tiles))
+	}
+	if info1.ID != info0.ID {
+		t.Errorf("@info re-rowed on a transient error: id %d -> %d", info0.ID, info1.ID)
+	}
+	if info1.X != 5 || info1.Y != 5 {
+		t.Errorf("@info lost its position on a transient error: (%d,%d), want (5,5)", info1.X, info1.Y)
+	}
+}
+
+// TestProcGridReconcilePreservesChildOnTransientReadError covers the same rule
+// for a *child* tile: Children drops any PID it couldn't read this pass, but a
+// still-present process (Exists true) must keep its child tile's id and place
+// rather than being swept and re-placed when it reappears in the listing.
+func TestProcGridReconcilePreservesChildOnTransientReadError(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	reader := &stubProcReader{
+		children: map[int64][]procsource.Info{1: {
+			{PID: 100, PPID: 1, Name: "bash"},
+			{PID: 200, PPID: 1, Name: "zsh"},
+		}},
+		self: map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
+	}
+	s.SetSourceReaders(nil, reader, "/proc")
+
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g0, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child0, ok := tileBySourceKey(g0.Tiles, "200")
+	if !ok {
+		t.Fatal("no child tile for pid 200 after first reconcile")
+	}
+	if _, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
+		Path:       rpc.Path{WellIDs: []int64{w.ID}},
+		TileID:     child0.ID,
+		Version:    child0.Version,
+		DestGridID: w.ChildGridID,
+		DestPath:   rpc.Path{WellIDs: []int64{w.ID}},
+		X:          6, Y: 6,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// pid 200 becomes unreadable this pass (dropped from Children) but is still
+	// present in /proc (Exists true for all three).
+	reader.children[1] = []procsource.Info{{PID: 100, PPID: 1, Name: "bash"}}
+	reader.exists = map[int64]bool{1: true, 100: true, 200: true}
+
+	g1, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child1, ok := tileBySourceKey(g1.Tiles, "200")
+	if !ok {
+		t.Fatalf("child pid 200 was swept while still running; want it preserved (tiles=%d)", len(g1.Tiles))
+	}
+	if child1.ID != child0.ID {
+		t.Errorf("child 200 re-rowed on a transient error: id %d -> %d", child0.ID, child1.ID)
+	}
+	if child1.X != 6 || child1.Y != 6 {
+		t.Errorf("child 200 lost its position on a transient error: (%d,%d), want (6,6)", child1.X, child1.Y)
 	}
 }
 
@@ -499,20 +621,48 @@ func TestProcDisplayName(t *testing.T) {
 }
 
 // stubProcReader is the test stub satisfying ProcReader.
+//
+//   - getErr[pid], when set, forces Get to fail with that error (a
+//     transient/permission read failure that is NOT a "process gone" signal).
+//   - exists, when non-nil, is the authoritative presence map Exists reads;
+//     when nil, presence is derived from self / children (anything we have
+//     metadata for is present). This lets a test model "alive but unreadable"
+//     (Get fails / not in children, yet Exists reports present).
 type stubProcReader struct {
 	children map[int64][]procsource.Info
 	self     map[int64]procsource.Info
+	getErr   map[int64]error
+	exists   map[int64]bool
 }
 
 func (s *stubProcReader) Children(_ string, ppid int64) ([]procsource.Info, error) {
 	return s.children[ppid], nil
 }
 func (s *stubProcReader) Get(_ string, pid int64) (procsource.Info, error) {
+	if err, ok := s.getErr[pid]; ok {
+		return procsource.Info{}, err
+	}
 	info, ok := s.self[pid]
 	if !ok {
 		return procsource.Info{}, os.ErrNotExist
 	}
 	return info, nil
+}
+func (s *stubProcReader) Exists(_ string, pid int64) (bool, error) {
+	if s.exists != nil {
+		return s.exists[pid], nil
+	}
+	if _, ok := s.self[pid]; ok {
+		return true, nil
+	}
+	for _, kids := range s.children {
+		for _, k := range kids {
+			if k.PID == pid {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 func (s *stubProcReader) MetadataMarkdown(info procsource.Info) string {
 	return procsource.MetadataMarkdown(info)

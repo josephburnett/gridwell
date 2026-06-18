@@ -457,6 +457,7 @@ func (stubProcReaderEmpty) Children(string, int64) ([]procsource.Info, error) { 
 func (stubProcReaderEmpty) Get(string, int64) (procsource.Info, error) {
 	return procsource.Info{}, os.ErrNotExist
 }
+func (stubProcReaderEmpty) Exists(string, int64) (bool, error) { return false, nil }
 func (stubProcReaderEmpty) MetadataMarkdown(procsource.Info) string { return "" }
 
 func TestSetTextViewRejectsNonText(t *testing.T) {

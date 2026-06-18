@@ -67,6 +67,20 @@ func TestGetMissingPID(t *testing.T) {
 	}
 }
 
+func TestExists(t *testing.T) {
+	root := stubProc(t, []stubProcess{{pid: 1, ppid: 0, name: "init"}})
+
+	// Present process → (true, nil).
+	if ok, err := Exists(root, 1); err != nil || !ok {
+		t.Errorf("Exists(1) = (%v, %v), want (true, nil)", ok, err)
+	}
+	// Definitively absent → (false, nil) — this is the only "gone" answer,
+	// the one the reconciler treats as grounds to sweep a tile.
+	if ok, err := Exists(root, 42); err != nil || ok {
+		t.Errorf("Exists(42) = (%v, %v), want (false, nil)", ok, err)
+	}
+}
+
 func TestMetadataMarkdownDeterministic(t *testing.T) {
 	info := Info{PID: 100, PPID: 1, Name: "bash", CmdLine: "/bin/bash", UID: 1000}
 	a := MetadataMarkdown(info)
