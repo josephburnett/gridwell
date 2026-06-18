@@ -310,6 +310,57 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	}
 }
 
+// TestProcGridReconcileKeepsInfoWhenProcessGone is the regression for the
+// "@info vanishes when the process exits" bug. When the parent process is
+// gone, procsource.Get errors but procsource.Children still returns (nil,
+// nil) — a successful, empty read — so the reconcile proceeds. The @info
+// tile must be left as-is (the documented intent: it survives until the
+// parent well itself goes away), not swept away by the stale-tile removal
+// pass.
+func TestProcGridReconcileKeepsInfoWhenProcessGone(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	reader := &stubProcReader{
+		children: map[int64][]procsource.Info{
+			1: {{PID: 100, PPID: 1, Name: "bash"}},
+		},
+		self: map[int64]procsource.Info{
+			1: {PID: 1, PPID: 0, Name: "init"},
+		},
+	}
+	s.SetSourceReaders(nil, reader, "/proc")
+
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+		t.Fatal(err)
+	}
+
+	// The process exits: Get now errors (no self entry) but Children is a
+	// successful empty read (no process has it as ppid).
+	delete(reader.self, 1)
+	reader.children[1] = nil
+
+	g, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hasInfo bool
+	for _, tile := range g.Tiles {
+		if tile.SourceKey == "@info" {
+			hasInfo = true
+		}
+	}
+	if !hasInfo {
+		t.Errorf("@info tile was removed when the process exited; want it preserved (tiles=%d)", len(g.Tiles))
+	}
+}
+
 // TestProcInfoBlobPopulatesAndRefreshes covers the @info tile body —
 // the synthetic per-PID metadata tile inside a proc-well. On first
 // reconcile the tile must carry a populated blob with the rendered

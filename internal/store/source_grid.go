@@ -209,9 +209,11 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	// rendered to markdown — refreshed on every reconcile, so each
 	// descent into the proc-well sees current state (memory, cwd,
 	// state). When the process has gone (infoErr != nil from Get) the
-	// @info tile is left as-is until the parent well itself goes away.
+	// @info tile is left as-is until the parent well itself goes away —
+	// so mark it seen unconditionally, or the removal sweep below would
+	// delete it (Children still succeeds-empty for a dead parent).
+	seen["@info"] = true
 	if infoErr == nil {
-		seen["@info"] = true
 		body := []byte(s.procReader.MetadataMarkdown(infoSelf))
 		if cur, ok := existing["@info"]; ok {
 			refreshed, err := s.refreshProcInfoBlob(ctx, tx, cur, body, events)
