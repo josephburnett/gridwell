@@ -76,15 +76,8 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 				}
 			}
 		}
-		if err := bumpTileVersion(ctx, tx, req.TileID); err != nil {
-			return err
-		}
-		out, err = s.loadTile(ctx, tx, req.TileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.finishContentEdit(ctx, tx, req.TileID, events)
+		return err
 	})
 	return out, err
 }

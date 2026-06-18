@@ -54,15 +54,8 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 			}
 		}
 
-		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
-			return err
-		}
-		out, err = s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.finishContentEdit(ctx, tx, tileID, events)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -83,15 +76,8 @@ func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string) error 
 			alt, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
-			return err
-		}
-		out, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		_, err := s.finishContentEdit(ctx, tx, tileID, events)
+		return err
 	})
 }
 

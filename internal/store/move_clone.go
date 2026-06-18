@@ -121,15 +121,11 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 				return err
 			}
 		}
-		out, err = s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
 		if crossGrid {
 			*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: srcGrid, TileID: tileID}})
 		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
 	})
 	return out, err
 }
@@ -210,12 +206,8 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err := s.bumpGridVersion(ctx, tx, dstGrid); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, newID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.emitTileChanged(ctx, tx, newID, events)
+		return err
 	})
 	return out, err
 }
@@ -256,15 +248,8 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 			alt, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
-		if err := bumpTileVersion(ctx, tx, req.TileID); err != nil {
-			return err
-		}
-		out, err = s.loadTile(ctx, tx, req.TileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.finishContentEdit(ctx, tx, req.TileID, events)
+		return err
 	})
 	return out, err
 }

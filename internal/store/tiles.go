@@ -33,6 +33,33 @@ func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, clai
 	return t, nil
 }
 
+// emitTileChanged reloads tileID and appends a TileChanged event for it. It is
+// the shared tail of every store write that publishes a tile. Framing setters
+// (SetWellView / SetTextView) call it directly — re-framing is NOT a content
+// edit, so it must not bump the version (CLAUDE.md). Content writers go through
+// finishContentEdit instead.
+func (s *Store) emitTileChanged(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {
+	out, err := s.loadTile(ctx, tx, tileID)
+	if err != nil {
+		return nil, err
+	}
+	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+	return out, nil
+}
+
+// finishContentEdit is the coda for a content mutation: bump the tile's version
+// (the optimistic-concurrency key + edit-history spine) then publish it via
+// emitTileChanged. Keeping the "content edit bumps version, framing edit does
+// not" rule as a choice between two named helpers — rather than a per-method
+// open-coded bump that a new mutation can forget or wrongly add — is what keeps
+// that invariant from drifting.
+func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {
+	if err := bumpTileVersion(ctx, tx, tileID); err != nil {
+		return nil, err
+	}
+	return s.emitTileChanged(ctx, tx, tileID, events)
+}
+
 // createTile is the shared scaffolding for the four Create* methods:
 // sequence validation → overlap check → kind-specific insert → grid version
 // bump → load → publish. The insert closure receives the canonical gridID, the
@@ -74,12 +101,8 @@ func (s *Store) createTile(
 		if err := s.bumpGridVersion(ctx, tx, gid); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
 	})
 	return out, err
 }
@@ -220,15 +243,8 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 			req.X, req.Y, req.W, req.H, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		if err := bumpTileVersion(ctx, tx, tileID); err != nil {
-			return err
-		}
-		out, err = s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.finishContentEdit(ctx, tx, tileID, events)
+		return err
 	})
 	return out, err
 }
@@ -257,12 +273,8 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, req.TileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.emitTileChanged(ctx, tx, req.TileID, events)
+		return err
 	})
 	return out, err
 }
@@ -292,12 +304,8 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
-		out, err = s.loadTile(ctx, tx, req.TileID)
-		if err != nil {
-			return err
-		}
-		*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
-		return nil
+		out, err = s.emitTileChanged(ctx, tx, req.TileID, events)
+		return err
 	})
 	return out, err
 }
