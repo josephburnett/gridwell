@@ -11,6 +11,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -285,19 +286,18 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 			reason = args[0].Get("reason").String()
 		}
 		shellLog("onClose pane=%s tile=%d code=%d reason=%q", p.ID, tileID, code, reason)
-		// PolicyViolation (1008) is the server's "session is gone"
-		// signal — wasm asked to attach but the tmux session no
-		// longer exists. Flip the cache so the refresh button hides
-		// on this tile until the user does something that creates
-		// a fresh session (which today is only "fresh tile, no
-		// snapshot" — i.e. never, for a snapshotted tile). Other
-		// close codes (NormalClosure, abnormal) mean the session
-		// was alive at least until the close: leave the cache as
-		// alive=true to skip a probe on the next descent.
-		if code == 1008 {
+		// PolicyViolation (1008) is the server's definitive "session is
+		// gone" signal — flip the cache to dead so the refresh button
+		// hides. Any other close code (normal teardown, 1006 abnormal,
+		// transport error) carries no liveness guarantee — an abnormal
+		// close commonly means the attach itself failed against a dead
+		// session — so drop any cached liveness and let the next render
+		// re-probe the authoritative server rather than assuming alive.
+		if shellconn.SessionDeadOnClose(code) {
 			a.setShellAlive(tileID, false)
-		} else {
-			a.setShellAlive(tileID, true)
+		} else if _, ok := a.shellAlive[tileID]; ok {
+			delete(a.shellAlive, tileID)
+			a.draw()
 		}
 		a.releaseShellStream(p.ID, conn)
 		a.draw()
