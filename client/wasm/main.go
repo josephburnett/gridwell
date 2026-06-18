@@ -692,6 +692,12 @@ func (a *App) startSSE() {
 			if a.c.Apply(ev) {
 				a.draw()
 			}
+			// A removed tile's decoded preview image (and its backing object
+			// URL) must be released, or deleting URL/shell tiles leaks browser
+			// image resources for the life of the page.
+			if ev.Kind == rpc.EventTileRemoved && ev.TileRemoved != nil {
+				a.urlPreview.Drop(ev.TileRemoved.TileID)
+			}
 			// GridChanged: refetch the affected grid if any pane is looking at it.
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
 				a.fetchGrid(ev.GridChanged.GridID)
