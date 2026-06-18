@@ -121,31 +121,6 @@ func TestLeafTileIDFromHref(t *testing.T) {
 	}
 }
 
-func TestDimensions(t *testing.T) {
-	cases := []struct {
-		name                       string
-		cellsW, cellsH             int64
-		cellPx, defaultW, defaultH int
-		wantW, wantH               int
-	}{
-		{"3x2 at 64px", 3, 2, 64, 192, 128, 192, 128},
-		{"1x1 at 64px", 1, 1, 64, 192, 128, 64, 64},
-		{"10x8 at 64px", 10, 8, 64, 192, 128, 640, 512},
-		{"zero cells falls back to defaults", 0, 0, 64, 192, 128, 192, 128},
-		{"zero W only → only W defaults", 0, 2, 64, 192, 128, 192, 128},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			gotW, gotH := Dimensions(tc.cellsW, tc.cellsH, tc.cellPx, tc.defaultW, tc.defaultH)
-			if gotW != tc.wantW || gotH != tc.wantH {
-				t.Errorf("Dimensions(%d,%d,%d,%d,%d) = %d,%d; want %d,%d",
-					tc.cellsW, tc.cellsH, tc.cellPx, tc.defaultW, tc.defaultH,
-					gotW, gotH, tc.wantW, tc.wantH)
-			}
-		})
-	}
-}
-
 func TestMarkdown(t *testing.T) {
 	cases := []struct {
 		origin string

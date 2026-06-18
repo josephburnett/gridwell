@@ -125,22 +125,6 @@ func reversed(xs []string) []string {
 	return out
 }
 
-// Dimensions returns the rendered-pixel size for an embed of a tile
-// with the given cell footprint. cellPx is the doc's embed-zoom cell
-// size in pixels. defaultW/H are the inline fallback for the cellsW=0
-// or cellsH=0 case (degenerate tiles, shouldn't happen in practice).
-func Dimensions(cellsW, cellsH int64, cellPx, defaultW, defaultH int) (int, int) {
-	w := int(cellsW) * cellPx
-	h := int(cellsH) * cellPx
-	if w <= 0 {
-		w = defaultW
-	}
-	if h <= 0 {
-		h = defaultH
-	}
-	return w, h
-}
-
 // Markdown returns the markdown plain-link string for an embed pointing
 // at the given tile, anchored at `origin`. Inside Gridwell the
 // rendered-mode renderer intercepts hrefs whose path looks like a
