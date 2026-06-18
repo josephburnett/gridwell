@@ -359,6 +359,45 @@ func TestProcGridReconcileSweepsWhenProcessesGone(t *testing.T) {
 	}
 }
 
+// TestProcGridReconcileSweepsReparentedChildrenWhenParentGone: when the well's
+// own process exits, the grid projects a dead PID's subtree, so it empties —
+// even an ex-child that reparented (to init) and is still running is swept,
+// because it is no longer THIS well's child.
+func TestProcGridReconcileSweepsReparentedChildrenWhenParentGone(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	reader := &stubProcReader{
+		children: map[int64][]procsource.Info{1: {{PID: 100, PPID: 1, Name: "daemon"}}},
+		self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
+	}
+	s.SetSourceReaders(nil, reader, "/proc")
+
+	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent (pid 1) exits; child 100 survives, reparented away from pid 1
+	// (so it's no longer in Children(1)), but still present in /proc.
+	delete(reader.self, 1)
+	reader.children[1] = nil
+	reader.exists = map[int64]bool{1: false, 100: true}
+
+	g, err := s.GetGrid(ctx, w.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Tiles) != 0 {
+		t.Errorf("parent gone but grid not empty (%d tiles): reparented ex-children should be swept: %+v", len(g.Tiles), g.Tiles)
+	}
+}
+
 // TestProcGridReconcilePreservesInfoOnTransientReadError is the regression for
 // the over-broad "@info survives a dead process" fix: a *failed read* of a
 // still-running process (Get errors, but Exists reports present) must NOT

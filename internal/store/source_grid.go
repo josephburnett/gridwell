@@ -211,22 +211,22 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 	layout := newLayoutTracker(existing)
 	changed := false
 
-	// Synthetic info tile for the well's own PID. Naming it "@info"
-	// (a name no real PID can collide with) keeps the same per-name
-	// reconcile lookup that fs grids use. Body is live /proc metadata
-	// rendered to markdown — refreshed on every reconcile while the
-	// process lives, so each descent sees current state (memory, cwd).
-	//
-	// Get failing does NOT by itself mean the process is gone: it also
-	// fails on a transient/permission read error, and Children
-	// succeeds-empty for a dead parent. So the @info tile is swept only
-	// when the process is *definitively* gone (processGone), never on a
-	// failed read — otherwise a transient blip would delete it and the
-	// re-insert next pass would re-row it and lose its placement.
-	if infoErr != nil && s.processGone(parentPID) {
-		// Confirmed gone: leave "@info" unseen so the removal sweep
-		// reclaims it, exactly as its (now-absent) children are reclaimed.
-	} else {
+	// parentGone is the well's own process being *definitively* absent from
+	// /proc. The grid projects that PID's subtree, so when the PID is gone the
+	// whole projection is gone — @info and every child tile are reclaimed,
+	// even an ex-child that reparented to init and is still running (it's no
+	// longer THIS well's child). Get failing alone is NOT "gone": it also
+	// fails on a transient/permission read, in which case the projection is
+	// preserved untouched (a failed read never removes or re-rows a tile —
+	// the re-insert would lose the tile's id and placement).
+	parentGone := infoErr != nil && s.processGone(parentPID)
+
+	// Synthetic info tile for the well's own PID. Naming it "@info" (a name no
+	// real PID can collide with) keeps the same per-name reconcile lookup that
+	// fs grids use. Body is live /proc metadata rendered to markdown —
+	// refreshed every reconcile while the process lives, so each descent sees
+	// current state (memory, cwd). Swept only when parentGone.
+	if !parentGone {
 		seen["@info"] = true
 	}
 	if infoErr == nil {
@@ -279,8 +279,9 @@ func (s *Store) reconcileProcGrid(ctx context.Context, tx *sql.Tx, g *rpc.Grid, 
 		// transient I/O), so a still-running process can drop out of the set.
 		// Sweep a child tile only when its process is *definitively* gone, so
 		// a transient blip never deletes the tile and re-rows / re-places it
-		// on return. ("@info" was already resolved above against processGone.)
-		if name != "@info" {
+		// on return. When the well's own process is gone (parentGone) the whole
+		// projection goes, so sweep regardless. ("@info" was resolved above.)
+		if name != "@info" && !parentGone {
 			if pid, perr := strconv.ParseInt(name, 10, 64); perr == nil && !s.processGone(pid) {
 				continue
 			}
