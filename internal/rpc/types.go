@@ -37,6 +37,17 @@ func IsWellKind(kind string) bool {
 	return kind == KindWell || kind == KindFileWell || kind == KindProcessWell
 }
 
+// IsContentDescentKind reports whether a tile kind is a content tile you
+// descend into via a *text-focus* descent (it sets pane.TextFocus) rather than
+// a grid descent — text, url, and shell. Blackhole is NOT one (it's a deletion
+// sink, not descendable). Shared by the client's click-to-descend routing and
+// its URL-restore walk so the set is spelled out once: when those two drifted,
+// a shell descent encoded into the URL was silently dropped on reload (the
+// restore walk omitted shell and wrongly listed blackhole).
+func IsContentDescentKind(kind string) bool {
+	return kind == KindText || kind == KindURL || kind == KindShell
+}
+
 // Grid source kinds. NULL ("") means a regular Gridwell-owned grid. fs
 // means the grid's tile list is reconciled against a host directory; proc
 // means against the host process table. SourceID carries the path or PID.

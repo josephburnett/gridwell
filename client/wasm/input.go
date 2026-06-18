@@ -967,11 +967,11 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 	if hit == nil {
 		return false
 	}
-	switch hit.Kind {
-	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
+	switch {
+	case rpc.IsWellKind(hit.Kind):
 		a.startDescent(p, hit)
 		return true
-	case rpc.KindText, rpc.KindURL, rpc.KindShell:
+	case rpc.IsContentDescentKind(hit.Kind):
 		a.startFileDescent(p, hit, nil)
 		return true
 	}

@@ -201,11 +201,11 @@ walk:
 			// Keep the current grid and continue with the next id.
 			continue
 		}
-		switch n.Kind {
-		case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
+		switch {
+		case rpc.IsWellKind(n.Kind):
 			resolvedPath = append(resolvedPath, id)
 			gid = n.ChildGridID
-		case rpc.KindText, rpc.KindURL, rpc.KindBlackHole:
+		case rpc.IsContentDescentKind(n.Kind):
 			if !isLast {
 				// Content tile mid-path is nonsense; ignore and keep walking.
 				continue
