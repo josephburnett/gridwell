@@ -82,7 +82,11 @@ func AltFromSource(src string) string {
 			}
 			sb.WriteString(sp.Text)
 		}
-		s := strings.TrimSpace(sb.String())
+		// Collapse every run of whitespace (newlines included) to a single
+		// space and trim. The alt must be ONE line: a code-block-first doc
+		// otherwise yields a multi-line span, and a newline in the alt breaks
+		// the generated `[alt](href)` embed link (link text can't span lines).
+		s := strings.Join(strings.Fields(sb.String()), " ")
 		if s == "" {
 			continue
 		}

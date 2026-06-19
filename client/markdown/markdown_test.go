@@ -288,7 +288,11 @@ func TestAltFromSource(t *testing.T) {
 		{"bold and italic stripped", "**bold** and *italic*", "bold and italic"},
 		{"inline code retained", "use `foo()` here", "use foo() here"},
 		{"link text retained", "click [here](https://x) please", "click here please"},
-		{"embed skipped, surrounding text kept", "before [![alt](src)](href) after", "before  after"},
+		{"embed skipped, surrounding text kept", "before [![alt](src)](href) after", "before after"},
+		// A code-block-first doc must not leak its newlines into the alt — a
+		// newline would break the generated [alt](href) embed link.
+		{"code block collapses to one line", "```\nfoo\nbar\n```", "foo bar"},
+		{"internal whitespace collapsed", "a    b\tc", "a b c"},
 		{"clamped to 100 runes",
 			"x" + strings.Repeat("y", 200),
 			"x" + strings.Repeat("y", 99)},
