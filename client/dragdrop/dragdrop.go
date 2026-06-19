@@ -225,6 +225,25 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 	return moving, pin - moving
 }
 
+// MoveForbidden reports whether a left-drag (move) from a tile in a grid whose
+// source kind is srcKind to a destination grid whose source kind is dstKind
+// would be rejected by the server. "" is a regular Gridwell grid; a non-empty
+// kind (fs / proc) is source-backed.
+//
+// It mirrors the server's MoveTile rule exactly: a *cross-grid* move is
+// forbidden when EITHER endpoint is source-backed — a host file can't migrate
+// into Gridwell, regular tiles can't move into a host directory, and host-side
+// mv between two source dirs isn't implemented (clone/right-drag links
+// instead). A same-grid move never crosses the boundary, so it's always
+// allowed. (The UI previously used an XOR here, which wrongly invited a
+// source→source cross-grid drop that the server then rejected.)
+func MoveForbidden(sameGrid bool, srcKind, dstKind string) bool {
+	if sameGrid {
+		return false
+	}
+	return srcKind != "" || dstKind != ""
+}
+
 // NearPx reports whether two pixel coordinates are within half a pixel.
 // Used for "is this divider line at the same place as that one?" checks
 // where exact float equality is too brittle.

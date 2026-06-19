@@ -307,3 +307,32 @@ func TestPaneCellAt(t *testing.T) {
 		t.Errorf("lower-right half: got (%d,%d), want (5,3)", cx, cy)
 	}
 }
+
+// TestMoveForbidden pins the move-drop policy to the server's MoveTile rule.
+// The regression is the source->source cross-grid case (e.g. dragging a file
+// from one host directory's grid into another's): the server rejects any
+// cross-grid move touching a source-backed grid, but the UI's old XOR check
+// reported it allowed, inviting a drop that then failed.
+func TestMoveForbidden(t *testing.T) {
+	cases := []struct {
+		name             string
+		sameGrid         bool
+		srcKind, dstKind string
+		want             bool
+	}{
+		{"same grid, both source", true, "fs", "fs", false},
+		{"same grid, regular", true, "", "", false},
+		{"cross regular->regular", false, "", "", false},
+		{"cross source->regular", false, "fs", "", true},
+		{"cross regular->source", false, "", "proc", true},
+		{"cross source->source (regression)", false, "fs", "proc", true},
+		{"cross same-kind source->source", false, "fs", "fs", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := MoveForbidden(c.sameGrid, c.srcKind, c.dstKind); got != c.want {
+				t.Errorf("MoveForbidden(%v, %q, %q) = %v, want %v", c.sameGrid, c.srcKind, c.dstKind, got, c.want)
+			}
+		})
+	}
+}

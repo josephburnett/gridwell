@@ -132,12 +132,11 @@ func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
 	}
-	if d.srcGridID == t.gridID {
-		return false
-	}
-	srcKind := a.gridSourceKind(d.srcGridID)
-	dstKind := a.gridSourceKind(t.gridID)
-	return (srcKind != "") != (dstKind != "")
+	return dragdrop.MoveForbidden(
+		d.srcGridID == t.gridID,
+		a.gridSourceKind(d.srcGridID),
+		a.gridSourceKind(t.gridID),
+	)
 }
 
 // cellAtCursorInTarget returns the (rounded) cell coord at the cursor
