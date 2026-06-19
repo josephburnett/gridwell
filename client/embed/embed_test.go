@@ -111,6 +111,14 @@ func TestLeafTileIDFromHref(t *testing.T) {
 		{"/0", 0}, // tile id must be positive
 		{"  /5  ", 5}, // trims whitespace
 		{"http://localhost:8080/path/notnumeric", 0},
+		// Non-numeric LEAF must not be an embed even when an ancestor segment
+		// is numeric — the regression for external links being mis-classified.
+		{"/2024/recap", 0},
+		{"https://blog.example.com/2024/01/post", 0},
+		{"/page/3/comments", 0},
+		{"/5/", 5},      // trailing slash tolerated
+		{"/3/4/5?x=1", 5}, // query stripped
+		{"/-5", 0},      // negative leaf is not a tile id
 	}
 	for _, tc := range cases {
 		t.Run(tc.href, func(t *testing.T) {
