@@ -45,10 +45,9 @@ func (p Pane) CellAt(sx, sy float64) (int64, int64) {
 	return int64(math.Floor(cx)), int64(math.Floor(cy))
 }
 
-// SnapToCell rounds a floating-cell coordinate to the nearest whole cell.
-// We round-half-down (floor + 0.5) so a drag exactly on the boundary lands
-// in the lower-numbered cell. This matches typical UI expectations where
-// dragging onto the leading edge "stays" rather than "advances".
+// SnapToCell rounds a floating-cell coordinate to the nearest whole cell,
+// rounding halves away from zero — so an exact boundary value snaps to the
+// cell of larger magnitude: 0.5 -> 1, 1.5 -> 2, -0.5 -> -1, -1.5 -> -2.
 //
 // Use this for "where should a tile come to rest?" semantics. For "what
 // cell is the cursor currently INSIDE?" use FloorCellAt — round and floor
@@ -58,8 +57,8 @@ func SnapToCell(c float64) int64 {
 	if c >= 0 {
 		return int64(c + 0.5)
 	}
-	// For negative values, biasing toward zero keeps the boundary
-	// behavior symmetric.
+	// Negative values round the same way by magnitude (e.g. -0.5 -> -1), so
+	// the snap is symmetric about zero.
 	return int64(c - 0.5)
 }
 
