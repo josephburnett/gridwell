@@ -38,6 +38,7 @@ const (
 	StyleCode   SpanStyle = 1 << 2
 	StyleLink   SpanStyle = 1 << 3
 	StyleEmbed  SpanStyle = 1 << 4
+	StyleStrike SpanStyle = 1 << 5
 )
 
 // Span is one styled run of text inside a block. For link spans, Href is

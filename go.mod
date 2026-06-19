@@ -6,6 +6,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	github.com/coder/websocket v1.8.14
 	github.com/creack/pty v1.1.24
+	github.com/yuin/goldmark v1.8.2
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.34.4
 )
