@@ -230,8 +230,11 @@ func parseInline(s string) []Span {
 			i += 2
 			continue
 		}
-		// Italic: single * or _
-		if s[i] == '*' || s[i] == '_' {
+		// Italic: single * always toggles; _ toggles too, EXCEPT between two
+		// word characters — an intraword underscore is literal, so "snake_case"
+		// renders verbatim instead of emphasizing "case" (CommonMark's
+		// intraword-underscore rule). Asterisks keep working intraword.
+		if s[i] == '*' || (s[i] == '_' && !intrawordUnderscore(s, i)) {
 			flush()
 			style ^= StyleItalic
 			i++
@@ -242,6 +245,20 @@ func parseInline(s string) []Span {
 	}
 	flush()
 	return out
+}
+
+// intrawordUnderscore reports whether the underscore at s[i] sits between two
+// word characters (so it should be a literal "_" rather than an emphasis
+// marker). Keeps identifiers like snake_case from rendering half-italic.
+func intrawordUnderscore(s string, i int) bool {
+	return i > 0 && isWordByte(s[i-1]) && i+1 < len(s) && isWordByte(s[i+1])
+}
+
+func isWordByte(b byte) bool {
+	return b == '_' ||
+		(b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9')
 }
 
 // parseEmbed attempts to read [![alt](src)](href) starting at s[start]. On

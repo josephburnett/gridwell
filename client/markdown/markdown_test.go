@@ -367,3 +367,34 @@ func TestWrapNoEarlyBreakOnSpaces(t *testing.T) {
 		t.Errorf("got %d lines: %+v", len(lines), lines)
 	}
 }
+
+// TestParseInlineIntrawordUnderscore: a "_" between word characters is literal
+// (snake_case must not render "case" italic), while boundary underscores and
+// asterisks still emphasize.
+func TestParseInlineIntrawordUnderscore(t *testing.T) {
+	stylize := func(src string) string {
+		spans := Parse(src)[0].Spans
+		out := ""
+		for _, s := range spans {
+			m := ""
+			if s.Style&StyleItalic != 0 {
+				m = "I"
+			}
+			out += m + ":" + s.Text + "|"
+		}
+		return out
+	}
+	cases := map[string]string{
+		"snake_case_var": ":snake_case_var|",        // all literal, no emphasis
+		"_f_":            "I:f|",                     // boundary underscores emphasize
+		"a _x_ b":        ":a |I:x|: b|",             // word-boundary emphasis still works
+		"call foo_bar()": ":call foo_bar()|",         // identifier stays literal
+	}
+	for src, want := range cases {
+		t.Run(src, func(t *testing.T) {
+			if got := stylize(src); got != want {
+				t.Errorf("stylize(%q) = %q, want %q", src, got, want)
+			}
+		})
+	}
+}
