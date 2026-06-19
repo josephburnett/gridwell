@@ -17,6 +17,12 @@ func TestNormalize(t *testing.T) {
 		{"localhost:8080/foo", "https://localhost:8080/foo", false},
 		{"192.168.1.1:8080", "https://192.168.1.1:8080", false},
 
+		// Userinfo must not make the password's colon read as a port
+		// separator (regression): these are valid URLs the server accepts.
+		{"https://user:pass@host.com", "https://user:pass@host.com", false},
+		{"user@example.com", "https://user@example.com", false},
+		{"http://user:pass@localhost:8080/x", "http://user:pass@localhost:8080/x", false},
+
 		// Already has a valid scheme: kept as-is.
 		{"https://example.com", "https://example.com", false},
 		{"http://example.com", "http://example.com", false},

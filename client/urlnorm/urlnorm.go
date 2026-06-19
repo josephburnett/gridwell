@@ -55,6 +55,13 @@ func looksLikeHost(s string) bool {
 	if s == "" {
 		return false
 	}
+	// Drop any userinfo ("user:pass@") before the port check, or the
+	// password's colon gets mistaken for the port separator — which would
+	// reject "user:pass@host.com" (a URL the server's http/https check
+	// happily accepts).
+	if at := strings.LastIndex(s, "@"); at >= 0 {
+		s = s[at+1:]
+	}
 	if i := strings.LastIndex(s, ":"); i > 0 {
 		s = s[:i]
 	}
