@@ -25,9 +25,11 @@ func procDisplayName(info procsource.Info) string {
 	if info.Name != "" {
 		return info.Name
 	}
-	if info.CmdLine != "" {
-		first := strings.Fields(info.CmdLine)[0]
-		if base := filepath.Base(first); base != "" && base != "." && base != "/" {
+	// A non-empty cmdline can still be all whitespace (e.g. a process whose
+	// argv[0] is a space), in which case Fields is empty — guard the index or
+	// it panics inside the GetGrid reconcile.
+	if fields := strings.Fields(info.CmdLine); len(fields) > 0 {
+		if base := filepath.Base(fields[0]); base != "" && base != "." && base != "/" {
 			return base
 		}
 	}

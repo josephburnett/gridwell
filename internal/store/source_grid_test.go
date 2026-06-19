@@ -651,6 +651,8 @@ func TestProcDisplayName(t *testing.T) {
 		{procsource.Info{PID: 1, Name: "init", CmdLine: "/sbin/init"}, "init"}, // Name wins over cmdline.
 		{procsource.Info{PID: 4242}, "pid 4242"},
 		{procsource.Info{PID: 4243, Name: "", CmdLine: "/ /"}, "pid 4243"}, // pathological cmdline → pid fallback.
+		{procsource.Info{PID: 4244, Name: "", CmdLine: " "}, "pid 4244"},   // all-whitespace cmdline must not panic on Fields[0].
+		{procsource.Info{PID: 4245, Name: "", CmdLine: "\t\n"}, "pid 4245"},
 	}
 	for _, c := range cases {
 		if got := procDisplayName(c.info); got != c.want {
