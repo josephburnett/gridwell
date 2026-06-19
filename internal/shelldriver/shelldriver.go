@@ -155,7 +155,20 @@ func (s *Session) pump() {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
-			s.outCh <- chunk
+			// Cancellable send. A plain `outCh <- chunk` would wedge this
+			// goroutine forever if outCh is full and nobody is draining it
+			// (e.g. a WS-takeover gap, or the tile was deleted) when the
+			// process exits: closing the PTY unblocks a blocked Read, not a
+			// blocked channel send. doneCh closes when the process exits
+			// (Close guarantees it via SIGTERM→SIGKILL), so fall through and
+			// drop the final chunk rather than leaking the goroutine + fd.
+			// While the process lives, doneCh is open, so a full channel
+			// still back-pressures the PTY read (the intended behavior).
+			select {
+			case s.outCh <- chunk:
+			case <-s.doneCh:
+				return
+			}
 		}
 		if err != nil {
 			return

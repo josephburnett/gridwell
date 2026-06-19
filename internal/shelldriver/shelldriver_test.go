@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -278,5 +279,58 @@ func TestCloseIsIdempotent(t *testing.T) {
 			t.Fatalf("Close calls did not all return; got %d/3", calls.Load())
 		case <-time.After(10 * time.Millisecond):
 		}
+	}
+}
+
+// TestPumpDoesNotLeakWhenOutputUndrained is the regression for the wedged-pump
+// goroutine leak. If outCh fills (subscriber gone — a WS-takeover gap, or the
+// tile was deleted) and Close runs, a plain blocking `outCh <- chunk` strands
+// the pump goroutine forever: closing the PTY unblocks a blocked Read, not a
+// blocked channel send. Each cycle below spawns a session that spews output,
+// never drains Output(), waits for the pump to fill outCh and block on the
+// send, then Closes — the exact "tile deleted while undrained" shape. A wedged
+// pump leaves one stranded goroutine per cycle; the cancellable send lets it
+// exit. Run many cycles so a leak stands out above runtime noise.
+func TestPumpDoesNotLeakWhenOutputUndrained(t *testing.T) {
+	bashPath := requireBash(t)
+	const cycles = 8
+
+	// Settle and capture a baseline goroutine count.
+	time.Sleep(100 * time.Millisecond)
+	runtime.GC()
+	base := runtime.NumGoroutine()
+
+	for range cycles {
+		s, err := Start(Config{
+			Cwd: "/", Cols: 80, Rows: 24, BashPath: bashPath,
+			Args: []string{"--norc", "--noprofile", "-i"},
+		})
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		// Spew unbounded output; we deliberately never read s.Output(), so the
+		// pump fills outCh (outputBufferFrames) and blocks on the next send.
+		if _, err := s.Write([]byte("yes\n")); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+		// Close's returned exit error (e.g. "signal: killed") is the bash
+		// process's exit status, not a teardown failure — irrelevant here.
+		_ = s.Close()
+	}
+
+	// Let exiting goroutines wind down, then assert we're back near baseline.
+	// A wedged pump per cycle would leave ~cycles extra goroutines.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		runtime.GC()
+		n := runtime.NumGoroutine()
+		if n <= base+2 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pump goroutines leaked: baseline %d, now %d after %d undrained Close cycles", base, n, cycles)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
