@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"log"
 
 	"connectrpc.com/connect"
@@ -10,7 +9,6 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/internal/rpc"
-	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // connectHandler implements gridwellv1connect.GridwellHandler. It is the
@@ -198,23 +196,18 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 }
 
 // asConnectError maps store sentinel errors to Connect status codes so
-// the wire surface matches the prior HTTP status mapping.
+// the wire surface matches the raw-HTTP status mapping — both route through
+// the single classifyStoreError categorization.
 func asConnectError(err error) error {
 	if err == nil {
 		return nil
 	}
-	switch {
-	case errors.Is(err, store.ErrNotFound):
+	switch classifyStoreError(err) {
+	case classNotFound:
 		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, store.ErrInvalidArgument),
-		errors.Is(err, store.ErrInvalidPath),
-		errors.Is(err, store.ErrNotURLTile),
-		errors.Is(err, store.ErrNotTextTile),
-		errors.Is(err, store.ErrNotWellTile),
-		errors.Is(err, store.ErrNotShellTile):
+	case classInvalidArgument:
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, store.ErrOverlap),
-		errors.Is(err, store.ErrVersionConflict):
+	case classConflict:
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	default:
 		return connect.NewError(connect.CodeInternal, err)

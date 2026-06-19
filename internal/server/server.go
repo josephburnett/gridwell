@@ -96,24 +96,54 @@ func (s *Server) staticOrSPA(dir string) http.Handler {
 	})
 }
 
-// writeHTTPError maps a store sentinel error to the right HTTP status
-// and writes a plain-text body. Used by the non-Connect endpoints
-// (preview image, ShellStream) where Connect's code mapping doesn't
-// apply.
-func writeHTTPError(w http.ResponseWriter, err error) {
-	status := http.StatusInternalServerError
+// storeErrorClass is the transport-neutral category of a store sentinel
+// error. Both the Connect handler (asConnectError) and the raw-HTTP endpoints
+// (writeHTTPError) map from this single classification, so the set of "which
+// sentinels are invalid-argument vs conflict vs not-found" lives in exactly
+// one place — a new sentinel can't be wired into one mapping and forgotten in
+// the other.
+type storeErrorClass int
+
+const (
+	classInternal storeErrorClass = iota
+	classNotFound
+	classInvalidArgument
+	classConflict
+)
+
+// classifyStoreError categorizes a store sentinel error. nil maps to
+// classInternal; callers handle nil before calling where it matters.
+func classifyStoreError(err error) storeErrorClass {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		status = http.StatusNotFound
+		return classNotFound
 	case errors.Is(err, store.ErrInvalidArgument),
 		errors.Is(err, store.ErrInvalidPath),
 		errors.Is(err, store.ErrNotURLTile),
 		errors.Is(err, store.ErrNotTextTile),
 		errors.Is(err, store.ErrNotWellTile),
 		errors.Is(err, store.ErrNotShellTile):
-		status = http.StatusBadRequest
+		return classInvalidArgument
 	case errors.Is(err, store.ErrOverlap),
 		errors.Is(err, store.ErrVersionConflict):
+		return classConflict
+	default:
+		return classInternal
+	}
+}
+
+// writeHTTPError maps a store sentinel error to the right HTTP status
+// and writes a plain-text body. Used by the non-Connect endpoints
+// (preview image, ShellStream) where Connect's code mapping doesn't
+// apply.
+func writeHTTPError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	switch classifyStoreError(err) {
+	case classNotFound:
+		status = http.StatusNotFound
+	case classInvalidArgument:
+		status = http.StatusBadRequest
+	case classConflict:
 		status = http.StatusConflict
 	}
 	http.Error(w, err.Error(), status)
