@@ -17,6 +17,8 @@ type LayoutStyle struct {
 	QuoteBarW   float64    // width of the blockquote bar
 	CodePadX    float64    // code block inner horizontal padding
 	CodePadY    float64    // code block inner vertical padding
+	TablePadX   float64    // table cell inner horizontal padding
+	TablePadY   float64    // table cell inner vertical padding
 	EmbedW      float64    // default inline embed width when unspecified
 	EmbedH      float64    // default inline embed height
 }
@@ -36,6 +38,8 @@ func DefaultLayoutStyle() LayoutStyle {
 		QuoteBarW:   3,
 		CodePadX:    8,
 		CodePadY:    6,
+		TablePadX:   6,
+		TablePadY:   3,
 		EmbedW:      144,
 		EmbedH:      144,
 	}
@@ -98,6 +102,8 @@ func (w *layoutWriter) block(n Node, x, y, avail float64, depth int) float64 {
 		mid := y + w.style.BlockGap/2
 		w.ops = append(w.ops, DrawOp{Kind: OpRule, X: x, Y: mid, W: avail, H: 1, Color: ColorRuleLine})
 		return y + w.style.BlockGap
+	case NodeTable:
+		return w.table(n, x, y, avail)
 	}
 	return y
 }
@@ -170,78 +176,245 @@ func (w *layoutWriter) marker(list, item Node, num int) string {
 	return "•" // bullet
 }
 
-// inline wraps a block's spans into lines within avail, emitting OpText (and
-// atomic OpEmbed) ops, and returns the y just past the last line.
-func (w *layoutWriter) inline(spans []Span, x, y, avail, fontPx float64, color ColorRole, mono bool) float64 {
-	tokens := w.tokenize(spans, fontPx, mono)
-	lineH := fontPx * w.style.LineSpacing
-
-	var line []inlineToken
-	var lineW, lineMaxH float64
-	flush := func() {
-		if len(line) == 0 {
-			return
-		}
-		h := lineH
-		if lineMaxH > h {
-			h = lineMaxH
-		}
-		cx := x
-		for _, tk := range line {
-			if tk.atomic {
-				alt := tk.span.Alt
-				if alt == "" {
-					alt = tk.span.Text
-				}
-				w.ops = append(w.ops, DrawOp{Kind: OpEmbed, X: cx, Y: y, W: tk.width, H: tk.height,
-					Href: tk.span.Href, Src: tk.span.Src, Alt: alt})
-				cx += tk.width
-				continue
-			}
-			col := color
-			if tk.span.Style&StyleLink != 0 {
-				col = ColorLink
-			} else if tk.span.Style&StyleCode != 0 {
-				col = ColorCode
-				// Inline code gets its own background chip (a code block's
-				// panel is drawn separately by codeBlock()).
-				w.ops = append(w.ops, DrawOp{Kind: OpRect, X: cx - 2, Y: y, W: tk.width + 4, H: h, Color: ColorInlineCodeBg})
-			}
-			w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: y, Text: tk.span.Text,
-				FontPx: fontPx, Style: tk.span.Style, Mono: mono || tk.span.Style&StyleCode != 0,
-				Color: col, Href: tk.span.Href})
-			cx += tk.width
-		}
-		y += h
-		line = nil
-		lineW, lineMaxH = 0, 0
+// table lays out a GFM table: content-sized columns fit to avail, per-row
+// height from wrapped cells, per-column alignment, a bold/tinted header row,
+// and a full gridline grid. Returns the y past the table.
+func (w *layoutWriter) table(n Node, x, y, avail float64) float64 {
+	rows := n.Children
+	if len(rows) == 0 {
+		return y
 	}
+	ncol := len(n.Align)
+	for _, r := range rows {
+		if len(r.Children) > ncol {
+			ncol = len(r.Children)
+		}
+	}
+	if ncol == 0 {
+		return y
+	}
+	fp := w.style.BaseFontPx
+	lineH := fp * w.style.LineSpacing
+	padX, padY := w.style.TablePadX, w.style.TablePadY
 
+	// Natural (single-line) and minimum (widest unbreakable token) column
+	// widths, including cell padding.
+	natW := make([]float64, ncol)
+	minW := make([]float64, ncol)
+	for _, row := range rows {
+		for ci := 0; ci < ncol && ci < len(row.Children); ci++ {
+			toks := w.tokenize(row.Children[ci].Spans, fp, false)
+			if nat := lineWidth(toks) + 2*padX; nat > natW[ci] {
+				natW[ci] = nat
+			}
+			if mn := widestToken(toks) + 2*padX; mn > minW[ci] {
+				minW[ci] = mn
+			}
+		}
+	}
+	colW := distributeColumns(natW, minW, avail)
+
+	colX := make([]float64, ncol+1)
+	colX[0] = x
+	for ci := 0; ci < ncol; ci++ {
+		colX[ci+1] = colX[ci] + colW[ci]
+	}
+	tableW := colX[ncol] - x
+
+	grid := ColorTableGrid
+	topY := y
+	w.ops = append(w.ops, DrawOp{Kind: OpRect, X: x, Y: y, W: tableW, H: 1, Color: grid}) // top border
+
+	for ri, row := range rows {
+		header := ri == 0
+		rowTop := y
+
+		cellLines := make([][][]inlineToken, ncol)
+		rowH := lineH + 2*padY
+		for ci := 0; ci < ncol; ci++ {
+			var spans []Span
+			if ci < len(row.Children) {
+				spans = row.Children[ci].Spans
+			}
+			lines := wrapTokens(w.tokenize(spans, fp, false), colW[ci]-2*padX)
+			cellLines[ci] = lines
+			if ch := float64(maxInt(len(lines), 1))*lineH + 2*padY; ch > rowH {
+				rowH = ch
+			}
+		}
+		if header {
+			w.ops = append(w.ops, DrawOp{Kind: OpRect, X: x, Y: rowTop, W: tableW, H: rowH, Color: ColorTableHeaderBg})
+		}
+		for ci := 0; ci < ncol; ci++ {
+			align := AlignLeft
+			if ci < len(n.Align) && n.Align[ci] != AlignNone {
+				align = n.Align[ci]
+			}
+			contentW := colW[ci] - 2*padX
+			cy := rowTop + padY
+			for _, line := range cellLines[ci] {
+				if header {
+					for i := range line {
+						line[i].span.Style |= StyleBold
+					}
+				}
+				lx := colX[ci] + padX
+				switch align {
+				case AlignCenter:
+					lx += (contentW - lineWidth(line)) / 2
+				case AlignRight:
+					lx += contentW - lineWidth(line)
+				}
+				w.emitLine(line, lx, cy, lineH, fp, ColorText, false)
+				cy += lineH
+			}
+		}
+		y = rowTop + rowH
+		w.ops = append(w.ops, DrawOp{Kind: OpRect, X: x, Y: y, W: tableW, H: 1, Color: grid}) // row separator
+	}
+	for ci := 0; ci <= ncol; ci++ {
+		w.ops = append(w.ops, DrawOp{Kind: OpRect, X: colX[ci], Y: topY, W: 1, H: y - topY, Color: grid})
+	}
+	return y
+}
+
+// distributeColumns fits natural column widths to avail. When they already fit,
+// they're kept as-is; when they overflow, columns shrink proportionally to
+// their slack (natural − min), never below min (a too-wide table then overflows
+// and is clipped at the tile rect rather than mangling content).
+func distributeColumns(natW, minW []float64, avail float64) []float64 {
+	out := make([]float64, len(natW))
+	copy(out, natW)
+	var total float64
+	for _, v := range natW {
+		total += v
+	}
+	if total <= avail || total == 0 {
+		return out
+	}
+	var slack float64
+	for i := range out {
+		slack += out[i] - minW[i]
+	}
+	if slack <= 0 {
+		copy(out, minW)
+		return out
+	}
+	remove := total - avail
+	if remove > slack {
+		remove = slack
+	}
+	for i := range out {
+		out[i] -= (out[i] - minW[i]) / slack * remove
+	}
+	return out
+}
+
+func widestToken(toks []inlineToken) float64 {
+	var m float64
+	for _, tk := range toks {
+		if !tk.isSpace && !tk.isBreak && tk.width > m {
+			m = tk.width
+		}
+	}
+	return m
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// inline wraps a block's spans into lines within avail, emitting OpText (and
+// atomic OpEmbed) ops left-aligned at x, and returns the y past the last line.
+func (w *layoutWriter) inline(spans []Span, x, y, avail, fontPx float64, color ColorRole, mono bool) float64 {
+	lineH := fontPx * w.style.LineSpacing
+	for _, line := range wrapTokens(w.tokenize(spans, fontPx, mono), avail) {
+		h := lineHeight(line, lineH)
+		w.emitLine(line, x, y, h, fontPx, color, mono)
+		y += h
+	}
+	return y
+}
+
+// wrapTokens greedily breaks a token stream into lines fitting avail. Leading
+// whitespace on each line is dropped; a break token forces a new line.
+func wrapTokens(tokens []inlineToken, avail float64) [][]inlineToken {
+	var lines [][]inlineToken
+	var line []inlineToken
+	var lineW float64
 	for _, tk := range tokens {
 		if tk.isBreak {
-			// A hard line break ends the current line; an empty line still
-			// advances (a deliberate blank line).
-			if len(line) > 0 {
-				flush()
-			} else {
-				y += lineH
-			}
+			lines = append(lines, line) // may be nil (a deliberate blank line)
+			line, lineW = nil, 0
 			continue
 		}
 		if !tk.isSpace && lineW+tk.width > avail && len(line) > 0 {
-			flush()
+			lines = append(lines, line)
+			line, lineW = nil, 0
 		}
 		if tk.isSpace && len(line) == 0 {
-			continue // drop leading whitespace
+			continue
 		}
 		line = append(line, tk)
 		lineW += tk.width
-		if tk.atomic && tk.height > lineMaxH {
-			lineMaxH = tk.height
+	}
+	if len(line) > 0 {
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// lineHeight returns a line's height: the text line height, grown to fit any
+// atomic embed on the line.
+func lineHeight(line []inlineToken, textLineH float64) float64 {
+	h := textLineH
+	for _, tk := range line {
+		if tk.atomic && tk.height > h {
+			h = tk.height
 		}
 	}
-	flush()
-	return y
+	return h
+}
+
+// lineWidth returns the total advance width of a line's tokens (for alignment).
+func lineWidth(line []inlineToken) float64 {
+	var sum float64
+	for _, tk := range line {
+		sum += tk.width
+	}
+	return sum
+}
+
+// emitLine paints one wrapped line's tokens starting at (x, y), with the given
+// line height h (used for the inline-code chip background).
+func (w *layoutWriter) emitLine(line []inlineToken, x, y, h, fontPx float64, color ColorRole, mono bool) {
+	cx := x
+	for _, tk := range line {
+		if tk.atomic {
+			alt := tk.span.Alt
+			if alt == "" {
+				alt = tk.span.Text
+			}
+			w.ops = append(w.ops, DrawOp{Kind: OpEmbed, X: cx, Y: y, W: tk.width, H: tk.height,
+				Href: tk.span.Href, Src: tk.span.Src, Alt: alt})
+			cx += tk.width
+			continue
+		}
+		col := color
+		if tk.span.Style&StyleLink != 0 {
+			col = ColorLink
+		} else if tk.span.Style&StyleCode != 0 {
+			col = ColorCode
+			w.ops = append(w.ops, DrawOp{Kind: OpRect, X: cx - 2, Y: y, W: tk.width + 4, H: h, Color: ColorInlineCodeBg})
+		}
+		w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: y, Text: tk.span.Text,
+			FontPx: fontPx, Style: tk.span.Style, Mono: mono || tk.span.Style&StyleCode != 0,
+			Color: col, Href: tk.span.Href})
+		cx += tk.width
+	}
 }
 
 // inlineToken is one atomic unit of inline flow: a word, a space run, or an

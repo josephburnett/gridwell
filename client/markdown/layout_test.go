@@ -243,3 +243,57 @@ func TestLayoutNestedBlockquote(t *testing.T) {
 		t.Errorf("want >=2 quote bars for nested quote, got %d", len(bars))
 	}
 }
+
+func TestLayoutTableBasics(t *testing.T) {
+	r := layoutOf(t, "| a | bb |\n|---|---|\n| ccc | d |", 1000)
+	for _, s := range []string{"a", "bb", "ccc", "d"} {
+		if _, ok := findText(r, s); !ok {
+			t.Errorf("missing cell text %q", s)
+		}
+	}
+	if h, _ := findText(r, "a"); h.Style&StyleBold == 0 {
+		t.Error("header cell 'a' should be bold")
+	}
+	if b, _ := findText(r, "ccc"); b.Style&StyleBold != 0 {
+		t.Error("body cell 'ccc' should not be bold")
+	}
+	if rects := opsOfKind(r, OpRect); len(rects) < 4 {
+		t.Errorf("expected gridline + header rects, got %d", len(rects))
+	}
+}
+
+func TestLayoutTableColumnWidth(t *testing.T) {
+	// col0 holds a wide body cell; col1 must begin past col0's content width.
+	r := layoutOf(t, "| a | b |\n|---|---|\n| wwwwww | x |", 1000)
+	a, _ := findText(r, "a")
+	b, _ := findText(r, "b")
+	wideW := monoMeasure("wwwwww", DefaultLayoutStyle().BaseFontPx, 0, false)
+	if b.X < a.X+wideW {
+		t.Errorf("col1 start %v should be past col0 content (a.X=%v + width %v)", b.X, a.X, wideW)
+	}
+}
+
+func TestLayoutTableAlignment(t *testing.T) {
+	// Wide header makes the column wider than the body cell, so alignment shows.
+	leftR := layoutOf(t, "| wwwwwwww |\n|:--|\n| v |", 1000)
+	rightR := layoutOf(t, "| wwwwwwww |\n|--:|\n| v |", 1000)
+	centerR := layoutOf(t, "| wwwwwwww |\n|:-:|\n| v |", 1000)
+	lv, _ := findText(leftR, "v")
+	rv, _ := findText(rightR, "v")
+	cv, _ := findText(centerR, "v")
+	if !(rv.X > cv.X && cv.X > lv.X) {
+		t.Errorf("alignment x not ordered left<center<right: l=%v c=%v r=%v", lv.X, cv.X, rv.X)
+	}
+}
+
+func TestLayoutTableCellWraps(t *testing.T) {
+	r := layoutOf(t, "| h |\n|---|\n| aa bb cc dd ee ff |", 90)
+	first, ok1 := findText(r, "aa")
+	last, ok2 := findText(r, "ff")
+	if !ok1 || !ok2 {
+		t.Fatalf("missing wrapped cell words: aa=%v ff=%v", ok1, ok2)
+	}
+	if first.Y == last.Y {
+		t.Errorf("narrow table cell did not wrap: aa and ff both at y=%v", first.Y)
+	}
+}

@@ -202,6 +202,8 @@ func markdownLayoutStyle(st markdownStyle) markdown.LayoutStyle {
 		QuoteBarW:   3,
 		CodePadX:    4,
 		CodePadY:    2,
+		TablePadX:   5,
+		TablePadY:   3,
 		EmbedW:      defaultEmbedW,
 		EmbedH:      defaultEmbedH,
 	}
