@@ -9,6 +9,7 @@ import (
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -124,16 +125,19 @@ func (a *App) ensureFileTextarea() {
 	a.sched.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.fileSaveScheduled = false
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
-			return nil
+		// The fire-time guard (focused text-tile pane, in raw-text mode,
+		// with the textarea singleton still bound to THIS tile) is the pure
+		// textedit.ShouldDebouncedSaveFire — see there for why the
+		// last-bound check matters (the cross-tile stale-buffer regression).
+		var (
+			textFocus int64
+			textMode  bool
+		)
+		if p != nil {
+			textFocus = p.TextFocus
+			textMode = p.TextMode == rpc.TextModeText
 		}
-		// Only save when the textarea is currently bound to this pane's
-		// tile. A debounced save scheduled while you were typing in
-		// tile A can otherwise fire after you've descended into tile B,
-		// reading A's stale buffer and persisting it as B's content —
-		// the exact "new tile contains the last edited tile's text"
-		// regression we just fixed in the seed path.
-		if a.lastTextareaTileID != p.TextFocus {
+		if !textedit.ShouldDebouncedSaveFire(p != nil, textFocus, textMode, a.lastTextareaTileID) {
 			return nil
 		}
 		a.saveFileFromTextarea(p)
