@@ -45,28 +45,51 @@ func DefaultLayoutStyle() LayoutStyle {
 	}
 }
 
-// EmbedFunc classifies a span as a tile embed (drawn as an atomic OpEmbed)
-// rather than flowing text. The wasm caller passes embed.SpanIsEmbed (which
-// knows tile-link hrefs); tests pass a stub. Keeping it a callback avoids an
-// import cycle (client/embed imports client/markdown).
-type EmbedFunc func(sp Span) bool
+// AtomKind classifies an inline span as an atomic (non-flowing) block, or as
+// ordinary flowing text.
+type AtomKind int
+
+const (
+	// AtomNone — the span flows as text (ordinary text or an external link).
+	AtomNone AtomKind = iota
+	// AtomEmbed — a native tile preview (a tile-link href, or the legacy
+	// image-in-link form): drawn as an atomic OpEmbed.
+	AtomEmbed
+	// AtomImage — a real external image (![alt](src) with no tile href): drawn
+	// as an atomic OpImage (fetched + painted by the renderer).
+	AtomImage
+)
+
+// ClassifyFunc classifies a span into an AtomKind. The wasm caller builds it
+// from embed.LeafTileIDFromHref (tile-link awareness); tests pass a stub.
+// Keeping it a callback avoids an import cycle (client/embed imports
+// client/markdown).
+type ClassifyFunc func(sp Span) AtomKind
 
 // Layout turns a lowered document into positioned draw ops at the given content
 // width. It is pure: all canvas interaction is deferred to the painter, which
 // just walks LayoutResult.Ops and scales them. width is the content width in
 // logical px (the area between the left pad and the right edge).
-func Layout(doc Node, m Measure, isEmbed EmbedFunc, width float64, style LayoutStyle) LayoutResult {
-	lw := &layoutWriter{m: m, isEmbed: isEmbed, style: style}
+func Layout(doc Node, m Measure, classify ClassifyFunc, width float64, style LayoutStyle) LayoutResult {
+	lw := &layoutWriter{m: m, classify: classify, style: style}
 	y := lw.blocks(doc.Children, style.PadX, 0, width-2*style.PadX, 0)
 	return LayoutResult{Ops: lw.ops, Height: y}
 }
 
 // layoutWriter accumulates ops while walking the block tree.
 type layoutWriter struct {
-	m       Measure
-	isEmbed EmbedFunc
-	style   LayoutStyle
-	ops     []DrawOp
+	m        Measure
+	classify ClassifyFunc
+	style    LayoutStyle
+	ops      []DrawOp
+}
+
+// atomKind classifies a span, tolerating a nil classifier (tests / no embeds).
+func (w *layoutWriter) atomKind(sp Span) AtomKind {
+	if w.classify == nil {
+		return AtomNone
+	}
+	return w.classify(sp)
 }
 
 // blocks lays out a sequence of sibling blocks starting at (x, y) within the
@@ -398,8 +421,13 @@ func (w *layoutWriter) emitLine(line []inlineToken, x, y, h, fontPx float64, col
 			if alt == "" {
 				alt = tk.span.Text
 			}
-			w.ops = append(w.ops, DrawOp{Kind: OpEmbed, X: cx, Y: y, W: tk.width, H: tk.height,
-				Href: tk.span.Href, Src: tk.span.Src, Alt: alt})
+			if tk.isImage {
+				w.ops = append(w.ops, DrawOp{Kind: OpImage, X: cx, Y: y, W: tk.width, H: tk.height,
+					Src: tk.span.Src, Alt: alt})
+			} else {
+				w.ops = append(w.ops, DrawOp{Kind: OpEmbed, X: cx, Y: y, W: tk.width, H: tk.height,
+					Href: tk.span.Href, Src: tk.span.Src, Alt: alt})
+			}
 			cx += tk.width
 			continue
 		}
@@ -425,6 +453,7 @@ type inlineToken struct {
 	isSpace bool
 	isBreak bool // a hard line break ("\n" sentinel)
 	atomic  bool
+	isImage bool // atomic && a real image (OpImage) vs a tile embed (OpEmbed)
 	height  float64
 }
 
@@ -434,18 +463,18 @@ type inlineToken struct {
 func (w *layoutWriter) tokenize(spans []Span, fontPx float64, mono bool) []inlineToken {
 	var toks []inlineToken
 	for _, sp := range spans {
-		if w.isEmbed != nil && w.isEmbed(sp) {
-			// Coalesce consecutive embed spans that share the same non-empty
-			// href into one embed: a tile link whose text is several inline
-			// spans (e.g. "[a **b**](/5)") is ONE embed, not several.
-			if sp.Href != "" && len(toks) > 0 {
-				if last := &toks[len(toks)-1]; last.atomic && last.span.Href == sp.Href {
+		if kind := w.atomKind(sp); kind != AtomNone {
+			// Coalesce consecutive tile-embed spans that share the same
+			// non-empty href into one embed: a tile link whose text is several
+			// inline spans (e.g. "[a **b**](/5)") is ONE embed, not several.
+			if kind == AtomEmbed && sp.Href != "" && len(toks) > 0 {
+				if last := &toks[len(toks)-1]; last.atomic && !last.isImage && last.span.Href == sp.Href {
 					last.span.Text += sp.Text
 					continue
 				}
 			}
 			ew, eh := w.embedSize(sp)
-			toks = append(toks, inlineToken{span: sp, width: ew, height: eh, atomic: true})
+			toks = append(toks, inlineToken{span: sp, width: ew, height: eh, atomic: true, isImage: kind == AtomImage})
 			continue
 		}
 		if sp.Text == "\n" {

@@ -1,6 +1,9 @@
 package markdown
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // monoMeasure is a deterministic measure: every rune is half the font size
 // wide, regardless of style. Makes layout geometry exactly assertable.
@@ -8,13 +11,39 @@ func monoMeasure(text string, fontPx float64, _ SpanStyle, _ bool) float64 {
 	return float64(len([]rune(text))) * fontPx * 0.5
 }
 
-// styleEmbed treats any StyleEmbed span as an embed (the wasm renderer also
-// catches tile-link hrefs via embed.SpanIsEmbed, but StyleEmbed suffices here).
-func styleEmbed(sp Span) bool { return sp.Style&StyleEmbed != 0 }
+// classifyStub mirrors the wasm classifier without importing client/embed: a
+// "/<int>[/<int>...]" href is a tile embed; any other StyleEmbed span is a real
+// image; everything else flows as text.
+func classifyStub(sp Span) AtomKind {
+	if looksLikeTileHref(sp.Href) {
+		return AtomEmbed
+	}
+	if sp.Style&StyleEmbed != 0 {
+		return AtomImage
+	}
+	return AtomNone
+}
+
+func looksLikeTileHref(href string) bool {
+	if !strings.HasPrefix(href, "/") {
+		return false
+	}
+	any := false
+	for part := range strings.SplitSeq(href[1:], "/") {
+		if part == "" {
+			continue
+		}
+		if strings.TrimFunc(part, func(r rune) bool { return r >= '0' && r <= '9' }) != "" {
+			return false
+		}
+		any = true
+	}
+	return any
+}
 
 func layoutOf(t *testing.T, src string, width float64) LayoutResult {
 	t.Helper()
-	return Layout(Lower([]byte(src)), monoMeasure, styleEmbed, width, DefaultLayoutStyle())
+	return Layout(Lower([]byte(src)), monoMeasure, classifyStub, width, DefaultLayoutStyle())
 }
 
 func opsOfKind(r LayoutResult, k DrawOpKind) []DrawOp {
@@ -123,19 +152,33 @@ func TestLayoutOrderedListNumbers(t *testing.T) {
 	}
 }
 
-func TestLayoutEmbedIsAtomic(t *testing.T) {
-	r := layoutOf(t, "before ![alt](pic.png) after", 1000)
+func TestLayoutTileEmbedIsAtomic(t *testing.T) {
+	// A tile-link href becomes a native embed; surrounding text still flows.
+	r := layoutOf(t, "see [label](/5) here", 1000)
 	embeds := opsOfKind(r, OpEmbed)
 	if len(embeds) != 1 {
 		t.Fatalf("want 1 embed op, got %d", len(embeds))
 	}
-	e := embeds[0]
-	if e.W != DefaultLayoutStyle().EmbedW || e.H != DefaultLayoutStyle().EmbedH {
-		t.Errorf("embed size = %vx%v, want default", e.W, e.H)
+	if opsOfKind(r, OpImage) != nil {
+		t.Error("tile link should be an embed, not an image")
 	}
-	// Surrounding text still renders.
 	if len(opsOfKind(r, OpText)) == 0 {
 		t.Error("expected surrounding text ops alongside the embed")
+	}
+}
+
+func TestLayoutRealImageIsOpImage(t *testing.T) {
+	// A bare image with a non-tile src is a real image, not a tile embed.
+	r := layoutOf(t, "before ![alt](https://x/pic.png) after", 1000)
+	imgs := opsOfKind(r, OpImage)
+	if len(imgs) != 1 {
+		t.Fatalf("want 1 image op, got %d (embeds=%d)", len(imgs), len(opsOfKind(r, OpEmbed)))
+	}
+	if imgs[0].Src != "https://x/pic.png" || imgs[0].Alt != "alt" {
+		t.Errorf("image op src/alt = %q/%q", imgs[0].Src, imgs[0].Alt)
+	}
+	if opsOfKind(r, OpEmbed) != nil {
+		t.Error("real image should not be an embed")
 	}
 }
 

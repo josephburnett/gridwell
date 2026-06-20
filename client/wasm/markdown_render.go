@@ -271,6 +271,8 @@ func (a *App) drawMarkdownRendered(src string, x, y, w, h, scale float64, drawEm
 			}
 			c.Set("fillStyle", markdownColorFor(st, op.Color))
 			c.Call("fillRect", sx, sy, op.W*scale, lh)
+		case markdown.OpImage:
+			a.drawMarkdownImage(c, op.Src, op.Alt, sx, sy, op.W*scale, op.H*scale, scale, st)
 		case markdown.OpEmbed:
 			ew := op.W * scale
 			eh := op.H * scale
@@ -332,9 +334,103 @@ func (a *App) layoutMarkdown(src string, width float64, m markdown.Measure, styl
 	if len(a.mdCache) > 128 {
 		a.mdCache = map[mdCacheKey]markdown.LayoutResult{}
 	}
-	r := markdown.Layout(markdown.Lower([]byte(src)), m, embedpkg.SpanIsEmbed, width, style)
+	r := markdown.Layout(markdown.Lower([]byte(src)), m, classifyAtom, width, style)
 	a.mdCache[key] = r
 	return r
+}
+
+// classifyAtom splits an inline span into a native tile embed (a tile-path
+// href, including the legacy image-in-link form), a real external image, or
+// flowing text — see markdown.ClassifyFunc.
+func classifyAtom(sp markdown.Span) markdown.AtomKind {
+	if embedpkg.LeafTileIDFromHref(sp.Href) != 0 {
+		return markdown.AtomEmbed
+	}
+	if sp.Style&markdown.StyleEmbed != 0 {
+		return markdown.AtomImage
+	}
+	return markdown.AtomNone
+}
+
+// drawMarkdownImage paints a real markdown image (![alt](src)) into the box
+// (x, y, w, h). It lazily loads the image element, draws it contained (aspect
+// preserved) once ready, and shows an alt-text placeholder while loading or on
+// error. The browser caches the URL fetch; we cache the decoded element.
+func (a *App) drawMarkdownImage(c js.Value, src, alt string, x, y, w, h, scale float64, st markdownStyle) {
+	if a.mdImages == nil {
+		a.mdImages = map[string]js.Value{}
+		a.mdImageState = map[string]int8{}
+	}
+	switch a.mdImageState[src] {
+	case 1: // ready
+		img := a.mdImages[src]
+		iw := img.Get("naturalWidth").Float()
+		ih := img.Get("naturalHeight").Float()
+		dx, dy, dw, dh := containRect(x, y, w, h, iw, ih)
+		c.Call("drawImage", img, dx, dy, dw, dh)
+	case 2: // error
+		drawImagePlaceholder(c, alt, x, y, w, h, scale, st, true)
+	default: // loading / not yet started
+		if _, ok := a.mdImages[src]; !ok {
+			a.startMarkdownImageLoad(src)
+		}
+		drawImagePlaceholder(c, alt, x, y, w, h, scale, st, false)
+	}
+}
+
+// startMarkdownImageLoad kicks off an async <img> load for src, redrawing when
+// it resolves. Callbacks are released on completion.
+func (a *App) startMarkdownImageLoad(src string) {
+	img := js.Global().Get("Image").New()
+	a.mdImages[src] = img
+	a.mdImageState[src] = 0
+	var onload, onerror js.Func
+	finish := func(state int8) {
+		a.mdImageState[src] = state
+		onload.Release()
+		onerror.Release()
+		a.draw()
+	}
+	onload = js.FuncOf(func(js.Value, []js.Value) any { finish(1); return nil })
+	onerror = js.FuncOf(func(js.Value, []js.Value) any { finish(2); return nil })
+	img.Set("onload", onload)
+	img.Set("onerror", onerror)
+	img.Set("src", src)
+}
+
+// containRect fits an (iw × ih) image inside (x, y, w, h), preserving aspect
+// ratio and centering. Degenerate intrinsic sizes fall back to filling the box.
+func containRect(x, y, w, h, iw, ih float64) (dx, dy, dw, dh float64) {
+	if iw <= 0 || ih <= 0 || w <= 0 || h <= 0 {
+		return x, y, w, h
+	}
+	s := w / iw
+	if sy := h / ih; sy < s {
+		s = sy
+	}
+	dw, dh = iw*s, ih*s
+	return x + (w-dw)/2, y + (h-dh)/2, dw, dh
+}
+
+// drawImagePlaceholder draws a bordered box with the alt label, used while a
+// markdown image loads or after it fails.
+func drawImagePlaceholder(c js.Value, alt string, x, y, w, h, scale float64, st markdownStyle, isError bool) {
+	c.Set("fillStyle", st.codeBg)
+	c.Call("fillRect", x, y, w, h)
+	c.Set("strokeStyle", st.mutedColor)
+	c.Set("lineWidth", 1)
+	c.Call("strokeRect", x+0.5, y+0.5, w-1, h-1)
+	label := alt
+	if label == "" {
+		label = "image"
+	}
+	if isError {
+		label = "⚠ " + label
+	}
+	setFont(c, st.bodyPx*scale*0.9, st.sansSerif, false, false)
+	c.Set("fillStyle", st.mutedColor)
+	c.Set("textBaseline", "top")
+	c.Call("fillText", label, x+4, y+4)
 }
 
 // setFont assembles a CSS font shorthand and assigns it. size is in pixels.

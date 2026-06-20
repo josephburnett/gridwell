@@ -157,6 +157,12 @@ type App struct {
 	// cached layout is valid across zoom levels. See layoutMarkdown.
 	mdCache map[mdCacheKey]markdown.LayoutResult
 
+	// mdImages caches HTMLImageElements for real markdown images (![](src)),
+	// keyed by src URL; mdImageState tracks load progress (0 loading, 1 ready,
+	// 2 error). See drawMarkdownImage.
+	mdImages     map[string]js.Value
+	mdImageState map[string]int8
+
 	// urlStreams holds the live native WebContentsView handle for each
 	// pane descended into a live URL tile. One per pane id; multiple panes
 	// may host views concurrently. Named "streams" for historical reasons
