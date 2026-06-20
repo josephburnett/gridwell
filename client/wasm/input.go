@@ -503,8 +503,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// Outside content area: restore default cursor.
 			a.canvas.Get("style").Set("cursor", "")
 		} else {
-			// Not hovering a URL descent pane: ensure cursor is reset.
-			a.canvas.Get("style").Set("cursor", "")
+			// Not hovering a URL descent pane: show a resize cursor when
+			// over a grabbable split divider (the grab band is far wider
+			// than the 1px line), otherwise clear.
+			a.canvas.Get("style").Set("cursor", a.dividerResizeCursor(sx, sy))
 		}
 	}
 	// Right-button gestures take precedence so a drag that started on

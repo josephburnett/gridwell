@@ -750,6 +750,30 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	return true
 }
 
+// dividerResizeCursor returns the CSS cursor to show while hovering a
+// grabbable pane split divider at (sx, sy): "ew-resize" over a vertical
+// divider, "ns-resize" over a horizontal one, or "" when the point isn't
+// over a divider's resize band. It mirrors armLeftResize exactly, so the
+// cursor appears precisely where a left-drag would resize. The grab band is
+// resizeBandPx (10) wide even though the divider line is drawn at 1px — the
+// cursor is what makes that otherwise-invisible band discoverable.
+func (a *App) dividerResizeCursor(sx, sy float64) string {
+	p, r, ok := a.paneAtScreen(sx, sy)
+	if !ok || pointInPlus(r, sx, sy) {
+		return ""
+	}
+	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
+	if !region.IsResize() || a.dividerOnSide(p, region.Side()) == nil {
+		return ""
+	}
+	switch region {
+	case pane.RegionResizeLeft, pane.RegionResizeRight:
+		return "ew-resize"
+	default: // RegionResizeTop, RegionResizeBottom
+		return "ns-resize"
+	}
+}
+
 // onLeftResizeMove applies the live divider ratio for the in-flight
 // left-button resize, clamped so neither side shrinks past leftResizeMinPx
 // — the left button never closes a pane.
