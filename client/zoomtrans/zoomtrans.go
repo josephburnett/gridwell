@@ -77,6 +77,36 @@ func EffectiveViewZoom(stored, fallback float64) float64 {
 	return fallback
 }
 
+// WheelZoom computes the new viewport zoom and center for a wheel zoom
+// centered on the cursor, keeping the world point under the cursor fixed on
+// screen (map-style). deltaY is the raw wheel delta; the per-event step is
+// scaled (÷200) and capped at ±0.5 so a fast scroll covers more range
+// without jumping. (cellX, cellY) is the world cell under the cursor;
+// (cx, cy) the current viewport center; factorBase the per-notch zoom factor.
+// The new zoom is clamped to [zMin, zMax]; when the clamp pins zoom unchanged
+// the center doesn't move (no drift at the limits).
+func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax float64) (zoom, newCx, newCy float64) {
+	step := deltaY / 200.0
+	if step > 0.5 {
+		step = 0.5
+	}
+	if step < -0.5 {
+		step = -0.5
+	}
+	z := oldZoom * math.Pow(factorBase, -step*4)
+	if z < zMin {
+		z = zMin
+	}
+	if z > zMax {
+		z = zMax
+	}
+	if z == oldZoom {
+		return z, cx, cy
+	}
+	ratio := oldZoom / z
+	return z, cellX - (cellX-cx)*ratio, cellY - (cellY-cy)*ratio
+}
+
 // Overtake returns the zoom at which a (footprintW × footprintH) cell
 // footprint exceeds both dimensions of a (refW × refH) px reference
 // rectangle — the "footprint has fully consumed the reference area, its

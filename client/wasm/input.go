@@ -161,30 +161,10 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// fast scroll covers more range, but capped per event. The pane's
 	// (Cx, Cy) shifts so the world point under the cursor stays under
 	// the cursor after the zoom — like every map app.
-	step := dy / 200.0
-	if step > 0.5 {
-		step = 0.5
-	}
-	if step < -0.5 {
-		step = -0.5
-	}
-	factor := math.Pow(zoomFactor, -step*4)
 	ps := paneToDragdrop(p, r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
-	oldZoom := p.Zoom
-	z := oldZoom * factor
-	if z < zoomMin {
-		z = zoomMin
-	}
-	if z > zoomMax {
-		z = zoomMax
-	}
-	p.Zoom = z
-	if z != oldZoom {
-		ratio := oldZoom / z
-		p.Cx = cellX - (cellX-p.Cx)*ratio
-		p.Cy = cellY - (cellY-p.Cy)*ratio
-	}
+	// Step clamp + cursor-anchored re-center is the pure zoomtrans.WheelZoom.
+	p.Zoom, p.Cx, p.Cy = zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax)
 	a.draw()
 	a.scheduleURLUpdate()
 	a.scheduleRootViewSave()

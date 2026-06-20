@@ -477,3 +477,42 @@ func TestZoomDist(t *testing.T) {
 		t.Errorf("z1<0: got %v, want 0", got)
 	}
 }
+
+func TestWheelZoom(t *testing.T) {
+	const base, zmin, zmax = 1.1, 0.25, 8.0
+
+	// Zoom in (deltaY<0) toward the cursor: zoom grows, center moves toward
+	// the cursor world point.
+	z, cx, cy := WheelZoom(-100, 1.0, 0, 0, 10, 10, base, zmin, zmax)
+	if z <= 1.0 {
+		t.Errorf("scroll up should zoom in: z=%v", z)
+	}
+	if !(cx > 0 && cx < 10) || !(cy > 0 && cy < 10) {
+		t.Errorf("center should move toward cursor (0<c<10): cx=%v cy=%v", cx, cy)
+	}
+
+	// Zoom out (deltaY>0): zoom shrinks.
+	z, _, _ = WheelZoom(100, 1.0, 0, 0, 10, 10, base, zmin, zmax)
+	if z >= 1.0 {
+		t.Errorf("scroll down should zoom out: z=%v", z)
+	}
+
+	// Step cap: a huge delta is capped at ±0.5 step, so the factor equals
+	// base^(-0.5*4) = base^-2 regardless of how big the delta is.
+	zCapped, _, _ := WheelZoom(1e9, 1.0, 0, 0, 0, 0, base, zmin, zmax)
+	if !near(zCapped, math.Pow(base, -2)) {
+		t.Errorf("step cap: z=%v want %v", zCapped, math.Pow(base, -2))
+	}
+
+	// Clamp at max: zoom can't exceed zmax and the center doesn't drift when
+	// the clamp pins zoom unchanged.
+	z, cx, cy = WheelZoom(-1e9, zmax, 3, 4, 10, 10, base, zmin, zmax)
+	if z != zmax || cx != 3 || cy != 4 {
+		t.Errorf("clamped at max: z=%v c=(%v,%v), want %v (3,4)", z, cx, cy, zmax)
+	}
+	// Clamp at min.
+	z, _, _ = WheelZoom(1e9, zmin, 0, 0, 0, 0, base, zmin, zmax)
+	if z != zmin {
+		t.Errorf("clamped at min: z=%v want %v", z, zmin)
+	}
+}
