@@ -97,17 +97,29 @@ func (a *App) ensureFileTextarea() {
 	style.Set("color", "#d8d9de")
 	style.Set("border", "0")
 	style.Set("outline", "none")
-	// border-box so the 8px padding fits inside the width/height
-	// fileTextareaBox returns. Without this, content-box would add
-	// 16px to each dimension and the textarea would overhang the
+	// border-box so the padding fits inside the width/height
+	// fileTextareaBox returns. Without this, content-box would add the
+	// padding to each dimension and the textarea would overhang the
 	// pane's right and bottom border strokes.
 	style.Set("boxSizing", "border-box")
-	style.Set("padding", "8px")
+	// Metrics mirror the canvas painter (drawMarkdownText) exactly so the
+	// raw text doesn't reflow when focus enters/leaves the pane: same font
+	// size (codePx), same line-height (rawTextLineHeight), same inset
+	// (pad). The top inset is shrunk by the textarea's half-leading — a
+	// line box centers its glyph, while the canvas top-aligns it — so the
+	// first line's glyphs land on the same pixel in both. (Left/right/bottom
+	// take the full pad; only the vertical glyph origin carries leading.)
+	mst := defaultMarkdownStyle()
+	halfLeading := (rawTextLineHeight - 1) * mst.codePx / 2
+	style.Set("paddingTop", strconv.FormatFloat(mst.pad-halfLeading, 'f', 3, 64)+"px")
+	style.Set("paddingRight", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
+	style.Set("paddingBottom", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
+	style.Set("paddingLeft", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
 	style.Set("margin", "0")
 	style.Set("resize", "none")
-	style.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
-	style.Set("fontSize", "14px")
-	style.Set("lineHeight", "1.45")
+	style.Set("fontFamily", mst.monospace)
+	style.Set("fontSize", strconv.FormatFloat(mst.codePx, 'f', 1, 64)+"px")
+	style.Set("lineHeight", strconv.FormatFloat(rawTextLineHeight, 'f', 2, 64))
 	style.Set("zIndex", "5")
 	style.Set("caretColor", "#d8d9de")
 	ta.Set("spellcheck", false)
@@ -493,7 +505,9 @@ func (a *App) syncFileOverlayPosition() {
 // font size for pane p with rect r. Adapter over panebox.TextareaBox
 // supplying the wasm renderer's fixed-scale constants.
 func fileTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
-	b, fp := panebox.TextareaBox(r, fileSideInset, 14.0, fileFixedScale)
+	// Font size = the canvas painter's codePx so focused (textarea) and
+	// blurred (canvas) raw text are the same size. See drawMarkdownText.
+	b, fp := panebox.TextareaBox(r, fileSideInset, defaultMarkdownStyle().codePx, fileFixedScale)
 	return b.X, b.Y, b.W, b.H, fp
 }
 

@@ -464,10 +464,17 @@ func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
 // drawMarkdownText paints src as raw monospace text at the given scale. Used
 // for source-mode preview and as a faint backdrop behind the textarea overlay.
 // Text mode does not soft-wrap; long lines are clipped by the caller's clip.
+// rawTextLineHeight is the line-advance multiple for raw monospace markdown
+// source. Shared by the canvas painter (drawMarkdownText) and the editing
+// <textarea> (file_overlay.go) so a focused pane's textarea and its blurred
+// canvas preview render line-for-line identically — the same content, the
+// same size, the same place, whether or not the pane has focus.
+const rawTextLineHeight = 1.35
+
 func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY float64) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
-	lineHeight := fontPx * 1.35
+	lineHeight := fontPx * rawTextLineHeight
 	setFont(c, fontPx*scale, st.monospace, false, false)
 	c.Set("textBaseline", "top")
 	c.Set("fillStyle", st.textColor)
