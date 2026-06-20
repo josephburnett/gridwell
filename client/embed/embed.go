@@ -17,8 +17,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/josephburnett/gridwell/client/markdown"
 )
 
 // TextMode mirrors rpc.TextModeText / rpc.TextModeRendered. The embed
@@ -261,37 +259,6 @@ func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 		SetValue:      false,
 		NewLastTileID: in.FocusedTileID,
 	}
-}
-
-// SpanIsEmbed reports whether a markdown span should render as a tile
-// embed: either it carries the explicit StyleEmbed bit (rare today —
-// the image-in-link form), or it is a plain link whose href looks like
-// a Gridwell tile-descent path. Centralizes the "this span is a
-// reference to a tile" test that the wasm renderer applies in three
-// places (wrap, line draw, link painting).
-func SpanIsEmbed(sp markdown.Span) bool {
-	if sp.Style&markdown.StyleEmbed != 0 {
-		return true
-	}
-	if sp.Style&markdown.StyleLink != 0 && LeafTileIDFromHref(sp.Href) != 0 {
-		return true
-	}
-	return false
-}
-
-// SpanEmbedSize returns the rendered W/H for a span being drawn as a
-// tile embed, in logical (pre-scale) pixels. Uses the span's own
-// W / H when set, falling back to caller-supplied defaults — the
-// renderer's "no width hint in the URL? use a 3x2 cell block."
-func SpanEmbedSize(sp markdown.Span, defaultW, defaultH float64) (float64, float64) {
-	w, h := float64(sp.W), float64(sp.H)
-	if w <= 0 {
-		w = defaultW
-	}
-	if h <= 0 {
-		h = defaultH
-	}
-	return w, h
 }
 
 // RowAt returns the line index (0-based) for a screen-relative y

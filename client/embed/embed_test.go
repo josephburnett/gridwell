@@ -3,8 +3,6 @@ package embed
 import (
 	"strings"
 	"testing"
-
-	"github.com/josephburnett/gridwell/client/markdown"
 )
 
 func TestClassifyDocTarget(t *testing.T) {
@@ -446,54 +444,3 @@ func TestInsertAtComputedOffset(t *testing.T) {
 	}
 }
 
-func TestSpanIsEmbed(t *testing.T) {
-	cases := []struct {
-		name string
-		sp   markdown.Span
-		want bool
-	}{
-		{"plain text", markdown.Span{Text: "hello"}, false},
-		{"explicit embed style", markdown.Span{Style: markdown.StyleEmbed}, true},
-		{"link with tile href",
-			markdown.Span{Style: markdown.StyleLink, Href: "/42"}, true},
-		{"link with absolute tile href",
-			markdown.Span{Style: markdown.StyleLink, Href: "http://localhost:8080/42"}, true},
-		{"link with non-tile href",
-			markdown.Span{Style: markdown.StyleLink, Href: "https://example.com/about"}, false},
-		{"link with empty href",
-			markdown.Span{Style: markdown.StyleLink, Href: ""}, false},
-		{"bold text (not a link)",
-			markdown.Span{Style: markdown.StyleBold, Text: "**bold**"}, false},
-		{"embed style wins even with non-link href",
-			markdown.Span{Style: markdown.StyleEmbed, Href: "garbage"}, true},
-	}
-	for _, c := range cases {
-		got := SpanIsEmbed(c.sp)
-		if got != c.want {
-			t.Errorf("%s: SpanIsEmbed = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestSpanEmbedSize(t *testing.T) {
-	const dw, dh = 192.0, 128.0
-	// Span carries an explicit size: use it verbatim.
-	w, h := SpanEmbedSize(markdown.Span{W: 256, H: 320}, dw, dh)
-	if w != 256 || h != 320 {
-		t.Errorf("explicit size: got (%v,%v), want (256,320)", w, h)
-	}
-	// No size: use defaults.
-	w, h = SpanEmbedSize(markdown.Span{}, dw, dh)
-	if w != dw || h != dh {
-		t.Errorf("no size: got (%v,%v), want (%v,%v)", w, h, dw, dh)
-	}
-	// Negative or zero values fall back to defaults independently per axis.
-	w, h = SpanEmbedSize(markdown.Span{W: 100, H: -5}, dw, dh)
-	if w != 100 || h != dh {
-		t.Errorf("partial defaults: got (%v,%v), want (100,%v)", w, h, dh)
-	}
-	w, h = SpanEmbedSize(markdown.Span{W: 0, H: 200}, dw, dh)
-	if w != dw || h != 200 {
-		t.Errorf("partial defaults: got (%v,%v), want (%v,200)", w, h, dw)
-	}
-}
