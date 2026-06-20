@@ -50,8 +50,6 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	if a.ghost == nil {
 		return
 	}
-	a.ghost.overDoc = false
-	a.ghost.forbidden = false
 	in := dragdrop.DropInput{
 		Started:    d.started,
 		IsTemplate: d.isTemplate,
@@ -68,48 +66,28 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
 	}
 
-	switch dragdrop.DecideDrop(in) {
-	case dragdrop.DropDelete:
-		// Over the source pane's trashcan button: shrink AND fragment. Drag
-		// back out and the size lerp reassembles it.
-		a.ghost.paneID = d.originPaneID
-		a.ghost.targetCellSize = d.srcCellSize * 0.2
-		a.ghost.targetFragmentation = 1.0
-		a.canvas.Get("style").Set("cursor", "")
-	case dragdrop.DropEmbed:
-		// Over a raw-mode text descent: insert a reference. Source stays put.
-		a.ghost.paneID = docTarget.pane.ID
-		a.ghost.targetCellSize = d.srcCellSize
-		a.ghost.targetFragmentation = 0.0
-		a.ghost.overDoc = true
-		a.canvas.Get("style").Set("cursor", "")
-	case dragdrop.DropRejected:
-		a.ghost.targetCellSize = d.srcCellSize
-		a.ghost.targetFragmentation = 0.0
-		switch {
-		case in.DocReject:
-			// Rendered-mode (read-only) text descent.
-			a.ghost.paneID = d.originPaneID
-			a.ghost.forbidden = !clone // left shows the no-entry badge; clone never did
-			a.canvas.Get("style").Set("cursor", "not-allowed")
-		case in.Forbidden:
-			// Cross-grid move between source-backed and regular grid: the
-			// server rejects, so flag it and steer the user to right-drag.
-			a.ghost.paneID = t.pane.ID
-			a.ghost.forbidden = true
-			a.canvas.Get("style").Set("cursor", "not-allowed")
-		default:
-			// Off-canvas or a file-mode pane: glide back at source size.
-			a.ghost.paneID = d.originPaneID
-			a.canvas.Get("style").Set("cursor", "")
-		}
-	default:
-		// DropMove / DropClone: snap to the target cell.
-		a.canvas.Get("style").Set("cursor", "")
-		a.ghost.paneID = t.pane.ID
-		a.ghost.targetCellSize = t.cellSize
-		a.ghost.targetFragmentation = 0.0
+	// The verdict picks the action; GhostPlanForDrop picks the styling. Both
+	// are pure + tested in client/dragdrop, so preview and commit (and the
+	// styling itself) can't drift. The ghost rests in a different pane per
+	// verdict, so feed all three candidate pane ids + sizes.
+	var targetPaneID string
+	var targetCellSize float64
+	if haveT {
+		targetPaneID = t.pane.ID
+		targetCellSize = t.cellSize
 	}
+	var docPaneID string
+	if overDoc {
+		docPaneID = docTarget.pane.ID
+	}
+	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in.DocReject, in.Forbidden, clone,
+		d.originPaneID, targetPaneID, docPaneID, d.srcCellSize, targetCellSize)
+	a.ghost.paneID = plan.PaneID
+	a.ghost.targetCellSize = plan.TargetCellSize
+	a.ghost.targetFragmentation = plan.Fragmentation
+	a.ghost.forbidden = plan.Forbidden
+	a.ghost.overDoc = plan.OverDoc
+	a.canvas.Get("style").Set("cursor", plan.Cursor)
 
 	size := a.ghost.displayedCellSize
 	a.ghost.screenX = sx - d.cellOffsetX*size

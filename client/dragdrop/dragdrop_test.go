@@ -406,3 +406,45 @@ func TestDecideDrop(t *testing.T) {
 		}
 	}
 }
+
+func TestGhostPlanForDrop(t *testing.T) {
+	const (
+		origin = "origin"
+		target = "target"
+		doc    = "doc"
+		srcSz  = 50.0
+		tgtSz  = 80.0
+	)
+	cases := []struct {
+		name             string
+		action           DropAction
+		docReject        bool
+		forbidden        bool
+		clone            bool
+		want             GhostPlan
+	}{
+		{"delete shrinks+fragments in origin", DropDelete, false, false, false,
+			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
+		{"embed: doc pane, link badge, source size", DropEmbed, false, false, false,
+			GhostPlan{PaneID: doc, TargetCellSize: srcSz, OverDoc: true}},
+		{"rejected docReject (move): no-entry in origin", DropRejected, true, false, false,
+			GhostPlan{PaneID: origin, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
+		{"rejected docReject (clone): NO badge, still not-allowed", DropRejected, true, false, true,
+			GhostPlan{PaneID: origin, TargetCellSize: srcSz, Forbidden: false, Cursor: "not-allowed"}},
+		{"rejected forbidden cross-grid: no-entry in target", DropRejected, false, true, false,
+			GhostPlan{PaneID: target, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
+		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false, false, false,
+			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
+		{"move snaps to target cell", DropMove, false, false, false,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+		{"clone snaps to target cell", DropClone, false, false, true,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+	}
+	for _, c := range cases {
+		got := GhostPlanForDrop(c.action, c.docReject, c.forbidden, c.clone,
+			origin, target, doc, srcSz, tgtSz)
+		if got != c.want {
+			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}

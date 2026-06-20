@@ -355,6 +355,59 @@ func DecideDrop(in DropInput) DropAction {
 	}
 }
 
+// GhostPlan is how the in-flight drag ghost should render for a drop
+// verdict — the VISUAL consequence of DecideDrop. DecideDrop decides the
+// action; this decides what the user sees while hovering. Extracted so the
+// verdict→styling mapping is table-tested too, not just the verdict.
+type GhostPlan struct {
+	PaneID         string  // pane whose coordinate space the ghost rests in
+	TargetCellSize float64 // size the ghost lerps toward
+	Fragmentation  float64 // 1 = shattering into the trashcan
+	Forbidden      bool    // draw the no-entry badge
+	OverDoc        bool    // draw the link (embed) badge
+	Cursor         string  // CSS cursor: "" or "not-allowed"
+}
+
+// GhostPlanForDrop maps a DecideDrop verdict (plus the two reject causes
+// and the clone flavor) to the ghost styling. The pane ids and cell sizes
+// are passed in because the ghost rests in a different pane per verdict:
+// the origin pane for a delete or an off-canvas/forbidden-doc reject, the
+// doc pane for an embed, the drop target for a placement or a forbidden
+// cross-grid move.
+//
+//   - Delete  → shrink to 1/5 and fully fragment, in the origin pane.
+//   - Embed   → source size in the doc pane, link badge.
+//   - Rejected, docReject → source size in origin; no-entry badge UNLESS
+//     this is a clone (the clone preview never drew the badge).
+//   - Rejected, forbidden → source size in the target pane, no-entry badge.
+//   - Rejected, otherwise (off-canvas / file-mode) → source size in origin,
+//     no badge.
+//   - Move/Clone → snap to the target cell size in the target pane.
+//
+// SameCell/Occupied never reach here as a distinct style: the preview is
+// optimistic about placement and shows the snap-to-cell (the commit does
+// the authoritative overlap check).
+func GhostPlanForDrop(action DropAction, docReject, forbidden, clone bool,
+	originPaneID, targetPaneID, docPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
+	switch action {
+	case DropDelete:
+		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
+	case DropEmbed:
+		return GhostPlan{PaneID: docPaneID, TargetCellSize: srcCellSize, OverDoc: true}
+	case DropRejected:
+		switch {
+		case docReject:
+			return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize, Forbidden: !clone, Cursor: "not-allowed"}
+		case forbidden:
+			return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
+		default:
+			return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
+		}
+	default: // DropMove / DropClone
+		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize}
+	}
+}
+
 // NearPx reports whether two pixel coordinates are within half a pixel.
 // Used for "is this divider line at the same place as that one?" checks
 // where exact float equality is too brittle.
