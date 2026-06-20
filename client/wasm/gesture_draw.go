@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -546,7 +547,14 @@ func drawArrowHead(a *App, cx, cy, angle, size float64) {
 //     releasing if they didn't intend to).
 func (a *App) drawResizePreview(rd *rightDragState) {
 	r := rd.container
-	ratio := rd.targetSplit.Ratio
+	// Derive BOTH the ratio and the collapse verdict from the same
+	// gesture.ResizeOutcome the commit (commitResize) uses, fed the same
+	// cursor onRightMove stored. Re-deriving close-A/close-B inline here was
+	// a preview/commit divergence waiting to happen: the red "about to
+	// close" border could mark a different side than the one release
+	// actually collapses. (rd.curX/curY == the sx,sy that last set
+	// rd.targetSplit.Ratio, so the ratio is identical to before.)
+	ratio, collapse := gesture.ResizeOutcome(r, rd.splitDir, rd.curX, rd.curY, rightCloseThreshold)
 	aRect, bRect := pane.SplitRect(r, rd.splitDir, ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.
@@ -575,21 +583,11 @@ func (a *App) drawResizePreview(rd *rightDragState) {
 	}
 	a.cctx.Set("lineWidth", 1.0)
 
-	var aSize, bSize float64
-	if rd.splitDir == pane.Horizontal {
-		aSize = r.H * ratio
-		bSize = r.H * (1 - ratio)
-	} else {
-		aSize = r.W * ratio
-		bSize = r.W * (1 - ratio)
-	}
-	closeA := aSize < rightCloseThreshold
-	closeB := bSize < rightCloseThreshold
-	if !closeA && !closeB {
+	if collapse == gesture.CollapseNone {
 		return
 	}
 	target := bRect
-	if closeA {
+	if collapse == gesture.CollapseA {
 		target = aRect
 	}
 	a.cctx.Set("strokeStyle", colorCloseWarn)
