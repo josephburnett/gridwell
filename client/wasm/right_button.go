@@ -458,7 +458,7 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 	}
 	if a.ghost != nil {
 		a.ghost.overDoc = false
-		if a.overDeleteButton(sx, sy) {
+		if a.overDeleteButton(d, sx, sy) {
 			// Over the source pane's trashcan button: preview a delete —
 			// shrink and fragment — the same gesture and outcome as the
 			// left-drag delete path, regardless of which button armed the drag.
@@ -556,7 +556,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// trashcan during the drag) deletes the grabbed tile, regardless of which
 	// button armed the drag — the same gesture and outcome as the left-drag
 	// delete path. (The drop ghost previewed this in advanceCloneDrag.)
-	if a.overDeleteButton(sx, sy) {
+	if a.overDeleteButton(d, sx, sy) {
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()

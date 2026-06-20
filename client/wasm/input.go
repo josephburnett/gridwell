@@ -624,7 +624,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// displayedCellSize so the grab point stays under the cursor.
 		a.ghost.overDoc = false
 		a.ghost.forbidden = false
-		if a.overDeleteButton(sx, sy) {
+		if a.overDeleteButton(d, sx, sy) {
 			// Over the source pane's corner button (the trashcan): preview a
 			// delete — the ghost shrinks AND fragments. Left-button release
 			// commits a DeleteTile; drag back out and the lerp reassembles it.
@@ -787,7 +787,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// (shown as a trashcan during a drag) deletes it — "drag it back to the
 	// menu it came from". Resolved against the source pane's button, not the
 	// grid under the cursor, so it works wherever that button sits.
-	if a.overDeleteButton(sx, sy) {
+	if a.overDeleteButton(d, sx, sy) {
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
@@ -958,17 +958,22 @@ func (a *App) tileDragInFlight() bool {
 	return a.dragging != nil && a.dragging.started && a.dragging.tileID != 0
 }
 
-// overDeleteButton reports whether (sx, sy) is over the delete target while
-// a tile drag is in flight: the + (trashcan) button of the pane the drag
-// STARTED from. Keyed off the origin pane — not the focused pane — so the
-// gesture works for both the left-drag move and the right-drag clone
-// regardless of which pane currently holds focus. A descended pane has no
-// + button, so it's never a delete target.
-func (a *App) overDeleteButton(sx, sy float64) bool {
-	if !a.tileDragInFlight() {
+// overDeleteButton reports whether (sx, sy) is over the delete target for the
+// in-flight drag d: the + (trashcan) button of the pane the drag STARTED from.
+//
+// It takes the drag EXPLICITLY rather than reading a.dragging, because the
+// commit path clears a.dragging before deciding what the drop means
+// (onMouseUp / commitTileCenter both do `d := a.dragging; a.dragging = nil`).
+// Reading the field here returned false at release — the tile fell through to a
+// normal move and was placed under the trashcan instead of deleted — even
+// though the live-drag preview looked correct. Keyed off the origin pane (not
+// focus) so it works for both the left-drag move and the right-drag clone; a
+// descended pane has no + button, so it's never a delete target.
+func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
+	if d == nil || !d.started || d.tileID == 0 {
 		return false
 	}
-	p := a.tree.FindPane(a.dragging.originPaneID)
+	p := a.tree.FindPane(d.originPaneID)
 	if p == nil || p.TextFocus != 0 {
 		return false
 	}
