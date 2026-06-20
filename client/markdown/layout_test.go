@@ -188,3 +188,58 @@ func TestLayoutTightVsLoose(t *testing.T) {
 		t.Errorf("loose list height %v should exceed tight %v", loose.Height, tight.Height)
 	}
 }
+
+func TestLayoutStrikethrough(t *testing.T) {
+	r := layoutOf(t, "~~struck~~ text", 400)
+	op, ok := findText(r, "struck")
+	if !ok {
+		t.Fatal("no 'struck' text op")
+	}
+	if op.Style&StyleStrike == 0 {
+		t.Errorf("struck text missing StyleStrike: %+v", op)
+	}
+}
+
+func TestLayoutHeadingLevels(t *testing.T) {
+	h3, _ := findText(layoutOf(t, "### h3", 400), "h3")
+	h4, _ := findText(layoutOf(t, "#### h4", 400), "h4")
+	h6, _ := findText(layoutOf(t, "###### h6", 400), "h6")
+	if !(h3.FontPx > h4.FontPx && h4.FontPx >= h6.FontPx) {
+		t.Errorf("heading sizes not monotonic: h3=%v h4=%v h6=%v", h3.FontPx, h4.FontPx, h6.FontPx)
+	}
+}
+
+func TestLayoutHardBreak(t *testing.T) {
+	// Two trailing spaces = a hard break: the two words land on different lines.
+	r := layoutOf(t, "alpha  \nbravo", 1000)
+	a, okA := findText(r, "alpha")
+	b, okB := findText(r, "bravo")
+	if !okA || !okB {
+		t.Fatalf("missing words: alpha=%v bravo=%v", okA, okB)
+	}
+	if a.Y == b.Y {
+		t.Errorf("hard break did not split lines: both at y=%v", a.Y)
+	}
+	// A soft break (no trailing spaces) keeps them on one line.
+	r2 := layoutOf(t, "alpha\nbravo", 1000)
+	a2, _ := findText(r2, "alpha")
+	b2, _ := findText(r2, "bravo")
+	if a2.Y != b2.Y {
+		t.Errorf("soft break should keep one line: alpha y=%v bravo y=%v", a2.Y, b2.Y)
+	}
+}
+
+func TestLayoutNestedBlockquote(t *testing.T) {
+	r := layoutOf(t, "> a\n>\n> > b", 400)
+	a, okA := findText(r, "a")
+	b, okB := findText(r, "b")
+	if !okA || !okB {
+		t.Fatalf("missing quote text: a=%v b=%v", okA, okB)
+	}
+	if b.X <= a.X {
+		t.Errorf("nested quote b (x=%v) not indented past a (x=%v)", b.X, a.X)
+	}
+	if bars := opsOfKind(r, OpRect); len(bars) < 2 {
+		t.Errorf("want >=2 quote bars for nested quote, got %d", len(bars))
+	}
+}

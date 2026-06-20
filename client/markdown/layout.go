@@ -218,6 +218,16 @@ func (w *layoutWriter) inline(spans []Span, x, y, avail, fontPx float64, color C
 	}
 
 	for _, tk := range tokens {
+		if tk.isBreak {
+			// A hard line break ends the current line; an empty line still
+			// advances (a deliberate blank line).
+			if len(line) > 0 {
+				flush()
+			} else {
+				y += lineH
+			}
+			continue
+		}
 		if !tk.isSpace && lineW+tk.width > avail && len(line) > 0 {
 			flush()
 		}
@@ -237,11 +247,12 @@ func (w *layoutWriter) inline(spans []Span, x, y, avail, fontPx float64, color C
 // inlineToken is one atomic unit of inline flow: a word, a space run, or an
 // atomic embed/image block.
 type inlineToken struct {
-	span   Span
-	width  float64
+	span    Span
+	width   float64
 	isSpace bool
-	atomic bool
-	height float64
+	isBreak bool // a hard line break ("\n" sentinel)
+	atomic  bool
+	height  float64
 }
 
 // tokenize splits spans into flow tokens: text spans break on whitespace
@@ -262,6 +273,11 @@ func (w *layoutWriter) tokenize(spans []Span, fontPx float64, mono bool) []inlin
 			}
 			ew, eh := w.embedSize(sp)
 			toks = append(toks, inlineToken{span: sp, width: ew, height: eh, atomic: true})
+			continue
+		}
+		if sp.Text == "\n" {
+			// Hard-break sentinel from lowering.
+			toks = append(toks, inlineToken{isBreak: true})
 			continue
 		}
 		// Links are atomic-ish only for embeds; ordinary links still wrap by

@@ -154,9 +154,12 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 			if text != "" {
 				*out = append(*out, Span{Text: text, Style: style, Href: href})
 			}
-			// A soft or hard line break renders as a space for now (hard
-			// breaks get their own handling in Phase 4).
-			if t.SoftLineBreak() || t.HardLineBreak() {
+			// A hard line break (two trailing spaces / backslash) forces a new
+			// line — carried as a "\n" sentinel span the layout turns into a
+			// break. A soft break is just a space.
+			if t.HardLineBreak() {
+				*out = append(*out, Span{Text: "\n", Style: style, Href: href})
+			} else if t.SoftLineBreak() {
 				*out = append(*out, Span{Text: " ", Style: style, Href: href})
 			}
 		case *ast.String:
