@@ -137,16 +137,29 @@ func (w *layoutWriter) codeBlock(n Node, x, y, avail float64) float64 {
 	if len(n.Spans) > 0 {
 		body = n.Spans[0].Text
 	}
-	lines := strings.Split(body, "\n")
 	fp := w.style.CodeFontPx
 	lh := fp * w.style.LineSpacing
-	height := w.style.CodePadY*2 + lh*float64(len(lines))
+	nlines := strings.Count(body, "\n") + 1
+	height := w.style.CodePadY*2 + lh*float64(nlines)
 	w.ops = append(w.ops, DrawOp{Kind: OpRect, X: x, Y: y, W: avail, H: height, Color: ColorCodeBg})
+
+	// Syntax-highlight into colored runs; split each run on newlines so a
+	// multi-line string/comment keeps its color across lines.
+	cx := x + w.style.CodePadX
 	ty := y + w.style.CodePadY
-	for _, ln := range lines {
-		w.ops = append(w.ops, DrawOp{Kind: OpText, X: x + w.style.CodePadX, Y: ty,
-			Text: ln, FontPx: fp, Style: StyleCode, Mono: true, Color: ColorCode})
-		ty += lh
+	for _, tk := range highlight(body, n.Lang) {
+		for pi, part := range strings.Split(tk.Text, "\n") {
+			if pi > 0 {
+				ty += lh
+				cx = x + w.style.CodePadX
+			}
+			if part == "" {
+				continue
+			}
+			w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: ty,
+				Text: part, FontPx: fp, Style: StyleCode, Mono: true, Color: tk.Color})
+			cx += w.m(part, fp, StyleCode, true)
+		}
 	}
 	return y + height
 }

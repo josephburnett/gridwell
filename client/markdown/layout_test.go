@@ -340,3 +340,23 @@ func TestLayoutTableCellWraps(t *testing.T) {
 		t.Errorf("narrow table cell did not wrap: aa and ff both at y=%v", first.Y)
 	}
 }
+
+func TestLayoutCodeBlockHighlights(t *testing.T) {
+	r := layoutOf(t, "```go\nfunc x() {}\n```", 400)
+	found := false
+	for _, op := range opsOfKind(r, OpText) {
+		if op.Text == "func" && op.Color == ColorSynKeyword {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("go code block did not highlight 'func' as a keyword")
+	}
+	// A fence with no language stays plain.
+	r2 := layoutOf(t, "```\nfunc x\n```", 400)
+	for _, op := range opsOfKind(r2, OpText) {
+		if op.Color == ColorSynKeyword {
+			t.Errorf("unlanguaged code block should not highlight: %+v", op)
+		}
+	}
+}

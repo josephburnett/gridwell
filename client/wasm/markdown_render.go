@@ -222,8 +222,20 @@ func markdownColorFor(st markdownStyle, role markdown.ColorRole) string {
 		return colorMarkdownCodeBg2
 	case markdown.ColorQuoteBar:
 		return st.quoteBar
+	case markdown.ColorSynKeyword:
+		return "#c678dd" // purple
+	case markdown.ColorSynString:
+		return "#98c379" // green
+	case markdown.ColorSynComment:
+		return "#7f848e" // grey
+	case markdown.ColorSynNumber:
+		return "#d19a66" // orange
+	case markdown.ColorSynType:
+		return "#56b6c2" // cyan
+	case markdown.ColorSynFunction:
+		return "#61afef" // blue
 	}
-	// ColorText / ColorHeading / ColorCode and any syntax roles not yet wired.
+	// ColorText / ColorHeading / ColorCode.
 	return st.textColor
 }
 
