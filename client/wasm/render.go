@@ -399,34 +399,42 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	half := paneBorderPx / 2
 	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
-	// URL descent gets a canvas back-arrow button; markdown descent gets
-	// the rendered/raw toggle as a DOM overlay button (refreshFileToggle)
-	// so the text content can fill the pane.
-	if p.TextFocus != 0 {
-		if a.isURLDescent(p) {
-			if a.urlStreams[p.ID] != nil {
-				a.drawURLBackButton(p, r)
-			} else {
-				a.drawURLRefreshButton(p, r)
+	// Per-pane controls belong to the active pane only: the focused pane
+	// shows its corner button (URL back/refresh, shell refresh) or, on a
+	// grid, the + creation menu; an unfocused pane is chrome-free so you
+	// see only the content you placed there. This matches the rendered/raw
+	// toggle, which is already a focused-only DOM overlay
+	// (refreshFileToggle). The matching click hit-tests in onMouseDown are
+	// gated on the pre-click focus, so clicking an unfocused pane's (hidden)
+	// corner just focuses it rather than silently firing the button.
+	if focused {
+		if p.TextFocus != 0 {
+			if a.isURLDescent(p) {
+				if a.urlStreams[p.ID] != nil {
+					a.drawURLBackButton(p, r)
+				} else {
+					a.drawURLRefreshButton(p, r)
+				}
+			} else if a.isShellDescent(p) && !a.hasShellStream(p.ID) {
+				// Frozen shell descent: lower-right refresh button either
+				// creates a fresh tmux session (no snapshot yet) or
+				// attaches to the existing one. Hidden when the tile has
+				// a snapshot but its tmux session is gone — the JPEG is
+				// all that remains. shellRefreshButtonVisible decides and
+				// kicks off the ShellSessionAlive probe if the answer
+				// isn't cached yet.
+				if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
+					a.drawURLRefreshButton(p, r)
+				}
 			}
-		} else if a.isShellDescent(p) && !a.hasShellStream(p.ID) {
-			// Frozen shell descent: lower-right refresh button either
-			// creates a fresh tmux session (no snapshot yet) or
-			// attaches to the existing one. Hidden when the tile has
-			// a snapshot but its tmux session is gone — the JPEG is
-			// all that remains. shellRefreshButtonVisible decides and
-			// kicks off the ShellSessionAlive probe if the answer
-			// isn't cached yet.
-			if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
-				a.drawURLRefreshButton(p, r)
-			}
+		} else {
+			// + button: the focused grid's entry point for creating tiles
+			// (and a visible handle even when the grid is unreachable — you
+			// can still ascend). The palette popover itself is drawn after
+			// every pane (see draw) so it floats above neighbouring panes
+			// it overflows into.
+			a.drawPlusButton(p, r)
 		}
-	} else {
-		// + button is always available; gives the user an entry point
-		// even when the grid is unreachable (they can still ascend, etc).
-		// The palette popover itself is drawn after every pane (see draw)
-		// so it floats above neighbouring panes it overflows into.
-		a.drawPlusButton(p, r)
 	}
 }
 

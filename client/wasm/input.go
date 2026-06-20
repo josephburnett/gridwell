@@ -208,7 +208,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// Focus moved → file-mode chrome must follow. The textarea
 		// overlay only ever lives over the focused pane, so without
 		// this call a click on a sibling pane in text mode would leave
-		// the textarea stranded.
+		// the textarea stranded. An open + menu belongs to the pane that
+		// was focused; close it so it doesn't outlive its (now hidden) +
+		// button on the de-focused pane.
+		a.menuOpen = false
 		a.refreshFileOverlay()
 		a.draw()
 	}
@@ -266,7 +269,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// itself (the DOM element absorbs them), so this path only
 		// fires for clicks on the pane chrome.
 		if a.isShellDescent(p) {
-			if pointInPlus(r, sx, sy) && !a.hasShellStream(p.ID) {
+			// The corner refresh button only acts on the already-focused
+			// pane (it's hidden otherwise). A click here on a just-focused
+			// pane falls through to the content/xterm path below.
+			if prevFocus == p.ID && pointInPlus(r, sx, sy) && !a.hasShellStream(p.ID) {
 				gid := a.gridIDForPath(p.Path)
 				if g, ok := a.c.Grid(gid); ok {
 					if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
@@ -292,7 +298,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// pane-border band. The outer margin ascends; the corner button goes
 		// live (frozen) or navigates back (live, if a stray click reaches us).
 		if a.isURLDescent(p) {
-			if pointInPlus(r, sx, sy) {
+			// The corner back/refresh button only acts on the already-focused
+			// pane (it's hidden otherwise); a click on a just-focused pane
+			// falls through to the pan/native-view path below.
+			if prevFocus == p.ID && pointInPlus(r, sx, sy) {
 				if a.urlStreams[p.ID] != nil {
 					bridgeGoBack(p.ID)
 				} else {
@@ -367,8 +376,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// Click on the + button toggles the menu for this pane.
-	if pointInPlus(r, sx, sy) {
+	// Click on the + button toggles the menu for this pane. The button is
+	// only drawn on the focused pane, so it only acts when the pane was
+	// already focused before this click; a click that merely focuses the
+	// pane falls through to normal grid interaction (pan / palette).
+	if prevFocus == p.ID && pointInPlus(r, sx, sy) {
 		if a.menuOpen && a.menuPaneID == p.ID {
 			a.menuOpen = false
 		} else {
