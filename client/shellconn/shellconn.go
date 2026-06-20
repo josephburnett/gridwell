@@ -23,3 +23,39 @@ const closePolicyViolation = 1008
 func SessionDeadOnClose(code int) bool {
 	return code == closePolicyViolation
 }
+
+// RefreshVisibility is the verdict for a frozen shell descent's refresh
+// button: whether it shows, and whether the caller must kick off a
+// liveness probe (because the tmux session's state is unknown).
+type RefreshVisibility struct {
+	Show  bool
+	Probe bool
+}
+
+// DecideShellRefreshVisible decides whether the lower-right refresh
+// button paints on a frozen shell descent, and whether a
+// ShellSessionAlive probe must be started. Pure: the caller resolves the
+// inputs (and performs the probe side effect when Probe is set).
+//
+//   - not a shell tile        → hidden, no probe.
+//   - no preview blob yet      → fresh tile; refresh creates a new tmux
+//     session, so always show.
+//   - liveness cached alive    → refresh attaches; show.
+//   - liveness cached dead      → no recovery possible; hide.
+//   - liveness unknown          → hide and probe; a redraw follows when
+//     the probe result lands.
+//
+// aliveKnown is whether the liveness probe result is cached at all;
+// alive is that cached value (meaningful only when aliveKnown).
+func DecideShellRefreshVisible(isShell, hasPreview, aliveKnown, alive bool) RefreshVisibility {
+	if !isShell {
+		return RefreshVisibility{}
+	}
+	if !hasPreview {
+		return RefreshVisibility{Show: true}
+	}
+	if aliveKnown {
+		return RefreshVisibility{Show: alive}
+	}
+	return RefreshVisibility{Probe: true}
+}

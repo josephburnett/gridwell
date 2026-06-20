@@ -33,3 +33,25 @@ func TestSessionDeadOnClose(t *testing.T) {
 		})
 	}
 }
+
+func TestDecideShellRefreshVisible(t *testing.T) {
+	cases := []struct {
+		name                string
+		isShell, hasPreview bool
+		aliveKnown, alive   bool
+		wantShow, wantProbe bool
+	}{
+		{"not a shell tile -> hidden, no probe", false, true, true, true, false, false},
+		{"fresh tile (no preview) -> always show", true, false, false, false, true, false},
+		{"fresh tile, even if cached dead -> show", true, false, true, false, true, false},
+		{"has preview, cached alive -> show", true, true, true, true, true, false},
+		{"has preview, cached dead -> hide", true, true, true, false, false, false},
+		{"has preview, unknown -> hide + probe", true, true, false, false, false, true},
+	}
+	for _, c := range cases {
+		got := DecideShellRefreshVisible(c.isShell, c.hasPreview, c.aliveKnown, c.alive)
+		if got.Show != c.wantShow || got.Probe != c.wantProbe {
+			t.Errorf("%s: got %+v, want Show=%v Probe=%v", c.name, got, c.wantShow, c.wantProbe)
+		}
+	}
+}

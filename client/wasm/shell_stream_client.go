@@ -93,17 +93,16 @@ func (a *App) hasShellStream(paneID string) bool {
 // Side effect: kicks off a ShellSessionAlive probe when the alive
 // state for tileID isn't cached and no probe is already in flight.
 func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
-	if tile == nil || tile.Kind != rpc.KindShell {
+	if tile == nil {
 		return false
 	}
-	if tile.PreviewBlobID == 0 {
-		return true
+	alive, known := a.shellAlive[tile.ID]
+	v := shellconn.DecideShellRefreshVisible(
+		tile.Kind == rpc.KindShell, tile.PreviewBlobID != 0, known, alive)
+	if v.Probe {
+		a.probeShellSessionAlive(tile.ID)
 	}
-	if alive, ok := a.shellAlive[tile.ID]; ok {
-		return alive
-	}
-	a.probeShellSessionAlive(tile.ID)
-	return false
+	return v.Show
 }
 
 // probeShellSessionAlive fires ShellSessionAlive RPC for tileID,
