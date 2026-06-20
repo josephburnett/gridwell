@@ -93,7 +93,7 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 		return nil
 	}
 	for _, n := range g.Tiles {
-		if cellX >= n.X && cellX < n.X+n.W && cellY >= n.Y && cellY < n.Y+n.H {
+		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
 			nn := n
 			return &nn
 		}
@@ -816,7 +816,7 @@ func (a *App) nodeAtCellInGrid(gridID, cellX, cellY int64) *rpc.Tile {
 		return nil
 	}
 	for _, n := range g.Tiles {
-		if cellX >= n.X && cellX < n.X+n.W && cellY >= n.Y && cellY < n.Y+n.H {
+		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
 			nn := n
 			return &nn
 		}

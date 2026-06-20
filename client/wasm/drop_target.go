@@ -228,16 +228,10 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 	}{X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY},
 		ratio)
-	cxF, cyF := cp.ChildCellAtScreen(sx, sy)
-	// Floor (which cell does the cursor sit in?), handling negatives.
-	cellX := int64(cxF)
-	if cxF < 0 && float64(cellX) != cxF {
-		cellX--
-	}
-	cellY := int64(cyF)
-	if cyF < 0 && float64(cellY) != cyF {
-		cellY--
-	}
+	// Which child cell does the cursor sit in? FloorCellAt floors toward
+	// -inf (math.Floor), the correct hit-test answer in a well's negative
+	// quadrant — int64() truncates toward zero and would mis-target there.
+	cellX, cellY := dragdrop.FloorCellAt(cp.OriginX, cp.OriginY, cp.CellPx, sx, sy)
 	for _, n := range g.Tiles {
 		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
 			return tileCopy(&n)
