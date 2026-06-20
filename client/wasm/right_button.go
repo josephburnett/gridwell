@@ -552,38 +552,55 @@ func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
 // event when it lands. Dropping on the trashcan deletes regardless of button —
 // the gesture is button-agnostic; otherwise right-drag is clone-or-link.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
-	// Trashcan delete: dropping on the source pane's + button (shown as a
-	// trashcan during the drag) deletes the grabbed tile, regardless of which
-	// button armed the drag — the same gesture and outcome as the left-drag
-	// delete path. (The drop ghost previewed this in advanceCloneDrag.)
-	if a.overDeleteButton(d, sx, sy) {
+	// Same snapshot-then-DecideDrop discipline as the left-drag commit
+	// (onMouseUp): gather every world-read once, then switch on the verdict
+	// so preview (advanceCloneDrag) and commit share one decision. Clone
+	// differs from move in only two inputs: Clone is true, and there is no
+	// cross-grid Forbidden check — right-drag IS the allowed cross-boundary
+	// gesture (it clones/links), so Forbidden stays false.
+	in := dragdrop.DropInput{
+		Started:    d.started,
+		IsTemplate: d.isTemplate,
+		Clone:      true,
+		TileID:     d.tileID,
+		OverDelete: a.overDeleteButton(d, sx, sy),
+	}
+	docTarget, overDoc := a.docDropTargetAt(sx, sy)
+	in.OverDoc = overDoc
+	in.DocReject = a.docRejectAt(sx, sy)
+	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
+	in.HasTarget = haveT
+	var dropX, dropY int64
+	if haveT {
+		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
+		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
+		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+	}
+
+	switch dragdrop.DecideDrop(in) {
+	case dragdrop.DropDelete:
+		// Trashcan delete: dropping on the source pane's + button (shown as a
+		// trashcan during the drag) deletes the grabbed tile, regardless of
+		// which button armed the drag — same gesture/outcome as the left-drag
+		// delete path. (advanceCloneDrag previewed this.)
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
 		return
-	}
-	// Doc drop: a raw-mode text descent under the cursor turns the gesture
-	// into "insert markdown reference". The source tile is left in place
-	// (clone semantics), the doc gains a link.
-	if dt, ok := a.docDropTargetAt(sx, sy); ok {
-		a.commitEmbedDrop(d, dt)
+	case dragdrop.DropEmbed:
+		// A raw-mode text descent under the cursor turns the gesture into
+		// "insert markdown reference". The source tile is left in place
+		// (clone semantics), the doc gains a link.
+		a.commitEmbedDrop(d, docTarget)
+		a.cancelDragSnapBack(d)
+		return
+	case dragdrop.DropRejected:
+		// Read-only doc, no target, same cell, or occupied — snap back.
 		a.cancelDragSnapBack(d)
 		return
 	}
-	t, ok := a.dropTargetAt(sx, sy, d.tileID)
-	if !ok {
-		a.cancelDragSnapBack(d)
-		return
-	}
-	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
-	if t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y {
-		a.cancelDragSnapBack(d)
-		return
-	}
-	if a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil {
-		a.cancelDragSnapBack(d)
-		return
-	}
+
+	// DropClone.
 	targetX := t.originX + float64(dropX)*t.cellSize
 	targetY := t.originY + float64(dropY)*t.cellSize
 	if a.ghost != nil {
