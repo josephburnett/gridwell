@@ -315,7 +315,7 @@ func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *rpc.Tile 
 
 // armTileGesture installs the right state for a right-button-down on
 // a tile. The model is the same for every tile kind (well, text, URL,
-// blackhole):
+// file-well):
 //   - Center 1/3 × 1/3: rightDragTileCenter — drag-past-threshold
 //     clones the tile (via the standard a.dragging machinery, armed
 //     in parallel); bare release does nothing.
@@ -458,7 +458,15 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 	}
 	if a.ghost != nil {
 		a.ghost.overDoc = false
-		if dt, ok := a.docDropTargetAt(sx, sy); ok {
+		if a.overDeleteButton(sx, sy) {
+			// Over the source pane's trashcan button: preview a delete —
+			// shrink and fragment — the same gesture and outcome as the
+			// left-drag delete path, regardless of which button armed the drag.
+			a.ghost.paneID = d.originPaneID
+			a.ghost.targetCellSize = d.srcCellSize * 0.2
+			a.ghost.targetFragmentation = 1.0
+			a.canvas.Get("style").Set("cursor", "")
+		} else if dt, ok := a.docDropTargetAt(sx, sy); ok {
 			a.ghost.paneID = dt.pane.ID
 			a.ghost.targetCellSize = d.srcCellSize
 			a.ghost.targetFragmentation = 0.0
@@ -472,17 +480,8 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
 			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = t.pane.ID
-			// Dropping on a black hole deletes, whichever button armed the
-			// drag (CLAUDE.md: "drag a tile onto a black hole"). Mirror the
-			// left-drag delete preview — the ghost shrinks and fragments.
-			sink := a.tileAtCellInTarget(t, sx, sy)
-			if sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
-				a.ghost.targetCellSize = t.cellSize * 0.2
-				a.ghost.targetFragmentation = 1.0
-			} else {
-				a.ghost.targetCellSize = t.cellSize
-				a.ghost.targetFragmentation = 0.0
-			}
+			a.ghost.targetCellSize = t.cellSize
+			a.ghost.targetFragmentation = 0.0
 		} else {
 			a.canvas.Get("style").Set("cursor", "")
 			a.ghost.paneID = d.originPaneID
@@ -547,12 +546,22 @@ func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
 }
 
 // commitRightClone resolves the drop target at (sx, sy) and either deletes
-// (drop on a black hole), fires CloneTile, inserts a markdown reference into
-// a doc, or snap-backs the ghost on a rejected drop. The async RPC fires in
-// a goroutine; the local cache is patched by the SSE event when it lands.
-// Dropping on a black hole deletes regardless of button — the gesture is
-// button-agnostic per CLAUDE.md; otherwise right-drag is clone-or-link.
+// (drop on the source pane's + / trashcan), fires CloneTile, inserts a
+// markdown reference into a doc, or snap-backs the ghost on a rejected drop.
+// The async RPC fires in a goroutine; the local cache is patched by the SSE
+// event when it lands. Dropping on the trashcan deletes regardless of button —
+// the gesture is button-agnostic; otherwise right-drag is clone-or-link.
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
+	// Trashcan delete: dropping on the source pane's + button (shown as a
+	// trashcan during the drag) deletes the grabbed tile, regardless of which
+	// button armed the drag — the same gesture and outcome as the left-drag
+	// delete path. (The drop ghost previewed this in advanceCloneDrag.)
+	if a.overDeleteButton(sx, sy) {
+		a.runDeleteTile(d, nil)
+		a.ghost = nil
+		a.draw()
+		return
+	}
 	// Doc drop: a raw-mode text descent under the cursor turns the gesture
 	// into "insert markdown reference". The source tile is left in place
 	// (clone semantics), the doc gains a link.
@@ -564,16 +573,6 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	t, ok := a.dropTargetAt(sx, sy, d.tileID)
 	if !ok {
 		a.cancelDragSnapBack(d)
-		return
-	}
-	// Black-hole sink: dropping on a black hole deletes the grabbed tile,
-	// regardless of which button armed the drag — the same gesture and
-	// outcome as the left-drag delete path. (The drop ghost previewed this
-	// in advanceCloneDrag.)
-	if sink := a.tileAtCellInTarget(t, sx, sy); sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID {
-		a.runDeleteTile(d, t)
-		a.ghost = nil
-		a.draw()
 		return
 	}
 	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
@@ -612,8 +611,10 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	}, d)
 }
 
-// runDeleteTile fires DeleteTile against the dragged source tile. Used
-// when the left-button-move gesture drops onto a black-hole sink.
+// runDeleteTile fires DeleteTile against the dragged source tile. Used when
+// a move or clone drag drops onto the source pane's + (trashcan) button. The
+// dropTarget is optional (nil when deleting via the button) — it only refines
+// which destination grid's cache to refresh.
 func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	var dstGridID int64
 	if t != nil {

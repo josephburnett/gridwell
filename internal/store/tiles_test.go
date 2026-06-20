@@ -548,17 +548,3 @@ func TestDeleteTileVersionConflict(t *testing.T) {
 	}
 }
 
-func TestCreateBlackHole(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-	bh, err := s.CreateBlackHole(ctx, &rpc.CreateBlackHoleRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bh.Kind != rpc.KindBlackHole {
-		t.Errorf("kind = %q", bh.Kind)
-	}
-}

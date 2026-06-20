@@ -114,9 +114,9 @@ func TestTileContainsCell(t *testing.T) {
 // any tile-under-cursor detection miss half its target.
 //
 // Concretely: when the cursor sat in the right or bottom half of a
-// black-hole tile's 1×1 cell, the drop-on-blackhole detection (which
-// originally used SnapToCell) failed to fire, so the tile didn't get
-// deleted. FloorCellAt is the correct answer for "which cell am I in".
+// 1×1 tile's cell, tile-under-cursor detection (which originally used
+// SnapToCell) failed to fire over half the target. FloorCellAt is the
+// correct answer for "which cell am I in".
 func TestFloorCellAtCoversWholeCell(t *testing.T) {
 	const origin = 100.0
 	const cs = 10.0

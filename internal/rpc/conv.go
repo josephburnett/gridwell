@@ -207,13 +207,6 @@ func CreateURLToProto(r *CreateURLRequest) *pb.CreateURLRequest {
 	return &pb.CreateURLRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, Url: r.URL}
 }
 
-func CreateBlackHoleFromProto(r *pb.CreateBlackHoleRequest) *CreateBlackHoleRequest {
-	return &CreateBlackHoleRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
-}
-func CreateBlackHoleToProto(r *CreateBlackHoleRequest) *pb.CreateBlackHoleRequest {
-	return &pb.CreateBlackHoleRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
-}
-
 func CreateFileWellFromProto(r *pb.CreateFileWellRequest) *CreateFileWellRequest {
 	return &CreateFileWellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, FSPath: r.FsPath}
 }

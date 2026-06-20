@@ -96,9 +96,6 @@ func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile,
 func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateURL(ctx, connect.NewRequest(CreateURLToProto(req))))
 }
-func (c *Client) CreateBlackHole(ctx context.Context, req *CreateBlackHoleRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateBlackHole(ctx, connect.NewRequest(CreateBlackHoleToProto(req))))
-}
 func (c *Client) CreateFileWell(ctx context.Context, req *CreateFileWellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateFileWell(ctx, connect.NewRequest(CreateFileWellToProto(req))))
 }

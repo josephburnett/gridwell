@@ -9,9 +9,9 @@
 // priority ordering between those facts — the piece worth testing in
 // isolation. On release, the gestures whose outcome is pure geometry
 // (Split, Resize, URLRefresh, Ascend) resolve here; the gestures whose
-// outcome is a drop resolution (TileCenter→clone, blackhole→delete) are
-// the job of the (still-pending) drop unification and stay in the App for
-// now.
+// outcome is a drop resolution (TileCenter→clone, drop-on-+-button→delete)
+// are the job of the (still-pending) drop unification and stay in the App
+// for now.
 package gesture
 
 import "github.com/josephburnett/gridwell/client/pane"

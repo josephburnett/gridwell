@@ -51,22 +51,6 @@ func TestPreviewTilePlaceholderText(t *testing.T) {
 	}
 }
 
-// TestPreviewTilePlaceholderBlackHole exercises the blackhole-kind glyph
-// branch of the placeholder renderer.
-func TestPreviewTilePlaceholderBlackHole(t *testing.T) {
-	hs, cl, root := newTestServer(t)
-	tile, err := cl.CreateBlackHole(context.Background(), &rpc.CreateBlackHoleRequest{
-		GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatalf("create blackhole: %v", err)
-	}
-	st, ct, _ := getPreview(t, hs, tile.ID, 96, 96)
-	if st != 200 || ct != "image/png" {
-		t.Fatalf("status=%d ct=%q", st, ct)
-	}
-}
-
 func TestPreviewTilePlaceholderWell(t *testing.T) {
 	hs, cl, root := newTestServer(t)
 	tile, err := cl.CreateWell(context.Background(), &rpc.CreateWellRequest{

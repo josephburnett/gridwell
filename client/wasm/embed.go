@@ -98,12 +98,12 @@ func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string) {
 		c.Call("beginPath")
 		c.Call("rect", sx, sy, side, side)
 		c.Call("clip")
-		c.Set("fillStyle", colorBlackHoleFill)
+		c.Set("fillStyle", colorExitFill)
 		c.Call("fillRect", sx, sy, side, side)
-		c.Set("strokeStyle", colorBlackHoleLine)
+		c.Set("strokeStyle", colorExitBorder)
 		c.Set("lineWidth", 2.0)
 		c.Call("strokeRect", sx+1, sy+1, side-2, side-2)
-		c.Set("fillStyle", colorBlackHoleLine)
+		c.Set("fillStyle", colorExitBorder)
 		label := alt
 		if label == "" {
 			label = "missing"
@@ -174,12 +174,6 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	}
 	if target.GridID != a.gridIDForPath(p.Path) {
 		// Cross-grid embed targets are not yet supported.
-		return false
-	}
-	// Only descendable kinds; mirror the canonical grid-cell descent
-	// (input.go) so every kind that can be entered there can be entered
-	// from an embed too. Blackhole has nothing to descend into.
-	if target.Kind == rpc.KindBlackHole {
 		return false
 	}
 	// Stash the doc's descent context before clearing it, then dispatch

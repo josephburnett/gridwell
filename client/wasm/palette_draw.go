@@ -45,11 +45,20 @@ func pointInPlus(r pane.Rect, x, y float64) bool {
 }
 
 // drawPlusButton paints the floating circular + button in the pane's lower
-// right.
+// right. During a tile drag whose source is this pane, the same round button
+// becomes the delete target: it shows a trashcan instead of a +, and its
+// circle goes danger-red while the dragged ghost hovers over it ("release
+// here deletes"). The round chrome is identical either way so the position is
+// muscle-memory-stable.
 func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
 	cx, cy := plusButtonCenter(r)
+	deleting := a.tileDragInFlight() && a.dragging.originPaneID == p.ID
+	hot := deleting && pointInPlus(r, a.dragging.curScreenX, a.dragging.curScreenY)
 	bg := colorPlusBg
-	if a.menuOpen && a.menuPaneID == p.ID {
+	switch {
+	case hot:
+		bg = colorPlusBgDelete
+	case a.menuOpen && a.menuPaneID == p.ID:
 		bg = colorPlusBgHi
 	}
 	a.cctx.Set("fillStyle", bg)
@@ -59,6 +68,13 @@ func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
 	a.cctx.Set("strokeStyle", colorPaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("stroke")
+
+	if deleting {
+		// Trashcan glyph centered in the circle — drop a tile here to delete.
+		side := float64(plusButtonRadius) * 1.4
+		drawTrashcanIcon(a.cctx, cx-side/2, cy-side/2, side, side)
+		return
+	}
 
 	// Plus glyph: two strokes through center.
 	a.cctx.Set("strokeStyle", colorPlusFg)
@@ -122,8 +138,6 @@ func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered boo
 		drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine)
 	case tplURL:
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
-	case tplBlackHole:
-		drawBlackHoleGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	case tplFileWell:
 		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	case tplProcessWell:

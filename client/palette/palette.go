@@ -1,7 +1,7 @@
 // Package palette computes the layout of Gridwell's tile-creation
 // palette — the popover that opens over the pane's "+" button and
-// holds the four template tile previews (well, markdown, url,
-// blackhole) that the user drags onto the canvas.
+// holds the template tile previews (well, markdown, url, file-well,
+// process-well, shell) that the user drags onto the canvas.
 //
 // All layout is pure: it depends only on the pane's screen rect, the
 // pane's current zoom (so the previews track the size of the placed

@@ -60,16 +60,17 @@ The shape generalizes: prefer **in-place, identity-stable mutation**; make the
 expensive, identity-creating operation **explicit and eager** rather than lazy
 and silent; and pay costs at the gesture that asked for them.
 
-## The seven primitives
+## The six primitives
 
-Seven tile kinds; move / clone / resize / descend over them cover everything.
+Six tile kinds; move / clone / resize / descend over them cover everything.
+Delete is not a kind — it's a gesture: drag a tile onto the pane's `+`
+corner button, which becomes a trashcan (see *The mutation surface*).
 
 | kind | what | outline |
 |---|---|---|
 | `text` | editable markdown | green |
 | `url` | a URL; frozen JPEG preview, refresh floats a live Electron WebContentsView over the pane | purple |
 | `well` | points at a child Gridwell grid; descend to enter | blue |
-| `blackhole` | deletion sink — drop a tile on it to delete | red |
 | `file-well` | a view of a host directory | red |
 | `process-well` | a view of host processes | red |
 | `shell` | bash in a gridwell-private tmux session; frozen JPEG, refresh attaches a live PTY | red |
@@ -78,12 +79,12 @@ Seven tile kinds; move / clone / resize / descend over them cover everything.
 
 **Outline = what's inside:**
 - **Blue** — grid well; inside is Gridwell.
-- **Red** — exit well; contents come from outside Gridwell (a directory, the process table, the bit bucket, a bash session). Descent and gestures still work; the world beyond isn't owned by Gridwell.
+- **Red** — exit well; contents come from outside Gridwell (a directory, the process table, a bash session). Descent and gestures still work; the world beyond isn't owned by Gridwell.
 - **Brown** — root grid; can't ascend further.
 - **Green / purple** — content tile (markdown / URL).
 
 **Line style = owned vs link:**
-- **Solid** — the real thing. Delete (drag onto a blackhole, either mouse button) acts for real: a host file/dir goes to the **system trash** (recoverable, never `rm -rf`); a process gets `SIGTERM`.
+- **Solid** — the real thing. Delete (drag onto the pane's `+` trashcan, either mouse button) acts for real: a host file/dir goes to the **system trash** (recoverable, never `rm -rf`); a process gets `SIGTERM`.
 - **Dashed** — a link out of Gridwell (file-well, process-well, or a file dragged into a regular grid). Delete only *unlinks* (drops the tile row); the real file/process is untouched. `DeleteTile` routes on the parent grid's `source_kind`.
 
 ## Identity and copy-on-clone
@@ -125,7 +126,7 @@ The same principle governs the live shell stream: a WebSocket close is treated a
 
 - **Descend** — left-click a well / content tile. **Ascend** — middle-click a pane, or right-click its corner circle (drag out to cancel).
 - **Move** — left-drag a tile. **Clone** — right-drag from a tile's center. **Resize** — right-drag a tile's outer ring.
-- **Delete** — drag a tile onto a blackhole (left or right drag).
+- **Delete** — drag a tile onto the pane's `+` corner button (left or right drag); during a tile drag the `+` becomes a trashcan, reddening as the ghost hovers it, and the dropped tile shatters into it. The button is the source pane's, so it's "drag it back to the menu it came from".
 - **Create** — drag from the palette. **Pan** — left-drag empty space. **Zoom / text-scroll** — wheel.
 - **Go live / refresh URL/shell** — left-click the descent's corner circle (frozen → goes live). The right button is reserved for the universal pane gestures, so a URL/shell descent has no special center behavior — its center is swap, like every pane.
 - **Split / swap / resize / close pane** — right-drag in the pane regions; a new split auto-ascends one level. Left-drag a pane boundary resizes but never closes (live tiles stay put). A live overlay is transparent to the right button (it forwards the gesture to the canvas and parks itself) — the shell does this via its DOM overlay, the native URL view via the Electron bridge.
@@ -161,7 +162,7 @@ These are implementation choices — swap them freely if they get in the way: co
 
 ## Rules for changes
 
-**Invariants (binding — don't break without a conversation):** things stay where you put them (**the deciding factor** — see *The guiding rule* / *Applying the principle*); seven primitives; color grammar (blue / red / brown / green / purple); preview = descent = ascent; a tile's row id is a permanent handle (nothing the user didn't touch re-rows; copies are made only by the clone gesture, eagerly); mouse-only, no modifiers; every gesture has a preview and a cancel zone; panes are views, not state; the durable/cache split (`gridwell.db` is a complete, copyable archive of authored content; the cache is disposable, regenerable, and never required to open it).
+**Invariants (binding — don't break without a conversation):** things stay where you put them (**the deciding factor** — see *The guiding rule* / *Applying the principle*); six primitives; color grammar (blue / red / brown / green / purple); preview = descent = ascent; a tile's row id is a permanent handle (nothing the user didn't touch re-rows; copies are made only by the clone gesture, eagerly); mouse-only, no modifiers; every gesture has a preview and a cancel zone; panes are views, not state; the durable/cache split (`gridwell.db` is a complete, copyable archive of authored content; the cache is disposable, regenerable, and never required to open it).
 
 **Per-commit gate:** `make check` (go build, go test, the `GOOS=js` wasm build, and the desktop `tsc` typecheck) must be green on every commit. `make check-electron` (xvfb live-tile harnesses) is for changes touching the URL/shell live path.
 

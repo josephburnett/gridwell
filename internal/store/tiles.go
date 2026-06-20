@@ -222,22 +222,6 @@ func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.
 		})
 }
 
-// CreateBlackHole creates a blackhole tile — a deletion sink.
-func (s *Store) CreateBlackHole(ctx context.Context, req *rpc.CreateBlackHoleRequest) (*rpc.Tile, error) {
-	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H,
-		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-					alt_text, created_at, updated_at)
-				VALUES (?, ?, 'blackhole', ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, rpc.AltNull, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert blackhole tile: %w", err)
-			}
-			return res.LastInsertId()
-		})
-}
-
 // ResizeTile changes a tile's footprint to (X, Y, W, H).
 func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rpc.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {

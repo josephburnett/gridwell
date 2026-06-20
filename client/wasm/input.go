@@ -624,7 +624,15 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// displayedCellSize so the grab point stays under the cursor.
 		a.ghost.overDoc = false
 		a.ghost.forbidden = false
-		if dt, ok := a.docDropTargetAt(sx, sy); ok {
+		if a.overDeleteButton(sx, sy) {
+			// Over the source pane's corner button (the trashcan): preview a
+			// delete — the ghost shrinks AND fragments. Left-button release
+			// commits a DeleteTile; drag back out and the lerp reassembles it.
+			a.ghost.paneID = d.originPaneID
+			a.ghost.targetCellSize = d.srcCellSize * 0.2
+			a.ghost.targetFragmentation = 1.0
+			a.canvas.Get("style").Set("cursor", "")
+		} else if dt, ok := a.docDropTargetAt(sx, sy); ok {
 			// Drag over a raw-mode text descent: insert a reference. Both
 			// left and right buttons land here — the doc isn't a placement
 			// medium, so there's no clone-vs-move distinction to honor.
@@ -644,11 +652,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			a.ghost.forbidden = true
 			a.canvas.Get("style").Set("cursor", "not-allowed")
 		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
-			// Sink check first — dropping on a black hole is a delete,
-			// not a move, so the cross-grid-move restriction doesn't apply.
-			sink := a.tileAtCellInTarget(t, sx, sy)
-			isBlackHoleSink := sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID
-			if !isBlackHoleSink && a.dropForbiddenForMove(d, t) {
+			if a.dropForbiddenForMove(d, t) {
 				// Cross-grid move between source-backed and regular grid:
 				// server rejects. Show the no-entry sign so the user
 				// switches to right-drag (clone/link) instead.
@@ -660,17 +664,8 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			} else {
 				a.canvas.Get("style").Set("cursor", "")
 				a.ghost.paneID = t.pane.ID
-				// Black-hole sink: if the cursor is over a black hole, the
-				// ghost shrinks AND fragments. Left-button release commits
-				// a DeleteTile. Drag back out and the lerp reassembles the
-				// ghost; release away from a sink does a normal move.
-				if isBlackHoleSink {
-					a.ghost.targetCellSize = t.cellSize * 0.2
-					a.ghost.targetFragmentation = 1.0
-				} else {
-					a.ghost.targetCellSize = t.cellSize
-					a.ghost.targetFragmentation = 0.0
-				}
+				a.ghost.targetCellSize = t.cellSize
+				a.ghost.targetFragmentation = 0.0
 			}
 		} else {
 			a.canvas.Get("style").Set("cursor", "")
@@ -756,8 +751,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		r := paneRectFor(a, focused)
 		// Try descent/ascent first — a click on a well, a content
 		// tile, or in the edge band kicks off navigation. Selection
-		// only applies to other cases (e.g., clicking a blackhole to
-		// outline it).
+		// only applies to other cases (e.g., clicking a tile to
+		// outline it without descending).
 		if a.attemptDescentOrAscent(focused, r, sx, sy) {
 			a.scheduleURLUpdate()
 			return nil
@@ -788,6 +783,17 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
+	// Delete: dropping the dragged tile on its source pane's corner button
+	// (shown as a trashcan during a drag) deletes it — "drag it back to the
+	// menu it came from". Resolved against the source pane's button, not the
+	// grid under the cursor, so it works wherever that button sits.
+	if a.overDeleteButton(sx, sy) {
+		a.runDeleteTile(d, nil)
+		a.ghost = nil
+		a.draw()
+		return nil
+	}
+
 	// Doc drop: dropping a tile onto a raw-mode text descent inserts a
 	// markdown reference rather than moving the source. The doc isn't a
 	// placement medium, so left-drag auto-promotes to "leave source" —
@@ -804,19 +810,6 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	t, ok := a.dropTargetAt(sx, sy, d.tileID)
 	if !ok {
 		a.cancelDragSnapBack(d)
-		return nil
-	}
-
-	// Black-hole sink: dropping a tile (or well) onto a black hole
-	// deletes the source instead of moving/cloning it. Skip the cell
-	// snap and overlap math — the black hole "absorbs" whatever the
-	// cursor is on, regardless of exact coords.
-	sink := a.tileAtCellInTarget(t, sx, sy)
-	isBlackHoleSink := sink != nil && sink.Kind == rpc.KindBlackHole && sink.ID != d.tileID
-	if isBlackHoleSink {
-		a.runDeleteTile(d, t)
-		a.ghost = nil
-		a.draw()
 		return nil
 	}
 
@@ -955,6 +948,31 @@ func paneRectFor(a *App, p *pane.Pane) pane.Rect {
 		return r
 	}
 	return pane.Rect{}
+}
+
+// tileDragInFlight reports whether a real tile (not a pan or a palette
+// template) is currently being dragged past the start threshold — the
+// state in which the source pane's + button turns into the trashcan
+// delete target.
+func (a *App) tileDragInFlight() bool {
+	return a.dragging != nil && a.dragging.started && a.dragging.tileID != 0
+}
+
+// overDeleteButton reports whether (sx, sy) is over the delete target while
+// a tile drag is in flight: the + (trashcan) button of the pane the drag
+// STARTED from. Keyed off the origin pane — not the focused pane — so the
+// gesture works for both the left-drag move and the right-drag clone
+// regardless of which pane currently holds focus. A descended pane has no
+// + button, so it's never a delete target.
+func (a *App) overDeleteButton(sx, sy float64) bool {
+	if !a.tileDragInFlight() {
+		return false
+	}
+	p := a.tree.FindPane(a.dragging.originPaneID)
+	if p == nil || p.TextFocus != 0 {
+		return false
+	}
+	return pointInPlus(paneRectFor(a, p), sx, sy)
 }
 
 // attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
@@ -1670,8 +1688,6 @@ func templateGhostNode(kind templateKind) rpc.Tile {
 		return rpc.Tile{Kind: rpc.KindText, W: 1, H: 1}
 	case tplURL:
 		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
-	case tplBlackHole:
-		return rpc.Tile{Kind: rpc.KindBlackHole, W: 1, H: 1, AltText: rpc.AltNull}
 	case tplFileWell:
 		return rpc.Tile{Kind: rpc.KindFileWell, W: 1, H: 1, FSPath: "/", AltText: rpc.AltFiles}
 	case tplProcessWell:
@@ -1738,8 +1754,6 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.createWellAtCell(destPane, dropX, dropY)
 	case tplMarkdown:
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
-	case tplBlackHole:
-		a.createBlackHoleAtCell(destPane, dropX, dropY)
 	case tplFileWell:
 		a.createFileWellAtCell(destPane, "/", dropX, dropY)
 	case tplProcessWell:
@@ -1814,20 +1828,6 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 			a.openURLStream(ffp, tile.ID)
 		})
 	})
-}
-
-// createBlackHoleAtCell fires CreateBlackHole at the given cell.
-// Footprint is 1×1.
-func (a *App) createBlackHoleAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
-	path := slices.Clone(p.Path)
-	req := &rpc.CreateBlackHoleRequest{
-		Path:   rpc.Path{WellIDs: path},
-		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-	}
-	a.postTileMutate("CreateBlackHole", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CreateBlackHole(ctx, req)
-	}, nil)
 }
 
 // createFileWellAtCell fires CreateFileWell at the given cell, rooted at

@@ -45,7 +45,7 @@ func TestTrashFileMovesAndRecords(t *testing.T) {
 }
 
 // TestTrashDirMovesWholeTree: trashing a directory moves the entire tree,
-// so a file-well blackhole delete is recoverable rather than rm -rf.
+// so deleting a file-well tile is recoverable rather than rm -rf.
 func TestTrashDirMovesWholeTree(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "project")
 	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {

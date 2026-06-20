@@ -86,9 +86,6 @@ func (h *connectHandler) CreateText(ctx context.Context, req *connect.Request[pb
 func (h *connectHandler) CreateURL(ctx context.Context, req *connect.Request[pb.CreateURLRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.CreateURL(ctx, rpc.CreateURLFromProto(req.Msg)))
 }
-func (h *connectHandler) CreateBlackHole(ctx context.Context, req *connect.Request[pb.CreateBlackHoleRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateBlackHole(ctx, rpc.CreateBlackHoleFromProto(req.Msg)))
-}
 func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Request[pb.CreateFileWellRequest]) (*connect.Response[pb.TileResponse], error) {
 	return tileResp(h.srv.store.CreateFileWell(ctx, rpc.CreateFileWellFromProto(req.Msg)))
 }

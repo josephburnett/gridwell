@@ -43,7 +43,6 @@ const (
 	// reveals the rest.
 	//   - text      → olive green
 	//   - url       → purple
-	//   - blackhole → red
 	colorMarkdownFill      = "#2c3a1a"
 	colorMarkdownLine      = "#8aa05a"
 	colorMarkdownLineFaded = "#4a5a3a"
@@ -53,16 +52,10 @@ const (
 	// colorURLLiveLine is the pane border used when a URL tile is live
 	// (WebSocket stream open). Same purple hue as colorURLLine but brighter
 	// and more saturated so it's clearly distinct from the frozen state.
-	colorURLLiveLine   = "#a07acc"
-	colorBlackHoleFill = "#3a1c1a"
-	colorBlackHoleLine = "#a06a5a"
-	// colorBlackHoleSwatchBg fills the palette / live blackhole swatch.
-	// Pure black so concentric grey rings read as event horizons.
-	colorBlackHoleSwatchBg = "#000000"
+	colorURLLiveLine = "#a07acc"
 	// colorExitBorder is the outline used by file-well / process-well
 	// tiles and the pane border when descended into a source-backed
-	// grid. Same red family as blackhole but brighter so it reads as a
-	// live container (vs blackhole's deletion sink).
+	// grid. A brighter red that reads as a live container.
 	colorExitBorder      = "#c87a5a"
 	colorExitBorderFaded = "#6a4032"
 	// colorExitFill is the body color for a text-kind tile that lives in
@@ -86,7 +79,11 @@ const (
 	colorEdgeDot       = "#5a6a8a"
 	colorPlusBg        = "#23252d"
 	colorPlusBgHi      = "#2d3140"
-	colorPlusFg        = "#c8c9ce"
+	// colorPlusBgDelete fills the + button when it's the live trashcan
+	// delete target and the dragged tile is hovering over it — a danger red
+	// confirming "release here deletes".
+	colorPlusBgDelete = "#6e2b22"
+	colorPlusFg       = "#c8c9ce"
 	colorMenuBg        = "#16181f"
 	colorMenuItemHi    = "#e8e9ee"
 	colorMuted         = "#6c6f78"
@@ -164,10 +161,6 @@ const (
 	tplWell templateKind = iota
 	tplMarkdown
 	tplURL
-	// tplBlackHole spawns a "trashcan" tile. Dropping another tile on
-	// top of a black hole deletes the dropped tile — the only delete
-	// affordance in the UI.
-	tplBlackHole
 	// tplFileWell spawns a file-well rooted at "/" (the host
 	// filesystem root). Outlined red — its contents come from outside
 	// Gridwell.
@@ -183,7 +176,7 @@ const (
 // templateKinds is the palette layout order, left to right. The two
 // exit-wells go after the interior kinds so the in-Gridwell tiles stay
 // grouped on the left.
-var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplBlackHole, tplFileWell, tplProcessWell, tplShell}
+var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplFileWell, tplProcessWell, tplShell}
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
 // displayed cell size approaches its target. At 60 fps this gives a
@@ -407,34 +400,35 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// (refreshFileToggle). The matching click hit-tests in onMouseDown are
 	// gated on the pre-click focus, so clicking an unfocused pane's (hidden)
 	// corner just focuses it rather than silently firing the button.
-	if focused {
-		if p.TextFocus != 0 {
-			if a.isURLDescent(p) {
-				if a.urlStreams[p.ID] != nil {
-					a.drawURLBackButton(p, r)
-				} else {
-					a.drawURLRefreshButton(p, r)
-				}
-			} else if a.isShellDescent(p) && !a.hasShellStream(p.ID) {
-				// Frozen shell descent: lower-right refresh button either
-				// creates a fresh tmux session (no snapshot yet) or
-				// attaches to the existing one. Hidden when the tile has
-				// a snapshot but its tmux session is gone — the JPEG is
-				// all that remains. shellRefreshButtonVisible decides and
-				// kicks off the ShellSessionAlive probe if the answer
-				// isn't cached yet.
-				if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
-					a.drawURLRefreshButton(p, r)
-				}
+	if p.TextFocus != 0 {
+		if focused && a.isURLDescent(p) {
+			if a.urlStreams[p.ID] != nil {
+				a.drawURLBackButton(p, r)
+			} else {
+				a.drawURLRefreshButton(p, r)
 			}
-		} else {
-			// + button: the focused grid's entry point for creating tiles
-			// (and a visible handle even when the grid is unreachable — you
-			// can still ascend). The palette popover itself is drawn after
-			// every pane (see draw) so it floats above neighbouring panes
-			// it overflows into.
-			a.drawPlusButton(p, r)
+		} else if focused && a.isShellDescent(p) && !a.hasShellStream(p.ID) {
+			// Frozen shell descent: lower-right refresh button either
+			// creates a fresh tmux session (no snapshot yet) or
+			// attaches to the existing one. Hidden when the tile has
+			// a snapshot but its tmux session is gone — the JPEG is
+			// all that remains. shellRefreshButtonVisible decides and
+			// kicks off the ShellSessionAlive probe if the answer
+			// isn't cached yet.
+			if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
+				a.drawURLRefreshButton(p, r)
+			}
 		}
+	} else if focused || (a.tileDragInFlight() && a.dragging.originPaneID == p.ID) {
+		// + button: the focused grid's entry point for creating tiles (and a
+		// visible handle even when the grid is unreachable — you can still
+		// ascend). It also appears on a tile-drag's SOURCE pane even when that
+		// pane isn't focused, because during a drag it becomes the trashcan
+		// delete target ("drag a tile back to the menu it came from").
+		// drawPlusButton paints a trashcan instead of a + in that state. The
+		// palette popover itself is drawn after every pane (see draw) so it
+		// floats above neighbouring panes it overflows into.
+		a.drawPlusButton(p, r)
 	}
 }
 
@@ -559,15 +553,6 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		return
 	case rpc.KindURL:
 		a.drawURLTile(n, x, y, w, h, selected)
-		a.drawTileBannerLabel(n, x, y, w, h, outside)
-		return
-	case rpc.KindBlackHole:
-		drawBlackHoleSwatch(a.cctx, x, y, w, h)
-		drawBlackHoleGlyph(a.cctx, x, y, w, h, colorExitBorder)
-		strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder, tileBorderPx)
-		if selected {
-			drawSelectedTileOutline(a.cctx, x, y, w, h)
-		}
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindShell:
@@ -711,11 +696,10 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 		return true
 	}
 	switch n.Kind {
-	case rpc.KindFileWell, rpc.KindProcessWell, rpc.KindBlackHole, rpc.KindShell:
-		// Black holes route their input to /dev/null — that's "outside"
-		// in the same color-grammar sense as a file-well: the dropped
-		// tile leaves Gridwell. Red border, "/dev/null" banner. Shell is the
-		// same shape: bash runs outside Gridwell's data world.
+	case rpc.KindFileWell, rpc.KindProcessWell, rpc.KindShell:
+		// Exit kinds: their contents come from outside Gridwell (a host
+		// directory, the process table, a bash session). Red border. Shell
+		// is the same shape: bash runs outside Gridwell's data world.
 		return true
 	}
 	if n.Kind == rpc.KindText && n.SourceKey != "" {
@@ -913,9 +897,6 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
 		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n.Kind), borderPx)
-	case rpc.KindBlackHole:
-		drawBlackHoleSwatch(c, x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorExitBorder, borderPx)
 	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)

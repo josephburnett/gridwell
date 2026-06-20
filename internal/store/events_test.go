@@ -103,22 +103,6 @@ func TestEventCreateURLEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "CreateURL", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
 }
 
-func TestEventCreateBlackHoleEmitsTileChanged(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-	ch, cancel := s.SubscribeEvents()
-	defer cancel()
-
-	if _, err := s.CreateBlackHole(ctx, &rpc.CreateBlackHoleRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "CreateBlackHole", got, map[rpc.EventKind]int{rpc.EventTileChanged: 1})
-}
-
 func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

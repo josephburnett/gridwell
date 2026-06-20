@@ -60,9 +60,6 @@ const (
 	GridwellCreateTextProcedure = "/gridwell.v1.Gridwell/CreateText"
 	// GridwellCreateURLProcedure is the fully-qualified name of the Gridwell's CreateURL RPC.
 	GridwellCreateURLProcedure = "/gridwell.v1.Gridwell/CreateURL"
-	// GridwellCreateBlackHoleProcedure is the fully-qualified name of the Gridwell's CreateBlackHole
-	// RPC.
-	GridwellCreateBlackHoleProcedure = "/gridwell.v1.Gridwell/CreateBlackHole"
 	// GridwellCreateFileWellProcedure is the fully-qualified name of the Gridwell's CreateFileWell RPC.
 	GridwellCreateFileWellProcedure = "/gridwell.v1.Gridwell/CreateFileWell"
 	// GridwellCreateProcessWellProcedure is the fully-qualified name of the Gridwell's
@@ -107,7 +104,6 @@ type GridwellClient interface {
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
-	CreateBlackHole(context.Context, *connect.Request[v1.CreateBlackHoleRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error)
@@ -176,12 +172,6 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellCreateURLProcedure,
 			connect.WithSchema(gridwellMethods.ByName("CreateURL")),
-			connect.WithClientOptions(opts...),
-		),
-		createBlackHole: connect.NewClient[v1.CreateBlackHoleRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellCreateBlackHoleProcedure,
-			connect.WithSchema(gridwellMethods.ByName("CreateBlackHole")),
 			connect.WithClientOptions(opts...),
 		),
 		createFileWell: connect.NewClient[v1.CreateFileWellRequest, v1.TileResponse](
@@ -286,7 +276,6 @@ type gridwellClient struct {
 	createWell        *connect.Client[v1.CreateWellRequest, v1.TileResponse]
 	createText        *connect.Client[v1.CreateTextRequest, v1.TileResponse]
 	createURL         *connect.Client[v1.CreateURLRequest, v1.TileResponse]
-	createBlackHole   *connect.Client[v1.CreateBlackHoleRequest, v1.TileResponse]
 	createFileWell    *connect.Client[v1.CreateFileWellRequest, v1.TileResponse]
 	createProcessWell *connect.Client[v1.CreateProcessWellRequest, v1.TileResponse]
 	createShell       *connect.Client[v1.CreateShellRequest, v1.TileResponse]
@@ -337,11 +326,6 @@ func (c *gridwellClient) CreateText(ctx context.Context, req *connect.Request[v1
 // CreateURL calls gridwell.v1.Gridwell.CreateURL.
 func (c *gridwellClient) CreateURL(ctx context.Context, req *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.createURL.CallUnary(ctx, req)
-}
-
-// CreateBlackHole calls gridwell.v1.Gridwell.CreateBlackHole.
-func (c *gridwellClient) CreateBlackHole(ctx context.Context, req *connect.Request[v1.CreateBlackHoleRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.createBlackHole.CallUnary(ctx, req)
 }
 
 // CreateFileWell calls gridwell.v1.Gridwell.CreateFileWell.
@@ -428,7 +412,6 @@ type GridwellHandler interface {
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
-	CreateBlackHole(context.Context, *connect.Request[v1.CreateBlackHoleRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error)
@@ -493,12 +476,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellCreateURLProcedure,
 		svc.CreateURL,
 		connect.WithSchema(gridwellMethods.ByName("CreateURL")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellCreateBlackHoleHandler := connect.NewUnaryHandler(
-		GridwellCreateBlackHoleProcedure,
-		svc.CreateBlackHole,
-		connect.WithSchema(gridwellMethods.ByName("CreateBlackHole")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellCreateFileWellHandler := connect.NewUnaryHandler(
@@ -607,8 +584,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellCreateTextHandler.ServeHTTP(w, r)
 		case GridwellCreateURLProcedure:
 			gridwellCreateURLHandler.ServeHTTP(w, r)
-		case GridwellCreateBlackHoleProcedure:
-			gridwellCreateBlackHoleHandler.ServeHTTP(w, r)
 		case GridwellCreateFileWellProcedure:
 			gridwellCreateFileWellHandler.ServeHTTP(w, r)
 		case GridwellCreateProcessWellProcedure:
@@ -674,10 +649,6 @@ func (UnimplementedGridwellHandler) CreateText(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateURL is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) CreateBlackHole(context.Context, *connect.Request[v1.CreateBlackHoleRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateBlackHole is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error) {

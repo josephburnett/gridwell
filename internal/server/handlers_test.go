@@ -51,19 +51,6 @@ func TestCreateURLRPC(t *testing.T) {
 	}
 }
 
-func TestCreateBlackHoleRPC(t *testing.T) {
-	_, cl, root := newTestServer(t)
-	tile, err := cl.CreateBlackHole(context.Background(), &rpc.CreateBlackHoleRequest{
-		GridID: root, X: 2, Y: 2, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatalf("create blackhole: %v", err)
-	}
-	if tile.Kind != rpc.KindBlackHole {
-		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindBlackHole)
-	}
-}
-
 func TestCreateFileWellRPC(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	tile, err := cl.CreateFileWell(context.Background(), &rpc.CreateFileWellRequest{

@@ -211,8 +211,8 @@ func TestUpdateTile(t *testing.T) {
 
 // TestRemoveTileFreesOptimisticBlob is the regression for an optimistic-blob
 // leak: editing a text tile stores a client-local (negative-id) blob and
-// repoints the tile at it. If the tile is then removed (e.g. dragged onto a
-// blackhole) before the authoritative server tile arrives, the optimistic blob
+// repoints the tile at it. If the tile is then removed (e.g. dragged onto the
+// + trashcan) before the authoritative server tile arrives, the optimistic blob
 // must be dropped from the map — otherwise it strands forever, exactly the
 // unbounded growth OptimisticEdit and the EventTileChanged reconcile guard
 // against.

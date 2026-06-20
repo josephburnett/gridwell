@@ -99,9 +99,6 @@ func kindColors(kind string) (color.RGBA, color.RGBA) {
 	case rpc.KindWell:
 		return color.RGBA{R: 230, G: 240, B: 252, A: 255},
 			color.RGBA{R: 47, G: 105, B: 188, A: 255}
-	case rpc.KindBlackHole:
-		return color.RGBA{R: 252, G: 232, B: 232, A: 255},
-			color.RGBA{R: 196, G: 64, B: 64, A: 255}
 	case rpc.KindURL:
 		return color.RGBA{R: 244, G: 234, B: 252, A: 255},
 			color.RGBA{R: 142, G: 84, B: 196, A: 255}
@@ -169,9 +166,6 @@ func drawKindGlyph(img *image.RGBA, kind string, c color.RGBA) {
 			ringStroke = 2
 		}
 		drawRectOutline(img, cx-sz, cy-sz, cx+sz, cy+sz, ringStroke, c)
-	case rpc.KindBlackHole:
-		// filled disc
-		drawDisc(img, cx, cy, sz, c)
 	case rpc.KindURL:
 		// two interlocking chain-link arcs (simplified: two rings)
 		ringStroke := sz / 6
@@ -202,17 +196,6 @@ func drawRectOutline(img *image.RGBA, x0, y0, x1, y1, stroke int, c color.RGBA) 
 		for s := 0; s < stroke; s++ {
 			setIn(img, x0+s, y, c)
 			setIn(img, x1-s, y, c)
-		}
-	}
-}
-
-func drawDisc(img *image.RGBA, cx, cy, r int, c color.RGBA) {
-	r2 := r * r
-	for dy := -r; dy <= r; dy++ {
-		for dx := -r; dx <= r; dx++ {
-			if dx*dx+dy*dy <= r2 {
-				setIn(img, cx+dx, cy+dy, c)
-			}
 		}
 	}
 }

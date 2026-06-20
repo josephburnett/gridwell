@@ -9,8 +9,8 @@ import (
 
 // This file holds the line-icon vocabulary: the shared glyph primitives
 // (sizing + stroke setup) and the per-kind glyphs the palette overlays on a
-// swatch, plus the blackhole swatch fill and the delete-ghost trashcan. All
-// pure canvas drawing — no App state.
+// swatch, plus the delete trashcan (drawn on the + button during a drag and
+// over the shrinking delete-ghost). All pure canvas drawing — no App state.
 
 func glyphLineWidth(w, h float64) float64 {
 	return math.Max(1.0, math.Min(w, h)/34)
@@ -54,23 +54,6 @@ func drawWellGlyph(c js.Value, x, y, w, h float64, color string) {
 	c.Call("moveTo", cx-half, cy)
 	c.Call("lineTo", cx+half, cy)
 	c.Call("stroke")
-	endGlyph(c)
-}
-
-// drawBlackHoleGlyph paints concentric rings collapsing to a filled core —
-// a void/sink — for the blackhole palette swatch.
-func drawBlackHoleGlyph(c js.Value, x, y, w, h float64, color string) {
-	beginGlyph(c, w, h, color)
-	cx, cy, half := glyphBox(x, y, w, h)
-	c.Call("beginPath")
-	c.Call("arc", cx, cy, half, 0.0, 2*math.Pi)
-	c.Call("stroke")
-	c.Call("beginPath")
-	c.Call("arc", cx, cy, half*0.55, 0.0, 2*math.Pi)
-	c.Call("stroke")
-	c.Call("beginPath")
-	c.Call("arc", cx, cy, half*0.16, 0.0, 2*math.Pi)
-	c.Call("fill")
 	endGlyph(c)
 }
 
@@ -194,15 +177,6 @@ func drawShellGlyph(c js.Value, x, y, w, h float64, color string) {
 	blockH := half * 0.9
 	c.Call("fillRect", cx+half*0.15, cy-blockH/2, blockW, blockH)
 	endGlyph(c)
-}
-
-// drawBlackHoleSwatch paints the canonical black-hole tile fill: a
-// pure-black rectangle. The orange border drawn by the caller carries
-// the "this is an exit" signal; the "/dev/null" banner label spells out the
-// destination. No interior glyph — the dark void is the metaphor.
-func drawBlackHoleSwatch(c js.Value, x, y, w, h float64) {
-	c.Set("fillStyle", colorBlackHoleSwatchBg)
-	c.Call("fillRect", x, y, w, h)
 }
 
 // drawTrashcanIcon paints a generic "trash" glyph inside (x, y, w, h).

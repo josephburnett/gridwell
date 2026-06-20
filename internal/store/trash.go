@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-// Trashing host files instead of unlinking them is what makes a blackhole
-// delete of a file-well recoverable: dragging a directory onto /dev/null
-// used to be an irreversible rm -rf. We implement the freedesktop.org Trash
+// Trashing host files instead of unlinking them is what makes deleting a
+// file-well tile recoverable: discarding a directory would otherwise be an
+// irreversible rm -rf. We implement the freedesktop.org Trash
 // spec's "home trash" ($XDG_DATA_HOME/Trash, default ~/.local/share/Trash)
 // directly — no trash CLI is assumed present — so a desktop file manager
 // can list and restore what Gridwell discarded.

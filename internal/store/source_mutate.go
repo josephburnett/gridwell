@@ -22,8 +22,8 @@ type HostActor interface {
 }
 
 // realHostActor is the production wiring. File/directory removals go to the
-// OS trash (recoverable) rather than os.Remove/os.RemoveAll — a blackhole
-// delete of a file-well should not be an irreversible rm -rf. Process kills
+// OS trash (recoverable) rather than os.Remove/os.RemoveAll — deleting a
+// file-well tile should not be an irreversible rm -rf. Process kills
 // still signal for real. Both Remove and RemoveAll trash the target; the
 // split only reflects the caller's file-vs-directory intent.
 type realHostActor struct{}

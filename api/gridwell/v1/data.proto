@@ -160,15 +160,6 @@ message CreateURLRequest {
   string url = 7;
 }
 
-message CreateBlackHoleRequest {
-  Path path = 1;
-  int64 grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-}
-
 message CreateFileWellRequest {
   Path path = 1;
   int64 grid_id = 2;
@@ -358,7 +349,6 @@ service Gridwell {
   rpc CreateWell(CreateWellRequest) returns (TileResponse);
   rpc CreateText(CreateTextRequest) returns (TileResponse);
   rpc CreateURL(CreateURLRequest) returns (TileResponse);
-  rpc CreateBlackHole(CreateBlackHoleRequest) returns (TileResponse);
   rpc CreateFileWell(CreateFileWellRequest) returns (TileResponse);
   rpc CreateProcessWell(CreateProcessWellRequest) returns (TileResponse);
   rpc CreateShell(CreateShellRequest) returns (TileResponse);

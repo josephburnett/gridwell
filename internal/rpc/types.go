@@ -6,15 +6,14 @@ package rpc
 
 // Tile kinds. A tile is exactly one of these.
 //
-// The four "interior" kinds — well, text, url, blackhole — live inside
-// Gridwell. file-well and process-well are "exit" kinds: their child
-// grids reflect state owned by the host (the filesystem and the process
-// table), not by Gridwell. The color grammar (red outline) follows.
+// The "interior" kinds — well, text, url — live inside Gridwell. file-well,
+// process-well, and shell are "exit" kinds: their contents reflect state
+// owned by the host (the filesystem, the process table, a bash session),
+// not by Gridwell. The color grammar (red outline) follows.
 const (
 	// Canonical alt-text strings stamped into a tile's alt_text at insert
 	// time. The client renders tile.AltText verbatim — no derivation —
 	// so server and client always agree on what a tile is called.
-	AltNull      = "/dev/null" // blackhole tiles
 	AltFiles     = "files"     // root file-well (FSPath == "/")
 	AltProcesses = "processes" // root process-well (PID == 1)
 	AltInfo      = "info"      // synthetic @info tile inside a proc-well
@@ -22,7 +21,6 @@ const (
 	KindWell        = "well"
 	KindText        = "text"
 	KindURL         = "url"
-	KindBlackHole   = "blackhole"
 	KindFileWell    = "file-well"
 	KindProcessWell = "process-well"
 	KindShell       = "shell"
@@ -39,11 +37,10 @@ func IsWellKind(kind string) bool {
 
 // IsContentDescentKind reports whether a tile kind is a content tile you
 // descend into via a *text-focus* descent (it sets pane.TextFocus) rather than
-// a grid descent — text, url, and shell. Blackhole is NOT one (it's a deletion
-// sink, not descendable). Shared by the client's click-to-descend routing and
-// its URL-restore walk so the set is spelled out once: when those two drifted,
-// a shell descent encoded into the URL was silently dropped on reload (the
-// restore walk omitted shell and wrongly listed blackhole).
+// a grid descent — text, url, and shell. Shared by the client's click-to-descend
+// routing and its URL-restore walk so the set is spelled out once: when those
+// two drifted, a shell descent encoded into the URL was silently dropped on
+// reload (the restore walk omitted shell).
 func IsContentDescentKind(kind string) bool {
 	return kind == KindText || kind == KindURL || kind == KindShell
 }
@@ -205,15 +202,6 @@ type CreateURLRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	URL    string `json:"url"`
-}
-
-type CreateBlackHoleRequest struct {
-	Path   Path  `json:"path"`
-	GridID int64 `json:"grid_id"`
-	X      int64 `json:"x"`
-	Y      int64 `json:"y"`
-	W      int64 `json:"w"`
-	H      int64 `json:"h"`
 }
 
 // CreateFileWellRequest creates a file-well at the given FSPath. The

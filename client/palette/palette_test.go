@@ -109,19 +109,18 @@ func TestTileIndexAt(t *testing.T) {
 }
 
 func TestLayoutHandlesExpandedKindCount(t *testing.T) {
-	// The current palette ships seven kinds (well, markdown, url,
-	// blackhole, file-well, process-well, shell). The layout has to
-	// widen the popover to fit them and the tile rects must stay
-	// non-overlapping.
+	// The current palette ships six kinds (well, markdown, url, file-well,
+	// process-well, shell). The layout has to widen the popover to fit them
+	// and the tile rects must stay non-overlapping.
 	l := makeLayout()
-	l.NumTiles = 7
+	l.NumTiles = 6
 	pop := l.PopoverRect()
 	tile := l.TilePx()
-	wantW := float64(7)*tile + float64(7+1)*l.Cfg.GapPx
+	wantW := float64(6)*tile + float64(6+1)*l.Cfg.GapPx
 	if pop.W != wantW {
 		t.Errorf("PopoverRect.W = %v, want %v", pop.W, wantW)
 	}
-	for i := 1; i < 7; i++ {
+	for i := 1; i < 6; i++ {
 		a := l.TileRect(i - 1)
 		b := l.TileRect(i)
 		if a.X+a.W > b.X {
