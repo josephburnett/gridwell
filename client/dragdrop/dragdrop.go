@@ -244,6 +244,117 @@ func MoveForbidden(sameGrid bool, srcKind, dstKind string) bool {
 	return srcKind != "" || dstKind != ""
 }
 
+// DropAction is the single verdict for a drag release (and the matching
+// in-flight preview). BOTH the commit handlers and the ghost-preview
+// handlers in the wasm client route through DecideDrop so they can never
+// disagree — the trashcan-delete regression (commit 92f9b21) was exactly
+// a preview/commit disagreement caused by reading a torn-down field on
+// the commit side only.
+type DropAction int
+
+const (
+	// DropNavigate: a bare click (no drag started) — the wasm side runs
+	// descent/ascent/selection. Not a placement at all.
+	DropNavigate DropAction = iota
+	// DropCreateTemplate: a palette-swatch drag — create a fresh tile at
+	// the snapped cell.
+	DropCreateTemplate
+	// DropPanEnd: an empty-space (tileID==0) drag — just persist viewport.
+	DropPanEnd
+	// DropDelete: released over the source pane's + (trashcan) button.
+	// This is the regression branch.
+	DropDelete
+	// DropEmbed: released over a raw-text descent — insert a markdown
+	// reference instead of moving the tile.
+	DropEmbed
+	// DropRejected: nothing legal here (read-only doc, no target,
+	// forbidden cross-grid move, same cell, or occupied) — snap back.
+	DropRejected
+	// DropMove: a clean left-drag — MoveTile.
+	DropMove
+	// DropClone: a clean right-drag — CloneTile.
+	DropClone
+)
+
+// DropInput is the snapshot of every world-read a drop decision needs,
+// gathered ONCE at release (or per preview frame) BEFORE any teardown
+// nils out drag state. It holds no App fields and no js.Value — that is
+// the whole point: gather first, then decide, so a cleared field can
+// never be read late.
+//
+// Field provenance in the wasm caller (impure resolvers stay there):
+//   - OverDelete: a.overDeleteButton(d, sx, sy)
+//   - OverDoc:    a.docDropTargetAt(sx, sy)
+//   - DocReject:  a.docRejectAt(sx, sy)
+//   - HasTarget:  a.dropTargetAt(sx, sy, tileID) resolved
+//   - Forbidden:  move-only — !Clone && a.dropForbiddenForMove(d, t)
+//   - SameCell:   target grid == source grid && drop cell == source cell
+//   - Occupied:   a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+type DropInput struct {
+	Started    bool
+	IsTemplate bool
+	Clone      bool  // right-drag armed
+	TileID     int64 // 0 = pan / empty-space drag
+	OverDelete bool
+	OverDoc    bool
+	DocReject  bool
+	HasTarget  bool
+	Forbidden  bool
+	SameCell   bool
+	Occupied   bool
+}
+
+// DecideDrop maps a gathered DropInput to the single action both preview
+// and commit obey.
+//
+// The order is canonical and load-bearing — it mirrors the left-drag
+// commit (onMouseUp) and reconciles the right-drag commit
+// (commitRightClone), which is behavior-preserving because the two never
+// actually contend: the + (trashcan) button lives in a grid-pane corner
+// while OverDoc/DocReject describe a *different* pane that is a text
+// descent, so OverDelete and OverDoc/DocReject are mutually exclusive in
+// practice. Earlier branches strictly win:
+//
+//  1. !Started      → Navigate     (bare click beats everything)
+//  2. IsTemplate    → CreateTemplate
+//  3. TileID == 0   → PanEnd
+//  4. OverDelete    → Delete
+//  5. OverDoc       → Embed
+//  6. DocReject     → Rejected      (read-only rendered doc)
+//  7. !HasTarget    → Rejected
+//  8. Forbidden     → Rejected      (cross-grid move; move-only input)
+//  9. SameCell      → Rejected
+//  10. Occupied     → Rejected
+//  11. else         → Clone ? DropClone : DropMove
+func DecideDrop(in DropInput) DropAction {
+	switch {
+	case !in.Started:
+		return DropNavigate
+	case in.IsTemplate:
+		return DropCreateTemplate
+	case in.TileID == 0:
+		return DropPanEnd
+	case in.OverDelete:
+		return DropDelete
+	case in.OverDoc:
+		return DropEmbed
+	case in.DocReject:
+		return DropRejected
+	case !in.HasTarget:
+		return DropRejected
+	case in.Forbidden:
+		return DropRejected
+	case in.SameCell:
+		return DropRejected
+	case in.Occupied:
+		return DropRejected
+	case in.Clone:
+		return DropClone
+	default:
+		return DropMove
+	}
+}
+
 // NearPx reports whether two pixel coordinates are within half a pixel.
 // Used for "is this divider line at the same place as that one?" checks
 // where exact float equality is too brittle.

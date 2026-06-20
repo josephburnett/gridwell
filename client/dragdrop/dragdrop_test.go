@@ -336,3 +336,73 @@ func TestMoveForbidden(t *testing.T) {
 		})
 	}
 }
+
+func TestDecideDrop(t *testing.T) {
+	// base is a clean, started, left-drag of a real tile over a valid
+	// empty target cell — i.e. the DropMove case. Each row flips just the
+	// fields under test so precedence is exercised in isolation.
+	base := DropInput{Started: true, TileID: 7, HasTarget: true}
+
+	cases := []struct {
+		name string
+		in   DropInput
+		want DropAction
+	}{
+		// --- the happy paths ---
+		{"clean left drag -> move", base, DropMove},
+		{"clean right drag -> clone",
+			DropInput{Started: true, TileID: 7, HasTarget: true, Clone: true}, DropClone},
+
+		// --- early branches beat everything ---
+		{"bare click -> navigate (beats all)",
+			DropInput{Started: false, IsTemplate: true, TileID: 7, OverDelete: true, HasTarget: true}, DropNavigate},
+		{"template -> create (beats pan/delete)",
+			DropInput{Started: true, IsTemplate: true, TileID: 0, OverDelete: true, HasTarget: true}, DropCreateTemplate},
+		{"pan (tileID 0) -> panEnd (beats delete)",
+			DropInput{Started: true, TileID: 0, OverDelete: true, HasTarget: true}, DropPanEnd},
+
+		// --- the regression: delete must fire ---
+		{"over delete button -> delete",
+			DropInput{Started: true, TileID: 7, OverDelete: true}, DropDelete},
+		{"delete wins over an occupied target (precedence)",
+			DropInput{Started: true, TileID: 7, OverDelete: true, HasTarget: true, Occupied: true}, DropDelete},
+		{"delete wins over a doc target (precedence)",
+			DropInput{Started: true, TileID: 7, OverDelete: true, OverDoc: true}, DropDelete},
+		{"delete fires even with no target",
+			DropInput{Started: true, TileID: 7, OverDelete: true, HasTarget: false}, DropDelete},
+
+		// --- doc embed vs reject ---
+		{"over raw-text doc -> embed",
+			DropInput{Started: true, TileID: 7, OverDoc: true}, DropEmbed},
+		{"embed wins over a normal target",
+			DropInput{Started: true, TileID: 7, OverDoc: true, HasTarget: true}, DropEmbed},
+		{"rendered (read-only) doc -> rejected",
+			DropInput{Started: true, TileID: 7, DocReject: true}, DropRejected},
+		{"docReject does not block delete (delete is earlier)",
+			DropInput{Started: true, TileID: 7, OverDelete: true, DocReject: true}, DropDelete},
+
+		// --- rejection cases, one cause each ---
+		{"no target -> rejected",
+			DropInput{Started: true, TileID: 7, HasTarget: false}, DropRejected},
+		{"forbidden cross-grid move -> rejected",
+			DropInput{Started: true, TileID: 7, HasTarget: true, Forbidden: true}, DropRejected},
+		{"same cell -> rejected",
+			DropInput{Started: true, TileID: 7, HasTarget: true, SameCell: true}, DropRejected},
+		{"occupied -> rejected",
+			DropInput{Started: true, TileID: 7, HasTarget: true, Occupied: true}, DropRejected},
+
+		// --- clone ignores move-only Forbidden (caller feeds Forbidden=false for clone) ---
+		{"clone with a clean target -> clone",
+			DropInput{Started: true, TileID: 7, HasTarget: true, Clone: true}, DropClone},
+		// SameCell/Occupied still reject a clone (both commit paths check them).
+		{"clone onto occupied -> rejected",
+			DropInput{Started: true, TileID: 7, HasTarget: true, Clone: true, Occupied: true}, DropRejected},
+		{"clone onto same cell -> rejected",
+			DropInput{Started: true, TileID: 7, HasTarget: true, Clone: true, SameCell: true}, DropRejected},
+	}
+	for _, c := range cases {
+		if got := DecideDrop(c.in); got != c.want {
+			t.Errorf("%s: DecideDrop(%+v) = %v, want %v", c.name, c.in, got, c.want)
+		}
+	}
+}
