@@ -65,38 +65,23 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 		mode = rpc.TextModeText
 	}
 	fp := a.paneFocusedOnFile(n.ID)
-	var scale, scrollX, scrollY float64
-	if fp != nil {
+	// Scale/scroll selection (focused inner-box cover-crop / stored framing /
+	// natural-width fallback) is the pure markdown.PreviewScaleScroll — the
+	// "preview cover-crops like the live pane" (preview = descent) math.
+	var iw, ih, fScrollX, fScrollY float64
+	focused := fp != nil
+	if focused {
 		if fp.TextMode != "" {
 			mode = fp.TextMode
 		}
 		fpRect := a.paneRectByID(fp.ID)
-		_, _, iw, ih := fileInnerBox(fp, fpRect)
-		scrollX = fp.TextScrollX
-		scrollY = fp.TextScrollY
-		if iw > 0 && ih > 0 {
-			scale = w / iw
-			if sy := h / ih; sy > scale {
-				scale = sy
-			}
-		} else {
-			scale = fileFixedScale
-		}
-	} else if n.TextW > 0 && n.TextH > 0 {
-		sxr := w / float64(n.TextW)
-		syr := h / float64(n.TextH)
-		scale = sxr
-		if syr > scale {
-			scale = syr
-		}
-		scrollX = float64(n.TextX)
-		scrollY = float64(n.TextY)
-	} else {
-		scale = w / fileNaturalContentPx
-		if scale < 0.02 {
-			scale = 0.02
-		}
+		_, _, iw, ih = fileInnerBox(fp, fpRect)
+		fScrollX = fp.TextScrollX
+		fScrollY = fp.TextScrollY
 	}
+	frame := markdown.PreviewScaleScroll(w, h, focused, iw, ih, fScrollX, fScrollY,
+		n.TextW, n.TextH, n.TextX, n.TextY, fileNaturalContentPx, fileFixedScale, 0.02)
+	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
@@ -474,7 +459,6 @@ const rawTextLineHeight = 1.35
 func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY float64) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
-	lineHeight := fontPx * rawTextLineHeight
 	setFont(c, fontPx*scale, st.monospace, false, false)
 	c.Set("fillStyle", st.textColor)
 	// Place each line's baseline exactly where a CSS line box would, so this
@@ -489,13 +473,15 @@ func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY
 	m := c.Call("measureText", "M")
 	asc := m.Get("fontBoundingBoxAscent").Float()
 	desc := m.Get("fontBoundingBoxDescent").Float()
-	slot := lineHeight * scale
-	baseline := (slot-(asc+desc))/2 + asc // baseline offset from a slot's top
-	slotTop := (st.pad - scrollY) * scale
+	// Slot/baseline/top math is the pure markdown.RawTextLineSlot — the
+	// pixel-match-the-textarea contract. asc/desc come from the scaled canvas
+	// font above.
+	slotted := markdown.RawTextLineSlot(fontPx, rawTextLineHeight, scale, st.pad, scrollY, asc, desc)
+	slotTop := slotted.Top0
 	for ln := range strings.SplitSeq(src, "\n") {
-		if slotTop+slot > 0 && slotTop < h {
-			c.Call("fillText", ln, x+st.pad*scale, y+slotTop+baseline)
+		if markdown.RawTextLineVisible(slotTop, slotted.Slot, h) {
+			c.Call("fillText", ln, x+st.pad*scale, y+slotTop+slotted.Baseline)
 		}
-		slotTop += slot
+		slotTop += slotted.Slot
 	}
 }
