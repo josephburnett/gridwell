@@ -7,6 +7,7 @@ import (
 	"slices"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -119,18 +120,7 @@ func (a *App) textareaCursorRowCol() (int, int) {
 	}
 	val := a.fileTextarea.Get("value").String()
 	off := a.fileTextarea.Get("selectionStart").Int()
-	off = min(off, len(val))
-	off = max(off, 0)
-	row := 0
-	col := 0
-	for i := 0; i < off; i++ {
-		if val[i] == '\n' {
-			row++
-			col = 0
-		} else {
-			col++
-		}
-	}
+	row, col := textcursor.RowColFromOffset(val, off)
 	return col, row
 }
 
@@ -322,43 +312,7 @@ func (a *App) placeCursorAt(col, row int) {
 		return
 	}
 	val := a.fileTextarea.Get("value").String()
-	off := offsetFromRowCol(val, row, col)
+	off := textcursor.OffsetFromRowCol(val, row, col)
 	a.fileTextarea.Call("focus")
 	a.fileTextarea.Call("setSelectionRange", off, off)
-}
-
-// offsetFromRowCol walks the source counting newlines until row, then
-// adds col (clamped to that line's length). Returns the offset within
-// the source.
-func offsetFromRowCol(src string, row, col int) int {
-	if row < 0 {
-		row = 0
-	}
-	if col < 0 {
-		col = 0
-	}
-	r := 0
-	lineStart := 0
-	for i := 0; i < len(src); i++ {
-		if r == row {
-			break
-		}
-		if src[i] == '\n' {
-			r++
-			lineStart = i + 1
-		}
-	}
-	if r != row {
-		// Past end of file — return end.
-		return len(src)
-	}
-	// Find the end of this line.
-	lineEnd := lineStart
-	for lineEnd < len(src) && src[lineEnd] != '\n' {
-		lineEnd++
-	}
-	if lineStart+col > lineEnd {
-		return lineEnd
-	}
-	return lineStart + col
 }
