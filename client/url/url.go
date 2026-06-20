@@ -24,6 +24,7 @@ package url
 import (
 	"errors"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -47,6 +48,33 @@ type State struct {
 
 // DefaultZoom is the implicit zoom value when `z` is absent.
 const DefaultZoom = 1.0
+
+// TextState builds the State for a text-tile descent: the descent path
+// plus the focused text tile as the trailing id. When isTextMode is true
+// the leaf is in raw-text mode and carries its cursor (col, row) so the
+// position is restored on reload; in rendered mode no cursor is encoded.
+// path is cloned — the caller's slice is never retained.
+func TextState(path []int64, textFocusTileID int64, isTextMode bool, col, row int) State {
+	s := State{TileIDs: append(slices.Clone(path), textFocusTileID)}
+	if isTextMode {
+		s.CursorMode = true
+		s.Col = col
+		s.Row = row
+	}
+	return s
+}
+
+// GridState builds the State for a grid (or rendered-file) descent: the
+// descent path as the tile ids and the pane viewport (center + zoom).
+// path is cloned.
+func GridState(path []int64, cx, cy, zoom float64) State {
+	return State{
+		TileIDs: slices.Clone(path),
+		X:       cx,
+		Y:       cy,
+		Zoom:    zoom,
+	}
+}
 
 // Encode renders s into a path+query string suitable for
 // history.replaceState. Always begins with '/'. The query is omitted

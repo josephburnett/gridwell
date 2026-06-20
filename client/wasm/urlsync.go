@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/textcursor"
@@ -94,22 +93,15 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	if p == nil {
 		return url.State{}
 	}
-	var s url.State
 	if p.TextFocus != 0 {
-		s.TileIDs = append(slices.Clone(p.Path), p.TextFocus)
-		if p.TextMode == rpc.TextModeText {
-			col, row := a.textareaCursorRowCol()
-			s.CursorMode = true
-			s.Col = col
-			s.Row = row
+		isText := p.TextMode == rpc.TextModeText
+		var col, row int
+		if isText {
+			col, row = a.textareaCursorRowCol()
 		}
-		return s
+		return url.TextState(p.Path, p.TextFocus, isText, col, row)
 	}
-	s.TileIDs = slices.Clone(p.Path)
-	s.X = p.Cx
-	s.Y = p.Cy
-	s.Zoom = p.Zoom
-	return s
+	return url.GridState(p.Path, p.Cx, p.Cy, p.Zoom)
 }
 
 // textareaCursorRowCol returns the cursor position in the file

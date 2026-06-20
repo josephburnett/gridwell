@@ -232,3 +232,58 @@ func TestDecodeBadCursorIgnored(t *testing.T) {
 		t.Error("CursorMode should be false for non-numeric c/r")
 	}
 }
+
+func TestTextStateRendered(t *testing.T) {
+	// Rendered text leaf: no cursor encoded.
+	s := TextState([]int64{3, 4}, 9, false, 12, 7)
+	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4, 9}) {
+		t.Errorf("TileIDs = %v, want [3 4 9]", s.TileIDs)
+	}
+	if s.CursorMode {
+		t.Error("rendered leaf should not set CursorMode")
+	}
+	if s.Col != 0 || s.Row != 0 {
+		t.Errorf("cursor leaked: col=%d row=%d", s.Col, s.Row)
+	}
+}
+
+func TestTextStateTextMode(t *testing.T) {
+	s := TextState([]int64{3}, 9, true, 12, 7)
+	if !reflect.DeepEqual(s.TileIDs, []int64{3, 9}) {
+		t.Errorf("TileIDs = %v", s.TileIDs)
+	}
+	if !s.CursorMode || s.Col != 12 || s.Row != 7 {
+		t.Errorf("cursor = (mode=%v, c=%d, r=%d)", s.CursorMode, s.Col, s.Row)
+	}
+}
+
+func TestTextStateClonesPath(t *testing.T) {
+	path := []int64{3, 4}
+	s := TextState(path, 9, false, 0, 0)
+	s.TileIDs[0] = 99 // mutating the result must not touch the caller's slice
+	if path[0] != 3 {
+		t.Errorf("TextState retained/aliased caller path: %v", path)
+	}
+}
+
+func TestGridState(t *testing.T) {
+	s := GridState([]int64{3, 4, 5}, 12.5, -3, 1.5)
+	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4, 5}) {
+		t.Errorf("TileIDs = %v", s.TileIDs)
+	}
+	if s.X != 12.5 || s.Y != -3 || s.Zoom != 1.5 {
+		t.Errorf("viewport = (%v,%v,%v)", s.X, s.Y, s.Zoom)
+	}
+	if s.CursorMode {
+		t.Error("grid state should not set CursorMode")
+	}
+}
+
+func TestGridStateClonesPath(t *testing.T) {
+	path := []int64{7}
+	s := GridState(path, 0, 0, 1)
+	s.TileIDs[0] = 99
+	if path[0] != 7 {
+		t.Errorf("GridState retained/aliased caller path: %v", path)
+	}
+}
