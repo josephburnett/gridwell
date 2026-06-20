@@ -146,3 +146,89 @@ func TestRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeMalformed(t *testing.T) {
+	cases := []struct {
+		name   string
+		raw    string
+		wantErr bool
+	}{
+		{"no leading slash", "3/4/5", true},
+		{"non-numeric segment", "/3/foo/5", true},
+		{"int64 overflow", "/99999999999999999999999999", true},
+		{"bad query escape", "/3?x=%zz", true},
+		{"empty middle segment tolerated", "/3//5", false},
+		{"trailing slash tolerated", "/3/4/", false},
+		{"negative id ok", "/-2/3", false},
+	}
+	for _, c := range cases {
+		_, err := Decode(c.raw)
+		if (err != nil) != c.wantErr {
+			t.Errorf("%s: Decode(%q) err=%v wantErr=%v", c.name, c.raw, err, c.wantErr)
+		}
+	}
+}
+
+func TestDecodeEmptyMiddleSegment(t *testing.T) {
+	s, err := Decode("/3//5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(s.TileIDs, []int64{3, 5}) {
+		t.Errorf("TileIDs = %v, want [3 5]", s.TileIDs)
+	}
+}
+
+func TestDecodeNegativeID(t *testing.T) {
+	s, err := Decode("/-2/3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(s.TileIDs, []int64{-2, 3}) {
+		t.Errorf("TileIDs = %v, want [-2 3]", s.TileIDs)
+	}
+}
+
+// Bad float values in x/y/z are silently ignored (ParseFloat error ->
+// the field stays 0), and Decode returns no error. Lock that contract.
+func TestDecodeBadFloatIgnored(t *testing.T) {
+	s, err := Decode("/3?x=notnum&y=2&z=bad")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if s.X != 0 {
+		t.Errorf("X = %v, want 0 (bad float ignored)", s.X)
+	}
+	if s.Y != 2 {
+		t.Errorf("Y = %v, want 2", s.Y)
+	}
+	if s.Zoom != 0 {
+		t.Errorf("Zoom = %v, want 0 (bad float ignored)", s.Zoom)
+	}
+}
+
+// `c` present without `r` is not enough for cursor mode, and because the
+// c-branch is taken, x/y/z are NOT read either. Lock this exact shape.
+func TestDecodeCursorRequiresBothCAndR(t *testing.T) {
+	s, err := Decode("/9?c=5&x=12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.CursorMode {
+		t.Error("CursorMode should be false when r is absent")
+	}
+	if s.X != 0 {
+		t.Errorf("X = %v, want 0 (c-branch suppresses viewport read)", s.X)
+	}
+}
+
+// Non-numeric c/r leaves CursorMode false (Atoi error path).
+func TestDecodeBadCursorIgnored(t *testing.T) {
+	s, err := Decode("/9?c=foo&r=bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.CursorMode {
+		t.Error("CursorMode should be false for non-numeric c/r")
+	}
+}
