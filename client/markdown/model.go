@@ -59,6 +59,7 @@ type Node struct {
 
 	Level   int         // NodeHeading: 1–6
 	Ordered bool        // NodeList: ordered vs unordered
+	Tight   bool        // NodeList: tight (no inter-item spacing) vs loose
 	Start   int         // NodeList: first number for an ordered list
 	Lang    string      // NodeCodeBlock: info-string language ("" if none)
 	Checked *bool       // NodeListItem: non-nil => task item with this state

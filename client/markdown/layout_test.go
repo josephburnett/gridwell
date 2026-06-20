@@ -145,3 +145,46 @@ func TestLayoutThematicBreak(t *testing.T) {
 		t.Errorf("want 1 rule op, got %d", len(rules))
 	}
 }
+
+func findText(r LayoutResult, s string) (DrawOp, bool) {
+	for _, op := range r.Ops {
+		if op.Kind == OpText && op.Text == s {
+			return op, true
+		}
+	}
+	return DrawOp{}, false
+}
+
+func TestLayoutNestedListIndents(t *testing.T) {
+	r := layoutOf(t, "- a\n    - b\n- c", 400)
+	a, okA := findText(r, "a")
+	b, okB := findText(r, "b")
+	c, okC := findText(r, "c")
+	if !okA || !okB || !okC {
+		t.Fatalf("missing list content ops: a=%v b=%v c=%v", okA, okB, okC)
+	}
+	if b.X <= a.X {
+		t.Errorf("nested item b (x=%v) not indented past a (x=%v)", b.X, a.X)
+	}
+	if b.X <= c.X {
+		t.Errorf("nested item b (x=%v) not indented past sibling c (x=%v)", b.X, c.X)
+	}
+}
+
+func TestLayoutTaskCheckboxMarkers(t *testing.T) {
+	r := layoutOf(t, "- [x] done\n- [ ] todo", 400)
+	if _, ok := findText(r, "☑"); !ok {
+		t.Error("missing checked task marker ☑")
+	}
+	if _, ok := findText(r, "☐"); !ok {
+		t.Error("missing unchecked task marker ☐")
+	}
+}
+
+func TestLayoutTightVsLoose(t *testing.T) {
+	tight := layoutOf(t, "- a\n- b\n- c", 400)
+	loose := layoutOf(t, "- a\n\n- b\n\n- c", 400)
+	if loose.Height <= tight.Height {
+		t.Errorf("loose list height %v should exceed tight %v", loose.Height, tight.Height)
+	}
+}

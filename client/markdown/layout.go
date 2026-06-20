@@ -143,7 +143,7 @@ func (w *layoutWriter) list(n Node, x, y, avail float64, depth int) float64 {
 		num = 1
 	}
 	for i, item := range n.Children {
-		if i > 0 {
+		if i > 0 && !n.Tight {
 			y += w.style.BlockGap
 		}
 		marker := w.marker(n, item, num)

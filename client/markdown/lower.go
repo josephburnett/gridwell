@@ -62,7 +62,7 @@ func lowerBlock(n ast.Node, src []byte) (Node, bool) {
 // lowerList lowers a list and its items, carrying ordered/start and per-item
 // task-checkbox state.
 func lowerList(l *ast.List, src []byte) Node {
-	out := Node{Kind: NodeList, Ordered: l.IsOrdered(), Start: l.Start}
+	out := Node{Kind: NodeList, Ordered: l.IsOrdered(), Tight: l.IsTight, Start: l.Start}
 	if !l.IsOrdered() {
 		out.Start = 0
 	}
