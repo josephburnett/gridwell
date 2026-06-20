@@ -616,68 +616,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			}
 		}
 	} else if a.ghost != nil {
-		// Update ghost target from the cursor's drop target. The
-		// per-frame size lerp in draw() interpolates displayedCellSize
-		// toward targetCellSize so the ghost smoothly resizes when the
-		// cursor crosses pane boundaries or enters/leaves a well's
-		// preview. Position is computed from cursor − cellOffset ×
-		// displayedCellSize so the grab point stays under the cursor.
-		a.ghost.overDoc = false
-		a.ghost.forbidden = false
-		if a.overDeleteButton(d, sx, sy) {
-			// Over the source pane's corner button (the trashcan): preview a
-			// delete — the ghost shrinks AND fragments. Left-button release
-			// commits a DeleteTile; drag back out and the lerp reassembles it.
-			a.ghost.paneID = d.originPaneID
-			a.ghost.targetCellSize = d.srcCellSize * 0.2
-			a.ghost.targetFragmentation = 1.0
-			a.canvas.Get("style").Set("cursor", "")
-		} else if dt, ok := a.docDropTargetAt(sx, sy); ok {
-			// Drag over a raw-mode text descent: insert a reference. Both
-			// left and right buttons land here — the doc isn't a placement
-			// medium, so there's no clone-vs-move distinction to honor.
-			// Left-drag is auto-promoted to "leave the source" so we never
-			// orphan a tile.
-			a.ghost.paneID = dt.pane.ID
-			a.ghost.targetCellSize = d.srcCellSize
-			a.ghost.targetFragmentation = 0.0
-			a.ghost.overDoc = true
-			a.canvas.Get("style").Set("cursor", "")
-		} else if a.docRejectAt(sx, sy) {
-			// Rendered-mode text descent: read-only, no drop allowed for
-			// either button.
-			a.ghost.paneID = d.originPaneID
-			a.ghost.targetCellSize = d.srcCellSize
-			a.ghost.targetFragmentation = 0.0
-			a.ghost.forbidden = true
-			a.canvas.Get("style").Set("cursor", "not-allowed")
-		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
-			if a.dropForbiddenForMove(d, t) {
-				// Cross-grid move between source-backed and regular grid:
-				// server rejects. Show the no-entry sign so the user
-				// switches to right-drag (clone/link) instead.
-				a.ghost.paneID = t.pane.ID
-				a.ghost.targetCellSize = d.srcCellSize
-				a.ghost.targetFragmentation = 0.0
-				a.ghost.forbidden = true
-				a.canvas.Get("style").Set("cursor", "not-allowed")
-			} else {
-				a.canvas.Get("style").Set("cursor", "")
-				a.ghost.paneID = t.pane.ID
-				a.ghost.targetCellSize = t.cellSize
-				a.ghost.targetFragmentation = 0.0
-			}
-		} else {
-			a.canvas.Get("style").Set("cursor", "")
-			// Off-canvas or over a file-mode pane: hold target = source
-			// size so the ghost glides back to its original scale.
-			a.ghost.paneID = d.originPaneID
-			a.ghost.targetCellSize = d.srcCellSize
-			a.ghost.targetFragmentation = 0.0
-		}
-		size := a.ghost.displayedCellSize
-		a.ghost.screenX = sx - d.cellOffsetX*size
-		a.ghost.screenY = sy - d.cellOffsetY*size
+		// Update the ghost from the SAME dragdrop.DecideDrop verdict the
+		// left-drag commit (onMouseUp) uses, so a previewed action can never
+		// differ from the committed one. clone=false → the move flavor.
+		a.previewDrop(d, sx, sy, false)
 	}
 	d.curScreenX = sx
 	d.curScreenY = sy

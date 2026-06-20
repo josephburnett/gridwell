@@ -457,40 +457,9 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 		}
 	}
 	if a.ghost != nil {
-		a.ghost.overDoc = false
-		if a.overDeleteButton(d, sx, sy) {
-			// Over the source pane's trashcan button: preview a delete —
-			// shrink and fragment — the same gesture and outcome as the
-			// left-drag delete path, regardless of which button armed the drag.
-			a.ghost.paneID = d.originPaneID
-			a.ghost.targetCellSize = d.srcCellSize * 0.2
-			a.ghost.targetFragmentation = 1.0
-			a.canvas.Get("style").Set("cursor", "")
-		} else if dt, ok := a.docDropTargetAt(sx, sy); ok {
-			a.ghost.paneID = dt.pane.ID
-			a.ghost.targetCellSize = d.srcCellSize
-			a.ghost.targetFragmentation = 0.0
-			a.ghost.overDoc = true
-			a.canvas.Get("style").Set("cursor", "")
-		} else if a.docRejectAt(sx, sy) {
-			a.ghost.paneID = d.originPaneID
-			a.ghost.targetCellSize = d.srcCellSize
-			a.ghost.targetFragmentation = 0.0
-			a.canvas.Get("style").Set("cursor", "not-allowed")
-		} else if t, ok := a.dropTargetAt(sx, sy, d.tileID); ok {
-			a.canvas.Get("style").Set("cursor", "")
-			a.ghost.paneID = t.pane.ID
-			a.ghost.targetCellSize = t.cellSize
-			a.ghost.targetFragmentation = 0.0
-		} else {
-			a.canvas.Get("style").Set("cursor", "")
-			a.ghost.paneID = d.originPaneID
-			a.ghost.targetCellSize = d.srcCellSize
-			a.ghost.targetFragmentation = 0.0
-		}
-		size := a.ghost.displayedCellSize
-		a.ghost.screenX = sx - d.cellOffsetX*size
-		a.ghost.screenY = sy - d.cellOffsetY*size
+		// Same DecideDrop verdict the right-drag commit (commitRightClone)
+		// uses — clone=true flavor. Preview and commit can't diverge.
+		a.previewDrop(d, sx, sy, true)
 	}
 	d.curScreenX = sx
 	d.curScreenY = sy

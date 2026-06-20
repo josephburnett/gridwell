@@ -33,6 +33,89 @@ type dropTarget struct {
 	originY  float64
 }
 
+// previewDrop updates the active ghost for an in-flight tile drag from
+// the SAME dragdrop.DecideDrop verdict the commit path uses, so a
+// previewed action can never diverge from the committed one (the
+// trashcan-delete regression was exactly such a divergence). clone picks
+// the right-drag flavor: Clone=true, no cross-grid Forbidden check
+// (right-drag IS the allowed cross-boundary gesture), and no no-entry
+// badge on a read-only doc (the clone preview never drew one).
+//
+// SameCell/Occupied are intentionally NOT fed here: the preview is
+// optimistic about placement (it shows the snap-to-cell even over an
+// occupied cell, matching the pre-unification behavior); the commit does
+// the authoritative overlap check and snaps back. The unification covers
+// the action CLASS (delete/embed/place/reject) — where the bug lived.
+func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
+	if a.ghost == nil {
+		return
+	}
+	a.ghost.overDoc = false
+	a.ghost.forbidden = false
+	in := dragdrop.DropInput{
+		Started:    d.started,
+		IsTemplate: d.isTemplate,
+		Clone:      clone,
+		TileID:     d.tileID,
+		OverDelete: a.overDeleteButton(d, sx, sy),
+	}
+	docTarget, overDoc := a.docDropTargetAt(sx, sy)
+	in.OverDoc = overDoc
+	in.DocReject = a.docRejectAt(sx, sy)
+	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
+	in.HasTarget = haveT
+	if haveT && !clone {
+		in.Forbidden = a.dropForbiddenForMove(d, t)
+	}
+
+	switch dragdrop.DecideDrop(in) {
+	case dragdrop.DropDelete:
+		// Over the source pane's trashcan button: shrink AND fragment. Drag
+		// back out and the size lerp reassembles it.
+		a.ghost.paneID = d.originPaneID
+		a.ghost.targetCellSize = d.srcCellSize * 0.2
+		a.ghost.targetFragmentation = 1.0
+		a.canvas.Get("style").Set("cursor", "")
+	case dragdrop.DropEmbed:
+		// Over a raw-mode text descent: insert a reference. Source stays put.
+		a.ghost.paneID = docTarget.pane.ID
+		a.ghost.targetCellSize = d.srcCellSize
+		a.ghost.targetFragmentation = 0.0
+		a.ghost.overDoc = true
+		a.canvas.Get("style").Set("cursor", "")
+	case dragdrop.DropRejected:
+		a.ghost.targetCellSize = d.srcCellSize
+		a.ghost.targetFragmentation = 0.0
+		switch {
+		case in.DocReject:
+			// Rendered-mode (read-only) text descent.
+			a.ghost.paneID = d.originPaneID
+			a.ghost.forbidden = !clone // left shows the no-entry badge; clone never did
+			a.canvas.Get("style").Set("cursor", "not-allowed")
+		case in.Forbidden:
+			// Cross-grid move between source-backed and regular grid: the
+			// server rejects, so flag it and steer the user to right-drag.
+			a.ghost.paneID = t.pane.ID
+			a.ghost.forbidden = true
+			a.canvas.Get("style").Set("cursor", "not-allowed")
+		default:
+			// Off-canvas or a file-mode pane: glide back at source size.
+			a.ghost.paneID = d.originPaneID
+			a.canvas.Get("style").Set("cursor", "")
+		}
+	default:
+		// DropMove / DropClone: snap to the target cell.
+		a.canvas.Get("style").Set("cursor", "")
+		a.ghost.paneID = t.pane.ID
+		a.ghost.targetCellSize = t.cellSize
+		a.ghost.targetFragmentation = 0.0
+	}
+
+	size := a.ghost.displayedCellSize
+	a.ghost.screenX = sx - d.cellOffsetX*size
+	a.ghost.screenY = sy - d.cellOffsetY*size
+}
+
 // dropTargetAt resolves the cursor at (sx, sy) to a drop target.
 // Returns false when the cursor is over a file-mode pane or off-canvas
 // — neither is a valid drop destination.
