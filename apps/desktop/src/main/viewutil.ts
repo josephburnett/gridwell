@@ -1,16 +1,17 @@
 import type { Bounds } from './ipc';
 
-// partitionFor derives the Electron session partition name for a tile. A
-// `persist:` prefix makes the session durable on disk (cookies, storage,
-// logins survive restarts). Keyed by the tile's stable objectId so the
-// same tile shares one cookie jar across panes and freeze/live cycles,
-// while distinct tiles stay isolated (Gmail in tile A ≠ tile B).
-export function partitionFor(objectId: string): string {
-  // objectId is a UUID from the store; sanitize defensively so a stray
-  // character can't change the partition's meaning.
-  const safe = objectId.replace(/[^A-Za-z0-9_-]/g, '');
-  return `persist:tile-${safe}`;
-}
+// SESSION_PARTITION is the single Electron session partition shared by ALL
+// live URL tiles. Tiles behave like browser tabs: one cookie jar and one
+// DOM-storage (localStorage) area for every tile, so a login — or an
+// autosaved, unsubmitted comment draft — made in one tile is visible in
+// every other tile and survives freeze/live cycles. The `persist:` prefix
+// makes it durable on disk, so it also survives app restarts.
+//
+// This is a deliberate change from the older per-tile partition
+// (`persist:tile-<objectId>`): the user wants shared sign-in across tiles,
+// not isolation. There is one owner of the partition name (here) so the
+// flush/clear helpers can't drift out of sync with the view creator.
+export const SESSION_PARTITION = 'persist:gridwell';
 
 // roundBounds snaps a CSS-pixel rect to integer DIP for setBounds, clamping
 // width/height to a 1px floor so a collapsed pane never asks for a 0-sized

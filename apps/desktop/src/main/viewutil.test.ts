@@ -1,17 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { partitionFor, roundBounds, boundsEqual } from './viewutil';
+import { SESSION_PARTITION, roundBounds, boundsEqual } from './viewutil';
 
-test('partitionFor is persistent and keyed by objectId', () => {
-  assert.equal(partitionFor('abc-123'), 'persist:tile-abc-123');
-  // Same tile → same partition (shared cookie jar across panes/time).
-  assert.equal(partitionFor('abc-123'), partitionFor('abc-123'));
-  // Different tiles → different partitions (isolation).
-  assert.notEqual(partitionFor('abc-123'), partitionFor('def-456'));
-});
-
-test('partitionFor sanitizes stray characters', () => {
-  assert.equal(partitionFor('a/b c:d'), 'persist:tile-abcd');
+test('SESSION_PARTITION is persistent and shared by all tiles', () => {
+  // `persist:` prefix → durable on disk (logins/storage survive restarts).
+  assert.ok(SESSION_PARTITION.startsWith('persist:'));
+  // One partition for every tile: tiles act like tabs, sharing the session.
+  // (There is no per-tile keying — that's the whole point of the change.)
 });
 
 test('roundBounds snaps to ints and floors size at 1', () => {

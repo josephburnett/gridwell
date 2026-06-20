@@ -73,9 +73,10 @@ export interface PaneRef {
 export interface PlaceArgs {
   paneId: string;
   tileId: number;
-  // objectId keys the session partition so a tile's cookies/login persist
-  // across panes and across freeze/live cycles. Two views of the same tile
-  // share a cookie jar; different tiles never do.
+  // objectId identifies which tile a pane is showing, so a pane reused for a
+  // different tile tears its old view down instead of just re-navigating.
+  // Session state is NOT keyed by it: all tiles share one persistent session
+  // (see SESSION_PARTITION) so logins/drafts are shared like browser tabs.
   objectId: string;
   url: string;
   bounds: Bounds;

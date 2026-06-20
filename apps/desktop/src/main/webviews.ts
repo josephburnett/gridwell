@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, session } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent } from './ipc';
-import { partitionFor, roundBounds, boundsEqual } from './viewutil';
+import { SESSION_PARTITION, roundBounds, boundsEqual } from './viewutil';
 import { captureJpegBase64 } from './capture';
 
 // urlViewPreload is the script injected into every live URL view; it forwards
@@ -68,10 +68,11 @@ export interface RegistryCallbacks {
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
-// root window. One view per paneId; the session partition is keyed by the
-// tile's objectId. The registry is deliberately free of IPC and store
-// knowledge — ipc.ts wires Electron handlers to these methods, and the
-// renderer remains the only thing that talks to the Go backend.
+// root window. One view per paneId; every view shares the single persistent
+// SESSION_PARTITION, so all tiles act like tabs of one browser (shared
+// cookies/logins and DOM storage). The registry is deliberately free of IPC
+// and store knowledge — ipc.ts wires Electron handlers to these methods, and
+// the renderer remains the only thing that talks to the Go backend.
 export class WebviewRegistry {
   private readonly win: BaseWindow;
   private readonly cb: RegistryCallbacks;
@@ -121,7 +122,7 @@ export class WebviewRegistry {
     if (!e) {
       const view = new WebContentsView({
         webPreferences: {
-          partition: partitionFor(objectId),
+          partition: SESSION_PARTITION,
           contextIsolation: true,
           nodeIntegration: false,
           // Forwards a right-button press to main → renderer so pane gestures
@@ -251,6 +252,14 @@ export class WebviewRegistry {
     try {
       url = e.view.webContents.getURL();
       title = e.view.webContents.getTitle();
+      // Commit DOM storage (localStorage) to the shared persistent partition
+      // BEFORE the renderer is closed. Chromium writes cookies eagerly but
+      // flushes localStorage lazily, so an abrupt webContents.close() can drop
+      // recent localStorage writes — which is exactly where GitLab autosaves
+      // an unsubmitted comment draft. Flushing here is what makes that draft
+      // survive ascend → descend → go-live. Cheap and best-effort; the session
+      // outlives the view, so the write lands even though the view goes away.
+      e.view.webContents.session.flushStorageData();
       jpegBase64 = await captureJpegBase64(e.view);
     } catch {
       // Best-effort: a crashed/destroyed view yields an empty freeze.
@@ -329,10 +338,9 @@ export class WebviewRegistry {
 // applyMinWidthZoom.
 const URL_MIN_LAYOUT_WIDTH = 640;
 
-// clearPersistedSession wipes a tile's stored cookies/storage. Not used yet
-// (a future "log out this tile" gesture); exposed so the partition naming
-// has a single owner.
-export async function clearPersistedSession(objectId: string): Promise<void> {
-  const part = partitionFor(objectId);
-  await session.fromPartition(part).clearStorageData();
+// clearSharedSession wipes the shared cookies/storage for ALL tiles. Not
+// used yet (a future "sign out" gesture); since the session is shared, this
+// logs every tile out at once — there is no per-tile session to clear.
+export async function clearSharedSession(): Promise<void> {
+  await session.fromPartition(SESSION_PARTITION).clearStorageData();
 }
