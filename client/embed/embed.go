@@ -66,6 +66,26 @@ func ClassifyDocTarget(s PaneState) DocTarget {
 	return DocTargetRendered
 }
 
+// EmbedDescentAllowed reports whether an embed click can be followed to
+// its target tile — the three gates a leaf-swap descent must pass before
+// the wasm side stashes the doc context and dispatches the descent:
+//
+//   - hitTileID != 0   — the click resolved to a real embed reference.
+//   - targetFound       — a tile with that id exists in the cache.
+//   - same grid         — targetGridID == currentGridID. v1 only follows
+//     embeds whose target lives in the current descended grid;
+//     cross-grid embeds (which need fetching the target's parent chain)
+//     are a future extension.
+//
+// Pure: the wasm caller resolves the inputs (findTileByID, gridIDForPath)
+// and performs the descent only when this returns true.
+func EmbedDescentAllowed(hitTileID int64, targetFound bool, targetGridID, currentGridID int64) bool {
+	if hitTileID == 0 || !targetFound {
+		return false
+	}
+	return targetGridID == currentGridID
+}
+
 // HrefForTile builds the markdown link href for an embed pointing at a
 // tile by id, anchored at `origin` (e.g., "http://localhost:8080") so
 // the link resolves when the doc is rendered outside Gridwell. An empty

@@ -444,3 +444,26 @@ func TestInsertAtComputedOffset(t *testing.T) {
 	}
 }
 
+
+func TestEmbedDescentAllowed(t *testing.T) {
+	cases := []struct {
+		name          string
+		hitTileID     int64
+		targetFound   bool
+		targetGridID  int64
+		currentGridID int64
+		want          bool
+	}{
+		{"all gates pass", 5, true, 100, 100, true},
+		{"zero tile id rejected", 0, true, 100, 100, false},
+		{"target not found rejected", 5, false, 100, 100, false},
+		{"cross-grid target rejected", 5, true, 200, 100, false},
+		{"zero id beats found+same-grid", 0, true, 100, 100, false},
+	}
+	for _, c := range cases {
+		if got := EmbedDescentAllowed(c.hitTileID, c.targetFound, c.targetGridID, c.currentGridID); got != c.want {
+			t.Errorf("%s: EmbedDescentAllowed(%d,%v,%d,%d) = %v, want %v",
+				c.name, c.hitTileID, c.targetFound, c.targetGridID, c.currentGridID, got, c.want)
+		}
+	}
+}

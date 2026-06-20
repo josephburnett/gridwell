@@ -165,15 +165,17 @@ func (a *App) findTileByID(id int64) *rpc.Tile {
 // startFileAscent again then leaves the doc — two ascents reach the
 // original grid, matching how a normal two-step descent works.
 func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
-	if hit == nil || hit.tileID == 0 {
+	if hit == nil {
 		return false
 	}
 	target := a.findTileByID(hit.tileID)
-	if target == nil {
-		return false
+	var targetGridID int64
+	if target != nil {
+		targetGridID = target.GridID
 	}
-	if target.GridID != a.gridIDForPath(p.Path) {
-		// Cross-grid embed targets are not yet supported.
+	// Three gates: a real reference, a found target, and (v1) a same-grid
+	// target. Cross-grid embeds aren't supported yet.
+	if !embed.EmbedDescentAllowed(hit.tileID, target != nil, targetGridID, a.gridIDForPath(p.Path)) {
 		return false
 	}
 	// Stash the doc's descent context before clearing it, then dispatch
