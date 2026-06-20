@@ -1,34 +1,17 @@
-// Package markdown is the small layout pass used by the Gridwell client to
-// render markdown into a canvas.
+// Package markdown is the Gridwell client's markdown engine. It parses GFM
+// (via goldmark — see parse_goldmark.go), lowers the AST into a document model
+// (model.go), and lays it out into positioned draw ops (layout.go) that the
+// wasm canvas renderer paints. This file holds the shared inline types, the
+// alt-text derivation, and the embed-size helper.
 //
-// The supported feature set is intentionally tiny: H1–H3, bold, italic,
-// inline code, code blocks, blockquotes, unordered lists, paragraphs.
-// Anything else falls back to plain paragraph text.
-//
-// The package is pure Go; output is a slice of layout primitives that the
-// canvas rendering code translates into fillText / fillRect calls.
+// The package is pure Go; nothing here touches syscall/js, so the parse →
+// lower → layout pipeline is exercised entirely by `go test`.
 package markdown
 
 import "strings"
 
-// BlockKind classifies a layout block.
-type BlockKind int
-
-const (
-	BlockParagraph BlockKind = iota
-	BlockHeading1
-	BlockHeading2
-	BlockHeading3
-	BlockBlockquote
-	BlockListItem
-	BlockCode // fenced code block; spans is one Span with raw text
-	BlockBlank // blank line (vertical spacing only)
-)
-
-// SpanStyle bits combine for inline formatting. A single span carries one
-// fixed style; emphasis switches mark new spans. StyleLink and StyleEmbed
-// are also surfaced here even though they describe link/image semantics
-// rather than text styling — they share the inline-span tokenizer.
+// SpanStyle bits combine for inline formatting. StyleLink / StyleEmbed describe
+// link/image semantics rather than text styling but share the inline span type.
 type SpanStyle uint8
 
 const (
@@ -41,10 +24,9 @@ const (
 	StyleStrike SpanStyle = 1 << 5
 )
 
-// Span is one styled run of text inside a block. For link spans, Href is
-// set and Text is the link's display text. For embed spans, Src/Alt/Href
-// are set; W/H carry the declared embed pixel size (from the src URL's
-// ?w=&h= query parameters, if any).
+// Span is one styled run of inline text. For link spans Href is set; for embed
+// (image / tile-link) spans Src/Alt/Href are set and W/H carry the declared
+// embed pixel size (from the src URL's ?w=&h=, if any).
 type Span struct {
 	Text  string
 	Style SpanStyle
@@ -54,46 +36,40 @@ type Span struct {
 	W, H  int
 }
 
-// Block is the unit of vertical layout: a sequence of inline spans plus a
-// block kind that determines font size, indent, and any decoration (bullet,
-// quote bar).
-type Block struct {
-	Kind  BlockKind
-	Spans []Span
-}
-
-// AltFromSource derives a short, one-line alt-text from a markdown
-// document: the plain-text content of the first non-blank block, with
-// markdown markers stripped (so a "# Heading" becomes "Heading"). Used
-// to label tile-embed links when a text tile is dragged into a doc.
-// Returns "" when the source is empty or contains only blank blocks.
+// AltFromSource derives a short, one-line alt-text from a markdown document:
+// the plain text of the first block, with markdown markers stripped (so
+// "# Heading" becomes "Heading"), all whitespace runs (newlines included)
+// collapsed to single spaces, clamped to altMaxLen runes. Returns "" for empty
+// or content-free input. Used to label tile-embed links.
 //
-// The result is clamped to altMaxLen runes so long opening paragraphs
-// don't bloat the alt.
+// Collapsing to one line matters: a code-block-first doc would otherwise yield
+// a multi-line alt, and a newline in alt text breaks the generated
+// [alt](href) embed link.
 func AltFromSource(src string) string {
-	blocks := Parse(src)
-	for _, b := range blocks {
-		if b.Kind == BlockBlank {
-			continue
-		}
-		var sb strings.Builder
-		for _, sp := range b.Spans {
-			if sp.Style&StyleEmbed != 0 {
-				continue
-			}
-			sb.WriteString(sp.Text)
-		}
-		// Collapse every run of whitespace (newlines included) to a single
-		// space and trim. The alt must be ONE line: a code-block-first doc
-		// otherwise yields a multi-line span, and a newline in the alt breaks
-		// the generated `[alt](href)` embed link (link text can't span lines).
-		s := strings.Join(strings.Fields(sb.String()), " ")
+	for _, b := range Lower([]byte(src)).Children {
+		s := strings.Join(strings.Fields(blockText(b)), " ")
 		if s == "" {
 			continue
 		}
 		return clampRunes(s, altMaxLen)
 	}
 	return ""
+}
+
+// blockText is the concatenated plain text of a block (embeds skipped),
+// recursing into child blocks.
+func blockText(n Node) string {
+	var b strings.Builder
+	for _, sp := range n.Spans {
+		if sp.Style&StyleEmbed != 0 {
+			continue
+		}
+		b.WriteString(sp.Text)
+	}
+	for _, c := range n.Children {
+		b.WriteString(blockText(c))
+	}
+	return b.String()
 }
 
 const altMaxLen = 100
@@ -106,236 +82,8 @@ func clampRunes(s string, n int) string {
 	return string(runes[:n])
 }
 
-// Parse splits source into Blocks. Inline parsing happens per-block.
-//
-// The parser is line-based and does not handle nested block structure
-// (e.g., a list inside a blockquote). For Gridwell's use the simplifications
-// are acceptable; nothing here goes wrong on input it does not understand,
-// it just renders as a paragraph.
-func Parse(src string) []Block {
-	lines := strings.Split(src, "\n")
-	var out []Block
-	inCode := false
-	var code strings.Builder
-	for _, line := range lines {
-		if strings.HasPrefix(line, "```") {
-			if inCode {
-				out = append(out, Block{Kind: BlockCode, Spans: []Span{{Text: code.String(), Style: StyleCode}}})
-				code.Reset()
-				inCode = false
-			} else {
-				inCode = true
-			}
-			continue
-		}
-		if inCode {
-			code.WriteString(line)
-			code.WriteString("\n")
-			continue
-		}
-		switch {
-		case strings.TrimSpace(line) == "":
-			out = append(out, Block{Kind: BlockBlank})
-		case strings.HasPrefix(line, "### "):
-			out = append(out, Block{Kind: BlockHeading3, Spans: parseInline(line[4:])})
-		case strings.HasPrefix(line, "## "):
-			out = append(out, Block{Kind: BlockHeading2, Spans: parseInline(line[3:])})
-		case strings.HasPrefix(line, "# "):
-			out = append(out, Block{Kind: BlockHeading1, Spans: parseInline(line[2:])})
-		case strings.HasPrefix(line, "> "):
-			out = append(out, Block{Kind: BlockBlockquote, Spans: parseInline(line[2:])})
-		case strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* "):
-			out = append(out, Block{Kind: BlockListItem, Spans: parseInline(line[2:])})
-		default:
-			out = append(out, Block{Kind: BlockParagraph, Spans: parseInline(line)})
-		}
-	}
-	if inCode {
-		// Unterminated code fence: emit what we have.
-		out = append(out, Block{Kind: BlockCode, Spans: []Span{{Text: code.String(), Style: StyleCode}}})
-	}
-	return out
-}
-
-// parseInline tokenizes inline emphasis. Supports:
-//   `code`         -> StyleCode
-//   **bold**       -> StyleBold
-//   *italic* / _italic_ -> StyleItalic
-//
-// Bold/italic combine if nested but the implementation here keeps things
-// simple by treating each marker as a flat toggle rather than building a
-// nested AST. Mismatched markers are passed through as literal text.
-func parseInline(s string) []Span {
-	var out []Span
-	cur := strings.Builder{}
-	style := StyleNone
-
-	flush := func() {
-		if cur.Len() > 0 {
-			out = append(out, Span{Text: cur.String(), Style: style})
-			cur.Reset()
-		}
-	}
-
-	for i := 0; i < len(s); {
-		// Inline code: backtick to backtick.
-		if s[i] == '`' {
-			flush()
-			end := strings.IndexByte(s[i+1:], '`')
-			if end < 0 {
-				cur.WriteByte('`')
-				i++
-				continue
-			}
-			out = append(out, Span{Text: s[i+1 : i+1+end], Style: StyleCode})
-			i = i + end + 2
-			continue
-		}
-		// Embed: [![alt](src)](href) — image wrapped in a link. This is the
-		// markdown pattern Gridwell uses for tile embeds, but the parser
-		// recognises it for any markdown source.
-		if s[i] == '[' && i+1 < len(s) && s[i+1] == '!' {
-			if end, alt, src, href, ok := parseEmbed(s, i); ok {
-				flush()
-				sp := Span{Style: StyleEmbed, Alt: alt, Src: src, Href: href}
-				sp.W, sp.H = embedSizeFromSrc(src)
-				out = append(out, sp)
-				i = end
-				continue
-			}
-		}
-		// Image alone: ![alt](src) — rendered as an embed with no href.
-		if s[i] == '!' && i+1 < len(s) && s[i+1] == '[' {
-			if end, alt, src, ok := parseImage(s, i); ok {
-				flush()
-				sp := Span{Style: StyleEmbed, Alt: alt, Src: src}
-				sp.W, sp.H = embedSizeFromSrc(src)
-				out = append(out, sp)
-				i = end
-				continue
-			}
-		}
-		// Plain link: [text](href).
-		if s[i] == '[' {
-			if end, text, href, ok := parseLink(s, i); ok {
-				flush()
-				out = append(out, Span{Text: text, Style: style | StyleLink, Href: href})
-				i = end
-				continue
-			}
-		}
-		// Bold: ** ... **
-		if i+1 < len(s) && s[i] == '*' && s[i+1] == '*' {
-			flush()
-			style ^= StyleBold
-			i += 2
-			continue
-		}
-		// Italic: single * always toggles; _ toggles too, EXCEPT between two
-		// word characters — an intraword underscore is literal, so "snake_case"
-		// renders verbatim instead of emphasizing "case" (CommonMark's
-		// intraword-underscore rule). Asterisks keep working intraword.
-		if s[i] == '*' || (s[i] == '_' && !intrawordUnderscore(s, i)) {
-			flush()
-			style ^= StyleItalic
-			i++
-			continue
-		}
-		cur.WriteByte(s[i])
-		i++
-	}
-	flush()
-	return out
-}
-
-// intrawordUnderscore reports whether the underscore at s[i] sits between two
-// word characters (so it should be a literal "_" rather than an emphasis
-// marker). Keeps identifiers like snake_case from rendering half-italic.
-func intrawordUnderscore(s string, i int) bool {
-	return i > 0 && isWordByte(s[i-1]) && i+1 < len(s) && isWordByte(s[i+1])
-}
-
-func isWordByte(b byte) bool {
-	return b == '_' ||
-		(b >= 'a' && b <= 'z') ||
-		(b >= 'A' && b <= 'Z') ||
-		(b >= '0' && b <= '9')
-}
-
-// parseEmbed attempts to read [![alt](src)](href) starting at s[start]. On
-// success ok is true and end is the index one past the closing ).
-func parseEmbed(s string, start int) (end int, alt, src, href string, ok bool) {
-	if start >= len(s) || s[start] != '[' {
-		return 0, "", "", "", false
-	}
-	imgEnd, alt, src, imgOK := parseImage(s, start+1)
-	if !imgOK {
-		return 0, "", "", "", false
-	}
-	if imgEnd >= len(s) || s[imgEnd] != ']' {
-		return 0, "", "", "", false
-	}
-	if imgEnd+1 >= len(s) || s[imgEnd+1] != '(' {
-		return 0, "", "", "", false
-	}
-	hrefStart := imgEnd + 2
-	close := strings.IndexByte(s[hrefStart:], ')')
-	if close < 0 {
-		return 0, "", "", "", false
-	}
-	return hrefStart + close + 1, alt, src, s[hrefStart : hrefStart+close], true
-}
-
-// parseImage reads ![alt](src) starting at s[start].
-func parseImage(s string, start int) (end int, alt, src string, ok bool) {
-	if start+1 >= len(s) || s[start] != '!' || s[start+1] != '[' {
-		return 0, "", "", false
-	}
-	altStart := start + 2
-	closeBracket := strings.IndexByte(s[altStart:], ']')
-	if closeBracket < 0 {
-		return 0, "", "", false
-	}
-	alt = s[altStart : altStart+closeBracket]
-	after := altStart + closeBracket + 1
-	if after >= len(s) || s[after] != '(' {
-		return 0, "", "", false
-	}
-	srcStart := after + 1
-	closeParen := strings.IndexByte(s[srcStart:], ')')
-	if closeParen < 0 {
-		return 0, "", "", false
-	}
-	return srcStart + closeParen + 1, alt, s[srcStart : srcStart+closeParen], true
-}
-
-// parseLink reads [text](href) starting at s[start]. Does not handle nested
-// brackets in text; that's fine for the small surface we target.
-func parseLink(s string, start int) (end int, text, href string, ok bool) {
-	if start >= len(s) || s[start] != '[' {
-		return 0, "", "", false
-	}
-	textStart := start + 1
-	closeBracket := strings.IndexByte(s[textStart:], ']')
-	if closeBracket < 0 {
-		return 0, "", "", false
-	}
-	text = s[textStart : textStart+closeBracket]
-	after := textStart + closeBracket + 1
-	if after >= len(s) || s[after] != '(' {
-		return 0, "", "", false
-	}
-	hrefStart := after + 1
-	closeParen := strings.IndexByte(s[hrefStart:], ')')
-	if closeParen < 0 {
-		return 0, "", "", false
-	}
-	return hrefStart + closeParen + 1, text, s[hrefStart : hrefStart+closeParen], true
-}
-
-// embedSizeFromSrc parses ?w= and ?h= query parameters out of an embed src
-// URL. Returns (0, 0) if either is missing — the renderer falls back to
-// its own default in that case.
+// embedSizeFromSrc parses ?w= and ?h= out of an embed src URL. Returns (0, 0)
+// if either is missing — the layout falls back to its default size.
 func embedSizeFromSrc(src string) (int, int) {
 	_, query, ok := strings.Cut(src, "?")
 	if !ok {
@@ -369,71 +117,4 @@ func atoiSafe(s string) int {
 		}
 	}
 	return n
-}
-
-// Wrap takes a block's spans and wraps them into lines of at most maxWidth
-// pixels. measure returns the rendered pixel width of a given span (the
-// callback may inspect Text, Style, Src, W/H to compute it).
-//
-// Wrap is deliberately byte-greedy on word boundaries; CJK and emoji are
-// not considered in v1. Trailing whitespace is preserved within a wrapped
-// line; leading whitespace on continuation lines is trimmed. Embed spans
-// (StyleEmbed) are atomic — they're never split into sub-tokens.
-func Wrap(spans []Span, maxWidth float64, measure func(sp Span) float64) [][]Span {
-	// Tokenize text spans on whitespace boundaries while preserving span
-	// style. Each text-token is a "run of non-space" or "single space".
-	// Embed spans pass through as a single atomic token.
-	var tokens []Span
-	for _, sp := range spans {
-		// Embeds and links are atomic tokens — the wrapper never splits
-		// a [text](href) mid-link, matching CommonMark's behavior and
-		// making the rendered preview embed (when the link is intercepted)
-		// not get sliced across lines.
-		if sp.Style&StyleEmbed != 0 || (sp.Style&StyleLink != 0 && sp.Href != "") {
-			tokens = append(tokens, sp)
-			continue
-		}
-		i := 0
-		for i < len(sp.Text) {
-			j := i
-			if sp.Text[i] == ' ' || sp.Text[i] == '\t' {
-				for j < len(sp.Text) && (sp.Text[j] == ' ' || sp.Text[j] == '\t') {
-					j++
-				}
-			} else {
-				for j < len(sp.Text) && sp.Text[j] != ' ' && sp.Text[j] != '\t' {
-					j++
-				}
-			}
-			tok := sp
-			tok.Text = sp.Text[i:j]
-			tokens = append(tokens, tok)
-			i = j
-		}
-	}
-
-	var lines [][]Span
-	var cur []Span
-	curWidth := 0.0
-	for _, tk := range tokens {
-		w := measure(tk)
-		isSpace := tk.Style&StyleEmbed == 0 && strings.TrimSpace(tk.Text) == ""
-		// If a non-space token would overflow and there's already content on
-		// the line, wrap before this token.
-		if !isSpace && curWidth+w > maxWidth && len(cur) > 0 {
-			lines = append(lines, cur)
-			cur = nil
-			curWidth = 0
-		}
-		// Skip leading whitespace at start of line.
-		if isSpace && len(cur) == 0 {
-			continue
-		}
-		cur = append(cur, tk)
-		curWidth += w
-	}
-	if len(cur) > 0 {
-		lines = append(lines, cur)
-	}
-	return lines
 }

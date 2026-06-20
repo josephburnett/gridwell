@@ -10,6 +10,20 @@ import (
 
 const testOrigin = "http://localhost:8080"
 
+// linkSpans collects every StyleLink span in a lowered document (depth-first).
+func linkSpans(n markdown.Node) []markdown.Span {
+	var out []markdown.Span
+	for _, sp := range n.Spans {
+		if sp.Style&markdown.StyleLink != 0 {
+			out = append(out, sp)
+		}
+	}
+	for _, c := range n.Children {
+		out = append(out, linkSpans(c)...)
+	}
+	return out
+}
+
 // TestDropRoundTripsThroughParser exercises the full chain a real drop
 // follows: build the markdown, insert into doc source, parse back, and
 // assert that the link href resolves to the right tile id. The plain
@@ -23,22 +37,11 @@ func TestDropRoundTripsThroughParser(t *testing.T) {
 	off := embed.LineEndOffset(doc, 0)
 	out := embed.Insert(doc, link, off)
 
-	blocks := markdown.Parse(out)
-	var linkSpan *markdown.Span
-	for _, b := range blocks {
-		for i := range b.Spans {
-			if b.Spans[i].Style&markdown.StyleLink != 0 {
-				linkSpan = &b.Spans[i]
-				break
-			}
-		}
-		if linkSpan != nil {
-			break
-		}
-	}
-	if linkSpan == nil {
+	spans := linkSpans(markdown.Lower([]byte(out)))
+	if len(spans) == 0 {
 		t.Fatalf("no link span found after round-trip; src=%q", out)
 	}
+	linkSpan := &spans[0]
 
 	if got := embed.LeafTileIDFromHref(linkSpan.Href); got != 5 {
 		t.Errorf("href %q resolved to id %d, want 5", linkSpan.Href, got)
@@ -76,16 +79,7 @@ func TestDropOnDocWithExistingLink(t *testing.T) {
 
 	out := embed.Insert(doc, link, len(doc))
 
-	blocks := markdown.Parse(out)
-	links := 0
-	for _, b := range blocks {
-		for _, sp := range b.Spans {
-			if sp.Style&markdown.StyleLink != 0 {
-				links++
-			}
-		}
-	}
-	if links != 2 {
+	if links := len(linkSpans(markdown.Lower([]byte(out)))); links != 2 {
 		t.Errorf("expected 2 link spans, got %d; out=%q", links, out)
 	}
 }

@@ -19,7 +19,8 @@ const (
 	ColorLink
 	ColorMuted // blockquote text, list markers
 	ColorRuleLine
-	ColorCodeBg
+	ColorCodeBg       // code block panel
+	ColorInlineCodeBg // inline `code` chip (lighter than the block panel)
 	ColorQuoteBar
 	ColorTableHeaderBg
 	ColorTableGrid

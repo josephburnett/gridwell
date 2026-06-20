@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -149,6 +150,12 @@ type App struct {
 	// shell tile previews. Keyed by tile id; auto-invalidates when a
 	// tile's PreviewBlobID changes server-side — see client/preview.
 	urlPreview *preview.Cache
+
+	// mdCache memoizes markdown layout (parse → lower → layout) keyed by
+	// content hash + content width, so a frame doesn't re-lay-out every
+	// visible text tile. Positions are logical; the painter scales them, so a
+	// cached layout is valid across zoom levels. See layoutMarkdown.
+	mdCache map[mdCacheKey]markdown.LayoutResult
 
 	// urlStreams holds the live native WebContentsView handle for each
 	// pane descended into a live URL tile. One per pane id; multiple panes

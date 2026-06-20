@@ -189,19 +189,27 @@ func (w *layoutWriter) inline(spans []Span, x, y, avail, fontPx float64, color C
 		cx := x
 		for _, tk := range line {
 			if tk.atomic {
-				w.ops = append(w.ops, DrawOp{Kind: OpEmbed, X: cx, Y: y, W: tk.width, H: tk.height,
-					Href: tk.span.Href, Src: tk.span.Src, Alt: tk.span.Alt})
-			} else {
-				col := color
-				if tk.span.Style&StyleLink != 0 {
-					col = ColorLink
-				} else if tk.span.Style&StyleCode != 0 {
-					col = ColorCode
+				alt := tk.span.Alt
+				if alt == "" {
+					alt = tk.span.Text
 				}
-				w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: y, Text: tk.span.Text,
-					FontPx: fontPx, Style: tk.span.Style, Mono: mono || tk.span.Style&StyleCode != 0,
-					Color: col, Href: tk.span.Href})
+				w.ops = append(w.ops, DrawOp{Kind: OpEmbed, X: cx, Y: y, W: tk.width, H: tk.height,
+					Href: tk.span.Href, Src: tk.span.Src, Alt: alt})
+				cx += tk.width
+				continue
 			}
+			col := color
+			if tk.span.Style&StyleLink != 0 {
+				col = ColorLink
+			} else if tk.span.Style&StyleCode != 0 {
+				col = ColorCode
+				// Inline code gets its own background chip (a code block's
+				// panel is drawn separately by codeBlock()).
+				w.ops = append(w.ops, DrawOp{Kind: OpRect, X: cx - 2, Y: y, W: tk.width + 4, H: h, Color: ColorInlineCodeBg})
+			}
+			w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: y, Text: tk.span.Text,
+				FontPx: fontPx, Style: tk.span.Style, Mono: mono || tk.span.Style&StyleCode != 0,
+				Color: col, Href: tk.span.Href})
 			cx += tk.width
 		}
 		y += h
@@ -243,6 +251,15 @@ func (w *layoutWriter) tokenize(spans []Span, fontPx float64, mono bool) []inlin
 	var toks []inlineToken
 	for _, sp := range spans {
 		if w.isEmbed != nil && w.isEmbed(sp) {
+			// Coalesce consecutive embed spans that share the same non-empty
+			// href into one embed: a tile link whose text is several inline
+			// spans (e.g. "[a **b**](/5)") is ONE embed, not several.
+			if sp.Href != "" && len(toks) > 0 {
+				if last := &toks[len(toks)-1]; last.atomic && last.span.Href == sp.Href {
+					last.span.Text += sp.Text
+					continue
+				}
+			}
 			ew, eh := w.embedSize(sp)
 			toks = append(toks, inlineToken{span: sp, width: ew, height: eh, atomic: true})
 			continue
