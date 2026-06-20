@@ -741,8 +741,34 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	a.canvas.Get("style").Set("cursor", "")
 	sx, sy = mouseXY(args[0], a.canvas)
 
-	// Bare click (no movement): navigation.
-	if !d.started {
+	// Snapshot every world-read the drop decision needs, ONCE, using the
+	// local d (a.dragging is already nil above). DecideDrop then picks the
+	// action and the switch executes side effects. onMouseMove builds the
+	// same DropInput for the ghost preview, so preview and commit cannot
+	// diverge — that divergence was the trashcan-delete regression.
+	in := dragdrop.DropInput{
+		Started:    d.started,
+		IsTemplate: d.isTemplate,
+		Clone:      d.clone, // always false here — clone commits via the right path above
+		TileID:     d.tileID,
+		OverDelete: a.overDeleteButton(d, sx, sy),
+	}
+	docTarget, overDoc := a.docDropTargetAt(sx, sy)
+	in.OverDoc = overDoc
+	in.DocReject = a.docRejectAt(sx, sy)
+	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
+	in.HasTarget = haveT
+	var dropX, dropY int64
+	if haveT {
+		in.Forbidden = a.dropForbiddenForMove(d, t)
+		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
+		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
+		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+	}
+
+	switch dragdrop.DecideDrop(in) {
+	case dragdrop.DropNavigate:
+		// Bare click (no movement): navigation.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {
 			a.draw()
@@ -766,80 +792,47 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.draw()
 		a.scheduleURLUpdate()
 		return nil
-	}
 
-	// Template-drag drop: turn the synthetic ghost into a real node by
-	// asking the server to create it at the snapped cell.
-	if d.isTemplate {
+	case dragdrop.DropCreateTemplate:
+		// Template-drag drop: turn the synthetic ghost into a real node by
+		// asking the server to create it at the snapped cell.
 		a.commitTemplateDrop(d, sx, sy)
 		return nil
-	}
 
-	// Pan drag end: just persist viewport state.
-	if d.tileID == 0 {
+	case dragdrop.DropPanEnd:
+		// Pan drag end: just persist viewport state.
 		a.scheduleURLUpdate()
 		a.scheduleRootViewSave()
 		a.draw()
 		return nil
-	}
 
-	// Delete: dropping the dragged tile on its source pane's corner button
-	// (shown as a trashcan during a drag) deletes it — "drag it back to the
-	// menu it came from". Resolved against the source pane's button, not the
-	// grid under the cursor, so it works wherever that button sits.
-	if a.overDeleteButton(d, sx, sy) {
+	case dragdrop.DropDelete:
+		// Dropping the dragged tile on its source pane's corner button
+		// (shown as a trashcan during a drag) deletes it — "drag it back to
+		// the menu it came from". Resolved against the source pane's button,
+		// not the grid under the cursor, so it works wherever that button sits.
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
 		return nil
-	}
 
-	// Doc drop: dropping a tile onto a raw-mode text descent inserts a
-	// markdown reference rather than moving the source. The doc isn't a
-	// placement medium, so left-drag auto-promotes to "leave source" —
-	// same outcome as right-drag, no tile orphaned.
-	if dt, ok := a.docDropTargetAt(sx, sy); ok {
-		a.commitEmbedDrop(d, dt)
+	case dragdrop.DropEmbed:
+		// Dropping a tile onto a raw-mode text descent inserts a markdown
+		// reference rather than moving the source. The doc isn't a placement
+		// medium, so left-drag auto-promotes to "leave source" — same outcome
+		// as right-drag, no tile orphaned.
+		a.commitEmbedDrop(d, docTarget)
+		a.cancelDragSnapBack(d)
+		return nil
+
+	case dragdrop.DropRejected:
+		// Read-only doc, no target, forbidden cross-grid move, same cell, or
+		// occupied — snap back without a doomed round-trip to the server.
 		a.cancelDragSnapBack(d)
 		return nil
 	}
 
-	// Node move/clone drag. Resolve the drop target — may be the
-	// destination pane's parent grid or, when the cursor is on an open
-	// well, the well's child grid.
-	t, ok := a.dropTargetAt(sx, sy, d.tileID)
-	if !ok {
-		a.cancelDragSnapBack(d)
-		return nil
-	}
-
-	// Forbidden move (e.g. source-grid → regular grid): the mousemove
-	// path already flagged it and showed the no-entry sign, so on
-	// release just snap back without making the round-trip to a server
-	// rejection.
-	if a.dropForbiddenForMove(d, t) {
-		a.cancelDragSnapBack(d)
-		return nil
-	}
-
-	dropX, dropY := t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
-
-	// Same-cell-as-source short-circuit: drop where it already is →
-	// no RPC, just snap back to origin (which is the same place).
-	if t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y {
-		a.cancelDragSnapBack(d)
-		return nil
-	}
-
-	// Overlap check in the target grid. nodeAtCellInGrid scans the
-	// cached grid; the server enforces the same rule authoritatively
-	// at commit time.
-	if a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil {
-		a.cancelDragSnapBack(d)
-		return nil
-	}
-
-	// Animate ghost to the snapped cell in the target grid's coords.
+	// DropMove: animate ghost to the snapped cell in the target grid's coords.
 	targetX := t.originX + float64(dropX)*t.cellSize
 	targetY := t.originY + float64(dropY)*t.cellSize
 	if a.ghost != nil {
