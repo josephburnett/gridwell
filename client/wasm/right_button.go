@@ -716,17 +716,16 @@ type leftResizeState struct {
 // resize band of pane p that has a divider on that side. Returns true if a
 // resize was armed (caller should stop interpreting the click).
 func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	// The corner circle (bottom-right) can overlap a resize band when the
-	// pane has a sibling; its left-click action always wins.
-	if pointInPlus(r, sx, sy) {
-		return false
-	}
 	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
-	if !region.IsResize() {
-		return false
+	var d *pane.Divider
+	if region.IsResize() {
+		d = a.dividerOnSide(p, region.Side())
 	}
-	d := a.dividerOnSide(p, region.Side())
-	if d == nil {
+	// gesture.ResizeAffordance owns the gating (corner-circle beats band beats
+	// missing divider); dividerResizeCursor shares it so the hover cursor can't
+	// disagree with where a drag actually arms. When arm is true, d is non-nil.
+	arm, _ := gesture.ResizeAffordance(pointInPlus(r, sx, sy), region, d != nil)
+	if !arm {
 		return false
 	}
 	a.leftResize = &leftResizeState{
@@ -746,19 +745,14 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 // cursor is what makes that otherwise-invisible band discoverable.
 func (a *App) dividerResizeCursor(sx, sy float64) string {
 	p, r, ok := a.paneAtScreen(sx, sy)
-	if !ok || pointInPlus(r, sx, sy) {
+	if !ok {
 		return ""
 	}
 	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
-	if !region.IsResize() || a.dividerOnSide(p, region.Side()) == nil {
-		return ""
-	}
-	switch region {
-	case pane.RegionResizeLeft, pane.RegionResizeRight:
-		return "ew-resize"
-	default: // RegionResizeTop, RegionResizeBottom
-		return "ns-resize"
-	}
+	hasDivider := region.IsResize() && a.dividerOnSide(p, region.Side()) != nil
+	// Same gating as armLeftResize, via the shared gesture.ResizeAffordance.
+	_, cursor := gesture.ResizeAffordance(pointInPlus(r, sx, sy), region, hasDivider)
+	return cursor
 }
 
 // onLeftResizeMove applies the live divider ratio for the in-flight

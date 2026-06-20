@@ -160,3 +160,26 @@ func ResizeOutcome(container pane.Rect, dir pane.Direction, sx, sy, closeThresho
 	}
 	return ratio, CollapseNone
 }
+
+// ResizeAffordance is the shared decision behind a left-button pane-boundary
+// resize: whether a drag would arm a resize at the cursor, and the CSS cursor
+// to advertise it. The hover-cursor path and the arm path MUST agree — the
+// resize cursor has to appear exactly where a left-drag would actually resize
+// — so both route through this one function instead of each re-deriving the
+// gating (the two used to be hand-mirrored copies that could drift).
+//
+// Inputs: inPlus (cursor over the corner circle, whose left-click always
+// wins), the region the cursor classifies into, and whether a grabbable
+// divider exists on that region's side. Precedence: corner circle beats the
+// resize band beats a missing divider.
+func ResizeAffordance(inPlus bool, region pane.Region, hasDivider bool) (arm bool, cursor string) {
+	if inPlus || !region.IsResize() || !hasDivider {
+		return false, ""
+	}
+	switch region {
+	case pane.RegionResizeLeft, pane.RegionResizeRight:
+		return true, "ew-resize"
+	default: // RegionResizeTop, RegionResizeBottom
+		return true, "ns-resize"
+	}
+}

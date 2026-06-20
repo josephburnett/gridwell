@@ -175,3 +175,30 @@ func TestResizeOutcome(t *testing.T) {
 		})
 	}
 }
+
+func TestResizeAffordance(t *testing.T) {
+	cases := []struct {
+		name       string
+		inPlus     bool
+		region     pane.Region
+		hasDivider bool
+		wantArm    bool
+		wantCursor string
+	}{
+		{"left band with divider -> ew", false, pane.RegionResizeLeft, true, true, "ew-resize"},
+		{"right band with divider -> ew", false, pane.RegionResizeRight, true, true, "ew-resize"},
+		{"top band with divider -> ns", false, pane.RegionResizeTop, true, true, "ns-resize"},
+		{"bottom band with divider -> ns", false, pane.RegionResizeBottom, true, true, "ns-resize"},
+		{"corner circle wins over a resizable band", true, pane.RegionResizeLeft, true, false, ""},
+		{"resize band but no divider on that side", false, pane.RegionResizeTop, false, false, ""},
+		{"not a resize region", false, pane.RegionNone, true, false, ""},
+		{"non-resize region ignores hasDivider", false, pane.RegionNone, true, false, ""},
+	}
+	for _, c := range cases {
+		arm, cursor := ResizeAffordance(c.inPlus, c.region, c.hasDivider)
+		if arm != c.wantArm || cursor != c.wantCursor {
+			t.Errorf("%s: ResizeAffordance(%v,%v,%v) = (%v,%q), want (%v,%q)",
+				c.name, c.inPlus, c.region, c.hasDivider, arm, cursor, c.wantArm, c.wantCursor)
+		}
+	}
+}
