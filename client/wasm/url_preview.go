@@ -41,65 +41,20 @@ func drawImageCoverCentered(c js.Value, img js.Value, x, y, w, h float64) {
 func drawImageCover(c js.Value, img js.Value, x, y, w, h, panX, panY float64) {
 	iw := img.Get("naturalWidth").Float()
 	ih := img.Get("naturalHeight").Float()
-	if iw <= 0 || ih <= 0 || w <= 0 || h <= 0 {
+	// Cover source-rect + pan is the pure preview.CoverSrcRect; a degenerate
+	// image/dest falls back to a stretch draw.
+	sx, sy, sw, sh, ok := preview.CoverSrcRect(iw, ih, w, h, panX, panY)
+	if !ok {
 		c.Call("drawImage", img, x, y, w, h)
 		return
 	}
-	destAR := w / h
-	imgAR := iw / ih
-	var sw, sh float64
-	if imgAR > destAR {
-		sh = ih
-		sw = ih * destAR
-	} else {
-		sw = iw
-		sh = iw / destAR
-	}
-	// Center offset, then shift by pan (converted from dest-px to src-px).
-	scale := sw / w // dest-px to source-px ratio
-	sx := (iw-sw)/2 + panX*scale
-	sy := (ih-sh)/2 + panY*scale
 	c.Call("drawImage", img, sx, sy, sw, sh, x, y, w, h)
 }
 
-// clampURLPan returns (panX, panY) clamped so the image at cover scale
-// always fills the destination rect — i.e., pan cannot expose empty
-// space beyond the image edges. iw/ih are the image's natural pixel
-// dimensions; w/h are the destination rect dimensions.
+// clampURLPan clamps the frozen-descent pan so the cover-scaled image always
+// fills the destination rect. Thin wrapper over the tested preview.ClampPan.
 func clampURLPan(panX, panY, iw, ih, w, h float64) (float64, float64) {
-	if iw <= 0 || ih <= 0 || w <= 0 || h <= 0 {
-		return 0, 0
-	}
-	destAR := w / h
-	imgAR := iw / ih
-	var sw, sh float64
-	if imgAR > destAR {
-		sh = ih
-		sw = ih * destAR
-	} else {
-		sw = iw
-		sh = iw / destAR
-	}
-	// scale: how many source-px per dest-px
-	scale := sw / w
-	// Maximum pan in dest-px so we don't go past the image edges.
-	// The center crop uses (iw-sw)/2 source px on each side, which is
-	// (iw-sw)/(2*scale) dest-px of overflow available.
-	maxPanX := (iw - sw) / (2 * scale)
-	maxPanY := (ih - sh) / (2 * scale)
-	if panX < -maxPanX {
-		panX = -maxPanX
-	}
-	if panX > maxPanX {
-		panX = maxPanX
-	}
-	if panY < -maxPanY {
-		panY = -maxPanY
-	}
-	if panY > maxPanY {
-		panY = maxPanY
-	}
-	return panX, panY
+	return preview.ClampPan(panX, panY, iw, ih, w, h)
 }
 
 // drawURLTileInPane renders a URL tile that's currently the pane's
