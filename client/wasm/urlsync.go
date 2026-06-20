@@ -9,6 +9,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
+	"github.com/josephburnett/gridwell/client/urlwalk"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -168,41 +169,27 @@ func (a *App) applyURLOnBoot() {
 		return
 	}
 
-	// Walk the path, fetching each grid as we go. An id that's not
-	// in the current grid is skipped (we stay put and try the next id).
-	// A non-leaf file ends the descent — we stop with what we've got.
-	gid := rootID
-	resolvedPath := []int64{}
-	var fileTileID int64
-walk:
-	for i, id := range state.TileIDs {
-		isLast := i == len(state.TileIDs)-1
-		// Ensure the current grid is cached (synchronously is impossible
-		// — we have to fetch and wait).
-		if _, ok := a.c.Grid(gid); !ok {
-			if !a.fetchGridSync(gid) {
-				break walk
+	// Walk the path, fetching each grid as we go (the lookup closure does
+	// the cache-or-fetch). The pure walk skips ids missing from the current
+	// grid, descends at well boundaries, and stops at a content leaf.
+	resolvedPath, fileTileID := urlwalk.Walk(rootID, state.TileIDs,
+		func(gid int64) (map[int64]urlwalk.Tile, bool) {
+			if _, ok := a.c.Grid(gid); !ok {
+				if !a.fetchGridSync(gid) {
+					return nil, false
+				}
 			}
-		}
-		g, _ := a.c.Grid(gid)
-		n, ok := g.Tiles[id]
-		if !ok {
-			// Skip unknown id — it might be a stale or bogus entry.
-			// Keep the current grid and continue with the next id.
-			continue
-		}
-		switch {
-		case rpc.IsWellKind(n.Kind):
-			resolvedPath = append(resolvedPath, id)
-			gid = n.ChildGridID
-		case rpc.IsContentDescentKind(n.Kind):
-			if !isLast {
-				// Content tile mid-path is nonsense; ignore and keep walking.
-				continue
+			g, _ := a.c.Grid(gid)
+			tiles := make(map[int64]urlwalk.Tile, len(g.Tiles))
+			for id, n := range g.Tiles {
+				tiles[id] = urlwalk.Tile{
+					ChildGridID: n.ChildGridID,
+					IsWell:      rpc.IsWellKind(n.Kind),
+					IsContent:   rpc.IsContentDescentKind(n.Kind),
+				}
 			}
-			fileTileID = id
-		}
-	}
+			return tiles, true
+		})
 
 	p := a.tree.FocusedPane()
 	if p == nil {
