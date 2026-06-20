@@ -104,17 +104,12 @@ func (a *App) ensureFileTextarea() {
 	style.Set("boxSizing", "border-box")
 	// Metrics mirror the canvas painter (drawMarkdownText) exactly so the
 	// raw text doesn't reflow when focus enters/leaves the pane: same font
-	// size (codePx), same line-height (rawTextLineHeight), same inset
-	// (pad). The top inset is shrunk by the textarea's half-leading — a
-	// line box centers its glyph, while the canvas top-aligns it — so the
-	// first line's glyphs land on the same pixel in both. (Left/right/bottom
-	// take the full pad; only the vertical glyph origin carries leading.)
+	// size (codePx), same line-height (rawTextLineHeight), same symmetric
+	// inset (pad). The painter replicates this line box's baseline placement
+	// from real font metrics rather than the other way round, so the inset
+	// here stays plain and uniform.
 	mst := defaultMarkdownStyle()
-	halfLeading := (rawTextLineHeight - 1) * mst.codePx / 2
-	style.Set("paddingTop", strconv.FormatFloat(mst.pad-halfLeading, 'f', 3, 64)+"px")
-	style.Set("paddingRight", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
-	style.Set("paddingBottom", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
-	style.Set("paddingLeft", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
+	style.Set("padding", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
 	style.Set("margin", "0")
 	style.Set("resize", "none")
 	style.Set("fontFamily", mst.monospace)

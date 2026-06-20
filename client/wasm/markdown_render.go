@@ -476,15 +476,26 @@ func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY
 	fontPx := st.codePx
 	lineHeight := fontPx * rawTextLineHeight
 	setFont(c, fontPx*scale, st.monospace, false, false)
-	c.Set("textBaseline", "top")
 	c.Set("fillStyle", st.textColor)
-	lines := strings.Split(src, "\n")
-	cursorY := st.pad - scrollY
-	for _, ln := range lines {
-		yPx := cursorY * scale
-		if yPx+lineHeight*scale > 0 && yPx < h {
-			c.Call("fillText", ln, x+st.pad*scale, y+yPx)
+	// Place each line's baseline exactly where a CSS line box would, so this
+	// matches the editing <textarea> (file_overlay.go) to the pixel and the
+	// raw text doesn't shift when focus enters or leaves the pane. A line box
+	// is lineHeight tall; the font's content area (fontBoundingBox asc+desc,
+	// for whatever font Chromium actually resolved) is centered in it with
+	// equal leading top and bottom, and the alphabetic baseline sits one
+	// ascent below the content-area top. measureText reports asc/desc in the
+	// current (already-scaled) font, so the slot height is scaled to match.
+	c.Set("textBaseline", "alphabetic")
+	m := c.Call("measureText", "M")
+	asc := m.Get("fontBoundingBoxAscent").Float()
+	desc := m.Get("fontBoundingBoxDescent").Float()
+	slot := lineHeight * scale
+	baseline := (slot-(asc+desc))/2 + asc // baseline offset from a slot's top
+	slotTop := (st.pad - scrollY) * scale
+	for ln := range strings.SplitSeq(src, "\n") {
+		if slotTop+slot > 0 && slotTop < h {
+			c.Call("fillText", ln, x+st.pad*scale, y+slotTop+baseline)
 		}
-		cursorY += lineHeight
+		slotTop += slot
 	}
 }
