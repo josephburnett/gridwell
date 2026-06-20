@@ -64,6 +64,41 @@ func TextState(path []int64, textFocusTileID int64, isTextMode bool, col, row in
 	return s
 }
 
+// BootView is how the root pane should be framed at boot — the result of
+// BootViewport. Apply is false when nothing should change (keep the
+// bootstrap default). SetZoom distinguishes "write this zoom" from "leave
+// the pane's current zoom" (a URL can carry an X/Y pan without a zoom).
+type BootView struct {
+	Apply   bool
+	Cx, Cy  float64
+	SetZoom bool
+	Zoom    float64
+}
+
+// BootViewport resolves the root pane's framing when the app opens with no
+// descent path, by this precedence — getting it wrong silently re-frames a
+// pane the user didn't touch (a "things stay where you put them" violation):
+//
+//   - URL viewport present (any of urlX/urlY/urlZoom non-zero): it wins.
+//     Cx/Cy always apply; Zoom applies only when urlZoom>0 (a pan-only URL
+//     keeps the pane's existing zoom).
+//   - else the stored root view, if it has a positive zoom: apply all three.
+//   - else: nothing — keep the bootstrap-supplied default (Apply=false).
+func BootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) BootView {
+	if urlX != 0 || urlY != 0 || urlZoom != 0 {
+		v := BootView{Apply: true, Cx: urlX, Cy: urlY}
+		if urlZoom > 0 {
+			v.SetZoom = true
+			v.Zoom = urlZoom
+		}
+		return v
+	}
+	if rootZoom > 0 {
+		return BootView{Apply: true, Cx: rootCx, Cy: rootCy, SetZoom: true, Zoom: rootZoom}
+	}
+	return BootView{}
+}
+
 // GridState builds the State for a grid (or rendered-file) descent: the
 // descent path as the tile ids and the pane viewport (center + zoom).
 // path is cloned.

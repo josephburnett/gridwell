@@ -143,17 +143,16 @@ func (a *App) applyURLOnBoot() {
 		a.fetchGridSync(rootID)
 		p := a.tree.FocusedPane()
 		if p != nil {
-			if state.X != 0 || state.Y != 0 || state.Zoom != 0 {
-				// URL viewport wins over the bootstrap-supplied root view.
-				p.Cx = state.X
-				p.Cy = state.Y
-				if state.Zoom > 0 {
-					p.Zoom = state.Zoom
+			// Precedence (URL viewport > stored root view > bootstrap default)
+			// is the pure url.BootViewport — re-framing the root pane the user
+			// didn't touch would violate "things stay where you put them".
+			if bv := url.BootViewport(state.X, state.Y, state.Zoom,
+				a.rootViewCx, a.rootViewCy, a.rootViewZoom); bv.Apply {
+				p.Cx = bv.Cx
+				p.Cy = bv.Cy
+				if bv.SetZoom {
+					p.Zoom = bv.Zoom
 				}
-			} else if a.rootViewZoom > 0 {
-				p.Cx = a.rootViewCx
-				p.Cy = a.rootViewCy
-				p.Zoom = a.rootViewZoom
 			}
 		}
 		a.draw()

@@ -287,3 +287,30 @@ func TestGridStateClonesPath(t *testing.T) {
 		t.Errorf("GridState retained/aliased caller path: %v", path)
 	}
 }
+
+func TestBootViewport(t *testing.T) {
+	cases := []struct {
+		name                         string
+		ux, uy, uz                   float64
+		rx, ry, rz                   float64
+		want                         BootView
+	}{
+		{"url viewport with zoom wins", 5, -3, 1.5, 9, 9, 2,
+			BootView{Apply: true, Cx: 5, Cy: -3, SetZoom: true, Zoom: 1.5}},
+		{"url pan only (no zoom) keeps pane zoom", 5, -3, 0, 9, 9, 2,
+			BootView{Apply: true, Cx: 5, Cy: -3, SetZoom: false}},
+		{"url zoom only (x,y zero) still applies", 0, 0, 1.5, 9, 9, 2,
+			BootView{Apply: true, Cx: 0, Cy: 0, SetZoom: true, Zoom: 1.5}},
+		{"no url -> stored root view", 0, 0, 0, 9, 8, 2,
+			BootView{Apply: true, Cx: 9, Cy: 8, SetZoom: true, Zoom: 2}},
+		{"no url, no stored zoom -> nothing", 0, 0, 0, 9, 8, 0,
+			BootView{}},
+		{"url negative zoom ignored as zoom, but x/y still apply", 4, 0, -1, 9, 8, 2,
+			BootView{Apply: true, Cx: 4, Cy: 0, SetZoom: false}},
+	}
+	for _, c := range cases {
+		if got := BootViewport(c.ux, c.uy, c.uz, c.rx, c.ry, c.rz); got != c.want {
+			t.Errorf("%s: BootViewport = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
