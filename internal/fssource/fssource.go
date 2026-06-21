@@ -100,6 +100,20 @@ func entryFromFileInfo(dir string, info os.FileInfo) Entry {
 	return e
 }
 
+// Stat builds an Entry for a single path — the single-item counterpart to
+// Read, used by the fs source's ReadBlob to regenerate a file tile's
+// metadata body lazily (after List handed back only a hash). Symlink and
+// kind handling match Read exactly so a path listed by Read and stat'd
+// here project identically.
+func Stat(path string) (Entry, error) {
+	path = filepath.Clean(path)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return Entry{}, fmt.Errorf("lstat %s: %w", path, err)
+	}
+	return entryFromFileInfo(filepath.Dir(path), info), nil
+}
+
 // MetadataMarkdown returns a small markdown blob describing one Entry —
 // used as the descent body for file tiles in V1, where actual file
 // content rendering is deferred. The output is deterministic so the
