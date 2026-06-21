@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/source"
 )
 
@@ -148,6 +149,89 @@ func TestReadBlobInfo(t *testing.T) {
 	}
 	if got := hashHex(body); got != wantHash {
 		t.Errorf("ReadBlob hash != List hash; dedup would break")
+	}
+}
+
+func TestDisplayName(t *testing.T) {
+	cases := []struct {
+		info procsource.Info
+		want string
+	}{
+		{procsource.Info{PID: 200, Name: "bash"}, "bash"},
+		{procsource.Info{PID: 300, Name: "", CmdLine: "/usr/bin/firefox --new-instance"}, "firefox"},
+		{procsource.Info{PID: 1, Name: "init", CmdLine: "/sbin/init"}, "init"},
+		{procsource.Info{PID: 4242}, "pid 4242"},
+		{procsource.Info{PID: 4243, Name: "", CmdLine: "/ /"}, "pid 4243"},
+		{procsource.Info{PID: 4244, Name: "", CmdLine: " "}, "pid 4244"},
+		{procsource.Info{PID: 4245, Name: "", CmdLine: "\t\n"}, "pid 4245"},
+	}
+	for _, c := range cases {
+		if got := displayName(c.info); got != c.want {
+			t.Errorf("displayName(%+v) = %q, want %q", c.info, got, c.want)
+		}
+	}
+}
+
+// TestListAuthoritativeWhenParentGone: when the parent process is definitively
+// absent from /proc, List must return an authoritative-empty listing so the
+// host sweeps all tiles — including reparented children that are still running.
+func TestListAuthoritativeWhenParentGone(t *testing.T) {
+	root := t.TempDir()
+	writeProc(t, root, 100, 1, "parent", "")
+	writeProc(t, root, 200, 100, "child", "")
+	s := New(root, &recordKiller{})
+	ctx := context.Background()
+
+	// First listing: normal non-authoritative with @info + child.
+	lst, err := s.List(ctx, "100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lst.Authoritative {
+		t.Error("normal listing should be non-authoritative")
+	}
+	if len(lst.Nodes) != 2 {
+		t.Fatalf("want 2 nodes, got %d", len(lst.Nodes))
+	}
+
+	// Parent exits: remove its /proc directory.
+	if err := os.RemoveAll(filepath.Join(root, "100")); err != nil {
+		t.Fatal(err)
+	}
+
+	lst2, err := s.List(ctx, "100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lst2.Authoritative {
+		t.Error("listing after parent exit must be authoritative so host sweeps tiles")
+	}
+	if len(lst2.Nodes) != 0 {
+		t.Errorf("authoritative-gone listing must be empty, got %d nodes", len(lst2.Nodes))
+	}
+}
+
+// TestListPreservesWhenParentTransientlyUnreadable: if the parent's /proc
+// directory exists but its status file is unreadable (transient), the listing
+// must be non-authoritative so the host can probe and keep the @info tile.
+func TestListPreservesWhenParentTransientlyUnreadable(t *testing.T) {
+	root := t.TempDir()
+	writeProc(t, root, 100, 1, "parent", "")
+	writeProc(t, root, 200, 100, "child", "")
+	s := New(root, &recordKiller{})
+	ctx := context.Background()
+
+	// Remove status (dir still exists → not definitively gone).
+	if err := os.Remove(filepath.Join(root, "100", "status")); err != nil {
+		t.Fatal(err)
+	}
+
+	lst, err := s.List(ctx, "100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lst.Authoritative {
+		t.Error("transient failure listing must be non-authoritative so @info tile survives")
 	}
 }
 

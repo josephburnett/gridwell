@@ -9,8 +9,10 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/source"
+	fssrc "github.com/josephburnett/gridwell/internal/source/fs"
+	procsrc "github.com/josephburnett/gridwell/internal/source/proc"
 )
 
 // stubHostActor records calls — tests assert against it instead of
@@ -50,7 +52,9 @@ func (s *stubHostActor) Kill(pid int64, sig syscall.Signal) error {
 func TestDeleteFSFileTileRemovesFile(t *testing.T) {
 	s := newTestStore(t)
 	host := &stubHostActor{}
-	s.SetHostActor(host)
+	reg := source.NewRegistry()
+	reg.Register(fssrc.New(host))
+	s.setRegistry(reg)
 	root := rootID(t, s)
 	ctx := context.Background()
 
@@ -87,7 +91,9 @@ func TestDeleteFSFileTileRemovesFile(t *testing.T) {
 func TestDeleteFSSubDirTileRemovesAll(t *testing.T) {
 	s := newTestStore(t)
 	host := &stubHostActor{}
-	s.SetHostActor(host)
+	reg := source.NewRegistry()
+	reg.Register(fssrc.New(host))
+	s.setRegistry(reg)
 	root := rootID(t, s)
 	ctx := context.Background()
 
@@ -123,7 +129,9 @@ func TestDeleteFSSubDirTileRemovesAll(t *testing.T) {
 func TestDeleteFSFileTileFailureKeepsRow(t *testing.T) {
 	s := newTestStore(t)
 	host := &stubHostActor{ReturnErr: os.ErrPermission}
-	s.SetHostActor(host)
+	reg := source.NewRegistry()
+	reg.Register(fssrc.New(host))
+	s.setRegistry(reg)
 	root := rootID(t, s)
 	ctx := context.Background()
 
@@ -149,15 +157,15 @@ func TestDeleteFSFileTileFailureKeepsRow(t *testing.T) {
 func TestDeleteProcessTileSendsSIGTERM(t *testing.T) {
 	s := newTestStore(t)
 	host := &stubHostActor{}
-	s.SetHostActor(host)
-	s.SetSourceReaders(nil, &stubProcReader{
-		children: map[int64][]procsource.Info{
-			1: {{PID: 42, PPID: 1, Name: "victim"}},
-		},
-		self: map[int64]procsource.Info{
-			1: {PID: 1, PPID: 0, Name: "init"},
-		},
-	}, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 42, 1, "victim", "")
+
+	reg := source.NewRegistry()
+	reg.Register(procsrc.New(procRoot, host))
+	s.setRegistry(reg)
+
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, _ := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
@@ -356,36 +364,5 @@ func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
 	if clone.SourceKey != "notes.md" {
 		t.Errorf("clone source_key = %q, want %q — client labeling depends on it",
 			clone.SourceKey, "notes.md")
-	}
-}
-
-func TestSourceDeletePath(t *testing.T) {
-	parent := &rpc.Grid{SourceKind: rpc.GridSourceFS, SourceID: "/etc"}
-	cases := []struct {
-		name string
-		tile rpc.Tile
-		want string
-	}{
-		{
-			name: "sub-file-well",
-			tile: rpc.Tile{Kind: rpc.KindFileWell, FSPath: "/etc/passwd.d", SourceKey: "passwd.d"},
-			want: "/etc/passwd.d",
-		},
-		{
-			name: "file tile",
-			tile: rpc.Tile{Kind: rpc.KindText, SourceKey: "motd"},
-			want: "/etc/motd",
-		},
-		{
-			name: "unrelated text tile (no source_key)",
-			tile: rpc.Tile{Kind: rpc.KindText},
-			want: "",
-		},
-	}
-	for _, c := range cases {
-		got := sourceDeletePath(parent, &c.tile)
-		if got != c.want {
-			t.Errorf("%s: sourceDeletePath = %q, want %q", c.name, got, c.want)
-		}
 	}
 }

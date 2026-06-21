@@ -3,11 +3,8 @@ package store
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/fssource"
-	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -414,10 +411,11 @@ func TestSetWellViewAcceptsAllWellKinds(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	s.SetSourceReaders(stubFSReaderEmpty{}, stubProcReaderEmpty{}, "/proc")
+	s.setRegistry(makeEmptyRegistry(t))
+	emptyDir := t.TempDir()
 
 	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/",
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: emptyDir,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -442,23 +440,6 @@ func TestSetWellViewAcceptsAllWellKinds(t *testing.T) {
 		}
 	}
 }
-
-// stubFSReaderEmpty / stubProcReaderEmpty stand in for the production
-// host readers in tests that just need source-grid creation to succeed
-// without producing any tiles.
-type stubFSReaderEmpty struct{}
-
-func (stubFSReaderEmpty) Read(string) ([]fssource.Entry, error)      { return nil, nil }
-func (stubFSReaderEmpty) MetadataMarkdown(fssource.Entry) string     { return "" }
-
-type stubProcReaderEmpty struct{}
-
-func (stubProcReaderEmpty) Children(string, int64) ([]procsource.Info, error) { return nil, nil }
-func (stubProcReaderEmpty) Get(string, int64) (procsource.Info, error) {
-	return procsource.Info{}, os.ErrNotExist
-}
-func (stubProcReaderEmpty) Exists(string, int64) (bool, error) { return false, nil }
-func (stubProcReaderEmpty) MetadataMarkdown(procsource.Info) string { return "" }
 
 func TestSetTextViewRejectsNonText(t *testing.T) {
 	s := newTestStore(t)

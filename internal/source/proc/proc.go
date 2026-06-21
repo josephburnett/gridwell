@@ -85,8 +85,12 @@ func (s *Source) Attach(_ context.Context, config map[string]string) (source.Att
 func (s *Source) Detach(context.Context, string) error { return nil }
 
 // List projects the @info node (the well's own metadata) plus one well per
-// direct child process. Non-authoritative: Children skips processes it
-// couldn't read, so absence here is not proof a child is gone.
+// direct child process. Normally non-authoritative (Children may skip
+// processes it couldn't read this pass, so absence is not proof of exit).
+// Exception: when the well's own process is definitively gone (directory
+// absent from /proc), the listing is authoritative-and-empty so the host
+// sweeps all tiles — including reparented children that are still running
+// but no longer belong to this well's subtree.
 func (s *Source) List(_ context.Context, sourceID string) (source.Listing, error) {
 	pid, err := strconv.ParseInt(sourceID, 10, 64)
 	if err != nil {
@@ -111,6 +115,16 @@ func (s *Source) List(_ context.Context, sourceID string) (source.Listing, error
 				Size:      int64(len(body)),
 			},
 		})
+	} else {
+		// Get failed. If the process is definitively gone return an
+		// authoritative empty listing so the host sweeps everything,
+		// including reparented children. A transient read failure
+		// (dir exists, status unreadable) falls through to a normal
+		// non-authoritative listing so tiles are preserved.
+		present, existsErr := procsource.Exists(s.procRoot, pid)
+		if existsErr == nil && !present {
+			return source.Listing{Authoritative: true}, nil
+		}
 	}
 
 	children, err := procsource.Children(s.procRoot, pid)

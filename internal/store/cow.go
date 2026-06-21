@@ -173,7 +173,13 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		}
 	case rpc.KindText:
 		if n.BlobID != 0 {
-			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
+			// Only reference the blob when it lives in the same schema as
+			// the destination. Cloning a source-grid (cache) text tile into
+			// the main grid would violate the FK if we reused the cache blob
+			// id — leave blob_id NULL so content is fetched on first open.
+			if schemaOf(n.BlobID) == schemaOf(gridID) {
+				blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
+			}
 		}
 		if n.TextMode != "" {
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
@@ -198,8 +204,14 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 	if err != nil {
 		return 0, err
 	}
-	if b := tileBlobRef(n.Kind, n.BlobID, n.PreviewBlobID); b != 0 {
-		if err := s.incBlobRefcount(ctx, tx, b); err != nil {
+	// Bump refcount for whatever blob the new row actually holds.
+	if blob.Valid {
+		if err := s.incBlobRefcount(ctx, tx, blob.Int64); err != nil {
+			return 0, err
+		}
+	}
+	if previewBlob.Valid {
+		if err := s.incBlobRefcount(ctx, tx, previewBlob.Int64); err != nil {
 			return 0, err
 		}
 	}

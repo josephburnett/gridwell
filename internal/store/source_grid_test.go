@@ -3,13 +3,16 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/source"
+	fssrc "github.com/josephburnett/gridwell/internal/source/fs"
+	procsrc "github.com/josephburnett/gridwell/internal/source/proc"
 )
 
 // TestFSGridReconcileFirstDescent confirms that the first GetGrid on a
@@ -199,24 +202,19 @@ func TestFSGridReconcileBlobDedupe(t *testing.T) {
 	}
 }
 
-// TestProcGridReconcile uses a stub procsource: GetGrid should produce
-// one process-well tile per child PID plus the "@info" tile for the
-// parent itself.
+// TestProcGridReconcile confirms that the first GetGrid on a fresh
+// proc-grid synthesizes one process-well tile per child PID plus the
+// "@info" text tile for the parent itself.
 func TestProcGridReconcile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	s.SetSourceReaders(nil, &stubProcReader{
-		children: map[int64][]procsource.Info{
-			1: {
-				{PID: 2, PPID: 1, Name: "kthreadd"},
-				{PID: 100, PPID: 1, Name: "bash", CmdLine: "/bin/bash"},
-			},
-		},
-		self: map[int64]procsource.Info{
-			1: {PID: 1, PPID: 0, Name: "init"},
-		},
-	}, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 2, 1, "kthreadd", "")
+	writeProc(t, procRoot, 100, 1, "bash", "/bin/bash")
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -269,15 +267,11 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	reader := &stubProcReader{
-		children: map[int64][]procsource.Info{
-			1: {{PID: 100, PPID: 1, Name: "bash"}},
-		},
-		self: map[int64]procsource.Info{
-			1: {PID: 1, PPID: 0, Name: "init"},
-		},
-	}
-	s.SetSourceReaders(nil, reader, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 100, 1, "bash", "")
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -288,8 +282,8 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
 		t.Fatal(err)
 	}
-	// Process renames itself in the meantime.
-	reader.children[1] = []procsource.Info{{PID: 100, PPID: 1, Name: "zsh"}}
+	// Process renames itself: overwrite status with name=zsh.
+	writeProc(t, procRoot, 100, 1, "zsh", "")
 
 	g, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
@@ -329,11 +323,11 @@ func TestProcGridReconcileSweepsWhenProcessesGone(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	reader := &stubProcReader{
-		children: map[int64][]procsource.Info{1: {{PID: 100, PPID: 1, Name: "bash"}}},
-		self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
-	}
-	s.SetSourceReaders(nil, reader, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 100, 1, "bash", "")
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -345,10 +339,11 @@ func TestProcGridReconcileSweepsWhenProcessesGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Whole subtree exits: not in self, not in children, and Exists (derived
-	// from self/children) reports both definitively gone.
-	delete(reader.self, 1)
-	reader.children[1] = nil
+	// Whole subtree exits: remove /proc/1 entirely. proc.Source.List returns
+	// authoritative-empty when Exists(1)=false, sweeping all tiles.
+	if err := os.RemoveAll(filepath.Join(procRoot, "1")); err != nil {
+		t.Fatal(err)
+	}
 
 	g, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
@@ -367,11 +362,11 @@ func TestProcGridReconcileSweepsReparentedChildrenWhenParentGone(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	reader := &stubProcReader{
-		children: map[int64][]procsource.Info{1: {{PID: 100, PPID: 1, Name: "daemon"}}},
-		self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
-	}
-	s.SetSourceReaders(nil, reader, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 100, 1, "daemon", "")
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -383,11 +378,12 @@ func TestProcGridReconcileSweepsReparentedChildrenWhenParentGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Parent (pid 1) exits; child 100 survives, reparented away from pid 1
-	// (so it's no longer in Children(1)), but still present in /proc.
-	delete(reader.self, 1)
-	reader.children[1] = nil
-	reader.exists = map[int64]bool{1: false, 100: true}
+	// Parent (pid 1) exits; child 100 survives reparented. Removing /proc/1
+	// makes List("1") return authoritative-empty, sweeping all tiles including
+	// "100" — even though /proc/100 still exists.
+	if err := os.RemoveAll(filepath.Join(procRoot, "1")); err != nil {
+		t.Fatal(err)
+	}
 
 	g, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
@@ -408,11 +404,11 @@ func TestProcGridReconcilePreservesInfoOnTransientReadError(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	reader := &stubProcReader{
-		children: map[int64][]procsource.Info{1: {{PID: 100, PPID: 1, Name: "bash"}}},
-		self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
-	}
-	s.SetSourceReaders(nil, reader, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 100, 1, "bash", "")
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -440,8 +436,12 @@ func TestProcGridReconcilePreservesInfoOnTransientReadError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Transient read failure: Get fails, but the process is still present.
-	reader.getErr = map[int64]error{1: os.ErrPermission}
+	// Transient read failure: remove status file while keeping /proc/1 dir.
+	// Get(1) fails; Exists(1) returns true → List is non-authoritative.
+	// @info is absent from listing but probe returns PresencePresent → kept.
+	if err := os.Remove(filepath.Join(procRoot, "1", "status")); err != nil {
+		t.Fatal(err)
+	}
 
 	g1, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
@@ -467,14 +467,12 @@ func TestProcGridReconcilePreservesChildOnTransientReadError(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	reader := &stubProcReader{
-		children: map[int64][]procsource.Info{1: {
-			{PID: 100, PPID: 1, Name: "bash"},
-			{PID: 200, PPID: 1, Name: "zsh"},
-		}},
-		self: map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
-	}
-	s.SetSourceReaders(nil, reader, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	writeProc(t, procRoot, 100, 1, "bash", "")
+	writeProc(t, procRoot, 200, 1, "zsh", "")
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -501,10 +499,12 @@ func TestProcGridReconcilePreservesChildOnTransientReadError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// pid 200 becomes unreadable this pass (dropped from Children) but is still
-	// present in /proc (Exists true for all three).
-	reader.children[1] = []procsource.Info{{PID: 100, PPID: 1, Name: "bash"}}
-	reader.exists = map[int64]bool{1: true, 100: true, 200: true}
+	// pid 200 becomes unreadable this pass: remove its status file (dir kept).
+	// Children(1) skips 200 (can't read status). Probe(200)→Exists→dir present
+	// → PresencePresent → tile 200 is preserved.
+	if err := os.Remove(filepath.Join(procRoot, "200", "status")); err != nil {
+		t.Fatal(err)
+	}
 
 	g1, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
@@ -533,12 +533,10 @@ func TestProcInfoBlobPopulatesAndRefreshes(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	reader := &stubProcReader{
-		self: map[int64]procsource.Info{
-			1: {PID: 1, PPID: 0, Name: "init", CmdLine: "/sbin/init", VmRSSKB: 1024},
-		},
-	}
-	s.SetSourceReaders(nil, reader, "/proc")
+
+	procRoot := t.TempDir()
+	writeProcFull(t, procRoot, 1, 0, "init", "/sbin/init", 1024)
+	s.setRegistry(makeProcRegistry(procRoot))
 
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
@@ -563,7 +561,7 @@ func TestProcInfoBlobPopulatesAndRefreshes(t *testing.T) {
 	}
 
 	// Process changes: memory grew, cmdline changed.
-	reader.self[1] = procsource.Info{PID: 1, PPID: 0, Name: "init", CmdLine: "/sbin/init --reload", VmRSSKB: 2048}
+	writeProcFull(t, procRoot, 1, 0, "init", "/sbin/init --reload", 2048)
 	g2, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
@@ -603,11 +601,11 @@ func TestUpdateTextRejectsSourceBacked(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	s.SetSourceReaders(nil, &stubProcReader{
-		self: map[int64]procsource.Info{
-			1: {PID: 1, PPID: 0, Name: "init"},
-		},
-	}, "/proc")
+
+	procRoot := t.TempDir()
+	writeProc(t, procRoot, 1, 0, "init", "")
+	s.setRegistry(makeProcRegistry(procRoot))
+
 	w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, PID: 1,
 	})
@@ -638,75 +636,49 @@ func findInfoTile(t *testing.T, tiles []rpc.Tile) rpc.Tile {
 	return rpc.Tile{}
 }
 
-// TestProcDisplayName covers the fallback ladder Name → cmdline basename
-// → "pid N". The PID fallback is what guarantees the client always sees
-// a usable label, even for processes with empty status/cmdline.
-func TestProcDisplayName(t *testing.T) {
-	cases := []struct {
-		info procsource.Info
-		want string
-	}{
-		{procsource.Info{PID: 200, Name: "bash"}, "bash"},
-		{procsource.Info{PID: 300, Name: "", CmdLine: "/usr/bin/firefox --new-instance"}, "firefox"},
-		{procsource.Info{PID: 1, Name: "init", CmdLine: "/sbin/init"}, "init"}, // Name wins over cmdline.
-		{procsource.Info{PID: 4242}, "pid 4242"},
-		{procsource.Info{PID: 4243, Name: "", CmdLine: "/ /"}, "pid 4243"}, // pathological cmdline → pid fallback.
-		{procsource.Info{PID: 4244, Name: "", CmdLine: " "}, "pid 4244"},   // all-whitespace cmdline must not panic on Fields[0].
-		{procsource.Info{PID: 4245, Name: "", CmdLine: "\t\n"}, "pid 4245"},
+// writeProc creates a stub /proc/<pid> entry (status + cmdline) so tests
+// don't depend on the host process table.
+func writeProc(t testing.TB, root string, pid, ppid int64, name, cmdline string) {
+	t.Helper()
+	writeProcFull(t, root, pid, ppid, name, cmdline, 0)
+}
+
+// writeProcFull is like writeProc but also writes a VmRSS line in status
+// when vmrssKB > 0.
+func writeProcFull(t testing.TB, root string, pid, ppid int64, name, cmdline string, vmrssKB int64) {
+	t.Helper()
+	dir := filepath.Join(root, fmt.Sprintf("%d", pid))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range cases {
-		if got := procDisplayName(c.info); got != c.want {
-			t.Errorf("procDisplayName(%+v) = %q, want %q", c.info, got, c.want)
-		}
+	status := fmt.Sprintf("Name:\t%s\nState:\tS (sleeping)\nPPid:\t%d\nUid:\t1000\t1000\t1000\t1000\nThreads:\t1\n", name, ppid)
+	if vmrssKB > 0 {
+		status += fmt.Sprintf("VmRSS:\t%d kB\n", vmrssKB)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := strings.ReplaceAll(cmdline, " ", "\x00")
+	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte(cmd), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
-// stubProcReader is the test stub satisfying ProcReader.
-//
-//   - getErr[pid], when set, forces Get to fail with that error (a
-//     transient/permission read failure that is NOT a "process gone" signal).
-//   - exists, when non-nil, is the authoritative presence map Exists reads;
-//     when nil, presence is derived from self / children (anything we have
-//     metadata for is present). This lets a test model "alive but unreadable"
-//     (Get fails / not in children, yet Exists reports present).
-type stubProcReader struct {
-	children map[int64][]procsource.Info
-	self     map[int64]procsource.Info
-	getErr   map[int64]error
-	exists   map[int64]bool
+// makeProcRegistry returns a registry with the proc source rooted at procRoot.
+func makeProcRegistry(procRoot string) *source.Registry {
+	reg := source.NewRegistry()
+	reg.Register(procsrc.New(procRoot, nil))
+	return reg
 }
 
-func (s *stubProcReader) Children(_ string, ppid int64) ([]procsource.Info, error) {
-	return s.children[ppid], nil
-}
-func (s *stubProcReader) Get(_ string, pid int64) (procsource.Info, error) {
-	if err, ok := s.getErr[pid]; ok {
-		return procsource.Info{}, err
-	}
-	info, ok := s.self[pid]
-	if !ok {
-		return procsource.Info{}, os.ErrNotExist
-	}
-	return info, nil
-}
-func (s *stubProcReader) Exists(_ string, pid int64) (bool, error) {
-	if s.exists != nil {
-		return s.exists[pid], nil
-	}
-	if _, ok := s.self[pid]; ok {
-		return true, nil
-	}
-	for _, kids := range s.children {
-		for _, k := range kids {
-			if k.PID == pid {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-func (s *stubProcReader) MetadataMarkdown(info procsource.Info) string {
-	return procsource.MetadataMarkdown(info)
+// makeEmptyRegistry returns a registry whose sources produce empty listings —
+// used by tests that need source wells to exist but produce no tiles.
+func makeEmptyRegistry(t *testing.T) *source.Registry {
+	t.Helper()
+	reg := source.NewRegistry()
+	reg.Register(fssrc.New(nil))
+	reg.Register(procsrc.New(t.TempDir(), nil))
+	return reg
 }
 
 func mustWrite(t *testing.T, path, content string) {

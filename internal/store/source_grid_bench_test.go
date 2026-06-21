@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/procsource"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/source"
+	procsrc "github.com/josephburnett/gridwell/internal/source/proc"
 )
 
 // benchFSDir builds a temp dir with n files + dirSubdirs subdirectories
@@ -91,23 +92,26 @@ func BenchmarkFSGridRepeatDescent(b *testing.B) {
 }
 
 // BenchmarkProcGridFirstDescent measures the analogous proc-grid path,
-// using a stub procsource so the benchmark doesn't depend on /proc.
+// using a stub /proc tree so the benchmark doesn't depend on the host
+// process table.
 func BenchmarkProcGridFirstDescent(b *testing.B) {
 	for _, n := range []int{10, 100, 500} {
 		b.Run(fmt.Sprintf("children=%d", n), func(b *testing.B) {
-			children := make([]procsource.Info, n)
-			for i := range children {
-				children[i] = procsource.Info{PID: int64(2 + i), PPID: 1, Name: fmt.Sprintf("p%d", i)}
+			// Build the stub /proc tree once outside the b.N loop.
+			procRoot := b.TempDir()
+			writeProcFull(b, procRoot, 1, 0, "init", "", 0)
+			for i := 0; i < n; i++ {
+				writeProcFull(b, procRoot, int64(2+i), 1, fmt.Sprintf("p%d", i), "", 0)
 			}
+
 			ctx := context.Background()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
 				s := newBenchStore(b)
-				s.SetSourceReaders(nil, &stubProcReader{
-					children: map[int64][]procsource.Info{1: children},
-					self:     map[int64]procsource.Info{1: {PID: 1, PPID: 0, Name: "init"}},
-				}, "/proc")
+				reg := source.NewRegistry()
+				reg.Register(procsrc.New(procRoot, nil))
+				s.setRegistry(reg)
 				root := mustRootID(b, s)
 				w, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 					Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, PID: 1,
