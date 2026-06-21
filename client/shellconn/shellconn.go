@@ -3,6 +3,57 @@
 // without a browser or a live socket.
 package shellconn
 
+import "encoding/base64"
+
+// WSSendAction is what to do with an outgoing shell frame given the
+// WebSocket's current readyState.
+type WSSendAction int
+
+const (
+	// WSDrop: socket is CLOSING/CLOSED (or an unknown state) — drop the frame.
+	WSDrop WSSendAction = iota
+	// WSQueue: socket is CONNECTING — hold the frame until it opens.
+	WSQueue
+	// WSSend: socket is OPEN — send now.
+	WSSend
+)
+
+// ShellSendAction maps a WebSocket readyState to whether an outgoing frame
+// should be queued (CONNECTING = 0), sent (OPEN = 1), or dropped (CLOSING =
+// 2 / CLOSED = 3, or anything else). Dropping a keystroke while CONNECTING —
+// or trying to send on a closed socket — is the hazard this pins down; both
+// the binary and text send paths route through it so they can't diverge.
+func ShellSendAction(readyState int) WSSendAction {
+	switch readyState {
+	case 0:
+		return WSQueue
+	case 1:
+		return WSSend
+	default:
+		return WSDrop
+	}
+}
+
+// DecodeJPEGDataURL decodes a "data:image/jpeg;base64,..." data URL into the
+// raw JPEG bytes. ok is false when s lacks the exact prefix or the base64
+// body doesn't decode.
+//
+// The decode is done in Go on purpose, NOT via JS atob: atob returns a binary
+// string whose code units are byte values, but reading it back through
+// js.Value.String() re-encodes as UTF-8 and doubles every byte ≥ 0x80,
+// corrupting the JPEG (FF D8 … becomes C3 BF C3 98 …).
+func DecodeJPEGDataURL(s string) ([]byte, bool) {
+	const prefix = "data:image/jpeg;base64,"
+	if len(s) <= len(prefix) || s[:len(prefix)] != prefix {
+		return nil, false
+	}
+	out, err := base64.StdEncoding.DecodeString(s[len(prefix):])
+	if err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
 // closePolicyViolation is the WebSocket close code (RFC 6455 1008,
 // PolicyViolation) the shell-stream server sends when wasm asked to attach
 // but the tmux session no longer exists — the one definitive "session gone"

@@ -55,3 +55,45 @@ func TestDecideShellRefreshVisible(t *testing.T) {
 		}
 	}
 }
+
+func TestShellSendAction(t *testing.T) {
+	cases := []struct {
+		readyState int
+		want       WSSendAction
+	}{
+		{0, WSQueue}, // CONNECTING
+		{1, WSSend},  // OPEN
+		{2, WSDrop},  // CLOSING
+		{3, WSDrop},  // CLOSED
+		{-1, WSDrop}, // unknown
+		{99, WSDrop},
+	}
+	for _, c := range cases {
+		if got := ShellSendAction(c.readyState); got != c.want {
+			t.Errorf("ShellSendAction(%d) = %v, want %v", c.readyState, got, c.want)
+		}
+	}
+}
+
+func TestDecodeJPEGDataURL(t *testing.T) {
+	// "data:image/jpeg;base64," + base64("hi") = "aGk="
+	out, ok := DecodeJPEGDataURL("data:image/jpeg;base64,aGk=")
+	if !ok || string(out) != "hi" {
+		t.Errorf("decode = %q ok=%v, want hi true", out, ok)
+	}
+	bad := []struct {
+		name string
+		in   string
+	}{
+		{"wrong prefix", "data:image/png;base64,aGk="},
+		{"no prefix", "aGk="},
+		{"prefix only (empty body)", "data:image/jpeg;base64,"},
+		{"invalid base64 body", "data:image/jpeg;base64,!!!!"},
+		{"empty string", ""},
+	}
+	for _, c := range bad {
+		if out, ok := DecodeJPEGDataURL(c.in); ok || out != nil {
+			t.Errorf("%s: expected (nil,false), got (%q,%v)", c.name, out, ok)
+		}
+	}
+}

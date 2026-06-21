@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -362,11 +361,10 @@ func jsBytes(s string) js.Value {
 // sendBinary forwards a Uint8Array on the WebSocket, queueing if the
 // socket is still CONNECTING.
 func (c *shellStreamConn) sendBinary(u8 js.Value) {
-	state := c.ws.Get("readyState").Int()
-	switch state {
-	case 0:
+	switch shellconn.ShellSendAction(c.ws.Get("readyState").Int()) {
+	case shellconn.WSQueue:
 		c.pending = append(c.pending, u8)
-	case 1:
+	case shellconn.WSSend:
 		c.ws.Call("send", u8)
 	}
 }
@@ -374,11 +372,10 @@ func (c *shellStreamConn) sendBinary(u8 js.Value) {
 // sendText forwards a string on the WebSocket. Used for control
 // messages (resize) that go as text frames per the wire protocol.
 func (c *shellStreamConn) sendText(s string) {
-	state := c.ws.Get("readyState").Int()
-	switch state {
-	case 0:
+	switch shellconn.ShellSendAction(c.ws.Get("readyState").Int()) {
+	case shellconn.WSQueue:
 		c.pending = append(c.pending, s)
-	case 1:
+	case shellconn.WSSend:
 		c.ws.Call("send", s)
 	}
 }
@@ -523,18 +520,10 @@ func snapshotShellCanvas(container js.Value) []byte {
 	if !dataURL.Truthy() {
 		return nil
 	}
-	s := dataURL.String()
-	// "data:image/jpeg;base64,XXXXX..."
-	const prefix = "data:image/jpeg;base64,"
-	if len(s) <= len(prefix) || s[:len(prefix)] != prefix {
-		return nil
-	}
-	// Decode base64 in Go. NOT through JS atob: atob returns a "binary
-	// string" whose code units are byte values, but Go's js.Value.String()
-	// re-encodes as UTF-8, doubling every byte >= 0x80. The resulting
-	// blob is not a valid JPEG (FF D8 ... becomes C3 BF C3 98 ...).
-	out, err := base64.StdEncoding.DecodeString(s[len(prefix):])
-	if err != nil {
+	// Prefix-validate + base64-decode in Go (not JS atob) via the pure
+	// shellconn.DecodeJPEGDataURL — see there for the atob-corruption reason.
+	out, ok := shellconn.DecodeJPEGDataURL(dataURL.String())
+	if !ok {
 		return nil
 	}
 	return out
