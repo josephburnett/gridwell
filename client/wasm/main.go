@@ -15,6 +15,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/preview"
@@ -732,23 +733,22 @@ func (a *App) startSSE() {
 // gridIDForPath walks the pane's descent path and returns the grid id at the
 // leaf. Returns root if the path is empty or stale prefixes don't resolve.
 func (a *App) gridIDForPath(p []int64) int64 {
-	if a.rootGridID == 0 {
-		return 0
-	}
-	gid := a.rootGridID
-	for _, wellID := range p {
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			a.fetchGrid(gid)
-			return gid
-		}
-		w, ok := g.Tiles[wellID]
-		if !ok {
-			return gid
-		}
-		gid = w.ChildGridID
-	}
-	return gid
+	// The walk (follow each well's child grid, stop at a stale prefix) is the
+	// pure gridpath.ResolveLeafGrid; the closure does the cache read and kicks
+	// a background fetch on an uncached grid.
+	return gridpath.ResolveLeafGrid(a.rootGridID, p,
+		func(gid, wellID int64) (int64, bool, bool) {
+			g, ok := a.c.Grid(gid)
+			if !ok {
+				a.fetchGrid(gid)
+				return 0, false, false
+			}
+			w, ok := g.Tiles[wellID]
+			if !ok {
+				return 0, true, false
+			}
+			return w.ChildGridID, true, true
+		})
 }
 
 // refetchGridOnConflict logs a 409 version-conflict and refetches the

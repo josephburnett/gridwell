@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -1009,11 +1010,11 @@ func (a *App) startAscent(p *pane.Pane) {
 		well = w
 		break
 	}
-	if level < 0 {
+	switch gridpath.ClassifyAscent(level, len(p.Path)) {
+	case gridpath.AscentToRoot:
 		a.instantAscend(p, nil)
 		return
-	}
-	if level != len(p.Path)-1 {
+	case gridpath.AscentSnapToLevel:
 		// We skipped one or more missing levels. The animation math
 		// expects to be ascending out of the leaf grid; jumping mid-
 		// path would render badly. Snap directly to the resolved level
