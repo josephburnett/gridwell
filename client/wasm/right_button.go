@@ -825,28 +825,11 @@ func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
 	root := pane.Rect{X: 0, Y: 0, W: a.width, H: a.height}
 	r := paneRectFor(a, p)
 	divs := pane.Dividers(a.tree, root, resizeBandPx)
-	for i := range divs {
-		d := divs[i]
-		// Match by adjacency: the divider's rect must touch the pane's
-		// edge on the requested side.
-		switch side {
-		case pane.SideTop:
-			if d.Dir == pane.Horizontal && dragdrop.NearPx(d.Rect.Y+d.Rect.H/2, r.Y) {
-				return &divs[i]
-			}
-		case pane.SideBottom:
-			if d.Dir == pane.Horizontal && dragdrop.NearPx(d.Rect.Y+d.Rect.H/2, r.Y+r.H) {
-				return &divs[i]
-			}
-		case pane.SideLeft:
-			if d.Dir == pane.Vertical && dragdrop.NearPx(d.Rect.X+d.Rect.W/2, r.X) {
-				return &divs[i]
-			}
-		case pane.SideRight:
-			if d.Dir == pane.Vertical && dragdrop.NearPx(d.Rect.X+d.Rect.W/2, r.X+r.W) {
-				return &divs[i]
-			}
-		}
+	// The adjacency match (which divider touches this pane's edge on `side`)
+	// is the pure pane.DividerOnSide; picking the wrong one would resize an
+	// unrelated boundary.
+	if i := pane.DividerOnSide(divs, r, side); i >= 0 {
+		return &divs[i]
 	}
 	return nil
 }

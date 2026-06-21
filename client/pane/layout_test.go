@@ -475,3 +475,39 @@ func TestRegionCategoriesAndSide(t *testing.T) {
 		}
 	}
 }
+
+func TestDividerOnSide(t *testing.T) {
+	pr := Rect{X: 0, Y: 0, W: 100, H: 100}
+	// Vertical divider centered on the pane's right edge (midX = 100).
+	vRight := Divider{Dir: Vertical, Rect: Rect{X: 99, Y: 0, W: 2, H: 100}}
+	// Vertical divider on the left edge (midX = 0).
+	vLeft := Divider{Dir: Vertical, Rect: Rect{X: -1, Y: 0, W: 2, H: 100}}
+	// Horizontal divider on the top edge (midY = 0).
+	hTop := Divider{Dir: Horizontal, Rect: Rect{X: 0, Y: -1, W: 100, H: 2}}
+	// Horizontal divider on the bottom edge (midY = 100).
+	hBottom := Divider{Dir: Horizontal, Rect: Rect{X: 0, Y: 99, W: 100, H: 2}}
+	// A vertical divider far away (no match).
+	vFar := Divider{Dir: Vertical, Rect: Rect{X: 499, Y: 0, W: 2, H: 100}}
+
+	cases := []struct {
+		name string
+		divs []Divider
+		side Side
+		want int
+	}{
+		{"right edge match", []Divider{vFar, vRight}, SideRight, 1},
+		{"left edge match", []Divider{vLeft}, SideLeft, 0},
+		{"top edge match", []Divider{hTop}, SideTop, 0},
+		{"bottom edge match", []Divider{hBottom}, SideBottom, 0},
+		{"wrong direction for side (vertical vs Top)", []Divider{vRight}, SideTop, -1},
+		{"horizontal divider not on left", []Divider{hTop}, SideLeft, -1},
+		{"position mismatch", []Divider{vFar}, SideRight, -1},
+		{"empty list", nil, SideRight, -1},
+		{"picks the adjacent one, not the far one", []Divider{vFar, vLeft}, SideLeft, 1},
+	}
+	for _, c := range cases {
+		if got := DividerOnSide(c.divs, pr, c.side); got != c.want {
+			t.Errorf("%s: DividerOnSide = %d, want %d", c.name, got, c.want)
+		}
+	}
+}

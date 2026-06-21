@@ -84,6 +84,48 @@ func Dividers(t *Tree, root Rect, bandPx float64) []Divider {
 	return out
 }
 
+// DividerOnSide returns the index into divs of the divider directly adjacent
+// to paneRect on the given side, or -1 when the pane abuts the screen edge
+// with no sibling there. Adjacency: Top/Bottom needs a Horizontal divider
+// whose mid-line sits at the pane's top/bottom edge; Left/Right needs a
+// Vertical divider at the pane's left/right edge (within half a pixel).
+// Picking the wrong divider here makes a boundary resize grab an unrelated
+// split, so the match is exact and tested.
+func DividerOnSide(divs []Divider, paneRect Rect, side Side) int {
+	for i := range divs {
+		d := divs[i]
+		switch side {
+		case SideTop:
+			if d.Dir == Horizontal && nearHalfPx(d.Rect.Y+d.Rect.H/2, paneRect.Y) {
+				return i
+			}
+		case SideBottom:
+			if d.Dir == Horizontal && nearHalfPx(d.Rect.Y+d.Rect.H/2, paneRect.Y+paneRect.H) {
+				return i
+			}
+		case SideLeft:
+			if d.Dir == Vertical && nearHalfPx(d.Rect.X+d.Rect.W/2, paneRect.X) {
+				return i
+			}
+		case SideRight:
+			if d.Dir == Vertical && nearHalfPx(d.Rect.X+d.Rect.W/2, paneRect.X+paneRect.W) {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// nearHalfPx reports whether two pixel coordinates are within half a pixel —
+// the same tolerance dragdrop.NearPx uses, inlined to keep pane dependency-free.
+func nearHalfPx(a, b float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < 0.5
+}
+
 // Region identifies which logical sub-area of a pane a (sx, sy) point
 // falls into. Used by the right-button input layer to dispatch swap,
 // split, and resize gestures purely from a hit test.
