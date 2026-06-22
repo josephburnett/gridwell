@@ -1,0 +1,86 @@
+// Package plugin — loader builds the plugin registry from server config.
+// Built-in plugins (kind "fs", "proc") are launched in-process using a
+// loopback TCP gRPC connection; external plugins (binary != "") use go-plugin.
+package plugin
+
+import (
+	"fmt"
+	"net"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/config"
+)
+
+// LoadAll constructs a Registry from the server config. Each PluginConfig
+// entry becomes one Registry entry keyed by its ID (UUID). Built-in plugins
+// are served in-process over a loopback gRPC listener; external plugins are
+// spawned as subprocesses via go-plugin.
+//
+// factories maps plugin kind strings to constructors. For kinds not in
+// factories, a binary path must be provided in PluginConfig.Binary.
+func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Registry, error) {
+	reg := NewRegistry()
+	for i := range cfg.Plugins {
+		pc := &cfg.Plugins[i]
+		client, closer, err := loadOne(pc, factories)
+		if err != nil {
+			reg.Close()
+			return nil, fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, err)
+		}
+		reg.Register(pc.ID, client, closer)
+	}
+	return reg, nil
+}
+
+// ServerFactory is a constructor called for built-in plugin kinds. It receives
+// the plugin config and returns an implementation ready to serve.
+type ServerFactory func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error)
+
+func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridwellv1.GridwellClient, func(), error) {
+	// External binary: use go-plugin subprocess transport.
+	if pc.Binary != "" {
+		return LoadPlugin(pc.Binary)
+	}
+
+	// Built-in: look up the factory by kind.
+	factory, ok := factories[pc.Kind]
+	if !ok {
+		return nil, nil, fmt.Errorf("no factory for kind %q and no binary path", pc.Kind)
+	}
+	impl, err := factory(pc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("factory %q: %w", pc.Kind, err)
+	}
+	return ServeInProcess(impl)
+}
+
+// ServeInProcess starts a gRPC server in a goroutine on a loopback TCP port
+// and returns a client connected to it. closer stops the server and closes
+// the connection. Used for built-in plugins that run in the same process.
+func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, func(), error) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, nil, fmt.Errorf("in-process listen: %w", err)
+	}
+
+	srv := grpc.NewServer()
+	gridwellv1.RegisterGridwellServer(srv, impl)
+	go srv.Serve(lis)
+
+	addr := lis.Addr().String()
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		srv.Stop()
+		return nil, nil, fmt.Errorf("in-process dial %s: %w", addr, err)
+	}
+
+	closer := func() {
+		cc.Close()
+		srv.GracefulStop()
+	}
+	return gridwellv1.NewGridwellClient(cc), closer, nil
+}
+
