@@ -21,7 +21,7 @@ option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridw
 // store can fork the COW spine of shared grids up to the highest one
 // still uniquely owned.
 message Path {
-  repeated int64 well_ids = 1;
+  repeated string well_ids = 1;
 }
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
@@ -31,7 +31,7 @@ message Path {
 // grid whose tile list is reconciled against a host directory, "proc"
 // for the process table. source_id carries the path or PID.
 message Grid {
-  int64 id = 1;
+  string id = 1;
   string object_id = 2;
   int64 version = 3;
   string source_kind = 4;
@@ -42,10 +42,10 @@ message Grid {
 // subset of the optional fields is meaningful; the DDL CHECK constraint
 // enforces it.
 message Tile {
-  int64 id = 1;
+  string id = 1;
   string object_id = 2;
   int64 version = 3;
-  int64 grid_id = 4;
+  string grid_id = 4;
   string kind = 5;
   int64 x = 6;
   int64 y = 7;
@@ -132,20 +132,20 @@ message InfoResponse {
 // once all callers have migrated).
 message AttachRequest  { map<string, string> config = 1; }
 message AttachResponse {
-  int64          root_grid_id = 1;
+  string         root_grid_id = 1;
   string         label        = 2;
   PluginCaps     caps         = 3;
   NetworkContext network      = 4;   // unset → url tiles frozen-only
   bool           has_session  = 5;   // GetSession/PutSession meaningful
 }
-message DetachRequest  { int64 root_grid_id = 1; }
+message DetachRequest  { string root_grid_id = 1; }
 message DetachResponse {}
 
 // Probe reports the definitive presence of one tile. Used for non-
 // authoritative listings (proc) where an entry can vanish between List and
 // reconcile. A failed read must never sweep a tile — only GONE does.
 message ProbeRequest {
-  int64 tile_id = 1;
+  string tile_id = 1;
 }
 message ProbeResponse {
   enum Presence {
@@ -160,13 +160,13 @@ message ProbeResponse {
 // GetSession / PutSession move the Chromium session blob (cookies + web
 // storage) associated with a plugin root.
 
-message GetSessionRequest { int64 root_grid_id = 1; }
+message GetSessionRequest { string root_grid_id = 1; }
 // BlobChunk is a streaming fragment for GetSession and future ReadBlob.
 message BlobChunk         { bytes data = 1; }
 
 // PutSessionRequest streams a session blob up; the first message carries
 // root_grid_id to bind the stream; subsequent messages carry only data.
-message PutSessionRequest  { int64 root_grid_id = 1; bytes data = 2; }
+message PutSessionRequest  { string root_grid_id = 1; bytes data = 2; }
 message PutSessionResponse {}
 
 // ─── Shell streaming ──────────────────────────────────────────────────────
@@ -174,14 +174,14 @@ message PutSessionResponse {}
 // raw PTY bytes both ways. First OpenShellRequest binds the tile (data empty);
 // then keystrokes flow up / terminal output flows down.
 
-message OpenShellRequest  { int64 tile_id = 1; bytes data = 2; PTYSize resize = 3; }
+message OpenShellRequest  { string tile_id = 1; bytes data = 2; PTYSize resize = 3; }
 message OpenShellResponse { bytes data = 1; }
 message PTYSize           { int32 cols = 1; int32 rows = 2; }
 
 // ─── Bootstrap (kept for backward compatibility; superseded by Attach) ────
 message BootstrapRequest {}
 message BootstrapResponse {
-  int64 root_grid_id = 1;
+  string root_grid_id = 1;
   double root_view_cx = 2;
   double root_view_cy = 3;
   double root_zoom = 4;
@@ -190,7 +190,7 @@ message BootstrapResponse {
 // Reads.
 
 message GetGridRequest {
-  int64 grid_id = 1;
+  string grid_id = 1;
 }
 message GetGridResponse {
   Grid grid = 1;
@@ -205,7 +205,7 @@ message GetBlobResponse {
 }
 
 message GetTilePreviewRequest {
-  int64 tile_id = 1;
+  string tile_id = 1;
 }
 message GetTilePreviewResponse {
   bytes jpeg = 1;
@@ -220,7 +220,7 @@ message TileResponse {
 
 message CreateWellRequest {
   Path path = 1;
-  int64 grid_id = 2;
+  string grid_id = 2;
   int64 x = 3;
   int64 y = 4;
   int64 w = 5;
@@ -229,7 +229,7 @@ message CreateWellRequest {
 
 message CreateTextRequest {
   Path path = 1;
-  int64 grid_id = 2;
+  string grid_id = 2;
   int64 x = 3;
   int64 y = 4;
   int64 w = 5;
@@ -239,7 +239,7 @@ message CreateTextRequest {
 
 message CreateURLRequest {
   Path path = 1;
-  int64 grid_id = 2;
+  string grid_id = 2;
   int64 x = 3;
   int64 y = 4;
   int64 w = 5;
@@ -249,7 +249,7 @@ message CreateURLRequest {
 
 message CreateFileWellRequest {
   Path path = 1;
-  int64 grid_id = 2;
+  string grid_id = 2;
   int64 x = 3;
   int64 y = 4;
   int64 w = 5;
@@ -259,7 +259,7 @@ message CreateFileWellRequest {
 
 message CreateProcessWellRequest {
   Path path = 1;
-  int64 grid_id = 2;
+  string grid_id = 2;
   int64 x = 3;
   int64 y = 4;
   int64 w = 5;
@@ -275,7 +275,7 @@ message CreateProcessWellRequest {
 // the machine reboots.
 message CreateShellRequest {
   Path path = 1;
-  int64 grid_id = 2;
+  string grid_id = 2;
   int64 x = 3;
   int64 y = 4;
   int64 w = 5;
@@ -288,7 +288,7 @@ message CreateShellRequest {
 // row, no extra storage.
 message SetShellPreviewRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
   bytes jpeg = 4;
 }
@@ -301,7 +301,7 @@ message SetShellPreviewRequest {
 //   - alive=false, snap set  → button hidden; the JPEG is all that
 //     remains (the session died, can't bring it back).
 message ShellSessionAliveRequest {
-  int64 tile_id = 1;
+  string tile_id = 1;
 }
 message ShellSessionAliveResponse {
   bool alive = 1;
@@ -312,9 +312,9 @@ message ShellSessionAliveResponse {
 
 message MoveTileRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
-  int64 dest_grid_id = 4;
+  string dest_grid_id = 4;
   Path dest_path = 5;
   int64 x = 6;
   int64 y = 7;
@@ -322,9 +322,9 @@ message MoveTileRequest {
 
 message CloneTileRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
-  int64 dest_grid_id = 4;
+  string dest_grid_id = 4;
   Path dest_path = 5;
   int64 x = 6;
   int64 y = 7;
@@ -332,7 +332,7 @@ message CloneTileRequest {
 
 message ResizeTileRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
   int64 x = 4;
   int64 y = 5;
@@ -342,7 +342,7 @@ message ResizeTileRequest {
 
 message SetWellViewRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
   int64 view_x = 4;
   int64 view_y = 5;
@@ -351,7 +351,7 @@ message SetWellViewRequest {
 
 message SetTextViewRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
   int64 text_x = 4;
   int64 text_y = 5;
@@ -376,7 +376,7 @@ message SetRootViewResponse {}
 // never clobbers good state.
 message SetURLStateRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
   bytes jpeg = 4;
   string url = 5;
@@ -385,14 +385,14 @@ message SetURLStateRequest {
 
 message UpdateTextRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
   bytes data = 4;
 }
 
 message DeleteTileRequest {
   Path path = 1;
-  int64 tile_id = 2;
+  string tile_id = 2;
   int64 version = 3;
 }
 message DeleteTileResponse {}
@@ -402,7 +402,7 @@ message DeleteTileResponse {}
 message SubscribeRequest {}
 
 message GridChanged {
-  int64 grid_id = 1;
+  string grid_id = 1;
 }
 
 message TileChanged {
@@ -410,8 +410,8 @@ message TileChanged {
 }
 
 message TileRemoved {
-  int64 grid_id = 1;
-  int64 tile_id = 2;
+  string grid_id = 1;
+  string tile_id = 2;
 }
 
 // Event carries one of the change kinds. The variant tells the client

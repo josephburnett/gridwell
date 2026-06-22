@@ -40,7 +40,7 @@ func makeDB(t *testing.T) string {
 		t.Fatal(err)
 	}
 	if _, err := st.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{WellIDs: []int64{well.ID}}, GridID: parseID(well.ChildGridID),
+		Path: rpc.Path{WellIDs: []string{well.ID}}, GridID: well.ChildGridID,
 		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# inside\n"),
 	}); err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestSessionRoundTripPersistsInDB(t *testing.T) {
 
 func TestUnattachedSourceIDFails(t *testing.T) {
 	s := New()
-	bogus := encodeCursor(cursor{Root: "/nope", Grid: 1})
+	bogus := encodeCursor(cursor{Root: "/nope", Grid: "1"})
 	if _, err := s.List(context.Background(), bogus); err == nil {
 		t.Error("listing an unattached cursor should fail")
 	}

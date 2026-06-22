@@ -95,20 +95,20 @@ func TestDescentPathThenCreate(t *testing.T) {
 	}
 	// Descend into well; create a sub-well inside it.
 	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: parseID(w.ChildGridID), X: 0, Y: 0, W: 2, H: 2,
+		Path:   rpc.Path{WellIDs: []string{w.ID}},
+		GridID: w.ChildGridID, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sub.GridID != parseID(w.ChildGridID) {
-		t.Errorf("sub.GridID = %d, want %s", sub.GridID, w.ChildGridID)
+	if sub.GridID != w.ChildGridID {
+		t.Errorf("sub.GridID = %s, want %s", sub.GridID, w.ChildGridID)
 	}
 
 	// Path with a non-existent well should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{9999}},
-		GridID: parseID(w.ChildGridID), X: 1, Y: 1, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{"9999"}},
+		GridID: w.ChildGridID, X: 1, Y: 1, W: 1, H: 1,
 	})
 	if !errors.Is(err, ErrInvalidPath) {
 		t.Errorf("got %v, want ErrInvalidPath", err)
@@ -327,7 +327,8 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	}
 	// The original is untouched and at the same version: still "the same
 	// tile" by (object_id, version).
-	orig, err := s.loadTile(ctx, s.db, w.ID)
+	wIDInt, _ := parseID(w.ID)
+	orig, err := s.loadTile(ctx, s.db, wIDInt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,11 +470,13 @@ func TestDeleteTile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	childGridID := parseID(w.ChildGridID)
+	childGridIDStr := w.ChildGridID
+	childGridID, _ := parseID(childGridIDStr)
+	wIDInt, _ := parseID(w.ID)
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: w.ID, Version: w.Version}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := s.loadTile(ctx, s.db, w.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.loadTile(ctx, s.db, wIDInt); !errors.Is(err, ErrNotFound) {
 		t.Errorf("well still exists: %v", err)
 	}
 	if _, err := s.loadGrid(ctx, s.db, childGridID); !errors.Is(err, ErrNotFound) {
@@ -492,8 +495,8 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 		t.Fatal(err)
 	}
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: parseID(w.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{w.ID}},
+		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -501,14 +504,16 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	// w may have been bumped by the creation of inner in its child grid?
 	// No: creating inner bumps the inner-grid version, not the outer well's.
 	// Reload w for current version.
-	wCur, err := s.loadTile(ctx, s.db, w.ID)
+	wIDInt2, _ := parseID(w.ID)
+	wCur, err := s.loadTile(ctx, s.db, wIDInt2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: w.ID, Version: wCur.Version}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := s.loadTile(ctx, s.db, inner.ID); !errors.Is(err, ErrNotFound) {
+	innerIDInt, _ := parseID(inner.ID)
+	if _, err := s.loadTile(ctx, s.db, innerIDInt); !errors.Is(err, ErrNotFound) {
 		t.Errorf("inner well still exists after cascading delete")
 	}
 }

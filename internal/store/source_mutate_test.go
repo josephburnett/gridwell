@@ -63,7 +63,7 @@ func TestDeleteFSFileTileRemovesFile(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var fileTile *rpc.Tile
 	for i := range g.Tiles {
 		if g.Tiles[i].SourceKey == "doomed.md" {
@@ -73,7 +73,7 @@ func TestDeleteFSFileTileRemovesFile(t *testing.T) {
 	if fileTile == nil {
 		t.Fatal("doomed.md tile not found after reconcile")
 	}
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
 		Path: descentPath, TileID: fileTile.ID, Version: fileTile.Version,
 	}); err != nil {
@@ -104,7 +104,7 @@ func TestDeleteFSSubDirTileRemovesAll(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var subWell *rpc.Tile
 	for i := range g.Tiles {
 		if g.Tiles[i].SourceKey == "stuff" {
@@ -114,7 +114,7 @@ func TestDeleteFSSubDirTileRemovesAll(t *testing.T) {
 	if subWell == nil {
 		t.Fatal("subdir tile not found")
 	}
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
 		Path: descentPath, TileID: subWell.ID, Version: subWell.Version,
 	}); err != nil {
@@ -140,15 +140,15 @@ func TestDeleteFSFileTileFailureKeepsRow(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	tile := g.Tiles[0]
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
 		Path: descentPath, TileID: tile.ID, Version: tile.Version,
 	}); err == nil {
 		t.Fatal("expected error from failed rm")
 	}
-	g2, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g2, _ := s.GetGrid(ctx, w.ChildGridID)
 	if len(g2.Tiles) != 1 {
 		t.Errorf("tile row should survive failed rm, got %d tiles", len(g2.Tiles))
 	}
@@ -171,7 +171,7 @@ func TestDeleteProcessTileSendsSIGTERM(t *testing.T) {
 	w, _ := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, PID: 1,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var victim *rpc.Tile
 	for i := range g.Tiles {
 		if g.Tiles[i].PID == 42 {
@@ -181,7 +181,7 @@ func TestDeleteProcessTileSendsSIGTERM(t *testing.T) {
 	if victim == nil {
 		t.Fatal("victim tile not found")
 	}
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
 		Path: descentPath, TileID: victim.ID, Version: victim.Version,
 	}); err != nil {
@@ -208,13 +208,13 @@ func TestMoveCrossSourceGridRejected(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	if len(g.Tiles) == 0 {
 		t.Fatal("expected reconciled tile")
 	}
 	fileTile := g.Tiles[0]
 
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	_, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
 		Path:    descentPath,
 		TileID:  fileTile.ID,
@@ -248,13 +248,13 @@ func TestCloneIntoSourceGridRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	_, err = s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path:    rpc.Path{},
 		TileID:  src.ID,
 		Version: src.Version,
 		// Destination is the fs-grid — that should be refused.
-		DestGridID: parseID(w.ChildGridID),
+		DestGridID: w.ChildGridID,
 		DestPath:   descentPath,
 		X:          0, Y: 7,
 	})
@@ -278,7 +278,7 @@ func TestCloneFileWellOutOfSourceGridAllowed(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var subWell *rpc.Tile
 	for i := range g.Tiles {
 		if g.Tiles[i].SourceKey == "sub" {
@@ -288,7 +288,7 @@ func TestCloneFileWellOutOfSourceGridAllowed(t *testing.T) {
 	if subWell == nil {
 		t.Fatal("sub tile not found")
 	}
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	if _, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path:    descentPath,
 		TileID:  subWell.ID,
@@ -335,7 +335,7 @@ func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
 	})
-	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, _ := s.GetGrid(ctx, w.ChildGridID)
 	var fileTile *rpc.Tile
 	for i := range g.Tiles {
 		if g.Tiles[i].SourceKey == "notes.md" {
@@ -346,7 +346,7 @@ func TestCloneFileTileOutOfSourceGridPreservesFSName(t *testing.T) {
 		t.Fatal("notes.md tile not found in fs-grid")
 	}
 
-	descentPath := rpc.Path{WellIDs: []int64{w.ID}}
+	descentPath := rpc.Path{WellIDs: []string{w.ID}}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path:       descentPath,
 		TileID:     fileTile.ID,

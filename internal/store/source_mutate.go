@@ -33,7 +33,7 @@ func trashHostPath(path string) error {
 // once the process is definitively gone.
 func (s *Store) deleteSourceTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, parent *rpc.Grid, events *[]rpc.Event) (handled bool, err error) {
 	if t.SourceKey == "" {
-		return false, fmt.Errorf("%w: source tile %d has no source_key", ErrInvalidArgument, t.ID)
+		return false, fmt.Errorf("%w: source tile %s has no source_key", ErrInvalidArgument, t.ID)
 	}
 	src, ok := s.sources.Get(parent.SourceKind)
 	if !ok {
@@ -55,14 +55,16 @@ func (s *Store) deleteSourceTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, p
 // child grid). Called from DeleteTile for regular tiles and from
 // deleteSourceTile when the source confirms the artifact is gone (settled).
 func (s *Store) dropTileRow(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events *[]rpc.Event) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
+	tileID, _ := parseID(t.ID)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 		return err
 	}
 	childGridID, _ := strconv.ParseInt(t.ChildGridID, 10, 64)
 	if err := s.decTileRefs(ctx, tx, t.Kind, childGridID, t.BlobID, t.PreviewBlobID); err != nil {
 		return err
 	}
-	if err := s.bumpGridVersion(ctx, tx, t.GridID); err != nil {
+	gridID, _ := parseID(t.GridID)
+	if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
 		return err
 	}
 	*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: t.GridID, TileID: t.ID}})

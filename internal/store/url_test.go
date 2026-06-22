@@ -9,7 +9,7 @@ import (
 )
 
 // createURLTileForTest creates a URL tile and returns it.
-func createURLTileForTest(t *testing.T, s *Store, root, x int64, url string) *rpc.Tile {
+func createURLTileForTest(t *testing.T, s *Store, root string, x int64, url string) *rpc.Tile {
 	t.Helper()
 	tile, err := s.CreateURL(context.Background(), &rpc.CreateURLRequest{
 		Path: rpc.Path{}, GridID: root,
@@ -75,11 +75,12 @@ func TestSetTileAlt(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com")
+	tileIDInt, _ := parseID(tile.ID)
 
-	if err := s.SetTileAlt(ctx, tile.ID, "Example Title"); err != nil {
+	if err := s.SetTileAlt(ctx, tileIDInt, "Example Title"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	got, err := s.loadTile(ctx, s.db, tile.ID)
+	got, err := s.loadTile(ctx, s.db, tileIDInt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,10 +91,10 @@ func TestSetTileAlt(t *testing.T) {
 		t.Errorf("version after SetTileAlt = %d, want %d", got.Version, tile.Version+1)
 	}
 	// Setting back to empty clears the column.
-	if err := s.SetTileAlt(ctx, tile.ID, ""); err != nil {
+	if err := s.SetTileAlt(ctx, tileIDInt, ""); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
-	got, err = s.loadTile(ctx, s.db, tile.ID)
+	got, err = s.loadTile(ctx, s.db, tileIDInt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,6 +140,7 @@ func TestSetURLStateSkipsEmptyFields(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com/keep")
+	tileIDInt, _ := parseID(tile.ID)
 	// Seed preview + title we expect to survive an empty-field update.
 	seed, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
 		Path: rpc.Path{}, TileID: tile.ID, Version: tile.Version,
@@ -155,7 +157,7 @@ func TestSetURLStateSkipsEmptyFields(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("empty update: %v", err)
 	}
-	got, err := s.loadTile(ctx, s.db, tile.ID)
+	got, err := s.loadTile(ctx, s.db, tileIDInt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +211,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{WellIDs: []int64{wellA.ID}}, GridID: parseID(wellA.ChildGridID),
+		Path: rpc.Path{WellIDs: []string{wellA.ID}}, GridID: wellA.ChildGridID,
 		X: 0, Y: 0, W: 1, H: 1, URL: "https://a.example",
 	}); err != nil {
 		t.Fatal(err)
@@ -227,7 +229,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 
 	// Freeze through wellB's OWN copy of the URL tile. It must touch only
 	// wellB; wellA is a separate row and stays as it was.
-	bGrid, err := s.GetGrid(ctx, parseID(wellB.ChildGridID))
+	bGrid, err := s.GetGrid(ctx, wellB.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,11 +239,11 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 			bURL = tile
 		}
 	}
-	if bURL.ID == 0 {
+	if bURL.ID == "" {
 		t.Fatalf("no URL tile in wellB's child grid %s", wellB.ChildGridID)
 	}
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		Path: rpc.Path{WellIDs: []int64{wellB.ID}}, TileID: bURL.ID, Version: bURL.Version,
+		Path: rpc.Path{WellIDs: []string{wellB.ID}}, TileID: bURL.ID, Version: bURL.Version,
 		JPEG: []byte("frozen-b"), URL: "https://b.example", Title: "B",
 	}); err != nil {
 		t.Fatal(err)
@@ -251,11 +253,12 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	// the URL tile in each.
 	urlIn := func(well *rpc.Tile) rpc.Tile {
 		t.Helper()
-		reloaded, err := s.loadTile(ctx, s.db, well.ID)
+		wellIDInt, _ := parseID(well.ID)
+		reloaded, err := s.loadTile(ctx, s.db, wellIDInt)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := s.GetGrid(ctx, parseID(reloaded.ChildGridID))
+		g, err := s.GetGrid(ctx, reloaded.ChildGridID)
 		if err != nil {
 			t.Fatal(err)
 		}

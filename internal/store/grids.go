@@ -13,8 +13,12 @@ import (
 // (fs / proc) grids, GetGrid first reconciles the tile rows against the
 // current host state — this is a read RPC that may mutate, but only for
 // grids whose contents come from outside Gridwell.
-func (s *Store) GetGrid(ctx context.Context, gridID int64) (*rpc.GetGridResponse, error) {
-	g, err := s.loadGrid(ctx, s.db, gridID)
+func (s *Store) GetGrid(ctx context.Context, gridID string) (*rpc.GetGridResponse, error) {
+	id, err := parseID(gridID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	g, err := s.loadGrid(ctx, s.db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -23,12 +27,12 @@ func (s *Store) GetGrid(ctx context.Context, gridID int64) (*rpc.GetGridResponse
 			return nil, err
 		}
 		// Reload — reconcile may have bumped the version.
-		g, err = s.loadGrid(ctx, s.db, gridID)
+		g, err = s.loadGrid(ctx, s.db, id)
 		if err != nil {
 			return nil, err
 		}
 	}
-	tiles, err := s.loadTilesInGrid(ctx, s.db, gridID)
+	tiles, err := s.loadTilesInGrid(ctx, s.db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -157,17 +161,25 @@ func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64)
 }
 
 // GetTile returns a single tile by ID.
-func (s *Store) GetTile(ctx context.Context, tileID int64) (*rpc.Tile, error) {
-	return s.loadTile(ctx, s.db, tileID)
+func (s *Store) GetTile(ctx context.Context, tileID string) (*rpc.Tile, error) {
+	id, err := parseID(tileID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return s.loadTile(ctx, s.db, id)
 }
 
 // GetTilePreview returns the JPEG bytes for a tile's current preview —
 // URL tiles store the last-frozen page render; shell tiles store the
 // last-frozen terminal frame. Returns nil for tiles that don't have a
 // preview yet (fresh palette drop, never refreshed).
-func (s *Store) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error) {
+func (s *Store) GetTilePreview(ctx context.Context, tileID string) ([]byte, error) {
+	id, err := parseID(tileID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
 	var previewBID sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ?`, tileID).Scan(&previewBID)
+	err = s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ?`, id).Scan(&previewBID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -185,15 +197,15 @@ func (s *Store) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error
 // session on the gridwell tmux socket whose id isn't in this list is
 // a leftover from a tile deleted while gridwell was down, and gets
 // killed.
-func (s *Store) AllShellTileIDs(ctx context.Context) ([]int64, error) {
+func (s *Store) AllShellTileIDs(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM tiles WHERE kind = 'shell'`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var ids []int64
+	var ids []string
 	for rows.Next() {
-		var id int64
+		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -207,10 +219,14 @@ func (s *Store) AllShellTileIDs(ctx context.Context) ([]int64, error) {
 // session keyed to that id is now orphaned: the session must die only when
 // this exact id is truly gone. (A cloned shell is an independent copy with
 // its own id and no session, so deleting it never affects the original.)
-func (s *Store) ShellTileExists(ctx context.Context, id int64) (bool, error) {
+func (s *Store) ShellTileExists(ctx context.Context, id string) (bool, error) {
+	idInt, err := parseID(id)
+	if err != nil {
+		return false, nil
+	}
 	var n int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(1) FROM tiles WHERE id = ? AND kind = 'shell'`, id).Scan(&n)
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM tiles WHERE id = ? AND kind = 'shell'`, idInt).Scan(&n)
 	return n > 0, err
 }
 

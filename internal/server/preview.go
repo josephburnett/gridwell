@@ -30,7 +30,7 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tile, err := s.store.GetTile(r.Context(), tileID)
+	tile, err := s.store.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
 	if err != nil {
 		writeHTTPError(w, err)
 		return
@@ -39,7 +39,7 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 	width, height := parsePreviewSize(r.URL.Query().Get("w"), r.URL.Query().Get("h"))
 
 	if tile.Kind == rpc.KindURL {
-		jpeg, err := s.store.GetTilePreview(r.Context(), tileID)
+		jpeg, err := s.store.GetTilePreview(r.Context(), strconv.FormatInt(tileID, 10))
 		if err == nil && len(jpeg) > 0 {
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Header().Set("Cache-Control", "no-cache")

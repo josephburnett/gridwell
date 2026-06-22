@@ -11,6 +11,7 @@ package localdb
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -194,9 +195,9 @@ func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessi
 	if p.sess == nil {
 		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
 	}
-	alive, err := p.sess.HasSession(req.TileId)
-	if err != nil {
-		alive = false
+	alive := false
+	if id, err := strconv.ParseInt(req.TileId, 10, 64); err == nil {
+		alive, _ = p.sess.HasSession(id)
 	}
 	return &gridwellv1.ShellSessionAliveResponse{Alive: alive}, nil
 }
@@ -225,7 +226,9 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	if p.sess != nil {
 		exists, err := p.st.ShellTileExists(ctx, tileID)
 		if err == nil && !exists {
-			_ = p.sess.Kill(tileID) // fire-and-forget; startup orphan sweep is the safety net
+			if id, perr := strconv.ParseInt(tileID, 10, 64); perr == nil {
+				_ = p.sess.Kill(id) // fire-and-forget; startup orphan sweep is the safety net
+			}
 		}
 	}
 	return &gridwellv1.DeleteTileResponse{}, nil

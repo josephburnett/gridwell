@@ -42,9 +42,13 @@ func (s *Store) CreateShell(ctx context.Context, req *rpc.CreateShellRequest) (*
 // stays on the wire so clients can still observe versions through
 // TileChanged.
 func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.loadTile(ctx, tx, req.TileID)
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, err := s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
 		}
@@ -56,7 +60,7 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 		}
 
 		if len(req.JPEG) > 0 {
-			if _, _, err := s.swapTileBlob(ctx, tx, req.TileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
+			if _, _, err := s.swapTileBlob(ctx, tx, tileID, "preview_blob_id", req.JPEG, mediaJPEG); err != nil {
 				return err
 			}
 		} else {
@@ -67,7 +71,7 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 			// the blob, or the FK trips when decBlobRefcount GCs it.
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET preview_blob_id = NULL, updated_at = ? WHERE id = ?`,
-				s.now().Unix(), req.TileID); err != nil {
+				s.now().Unix(), tileID); err != nil {
 				return err
 			}
 			if n.PreviewBlobID != 0 {
@@ -76,7 +80,7 @@ func (s *Store) SetShellPreview(ctx context.Context, req *rpc.SetShellPreviewReq
 				}
 			}
 		}
-		out, err = s.finishContentEdit(ctx, tx, req.TileID, events)
+		out, err = s.finishContentEdit(ctx, tx, tileID, events)
 		return err
 	})
 	return out, err

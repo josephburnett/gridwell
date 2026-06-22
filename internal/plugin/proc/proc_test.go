@@ -99,8 +99,8 @@ func TestAttach_DefaultPID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
-	if resp.RootGridId <= 0 {
-		t.Errorf("RootGridId = %d, want > 0", resp.RootGridId)
+	if resp.RootGridId == "" {
+		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
 	if resp.Label != "processes" {
 		t.Errorf("Label = %q, want %q", resp.Label, "processes")
@@ -116,8 +116,8 @@ func TestAttach_SpecificPID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
-	if resp.RootGridId <= 0 {
-		t.Errorf("RootGridId = %d, want > 0", resp.RootGridId)
+	if resp.RootGridId == "" {
+		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
 	if resp.Label == "processes" {
 		t.Errorf("Label should not be 'processes' for non-1 pid: %q", resp.Label)
@@ -172,13 +172,13 @@ func TestGetGrid_StableIDs(t *testing.T) {
 	r1, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 
-	ids1 := map[string]int64{}
+	ids1 := map[string]string{}
 	for _, t2 := range r1.Tiles {
 		ids1[t2.AltText] = t2.Id
 	}
 	for _, t2 := range r2.Tiles {
 		if ids1[t2.AltText] != t2.Id {
-			t.Errorf("tile %q: id changed %d→%d", t2.AltText, ids1[t2.AltText], t2.Id)
+			t.Errorf("tile %q: id changed %s→%s", t2.AltText, ids1[t2.AltText], t2.Id)
 		}
 	}
 }
@@ -226,13 +226,13 @@ func TestProbe_Present(t *testing.T) {
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 
 	childKey := strconv.FormatInt(childPID, 10)
-	var tileID int64
+	var tileID string
 	for _, t2 := range r.Tiles {
 		if t2.AltText == childKey {
 			tileID = t2.Id
 		}
 	}
-	if tileID == 0 {
+	if tileID == "" {
 		t.Fatal("child tile not found")
 	}
 
@@ -247,7 +247,7 @@ func TestProbe_Present(t *testing.T) {
 
 func TestProbe_Gone(t *testing.T) {
 	p := openPlugin(t, "", nil)
-	pr, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: 999999})
+	pr, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: "999999"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,13 +267,13 @@ func TestDeleteTile_SignalsProcess(t *testing.T) {
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 
 	childKey := strconv.FormatInt(childPID, 10)
-	var tileID int64
+	var tileID string
 	for _, t2 := range r.Tiles {
 		if t2.AltText == childKey {
 			tileID = t2.Id
 		}
 	}
-	if tileID == 0 {
+	if tileID == "" {
 		t.Fatal("child tile not found")
 	}
 
@@ -288,7 +288,7 @@ func TestDeleteTile_SignalsProcess(t *testing.T) {
 
 func TestDeleteTile_UnknownIsNoOp(t *testing.T) {
 	p := openPlugin(t, "", nil)
-	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: 999999})
+	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: "999999"})
 	if err != nil {
 		t.Errorf("DeleteTile of unknown tile should be no-op: %v", err)
 	}

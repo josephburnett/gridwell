@@ -36,7 +36,11 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 		return gridSequence{}, err
 	}
 	seq := gridSequence{grids: []int64{root}}
-	for _, wellID := range p.WellIDs {
+	for _, wellIDStr := range p.WellIDs {
+		wellID, err := parseID(wellIDStr)
+		if err != nil {
+			return gridSequence{}, fmt.Errorf("%w: well %q: %v", ErrInvalidPath, wellIDStr, err)
+		}
 		w, err := s.loadTile(ctx, q, wellID)
 		if err != nil {
 			return gridSequence{}, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
@@ -44,7 +48,7 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 		if !isWellKind(w.Kind) {
 			return gridSequence{}, fmt.Errorf("%w: tile %d is not a well", ErrInvalidPath, wellID)
 		}
-		if w.GridID != seq.grids[len(seq.grids)-1] {
+		if w.GridID != strconv.FormatInt(seq.grids[len(seq.grids)-1], 10) {
 			return gridSequence{}, fmt.Errorf("%w: well %d not in grid %d", ErrInvalidPath, wellID, seq.grids[len(seq.grids)-1])
 		}
 		seq.wells = append(seq.wells, wellID)
@@ -73,8 +77,8 @@ func (s *Store) checkPathLeaf(ctx context.Context, tx *sql.Tx, path rpc.Path, ti
 		return 0, err
 	}
 	leaf := seq.grids[len(seq.grids)-1]
-	if tile.GridID != leaf {
-		return 0, fmt.Errorf("%w: tile %d not in path leaf grid %d", ErrInvalidPath, tile.ID, leaf)
+	if tile.GridID != strconv.FormatInt(leaf, 10) {
+		return 0, fmt.Errorf("%w: tile %s not in path leaf grid %d", ErrInvalidPath, tile.ID, leaf)
 	}
 	return leaf, nil
 }

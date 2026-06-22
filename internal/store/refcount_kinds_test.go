@@ -18,7 +18,7 @@ func blobExists(t *testing.T, s *Store, id int64) bool {
 	return n > 0
 }
 
-func gridExists(t *testing.T, s *Store, id int64) bool {
+func gridExists(t *testing.T, s *Store, id string) bool {
 	t.Helper()
 	var n int64
 	if err := s.db.QueryRow(`SELECT COUNT(1) FROM grids WHERE id = ?`, id).Scan(&n); err != nil {
@@ -86,9 +86,9 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner := rpc.Path{WellIDs: []int64{well.ID}}
+	inner := rpc.Path{WellIDs: []string{well.ID}}
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: inner, GridID: parseID(well.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
+		Path: inner, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +111,7 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	}
 
 	// Two shell rows (original + copy) now share one preview blob.
-	cloneChild, err := s.GetGrid(ctx, parseID(clone.ChildGridID))
+	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,16 +144,16 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner := rpc.Path{WellIDs: []int64{well.ID}}
+	inner := rpc.Path{WellIDs: []string{well.ID}}
 
 	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
-		Path: inner, GridID: parseID(well.ChildGridID), X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
+		Path: inner, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: inner, GridID: parseID(well.ChildGridID), X: 2, Y: 0, W: 1, H: 1,
+		Path: inner, GridID: well.ChildGridID, X: 2, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +181,7 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	verifyRefcounts(t, s)
 	// Source grids are shared by identity (not refcounted), so the fs-grid
 	// persists in the main DB after the file-well is deleted.
-	if !gridExists(t, s, parseID(fsGrid)) {
+	if !gridExists(t, s, fsGrid) {
 		t.Errorf("fs-grid %s was deleted — source grids must persist (shared by identity)", fsGrid)
 	}
 	if blobExists(t, s, previewBlob) {

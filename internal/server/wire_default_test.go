@@ -45,7 +45,7 @@ func TestCreateTextEmptyData(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(resp.Tiles) != 1 || resp.Tiles[0].ID != tile.ID {
-		t.Errorf("after CreateText empty: %d tiles, want 1 matching id=%d",
+		t.Errorf("after CreateText empty: %d tiles, want 1 matching id=%s",
 			len(resp.Tiles), tile.ID)
 	}
 }

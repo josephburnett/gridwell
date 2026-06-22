@@ -33,15 +33,15 @@ func TestRebindExitWellsRebuildsSourceGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	fwID := fw.ID
-	origChildID := parseID(fw.ChildGridID)
+	origChildIDInt, _ := parseID(fw.ChildGridID)
 
 	// Manually delete the source grid to simulate a stale pointer.
 	if _, err := s.db.ExecContext(ctx,
-		`DELETE FROM tiles WHERE grid_id = ?`, origChildID); err != nil {
+		`DELETE FROM tiles WHERE grid_id = ?`, origChildIDInt); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`DELETE FROM grids WHERE id = ?`, origChildID); err != nil {
+		`DELETE FROM grids WHERE id = ?`, origChildIDInt); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -65,7 +65,7 @@ func TestRebindExitWellsRebuildsSourceGrid(t *testing.T) {
 	if tile.ChildGridID == "" {
 		t.Fatal("child_grid_id not rebound by rebindExitWells")
 	}
-	g, err := s2.GetGrid(ctx, parseID(tile.ChildGridID))
+	g, err := s2.GetGrid(ctx, tile.ChildGridID)
 	if err != nil {
 		t.Fatalf("descend into rebound source grid: %v", err)
 	}

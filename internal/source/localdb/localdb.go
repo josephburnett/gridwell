@@ -31,9 +31,9 @@ import (
 
 // cursor is the decoded form of a SourceID.
 type cursor struct {
-	Root string  `json:"r"` // attached DB key (its file path)
-	Path []int64 `json:"p"` // underlying well-tile ids from the DB root
-	Grid int64   `json:"g"` // underlying grid id being listed
+	Root string   `json:"r"` // attached DB key (its file path)
+	Path []string `json:"p"` // underlying well-tile ids from the DB root
+	Grid string   `json:"g"` // underlying grid id being listed
 }
 
 func encodeCursor(c cursor) string {
@@ -185,7 +185,7 @@ func (s *Source) Probe(ctx context.Context, sourceID, key string) (source.Presen
 		return source.PresenceUnknown, nil
 	}
 	for i := range resp.Tiles {
-		if strconv.FormatInt(resp.Tiles[i].ID, 10) == key {
+		if resp.Tiles[i].ID == key {
 			return source.PresencePresent, nil
 		}
 	}
@@ -245,13 +245,9 @@ func (s *Source) Delete(ctx context.Context, sourceID, key string, version int64
 	if err != nil {
 		return false, err
 	}
-	tileID, err := strconv.ParseInt(key, 10, 64)
-	if err != nil {
-		return false, fmt.Errorf("%w: bad key %q", source.ErrNotFound, key)
-	}
 	err = a.st.DeleteTile(ctx, &rpc.DeleteTileRequest{
 		Path:    rpc.Path{WellIDs: c.Path},
-		TileID:  tileID,
+		TileID:  key,
 		Version: version,
 	})
 	if err != nil {
@@ -270,13 +266,9 @@ func (s *Source) Move(ctx context.Context, req source.MoveRequest) (source.Node,
 	if err != nil {
 		return source.Node{}, err
 	}
-	tileID, err := strconv.ParseInt(req.Key, 10, 64)
-	if err != nil {
-		return source.Node{}, fmt.Errorf("%w: bad key %q", source.ErrNotFound, req.Key)
-	}
 	t, err := a.st.MoveTile(ctx, &rpc.MoveTileRequest{
 		Path:       rpc.Path{WellIDs: c.Path},
-		TileID:     tileID,
+		TileID:     req.Key,
 		Version:    req.Version,
 		DestGridID: dst.Grid,
 		DestPath:   rpc.Path{WellIDs: dst.Path},
@@ -299,13 +291,9 @@ func (s *Source) Clone(ctx context.Context, req source.CloneRequest) (source.Nod
 	if err != nil {
 		return source.Node{}, err
 	}
-	tileID, err := strconv.ParseInt(req.Key, 10, 64)
-	if err != nil {
-		return source.Node{}, fmt.Errorf("%w: bad key %q", source.ErrNotFound, req.Key)
-	}
 	t, err := a.st.CloneTile(ctx, &rpc.CloneTileRequest{
 		Path:       rpc.Path{WellIDs: c.Path},
-		TileID:     tileID,
+		TileID:     req.Key,
 		Version:    req.Version,
 		DestGridID: dst.Grid,
 		DestPath:   rpc.Path{WellIDs: dst.Path},
@@ -324,13 +312,9 @@ func (s *Source) Write(ctx context.Context, sourceID, key string, version int64,
 	if err != nil {
 		return source.Node{}, err
 	}
-	tileID, err := strconv.ParseInt(key, 10, 64)
-	if err != nil {
-		return source.Node{}, fmt.Errorf("%w: bad key %q", source.ErrNotFound, key)
-	}
 	t, err := a.st.UpdateText(ctx, &rpc.UpdateTextRequest{
 		Path:    rpc.Path{WellIDs: c.Path},
-		TileID:  tileID,
+		TileID:  key,
 		Version: version,
 		Data:    data,
 	})
@@ -346,14 +330,10 @@ func (s *Source) SetView(ctx context.Context, req source.SetViewRequest) (source
 	if err != nil {
 		return source.Node{}, err
 	}
-	tileID, err := strconv.ParseInt(req.Key, 10, 64)
-	if err != nil {
-		return source.Node{}, fmt.Errorf("%w: bad key %q", source.ErrNotFound, req.Key)
-	}
 	switch {
 	case req.Frame != nil:
 		t, err := a.st.SetWellView(ctx, &rpc.SetWellViewRequest{
-			Path: rpc.Path{WellIDs: c.Path}, TileID: tileID, Version: req.Version,
+			Path: rpc.Path{WellIDs: c.Path}, TileID: req.Key, Version: req.Version,
 			ViewX: req.Frame.ViewX, ViewY: req.Frame.ViewY, ViewZoom: req.Frame.ViewZoom,
 		})
 		if err != nil {
@@ -362,7 +342,7 @@ func (s *Source) SetView(ctx context.Context, req source.SetViewRequest) (source
 		return nodeForTile(c, t), nil
 	case req.Scroll != nil:
 		t, err := a.st.SetTextView(ctx, &rpc.SetTextViewRequest{
-			Path: rpc.Path{WellIDs: c.Path}, TileID: tileID, Version: req.Version,
+			Path: rpc.Path{WellIDs: c.Path}, TileID: req.Key, Version: req.Version,
 			TextX: req.Scroll.X, TextY: req.Scroll.Y, TextW: req.Scroll.W, TextH: req.Scroll.H,
 			TextMode: req.Scroll.Mode,
 		})
@@ -380,7 +360,7 @@ func (s *Source) SetView(ctx context.Context, req source.SetViewRequest) (source
 // one well-id deeper into the same DB.
 func nodeForTile(parent cursor, t *rpc.Tile) source.Node {
 	n := source.Node{
-		Key:     strconv.FormatInt(t.ID, 10),
+		Key:     t.ID,
 		Label:   t.AltText,
 		X:       t.X,
 		Y:       t.Y,
@@ -388,18 +368,17 @@ func nodeForTile(parent cursor, t *rpc.Tile) source.Node {
 		H:       t.H,
 		Version: t.Version,
 	}
-	childGridInt, _ := strconv.ParseInt(t.ChildGridID, 10, 64)
 	switch t.Kind {
 	case rpc.KindWell:
 		n.Kind = source.KindWell
-		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: childGridInt})
+		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: t.ChildGridID})
 		n.Frame = source.Frame{ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}
 		n.Caps = source.Caps{Delete: true, Move: true, Clone: true, Accept: true}
 	case rpc.KindFileWell, rpc.KindProcessWell:
 		// Descendable, but its children come from the underlying DB's own
 		// host (fs / proc). Don't expose host-mutating caps two layers up.
 		n.Kind = source.KindWell
-		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: childGridInt})
+		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: t.ChildGridID})
 		n.Frame = source.Frame{ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}
 	case rpc.KindText:
 		n.Kind = source.KindText
@@ -428,8 +407,8 @@ func nodeForTile(parent cursor, t *rpc.Tile) source.Node {
 
 // appendCopy returns a fresh copy of path so concurrent Node mappings
 // don't alias and clobber a shared backing array.
-func appendCopy(path []int64) []int64 {
-	out := make([]int64, len(path))
+func appendCopy(path []string) []string {
+	out := make([]string, len(path))
 	copy(out, path)
 	return out
 }

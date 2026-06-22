@@ -29,7 +29,7 @@ func TestCreateFileWellHappyPath(t *testing.T) {
 	if w.ChildGridID == "" {
 		t.Error("no child grid")
 	}
-	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestCreateProcessWellHappyPath(t *testing.T) {
 	if w.PID != 1 {
 		t.Errorf("pid=%d, want 1", w.PID)
 	}
-	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}

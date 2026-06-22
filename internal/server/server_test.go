@@ -20,7 +20,7 @@ import (
 // newTestServer wires up a Server backed by an in-memory store and
 // returns the httptest server, a typed Connect client pointed at it,
 // and the bootstrapped root grid id.
-func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, int64) {
+func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -60,7 +60,7 @@ func TestBootstrapReturnsRoot(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	if resp.RootGridID != root {
-		t.Errorf("root_grid_id = %d, want %d", resp.RootGridID, root)
+		t.Errorf("root_grid_id = %q, want %q", resp.RootGridID, root)
 	}
 }
 

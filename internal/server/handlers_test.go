@@ -239,8 +239,8 @@ func TestErrorCodeMapping(t *testing.T) {
 
 	// Invalid path (bogus well id) → InvalidArgument.
 	_, err = cl.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{99}},
-		GridID: 1, X: 10, Y: 10, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{"99"}},
+		GridID: "1", X: 10, Y: 10, W: 1, H: 1,
 	})
 	if got := errCode(err); got != connect.CodeInvalidArgument {
 		t.Errorf("invalid path: code %v, want InvalidArgument", got)
@@ -264,7 +264,7 @@ func TestBootstrapIncludesRootView(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	if resp.RootGridID != root {
-		t.Errorf("root_grid_id = %d, want %d", resp.RootGridID, root)
+		t.Errorf("root_grid_id = %q, want %q", resp.RootGridID, root)
 	}
 	if resp.RootViewCx != 0 || resp.RootViewCy != 0 || resp.RootZoom != 1 {
 		t.Errorf("initial bootstrap view = (%v,%v,%v), want (0,0,1)",

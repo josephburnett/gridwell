@@ -3,17 +3,10 @@ package store
 import (
 	"context"
 	"errors"
-	"strconv"
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
-
-// parseID parses a string tile/grid id (now used for ChildGridID) to int64.
-func parseID(s string) int64 {
-	id, _ := strconv.ParseInt(s, 10, 64)
-	return id
-}
 
 // TestSwapTileBlob exercises the blob-swap kernel directly: a content change
 // (new blob, old released), a no-op identical write (no churn), and a dedup
@@ -32,13 +25,14 @@ func TestSwapTileBlob(t *testing.T) {
 	}
 	origBlob := tile.BlobID
 
+	tileIDInt, _ := parseID(tile.ID)
 	swap := func(bytes []byte) (int64, bool) {
 		t.Helper()
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		id, changed, err := s.swapTileBlob(ctx, tx, tile.ID, "blob_id", bytes, mediaMarkdown)
+		id, changed, err := s.swapTileBlob(ctx, tx, tileIDInt, "blob_id", bytes, mediaMarkdown)
 		if err != nil {
 			tx.Rollback()
 			t.Fatal(err)
@@ -108,8 +102,8 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: parseID(w.ChildGridID), X: 5, Y: 5, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{w.ID}},
+		GridID: w.ChildGridID, X: 5, Y: 5, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +126,7 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 		t.Errorf("clone child grid = %s == original (expected an independent copy)", clone.ChildGridID)
 	}
 
-	cloneChild, err := s.GetGrid(ctx, parseID(clone.ChildGridID))
+	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +135,7 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 	}
 	ct := cloneChild.Tiles[0]
 	if ct.ID == inner.ID {
-		t.Errorf("inner tile should be re-rowed in the copy, still has id %d", inner.ID)
+		t.Errorf("inner tile should be re-rowed in the copy, still has id %s", inner.ID)
 	}
 	if ct.ObjectID != inner.ObjectID {
 		t.Errorf("copied inner object_id = %s, want %s (provenance)", ct.ObjectID, inner.ObjectID)
@@ -163,8 +157,8 @@ func TestCloneIndependentEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: parseID(w.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{w.ID}},
+		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -177,13 +171,13 @@ func TestCloneIndependentEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cloneChild, err := s.GetGrid(ctx, parseID(clone.ChildGridID))
+	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cInner := cloneChild.Tiles[0]
 	resized, err := s.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: cInner.ID,
+		Path: rpc.Path{WellIDs: []string{clone.ID}}, TileID: cInner.ID,
 		Version: cInner.Version, W: 3, H: 3,
 	})
 	if err != nil {
@@ -196,7 +190,7 @@ func TestCloneIndependentEdit(t *testing.T) {
 		t.Errorf("resize did not apply: %+v", resized)
 	}
 
-	origChild, err := s.GetGrid(ctx, parseID(w.ChildGridID))
+	origChild, err := s.GetGrid(ctx, w.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +198,7 @@ func TestCloneIndependentEdit(t *testing.T) {
 		t.Fatalf("original child has %d tiles, want 1", len(origChild.Tiles))
 	}
 	if origChild.Tiles[0].ID != inner.ID {
-		t.Errorf("original inner re-rowed: %d -> %d", inner.ID, origChild.Tiles[0].ID)
+		t.Errorf("original inner re-rowed: %s -> %s", inner.ID, origChild.Tiles[0].ID)
 	}
 	if origChild.Tiles[0].W != 1 || origChild.Tiles[0].H != 1 {
 		t.Errorf("original child tile was mutated: %+v", origChild.Tiles[0])
@@ -227,21 +221,21 @@ func TestCloneOneLevelByteIdentity(t *testing.T) {
 	}
 	original := []byte("# original")
 	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path:   rpc.Path{WellIDs: []int64{outer.ID}},
-		GridID: parseID(outer.ChildGridID),
+		Path:   rpc.Path{WellIDs: []string{outer.ID}},
+		GridID: outer.ChildGridID,
 		X:      0, Y: 0, W: 1, H: 1, Data: original,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	snap := func(outerID int64) []byte {
+	snap := func(outerID string) []byte {
 		t.Helper()
 		ot, err := s.GetTile(ctx, outerID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := s.GetGrid(ctx, parseID(ot.ChildGridID))
+		g, err := s.GetGrid(ctx, ot.ChildGridID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -263,13 +257,13 @@ func TestCloneOneLevelByteIdentity(t *testing.T) {
 		t.Fatalf("clone: %v", err)
 	}
 
-	cloneChild, err := s.GetGrid(ctx, parseID(clone.ChildGridID))
+	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cText := cloneChild.Tiles[0]
 	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{WellIDs: []int64{clone.ID}}, TileID: cText.ID,
+		Path: rpc.Path{WellIDs: []string{clone.ID}}, TileID: cText.ID,
 		Version: cText.Version, Data: []byte("# mutated"),
 	})
 	if err != nil {
@@ -305,36 +299,36 @@ func TestCloneTwoLevelByteIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{a.ID}},
-		GridID: parseID(a.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{a.ID}},
+		GridID: a.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	original := []byte("# original")
 	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path:   rpc.Path{WellIDs: []int64{a.ID, b.ID}},
-		GridID: parseID(b.ChildGridID),
+		Path:   rpc.Path{WellIDs: []string{a.ID, b.ID}},
+		GridID: b.ChildGridID,
 		X:      0, Y: 0, W: 1, H: 1, Data: original,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	leafBytes := func(outerWellID int64) []byte {
+	leafBytes := func(outerWellID string) []byte {
 		t.Helper()
 		ot, err := s.GetTile(ctx, outerWellID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := s.GetGrid(ctx, parseID(ot.ChildGridID))
+		g, err := s.GetGrid(ctx, ot.ChildGridID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(g.Tiles) != 1 || g.Tiles[0].Kind != rpc.KindWell {
-			t.Fatalf("expected one well inside outer %d; got %+v", outerWellID, g.Tiles)
+			t.Fatalf("expected one well inside outer %s; got %+v", outerWellID, g.Tiles)
 		}
-		h, err := s.GetGrid(ctx, parseID(g.Tiles[0].ChildGridID))
+		h, err := s.GetGrid(ctx, g.Tiles[0].ChildGridID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -361,7 +355,7 @@ func TestCloneTwoLevelByteIdentity(t *testing.T) {
 
 	mutated := []byte("# mutated")
 	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path:    rpc.Path{WellIDs: []int64{a.ID, b.ID}},
+		Path:    rpc.Path{WellIDs: []string{a.ID, b.ID}},
 		TileID:  text.ID,
 		Version: text.Version, Data: mutated,
 	})
@@ -396,25 +390,25 @@ func TestCloneThreeIndependentCopies(t *testing.T) {
 	}
 	original := []byte("# original")
 	text, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path:   rpc.Path{WellIDs: []int64{a.ID}},
-		GridID: parseID(a.ChildGridID), X: 0, Y: 0, W: 1, H: 1, Data: original,
+		Path:   rpc.Path{WellIDs: []string{a.ID}},
+		GridID: a.ChildGridID, X: 0, Y: 0, W: 1, H: 1, Data: original,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	leafBytes := func(outerWellID int64) []byte {
+	leafBytes := func(outerWellID string) []byte {
 		t.Helper()
 		ot, err := s.GetTile(ctx, outerWellID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := s.GetGrid(ctx, parseID(ot.ChildGridID))
+		g, err := s.GetGrid(ctx, ot.ChildGridID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(g.Tiles) != 1 {
-			t.Fatalf("expected 1 tile in outer %d's child; got %d", outerWellID, len(g.Tiles))
+			t.Fatalf("expected 1 tile in outer %s's child; got %d", outerWellID, len(g.Tiles))
 		}
 		data, err := s.GetBlob(ctx, g.Tiles[0].BlobID)
 		if err != nil {
@@ -440,7 +434,7 @@ func TestCloneThreeIndependentCopies(t *testing.T) {
 
 	mutated := []byte("# mutated")
 	if _, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path:    rpc.Path{WellIDs: []int64{a.ID}},
+		Path:    rpc.Path{WellIDs: []string{a.ID}},
 		TileID:  text.ID,
 		Version: text.Version, Data: mutated,
 	}); err != nil {
@@ -535,27 +529,28 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 	mdTile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path:   rpc.Path{WellIDs: []int64{outer.ID}},
-		GridID: parseID(outer.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{outer.ID}},
+		GridID: outer.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 		Data: []byte("inside"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []int64{outer.ID}},
-		GridID: parseID(outer.ChildGridID), X: 5, Y: 0, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{outer.ID}},
+		GridID: outer.ChildGridID, X: 5, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	subChildGrid := parseID(sub.ChildGridID)
+	subChildGridID, _ := parseID(sub.ChildGridID)
 
 	if rc := refcount(t, s, "blobs", mdTile.BlobID); rc != 1 {
 		t.Fatalf("md blob refcount = %d, want 1", rc)
 	}
 
-	outerCur, err := s.loadTile(ctx, s.db, outer.ID)
+	outerIDInt, _ := parseID(outer.ID)
+	outerCur, err := s.loadTile(ctx, s.db, outerIDInt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,14 +560,15 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	outerChildGridID, _ := parseID(outer.ChildGridID)
 	var n int64
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM grids WHERE id = ?`, parseID(outer.ChildGridID)).Scan(&n); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM grids WHERE id = ?`, outerChildGridID).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
 		t.Errorf("outer child grid still present after delete")
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM grids WHERE id = ?`, subChildGrid).Scan(&n); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM grids WHERE id = ?`, subChildGridID).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {

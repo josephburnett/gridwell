@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log"
+	"strconv"
 
 	"connectrpc.com/connect"
 
@@ -127,9 +128,9 @@ func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Reque
 	if h.srv.shellStreamer == nil {
 		return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: false})), nil
 	}
-	alive, err := h.srv.shellStreamer.HasSession(in.TileID)
-	if err != nil {
-		alive = false
+	alive := false
+	if tileIDInt, err := strconv.ParseInt(in.TileID, 10, 64); err == nil {
+		alive, _ = h.srv.shellStreamer.HasSession(tileIDInt)
 	}
 	return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: alive})), nil
 }
@@ -161,10 +162,12 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 		exists, err := h.srv.store.ShellTileExists(ctx, tileID)
 		switch {
 		case err != nil:
-			log.Printf("[shellstream] kill-on-delete existence tile=%d err=%v", tileID, err)
+			log.Printf("[shellstream] kill-on-delete existence tile=%s err=%v", tileID, err)
 		case !exists:
-			if err := h.srv.shellStreamer.Kill(tileID); err != nil {
-				log.Printf("[shellstream] kill-on-delete tile=%d err=%v", tileID, err)
+			if tileIDInt, perr := strconv.ParseInt(tileID, 10, 64); perr == nil {
+				if err := h.srv.shellStreamer.Kill(tileIDInt); err != nil {
+					log.Printf("[shellstream] kill-on-delete tile=%s err=%v", tileID, err)
+				}
 			}
 		}
 	}

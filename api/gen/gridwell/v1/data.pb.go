@@ -89,7 +89,7 @@ func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
 // still uniquely owned.
 type Path struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	WellIds       []int64                `protobuf:"varint,1,rep,packed,name=well_ids,json=wellIds,proto3" json:"well_ids,omitempty"`
+	WellIds       []string               `protobuf:"bytes,1,rep,name=well_ids,json=wellIds,proto3" json:"well_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -124,7 +124,7 @@ func (*Path) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Path) GetWellIds() []int64 {
+func (x *Path) GetWellIds() []string {
 	if x != nil {
 		return x.WellIds
 	}
@@ -139,7 +139,7 @@ func (x *Path) GetWellIds() []int64 {
 // for the process table. source_id carries the path or PID.
 type Grid struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ObjectId      string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	SourceKind    string                 `protobuf:"bytes,4,opt,name=source_kind,json=sourceKind,proto3" json:"source_kind,omitempty"`
@@ -178,11 +178,11 @@ func (*Grid) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Grid) GetId() int64 {
+func (x *Grid) GetId() string {
 	if x != nil {
 		return x.Id
 	}
-	return 0
+	return ""
 }
 
 func (x *Grid) GetObjectId() string {
@@ -218,10 +218,10 @@ func (x *Grid) GetSourceId() string {
 // enforces it.
 type Tile struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
-	Id       int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ObjectId string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	Version  int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	GridId   int64                  `protobuf:"varint,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId   string                 `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	Kind     string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
 	X        int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
 	Y        int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
@@ -293,11 +293,11 @@ func (*Tile) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Tile) GetId() int64 {
+func (x *Tile) GetId() string {
 	if x != nil {
 		return x.Id
 	}
-	return 0
+	return ""
 }
 
 func (x *Tile) GetObjectId() string {
@@ -314,11 +314,11 @@ func (x *Tile) GetVersion() int64 {
 	return 0
 }
 
-func (x *Tile) GetGridId() int64 {
+func (x *Tile) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *Tile) GetKind() string {
@@ -842,7 +842,7 @@ func (x *AttachRequest) GetConfig() map[string]string {
 
 type AttachResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootGridId    int64                  `protobuf:"varint,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
+	RootGridId    string                 `protobuf:"bytes,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	Caps          *PluginCaps            `protobuf:"bytes,3,opt,name=caps,proto3" json:"caps,omitempty"`
 	Network       *NetworkContext        `protobuf:"bytes,4,opt,name=network,proto3" json:"network,omitempty"`                          // unset → url tiles frozen-only
@@ -881,11 +881,11 @@ func (*AttachResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *AttachResponse) GetRootGridId() int64 {
+func (x *AttachResponse) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
 	}
-	return 0
+	return ""
 }
 
 func (x *AttachResponse) GetLabel() string {
@@ -918,7 +918,7 @@ func (x *AttachResponse) GetHasSession() bool {
 
 type DetachRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootGridId    int64                  `protobuf:"varint,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
+	RootGridId    string                 `protobuf:"bytes,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -953,11 +953,11 @@ func (*DetachRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *DetachRequest) GetRootGridId() int64 {
+func (x *DetachRequest) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
 	}
-	return 0
+	return ""
 }
 
 type DetachResponse struct {
@@ -1001,7 +1001,7 @@ func (*DetachResponse) Descriptor() ([]byte, []int) {
 // reconcile. A failed read must never sweep a tile — only GONE does.
 type ProbeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        int64                  `protobuf:"varint,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1036,11 +1036,11 @@ func (*ProbeRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *ProbeRequest) GetTileId() int64 {
+func (x *ProbeRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 type ProbeResponse struct {
@@ -1089,7 +1089,7 @@ func (x *ProbeResponse) GetPresence() ProbeResponse_Presence {
 
 type GetSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootGridId    int64                  `protobuf:"varint,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
+	RootGridId    string                 `protobuf:"bytes,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1124,11 +1124,11 @@ func (*GetSessionRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *GetSessionRequest) GetRootGridId() int64 {
+func (x *GetSessionRequest) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
 	}
-	return 0
+	return ""
 }
 
 // BlobChunk is a streaming fragment for GetSession and future ReadBlob.
@@ -1180,7 +1180,7 @@ func (x *BlobChunk) GetData() []byte {
 // root_grid_id to bind the stream; subsequent messages carry only data.
 type PutSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootGridId    int64                  `protobuf:"varint,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
+	RootGridId    string                 `protobuf:"bytes,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1216,11 +1216,11 @@ func (*PutSessionRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *PutSessionRequest) GetRootGridId() int64 {
+func (x *PutSessionRequest) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
 	}
-	return 0
+	return ""
 }
 
 func (x *PutSessionRequest) GetData() []byte {
@@ -1268,7 +1268,7 @@ func (*PutSessionResponse) Descriptor() ([]byte, []int) {
 
 type OpenShellRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        int64                  `protobuf:"varint,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	Resize        *PTYSize               `protobuf:"bytes,3,opt,name=resize,proto3" json:"resize,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1305,11 +1305,11 @@ func (*OpenShellRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *OpenShellRequest) GetTileId() int64 {
+func (x *OpenShellRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *OpenShellRequest) GetData() []byte {
@@ -1461,7 +1461,7 @@ func (*BootstrapRequest) Descriptor() ([]byte, []int) {
 
 type BootstrapResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootGridId    int64                  `protobuf:"varint,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
+	RootGridId    string                 `protobuf:"bytes,1,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	RootViewCx    float64                `protobuf:"fixed64,2,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy    float64                `protobuf:"fixed64,3,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootZoom      float64                `protobuf:"fixed64,4,opt,name=root_zoom,json=rootZoom,proto3" json:"root_zoom,omitempty"`
@@ -1499,11 +1499,11 @@ func (*BootstrapResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *BootstrapResponse) GetRootGridId() int64 {
+func (x *BootstrapResponse) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
 	}
-	return 0
+	return ""
 }
 
 func (x *BootstrapResponse) GetRootViewCx() float64 {
@@ -1529,7 +1529,7 @@ func (x *BootstrapResponse) GetRootZoom() float64 {
 
 type GetGridRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	GridId        int64                  `protobuf:"varint,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1564,11 +1564,11 @@ func (*GetGridRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *GetGridRequest) GetGridId() int64 {
+func (x *GetGridRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 type GetGridResponse struct {
@@ -1713,7 +1713,7 @@ func (x *GetBlobResponse) GetData() []byte {
 
 type GetTilePreviewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        int64                  `protobuf:"varint,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1748,11 +1748,11 @@ func (*GetTilePreviewRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{27}
 }
 
-func (x *GetTilePreviewRequest) GetTileId() int64 {
+func (x *GetTilePreviewRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 type GetTilePreviewResponse struct {
@@ -1847,7 +1847,7 @@ func (x *TileResponse) GetTile() *Tile {
 type CreateWellRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        int64                  `protobuf:"varint,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
 	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
@@ -1893,11 +1893,11 @@ func (x *CreateWellRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CreateWellRequest) GetGridId() int64 {
+func (x *CreateWellRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CreateWellRequest) GetX() int64 {
@@ -1931,7 +1931,7 @@ func (x *CreateWellRequest) GetH() int64 {
 type CreateTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        int64                  `protobuf:"varint,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
 	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
@@ -1978,11 +1978,11 @@ func (x *CreateTextRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CreateTextRequest) GetGridId() int64 {
+func (x *CreateTextRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CreateTextRequest) GetX() int64 {
@@ -2023,7 +2023,7 @@ func (x *CreateTextRequest) GetData() []byte {
 type CreateURLRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        int64                  `protobuf:"varint,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
 	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
@@ -2070,11 +2070,11 @@ func (x *CreateURLRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CreateURLRequest) GetGridId() int64 {
+func (x *CreateURLRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CreateURLRequest) GetX() int64 {
@@ -2115,7 +2115,7 @@ func (x *CreateURLRequest) GetUrl() string {
 type CreateFileWellRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        int64                  `protobuf:"varint,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
 	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
@@ -2162,11 +2162,11 @@ func (x *CreateFileWellRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CreateFileWellRequest) GetGridId() int64 {
+func (x *CreateFileWellRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CreateFileWellRequest) GetX() int64 {
@@ -2207,7 +2207,7 @@ func (x *CreateFileWellRequest) GetFsPath() string {
 type CreateProcessWellRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        int64                  `protobuf:"varint,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
 	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
@@ -2254,11 +2254,11 @@ func (x *CreateProcessWellRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CreateProcessWellRequest) GetGridId() int64 {
+func (x *CreateProcessWellRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CreateProcessWellRequest) GetX() int64 {
@@ -2305,7 +2305,7 @@ func (x *CreateProcessWellRequest) GetPid() int64 {
 type CreateShellRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        int64                  `protobuf:"varint,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
 	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
@@ -2351,11 +2351,11 @@ func (x *CreateShellRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CreateShellRequest) GetGridId() int64 {
+func (x *CreateShellRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CreateShellRequest) GetX() int64 {
@@ -2393,7 +2393,7 @@ func (x *CreateShellRequest) GetH() int64 {
 type SetShellPreviewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	Jpeg          []byte                 `protobuf:"bytes,4,opt,name=jpeg,proto3" json:"jpeg,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2437,11 +2437,11 @@ func (x *SetShellPreviewRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *SetShellPreviewRequest) GetTileId() int64 {
+func (x *SetShellPreviewRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *SetShellPreviewRequest) GetVersion() int64 {
@@ -2467,7 +2467,7 @@ func (x *SetShellPreviewRequest) GetJpeg() []byte {
 //     remains (the session died, can't bring it back).
 type ShellSessionAliveRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        int64                  `protobuf:"varint,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2502,11 +2502,11 @@ func (*ShellSessionAliveRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{37}
 }
 
-func (x *ShellSessionAliveRequest) GetTileId() int64 {
+func (x *ShellSessionAliveRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 type ShellSessionAliveResponse struct {
@@ -2556,9 +2556,9 @@ func (x *ShellSessionAliveResponse) GetAlive() bool {
 type MoveTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	DestGridId    int64                  `protobuf:"varint,4,opt,name=dest_grid_id,json=destGridId,proto3" json:"dest_grid_id,omitempty"`
+	DestGridId    string                 `protobuf:"bytes,4,opt,name=dest_grid_id,json=destGridId,proto3" json:"dest_grid_id,omitempty"`
 	DestPath      *Path                  `protobuf:"bytes,5,opt,name=dest_path,json=destPath,proto3" json:"dest_path,omitempty"`
 	X             int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
@@ -2603,11 +2603,11 @@ func (x *MoveTileRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *MoveTileRequest) GetTileId() int64 {
+func (x *MoveTileRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *MoveTileRequest) GetVersion() int64 {
@@ -2617,11 +2617,11 @@ func (x *MoveTileRequest) GetVersion() int64 {
 	return 0
 }
 
-func (x *MoveTileRequest) GetDestGridId() int64 {
+func (x *MoveTileRequest) GetDestGridId() string {
 	if x != nil {
 		return x.DestGridId
 	}
-	return 0
+	return ""
 }
 
 func (x *MoveTileRequest) GetDestPath() *Path {
@@ -2648,9 +2648,9 @@ func (x *MoveTileRequest) GetY() int64 {
 type CloneTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	DestGridId    int64                  `protobuf:"varint,4,opt,name=dest_grid_id,json=destGridId,proto3" json:"dest_grid_id,omitempty"`
+	DestGridId    string                 `protobuf:"bytes,4,opt,name=dest_grid_id,json=destGridId,proto3" json:"dest_grid_id,omitempty"`
 	DestPath      *Path                  `protobuf:"bytes,5,opt,name=dest_path,json=destPath,proto3" json:"dest_path,omitempty"`
 	X             int64                  `protobuf:"varint,6,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
@@ -2695,11 +2695,11 @@ func (x *CloneTileRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *CloneTileRequest) GetTileId() int64 {
+func (x *CloneTileRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *CloneTileRequest) GetVersion() int64 {
@@ -2709,11 +2709,11 @@ func (x *CloneTileRequest) GetVersion() int64 {
 	return 0
 }
 
-func (x *CloneTileRequest) GetDestGridId() int64 {
+func (x *CloneTileRequest) GetDestGridId() string {
 	if x != nil {
 		return x.DestGridId
 	}
-	return 0
+	return ""
 }
 
 func (x *CloneTileRequest) GetDestPath() *Path {
@@ -2740,7 +2740,7 @@ func (x *CloneTileRequest) GetY() int64 {
 type ResizeTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	X             int64                  `protobuf:"varint,4,opt,name=x,proto3" json:"x,omitempty"`
 	Y             int64                  `protobuf:"varint,5,opt,name=y,proto3" json:"y,omitempty"`
@@ -2787,11 +2787,11 @@ func (x *ResizeTileRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *ResizeTileRequest) GetTileId() int64 {
+func (x *ResizeTileRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *ResizeTileRequest) GetVersion() int64 {
@@ -2832,7 +2832,7 @@ func (x *ResizeTileRequest) GetH() int64 {
 type SetWellViewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	ViewX         int64                  `protobuf:"varint,4,opt,name=view_x,json=viewX,proto3" json:"view_x,omitempty"`
 	ViewY         int64                  `protobuf:"varint,5,opt,name=view_y,json=viewY,proto3" json:"view_y,omitempty"`
@@ -2878,11 +2878,11 @@ func (x *SetWellViewRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *SetWellViewRequest) GetTileId() int64 {
+func (x *SetWellViewRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *SetWellViewRequest) GetVersion() int64 {
@@ -2916,7 +2916,7 @@ func (x *SetWellViewRequest) GetViewZoom() float64 {
 type SetTextViewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	TextX         int64                  `protobuf:"varint,4,opt,name=text_x,json=textX,proto3" json:"text_x,omitempty"`
 	TextY         int64                  `protobuf:"varint,5,opt,name=text_y,json=textY,proto3" json:"text_y,omitempty"`
@@ -2964,11 +2964,11 @@ func (x *SetTextViewRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *SetTextViewRequest) GetTileId() int64 {
+func (x *SetTextViewRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *SetTextViewRequest) GetVersion() int64 {
@@ -3119,7 +3119,7 @@ func (*SetRootViewResponse) Descriptor() ([]byte, []int) {
 type SetURLStateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	Jpeg          []byte                 `protobuf:"bytes,4,opt,name=jpeg,proto3" json:"jpeg,omitempty"`
 	Url           string                 `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
@@ -3165,11 +3165,11 @@ func (x *SetURLStateRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *SetURLStateRequest) GetTileId() int64 {
+func (x *SetURLStateRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *SetURLStateRequest) GetVersion() int64 {
@@ -3203,7 +3203,7 @@ func (x *SetURLStateRequest) GetTitle() string {
 type UpdateTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3247,11 +3247,11 @@ func (x *UpdateTextRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *UpdateTextRequest) GetTileId() int64 {
+func (x *UpdateTextRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *UpdateTextRequest) GetVersion() int64 {
@@ -3271,7 +3271,7 @@ func (x *UpdateTextRequest) GetData() []byte {
 type DeleteTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3314,11 +3314,11 @@ func (x *DeleteTileRequest) GetPath() *Path {
 	return nil
 }
 
-func (x *DeleteTileRequest) GetTileId() int64 {
+func (x *DeleteTileRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 func (x *DeleteTileRequest) GetVersion() int64 {
@@ -3402,7 +3402,7 @@ func (*SubscribeRequest) Descriptor() ([]byte, []int) {
 
 type GridChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	GridId        int64                  `protobuf:"varint,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3437,11 +3437,11 @@ func (*GridChanged) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{51}
 }
 
-func (x *GridChanged) GetGridId() int64 {
+func (x *GridChanged) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
 type TileChanged struct {
@@ -3490,8 +3490,8 @@ func (x *TileChanged) GetTile() *Tile {
 
 type TileRemoved struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	GridId        int64                  `protobuf:"varint,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	TileId        int64                  `protobuf:"varint,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	GridId        string                 `protobuf:"bytes,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3526,18 +3526,18 @@ func (*TileRemoved) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{53}
 }
 
-func (x *TileRemoved) GetGridId() int64 {
+func (x *TileRemoved) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
-	return 0
+	return ""
 }
 
-func (x *TileRemoved) GetTileId() int64 {
+func (x *TileRemoved) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
-	return 0
+	return ""
 }
 
 // Event carries one of the change kinds. The variant tells the client
@@ -3647,19 +3647,19 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"!\n" +
 	"\x04Path\x12\x19\n" +
-	"\bwell_ids\x18\x01 \x03(\x03R\awellIds\"\x8b\x01\n" +
+	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\x8b\x01\n" +
 	"\x04Grid\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
 	"\vsource_kind\x18\x04 \x01(\tR\n" +
 	"sourceKind\x12\x1b\n" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\"\xdf\x04\n" +
 	"\x04Tile\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
-	"\agrid_id\x18\x04 \x01(\x03R\x06gridId\x12\x12\n" +
+	"\agrid_id\x18\x04 \x01(\tR\x06gridId\x12\x12\n" +
 	"\x04kind\x18\x05 \x01(\tR\x04kind\x12\f\n" +
 	"\x01x\x18\x06 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\a \x01(\x03R\x01y\x12\f\n" +
@@ -3711,7 +3711,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcd\x01\n" +
 	"\x0eAttachResponse\x12 \n" +
-	"\froot_grid_id\x18\x01 \x01(\x03R\n" +
+	"\froot_grid_id\x18\x01 \x01(\tR\n" +
 	"rootGridId\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12+\n" +
 	"\x04caps\x18\x03 \x01(\v2\x17.gridwell.v1.PluginCapsR\x04caps\x125\n" +
@@ -3719,11 +3719,11 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vhas_session\x18\x05 \x01(\bR\n" +
 	"hasSession\"1\n" +
 	"\rDetachRequest\x12 \n" +
-	"\froot_grid_id\x18\x01 \x01(\x03R\n" +
+	"\froot_grid_id\x18\x01 \x01(\tR\n" +
 	"rootGridId\"\x10\n" +
 	"\x0eDetachResponse\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\x03R\x06tileId\"\x9f\x01\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +
 	"\bpresence\x18\x01 \x01(\x0e2#.gridwell.v1.ProbeResponse.PresenceR\bpresence\"M\n" +
 	"\bPresence\x12\x18\n" +
@@ -3731,17 +3731,17 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x10PRESENCE_PRESENT\x10\x01\x12\x11\n" +
 	"\rPRESENCE_GONE\x10\x02\"5\n" +
 	"\x11GetSessionRequest\x12 \n" +
-	"\froot_grid_id\x18\x01 \x01(\x03R\n" +
+	"\froot_grid_id\x18\x01 \x01(\tR\n" +
 	"rootGridId\"\x1f\n" +
 	"\tBlobChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\"I\n" +
 	"\x11PutSessionRequest\x12 \n" +
-	"\froot_grid_id\x18\x01 \x01(\x03R\n" +
+	"\froot_grid_id\x18\x01 \x01(\tR\n" +
 	"rootGridId\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\"\x14\n" +
 	"\x12PutSessionResponse\"m\n" +
 	"\x10OpenShellRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\x03R\x06tileId\x12\x12\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12,\n" +
 	"\x06resize\x18\x03 \x01(\v2\x14.gridwell.v1.PTYSizeR\x06resize\"'\n" +
 	"\x11OpenShellResponse\x12\x12\n" +
@@ -3751,7 +3751,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x04rows\x18\x02 \x01(\x05R\x04rows\"\x12\n" +
 	"\x10BootstrapRequest\"\x96\x01\n" +
 	"\x11BootstrapResponse\x12 \n" +
-	"\froot_grid_id\x18\x01 \x01(\x03R\n" +
+	"\froot_grid_id\x18\x01 \x01(\tR\n" +
 	"rootGridId\x12 \n" +
 	"\froot_view_cx\x18\x02 \x01(\x01R\n" +
 	"rootViewCx\x12 \n" +
@@ -3759,7 +3759,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12\x1b\n" +
 	"\troot_zoom\x18\x04 \x01(\x01R\brootZoom\")\n" +
 	"\x0eGetGridRequest\x12\x17\n" +
-	"\agrid_id\x18\x01 \x01(\x03R\x06gridId\"a\n" +
+	"\agrid_id\x18\x01 \x01(\tR\x06gridId\"a\n" +
 	"\x0fGetGridResponse\x12%\n" +
 	"\x04grid\x18\x01 \x01(\v2\x11.gridwell.v1.GridR\x04grid\x12'\n" +
 	"\x05tiles\x18\x02 \x03(\v2\x11.gridwell.v1.TileR\x05tiles\")\n" +
@@ -3768,21 +3768,21 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fGetBlobResponse\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\"0\n" +
 	"\x15GetTilePreviewRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\x03R\x06tileId\",\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\",\n" +
 	"\x16GetTilePreviewResponse\x12\x12\n" +
 	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\x8b\x01\n" +
 	"\x11CreateWellRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\agrid_id\x18\x02 \x01(\x03R\x06gridId\x12\f\n" +
+	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
 	"\x01h\x18\x06 \x01(\x03R\x01h\"\x9f\x01\n" +
 	"\x11CreateTextRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\agrid_id\x18\x02 \x01(\x03R\x06gridId\x12\f\n" +
+	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
@@ -3790,7 +3790,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x04data\x18\a \x01(\fR\x04data\"\x9c\x01\n" +
 	"\x10CreateURLRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\agrid_id\x18\x02 \x01(\x03R\x06gridId\x12\f\n" +
+	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
@@ -3798,7 +3798,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x03url\x18\a \x01(\tR\x03url\"\xa8\x01\n" +
 	"\x15CreateFileWellRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\agrid_id\x18\x02 \x01(\x03R\x06gridId\x12\f\n" +
+	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
@@ -3806,7 +3806,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\afs_path\x18\a \x01(\tR\x06fsPath\"\xa4\x01\n" +
 	"\x18CreateProcessWellRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\agrid_id\x18\x02 \x01(\x03R\x06gridId\x12\f\n" +
+	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
@@ -3814,41 +3814,41 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x03pid\x18\a \x01(\x03R\x03pid\"\x8c\x01\n" +
 	"\x12CreateShellRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\agrid_id\x18\x02 \x01(\x03R\x06gridId\x12\f\n" +
+	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
 	"\x01h\x18\x06 \x01(\x03R\x01h\"\x86\x01\n" +
 	"\x16SetShellPreviewRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x12\n" +
 	"\x04jpeg\x18\x04 \x01(\fR\x04jpeg\"3\n" +
 	"\x18ShellSessionAliveRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\x03R\x06tileId\"1\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\"1\n" +
 	"\x19ShellSessionAliveResponse\x12\x14\n" +
 	"\x05alive\x18\x01 \x01(\bR\x05alive\"\xd9\x01\n" +
 	"\x0fMoveTileRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12 \n" +
-	"\fdest_grid_id\x18\x04 \x01(\x03R\n" +
+	"\fdest_grid_id\x18\x04 \x01(\tR\n" +
 	"destGridId\x12.\n" +
 	"\tdest_path\x18\x05 \x01(\v2\x11.gridwell.v1.PathR\bdestPath\x12\f\n" +
 	"\x01x\x18\x06 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\a \x01(\x03R\x01y\"\xda\x01\n" +
 	"\x10CloneTileRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12 \n" +
-	"\fdest_grid_id\x18\x04 \x01(\x03R\n" +
+	"\fdest_grid_id\x18\x04 \x01(\tR\n" +
 	"destGridId\x12.\n" +
 	"\tdest_path\x18\x05 \x01(\v2\x11.gridwell.v1.PathR\bdestPath\x12\f\n" +
 	"\x01x\x18\x06 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\a \x01(\x03R\x01y\"\xa5\x01\n" +
 	"\x11ResizeTileRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\f\n" +
 	"\x01x\x18\x04 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x05 \x01(\x03R\x01y\x12\f\n" +
@@ -3856,14 +3856,14 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x01h\x18\a \x01(\x03R\x01h\"\xb9\x01\n" +
 	"\x12SetWellViewRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x15\n" +
 	"\x06view_x\x18\x04 \x01(\x03R\x05viewX\x12\x15\n" +
 	"\x06view_y\x18\x05 \x01(\x03R\x05viewY\x12\x1b\n" +
 	"\tview_zoom\x18\x06 \x01(\x01R\bviewZoom\"\xe7\x01\n" +
 	"\x12SetTextViewRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x15\n" +
 	"\x06text_x\x18\x04 \x01(\x03R\x05textX\x12\x15\n" +
 	"\x06text_y\x18\x05 \x01(\x03R\x05textY\x12\x15\n" +
@@ -3877,29 +3877,29 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x13SetRootViewResponse\"\xaa\x01\n" +
 	"\x12SetURLStateRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x12\n" +
 	"\x04jpeg\x18\x04 \x01(\fR\x04jpeg\x12\x10\n" +
 	"\x03url\x18\x05 \x01(\tR\x03url\x12\x14\n" +
 	"\x05title\x18\x06 \x01(\tR\x05title\"\x81\x01\n" +
 	"\x11UpdateTextRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x12\n" +
 	"\x04data\x18\x04 \x01(\fR\x04data\"m\n" +
 	"\x11DeleteTileRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\"\x14\n" +
 	"\x12DeleteTileResponse\"\x12\n" +
 	"\x10SubscribeRequest\"&\n" +
 	"\vGridChanged\x12\x17\n" +
-	"\agrid_id\x18\x01 \x01(\x03R\x06gridId\"4\n" +
+	"\agrid_id\x18\x01 \x01(\tR\x06gridId\"4\n" +
 	"\vTileChanged\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"?\n" +
 	"\vTileRemoved\x12\x17\n" +
-	"\agrid_id\x18\x01 \x01(\x03R\x06gridId\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\x03R\x06tileId\"\xcf\x01\n" +
+	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x17\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\xcf\x01\n" +
 	"\x05Event\x12=\n" +
 	"\fgrid_changed\x18\x01 \x01(\v2\x18.gridwell.v1.GridChangedH\x00R\vgridChanged\x12=\n" +
 	"\ftile_changed\x18\x02 \x01(\v2\x18.gridwell.v1.TileChangedH\x00R\vtileChanged\x12=\n" +

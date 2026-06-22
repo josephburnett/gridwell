@@ -152,14 +152,14 @@ func (s *Server) CleanupOrphanedShellSessions(ctx context.Context) (int, error) 
 	if err != nil {
 		return 0, fmt.Errorf("list shell tiles: %w", err)
 	}
-	known := make(map[int64]bool, len(tileIDs))
+	known := make(map[string]bool, len(tileIDs))
 	for _, id := range tileIDs {
 		known[id] = true
 	}
 	killed := 0
 	var firstErr error
 	for _, id := range live {
-		if known[id] {
+		if known[strconv.FormatInt(id, 10)] {
 			continue
 		}
 		if err := s.shellStreamer.Kill(id); err != nil {
@@ -290,7 +290,7 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing or invalid tile_id", http.StatusBadRequest)
 		return
 	}
-	tile, err := s.store.GetTile(r.Context(), tileID)
+	tile, err := s.store.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
 	if err != nil {
 		writeHTTPError(w, err)
 		return

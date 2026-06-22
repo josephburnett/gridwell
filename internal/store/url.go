@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -18,12 +19,15 @@ import (
 // keeps tiles unshared, so the frozen frame and address write straight to the
 // tile's own row.
 func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, rpc.KindURL, ErrNotURLTile); err != nil {
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		if _, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, rpc.KindURL, ErrNotURLTile); err != nil {
 			return err
 		}
-		tileID := req.TileID
 
 		// Empty JPEG is skipped (a partial capture must not clobber a good
 		// frozen frame); the blob-swap kernel handles dedup + refcounting.

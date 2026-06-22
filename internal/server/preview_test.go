@@ -12,9 +12,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-func getPreview(t *testing.T, hs *httptest.Server, tileID int64, w, h int) (int, string, []byte) {
+func getPreview(t *testing.T, hs *httptest.Server, tileID string, w, h int) (int, string, []byte) {
 	t.Helper()
-	url := hs.URL + "/preview/tile/" + strconv.FormatInt(tileID, 10) +
+	url := hs.URL + "/preview/tile/" + tileID +
 		"?w=" + strconv.Itoa(w) + "&h=" + strconv.Itoa(h)
 	got, err := http.Get(url)
 	if err != nil {

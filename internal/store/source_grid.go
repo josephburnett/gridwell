@@ -28,7 +28,8 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 			return nil // source unavailable; keep existing tiles unchanged
 		}
 
-		existing, err := loadSourceGridTiles(ctx, tx, g.ID)
+		gid, _ := parseID(g.ID)
+		existing, err := loadSourceGridTiles(ctx, tx, gid)
 		if err != nil {
 			return err
 		}
@@ -56,7 +57,7 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 					return err
 				}
 			case source.KindText:
-				if err := s.insertSourceTextTile(ctx, tx, g.ID, src, g.SourceID, n, layout.next(), now, events); err != nil {
+				if err := s.insertSourceTextTile(ctx, tx, gid, src, g.SourceID, n,layout.next(), now, events); err != nil {
 					return err
 				}
 			// KindURL / KindShell: not yet wired into the reconciler.
@@ -67,7 +68,8 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 		// Apply label refreshes.
 		for _, r := range plan.Relabel {
 			tile := existing[r.Key]
-			if err := s.updateTileAltText(ctx, tx, tile.ID, r.Label, now, events); err != nil {
+			tid, _ := parseID(tile.ID)
+			if err := s.updateTileAltText(ctx, tx, tid, r.Label, now, events); err != nil {
 				return err
 			}
 			changed = true
@@ -99,7 +101,7 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 				case source.KindWell:
 					err = s.insertSourceWellTile(ctx, tx, g, n, pos, now, events)
 				case source.KindText:
-					err = s.insertSourceTextTile(ctx, tx, g.ID, src, g.SourceID, n, pos, now, events)
+					err = s.insertSourceTextTile(ctx, tx, gid, src, g.SourceID, n,pos, now, events)
 				}
 				if err != nil {
 					return err
@@ -121,15 +123,16 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 			if err != nil {
 				continue // can't refresh; keep old blob
 			}
-			_, bodyChanged, err := s.swapTileBlob(ctx, tx, tile.ID, "blob_id", body, n.Body.MediaType)
+			tid, _ := parseID(tile.ID)
+			_, bodyChanged, err := s.swapTileBlob(ctx, tx, tid, "blob_id", body, n.Body.MediaType)
 			if err != nil {
 				return err
 			}
 			if bodyChanged {
-				if err := bumpTileVersion(ctx, tx, tile.ID); err != nil {
+				if err := bumpTileVersion(ctx, tx, tid); err != nil {
 					return err
 				}
-				t, err := s.loadTile(ctx, tx, tile.ID)
+				t, err := s.loadTile(ctx, tx, tid)
 				if err != nil {
 					return err
 				}
@@ -150,7 +153,7 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 		if !changed {
 			return nil
 		}
-		return s.bumpGridVersion(ctx, tx, g.ID)
+		return s.bumpGridVersion(ctx, tx, gid)
 	})
 }
 
@@ -158,6 +161,7 @@ func (s *Store) reconcileSourceGrid(ctx context.Context, g *rpc.Grid) error {
 // The rpc kind and extra columns (fs_path / pid) are determined by the
 // parent grid's source kind.
 func (s *Store) insertSourceWellTile(ctx context.Context, tx *sql.Tx, g *rpc.Grid, n source.Node, pos position, now int64, events *[]rpc.Event) error {
+	gridID, _ := parseID(g.ID)
 	childGridID, err := s.getOrCreateSourceGrid(ctx, tx, g.SourceKind, n.Child, now)
 	if err != nil {
 		return err
@@ -171,7 +175,7 @@ func (s *Store) insertSourceWellTile(ctx context.Context, tx *sql.Tx, g *rpc.Gri
 				view_x, view_y, view_zoom, child_grid_id, fs_path, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'file-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
-			objID, g.ID, pos.x, pos.y, childGridID, n.Child, n.Key, n.Label, now, now)
+			objID, gridID, pos.x, pos.y, childGridID, n.Child, n.Key, n.Label, now, now)
 	case rpc.GridSourceProc:
 		pid, perr := strconv.ParseInt(n.Key, 10, 64)
 		if perr != nil {
@@ -182,14 +186,14 @@ func (s *Store) insertSourceWellTile(ctx context.Context, tx *sql.Tx, g *rpc.Gri
 				view_x, view_y, view_zoom, child_grid_id, pid, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'process-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
-			objID, g.ID, pos.x, pos.y, childGridID, pid, n.Key, n.Label, now, now)
+			objID, gridID, pos.x, pos.y, childGridID, pid, n.Key, n.Label, now, now)
 	default:
 		res, err = tx.ExecContext(ctx, `
 			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?)`,
-			objID, g.ID, pos.x, pos.y, childGridID, n.Key, n.Label, now, now)
+			objID, gridID, pos.x, pos.y, childGridID, n.Key, n.Label, now, now)
 	}
 	if err != nil {
 		return fmt.Errorf("insert source well tile: %w", err)
@@ -368,7 +372,8 @@ func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64,
 // deleteFSGridTile drops a source-backed tile that no longer has a backing
 // entry, releasing any child-grid or blob reference it held.
 func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events *[]rpc.Event) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
+	tileID, _ := parseID(t.ID)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 		return err
 	}
 	childGridID, _ := strconv.ParseInt(t.ChildGridID, 10, 64)

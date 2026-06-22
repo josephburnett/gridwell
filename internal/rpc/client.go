@@ -48,7 +48,7 @@ func (c *Client) Bootstrap(ctx context.Context) (*BootstrapResponse, error) {
 	}, nil
 }
 
-func (c *Client) GetGrid(ctx context.Context, gridID int64) (*GetGridResponse, error) {
+func (c *Client) GetGrid(ctx context.Context, gridID string) (*GetGridResponse, error) {
 	r, err := c.cl.GetGrid(ctx, connect.NewRequest(&pb.GetGridRequest{GridId: gridID}))
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (c *Client) GetBlob(ctx context.Context, blobID int64) ([]byte, error) {
 	return r.Msg.Data, nil
 }
 
-func (c *Client) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error) {
+func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, error) {
 	r, err := c.cl.GetTilePreview(ctx, connect.NewRequest(&pb.GetTilePreviewRequest{TileId: tileID}))
 	if err != nil {
 		return nil, err

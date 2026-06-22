@@ -23,7 +23,7 @@ func (s *stubServer) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwe
 }
 
 func (s *stubServer) Attach(_ context.Context, _ *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
-	return &gridwellv1.AttachResponse{RootGridId: 42, Label: "stub-root"}, nil
+	return &gridwellv1.AttachResponse{RootGridId: "42", Label: "stub-root"}, nil
 }
 
 // TestInProcessRoundTrip verifies the gRPC server/client stubs round-trip
@@ -57,8 +57,8 @@ func TestInProcessRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
-	if ar.RootGridId != 42 {
-		t.Errorf("Attach.RootGridId: got %d, want 42", ar.RootGridId)
+	if ar.RootGridId != "42" {
+		t.Errorf("Attach.RootGridId: got %q, want %q", ar.RootGridId, "42")
 	}
 }
 

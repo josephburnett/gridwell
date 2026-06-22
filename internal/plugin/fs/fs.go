@@ -126,7 +126,7 @@ func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*grid
 		label = "files"
 	}
 	return &gridwellv1.AttachResponse{
-		RootGridId: gridID,
+		RootGridId: strconv.FormatInt(gridID, 10),
 		Label:      label,
 		Caps:       &gridwellv1.PluginCaps{},
 		HasSession: false,
@@ -142,7 +142,10 @@ func (p *Plugin) Detach(_ context.Context, _ *gridwellv1.DetachRequest) (*gridwe
 // against the current directory contents, and returns the resulting tiles.
 // Missing directories return an empty grid without error.
 func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
-	gridID := req.GridId
+	gridID, err := strconv.ParseInt(req.GridId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("fs GetGrid: invalid grid_id %q", req.GridId)
+	}
 
 	path, err := p.gridPath(gridID)
 	if err != nil {
@@ -164,15 +167,19 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		return nil, err
 	}
 
-	grid := &gridwellv1.Grid{Id: gridID, SourceKind: "fs", SourceId: path}
+	grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
 	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
 }
 
 // Probe checks whether the tile at tile_id still has its backing path on disk.
 func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
+	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
+	}
 	var gridID int64
 	var name string
-	err := p.db.QueryRow(`SELECT t.grid_id, t.name FROM tiles t WHERE t.id = ?`, req.TileId).Scan(&gridID, &name)
+	err = p.db.QueryRow(`SELECT t.grid_id, t.name FROM tiles t WHERE t.id = ?`, tileID).Scan(&gridID, &name)
 	if err == sql.ErrNoRows {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
@@ -198,9 +205,13 @@ func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwe
 // DeleteTile removes the file or directory from disk (via Host), then drops
 // the tile row from the plugin DB.
 func (p *Plugin) DeleteTile(_ context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
+	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return &gridwellv1.DeleteTileResponse{}, nil
+	}
 	var gridID int64
 	var name, kind string
-	err := p.db.QueryRow(`SELECT grid_id, name, kind FROM tiles WHERE id = ?`, req.TileId).Scan(&gridID, &name, &kind)
+	err = p.db.QueryRow(`SELECT grid_id, name, kind FROM tiles WHERE id = ?`, tileID).Scan(&gridID, &name, &kind)
 	if err == sql.ErrNoRows {
 		return &gridwellv1.DeleteTileResponse{}, nil // already gone
 	}
@@ -227,7 +238,7 @@ func (p *Plugin) DeleteTile(_ context.Context, req *gridwellv1.DeleteTileRequest
 		}
 	}
 	// Remove the tile row and any child grid it pointed at.
-	if _, err := p.db.Exec(`DELETE FROM tiles WHERE id = ?`, req.TileId); err != nil {
+	if _, err := p.db.Exec(`DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 		return nil, err
 	}
 	return &gridwellv1.DeleteTileResponse{}, nil
@@ -381,8 +392,8 @@ func (p *Plugin) loadTiles(gridID int64) ([]*gridwellv1.Tile, error) {
 			return nil, err
 		}
 		t := &gridwellv1.Tile{
-			Id:          id,
-			GridId:      gridID,
+			Id:          strconv.FormatInt(id, 10),
+			GridId:      strconv.FormatInt(gridID, 10),
 			Kind:        kind,
 			X:           x,
 			Y:           y,

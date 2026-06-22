@@ -74,14 +74,14 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	}
 	moved, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
 		Path: rpc.Path{}, TileID: target.ID, Version: target.Version,
-		DestGridID: parseID(a.ChildGridID), DestPath: rpc.Path{WellIDs: []int64{a.ID}},
+		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []string{a.ID}},
 		X: 0, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("move across: %v", err)
 	}
-	if moved.GridID != parseID(a.ChildGridID) {
-		t.Errorf("moved.GridID = %d, want %s", moved.GridID, a.ChildGridID)
+	if moved.GridID != a.ChildGridID {
+		t.Errorf("moved.GridID = %s, want %s", moved.GridID, a.ChildGridID)
 	}
 	g, _ := s.GetGrid(ctx, root)
 	for _, n := range g.Tiles {

@@ -31,8 +31,8 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
-// rootID returns the bootstrapped root grid id.
-func rootID(t *testing.T, s *Store) int64 {
+// rootID returns the bootstrapped root grid id as a string.
+func rootID(t *testing.T, s *Store) string {
 	t.Helper()
 	id, err := s.RootGridID(context.Background())
 	if err != nil {
@@ -74,8 +74,8 @@ func TestBootstrapRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("root: %v", err)
 	}
-	if id <= 0 {
-		t.Errorf("root id = %d", id)
+	if id == "" {
+		t.Error("root id is empty")
 	}
 }
 

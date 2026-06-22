@@ -36,8 +36,8 @@ func TestAttach_ReturnsRootGridID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.RootGridId <= 0 {
-		t.Errorf("RootGridId = %d, want > 0", resp.RootGridId)
+	if resp.RootGridId == "" {
+		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
 	if !resp.Caps.Write {
 		t.Error("expected Write cap")
@@ -50,8 +50,8 @@ func TestBootstrap_ReturnsRootGridID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.RootGridId <= 0 {
-		t.Errorf("RootGridId = %d, want > 0", resp.RootGridId)
+	if resp.RootGridId == "" {
+		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestAttach_MatchesBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.RootGridId != b.RootGridId {
-		t.Errorf("Attach.RootGridId=%d != Bootstrap.RootGridId=%d", a.RootGridId, b.RootGridId)
+		t.Errorf("Attach.RootGridId=%q != Bootstrap.RootGridId=%q", a.RootGridId, b.RootGridId)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestGetGrid_ReturnsGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.Grid.Id != a.RootGridId {
-		t.Errorf("grid id = %d, want %d", resp.Grid.Id, a.RootGridId)
+		t.Errorf("grid id = %q, want %q", resp.Grid.Id, a.RootGridId)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestProbe_Present(t *testing.T) {
 
 func TestProbe_Gone(t *testing.T) {
 	p := openPlugin(t)
-	pr, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: 999999})
+	pr, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: "999999"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 
 func TestShellSessionAlive_NilSess(t *testing.T) {
 	p := openPlugin(t) // sess = nil
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: 1})
+	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestShellSessionAlive_WithSess(t *testing.T) {
 	sess := &recordSession{}
 	p := localdb.New(st, sess)
 
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: 1})
+	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -147,9 +147,18 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 	})
 }
 
-// RootGridID returns the current root grid id.
-func (s *Store) RootGridID(ctx context.Context) (int64, error) {
-	return rootGridID(ctx, s.db)
+// parseID converts a string tile/grid ID to int64 for SQL binding.
+func parseID(s string) (int64, error) {
+	return strconv.ParseInt(s, 10, 64)
+}
+
+// RootGridID returns the current root grid id as a decimal string.
+func (s *Store) RootGridID(ctx context.Context) (string, error) {
+	id, err := rootGridID(ctx, s.db)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(id, 10), nil
 }
 
 // RootView returns the persisted root viewport: center (cx, cy) and zoom.
@@ -200,7 +209,7 @@ func (s *Store) SetRootView(ctx context.Context, req *rpc.SetRootViewRequest) er
 	if err != nil {
 		return err
 	}
-	s.publish(rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: rootID}})
+	s.publish(rpc.Event{Kind: rpc.EventGridChanged, GridChanged: &rpc.GridChanged{GridID: strconv.FormatInt(rootID, 10)}})
 	return nil
 }
 

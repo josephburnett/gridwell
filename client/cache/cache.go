@@ -20,7 +20,7 @@ import (
 // fetches them on first descent).
 type Cache struct {
 	mu    sync.Mutex
-	grids map[int64]*Grid
+	grids map[string]*Grid
 	blobs map[int64][]byte
 	// localBlobSeq generates client-local optimistic blob ids. It decrements
 	// from 0, so optimistic ids are always negative and can never collide with
@@ -32,12 +32,12 @@ type Cache struct {
 // Grid is a cached grid plus its tiles indexed by id for cheap upsert.
 type Grid struct {
 	Meta  rpc.Grid
-	Tiles map[int64]rpc.Tile
+	Tiles map[string]rpc.Tile
 }
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[int64]*Grid{}, blobs: map[int64][]byte{}}
+	return &Cache{grids: map[string]*Grid{}, blobs: map[int64][]byte{}}
 }
 
 // PutBlob stores a blob. Blobs are text bytes (the only blob-bearing tile
@@ -72,7 +72,7 @@ func (c *Cache) Blob(blobID int64) ([]byte, bool) {
 // The authoritative server blob id arrives later via Apply(EventTileChanged),
 // which replaces the tile (and drops this optimistic blob). A prior optimistic
 // blob for the same tile is dropped here so the map can't grow without bound.
-func (c *Cache) OptimisticEdit(gridID, tileID int64, data []byte) bool {
+func (c *Cache) OptimisticEdit(gridID, tileID string, data []byte) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	g, ok := c.grids[gridID]
@@ -101,7 +101,7 @@ func (c *Cache) OptimisticEdit(gridID, tileID int64, data []byte) bool {
 func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	gr := &Grid{Meta: g, Tiles: map[int64]rpc.Tile{}}
+	gr := &Grid{Meta: g, Tiles: map[string]rpc.Tile{}}
 	for _, n := range tiles {
 		gr.Tiles[n.ID] = n
 	}
@@ -111,23 +111,23 @@ func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {
 // Grid returns a snapshot of a cached grid, or (nil, false) if absent.
 // The returned grid is a deep enough copy that the caller can iterate it
 // without holding the cache lock.
-func (c *Cache) Grid(id int64) (*Grid, bool) {
+func (c *Cache) Grid(id string) (*Grid, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	g, ok := c.grids[id]
 	if !ok {
 		return nil, false
 	}
-	out := &Grid{Meta: g.Meta, Tiles: make(map[int64]rpc.Tile, len(g.Tiles))}
+	out := &Grid{Meta: g.Meta, Tiles: make(map[string]rpc.Tile, len(g.Tiles))}
 	maps.Copy(out.Tiles, g.Tiles)
 	return out, true
 }
 
 // KnownGridIDs returns the set of grid ids the cache currently holds.
-func (c *Cache) KnownGridIDs() []int64 {
+func (c *Cache) KnownGridIDs() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]int64, 0, len(c.grids))
+	out := make([]string, 0, len(c.grids))
 	for id := range c.grids {
 		out = append(out, id)
 	}
@@ -138,7 +138,7 @@ func (c *Cache) KnownGridIDs() []int64 {
 // the grid or tile is not cached. Used by URLStream nav events to
 // keep cached URL tiles in sync with in-page navigation without
 // going through the full Subscribe event path.
-func (c *Cache) UpdateTile(gridID int64, t rpc.Tile) {
+func (c *Cache) UpdateTile(gridID string, t rpc.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	g, ok := c.grids[gridID]

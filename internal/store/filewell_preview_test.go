@@ -44,7 +44,7 @@ func TestFileWellChildGridDistinctFromWell(t *testing.T) {
 	var srcKind, srcID string
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(source_kind,''), COALESCE(source_id,'') FROM grids WHERE id = ?`,
-		parseID(fw.ChildGridID)).Scan(&srcKind, &srcID)
+		fw.ChildGridID).Scan(&srcKind, &srcID)
 	if err != nil {
 		t.Fatalf("query child grid: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestGridIDNotReusedAfterDelete(t *testing.T) {
 	// otherwise there's no freed id to reuse and this test proves nothing.
 	var n int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM grids WHERE id = ?`, parseID(deletedChild)).Scan(&n); err != nil {
+		`SELECT COUNT(*) FROM grids WHERE id = ?`, deletedChild).Scan(&n); err != nil {
 		t.Fatalf("query deleted grid: %v", err)
 	}
 	if n != 0 {

@@ -137,7 +137,7 @@ func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*grid
 		label = fmt.Sprintf("pid %d", pid)
 	}
 	return &gridwellv1.AttachResponse{
-		RootGridId: gridID,
+		RootGridId: strconv.FormatInt(gridID, 10),
 		Label:      label,
 		Caps:       &gridwellv1.PluginCaps{},
 		HasSession: false,
@@ -154,7 +154,10 @@ func (p *Plugin) Detach(_ context.Context, _ *gridwellv1.DetachRequest) (*gridwe
 // Reconciliation is non-authoritative: tiles for processes unreadable this pass
 // are kept; tiles for definitively-gone PIDs are swept.
 func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
-	gridID := req.GridId
+	gridID, err := strconv.ParseInt(req.GridId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("proc GetGrid: invalid grid_id %q", req.GridId)
+	}
 	rootPID, err := p.gridPID(gridID)
 	if err != nil {
 		return nil, fmt.Errorf("proc GetGrid %d: %w", gridID, err)
@@ -170,7 +173,7 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 	}
 
 	grid := &gridwellv1.Grid{
-		Id:         gridID,
+		Id:         req.GridId,
 		SourceKind: "proc",
 		SourceId:   strconv.FormatInt(rootPID, 10),
 	}
@@ -179,9 +182,13 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 
 // Probe checks whether the process backing tile_id still exists.
 func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
+	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
+	}
 	var pid int64
 	var key string
-	err := p.db.QueryRow(`SELECT pid, key FROM tiles WHERE id = ?`, req.TileId).Scan(&pid, &key)
+	err = p.db.QueryRow(`SELECT pid, key FROM tiles WHERE id = ?`, tileID).Scan(&pid, &key)
 	if err == sql.ErrNoRows {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
@@ -191,7 +198,7 @@ func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwe
 	if key == infoKey {
 		// @info maps to the root PID of the parent grid.
 		var gridID int64
-		if err := p.db.QueryRow(`SELECT grid_id FROM tiles WHERE id = ?`, req.TileId).Scan(&gridID); err != nil {
+		if err := p.db.QueryRow(`SELECT grid_id FROM tiles WHERE id = ?`, tileID).Scan(&gridID); err != nil {
 			return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 		}
 		var rootPID int64
@@ -215,10 +222,14 @@ func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwe
 // SIGTERM is best-effort; the tile is swept on the next GetGrid call once
 // the process is definitively gone.
 func (p *Plugin) DeleteTile(_ context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
+	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return &gridwellv1.DeleteTileResponse{}, nil
+	}
 	var pid int64
 	var key string
 	var gridID int64
-	err := p.db.QueryRow(`SELECT grid_id, pid, key FROM tiles WHERE id = ?`, req.TileId).Scan(&gridID, &pid, &key)
+	err = p.db.QueryRow(`SELECT grid_id, pid, key FROM tiles WHERE id = ?`, tileID).Scan(&gridID, &pid, &key)
 	if err == sql.ErrNoRows {
 		return &gridwellv1.DeleteTileResponse{}, nil
 	}
@@ -404,8 +415,8 @@ func (p *Plugin) loadTiles(gridID int64) ([]*gridwellv1.Tile, error) {
 			return nil, err
 		}
 		t := &gridwellv1.Tile{
-			Id:          id,
-			GridId:      gridID,
+			Id:          strconv.FormatInt(id, 10),
+			GridId:      strconv.FormatInt(gridID, 10),
 			Kind:        kind,
 			X:           x,
 			Y:           y,

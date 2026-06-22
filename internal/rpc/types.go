@@ -64,7 +64,7 @@ const (
 // validate the editing pane really sits in this leaf grid (checkPathLeaf);
 // copy-on-clone keeps tiles unshared, so the edit writes in place — no fork.
 type Path struct {
-	WellIDs []int64 `json:"well_ids"`
+	WellIDs []string `json:"well_ids"`
 }
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells point at
@@ -75,7 +75,7 @@ type Path struct {
 // table. SourceID carries the path or PID; clients use SourceKind to pick
 // the red color theme on descent.
 type Grid struct {
-	ID         int64  `json:"id"`
+	ID         string `json:"id"`
 	ObjectID   string `json:"object_id"`
 	Version    int64  `json:"version"`
 	SourceKind string `json:"source_kind,omitempty"`
@@ -85,10 +85,10 @@ type Grid struct {
 // Tile is the persistent unit of content in a grid. Kind selects which subset
 // of the optional fields is meaningful.
 type Tile struct {
-	ID       int64  `json:"id"`
+	ID       string `json:"id"`
 	ObjectID string `json:"object_id"`
 	Version  int64  `json:"version"`
-	GridID   int64  `json:"grid_id"`
+	GridID   string `json:"grid_id"`
 	Kind     string `json:"kind"`
 	X        int64  `json:"x"`
 	Y        int64  `json:"y"`
@@ -138,7 +138,7 @@ type Tile struct {
 
 type BootstrapRequest struct{}
 type BootstrapResponse struct {
-	RootGridID int64   `json:"root_grid_id"`
+	RootGridID string  `json:"root_grid_id"`
 	RootViewCx float64 `json:"root_view_cx"`
 	RootViewCy float64 `json:"root_view_cy"`
 	RootZoom   float64 `json:"root_zoom"`
@@ -147,7 +147,7 @@ type BootstrapResponse struct {
 // Reads.
 
 type GetGridRequest struct {
-	GridID int64 `json:"grid_id"`
+	GridID string `json:"grid_id"`
 }
 type GetGridResponse struct {
 	Grid  Grid   `json:"grid"`
@@ -162,7 +162,7 @@ type GetBlobResponse struct {
 }
 
 type GetTilePreviewRequest struct {
-	TileID int64 `json:"tile_id"`
+	TileID string `json:"tile_id"`
 }
 type GetTilePreviewResponse struct {
 	JPEG []byte `json:"jpeg"`
@@ -176,8 +176,8 @@ type TileResponse struct {
 // Creates: no Version (the tile doesn't exist yet).
 
 type CreateWellRequest struct {
-	Path   Path  `json:"path"`
-	GridID int64 `json:"grid_id"`
+	Path   Path   `json:"path"`
+	GridID string `json:"grid_id"`
 	X      int64 `json:"x"`
 	Y      int64 `json:"y"`
 	W      int64 `json:"w"`
@@ -186,7 +186,7 @@ type CreateWellRequest struct {
 
 type CreateTextRequest struct {
 	Path   Path   `json:"path"`
-	GridID int64  `json:"grid_id"`
+	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
@@ -196,7 +196,7 @@ type CreateTextRequest struct {
 
 type CreateURLRequest struct {
 	Path   Path   `json:"path"`
-	GridID int64  `json:"grid_id"`
+	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
@@ -211,7 +211,7 @@ type CreateURLRequest struct {
 // per-clone divergence is impossible).
 type CreateFileWellRequest struct {
 	Path   Path   `json:"path"`
-	GridID int64  `json:"grid_id"`
+	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
@@ -222,8 +222,8 @@ type CreateFileWellRequest struct {
 // CreateProcessWellRequest creates a process-well at the given PID. The
 // canonical starting PID from the palette is 1 (init).
 type CreateProcessWellRequest struct {
-	Path   Path  `json:"path"`
-	GridID int64 `json:"grid_id"`
+	Path   Path   `json:"path"`
+	GridID string `json:"grid_id"`
 	X      int64 `json:"x"`
 	Y      int64 `json:"y"`
 	W      int64 `json:"w"`
@@ -238,8 +238,8 @@ type CreateProcessWellRequest struct {
 // tmux session keyed by tile id and persists across ascents until
 // the tile is deleted (or the machine reboots).
 type CreateShellRequest struct {
-	Path   Path  `json:"path"`
-	GridID int64 `json:"grid_id"`
+	Path   Path   `json:"path"`
+	GridID string `json:"grid_id"`
 	X      int64 `json:"x"`
 	Y      int64 `json:"y"`
 	W      int64 `json:"w"`
@@ -250,28 +250,28 @@ type CreateShellRequest struct {
 // Server returns 409 / ErrVersionConflict if it does not match.
 
 type MoveTileRequest struct {
-	Path       Path  `json:"path"`
-	TileID     int64 `json:"tile_id"`
-	Version    int64 `json:"version"`
-	DestGridID int64 `json:"dest_grid_id"`
+	Path       Path   `json:"path"`
+	TileID     string `json:"tile_id"`
+	Version    int64  `json:"version"`
+	DestGridID string `json:"dest_grid_id"`
 	DestPath   Path  `json:"dest_path"`
 	X          int64 `json:"x"`
 	Y          int64 `json:"y"`
 }
 
 type CloneTileRequest struct {
-	Path       Path  `json:"path"`
-	TileID     int64 `json:"tile_id"`
-	Version    int64 `json:"version"`
-	DestGridID int64 `json:"dest_grid_id"`
+	Path       Path   `json:"path"`
+	TileID     string `json:"tile_id"`
+	Version    int64  `json:"version"`
+	DestGridID string `json:"dest_grid_id"`
 	DestPath   Path  `json:"dest_path"`
 	X          int64 `json:"x"`
 	Y          int64 `json:"y"`
 }
 
 type ResizeTileRequest struct {
-	Path    Path  `json:"path"`
-	TileID  int64 `json:"tile_id"`
+	Path    Path   `json:"path"`
+	TileID  string `json:"tile_id"`
 	Version int64 `json:"version"`
 	X       int64 `json:"x"`
 	Y       int64 `json:"y"`
@@ -281,7 +281,7 @@ type ResizeTileRequest struct {
 
 type SetWellViewRequest struct {
 	Path     Path    `json:"path"`
-	TileID   int64   `json:"tile_id"`
+	TileID   string  `json:"tile_id"`
 	Version  int64   `json:"version"`
 	ViewX    int64   `json:"view_x"`
 	ViewY    int64   `json:"view_y"`
@@ -290,7 +290,7 @@ type SetWellViewRequest struct {
 
 type SetTextViewRequest struct {
 	Path     Path   `json:"path"`
-	TileID   int64  `json:"tile_id"`
+	TileID   string `json:"tile_id"`
 	Version  int64  `json:"version"`
 	TextX    int64  `json:"text_x"`
 	TextY    int64  `json:"text_y"`
@@ -303,7 +303,7 @@ type SetTextViewRequest struct {
 // the frozen preview. Bytes are hash-deduped through the blobs table.
 type SetShellPreviewRequest struct {
 	Path    Path   `json:"path"`
-	TileID  int64  `json:"tile_id"`
+	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 	JPEG    []byte `json:"jpeg"`
 }
@@ -313,7 +313,7 @@ type SetShellPreviewRequest struct {
 // answer to gate the refresh button on descent — see CLAUDE.md /
 // the shell-tile design notes for the truth table.
 type ShellSessionAliveRequest struct {
-	TileID int64 `json:"tile_id"`
+	TileID string `json:"tile_id"`
 }
 
 // ShellSessionAliveResponse is the answer side of the probe.
@@ -335,7 +335,7 @@ type SetRootViewResponse struct{}
 // is no fork). Empty jpeg/url/title fields are skipped.
 type SetURLStateRequest struct {
 	Path    Path   `json:"path"`
-	TileID  int64  `json:"tile_id"`
+	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 	JPEG    []byte `json:"jpeg"`
 	URL     string `json:"url"`
@@ -344,14 +344,14 @@ type SetURLStateRequest struct {
 
 type UpdateTextRequest struct {
 	Path    Path   `json:"path"`
-	TileID  int64  `json:"tile_id"`
+	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 	Data    []byte `json:"data"`
 }
 
 type DeleteTileRequest struct {
-	Path    Path  `json:"path"`
-	TileID  int64 `json:"tile_id"`
+	Path    Path   `json:"path"`
+	TileID  string `json:"tile_id"`
 	Version int64 `json:"version"`
 }
 type DeleteTileResponse struct{}
@@ -376,12 +376,12 @@ type Event struct {
 }
 
 type GridChanged struct {
-	GridID int64 `json:"grid_id"`
+	GridID string `json:"grid_id"`
 }
 type TileChanged struct {
 	Tile Tile `json:"tile"`
 }
 type TileRemoved struct {
-	GridID int64 `json:"grid_id"`
-	TileID int64 `json:"tile_id"`
+	GridID string `json:"grid_id"`
+	TileID string `json:"tile_id"`
 }

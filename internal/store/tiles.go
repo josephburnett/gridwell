@@ -91,14 +91,18 @@ func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64,
 // returns its id.
 func (s *Store) createTile(
 	ctx context.Context,
-	path rpc.Path, gridID, x, y, w, h int64,
+	path rpc.Path, gridIDStr string, x, y, w, h int64,
 	insert func(tx *sql.Tx, gridID, now int64, objID string) (tileID int64, err error),
 ) (*rpc.Tile, error) {
+	gridID, err := parseID(gridIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
+	}
 	if w <= 0 || h <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		seq, err := s.buildGridSequence(ctx, tx, path)
 		if err != nil {
 			return err
@@ -227,13 +231,16 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		_, gridID, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, "", nil)
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		_, gridID, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
-		tileID := req.TileID
 
 		over, err := overlapsExisting(ctx, tx, gridID, req.X, req.Y, req.W, req.H, tileID)
 		if err != nil {
@@ -260,9 +267,13 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 // already independent, so there is nothing to fork) — the framing stays
 // exactly as you left it.
 func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, "", nil)
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
@@ -271,10 +282,10 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
-			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), req.TileID); err != nil {
+			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		out, err = s.emitTileChanged(ctx, tx, req.TileID, events)
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
 		return err
 	})
 	return out, err
@@ -284,9 +295,13 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 // mode. Like SetWellView this is framing, not content: an in-place write that
 // does NOT bump the tile version.
 func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, rpc.KindText, ErrNotTextTile); err != nil {
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		if _, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, rpc.KindText, ErrNotTextTile); err != nil {
 			return err
 		}
 		var textModeArg any
@@ -295,11 +310,11 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
-			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), req.TileID); err != nil {
+			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), tileID); err != nil {
 			return err
 		}
 		var err error
-		out, err = s.emitTileChanged(ctx, tx, req.TileID, events)
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
 		return err
 	})
 	return out, err
@@ -309,12 +324,17 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 // grids are routed through deleteSourceTile so the host-side artifact
 // (file, directory, process) is removed too.
 func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, _, err := s.loadForEdit(ctx, tx, req.Path, req.TileID, req.Version, "", nil)
+		t, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
-		parent, err := s.loadGrid(ctx, tx, t.GridID)
+		parentID, _ := parseID(t.GridID)
+		parent, err := s.loadGrid(ctx, tx, parentID)
 		if err != nil {
 			return err
 		}

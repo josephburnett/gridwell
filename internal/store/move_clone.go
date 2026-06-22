@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -40,9 +41,17 @@ func (s *Store) gridSourceKind(ctx context.Context, tx *sql.Tx, id int64) (strin
 
 // MoveTile moves a tile either within its grid or across grids.
 func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	destGridID, err := parseID(req.DestGridID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid dest_grid_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
 		if err != nil {
 			return err
 		}
@@ -52,19 +61,15 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			return err
 		}
 		srcGrid := srcSeq.grids[len(srcSeq.grids)-1]
-		if n.GridID != srcGrid {
-			return fmt.Errorf("%w: tile %d not in source path leaf grid %d", ErrInvalidPath, req.TileID, srcGrid)
+		if n.GridID != strconv.FormatInt(srcGrid, 10) {
+			return fmt.Errorf("%w: tile %d not in source path leaf grid %d", ErrInvalidPath, tileID, srcGrid)
 		}
-
-		// No fork: copy-on-clone keeps tiles unshared, so a move writes the
-		// tile's row in place (its id never changes).
-		tileID := req.TileID
 
 		dstSeq, err := s.buildGridSequence(ctx, tx, req.DestPath)
 		if err != nil {
 			return err
 		}
-		if err := checkLeafGrid(dstSeq, req.DestGridID); err != nil {
+		if err := checkLeafGrid(dstSeq, destGridID); err != nil {
 			return err
 		}
 		dstGrid := dstSeq.grids[len(dstSeq.grids)-1]
@@ -85,7 +90,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			}
 		}
 		if n.Kind == rpc.KindWell {
-			if slices.Contains(req.DestPath.WellIDs, tileID) {
+			if slices.Contains(req.DestPath.WellIDs, req.TileID) {
 				return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
 			}
 		}
@@ -119,7 +124,10 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 			}
 		}
 		if crossGrid {
-			*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: srcGrid, TileID: tileID}})
+			*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{
+				GridID: strconv.FormatInt(srcGrid, 10),
+				TileID: strconv.FormatInt(tileID, 10),
+			}})
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
 		return err
@@ -135,9 +143,17 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 // tile shares its content/preview blob (refcount bumped). Nothing is shared
 // between the two copies, so editing one can never touch the other.
 func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	destGridID, err := parseID(req.DestGridID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid dest_grid_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
 		if err != nil {
 			return err
 		}
@@ -146,14 +162,14 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 		if err != nil {
 			return err
 		}
-		if n.GridID != srcSeq.grids[len(srcSeq.grids)-1] {
-			return fmt.Errorf("%w: tile %d not in source path leaf grid", ErrInvalidPath, req.TileID)
+		if n.GridID != strconv.FormatInt(srcSeq.grids[len(srcSeq.grids)-1], 10) {
+			return fmt.Errorf("%w: tile %d not in source path leaf grid", ErrInvalidPath, tileID)
 		}
 		dstSeq, err := s.buildGridSequence(ctx, tx, req.DestPath)
 		if err != nil {
 			return err
 		}
-		if err := checkLeafGrid(dstSeq, req.DestGridID); err != nil {
+		if err := checkLeafGrid(dstSeq, destGridID); err != nil {
 			return err
 		}
 
@@ -214,9 +230,13 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 	if int64(len(req.Data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
 	}
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
 	var out *rpc.Tile
-	err := s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, err := s.checkTileVersion(ctx, tx, req.TileID, req.Version)
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
 		if err != nil {
 			return err
 		}
@@ -236,7 +256,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 			return err
 		}
 
-		if _, _, err := s.swapTileBlob(ctx, tx, req.TileID, "blob_id", req.Data, mediaMarkdown); err != nil {
+		if _, _, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", req.Data, mediaMarkdown); err != nil {
 			return err
 		}
 		// alt_text is a deterministic function of the content; write it
@@ -244,10 +264,10 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
-			alt, s.now().Unix(), req.TileID); err != nil {
+			alt, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		out, err = s.finishContentEdit(ctx, tx, req.TileID, events)
+		out, err = s.finishContentEdit(ctx, tx, tileID, events)
 		return err
 	})
 	return out, err

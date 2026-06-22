@@ -26,9 +26,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 	ctx := context.Background()
 
 	type liveTile struct {
-		id          int64
+		id          string
 		kind        string
-		gridID      int64
+		gridID      string
 		path        rpc.Path
 		w, h        int64
 		x, y        int64
@@ -52,8 +52,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 
 	// liveVersion reads the current version of a tile id, returning 0 and
 	// reporting not-found if the row is gone.
-	liveVersion := func(id int64) (int64, error) {
-		t, err := s.loadTile(ctx, s.db, id)
+	liveVersion := func(id string) (int64, error) {
+		idInt, _ := parseID(id)
+		t, err := s.loadTile(ctx, s.db, idInt)
 		if err != nil {
 			return 0, err
 		}
@@ -75,9 +76,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			if len(tiles) > 0 && rng.IntN(2) == 0 {
 				ln := tiles[rng.IntN(len(tiles))]
 				if ln.kind == rpc.KindWell && ln.childGridID != "" {
-					parentPath = rpc.Path{WellIDs: append([]int64{}, ln.path.WellIDs...)}
+					parentPath = rpc.Path{WellIDs: append([]string{}, ln.path.WellIDs...)}
 					parentPath.WellIDs = append(parentPath.WellIDs, ln.id)
-					gridID = parseID(ln.childGridID)
+					gridID = ln.childGridID
 				}
 			}
 			x := int64(rng.IntN(20)) * 2
@@ -186,9 +187,9 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				t.Fatalf("iter %d delete: %v", i, err)
 			}
 			if err == nil {
-				deletedGrids := map[int64]bool{}
+				deletedGrids := map[string]bool{}
 				if pick.kind == rpc.KindWell && pick.childGridID != "" {
-					deletedGrids[parseID(pick.childGridID)] = true
+					deletedGrids[pick.childGridID] = true
 				}
 				next := tiles[:0]
 				for _, n := range tiles {

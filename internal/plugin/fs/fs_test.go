@@ -79,8 +79,8 @@ func TestAttach_ValidPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
-	if resp.RootGridId <= 0 {
-		t.Errorf("RootGridId: got %d, want >0", resp.RootGridId)
+	if resp.RootGridId == "" {
+		t.Errorf("RootGridId: got %q, want non-empty", resp.RootGridId)
 	}
 	if resp.Label != "joe" {
 		t.Errorf("Label: got %q, want %q", resp.Label, "joe")
@@ -199,13 +199,13 @@ func TestGetGrid_StableIDs(t *testing.T) {
 		t.Fatalf("GetGrid 2: %v", err)
 	}
 
-	ids1 := map[string]int64{}
+	ids1 := map[string]string{}
 	for _, tile := range r1.Tiles {
 		ids1[tile.AltText] = tile.Id
 	}
 	for _, tile := range r2.Tiles {
 		if ids1[tile.AltText] != tile.Id {
-			t.Errorf("tile %q: id changed %d→%d", tile.AltText, ids1[tile.AltText], tile.Id)
+			t.Errorf("tile %q: id changed %s→%s", tile.AltText, ids1[tile.AltText], tile.Id)
 		}
 	}
 }
@@ -219,7 +219,7 @@ func TestGetGrid_NewFileAppearsStably(t *testing.T) {
 	gridID := att.RootGridId
 
 	r1, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
-	ids1 := map[string]int64{}
+	ids1 := map[string]string{}
 	for _, tile := range r1.Tiles {
 		ids1[tile.AltText] = tile.Id
 	}
@@ -236,7 +236,7 @@ func TestGetGrid_NewFileAppearsStably(t *testing.T) {
 			continue // new tile, no prior id
 		}
 		if ids1[tile.AltText] != tile.Id {
-			t.Errorf("existing tile %q id changed: %d→%d", tile.AltText, ids1[tile.AltText], tile.Id)
+			t.Errorf("existing tile %q id changed: %s→%s", tile.AltText, ids1[tile.AltText], tile.Id)
 		}
 	}
 }
@@ -290,13 +290,13 @@ func TestProbe_Present(t *testing.T) {
 	})
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
-	var noteID int64
+	var noteID string
 	for _, tile := range resp.Tiles {
 		if tile.AltText == "note.txt" {
 			noteID = tile.Id
 		}
 	}
-	if noteID == 0 {
+	if noteID == "" {
 		t.Fatal("note.txt tile not found")
 	}
 
@@ -312,7 +312,7 @@ func TestProbe_Present(t *testing.T) {
 func TestProbe_Gone(t *testing.T) {
 	p := openPlugin(t)
 	// Non-existent tile_id.
-	probeResp, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: 99999})
+	probeResp, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: "99999"})
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
@@ -331,13 +331,13 @@ func TestDeleteTile_File(t *testing.T) {
 	})
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
-	var noteID int64
+	var noteID string
 	for _, tile := range resp.Tiles {
 		if tile.AltText == "note.txt" {
 			noteID = tile.Id
 		}
 	}
-	if noteID == 0 {
+	if noteID == "" {
 		t.Fatal("note.txt tile not found")
 	}
 
@@ -368,13 +368,13 @@ func TestDeleteTile_CallsRemoveMethod(t *testing.T) {
 	})
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
-	var noteID int64
+	var noteID string
 	for _, tile := range resp.Tiles {
 		if tile.AltText == "note.txt" {
 			noteID = tile.Id
 		}
 	}
-	if noteID == 0 {
+	if noteID == "" {
 		t.Fatal("note.txt tile not found")
 	}
 
@@ -396,13 +396,13 @@ func TestDeleteTile_Dir(t *testing.T) {
 	})
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
-	var subID int64
+	var subID string
 	for _, tile := range resp.Tiles {
 		if tile.AltText == "sub" {
 			subID = tile.Id
 		}
 	}
-	if subID == 0 {
+	if subID == "" {
 		t.Fatal("sub tile not found")
 	}
 
@@ -417,7 +417,7 @@ func TestDeleteTile_Dir(t *testing.T) {
 
 func TestDeleteTile_MissingIsOK(t *testing.T) {
 	p := openPlugin(t)
-	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: 99999})
+	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: "99999"})
 	if err != nil {
 		t.Fatalf("DeleteTile missing: %v", err)
 	}
