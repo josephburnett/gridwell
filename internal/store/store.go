@@ -66,8 +66,7 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("open: %w", err)
 	}
 	// SQLite is single-writer at the file level; one connection eliminates
-	// contention and gives deterministic transaction interleaving. It also
-	// keeps the attached cache database (below) bound to this one connection.
+	// contention and gives deterministic transaction interleaving.
 	db.SetMaxOpenConns(1)
 
 	if _, err := db.Exec(pragmas); err != nil {
@@ -78,16 +77,9 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply system schema: %w", err)
 	}
-	if _, err := db.Exec(tablesDDL("")); err != nil {
+	if _, err := db.Exec(tablesDDL()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
-	}
-	// Attach the ephemeral cache database beside the durable main one. The
-	// main file stays independently copyable as an archive; projected host
-	// state (fs/proc grids + their arrangement) lives in the cache file.
-	if err := attachCache(context.Background(), db, path); err != nil {
-		db.Close()
-		return nil, err
 	}
 	reg := source.NewRegistry()
 	reg.Register(fssrc.New(realHostActor{}))
@@ -107,9 +99,6 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	// Re-resolve durable exit wells against the (possibly freshly-created)
-	// cache database, so the canvas opens correctly even when the cache file
-	// is absent — the archival case.
 	if err := s.rebindExitWells(context.Background()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("rebind exit wells: %w", err)

@@ -1,7 +1,5 @@
 package store
 
-import "strings"
-
 // This file is the canonical SQLite schema for Gridwell. Single-tenant:
 // there is no users/groups/sessions table. The `system` KV table holds
 // singleton state (root grid id and root viewport framing); the schema
@@ -25,11 +23,6 @@ import "strings"
 // Gridwell-owned, 'fs' = backed by a filesystem path, 'proc' = backed by
 // a PID's child set. The (source_kind, source_id) pair is unique when
 // non-NULL, so two file-wells at the same path share one backing grid.
-//
-// The grids/tiles/blobs table shapes are materialized in both the durable
-// main database and the attached ephemeral `cache` database (see attach.go),
-// so their DDL is parameterized by schema prefix via tablesDDL. A test
-// asserts the two materializations don't drift.
 //
 // Well rows carry one view rectangle (view_x, view_y, view_zoom) that is
 // at once the preview frame, the descent target, and the ascent return.
@@ -58,16 +51,11 @@ CREATE TABLE IF NOT EXISTS system (
 -- Keys: root_grid_id, root_view_cx, root_view_cy, root_zoom.
 `
 
-// tablesDDL returns the grids/tiles/blobs DDL for a schema: prefix "" for the
-// durable main database, "cache." for the attached ephemeral one. Foreign
-// keys and index ON-targets stay unqualified so they resolve within whichever
-// schema the statement runs against (SQLite has no cross-database FKs).
-func tablesDDL(schemaPrefix string) string {
-	return strings.ReplaceAll(tablesTemplate, "{{P}}", schemaPrefix)
-}
+// tablesDDL returns the grids/tiles/blobs DDL for the main database.
+func tablesDDL() string { return tablesTemplate }
 
 const tablesTemplate = `
-CREATE TABLE IF NOT EXISTS {{P}}grids (
+CREATE TABLE IF NOT EXISTS grids (
     -- AUTOINCREMENT so a deleted grid's id is never reused. Without it,
     -- SQLite recycles the rowid of a deleted grid (e.g. an interior well that
     -- was deleted, taking its owned child grid with it), and a new grid taking
@@ -86,10 +74,10 @@ CREATE TABLE IF NOT EXISTS {{P}}grids (
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS {{P}}idx_grids_object_id ON grids(object_id);
-CREATE UNIQUE INDEX IF NOT EXISTS {{P}}idx_grids_source ON grids(source_kind, source_id) WHERE source_kind IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_source ON grids(source_kind, source_id) WHERE source_kind IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS {{P}}blobs (
+CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
     -- cache key, so a recycled blob id could serve stale image bytes.
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +93,7 @@ CREATE TABLE IF NOT EXISTS {{P}}blobs (
     created_at INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS {{P}}tiles (
+CREATE TABLE IF NOT EXISTS tiles (
     -- AUTOINCREMENT for the same reason as grids: a reused tile id would
     -- collide with the client's per-tile caches (e.g. the URL preview cache
     -- keyed by tile id), showing a deleted tile's frozen frame on a new one.
@@ -123,10 +111,9 @@ CREATE TABLE IF NOT EXISTS {{P}}tiles (
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 0,
-    -- No FK: an interior well's child grid is in this same (main) DB, but a
-    -- file/process well in a main grid points at a source grid in the
-    -- attached cache DB, and SQLite has no cross-file foreign keys. Integrity
-    -- for interior wells rests on the refcount machinery + property test.
+    -- No FK on child_grid_id: a file/process-well's source grid is shared
+    -- by identity (not refcounted), so the link is a soft pointer. Interior
+    -- well integrity rests on the refcount machinery + property test.
     child_grid_id INTEGER,
     -- text-only: the framed window in doc-space px (scroll offset + size)
     -- plus rendered/text mode.
@@ -166,7 +153,7 @@ CREATE TABLE IF NOT EXISTS {{P}}tiles (
     OR (kind = 'shell'        AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
     )
 );
-CREATE INDEX IF NOT EXISTS {{P}}idx_tiles_grid_id   ON tiles(grid_id);
-CREATE INDEX IF NOT EXISTS {{P}}idx_tiles_object_id ON tiles(object_id);
-CREATE INDEX IF NOT EXISTS {{P}}idx_tiles_child     ON tiles(child_grid_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
 `

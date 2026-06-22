@@ -40,14 +40,10 @@ func TestFileWellChildGridDistinctFromWell(t *testing.T) {
 			fw.ChildGridID, gw.ChildGridID)
 	}
 
-	// The file-well's child grid must be an FS source grid for "/". Source
-	// grids live in the attached cache database (id >= cacheIDBase).
-	if !isCacheID(fw.ChildGridID) {
-		t.Fatalf("file-well child grid %d is not a cache id (>= %d)", fw.ChildGridID, int64(cacheIDBase))
-	}
+	// The file-well's child grid must be a source grid for "/" in the main DB.
 	var srcKind, srcID string
 	err = s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(source_kind,''), COALESCE(source_id,'') FROM `+schemaOf(fw.ChildGridID)+`grids WHERE id = ?`,
+		`SELECT COALESCE(source_kind,''), COALESCE(source_id,'') FROM grids WHERE id = ?`,
 		fw.ChildGridID).Scan(&srcKind, &srcID)
 	if err != nil {
 		t.Fatalf("query child grid: %v", err)

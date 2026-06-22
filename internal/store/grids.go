@@ -51,7 +51,7 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 		sourceID   sql.NullString
 	)
 	err := q.QueryRowContext(ctx,
-		`SELECT id, object_id, version, source_kind, source_id FROM `+schemaOf(gridID)+`grids WHERE id = ?`, gridID,
+		`SELECT id, object_id, version, source_kind, source_id FROM grids WHERE id = ?`, gridID,
 	).Scan(&g.ID, &g.ObjectID, &g.Version, &sourceKind, &sourceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -128,7 +128,7 @@ func scanTile(scanner interface {
 }
 
 func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.Tile, error) {
-	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM `+schemaOf(tileID)+`tiles WHERE id = ?`, tileID)
+	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ?`, tileID)
 	n, err := scanTile(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -140,7 +140,7 @@ func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*rpc.
 }
 
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]rpc.Tile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM `+schemaOf(gridID)+`tiles WHERE grid_id = ? ORDER BY id`, gridID)
+	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (s *Store) GetTile(ctx context.Context, tileID int64) (*rpc.Tile, error) {
 // preview yet (fresh palette drop, never refreshed).
 func (s *Store) GetTilePreview(ctx context.Context, tileID int64) ([]byte, error) {
 	var previewBID sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM `+schemaOf(tileID)+`tiles WHERE id = ?`, tileID).Scan(&previewBID)
+	err := s.db.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ?`, tileID).Scan(&previewBID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -217,7 +217,7 @@ func (s *Store) ShellTileExists(ctx context.Context, id int64) (bool, error) {
 // bumpTileVersion increments a tile row's version by 1.
 func bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
 	_, err := tx.ExecContext(ctx,
-		`UPDATE `+schemaOf(tileID)+`tiles SET version = version + 1 WHERE id = ?`, tileID)
+		`UPDATE tiles SET version = version + 1 WHERE id = ?`, tileID)
 	return err
 }
 
@@ -227,7 +227,7 @@ func bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
 // "last touched" for the planned recency feature.
 func (s *Store) bumpGridVersion(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	_, err := tx.ExecContext(ctx,
-		`UPDATE `+schemaOf(gridID)+`grids SET version = version + 1, updated_at = ? WHERE id = ?`,
+		`UPDATE grids SET version = version + 1, updated_at = ? WHERE id = ?`,
 		s.now().Unix(), gridID)
 	return err
 }
@@ -249,11 +249,11 @@ func overlapsExisting(ctx context.Context, q gridReader, gridID, x, y, w, h int6
 		excl += ")"
 	}
 	q1 := fmt.Sprintf(`
-		SELECT 1 FROM %stiles
+		SELECT 1 FROM tiles
 		WHERE grid_id = ?
 		  AND x < ? AND (x + w) > ?
 		  AND y < ? AND (y + h) > ?
-		%s LIMIT 1`, schemaOf(gridID), excl)
+		%s LIMIT 1`, excl)
 	var n int
 	err := q.QueryRowContext(ctx, q1, args...).Scan(&n)
 	if errors.Is(err, sql.ErrNoRows) {

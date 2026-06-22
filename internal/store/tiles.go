@@ -170,7 +170,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 	alt := markdown.AltFromSource(string(req.Data))
 	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
-			blobID, err := s.putBlob(ctx, tx, schemaOf(gridID), hash, req.Data, mediaMarkdown)
+			blobID, err := s.putBlob(ctx, tx, hash, req.Data, mediaMarkdown)
 			if err != nil {
 				return 0, err
 			}
@@ -243,7 +243,7 @@ func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rp
 			return ErrOverlap
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(tileID)+`tiles SET x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
 			req.X, req.Y, req.W, req.H, s.now().Unix(), tileID); err != nil {
 			return err
 		}
@@ -270,7 +270,7 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 			return ErrNotWellTile
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(req.TileID)+`tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
 			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}
@@ -294,7 +294,7 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 			textModeArg = req.TextMode
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(req.TileID)+`tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
 			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}

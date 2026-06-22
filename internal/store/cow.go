@@ -173,20 +173,14 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		}
 	case rpc.KindText:
 		if n.BlobID != 0 {
-			// Only reference the blob when it lives in the same schema as
-			// the destination. Cloning a source-grid (cache) text tile into
-			// the main grid would violate the FK if we reused the cache blob
-			// id — leave blob_id NULL so content is fetched on first open.
-			if schemaOf(n.BlobID) == schemaOf(gridID) {
-				blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
-			}
+			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
 		}
 		if n.TextMode != "" {
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
 	}
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO `+schemaOf(gridID)+`tiles (object_id, version, grid_id, kind, x, y, w, h,
+		INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 			view_x, view_y, view_zoom, child_grid_id,
 			text_x, text_y, text_w, text_h, text_mode, blob_id,
 			url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
@@ -225,9 +219,8 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 // grids are 1:1 with their parent well, so there is no refcount to consult;
 // deleting the well deletes the grid.
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
-	sc := schemaOf(gridID)
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, kind, child_grid_id, blob_id, preview_blob_id FROM `+sc+`tiles WHERE grid_id = ?`, gridID)
+		`SELECT id, kind, child_grid_id, blob_id, preview_blob_id FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
@@ -254,7 +247,7 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 	rows.Close()
 
 	for _, r := range refs {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+sc+`tiles WHERE id = ?`, r.id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, r.id); err != nil {
 			return err
 		}
 		if err := s.decTileRefs(ctx, tx, r.kind,
@@ -262,7 +255,7 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM `+sc+`grids WHERE id = ?`, gridID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM grids WHERE id = ?`, gridID); err != nil {
 		return err
 	}
 	return nil
@@ -283,19 +276,15 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 // case — a fresh palette drop of a markdown tile arrives here with
 // Data=nil (proto3 default-value omission round-tripped through the
 // wire as a missing field), and that path has to succeed.
-// schemaPrefix selects which file the blob lives in ("" main, "cache." for
-// ephemeral content like the @info markdown of a cache-resident proc tile).
-// Dedup is per-file: the same bytes may exist once in each, which is fine —
-// cache blobs are disposable.
-func (s *Store) putBlob(ctx context.Context, tx *sql.Tx, schemaPrefix, hash string, data []byte, mediaType string) (int64, error) {
+func (s *Store) putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byte, mediaType string) (int64, error) {
 	if data == nil {
 		data = []byte{}
 	}
 	var id int64
-	err := tx.QueryRowContext(ctx, `SELECT id FROM `+schemaPrefix+`blobs WHERE hash = ?`, hash).Scan(&id)
+	err := tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO `+schemaPrefix+`blobs (hash, size, data, refcount, media_type, created_at) VALUES (?, ?, ?, 0, ?, ?)`,
+			`INSERT INTO blobs (hash, size, data, refcount, media_type, created_at) VALUES (?, ?, ?, 0, ?, ?)`,
 			hash, len(data), data, mediaType, s.now().Unix())
 		if err != nil {
 			return 0, fmt.Errorf("insert blob: %w", err)
@@ -309,7 +298,7 @@ func (s *Store) putBlob(ctx context.Context, tx *sql.Tx, schemaPrefix, hash stri
 }
 
 func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {
-	_, err := tx.ExecContext(ctx, `UPDATE `+schemaOf(blobID)+`blobs SET refcount = refcount + 1 WHERE id = ?`, blobID)
+	_, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, blobID)
 	return err
 }
 
@@ -330,14 +319,12 @@ func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) e
 // interpolated into the SQL, never user input. mediaType is stamped on the
 // blob if it is newly created (self-describing media).
 func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col string, bytes []byte, mediaType string) (newBlobID int64, changed bool, err error) {
-	sc := schemaOf(tileID)
 	var oldBlob sql.NullInt64
 	if err := tx.QueryRowContext(ctx,
-		`SELECT `+col+` FROM `+sc+`tiles WHERE id = ?`, tileID).Scan(&oldBlob); err != nil {
+		`SELECT `+col+` FROM tiles WHERE id = ?`, tileID).Scan(&oldBlob); err != nil {
 		return 0, false, err
 	}
-	// The blob lives in the same file as the tile that references it.
-	newBlobID, err = s.putBlob(ctx, tx, sc, hashBytes(bytes), bytes, mediaType)
+	newBlobID, err = s.putBlob(ctx, tx, hashBytes(bytes), bytes, mediaType)
 	if err != nil {
 		return 0, false, err
 	}
@@ -345,7 +332,7 @@ func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col 
 		return newBlobID, false, nil
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE `+sc+`tiles SET `+col+` = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE tiles SET `+col+` = ?, updated_at = ? WHERE id = ?`,
 		newBlobID, s.now().Unix(), tileID); err != nil {
 		return 0, false, err
 	}
@@ -416,16 +403,15 @@ func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind string, childG
 }
 
 func (s *Store) decBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {
-	sc := schemaOf(blobID)
-	if _, err := tx.ExecContext(ctx, `UPDATE `+sc+`blobs SET refcount = refcount - 1 WHERE id = ?`, blobID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE blobs SET refcount = refcount - 1 WHERE id = ?`, blobID); err != nil {
 		return err
 	}
 	var rc int64
-	if err := tx.QueryRowContext(ctx, `SELECT refcount FROM `+sc+`blobs WHERE id = ?`, blobID).Scan(&rc); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT refcount FROM blobs WHERE id = ?`, blobID).Scan(&rc); err != nil {
 		return err
 	}
 	if rc <= 0 {
-		_, err := tx.ExecContext(ctx, `DELETE FROM `+sc+`blobs WHERE id = ?`, blobID)
+		_, err := tx.ExecContext(ctx, `DELETE FROM blobs WHERE id = ?`, blobID)
 		return err
 	}
 	return nil

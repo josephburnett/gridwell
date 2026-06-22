@@ -92,22 +92,15 @@ func processWellAlt(pid int64) string {
 	return fmt.Sprintf("pid %d", pid)
 }
 
-// getOrCreateSourceGrid returns the cache grid_id of the singleton source
-// grid for (sourceKind, sourceID), creating it if necessary. Source grids
-// are projected host state, so they live in the ephemeral cache database, not
-// the durable main one. The UNIQUE INDEX on (source_kind, source_id) guards
-// against duplicate inserts under concurrent callers.
-//
-// Cache source grids are shared by identity (path / PID) and are NOT
-// refcounted: the cache is disposable, so an orphaned source grid is harmless
-// and is cleared when the cache file is deleted (see CLAUDE.md, Storage).
-// An exit well in the main DB therefore just stores this id in child_grid_id
-// (a soft cross-file pointer, no FK), and Open re-resolves it if the cache was
-// wiped.
+// getOrCreateSourceGrid returns the grid_id of the singleton source grid for
+// (sourceKind, sourceID), creating it if necessary. Source grids are shared
+// by identity (path / PID) and are NOT refcounted. The UNIQUE INDEX on
+// (source_kind, source_id) guards against duplicate inserts under concurrent
+// callers.
 func (s *Store) getOrCreateSourceGrid(ctx context.Context, tx *sql.Tx, sourceKind, sourceID string, now int64) (int64, error) {
 	var existing int64
 	err := tx.QueryRowContext(ctx,
-		`SELECT id FROM cache.grids WHERE source_kind = ? AND source_id = ?`,
+		`SELECT id FROM grids WHERE source_kind = ? AND source_id = ?`,
 		sourceKind, sourceID,
 	).Scan(&existing)
 	if err == nil {
@@ -118,7 +111,7 @@ func (s *Store) getOrCreateSourceGrid(ctx context.Context, tx *sql.Tx, sourceKin
 	}
 	objID := s.newID()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO cache.grids (object_id, source_kind, source_id, created_at, updated_at)
+		`INSERT INTO grids (object_id, source_kind, source_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		objID, sourceKind, sourceID, now, now)
 	if err != nil {

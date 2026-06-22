@@ -11,9 +11,7 @@ import (
 )
 
 // gridSourceKinds returns the source_kind values for two grids. Empty string
-// means a regular Gridwell-owned grid. The two grids may live in different
-// files (e.g. cloning a tile out of a cache-resident source grid into a main
-// grid), so each is looked up in its own schema.
+// means a regular Gridwell-owned grid.
 func (s *Store) gridSourceKinds(ctx context.Context, tx *sql.Tx, a, b int64) (string, string, error) {
 	ka, err := s.gridSourceKind(ctx, tx, a)
 	if err != nil {
@@ -26,12 +24,11 @@ func (s *Store) gridSourceKinds(ctx context.Context, tx *sql.Tx, a, b int64) (st
 	return ka, kb, nil
 }
 
-// gridSourceKind returns one grid's source_kind ("" for a regular grid),
-// routed to whichever file the grid id lives in.
+// gridSourceKind returns one grid's source_kind ("" for a regular grid).
 func (s *Store) gridSourceKind(ctx context.Context, tx *sql.Tx, id int64) (string, error) {
 	var k sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT source_kind FROM `+schemaOf(id)+`grids WHERE id = ?`, id).Scan(&k)
+		`SELECT source_kind FROM grids WHERE id = ?`, id).Scan(&k)
 	if err != nil {
 		return "", err
 	}
@@ -106,7 +103,7 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		}
 
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(tileID)+`tiles SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET grid_id = ?, x = ?, y = ?, updated_at = ? WHERE id = ?`,
 			dstGrid, req.X, req.Y, s.now().Unix(), tileID); err != nil {
 			return err
 		}
@@ -246,7 +243,7 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		// alongside (a separate statement from the blob kernel).
 		alt := markdown.AltFromSource(string(req.Data))
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE `+schemaOf(req.TileID)+`tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
 			alt, s.now().Unix(), req.TileID); err != nil {
 			return err
 		}

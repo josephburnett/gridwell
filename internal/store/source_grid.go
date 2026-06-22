@@ -167,7 +167,7 @@ func (s *Store) insertSourceWellTile(ctx context.Context, tx *sql.Tx, g *rpc.Gri
 	switch g.SourceKind {
 	case rpc.GridSourceFS:
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO `+schemaOf(g.ID)+`tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id, fs_path, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'file-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
@@ -178,14 +178,14 @@ func (s *Store) insertSourceWellTile(ctx context.Context, tx *sql.Tx, g *rpc.Gri
 			return fmt.Errorf("bad proc key %q: %w", n.Key, perr)
 		}
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO `+schemaOf(g.ID)+`tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id, pid, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'process-well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
 			objID, g.ID, pos.x, pos.y, childGridID, pid, n.Key, n.Label, now, now)
 	default:
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO `+schemaOf(g.ID)+`tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				view_x, view_y, view_zoom, child_grid_id, source_key,
 				alt_text, created_at, updated_at)
 			VALUES (?, ?, 'well', ?, ?, 1, 1, 0, 0, 0, ?, ?, ?, ?, ?)`,
@@ -205,7 +205,7 @@ func (s *Store) insertSourceTextTile(ctx context.Context, tx *sql.Tx, gridID int
 	if n.Body != nil {
 		if body, err := src.ReadBlob(ctx, sourceID, n.Body.BlobRef); err == nil {
 			hash := hashBytes(body)
-			id, err := s.putBlob(ctx, tx, schemaOf(gridID), hash, body, n.Body.MediaType)
+			id, err := s.putBlob(ctx, tx, hash, body, n.Body.MediaType)
 			if err != nil {
 				return err
 			}
@@ -219,13 +219,13 @@ func (s *Store) insertSourceTextTile(ctx context.Context, tx *sql.Tx, gridID int
 	)
 	if blobID != 0 {
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO `+schemaOf(gridID)+`tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				blob_id, source_key, alt_text, created_at, updated_at)
 			VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?, ?, ?)`,
 			objID, gridID, pos.x, pos.y, blobID, n.Key, n.Label, now, now)
 	} else {
 		res, err = tx.ExecContext(ctx, `
-			INSERT INTO `+schemaOf(gridID)+`tiles (object_id, grid_id, kind, x, y, w, h,
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 				source_key, alt_text, created_at, updated_at)
 			VALUES (?, ?, 'text', ?, ?, 1, 1, ?, ?, ?, ?)`,
 			objID, gridID, pos.x, pos.y, n.Key, n.Label, now, now)
@@ -273,7 +273,7 @@ func tileBlobHashTx(ctx context.Context, tx *sql.Tx, blobID int64) string {
 		return ""
 	}
 	var hash string
-	_ = tx.QueryRowContext(ctx, `SELECT hash FROM `+schemaOf(blobID)+`blobs WHERE id = ?`, blobID).Scan(&hash)
+	_ = tx.QueryRowContext(ctx, `SELECT hash FROM blobs WHERE id = ?`, blobID).Scan(&hash)
 	return hash
 }
 
@@ -281,7 +281,7 @@ func tileBlobHashTx(ctx context.Context, tx *sql.Tx, blobID int64) string {
 // source_key. Tiles without a source_key are skipped (they are not
 // reconciler-managed).
 func loadSourceGridTiles(ctx context.Context, q gridReader, gridID int64) (map[string]*rpc.Tile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM `+schemaOf(gridID)+`tiles WHERE grid_id = ?`, gridID)
+	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (s *Store) emitInsertedTile(ctx context.Context, tx *sql.Tx, res sql.Result
 // TileChanged event.
 func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64, altText string, now int64, events *[]rpc.Event) error {
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE `+schemaOf(tileID)+`tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
 		altText, now, tileID); err != nil {
 		return fmt.Errorf("update tile alt_text: %w", err)
 	}
@@ -368,7 +368,7 @@ func (s *Store) updateTileAltText(ctx context.Context, tx *sql.Tx, tileID int64,
 // deleteFSGridTile drops a source-backed tile that no longer has a backing
 // entry, releasing any child-grid or blob reference it held.
 func (s *Store) deleteFSGridTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events *[]rpc.Event) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM `+schemaOf(t.ID)+`tiles WHERE id = ?`, t.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
 		return err
 	}
 	if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridID, t.BlobID, t.PreviewBlobID); err != nil {

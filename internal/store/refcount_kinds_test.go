@@ -129,10 +129,10 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 }
 
 // TestDeleteGridReleasesAllKindRefs: GC'ing a grid (its last well deleted)
-// must release every reference its tiles held — the file-well's backing
-// fs-grid and the shell's preview blob. Regression: deleteGrid only
-// decremented plain wells and text/url blobs, leaking the fs/proc grid
-// refcount and the shell preview blob.
+// must release every reference its tiles held — in particular the shell's
+// preview blob. File-well source grids are shared by identity (not
+// refcounted), so they persist in the main DB after the file-well is deleted;
+// they are not "owned" by the file-well tile.
 func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -179,8 +179,10 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	}
 
 	verifyRefcounts(t, s)
-	if gridExists(t, s, fsGrid) {
-		t.Errorf("fs-grid %d survived GC — file-well refcount leaked", fsGrid)
+	// Source grids are shared by identity (not refcounted), so the fs-grid
+	// persists in the main DB after the file-well is deleted.
+	if !gridExists(t, s, fsGrid) {
+		t.Errorf("fs-grid %d was deleted — source grids must persist (shared by identity)", fsGrid)
 	}
 	if blobExists(t, s, previewBlob) {
 		t.Errorf("shell preview blob %d survived GC — refcount leaked", previewBlob)

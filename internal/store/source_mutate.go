@@ -54,7 +54,7 @@ func (s *Store) deleteSourceTile(ctx context.Context, tx *sql.Tx, t *rpc.Tile, p
 // child grid). Called from DeleteTile for regular tiles and from
 // deleteSourceTile when the source confirms the artifact is gone (settled).
 func (s *Store) dropTileRow(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events *[]rpc.Event) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM `+schemaOf(t.ID)+`tiles WHERE id = ?`, t.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
 		return err
 	}
 	if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridID, t.BlobID, t.PreviewBlobID); err != nil {
