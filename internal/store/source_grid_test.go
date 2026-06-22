@@ -38,7 +38,7 @@ func TestFSGridReconcileFirstDescent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,12 +74,12 @@ func TestFSGridReconcileStickyPositions(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, FSPath: dir,
 	})
-	g1, _ := s.GetGrid(ctx, w.ChildGridID)
+	g1, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
 	pos1 := map[string]position{}
 	for _, tile := range g1.Tiles {
 		pos1[tile.SourceKey] = position{tile.X, tile.Y}
 	}
-	g2, _ := s.GetGrid(ctx, w.ChildGridID)
+	g2, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
 	for _, tile := range g2.Tiles {
 		if pos1[tile.SourceKey] != (position{tile.X, tile.Y}) {
 			t.Errorf("position of %q drifted: %v -> %v",
@@ -103,13 +103,13 @@ func TestFSGridReconcileRemovesGoneFile(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, FSPath: dir,
 	})
-	if g, _ := s.GetGrid(ctx, w.ChildGridID); len(g.Tiles) != 1 {
+	if g, _ := s.GetGrid(ctx, parseID(w.ChildGridID)); len(g.Tiles) != 1 {
 		t.Fatalf("expected 1 tile, got %d", len(g.Tiles))
 	}
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	g, _ := s.GetGrid(ctx, w.ChildGridID)
+	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if len(g.Tiles) != 0 {
 		t.Errorf("expected 0 tiles after removal, got %d", len(g.Tiles))
 	}
@@ -142,7 +142,7 @@ func TestFSGridReconcileDeleteReleasesAllRefs(t *testing.T) {
 	}
 	// First reconcile materializes a text tile (file) + a file-well tile
 	// (subdir, with its own descended child grid).
-	g, _ := s.GetGrid(ctx, w.ChildGridID)
+	g, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if len(g.Tiles) != 2 {
 		t.Fatalf("expected 2 tiles (file + subdir), got %d", len(g.Tiles))
 	}
@@ -157,7 +157,7 @@ func TestFSGridReconcileDeleteReleasesAllRefs(t *testing.T) {
 	}
 	// Descend into the subdir so its child grid is populated too — gives the
 	// reconcile delete a non-trivial spine to release.
-	if _, err := s.GetGrid(ctx, sub.ChildGridID); err != nil {
+	if _, err := s.GetGrid(ctx, parseID(sub.ChildGridID)); err != nil {
 		t.Fatal(err)
 	}
 	verifyRefcounts(t, s)
@@ -171,7 +171,7 @@ func TestFSGridReconcileDeleteReleasesAllRefs(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "file.txt")); err != nil {
 		t.Fatal(err)
 	}
-	g, _ = s.GetGrid(ctx, w.ChildGridID)
+	g, _ = s.GetGrid(ctx, parseID(w.ChildGridID))
 	if len(g.Tiles) != 0 {
 		t.Errorf("expected 0 tiles after removal, got %d", len(g.Tiles))
 	}
@@ -191,8 +191,8 @@ func TestFSGridReconcileBlobDedupe(t *testing.T) {
 	w, _ := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
 		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2, FSPath: dir,
 	})
-	g1, _ := s.GetGrid(ctx, w.ChildGridID)
-	g2, _ := s.GetGrid(ctx, w.ChildGridID)
+	g1, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
+	g2, _ := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if len(g1.Tiles) != 1 || len(g2.Tiles) != 1 {
 		t.Fatalf("tile count drift: %d / %d", len(g1.Tiles), len(g2.Tiles))
 	}
@@ -222,7 +222,7 @@ func TestProcGridReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,13 +279,13 @@ func TestProcGridReconcileRefreshesAltText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+	if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 		t.Fatal(err)
 	}
 	// Process renames itself: overwrite status with name=zsh.
 	writeProc(t, procRoot, 100, 1, "zsh", "")
 
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestProcGridReconcileSweepsWhenProcessesGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+	if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -345,7 +345,7 @@ func TestProcGridReconcileSweepsWhenProcessesGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +374,7 @@ func TestProcGridReconcileSweepsReparentedChildrenWhenParentGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+	if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -385,7 +385,7 @@ func TestProcGridReconcileSweepsReparentedChildrenWhenParentGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +416,7 @@ func TestProcGridReconcilePreservesInfoOnTransientReadError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g0, err := s.GetGrid(ctx, w.ChildGridID)
+	g0, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +429,7 @@ func TestProcGridReconcilePreservesInfoOnTransientReadError(t *testing.T) {
 		Path:       rpc.Path{WellIDs: []int64{w.ID}},
 		TileID:     info0.ID,
 		Version:    info0.Version,
-		DestGridID: w.ChildGridID,
+		DestGridID: parseID(w.ChildGridID),
 		DestPath:   rpc.Path{WellIDs: []int64{w.ID}},
 		X:          5, Y: 5,
 	}); err != nil {
@@ -443,7 +443,7 @@ func TestProcGridReconcilePreservesInfoOnTransientReadError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g1, err := s.GetGrid(ctx, w.ChildGridID)
+	g1, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +480,7 @@ func TestProcGridReconcilePreservesChildOnTransientReadError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g0, err := s.GetGrid(ctx, w.ChildGridID)
+	g0, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +492,7 @@ func TestProcGridReconcilePreservesChildOnTransientReadError(t *testing.T) {
 		Path:       rpc.Path{WellIDs: []int64{w.ID}},
 		TileID:     child0.ID,
 		Version:    child0.Version,
-		DestGridID: w.ChildGridID,
+		DestGridID: parseID(w.ChildGridID),
 		DestPath:   rpc.Path{WellIDs: []int64{w.ID}},
 		X:          6, Y: 6,
 	}); err != nil {
@@ -506,7 +506,7 @@ func TestProcGridReconcilePreservesChildOnTransientReadError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g1, err := s.GetGrid(ctx, w.ChildGridID)
+	g1, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +544,7 @@ func TestProcInfoBlobPopulatesAndRefreshes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g1, err := s.GetGrid(ctx, w.ChildGridID)
+	g1, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +562,7 @@ func TestProcInfoBlobPopulatesAndRefreshes(t *testing.T) {
 
 	// Process changes: memory grew, cmdline changed.
 	writeProcFull(t, procRoot, 1, 0, "init", "/sbin/init --reload", 2048)
-	g2, err := s.GetGrid(ctx, w.ChildGridID)
+	g2, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -580,7 +580,7 @@ func TestProcInfoBlobPopulatesAndRefreshes(t *testing.T) {
 
 	// No-change reconcile must NOT bump the version (otherwise every
 	// GetGrid would fire spurious SSE noise on quiet processes).
-	g3, err := s.GetGrid(ctx, w.ChildGridID)
+	g3, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -612,7 +612,7 @@ func TestUpdateTextRejectsSourceBacked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}

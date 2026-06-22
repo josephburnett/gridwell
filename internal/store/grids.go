@@ -82,7 +82,7 @@ func scanTile(scanner interface {
 }) (*rpc.Tile, error) {
 	var (
 		n          rpc.Tile
-		childGrid  sql.NullInt64
+		childGrid  sql.NullString
 		blob       sql.NullInt64
 		urlStr     sql.NullString
 		previewBID sql.NullInt64
@@ -101,7 +101,7 @@ func scanTile(scanner interface {
 		return nil, err
 	}
 	if childGrid.Valid {
-		n.ChildGridID = childGrid.Int64
+		n.ChildGridID = childGrid.String
 	}
 	if blob.Valid {
 		n.BlobID = blob.Int64

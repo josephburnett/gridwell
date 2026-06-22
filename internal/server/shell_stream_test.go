@@ -731,7 +731,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	shell, err := cl.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{WellIDs: []int64{well.ID}}, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		Path: rpc.Path{WellIDs: []int64{well.ID}}, GridID: func() int64 { id, _ := strconv.ParseInt(well.ChildGridID, 10, 64); return id }(), X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -748,7 +748,8 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneChild, err := srv.store.GetGrid(ctx, clone.ChildGridID)
+	cloneChildID, _ := strconv.ParseInt(clone.ChildGridID, 10, 64)
+	cloneChild, err := srv.store.GetGrid(ctx, cloneChildID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -759,7 +760,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 		}
 	}
 	if cloneShell.ID == 0 {
-		t.Fatalf("no shell tile in clone's child grid %d", clone.ChildGridID)
+		t.Fatalf("no shell tile in clone's child grid %s", clone.ChildGridID)
 	}
 
 	// Delete the clone's shell copy. It has its own id and no session, so this

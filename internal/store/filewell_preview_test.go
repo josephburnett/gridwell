@@ -32,11 +32,11 @@ func TestFileWellChildGridDistinctFromWell(t *testing.T) {
 	if fw.Kind != rpc.KindFileWell {
 		t.Fatalf("file-well kind = %q", fw.Kind)
 	}
-	if fw.ChildGridID == 0 {
+	if fw.ChildGridID == "" {
 		t.Fatal("file-well has no child grid")
 	}
 	if fw.ChildGridID == gw.ChildGridID {
-		t.Fatalf("file-well child grid %d == grid-well child grid %d (cross-wired)",
+		t.Fatalf("file-well child grid %s == grid-well child grid %s (cross-wired)",
 			fw.ChildGridID, gw.ChildGridID)
 	}
 
@@ -44,7 +44,7 @@ func TestFileWellChildGridDistinctFromWell(t *testing.T) {
 	var srcKind, srcID string
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(source_kind,''), COALESCE(source_id,'') FROM grids WHERE id = ?`,
-		fw.ChildGridID).Scan(&srcKind, &srcID)
+		parseID(fw.ChildGridID)).Scan(&srcKind, &srcID)
 	if err != nil {
 		t.Fatalf("query child grid: %v", err)
 	}
@@ -80,11 +80,11 @@ func TestGridIDNotReusedAfterDelete(t *testing.T) {
 	// otherwise there's no freed id to reuse and this test proves nothing.
 	var n int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM grids WHERE id = ?`, deletedChild).Scan(&n); err != nil {
+		`SELECT COUNT(*) FROM grids WHERE id = ?`, parseID(deletedChild)).Scan(&n); err != nil {
 		t.Fatalf("query deleted grid: %v", err)
 	}
 	if n != 0 {
-		t.Fatalf("child grid %d not deleted (refcount > 0); test wouldn't exercise id reuse", deletedChild)
+		t.Fatalf("child grid %s not deleted (refcount > 0); test wouldn't exercise id reuse", deletedChild)
 	}
 
 	b, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
@@ -94,6 +94,6 @@ func TestGridIDNotReusedAfterDelete(t *testing.T) {
 		t.Fatalf("create well B: %v", err)
 	}
 	if b.ChildGridID == deletedChild {
-		t.Fatalf("new grid reused deleted grid id %d", deletedChild)
+		t.Fatalf("new grid reused deleted grid id %s", deletedChild)
 	}
 }

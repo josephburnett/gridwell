@@ -25,7 +25,7 @@ func TestCreateWellHappyPath(t *testing.T) {
 	if w.X != 1 || w.Y != 2 || w.W != 3 || w.H != 4 {
 		t.Errorf("dims wrong: %+v", w)
 	}
-	if w.ChildGridID == 0 {
+	if w.ChildGridID == "" {
 		t.Error("no child grid")
 	}
 	if w.Version != 0 {
@@ -96,19 +96,19 @@ func TestDescentPathThenCreate(t *testing.T) {
 	// Descend into well; create a sub-well inside it.
 	sub, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: w.ChildGridID, X: 0, Y: 0, W: 2, H: 2,
+		GridID: parseID(w.ChildGridID), X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sub.GridID != w.ChildGridID {
-		t.Errorf("sub.GridID = %d, want %d", sub.GridID, w.ChildGridID)
+	if sub.GridID != parseID(w.ChildGridID) {
+		t.Errorf("sub.GridID = %d, want %s", sub.GridID, w.ChildGridID)
 	}
 
 	// Path with a non-existent well should fail.
 	_, err = s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []int64{9999}},
-		GridID: w.ChildGridID, X: 1, Y: 1, W: 1, H: 1,
+		GridID: parseID(w.ChildGridID), X: 1, Y: 1, W: 1, H: 1,
 	})
 	if !errors.Is(err, ErrInvalidPath) {
 		t.Errorf("got %v, want ErrInvalidPath", err)
@@ -469,7 +469,7 @@ func TestDeleteTile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	childGridID := w.ChildGridID
+	childGridID := parseID(w.ChildGridID)
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: w.ID, Version: w.Version}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	}
 	inner, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		GridID: parseID(w.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)

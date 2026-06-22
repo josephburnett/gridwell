@@ -6,13 +6,15 @@
 // `go test` coverage. A misstep here lands the user in the wrong grid.
 package urlwalk
 
+import "strconv"
+
 // Tile is the minimum a walk step needs to know about a tile: whether it
 // descends into a child grid (a well), whether it is a content leaf
 // (text/url), and — for a well — which grid it points at. The caller
 // classifies kinds (via rpc.IsWellKind / rpc.IsContentDescentKind) when
 // building these, keeping this package free of wire types.
 type Tile struct {
-	ChildGridID int64
+	ChildGridID string
 	IsWell      bool
 	IsContent   bool
 }
@@ -54,7 +56,7 @@ func Walk(rootGridID int64, tileIDs []int64, lookup GridLookup) (path []int64, f
 		switch {
 		case t.IsWell:
 			path = append(path, id)
-			gid = t.ChildGridID
+			gid, _ = strconv.ParseInt(t.ChildGridID, 10, 64)
 		case t.IsContent:
 			if !isLast {
 				// Content tile mid-path is nonsense; ignore and keep walking.

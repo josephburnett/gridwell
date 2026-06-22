@@ -33,7 +33,7 @@ func TestRebindExitWellsRebuildsSourceGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	fwID := fw.ID
-	origChildID := fw.ChildGridID
+	origChildID := parseID(fw.ChildGridID)
 
 	// Manually delete the source grid to simulate a stale pointer.
 	if _, err := s.db.ExecContext(ctx,
@@ -62,10 +62,10 @@ func TestRebindExitWellsRebuildsSourceGrid(t *testing.T) {
 	if tile.Kind != rpc.KindFileWell || tile.FSPath != "/etc" {
 		t.Fatalf("file-well corrupted: kind=%q fs_path=%q", tile.Kind, tile.FSPath)
 	}
-	if tile.ChildGridID == 0 {
+	if tile.ChildGridID == "" {
 		t.Fatal("child_grid_id not rebound by rebindExitWells")
 	}
-	g, err := s2.GetGrid(ctx, tile.ChildGridID)
+	g, err := s2.GetGrid(ctx, parseID(tile.ChildGridID))
 	if err != nil {
 		t.Fatalf("descend into rebound source grid: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestRebindExitWellsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	origChildID := fw.ChildGridID
+	origChildID := fw.ChildGridID // string comparison for idempotency check
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestRebindExitWellsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if tile.ChildGridID != origChildID {
-		t.Errorf("child_grid_id changed from %d to %d (should be stable)", origChildID, tile.ChildGridID)
+		t.Errorf("child_grid_id changed from %s to %s (should be stable)", origChildID, tile.ChildGridID)
 	}
 }
 

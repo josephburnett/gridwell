@@ -544,6 +544,13 @@ func (a *App) fetchGrid(id int64) {
 	}()
 }
 
+// parseGridID converts a ChildGridID string (plain decimal integer) to int64.
+// Invalid or empty strings return 0.
+func parseGridID(s string) int64 {
+	id, _ := strconv.ParseInt(s, 10, 64)
+	return id
+}
+
 // nowMs returns the current time in milliseconds since the epoch as
 // reported by the browser. Used for animation timing.
 func nowMs() float64 {
@@ -747,7 +754,7 @@ func (a *App) gridIDForPath(p []int64) int64 {
 			if !ok {
 				return 0, true, false
 			}
-			return w.ChildGridID, true, true
+			return parseGridID(w.ChildGridID), true, true
 		})
 }
 

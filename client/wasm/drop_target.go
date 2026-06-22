@@ -124,7 +124,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
 		rpc.IsWellKind(n.Kind) &&
-		n.ChildGridID != 0 &&
+		n.ChildGridID != "" &&
 		n.ID != excludeTileID {
 		// Well preview math. Effective ratio resolves the unvisited
 		// fallback in one place so the child cell size is computed
@@ -138,7 +138,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 		return &dropTarget{
 			pane:     p,
 			rect:     r,
-			gridID:   n.ChildGridID,
+			gridID:   parseGridID(n.ChildGridID),
 			path:     path,
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
@@ -214,10 +214,10 @@ func (t *dropTarget) cellAtCursor(sx, sy, cellOffsetX, cellOffsetY float64) (int
 // to decide whether a click on a well is starting a "pull out" gesture
 // on a specific child tile.
 func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, sy float64) *rpc.Tile {
-	if !rpc.IsWellKind(well.Kind) || well.ChildGridID == 0 {
+	if !rpc.IsWellKind(well.Kind) || well.ChildGridID == "" {
 		return nil
 	}
-	g, ok := a.c.Grid(well.ChildGridID)
+	g, ok := a.c.Grid(parseGridID(well.ChildGridID))
 	if !ok {
 		return nil
 	}

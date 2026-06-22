@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -47,7 +48,8 @@ func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path)
 			return gridSequence{}, fmt.Errorf("%w: well %d not in grid %d", ErrInvalidPath, wellID, seq.grids[len(seq.grids)-1])
 		}
 		seq.wells = append(seq.wells, wellID)
-		seq.grids = append(seq.grids, w.ChildGridID)
+		childID, _ := strconv.ParseInt(w.ChildGridID, 10, 64)
+		seq.grids = append(seq.grids, childID)
 	}
 	return seq, nil
 }
@@ -129,18 +131,19 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 //     — you can't deep-copy the filesystem or the process table);
 //   - everything else: none.
 func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) (sql.NullInt64, error) {
-	if n.ChildGridID == 0 {
+	if n.ChildGridID == "" {
 		return sql.NullInt64{}, nil
 	}
+	childID, _ := strconv.ParseInt(n.ChildGridID, 10, 64)
 	switch n.Kind {
 	case rpc.KindWell:
-		newChild, err := s.cloneSubtree(ctx, tx, n.ChildGridID)
+		newChild, err := s.cloneSubtree(ctx, tx, childID)
 		if err != nil {
 			return sql.NullInt64{}, err
 		}
 		return sql.NullInt64{Int64: newChild, Valid: true}, nil
 	case rpc.KindFileWell, rpc.KindProcessWell:
-		return sql.NullInt64{Int64: n.ChildGridID, Valid: true}, nil
+		return sql.NullInt64{Int64: childID, Valid: true}, nil
 	}
 	return sql.NullInt64{}, nil
 }

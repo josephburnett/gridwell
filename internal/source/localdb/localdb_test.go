@@ -11,6 +11,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
+func parseID(s string) int64 {
+	id, _ := strconv.ParseInt(s, 10, 64)
+	return id
+}
+
 // makeDB builds a source Gridwell DB on disk with a text tile and a well
 // containing a nested text tile, then closes it. Returns the file path.
 func makeDB(t *testing.T) string {
@@ -35,7 +40,7 @@ func makeDB(t *testing.T) string {
 		t.Fatal(err)
 	}
 	if _, err := st.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{WellIDs: []int64{well.ID}}, GridID: well.ChildGridID,
+		Path: rpc.Path{WellIDs: []int64{well.ID}}, GridID: parseID(well.ChildGridID),
 		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# inside\n"),
 	}); err != nil {
 		t.Fatal(err)

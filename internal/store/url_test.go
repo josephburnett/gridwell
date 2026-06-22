@@ -209,7 +209,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{WellIDs: []int64{wellA.ID}}, GridID: wellA.ChildGridID,
+		Path: rpc.Path{WellIDs: []int64{wellA.ID}}, GridID: parseID(wellA.ChildGridID),
 		X: 0, Y: 0, W: 1, H: 1, URL: "https://a.example",
 	}); err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 
 	// Freeze through wellB's OWN copy of the URL tile. It must touch only
 	// wellB; wellA is a separate row and stays as it was.
-	bGrid, err := s.GetGrid(ctx, wellB.ChildGridID)
+	bGrid, err := s.GetGrid(ctx, parseID(wellB.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		}
 	}
 	if bURL.ID == 0 {
-		t.Fatalf("no URL tile in wellB's child grid %d", wellB.ChildGridID)
+		t.Fatalf("no URL tile in wellB's child grid %s", wellB.ChildGridID)
 	}
 	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
 		Path: rpc.Path{WellIDs: []int64{wellB.ID}}, TileID: bURL.ID, Version: bURL.Version,
@@ -255,7 +255,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := s.GetGrid(ctx, reloaded.ChildGridID)
+		g, err := s.GetGrid(ctx, parseID(reloaded.ChildGridID))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -264,7 +264,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 				return tile
 			}
 		}
-		t.Fatalf("no URL tile in grid %d", reloaded.ChildGridID)
+		t.Fatalf("no URL tile in grid %s", reloaded.ChildGridID)
 		return rpc.Tile{}
 	}
 

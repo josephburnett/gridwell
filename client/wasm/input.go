@@ -426,7 +426,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.originScreenX = tlX
 			a.dragging.originScreenY = tlY
 			a.dragging.originPaneRect = r
-			a.dragging.srcGridID = n.ChildGridID
+			a.dragging.srcGridID = parseGridID(n.ChildGridID)
 			a.dragging.srcPath = append(slices.Clone(p.Path), n.ID)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
@@ -1148,7 +1148,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
 	mid, swap, final := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
-	a.fetchGrid(well.ChildGridID)
+	a.fetchGrid(parseGridID(well.ChildGridID))
 
 	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
 		zoomDist(from.Zoom, mid.Zoom)

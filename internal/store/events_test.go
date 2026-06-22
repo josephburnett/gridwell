@@ -224,7 +224,7 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	defer cancel()
 	if _, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
 		Path: rpc.Path{}, TileID: target.ID, Version: target.Version,
-		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []int64{a.ID}},
+		DestGridID: parseID(a.ChildGridID), DestPath: rpc.Path{WellIDs: []int64{a.ID}},
 		X: 0, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
@@ -314,7 +314,7 @@ func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 	}
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []int64{w.ID}},
-		GridID: w.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		GridID: parseID(w.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
+	cloneChild, err := s.GetGrid(ctx, parseID(clone.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}

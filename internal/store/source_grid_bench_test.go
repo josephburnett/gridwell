@@ -50,7 +50,7 @@ func BenchmarkFSGridFirstDescent(b *testing.B) {
 					b.Fatal(err)
 				}
 				b.StartTimer()
-				if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+				if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -78,12 +78,12 @@ func BenchmarkFSGridRepeatDescent(b *testing.B) {
 			}
 			// Warm the grid so the first iteration measures a no-op
 			// reconcile, not the first-descent cost.
-			if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+			if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 				b.Fatal(err)
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+				if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -120,7 +120,7 @@ func BenchmarkProcGridFirstDescent(b *testing.B) {
 					b.Fatal(err)
 				}
 				b.StartTimer()
-				if _, err := s.GetGrid(ctx, w.ChildGridID); err != nil {
+				if _, err := s.GetGrid(ctx, parseID(w.ChildGridID)); err != nil {
 					b.Fatal(err)
 				}
 			}

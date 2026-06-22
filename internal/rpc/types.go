@@ -99,7 +99,7 @@ type Tile struct {
 	ViewX       int64   `json:"view_x,omitempty"`
 	ViewY       int64   `json:"view_y,omitempty"`
 	ViewZoom    float64 `json:"view_zoom,omitempty"`
-	ChildGridID int64   `json:"child_grid_id,omitempty"`
+	ChildGridID string  `json:"child_grid_id,omitempty"`
 	// text-only: TextX/Y is the scroll offset; TextW/H is the window size;
 	// all four are doc-space px. TextMode is "rendered" or "text".
 	TextX    int64  `json:"text_x,omitempty"`

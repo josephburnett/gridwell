@@ -88,7 +88,7 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	}
 	inner := rpc.Path{WellIDs: []int64{well.ID}}
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: inner, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		Path: inner, GridID: parseID(well.ChildGridID), X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +111,7 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	}
 
 	// Two shell rows (original + copy) now share one preview blob.
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridID)
+	cloneChild, err := s.GetGrid(ctx, parseID(clone.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,13 +147,13 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	inner := rpc.Path{WellIDs: []int64{well.ID}}
 
 	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
-		Path: inner, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
+		Path: inner, GridID: parseID(well.ChildGridID), X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: inner, GridID: well.ChildGridID, X: 2, Y: 0, W: 1, H: 1,
+		Path: inner, GridID: parseID(well.ChildGridID), X: 2, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -166,8 +166,8 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	}
 	fsGrid := fw.ChildGridID
 	previewBlob := framed.PreviewBlobID
-	if fsGrid == 0 || previewBlob == 0 {
-		t.Fatalf("setup: fsGrid=%d previewBlob=%d", fsGrid, previewBlob)
+	if fsGrid == "" || previewBlob == 0 {
+		t.Fatalf("setup: fsGrid=%s previewBlob=%d", fsGrid, previewBlob)
 	}
 
 	// Delete the only well pointing at the child grid → child grid GCs,
@@ -181,8 +181,8 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	verifyRefcounts(t, s)
 	// Source grids are shared by identity (not refcounted), so the fs-grid
 	// persists in the main DB after the file-well is deleted.
-	if !gridExists(t, s, fsGrid) {
-		t.Errorf("fs-grid %d was deleted — source grids must persist (shared by identity)", fsGrid)
+	if !gridExists(t, s, parseID(fsGrid)) {
+		t.Errorf("fs-grid %s was deleted — source grids must persist (shared by identity)", fsGrid)
 	}
 	if blobExists(t, s, previewBlob) {
 		t.Errorf("shell preview blob %d survived GC — refcount leaked", previewBlob)

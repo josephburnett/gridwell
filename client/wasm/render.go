@@ -569,9 +569,9 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// children via the flat drawNode — no further fetches. Off-screen
 	// culling in drawPane bounds how many top-level wells trigger a
 	// fetch on first descent.
-	child, haveChild := a.c.Grid(n.ChildGridID)
+	child, haveChild := a.c.Grid(parseGridID(n.ChildGridID))
 	if !haveChild {
-		a.fetchGrid(n.ChildGridID)
+		a.fetchGrid(parseGridID(n.ChildGridID))
 	}
 	// Background matches the surrounding pane so there's no color jump
 	// when the well's outline crosses the screen edges during descent.

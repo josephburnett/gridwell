@@ -57,7 +57,7 @@ message Tile {
   int64 view_x = 10;
   int64 view_y = 11;
   double view_zoom = 12;
-  int64 child_grid_id = 13;
+  string child_grid_id = 13;
 
   // text-only: text_x/text_y is the scroll offset; text_w/text_h is the
   // window size; all four are doc-space px. text_mode is "rendered" or

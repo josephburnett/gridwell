@@ -412,7 +412,7 @@ func (p *Plugin) loadTiles(gridID int64) ([]*gridwellv1.Tile, error) {
 			W:           w,
 			H:           h,
 			AltText:     key,
-			ChildGridId: childGrid,
+			ChildGridId: strconv.FormatInt(childGrid, 10),
 			ViewX:       vx,
 			ViewY:       vy,
 			ViewZoom:    vz,

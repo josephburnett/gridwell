@@ -10,7 +10,7 @@ func seedCache(t *testing.T) *Cache {
 	t.Helper()
 	c := New()
 	c.PutGrid(rpc.Grid{ID: 1}, []rpc.Tile{
-		{ID: 100, GridID: 1, Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridID: 2},
+		{ID: 100, GridID: 1, Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridID: "2"},
 		{ID: 101, GridID: 1, Kind: rpc.KindText, X: 5, Y: 5, W: 1, H: 1, BlobID: 1},
 	})
 	return c
@@ -98,7 +98,7 @@ func TestApplyTileChanged(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
 		Kind:        rpc.EventTileChanged,
-		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 100, GridID: 1, Kind: rpc.KindWell, X: 9, Y: 9, W: 2, H: 2, ChildGridID: 2}},
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 100, GridID: 1, Kind: rpc.KindWell, X: 9, Y: 9, W: 2, H: 2, ChildGridID: "2"}},
 	})
 	if !ok {
 		t.Error("Apply returned false")
@@ -135,7 +135,7 @@ func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
 		Kind:        rpc.EventTileChanged,
-		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 999, GridID: 999, Kind: rpc.KindWell, ChildGridID: 1}},
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: 999, GridID: 999, Kind: rpc.KindWell, ChildGridID: "1"}},
 	})
 	if ok {
 		t.Error("expected false for unknown grid")

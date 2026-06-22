@@ -388,17 +388,18 @@ func nodeForTile(parent cursor, t *rpc.Tile) source.Node {
 		H:       t.H,
 		Version: t.Version,
 	}
+	childGridInt, _ := strconv.ParseInt(t.ChildGridID, 10, 64)
 	switch t.Kind {
 	case rpc.KindWell:
 		n.Kind = source.KindWell
-		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: t.ChildGridID})
+		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: childGridInt})
 		n.Frame = source.Frame{ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}
 		n.Caps = source.Caps{Delete: true, Move: true, Clone: true, Accept: true}
 	case rpc.KindFileWell, rpc.KindProcessWell:
 		// Descendable, but its children come from the underlying DB's own
 		// host (fs / proc). Don't expose host-mutating caps two layers up.
 		n.Kind = source.KindWell
-		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: t.ChildGridID})
+		n.Child = encodeCursor(cursor{Root: parent.Root, Path: append(appendCopy(parent.Path), t.ID), Grid: childGridInt})
 		n.Frame = source.Frame{ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}
 	case rpc.KindText:
 		n.Kind = source.KindText

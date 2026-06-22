@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
@@ -391,7 +392,7 @@ func (p *Plugin) loadTiles(gridID int64) ([]*gridwellv1.Tile, error) {
 			ViewX:       vx,
 			ViewY:       vy,
 			ViewZoom:    vz,
-			ChildGridId: childGrid,
+			ChildGridId: strconv.FormatInt(childGrid, 10),
 		}
 		out = append(out, t)
 	}

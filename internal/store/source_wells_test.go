@@ -26,10 +26,10 @@ func TestCreateFileWellHappyPath(t *testing.T) {
 	if w.FSPath != "/etc" {
 		t.Errorf("fs_path=%q, want /etc", w.FSPath)
 	}
-	if w.ChildGridID == 0 {
+	if w.ChildGridID == "" {
 		t.Error("no child grid")
 	}
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +60,8 @@ func TestCreateFileWellSharesGridByPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create b: %v", err)
 	}
-	if a.ChildGridID == 0 || a.ChildGridID != b.ChildGridID {
-		t.Errorf("expected shared child grid, got a=%d b=%d", a.ChildGridID, b.ChildGridID)
+	if a.ChildGridID == "" || a.ChildGridID != b.ChildGridID {
+		t.Errorf("expected shared child grid, got a=%s b=%s", a.ChildGridID, b.ChildGridID)
 	}
 	if b.FSPath != "/etc" {
 		t.Errorf("path not canonicalized: %q", b.FSPath)
@@ -95,7 +95,7 @@ func TestCreateProcessWellHappyPath(t *testing.T) {
 	if w.PID != 1 {
 		t.Errorf("pid=%d, want 1", w.PID)
 	}
-	g, err := s.GetGrid(ctx, w.ChildGridID)
+	g, err := s.GetGrid(ctx, parseID(w.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,7 +32,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		path        rpc.Path
 		w, h        int64
 		x, y        int64
-		childGridID int64
+		childGridID string
 	}
 	var tiles []liveTile
 	addTile := func(n *rpc.Tile, path rpc.Path) {
@@ -74,10 +74,10 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			gridID := root
 			if len(tiles) > 0 && rng.IntN(2) == 0 {
 				ln := tiles[rng.IntN(len(tiles))]
-				if ln.kind == rpc.KindWell && ln.childGridID != 0 {
+				if ln.kind == rpc.KindWell && ln.childGridID != "" {
 					parentPath = rpc.Path{WellIDs: append([]int64{}, ln.path.WellIDs...)}
 					parentPath.WellIDs = append(parentPath.WellIDs, ln.id)
-					gridID = ln.childGridID
+					gridID = parseID(ln.childGridID)
 				}
 			}
 			x := int64(rng.IntN(20)) * 2
@@ -187,8 +187,8 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			if err == nil {
 				deletedGrids := map[int64]bool{}
-				if pick.kind == rpc.KindWell && pick.childGridID != 0 {
-					deletedGrids[pick.childGridID] = true
+				if pick.kind == rpc.KindWell && pick.childGridID != "" {
+					deletedGrids[parseID(pick.childGridID)] = true
 				}
 				next := tiles[:0]
 				for _, n := range tiles {

@@ -232,7 +232,7 @@ type Tile struct {
 	ViewX       int64   `protobuf:"varint,10,opt,name=view_x,json=viewX,proto3" json:"view_x,omitempty"`
 	ViewY       int64   `protobuf:"varint,11,opt,name=view_y,json=viewY,proto3" json:"view_y,omitempty"`
 	ViewZoom    float64 `protobuf:"fixed64,12,opt,name=view_zoom,json=viewZoom,proto3" json:"view_zoom,omitempty"`
-	ChildGridId int64   `protobuf:"varint,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
+	ChildGridId string  `protobuf:"bytes,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
 	// text-only: text_x/text_y is the scroll offset; text_w/text_h is the
 	// window size; all four are doc-space px. text_mode is "rendered" or
 	// "text". blob_id points at the markdown source in the blobs table.
@@ -377,11 +377,11 @@ func (x *Tile) GetViewZoom() float64 {
 	return 0
 }
 
-func (x *Tile) GetChildGridId() int64 {
+func (x *Tile) GetChildGridId() string {
 	if x != nil {
 		return x.ChildGridId
 	}
-	return 0
+	return ""
 }
 
 func (x *Tile) GetTextX() int64 {
@@ -3669,7 +3669,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	" \x01(\x03R\x05viewX\x12\x15\n" +
 	"\x06view_y\x18\v \x01(\x03R\x05viewY\x12\x1b\n" +
 	"\tview_zoom\x18\f \x01(\x01R\bviewZoom\x12\"\n" +
-	"\rchild_grid_id\x18\r \x01(\x03R\vchildGridId\x12\x15\n" +
+	"\rchild_grid_id\x18\r \x01(\tR\vchildGridId\x12\x15\n" +
 	"\x06text_x\x18\x0e \x01(\x03R\x05textX\x12\x15\n" +
 	"\x06text_y\x18\x0f \x01(\x03R\x05textY\x12\x15\n" +
 	"\x06text_w\x18\x10 \x01(\x03R\x05textW\x12\x15\n" +

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -57,7 +58,8 @@ func (s *Store) dropTileRow(ctx context.Context, tx *sql.Tx, t *rpc.Tile, events
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.ID); err != nil {
 		return err
 	}
-	if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridID, t.BlobID, t.PreviewBlobID); err != nil {
+	childGridID, _ := strconv.ParseInt(t.ChildGridID, 10, 64)
+	if err := s.decTileRefs(ctx, tx, t.Kind, childGridID, t.BlobID, t.PreviewBlobID); err != nil {
 		return err
 	}
 	if err := s.bumpGridVersion(ctx, tx, t.GridID); err != nil {
