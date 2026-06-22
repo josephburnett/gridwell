@@ -91,7 +91,94 @@ message Tile {
   string alt_text = 25;
 }
 
-// Bootstrap returns the current root grid id and root framing.
+// ─── Plugin / node lifecycle ──────────────────────────────────────────────
+// The same RPCs are exposed by a local server, a plugin process, and a
+// remote server reached over SSH. The client talks to the local server;
+// the server routes to plugins; an SSH gateway transparently proxies.
+
+// PluginCaps advertises which mutations a plugin instance allows.
+message PluginCaps {
+  bool delete = 1;
+  bool clone  = 2;
+  bool move   = 3;
+  bool write  = 4;
+  bool live   = 5;   // SHELL: live PTY is attachable
+  bool accept = 6;   // WELL: accepts children moved/cloned in
+}
+
+// NetworkContext declares how url tiles in this plugin reach the network.
+// Unset → url tiles are frozen-only (no live Chromium tab).
+message NetworkContext {
+  oneof via {
+    bool          direct = 1;   // use the host's own network stack
+    ProxyEndpoint proxy  = 2;   // route through a proxy (e.g. SOCKS5 over SSH)
+  }
+}
+message ProxyEndpoint {
+  string scheme  = 1;   // e.g. "socks5"
+  string address = 2;   // e.g. "127.0.0.1:41234"
+}
+
+message InfoRequest {}
+message InfoResponse {
+  string kind           = 1;   // e.g. "localdb", "fs", "proc", "ssh"
+  string display_name   = 2;
+  int64  schema_version = 3;
+  bool   watch          = 4;   // implements Subscribe for live change events
+}
+
+// Attach turns a config map into a root grid in the plugin's namespace.
+// The local server's Attach({}) returns its own root grid (replaces Bootstrap
+// once all callers have migrated).
+message AttachRequest  { map<string, string> config = 1; }
+message AttachResponse {
+  int64          root_grid_id = 1;
+  string         label        = 2;
+  PluginCaps     caps         = 3;
+  NetworkContext network      = 4;   // unset → url tiles frozen-only
+  bool           has_session  = 5;   // GetSession/PutSession meaningful
+}
+message DetachRequest  { int64 root_grid_id = 1; }
+message DetachResponse {}
+
+// Probe reports the definitive presence of one tile. Used for non-
+// authoritative listings (proc) where an entry can vanish between List and
+// reconcile. A failed read must never sweep a tile — only GONE does.
+message ProbeRequest {
+  int64 tile_id = 1;
+}
+message ProbeResponse {
+  enum Presence {
+    PRESENCE_UNSPECIFIED = 0;
+    PRESENCE_PRESENT     = 1;
+    PRESENCE_GONE        = 2;
+  }
+  Presence presence = 1;
+}
+
+// ─── Session streaming ────────────────────────────────────────────────────
+// GetSession / PutSession move the Chromium session blob (cookies + web
+// storage) associated with a plugin root.
+
+message GetSessionRequest { int64 root_grid_id = 1; }
+// BlobChunk is a streaming fragment for GetSession and future ReadBlob.
+message BlobChunk         { bytes data = 1; }
+
+// PutSessionRequest streams a session blob up; the first message carries
+// root_grid_id to bind the stream; subsequent messages carry only data.
+message PutSessionRequest  { int64 root_grid_id = 1; bytes data = 2; }
+message PutSessionResponse {}
+
+// ─── Shell streaming ──────────────────────────────────────────────────────
+// OpenShell replaces the WebSocket /rpc/ShellStream endpoint. Bidirectional:
+// raw PTY bytes both ways. First OpenShellRequest binds the tile (data empty);
+// then keystrokes flow up / terminal output flows down.
+
+message OpenShellRequest  { int64 tile_id = 1; bytes data = 2; PTYSize resize = 3; }
+message OpenShellResponse { bytes data = 1; }
+message PTYSize           { int32 cols = 1; int32 rows = 2; }
+
+// ─── Bootstrap (kept for backward compatibility; superseded by Attach) ────
 message BootstrapRequest {}
 message BootstrapResponse {
   int64 root_grid_id = 1;
@@ -338,9 +425,23 @@ message Event {
   }
 }
 
-// Gridwell is the RPC surface. Bootstrap + GetGrid + GetBlob +
-// GetTilePreview are reads; everything else mutates.
+// Gridwell is the unified RPC surface, implemented by every node: a local
+// server, a plugin process, and a remote server reached over SSH.
 service Gridwell {
+  // ── Plugin lifecycle ────────────────────────────────────────────────────
+  rpc Info(InfoRequest)       returns (InfoResponse);
+  rpc Attach(AttachRequest)   returns (AttachResponse);
+  rpc Detach(DetachRequest)   returns (DetachResponse);
+  rpc Probe(ProbeRequest)     returns (ProbeResponse);
+
+  // ── Session ─────────────────────────────────────────────────────────────
+  rpc GetSession(GetSessionRequest)          returns (stream BlobChunk);
+  rpc PutSession(stream PutSessionRequest)     returns (PutSessionResponse);
+
+  // ── Shell ────────────────────────────────────────────────────────────────
+  rpc OpenShell(stream OpenShellRequest) returns (stream OpenShellResponse);
+
+  // ── Bootstrap (kept for backward compat; superseded by Attach) ──────────
   rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse);
   rpc GetGrid(GetGridRequest) returns (GetGridResponse);
   rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);

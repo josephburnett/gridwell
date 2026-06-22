@@ -5,15 +5,15 @@
 // reconciles a source grid by calling List; the client never learns a
 // source was involved.
 //
-// This is the Go mirror of api/plugin/v1/source.proto. The interface is
-// deliberately in-process first (return values, not streams): the
-// go-plugin gRPC transport wraps these same methods, but the
-// implementations and their tests prove the contract with zero IPC.
+// The interface is deliberately in-process first (return values, not
+// streams): the go-plugin gRPC transport (api/gridwell/v1/data.proto)
+// wraps these same methods, but the implementations and their tests prove
+// the contract with zero IPC.
 //
 // The one load-bearing rule: SourceID is an opaque, plugin-owned token
 // Gridwell never interprets. A plugin encodes into it whatever path
-// context it needs to stay deterministic and COW-correct (fs → an
-// absolute path, proc → a PID, a DB proxy → the descent path + grid id).
+// context it needs to stay deterministic (fs → an absolute path,
+// proc → a PID, a DB proxy → the descent path + grid id).
 package source
 
 import (

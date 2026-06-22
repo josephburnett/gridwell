@@ -46,6 +46,20 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// GridwellInfoProcedure is the fully-qualified name of the Gridwell's Info RPC.
+	GridwellInfoProcedure = "/gridwell.v1.Gridwell/Info"
+	// GridwellAttachProcedure is the fully-qualified name of the Gridwell's Attach RPC.
+	GridwellAttachProcedure = "/gridwell.v1.Gridwell/Attach"
+	// GridwellDetachProcedure is the fully-qualified name of the Gridwell's Detach RPC.
+	GridwellDetachProcedure = "/gridwell.v1.Gridwell/Detach"
+	// GridwellProbeProcedure is the fully-qualified name of the Gridwell's Probe RPC.
+	GridwellProbeProcedure = "/gridwell.v1.Gridwell/Probe"
+	// GridwellGetSessionProcedure is the fully-qualified name of the Gridwell's GetSession RPC.
+	GridwellGetSessionProcedure = "/gridwell.v1.Gridwell/GetSession"
+	// GridwellPutSessionProcedure is the fully-qualified name of the Gridwell's PutSession RPC.
+	GridwellPutSessionProcedure = "/gridwell.v1.Gridwell/PutSession"
+	// GridwellOpenShellProcedure is the fully-qualified name of the Gridwell's OpenShell RPC.
+	GridwellOpenShellProcedure = "/gridwell.v1.Gridwell/OpenShell"
 	// GridwellBootstrapProcedure is the fully-qualified name of the Gridwell's Bootstrap RPC.
 	GridwellBootstrapProcedure = "/gridwell.v1.Gridwell/Bootstrap"
 	// GridwellGetGridProcedure is the fully-qualified name of the Gridwell's GetGrid RPC.
@@ -97,6 +111,17 @@ const (
 
 // GridwellClient is a client for the gridwell.v1.Gridwell service.
 type GridwellClient interface {
+	// ── Plugin lifecycle ────────────────────────────────────────────────────
+	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
+	Attach(context.Context, *connect.Request[v1.AttachRequest]) (*connect.Response[v1.AttachResponse], error)
+	Detach(context.Context, *connect.Request[v1.DetachRequest]) (*connect.Response[v1.DetachResponse], error)
+	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
+	// ── Session ─────────────────────────────────────────────────────────────
+	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.ServerStreamForClient[v1.BlobChunk], error)
+	PutSession(context.Context) *connect.ClientStreamForClient[v1.PutSessionRequest, v1.PutSessionResponse]
+	// ── Shell ────────────────────────────────────────────────────────────────
+	OpenShell(context.Context) *connect.BidiStreamForClient[v1.OpenShellRequest, v1.OpenShellResponse]
+	// ── Bootstrap (kept for backward compat; superseded by Attach) ──────────
 	Bootstrap(context.Context, *connect.Request[v1.BootstrapRequest]) (*connect.Response[v1.BootstrapResponse], error)
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetBlob(context.Context, *connect.Request[v1.GetBlobRequest]) (*connect.Response[v1.GetBlobResponse], error)
@@ -132,6 +157,48 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 	baseURL = strings.TrimRight(baseURL, "/")
 	gridwellMethods := v1.File_gridwell_v1_data_proto.Services().ByName("Gridwell").Methods()
 	return &gridwellClient{
+		info: connect.NewClient[v1.InfoRequest, v1.InfoResponse](
+			httpClient,
+			baseURL+GridwellInfoProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Info")),
+			connect.WithClientOptions(opts...),
+		),
+		attach: connect.NewClient[v1.AttachRequest, v1.AttachResponse](
+			httpClient,
+			baseURL+GridwellAttachProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Attach")),
+			connect.WithClientOptions(opts...),
+		),
+		detach: connect.NewClient[v1.DetachRequest, v1.DetachResponse](
+			httpClient,
+			baseURL+GridwellDetachProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Detach")),
+			connect.WithClientOptions(opts...),
+		),
+		probe: connect.NewClient[v1.ProbeRequest, v1.ProbeResponse](
+			httpClient,
+			baseURL+GridwellProbeProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Probe")),
+			connect.WithClientOptions(opts...),
+		),
+		getSession: connect.NewClient[v1.GetSessionRequest, v1.BlobChunk](
+			httpClient,
+			baseURL+GridwellGetSessionProcedure,
+			connect.WithSchema(gridwellMethods.ByName("GetSession")),
+			connect.WithClientOptions(opts...),
+		),
+		putSession: connect.NewClient[v1.PutSessionRequest, v1.PutSessionResponse](
+			httpClient,
+			baseURL+GridwellPutSessionProcedure,
+			connect.WithSchema(gridwellMethods.ByName("PutSession")),
+			connect.WithClientOptions(opts...),
+		),
+		openShell: connect.NewClient[v1.OpenShellRequest, v1.OpenShellResponse](
+			httpClient,
+			baseURL+GridwellOpenShellProcedure,
+			connect.WithSchema(gridwellMethods.ByName("OpenShell")),
+			connect.WithClientOptions(opts...),
+		),
 		bootstrap: connect.NewClient[v1.BootstrapRequest, v1.BootstrapResponse](
 			httpClient,
 			baseURL+GridwellBootstrapProcedure,
@@ -269,6 +336,13 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 
 // gridwellClient implements GridwellClient.
 type gridwellClient struct {
+	info              *connect.Client[v1.InfoRequest, v1.InfoResponse]
+	attach            *connect.Client[v1.AttachRequest, v1.AttachResponse]
+	detach            *connect.Client[v1.DetachRequest, v1.DetachResponse]
+	probe             *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
+	getSession        *connect.Client[v1.GetSessionRequest, v1.BlobChunk]
+	putSession        *connect.Client[v1.PutSessionRequest, v1.PutSessionResponse]
+	openShell         *connect.Client[v1.OpenShellRequest, v1.OpenShellResponse]
 	bootstrap         *connect.Client[v1.BootstrapRequest, v1.BootstrapResponse]
 	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
 	getBlob           *connect.Client[v1.GetBlobRequest, v1.GetBlobResponse]
@@ -291,6 +365,41 @@ type gridwellClient struct {
 	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
+}
+
+// Info calls gridwell.v1.Gridwell.Info.
+func (c *gridwellClient) Info(ctx context.Context, req *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error) {
+	return c.info.CallUnary(ctx, req)
+}
+
+// Attach calls gridwell.v1.Gridwell.Attach.
+func (c *gridwellClient) Attach(ctx context.Context, req *connect.Request[v1.AttachRequest]) (*connect.Response[v1.AttachResponse], error) {
+	return c.attach.CallUnary(ctx, req)
+}
+
+// Detach calls gridwell.v1.Gridwell.Detach.
+func (c *gridwellClient) Detach(ctx context.Context, req *connect.Request[v1.DetachRequest]) (*connect.Response[v1.DetachResponse], error) {
+	return c.detach.CallUnary(ctx, req)
+}
+
+// Probe calls gridwell.v1.Gridwell.Probe.
+func (c *gridwellClient) Probe(ctx context.Context, req *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
+	return c.probe.CallUnary(ctx, req)
+}
+
+// GetSession calls gridwell.v1.Gridwell.GetSession.
+func (c *gridwellClient) GetSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.ServerStreamForClient[v1.BlobChunk], error) {
+	return c.getSession.CallServerStream(ctx, req)
+}
+
+// PutSession calls gridwell.v1.Gridwell.PutSession.
+func (c *gridwellClient) PutSession(ctx context.Context) *connect.ClientStreamForClient[v1.PutSessionRequest, v1.PutSessionResponse] {
+	return c.putSession.CallClientStream(ctx)
+}
+
+// OpenShell calls gridwell.v1.Gridwell.OpenShell.
+func (c *gridwellClient) OpenShell(ctx context.Context) *connect.BidiStreamForClient[v1.OpenShellRequest, v1.OpenShellResponse] {
+	return c.openShell.CallBidiStream(ctx)
 }
 
 // Bootstrap calls gridwell.v1.Gridwell.Bootstrap.
@@ -405,6 +514,17 @@ func (c *gridwellClient) Subscribe(ctx context.Context, req *connect.Request[v1.
 
 // GridwellHandler is an implementation of the gridwell.v1.Gridwell service.
 type GridwellHandler interface {
+	// ── Plugin lifecycle ────────────────────────────────────────────────────
+	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
+	Attach(context.Context, *connect.Request[v1.AttachRequest]) (*connect.Response[v1.AttachResponse], error)
+	Detach(context.Context, *connect.Request[v1.DetachRequest]) (*connect.Response[v1.DetachResponse], error)
+	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
+	// ── Session ─────────────────────────────────────────────────────────────
+	GetSession(context.Context, *connect.Request[v1.GetSessionRequest], *connect.ServerStream[v1.BlobChunk]) error
+	PutSession(context.Context, *connect.ClientStream[v1.PutSessionRequest]) (*connect.Response[v1.PutSessionResponse], error)
+	// ── Shell ────────────────────────────────────────────────────────────────
+	OpenShell(context.Context, *connect.BidiStream[v1.OpenShellRequest, v1.OpenShellResponse]) error
+	// ── Bootstrap (kept for backward compat; superseded by Attach) ──────────
 	Bootstrap(context.Context, *connect.Request[v1.BootstrapRequest]) (*connect.Response[v1.BootstrapResponse], error)
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetBlob(context.Context, *connect.Request[v1.GetBlobRequest]) (*connect.Response[v1.GetBlobResponse], error)
@@ -436,6 +556,48 @@ type GridwellHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	gridwellMethods := v1.File_gridwell_v1_data_proto.Services().ByName("Gridwell").Methods()
+	gridwellInfoHandler := connect.NewUnaryHandler(
+		GridwellInfoProcedure,
+		svc.Info,
+		connect.WithSchema(gridwellMethods.ByName("Info")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellAttachHandler := connect.NewUnaryHandler(
+		GridwellAttachProcedure,
+		svc.Attach,
+		connect.WithSchema(gridwellMethods.ByName("Attach")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellDetachHandler := connect.NewUnaryHandler(
+		GridwellDetachProcedure,
+		svc.Detach,
+		connect.WithSchema(gridwellMethods.ByName("Detach")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellProbeHandler := connect.NewUnaryHandler(
+		GridwellProbeProcedure,
+		svc.Probe,
+		connect.WithSchema(gridwellMethods.ByName("Probe")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellGetSessionHandler := connect.NewServerStreamHandler(
+		GridwellGetSessionProcedure,
+		svc.GetSession,
+		connect.WithSchema(gridwellMethods.ByName("GetSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellPutSessionHandler := connect.NewClientStreamHandler(
+		GridwellPutSessionProcedure,
+		svc.PutSession,
+		connect.WithSchema(gridwellMethods.ByName("PutSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellOpenShellHandler := connect.NewBidiStreamHandler(
+		GridwellOpenShellProcedure,
+		svc.OpenShell,
+		connect.WithSchema(gridwellMethods.ByName("OpenShell")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellBootstrapHandler := connect.NewUnaryHandler(
 		GridwellBootstrapProcedure,
 		svc.Bootstrap,
@@ -570,6 +732,20 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 	)
 	return "/gridwell.v1.Gridwell/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case GridwellInfoProcedure:
+			gridwellInfoHandler.ServeHTTP(w, r)
+		case GridwellAttachProcedure:
+			gridwellAttachHandler.ServeHTTP(w, r)
+		case GridwellDetachProcedure:
+			gridwellDetachHandler.ServeHTTP(w, r)
+		case GridwellProbeProcedure:
+			gridwellProbeHandler.ServeHTTP(w, r)
+		case GridwellGetSessionProcedure:
+			gridwellGetSessionHandler.ServeHTTP(w, r)
+		case GridwellPutSessionProcedure:
+			gridwellPutSessionHandler.ServeHTTP(w, r)
+		case GridwellOpenShellProcedure:
+			gridwellOpenShellHandler.ServeHTTP(w, r)
 		case GridwellBootstrapProcedure:
 			gridwellBootstrapHandler.ServeHTTP(w, r)
 		case GridwellGetGridProcedure:
@@ -622,6 +798,34 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 
 // UnimplementedGridwellHandler returns CodeUnimplemented from all methods.
 type UnimplementedGridwellHandler struct{}
+
+func (UnimplementedGridwellHandler) Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Info is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) Attach(context.Context, *connect.Request[v1.AttachRequest]) (*connect.Response[v1.AttachResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Attach is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) Detach(context.Context, *connect.Request[v1.DetachRequest]) (*connect.Response[v1.DetachResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Detach is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Probe is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest], *connect.ServerStream[v1.BlobChunk]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetSession is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) PutSession(context.Context, *connect.ClientStream[v1.PutSessionRequest]) (*connect.Response[v1.PutSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.PutSession is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) OpenShell(context.Context, *connect.BidiStream[v1.OpenShellRequest, v1.OpenShellResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.OpenShell is not implemented"))
+}
 
 func (UnimplementedGridwellHandler) Bootstrap(context.Context, *connect.Request[v1.BootstrapRequest]) (*connect.Response[v1.BootstrapResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Bootstrap is not implemented"))
