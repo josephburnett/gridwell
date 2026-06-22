@@ -1,6 +1,8 @@
-.PHONY: build bin wasm test test-cover check check-electron serve clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm test test-cover check check-electron serve clean launch vendor dist node-modules
 
 BIN := ./gridwell
+FS_BIN := ./gridwell-fs
+PROC_BIN := ./gridwell-proc
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -27,6 +29,14 @@ build: bin wasm
 # genuinely has zero system dependencies.
 bin:
 	CGO_ENABLED=0 go build -o $(BIN) ./cmd/gridwell
+
+plugins: $(FS_BIN) $(PROC_BIN)
+
+$(FS_BIN):
+	CGO_ENABLED=0 go build -o $(FS_BIN) ./cmd/plugin/fs
+
+$(PROC_BIN):
+	CGO_ENABLED=0 go build -o $(PROC_BIN) ./cmd/plugin/proc
 
 wasm: $(WASM_EXEC)
 	mkdir -p web
@@ -118,5 +128,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(FS_BIN) $(PROC_BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out
