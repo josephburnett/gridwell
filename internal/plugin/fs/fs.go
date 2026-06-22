@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/fssource"
 	_ "modernc.org/sqlite"
 )
@@ -89,6 +90,16 @@ CREATE TABLE IF NOT EXISTS tiles (
 
 // Close closes the underlying database.
 func (p *Plugin) Close() error { return p.db.Close() }
+
+// NewFactory returns a ServerFactory for the "fs" kind.
+// config["db_file"] is the path to the plugin's SQLite DB.
+func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
+	dbPath := cfg.Config["db_file"]
+	if dbPath == "" {
+		return nil, fmt.Errorf("fs plugin %q: db_file config key required", cfg.Name)
+	}
+	return Open(dbPath, nil)
+}
 
 // Info returns the static plugin descriptor.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
