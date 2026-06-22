@@ -1,0 +1,388 @@
+// Package fs implements a Gridwell plugin that projects a host directory tree.
+// Each plugin instance has its own SQLite DB that maps directory paths to
+// stable integer grid IDs and file/dir names to stable integer tile IDs.
+// Positions (x,y,w,h) and well view framing are stored in the plugin DB so
+// they survive restarts.
+package fs
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/fssource"
+	_ "modernc.org/sqlite"
+)
+
+const autoGridWidth = 8
+
+// Host is the destructive side-effect surface. Injected so tests never rm
+// anything on disk. Production wires osHost; tests wire recordHost.
+type Host interface {
+	Remove(path string) error
+	RemoveAll(path string) error
+}
+
+type osHost struct{}
+
+func (osHost) Remove(p string) error    { return os.Remove(p) }
+func (osHost) RemoveAll(p string) error { return os.RemoveAll(p) }
+
+// Plugin implements gridwellv1.GridwellServer for a filesystem source.
+type Plugin struct {
+	gridwellv1.UnimplementedGridwellServer
+	db   *sql.DB
+	host Host
+}
+
+// Open opens (or creates) the plugin SQLite DB at dbPath. A nil host uses
+// plain os.Remove/os.RemoveAll.
+func Open(dbPath string, host Host) (*Plugin, error) {
+	if host == nil {
+		host = osHost{}
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("fs plugin open %s: %w", dbPath, err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("fs plugin pragmas: %w", err)
+	}
+	if err := createSchema(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Plugin{db: db, host: host}, nil
+}
+
+func createSchema(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS grids (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    path      TEXT NOT NULL UNIQUE,
+    view_x    INTEGER NOT NULL DEFAULT 0,
+    view_y    INTEGER NOT NULL DEFAULT 0,
+    view_zoom REAL NOT NULL DEFAULT 1.0
+);
+CREATE TABLE IF NOT EXISTS tiles (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    grid_id       INTEGER NOT NULL REFERENCES grids(id),
+    name          TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text')),
+    x             INTEGER NOT NULL DEFAULT 0,
+    y             INTEGER NOT NULL DEFAULT 0,
+    w             INTEGER NOT NULL DEFAULT 1,
+    h             INTEGER NOT NULL DEFAULT 1,
+    child_grid_id INTEGER,
+    view_x        INTEGER NOT NULL DEFAULT 0,
+    view_y        INTEGER NOT NULL DEFAULT 0,
+    view_zoom     REAL NOT NULL DEFAULT 1.0,
+    UNIQUE (grid_id, name)
+);`)
+	return err
+}
+
+// Close closes the underlying database.
+func (p *Plugin) Close() error { return p.db.Close() }
+
+// Info returns the static plugin descriptor.
+func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+	return &gridwellv1.InfoResponse{
+		Kind:          "fs",
+		DisplayName:   "files",
+		SchemaVersion: 1,
+	}, nil
+}
+
+// Attach turns config["path"] into a root grid in the plugin's namespace.
+func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
+	path := filepath.Clean(req.Config["path"])
+	if path == "" || path == "." {
+		return nil, fmt.Errorf("fs plugin: Attach requires a non-empty path")
+	}
+	gridID, err := p.getOrCreateGrid(path)
+	if err != nil {
+		return nil, err
+	}
+	label := filepath.Base(path)
+	if label == "/" || label == "." {
+		label = "files"
+	}
+	return &gridwellv1.AttachResponse{
+		RootGridId: gridID,
+		Label:      label,
+		Caps:       &gridwellv1.PluginCaps{},
+		HasSession: false,
+	}, nil
+}
+
+// Detach is a no-op for the fs plugin.
+func (p *Plugin) Detach(_ context.Context, _ *gridwellv1.DetachRequest) (*gridwellv1.DetachResponse, error) {
+	return &gridwellv1.DetachResponse{}, nil
+}
+
+// GetGrid reads the directory for the given grid_id, reconciles tile rows
+// against the current directory contents, and returns the resulting tiles.
+// Missing directories return an empty grid without error.
+func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
+	gridID := req.GridId
+
+	path, err := p.gridPath(gridID)
+	if err != nil {
+		return nil, fmt.Errorf("fs GetGrid %d: %w", gridID, err)
+	}
+
+	entries, readErr := fssource.Read(path)
+	// A missing/unreadable directory is not an error — return empty authoritative.
+	if readErr != nil {
+		entries = nil
+	}
+
+	if err := p.reconcileTiles(gridID, path, entries); err != nil {
+		return nil, err
+	}
+
+	tiles, err := p.loadTiles(gridID)
+	if err != nil {
+		return nil, err
+	}
+
+	grid := &gridwellv1.Grid{Id: gridID, SourceKind: "fs", SourceId: path}
+	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
+}
+
+// Probe checks whether the tile at tile_id still has its backing path on disk.
+func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
+	var gridID int64
+	var name string
+	err := p.db.QueryRow(`SELECT t.grid_id, t.name FROM tiles t WHERE t.id = ?`, req.TileId).Scan(&gridID, &name)
+	if err == sql.ErrNoRows {
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	dirPath, err := p.gridPath(gridID)
+	if err != nil {
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
+	}
+	fullPath := filepath.Join(dirPath, name)
+	_, statErr := os.Lstat(fullPath)
+	switch {
+	case statErr == nil:
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
+	case os.IsNotExist(statErr):
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
+	default:
+		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_UNSPECIFIED}, nil
+	}
+}
+
+// DeleteTile removes the file or directory from disk (via Host), then drops
+// the tile row from the plugin DB.
+func (p *Plugin) DeleteTile(_ context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
+	var gridID int64
+	var name, kind string
+	err := p.db.QueryRow(`SELECT grid_id, name, kind FROM tiles WHERE id = ?`, req.TileId).Scan(&gridID, &name, &kind)
+	if err == sql.ErrNoRows {
+		return &gridwellv1.DeleteTileResponse{}, nil // already gone
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	dirPath, err := p.gridPath(gridID)
+	if err != nil {
+		return nil, err
+	}
+	fullPath := filepath.Join(dirPath, name)
+
+	info, statErr := os.Lstat(fullPath)
+	if statErr == nil {
+		if info.IsDir() {
+			if err := p.host.RemoveAll(fullPath); err != nil {
+				return nil, fmt.Errorf("fs DeleteTile RemoveAll %s: %w", fullPath, err)
+			}
+		} else {
+			if err := p.host.Remove(fullPath); err != nil {
+				return nil, fmt.Errorf("fs DeleteTile Remove %s: %w", fullPath, err)
+			}
+		}
+	}
+	// Remove the tile row and any child grid it pointed at.
+	if _, err := p.db.Exec(`DELETE FROM tiles WHERE id = ?`, req.TileId); err != nil {
+		return nil, err
+	}
+	return &gridwellv1.DeleteTileResponse{}, nil
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+func (p *Plugin) getOrCreateGrid(path string) (int64, error) {
+	var id int64
+	err := p.db.QueryRow(`SELECT id FROM grids WHERE path = ?`, path).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, err
+	}
+	res, err := p.db.Exec(`INSERT INTO grids (path) VALUES (?)`, path)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (p *Plugin) gridPath(gridID int64) (string, error) {
+	var path string
+	err := p.db.QueryRow(`SELECT path FROM grids WHERE id = ?`, gridID).Scan(&path)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("grid %d not found", gridID)
+	}
+	return path, err
+}
+
+// reconcileTiles upserts tile rows for current entries and deletes rows for
+// names no longer present on disk.
+func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource.Entry) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Load existing tile rows (name → id).
+	rows, err := tx.Query(`SELECT id, name, x, y FROM tiles WHERE grid_id = ?`, gridID)
+	if err != nil {
+		return err
+	}
+	type existing struct{ id, x, y int64 }
+	existingByName := map[string]existing{}
+	for rows.Next() {
+		var id, x, y int64
+		var name string
+		if err := rows.Scan(&id, &name, &x, &y); err != nil {
+			rows.Close()
+			return err
+		}
+		existingByName[name] = existing{id, x, y}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Build occupied-cell set for auto-layout.
+	occupied := map[[2]int64]bool{}
+	for _, e := range existingByName {
+		occupied[[2]int64{e.x, e.y}] = true
+	}
+	nextCell := func() (int64, int64) {
+		var cx, cy int64
+		for {
+			if !occupied[[2]int64{cx, cy}] {
+				occupied[[2]int64{cx, cy}] = true
+				return cx, cy
+			}
+			cx++
+			if cx >= autoGridWidth {
+				cx = 0
+				cy++
+			}
+		}
+	}
+
+	// Upsert entries.
+	presentNames := map[string]bool{}
+	for _, e := range entries {
+		presentNames[e.Name] = true
+		if _, exists := existingByName[e.Name]; exists {
+			continue // already in DB; keep existing position
+		}
+		kind := "text"
+		var childGridID int64
+		if e.Kind == fssource.KindDir {
+			kind = "well"
+			childPath := e.AbsPath
+			// Get or create grid row for the subdirectory.
+			var cgid int64
+			err2 := tx.QueryRow(`SELECT id FROM grids WHERE path = ?`, childPath).Scan(&cgid)
+			if err2 == sql.ErrNoRows {
+				res2, err3 := tx.Exec(`INSERT INTO grids (path) VALUES (?)`, childPath)
+				if err3 != nil {
+					return err3
+				}
+				cgid, _ = res2.LastInsertId()
+			} else if err2 != nil {
+				return err2
+			}
+			childGridID = cgid
+		}
+		x, y := nextCell()
+		if kind == "well" {
+			_, err = tx.Exec(`INSERT INTO tiles (grid_id, name, kind, x, y, child_grid_id) VALUES (?, ?, ?, ?, ?, ?)`,
+				gridID, e.Name, kind, x, y, childGridID)
+		} else {
+			_, err = tx.Exec(`INSERT INTO tiles (grid_id, name, kind, x, y) VALUES (?, ?, ?, ?, ?)`,
+				gridID, e.Name, kind, x, y)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete tiles for names no longer on disk.
+	for name, ex := range existingByName {
+		if !presentNames[name] {
+			if _, err := tx.Exec(`DELETE FROM tiles WHERE id = ?`, ex.id); err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// loadTiles loads the current tile rows for a grid and converts them to proto Tiles.
+func (p *Plugin) loadTiles(gridID int64) ([]*gridwellv1.Tile, error) {
+	rows, err := p.db.Query(`
+		SELECT id, name, kind, x, y, w, h,
+		       COALESCE(child_grid_id,0), view_x, view_y, view_zoom
+		FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*gridwellv1.Tile
+	for rows.Next() {
+		var id, x, y, w, h, childGrid, vx, vy int64
+		var vz float64
+		var name, kind string
+		if err := rows.Scan(&id, &name, &kind, &x, &y, &w, &h, &childGrid, &vx, &vy, &vz); err != nil {
+			return nil, err
+		}
+		t := &gridwellv1.Tile{
+			Id:          id,
+			GridId:      gridID,
+			Kind:        kind,
+			X:           x,
+			Y:           y,
+			W:           w,
+			H:           h,
+			AltText:     name,
+			ViewX:       vx,
+			ViewY:       vy,
+			ViewZoom:    vz,
+			ChildGridId: childGrid,
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
