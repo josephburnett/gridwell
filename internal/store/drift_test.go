@@ -22,11 +22,15 @@ func TestProtoMatchesDDL(t *testing.T) {
 		table       string
 		message     protoreflect.MessageDescriptor
 		storageOnly []string
+		protoOnly   []string
 	}{
 		{
-			table:       "grids",
-			message:     (&pb.Grid{}).ProtoReflect().Descriptor(),
+			table:   "grids",
+			message: (&pb.Grid{}).ProtoReflect().Descriptor(),
+			// source_kind/source_id are set by the fs/proc plugins on their
+			// own GetGrid responses; the local store never persists them.
 			storageOnly: []string{"created_at", "updated_at"},
+			protoOnly:   []string{"source_kind", "source_id"},
 		},
 		{
 			table:       "tiles",
@@ -39,9 +43,13 @@ func TestProtoMatchesDDL(t *testing.T) {
 			cols := tableColumns(t, s, c.table)
 			fields := protoFieldNames(c.message)
 			storage := stringSet(c.storageOnly)
+			protoOnly := stringSet(c.protoOnly)
 
 			missingCols := []string{}
 			for f := range fields {
+				if _, ok := protoOnly[f]; ok {
+					continue
+				}
 				if _, ok := cols[f]; !ok {
 					missingCols = append(missingCols, f)
 				}

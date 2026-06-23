@@ -11,34 +11,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// gridSourceKinds returns the source_kind values for two grids. Empty string
-// means a regular Gridwell-owned grid.
-func (s *Store) gridSourceKinds(ctx context.Context, tx *sql.Tx, a, b int64) (string, string, error) {
-	ka, err := s.gridSourceKind(ctx, tx, a)
-	if err != nil {
-		return "", "", err
-	}
-	kb, err := s.gridSourceKind(ctx, tx, b)
-	if err != nil {
-		return "", "", err
-	}
-	return ka, kb, nil
-}
-
-// gridSourceKind returns one grid's source_kind ("" for a regular grid).
-func (s *Store) gridSourceKind(ctx context.Context, tx *sql.Tx, id int64) (string, error) {
-	var k sql.NullString
-	err := tx.QueryRowContext(ctx,
-		`SELECT source_kind FROM grids WHERE id = ?`, id).Scan(&k)
-	if err != nil {
-		return "", err
-	}
-	if k.Valid {
-		return k.String, nil
-	}
-	return "", nil
-}
-
 // MoveTile moves a tile either within its grid or across grids.
 func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
@@ -75,20 +47,6 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 		dstGrid := dstSeq.grids[len(dstSeq.grids)-1]
 
 		crossGrid := dstGrid != srcGrid
-		// Cross-grid moves that touch a source-backed grid are not
-		// permitted: a file can't be moved into Gridwell ("things stay
-		// where you put them" only inside Gridwell), and host-side mv
-		// across directories is not yet implemented. The user can clone
-		// (right-drag) instead to drop a linked tile.
-		if crossGrid {
-			srcSource, dstSource, err := s.gridSourceKinds(ctx, tx, srcGrid, dstGrid)
-			if err != nil {
-				return err
-			}
-			if srcSource != "" || dstSource != "" {
-				return fmt.Errorf("%w: cross-grid move involving a source-backed grid is not allowed; clone (right-drag) to link instead", ErrInvalidArgument)
-			}
-		}
 		if n.Kind == rpc.KindWell {
 			if slices.Contains(req.DestPath.WellIDs, req.TileID) {
 				return fmt.Errorf("%w: cannot move a well into itself or a descendant", ErrInvalidArgument)
@@ -138,10 +96,11 @@ func (s *Store) MoveTile(ctx context.Context, req *rpc.MoveTileRequest) (*rpc.Ti
 // CloneTile duplicates a tile into a destination grid at (x, y) as an eager,
 // independent copy. The new row carries the source's object_id + version as a
 // provenance marker but gets a fresh row id. An interior well's whole child
-// subtree is deep-copied (new grid + tile rows; blobs shared); a file/process
-// well shares its host-backed source grid (identity, not COW); a text/url/shell
-// tile shares its content/preview blob (refcount bumped). Nothing is shared
-// between the two copies, so editing one can never touch the other.
+// subtree is deep-copied (new grid + tile rows; blobs shared); an exit well
+// keeps its qualified cross-plugin child_grid_id (the child grid is owned by
+// another plugin, not duplicated); a text/url/shell tile shares its
+// content/preview blob (refcount bumped). Nothing is shared between the two
+// copies, so editing one can never touch the other.
 func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.Tile, error) {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -173,28 +132,7 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 			return err
 		}
 
-		srcGrid := srcSeq.grids[len(srcSeq.grids)-1]
-		dstGridRaw := dstSeq.grids[len(dstSeq.grids)-1]
-		if srcGrid != dstGridRaw {
-			srcSource, dstSource, err := s.gridSourceKinds(ctx, tx, srcGrid, dstGridRaw)
-			if err != nil {
-				return err
-			}
-			if dstSource != "" {
-				return fmt.Errorf("%w: cannot clone into a source-backed grid; its contents come from the host", ErrInvalidArgument)
-			}
-			// From a source grid, both well kinds (file-well / process-well)
-			// and text tiles can be linked out. Wells carry their FS path /
-			// PID; text tiles (the synthesized file / @info rows) carry
-			// source_key so the client renders the basename / "info" label and
-			// the red exit border — the clone reads as a reference to
-			// something outside Gridwell.
-			if srcSource != "" && !isWellKind(n.Kind) && n.Kind != rpc.KindText {
-				return fmt.Errorf("%w: only wells and file tiles can be linked out of a source-backed grid", ErrInvalidArgument)
-			}
-		}
-
-		dstGrid := dstGridRaw
+		dstGrid := dstSeq.grids[len(dstSeq.grids)-1]
 
 		over, err := overlapsExisting(ctx, tx, dstGrid, req.X, req.Y, n.W, n.H)
 		if err != nil {
@@ -206,8 +144,9 @@ func (s *Store) CloneTile(ctx context.Context, req *rpc.CloneTileRequest) (*rpc.
 
 		now := s.now().Unix()
 		// child_grid_id: an interior well gets a deep copy of its subtree
-		// (cloneSubtree); a file/process well shares the same host-backed source
-		// grid (identity, not COW); everything else has none.
+		// (cloneSubtree); an exit well keeps its qualified cross-plugin child
+		// reference (the child grid lives in another plugin); everything else
+		// has none.
 		child, err := s.childGridForClone(ctx, tx, n)
 		if err != nil {
 			return err
@@ -242,15 +181,6 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 		}
 		if n.Kind != rpc.KindText {
 			return ErrNotTextTile
-		}
-		// Source-backed text tiles (fs file metadata, the proc @info
-		// tile) are read-only views of host state: their content is
-		// produced by the reconciler, not the user. Rejecting writes
-		// here means even a misbehaving client can't poison the blob.
-		// (Checked before checkPathLeaf so the read-only signal wins over
-		// a stale path — order matters to callers and is asserted in tests.)
-		if n.SourceKey != "" {
-			return fmt.Errorf("%w: source-backed text tiles are read-only", ErrInvalidArgument)
 		}
 		if _, err := s.checkPathLeaf(ctx, tx, req.Path, n); err != nil {
 			return err

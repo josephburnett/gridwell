@@ -39,25 +39,15 @@ type gridReader interface {
 }
 
 func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.Grid, error) {
-	var (
-		g          rpc.Grid
-		sourceKind sql.NullString
-		sourceID   sql.NullString
-	)
+	var g rpc.Grid
 	err := q.QueryRowContext(ctx,
-		`SELECT id, object_id, version, source_kind, source_id FROM grids WHERE id = ?`, gridID,
-	).Scan(&g.ID, &g.ObjectID, &g.Version, &sourceKind, &sourceID)
+		`SELECT id, object_id, version FROM grids WHERE id = ?`, gridID,
+	).Scan(&g.ID, &g.ObjectID, &g.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
-	}
-	if sourceKind.Valid {
-		g.SourceKind = sourceKind.String
-	}
-	if sourceID.Valid {
-		g.SourceID = sourceID.String
 	}
 	return &g, nil
 }
@@ -67,7 +57,7 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, preview_blob_id, fs_path, pid, source_key, alt_text`
+	url_string, preview_blob_id, alt_text`
 
 // scanTile scans a single row into an rpc.Tile. It expects the columns to
 // match tileColumns in order.
@@ -81,16 +71,13 @@ func scanTile(scanner interface {
 		urlStr     sql.NullString
 		previewBID sql.NullInt64
 		textMode   sql.NullString
-		fsPath     sql.NullString
-		pidNS      sql.NullInt64
-		sourceKey  sql.NullString
 	)
 	if err := scanner.Scan(
 		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
 		&n.X, &n.Y, &n.W, &n.H,
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
-		&urlStr, &previewBID, &fsPath, &pidNS, &sourceKey, &n.AltText,
+		&urlStr, &previewBID, &n.AltText,
 	); err != nil {
 		return nil, err
 	}
@@ -108,15 +95,6 @@ func scanTile(scanner interface {
 	}
 	if textMode.Valid {
 		n.TextMode = textMode.String
-	}
-	if fsPath.Valid {
-		n.FSPath = fsPath.String
-	}
-	if pidNS.Valid {
-		n.PID = pidNS.Int64
-	}
-	if sourceKey.Valid {
-		n.SourceKey = sourceKey.String
 	}
 	return &n, nil
 }

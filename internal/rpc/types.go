@@ -11,28 +11,27 @@ package rpc
 // owned by the host (the filesystem, the process table, a bash session),
 // not by Gridwell. The color grammar (red outline) follows.
 const (
-	// Canonical alt-text strings stamped into a tile's alt_text at insert
-	// time. The client renders tile.AltText verbatim — no derivation —
-	// so server and client always agree on what a tile is called.
-	AltFiles     = "files"     // root file-well (FSPath == "/")
-	AltProcesses = "processes" // root process-well (PID == 1)
-	AltInfo      = "info"      // synthetic @info tile inside a proc-well
+	// Canonical alt-text strings supplied by the fs/proc plugins as the
+	// Attach label of a file/process well. The client renders tile.AltText
+	// verbatim — no derivation — so server and client always agree on what a
+	// tile is called.
+	AltFiles     = "files"     // root file well (path "/")
+	AltProcesses = "processes" // root process well (PID 1)
+	AltInfo      = "info"      // synthetic @info tile inside a process grid
 
-	KindWell        = "well"
-	KindText        = "text"
-	KindURL         = "url"
-	KindFileWell    = "file-well"
-	KindProcessWell = "process-well"
-	KindShell       = "shell"
+	KindWell  = "well"
+	KindText  = "text"
+	KindURL   = "url"
+	KindShell = "shell"
 )
 
 // IsWellKind reports whether a tile kind has a child grid that can be
-// descended into — the three "well" kinds (interior well, file-well,
-// process-well). Shared by the store (path validation, refcount
-// holdings) and the client (drop-target resolution) so the three-kind
-// set is spelled out in exactly one place.
+// descended into. Only "well" qualifies — an exit well (one whose child grid
+// lives in another plugin) is still a well; it is distinguished by its
+// qualified child_grid_id, not by its kind. Shared by the store (path
+// validation, refcount holdings) and the client (drop-target resolution).
 func IsWellKind(kind string) bool {
-	return kind == KindWell || kind == KindFileWell || kind == KindProcessWell
+	return kind == KindWell
 }
 
 // IsContentDescentKind reports whether a tile kind is a content tile you
@@ -114,17 +113,6 @@ type Tile struct {
 	// deduped through the blobs table the same way text content is.
 	URLString     string `json:"url_string,omitempty"`
 	PreviewBlobID int64  `json:"preview_blob_id,omitempty"`
-	// file-well-only: the absolute host path the well points at.
-	FSPath string `json:"fs_path,omitempty"`
-	// SourceKey is the stable per-source identifier used by the
-	// source-grid reconciler to dedup tiles against their backing
-	// host artifact: for fs-grids, the basename of the file or
-	// directory; for proc-grids, the PID as a decimal string ("@info"
-	// for the synthetic well-self tile). Empty for tiles in regular
-	// Gridwell-owned grids.
-	SourceKey string `json:"source_key,omitempty"`
-	// process-well-only: the PID the well points at.
-	PID int64 `json:"pid,omitempty"`
 	// AltText is a human-readable label used as the alt of a markdown
 	// link when this tile is dropped into a doc. Populated by the
 	// server: URL tiles get the page title (captured on Chromium

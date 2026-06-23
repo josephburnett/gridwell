@@ -74,20 +74,13 @@ message Tile {
   string url_string = 20;
   int64 preview_blob_id = 21;
 
-  // file-well-only / process-well-only: the FS path or PID this exit
-  // well points at.
-  string fs_path = 22;
-  int64 pid = 23;
-
-  // source_key is the per-source dedup identifier for tiles
-  // synthesized inside an fs/proc-grid — basename for fs, PID string
-  // (or "@info" for the well-self tile) for proc. Empty for tiles in
-  // regular Gridwell-owned grids.
-  string source_key = 24;
+  // 22 (fs_path), 23 (pid), 24 (source_key): removed with the legacy
+  // source-grid reconciler. A file/process well is now a plain well whose
+  // child_grid_id is a qualified "<plugin-uuid>/<grid-id>" reference.
 
   // alt_text is the canonical display label, rendered verbatim by the
-  // client. Stamped at insert time and refreshed by the source-grid
-  // reconciler.
+  // client. Stamped at insert time (for plugin-owned tiles, the plugin's
+  // Attach label or entry name).
   string alt_text = 25;
 }
 

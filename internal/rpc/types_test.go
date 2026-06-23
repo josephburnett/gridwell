@@ -3,11 +3,8 @@ package rpc
 import "testing"
 
 func TestIsWellKind(t *testing.T) {
-	wells := []string{KindWell, KindFileWell, KindProcessWell}
-	for _, k := range wells {
-		if !IsWellKind(k) {
-			t.Errorf("IsWellKind(%q) = false, want true", k)
-		}
+	if !IsWellKind(KindWell) {
+		t.Errorf("IsWellKind(%q) = false, want true", KindWell)
 	}
 	notWells := []string{KindText, KindURL, KindShell, ""}
 	for _, k := range notWells {
@@ -29,7 +26,7 @@ func TestIsContentDescentKind(t *testing.T) {
 			t.Errorf("IsContentDescentKind(%q) = false, want true", k)
 		}
 	}
-	notContent := []string{KindWell, KindFileWell, KindProcessWell, ""}
+	notContent := []string{KindWell, ""}
 	for _, k := range notContent {
 		if IsContentDescentKind(k) {
 			t.Errorf("IsContentDescentKind(%q) = true, want false", k)

@@ -671,14 +671,13 @@ func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
 }
 
 // tileReadOnly reports whether the user is allowed to edit n's text
-// content. Text tiles whose `source_key` is set are read-only views of
-// host state — file metadata reconciled from /proc, the @info tile in
-// a proc-well — produced by the server's source-grid reconciler. The
-// rendered/raw toggle, the textarea overlay, and the UpdateText round-
-// trip on ascent all consult this so the user can't type into one of
-// these, and a stale local buffer can't be silently re-posted.
+// content. A text tile owned by a plugin (a file's metadata, a process's
+// @info) is a read-only view of host state — the plugin has no write-back —
+// so the rendered/raw toggle, the textarea overlay, and the UpdateText round-
+// trip on ascent all consult this to keep the user from typing into one and
+// silently re-posting a stale buffer.
 func (a *App) tileReadOnly(n *rpc.Tile) bool {
-	return n.Kind == rpc.KindText && (n.SourceKey != "" || a.isPluginTile(n))
+	return n.Kind == rpc.KindText && a.isPluginTile(n)
 }
 
 // tileOutside reports whether a tile should be rendered with the "outside
@@ -688,8 +687,6 @@ func (a *App) tileReadOnly(n *rpc.Tile) bool {
 //   - the tile is itself an exit well (its child grid lives in another
 //     plugin) anywhere — outside regardless of where the well sits
 //   - the tile is a shell tile (bash runs outside Gridwell's data world)
-//   - the tile is a text tile carrying a source_key, i.e. it was cloned
-//     out of an fs-grid and still represents an outside reference
 func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 	if parentInSource {
 		return true
@@ -703,27 +700,16 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 		// Bash runs outside Gridwell's data world. Same treatment.
 		return true
 	}
-	if n.Kind == rpc.KindText && n.SourceKey != "" {
-		return true
-	}
 	return false
 }
 
-// isLinkTile reports whether n is a reference to content outside Gridwell:
-// a file-well, a process-well, or a file dragged out of a source grid (a
-// text tile carrying a SourceKey). In a REGULAR grid these render with a
-// dashed border, and dropping one on /dev/null only unlinks it (drops the
-// tile row). The same entities INSIDE their source well render solid, and
-// dropping them on /dev/null deletes for real (rm / SIGTERM) — the store's
-// DeleteTile already routes on the parent grid's source_kind.
+// isLinkTile reports whether n is a reference to content that lives outside
+// the current grid's plugin — an exit well whose child grid is in another
+// plugin (a host directory, the process table). In a REGULAR grid these render
+// with a dashed border, and dropping one on /dev/null only unlinks it (drops
+// the tile row); the well itself inside its own grid deletes for real.
 func isLinkTile(n *rpc.Tile) bool {
-	if isExitWell(n) {
-		return true
-	}
-	if n.Kind == rpc.KindText {
-		return n.SourceKey != ""
-	}
-	return false
+	return isExitWell(n)
 }
 
 // tileBorderDash is the dash pattern for link-tile borders: short on/off so

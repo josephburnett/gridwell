@@ -129,27 +129,31 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 	return newGridID, nil
 }
 
-// childGridForClone returns the child_grid_id a copy of tile n should carry:
-//   - interior well: a deep copy of its subtree (recursive cloneSubtree);
-//   - file/process well: the SAME host-backed source grid (shared by identity
-//     — you can't deep-copy the filesystem or the process table);
-//   - everything else: none.
-func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) (sql.NullInt64, error) {
+// childGridForClone returns the child_grid_id a copy of tile n should carry,
+// as a value ready to bind into the INSERT (nil → NULL, int64 → a local grid,
+// string → a qualified cross-plugin reference):
+//   - interior well (numeric child): a deep copy of its subtree (cloneSubtree),
+//     returned as the new grid's id;
+//   - exit well (qualified "<uuid>/<id>" child): the SAME cross-plugin
+//     reference — the child grid is owned by another plugin, not duplicated;
+//   - everything else: nil.
+func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) (any, error) {
 	if n.ChildGridID == "" {
-		return sql.NullInt64{}, nil
+		return nil, nil
 	}
-	childID, _ := strconv.ParseInt(n.ChildGridID, 10, 64)
-	switch n.Kind {
-	case rpc.KindWell:
+	childID, err := strconv.ParseInt(n.ChildGridID, 10, 64)
+	if err != nil {
+		// Qualified cross-plugin reference: preserve it verbatim.
+		return n.ChildGridID, nil
+	}
+	if n.Kind == rpc.KindWell {
 		newChild, err := s.cloneSubtree(ctx, tx, childID)
 		if err != nil {
-			return sql.NullInt64{}, err
+			return nil, err
 		}
-		return sql.NullInt64{Int64: newChild, Valid: true}, nil
-	case rpc.KindFileWell, rpc.KindProcessWell:
-		return sql.NullInt64{Int64: childID, Valid: true}, nil
+		return newChild, nil
 	}
-	return sql.NullInt64{}, nil
+	return nil, nil
 }
 
 // insertTileCopy inserts a copy of tile n into gridID at (x, y) with the given
@@ -157,16 +161,12 @@ func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) 
 // blob (refcount bumped). The per-kind column nullability mirrors the schema
 // CHECK constraint. Used by CloneTile (one tile) and cloneSubtree (every tile
 // in a subtree).
-func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *rpc.Tile, x, y int64, child sql.NullInt64, now int64) (int64, error) {
+func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *rpc.Tile, x, y int64, child any, now int64) (int64, error) {
 	var (
-		blob, previewBlob, pidNS sql.NullInt64
-		urlStr, textMode, fsPath sql.NullString
+		blob, previewBlob sql.NullInt64
+		urlStr, textMode  sql.NullString
 	)
 	switch n.Kind {
-	case rpc.KindFileWell:
-		fsPath = sql.NullString{String: n.FSPath, Valid: true}
-	case rpc.KindProcessWell:
-		pidNS = sql.NullInt64{Int64: n.PID, Valid: true}
 	case rpc.KindURL:
 		urlStr = sql.NullString{String: n.URLString, Valid: true}
 		if n.PreviewBlobID != 0 {
@@ -190,13 +190,13 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
 			view_x, view_y, view_zoom, child_grid_id,
 			text_x, text_y, text_w, text_h, text_mode, blob_id,
-			url_string, preview_blob_id, fs_path, pid, source_key, alt_text,
+			url_string, preview_blob_id, alt_text,
 			created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		n.ObjectID, n.Version, gridID, n.Kind, x, y, n.W, n.H,
 		n.ViewX, n.ViewY, n.ViewZoom, child,
 		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-		urlStr, previewBlob, fsPath, pidNS, nullableString(n.SourceKey), n.AltText,
+		urlStr, previewBlob, n.AltText,
 		now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert tile copy: %w", err)
@@ -376,7 +376,7 @@ func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef
 		return childGrid, 0
 	case rpc.KindText:
 		return 0, blob
-	case rpc.KindURL, rpc.KindShell, rpc.KindFileWell, rpc.KindProcessWell:
+	case rpc.KindURL, rpc.KindShell:
 		return 0, previewBlob
 	}
 	return 0, 0

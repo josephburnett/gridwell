@@ -246,18 +246,9 @@ type Tile struct {
 	// preview (in the blobs table; hash-deduped across clones).
 	UrlString     string `protobuf:"bytes,20,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
 	PreviewBlobId int64  `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
-	// file-well-only / process-well-only: the FS path or PID this exit
-	// well points at.
-	FsPath string `protobuf:"bytes,22,opt,name=fs_path,json=fsPath,proto3" json:"fs_path,omitempty"`
-	Pid    int64  `protobuf:"varint,23,opt,name=pid,proto3" json:"pid,omitempty"`
-	// source_key is the per-source dedup identifier for tiles
-	// synthesized inside an fs/proc-grid — basename for fs, PID string
-	// (or "@info" for the well-self tile) for proc. Empty for tiles in
-	// regular Gridwell-owned grids.
-	SourceKey string `protobuf:"bytes,24,opt,name=source_key,json=sourceKey,proto3" json:"source_key,omitempty"`
 	// alt_text is the canonical display label, rendered verbatim by the
-	// client. Stamped at insert time and refreshed by the source-grid
-	// reconciler.
+	// client. Stamped at insert time (for plugin-owned tiles, the plugin's
+	// Attach label or entry name).
 	AltText       string `protobuf:"bytes,25,opt,name=alt_text,json=altText,proto3" json:"alt_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -438,27 +429,6 @@ func (x *Tile) GetPreviewBlobId() int64 {
 		return x.PreviewBlobId
 	}
 	return 0
-}
-
-func (x *Tile) GetFsPath() string {
-	if x != nil {
-		return x.FsPath
-	}
-	return ""
-}
-
-func (x *Tile) GetPid() int64 {
-	if x != nil {
-		return x.Pid
-	}
-	return 0
-}
-
-func (x *Tile) GetSourceKey() string {
-	if x != nil {
-		return x.SourceKey
-	}
-	return ""
 }
 
 func (x *Tile) GetAltText() string {
@@ -3754,7 +3724,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
 	"\vsource_kind\x18\x04 \x01(\tR\n" +
 	"sourceKind\x12\x1b\n" +
-	"\tsource_id\x18\x05 \x01(\tR\bsourceId\"\xdf\x04\n" +
+	"\tsource_id\x18\x05 \x01(\tR\bsourceId\"\x95\x04\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3778,11 +3748,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\ablob_id\x18\x13 \x01(\x03R\x06blobId\x12\x1d\n" +
 	"\n" +
 	"url_string\x18\x14 \x01(\tR\turlString\x12&\n" +
-	"\x0fpreview_blob_id\x18\x15 \x01(\x03R\rpreviewBlobId\x12\x17\n" +
-	"\afs_path\x18\x16 \x01(\tR\x06fsPath\x12\x10\n" +
-	"\x03pid\x18\x17 \x01(\x03R\x03pid\x12\x1d\n" +
-	"\n" +
-	"source_key\x18\x18 \x01(\tR\tsourceKey\x12\x19\n" +
+	"\x0fpreview_blob_id\x18\x15 \x01(\x03R\rpreviewBlobId\x12\x19\n" +
 	"\balt_text\x18\x19 \x01(\tR\aaltText\"\x90\x01\n" +
 	"\n" +
 	"PluginCaps\x12\x16\n" +

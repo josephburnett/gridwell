@@ -5,24 +5,21 @@ package store
 // singleton state (root grid id and root viewport framing); the schema
 // version lives in the SQLite header (PRAGMA user_version), not here.
 //
-// There are six tile kinds:
-//   - well       (interior): points at a child Gridwell-owned grid (blue).
-//   - text       (interior): markdown blob (green).
-//   - url        (interior): http(s) URL + frozen JPEG preview (purple).
-//   - file-well  (exit):     points at a host directory; child grid's tile
-//     list is reconciled against that directory.
-//   - process-well (exit):   points at a host PID; child grid's tile list
-//     is reconciled against the process table.
-//   - shell      (exit):     interactive bash session inside a gridwell-
-//     private tmux session. Live mode attaches the tmux client; freeze
-//     captures a JPEG preview and detaches. The bash + scrollback live in
-//     the tmux server and persist across ascents (and gridwell restarts);
-//     they are gone only when the tile is deleted or the host reboots.
+// The local store holds only Gridwell-owned grids. Host-backed content
+// (filesystem directories, the process table) lives in the fs/proc plugins,
+// each with its own database; a well that points at one is an ordinary `well`
+// row whose child_grid_id is a qualified "<plugin-uuid>/<grid-id>" reference.
 //
-// Grids carry an optional (source_kind, source_id): NULL = regular
-// Gridwell-owned, 'fs' = backed by a filesystem path, 'proc' = backed by
-// a PID's child set. The (source_kind, source_id) pair is unique when
-// non-NULL, so two file-wells at the same path share one backing grid.
+// There are four tile kinds:
+//   - well  (interior): points at a child grid. Blue when the child is in this
+//     same store; red ("exit well") when child_grid_id names another plugin.
+//   - text  (interior): markdown blob (green).
+//   - url   (interior): http(s) URL + frozen JPEG preview (purple).
+//   - shell (exit):     interactive bash session inside a gridwell-private tmux
+//     session. Live mode attaches the tmux client; freeze captures a JPEG
+//     preview and detaches. The bash + scrollback live in the tmux server and
+//     persist across ascents (and gridwell restarts); they are gone only when
+//     the tile is deleted or the host reboots.
 //
 // Well rows carry one view rectangle (view_x, view_y, view_zoom) that is
 // at once the preview frame, the descent target, and the ascent return.
@@ -30,10 +27,6 @@ package store
 // plus a rendered/text mode plus blob_id (the markdown source). URL rows
 // carry a URL string and preview_blob_id (the last-frozen JPEG captured
 // at close, hash-deduped through the blobs table just like text content).
-// File-well rows carry fs_path; process-well rows carry pid. Synthesized
-// file-backed tiles inside an fs-grid carry source_key (their basename
-// within the parent); proc-grid tiles carry the PID string as
-// source_key (and "@info" for the well-self tile).
 
 // pragmas are connection-level settings applied once at Open, before any
 // schema or attach.
@@ -60,22 +53,18 @@ CREATE TABLE IF NOT EXISTS grids (
     -- SQLite recycles the rowid of a deleted grid (e.g. an interior well that
     -- was deleted, taking its owned child grid with it), and a new grid taking
     -- that id would collide with the client's still-cached copy of the old
-    -- grid — making a fresh file-well render the deleted well's tiles. Fresh
-    -- ids keep the client cache (keyed by id) honest.
+    -- grid — making a fresh well render the deleted well's tiles. Fresh ids
+    -- keep the client cache (keyed by id) honest.
     --
-    -- No refcount: regular grids are owned 1:1 by their parent well (copy-on-
-    -- clone never shares a grid), and host-backed source grids are shared by
-    -- identity but disposable, so neither is reference-counted. Only blobs are.
+    -- No refcount: grids are owned 1:1 by their parent well (copy-on-clone
+    -- never shares a grid), so only blobs are reference-counted.
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id   TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 0,
-    source_kind TEXT,
-    source_id   TEXT,
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_source ON grids(source_kind, source_id) WHERE source_kind IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
@@ -101,19 +90,20 @@ CREATE TABLE IF NOT EXISTS tiles (
     object_id     TEXT NOT NULL,
     version       INTEGER NOT NULL DEFAULT 0,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
-    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','file-well','process-well','shell')),
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','shell')),
     x             INTEGER NOT NULL,
     y             INTEGER NOT NULL,
     w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
     h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
-    -- well / file-well / process-well: the rectangle in child-grid
-    -- coordinates that the preview shows and descent restores.
+    -- well: the rectangle in child-grid coordinates that the preview shows
+    -- and descent restores.
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 0,
-    -- No FK on child_grid_id: a file/process-well's source grid is shared
-    -- by identity (not refcounted), so the link is a soft pointer. Interior
-    -- well integrity rests on the refcount machinery + property test.
+    -- No FK on child_grid_id: an exit well's child grid lives in another
+    -- plugin (a qualified "<uuid>/<id>" reference), so the link is a soft
+    -- pointer. Interior well integrity rests on the refcount machinery +
+    -- property test.
     child_grid_id INTEGER,
     -- text-only: the framed window in doc-space px (scroll offset + size)
     -- plus rendered/text mode.
@@ -129,28 +119,17 @@ CREATE TABLE IF NOT EXISTS tiles (
     -- is — clones that haven't navigated independently share one row.
     url_string       TEXT,
     preview_blob_id  INTEGER REFERENCES blobs(id),
-    -- file-well-only / process-well-only: the FS path or PID this exit
-    -- well points at. source_key is the per-source dedup identifier
-    -- for tiles synthesized inside an fs/proc-grid — basename for fs,
-    -- PID string (or "@info" for the well-self tile) for proc. NULL
-    -- for tiles in regular Gridwell-owned grids.
-    fs_path       TEXT,
-    pid           INTEGER,
-    source_key    TEXT,
-    -- Canonical display label. Stamped at insert time and refreshed by
-    -- the source-grid reconciler. The client renders alt_text verbatim
-    -- (no derivation). Empty string until something stamps it (e.g. a
-    -- URL tile before its page title is captured).
+    -- Canonical display label. Stamped at insert time. The client renders
+    -- alt_text verbatim (no derivation). Empty string until something stamps
+    -- it (e.g. a URL tile before its page title is captured).
     alt_text      TEXT NOT NULL DEFAULT '',
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
-       (kind = 'well'         AND child_grid_id IS NOT NULL AND blob_id IS NULL     AND url_string IS NULL     AND preview_blob_id IS NULL AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
-    OR (kind = 'text'         AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND fs_path IS NULL      AND pid IS NULL)
-    OR (kind = 'url'          AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL    AND fs_path IS NULL AND pid IS NULL)
-    OR (kind = 'file-well'    AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL AND fs_path IS NOT NULL AND pid IS NULL)
-    OR (kind = 'process-well' AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL AND fs_path IS NULL AND pid IS NOT NULL)
-    OR (kind = 'shell'        AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL AND fs_path IS NULL AND pid IS NULL)
+       (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL    AND preview_blob_id IS NULL AND text_mode IS NULL)
+    OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
+    OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
+    OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
     )
 );
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
