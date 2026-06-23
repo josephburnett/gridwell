@@ -51,10 +51,11 @@ type Store struct {
 }
 
 const (
-	systemKeyRootGridID = "root_grid_id"
-	systemKeyRootViewCx = "root_view_cx"
-	systemKeyRootViewCy = "root_view_cy"
-	systemKeyRootZoom   = "root_zoom"
+	systemKeyRootGridID  = "root_grid_id"
+	systemKeyRootViewCx  = "root_view_cx"
+	systemKeyRootViewCy  = "root_view_cy"
+	systemKeyRootZoom    = "root_zoom"
+	systemKeyPluginUUID  = "plugin_uuid"
 )
 
 // Open opens a SQLite database at the given path, applies the schema, and
@@ -135,6 +136,7 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 			{systemKeyRootViewCx, "0"},
 			{systemKeyRootViewCy, "0"},
 			{systemKeyRootZoom, "1"},
+			{systemKeyPluginUUID, s.newID()},
 		}
 		for _, kv := range seeds {
 			if _, err := tx.ExecContext(ctx,
@@ -159,6 +161,14 @@ func (s *Store) RootGridID(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return strconv.FormatInt(id, 10), nil
+}
+
+// PluginUUID returns the stable UUID that identifies this store as a plugin.
+// Generated once on first bootstrap; stable across restarts.
+func (s *Store) PluginUUID(ctx context.Context) (string, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyPluginUUID).Scan(&v)
+	return v, err
 }
 
 // RootView returns the persisted root viewport: center (cx, cy) and zoom.

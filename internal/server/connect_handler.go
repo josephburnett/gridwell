@@ -25,19 +25,85 @@ func newConnectHandler(srv *Server) *connectHandler {
 	return &connectHandler{srv: srv}
 }
 
-// tileResp packs a store-produced tile into the wire-shaped response.
-// Used by every Create / Move / Clone / Resize / Set / Update method.
-func tileResp(t *rpc.Tile, err error) (*connect.Response[pb.TileResponse], error) {
+// ── ID translation helpers ────────────────────────────────────────────────────
+
+// localID strips the localdb UUID prefix from an incoming ID so the store
+// always receives bare decimal strings. A bare ID (no "/") is returned
+// unchanged. An ID with a different plugin's UUID is also returned unchanged
+// (the caller is responsible for routing to the right plugin first).
+func (h *connectHandler) localID(id string) string {
+	if h.srv.localdbUUID == "" || id == "" {
+		return id
+	}
+	if uuid, local, ok := splitPluginID(id); ok && uuid == h.srv.localdbUUID {
+		return local
+	}
+	return id
+}
+
+// localPath strips localdb UUID prefixes from every WellID in a Path.
+func (h *connectHandler) localPath(p rpc.Path) rpc.Path {
+	if len(p.WellIDs) == 0 {
+		return p
+	}
+	ids := make([]string, len(p.WellIDs))
+	for i, id := range p.WellIDs {
+		ids[i] = h.localID(id)
+	}
+	return rpc.Path{WellIDs: ids}
+}
+
+// qualifyLocaldbTile converts a store Tile to its proto form and qualifies
+// all IDs with the localdb UUID (when set).
+func (h *connectHandler) qualifyLocaldbTile(t *rpc.Tile) *pb.Tile {
+	pt := rpc.TileToProto(t)
+	if pt == nil || h.srv.localdbUUID == "" {
+		return pt
+	}
+	return qualifyTiles(h.srv.localdbUUID, []*pb.Tile{pt})[0]
+}
+
+// tileRespQ packs a store tile into a TileResponse with qualified IDs.
+func (h *connectHandler) tileRespQ(t *rpc.Tile, err error) (*connect.Response[pb.TileResponse], error) {
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	return connect.NewResponse(&pb.TileResponse{Tile: rpc.TileToProto(t)}), nil
+	return connect.NewResponse(&pb.TileResponse{Tile: h.qualifyLocaldbTile(t)}), nil
 }
+
+// qualifyLocaldbEvent rewrites all grid/tile IDs in a store event.
+func (h *connectHandler) qualifyLocaldbEvent(e rpc.Event) *pb.Event {
+	uuid := h.srv.localdbUUID
+	if uuid == "" {
+		return rpc.EventToProto(e)
+	}
+	switch e.Kind {
+	case rpc.EventGridChanged:
+		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
+			GridId: qualifyID(uuid, e.GridChanged.GridID),
+		}}}
+	case rpc.EventTileChanged:
+		pt := rpc.TileToProto(&e.TileChanged.Tile)
+		qualified := qualifyTiles(uuid, []*pb.Tile{pt})
+		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: qualified[0]}}}
+	case rpc.EventTileRemoved:
+		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
+			GridId: qualifyID(uuid, e.TileRemoved.GridID),
+			TileId: qualifyID(uuid, e.TileRemoved.TileID),
+		}}}
+	}
+	return rpc.EventToProto(e)
+}
+
+// ── RPC handlers ──────────────────────────────────────────────────────────────
 
 func (h *connectHandler) Bootstrap(ctx context.Context, _ *connect.Request[pb.BootstrapRequest]) (*connect.Response[pb.BootstrapResponse], error) {
 	id, err := h.srv.store.RootGridID(ctx)
 	if err != nil {
 		return nil, asConnectError(err)
+	}
+	if h.srv.localdbUUID != "" {
+		id = qualifyID(h.srv.localdbUUID, id)
 	}
 	cx, cy, zoom, err := h.srv.store.RootView(ctx)
 	if err != nil {
@@ -52,14 +118,33 @@ func (h *connectHandler) Bootstrap(ctx context.Context, _ *connect.Request[pb.Bo
 }
 
 func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.GetGridRequest]) (*connect.Response[pb.GetGridResponse], error) {
-	r, err := h.srv.store.GetGrid(ctx, req.Msg.GridId)
+	gridID := req.Msg.GridId
+	if uuid, local, ok := splitPluginID(gridID); ok && h.srv.pluginReg != nil {
+		if uuid != h.srv.localdbUUID {
+			if client, found := h.srv.pluginReg.Get(uuid); found {
+				resp, err := client.GetGrid(ctx, &pb.GetGridRequest{GridId: local})
+				if err != nil {
+					return nil, asConnectError(err)
+				}
+				return connect.NewResponse(&pb.GetGridResponse{
+					Grid:  qualifyGrid(uuid, resp.Grid),
+					Tiles: qualifyTiles(uuid, resp.Tiles),
+				}), nil
+			}
+		}
+	}
+	localGridID := h.localID(gridID)
+	r, err := h.srv.store.GetGrid(ctx, localGridID)
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	return connect.NewResponse(&pb.GetGridResponse{
-		Grid:  rpc.GridToProto(&r.Grid),
-		Tiles: rpc.TilesToProto(r.Tiles),
-	}), nil
+	pg := rpc.GridToProto(&r.Grid)
+	pts := rpc.TilesToProto(r.Tiles)
+	if h.srv.localdbUUID != "" {
+		pg = qualifyGrid(h.srv.localdbUUID, pg)
+		pts = qualifyTiles(h.srv.localdbUUID, pts)
+	}
+	return connect.NewResponse(&pb.GetGridResponse{Grid: pg, Tiles: pts}), nil
 }
 
 func (h *connectHandler) GetBlob(ctx context.Context, req *connect.Request[pb.GetBlobRequest]) (*connect.Response[pb.GetBlobResponse], error) {
@@ -71,7 +156,7 @@ func (h *connectHandler) GetBlob(ctx context.Context, req *connect.Request[pb.Ge
 }
 
 func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Request[pb.GetTilePreviewRequest]) (*connect.Response[pb.GetTilePreviewResponse], error) {
-	jpeg, err := h.srv.store.GetTilePreview(ctx, req.Msg.TileId)
+	jpeg, err := h.srv.store.GetTilePreview(ctx, h.localID(req.Msg.TileId))
 	if err != nil {
 		return nil, asConnectError(err)
 	}
@@ -79,41 +164,81 @@ func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Reques
 }
 
 func (h *connectHandler) CreateWell(ctx context.Context, req *connect.Request[pb.CreateWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateWell(ctx, rpc.CreateWellFromProto(req.Msg)))
+	r := rpc.CreateWellFromProto(req.Msg)
+	r.GridID = h.localID(r.GridID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.CreateWell(ctx, r))
 }
 func (h *connectHandler) CreateText(ctx context.Context, req *connect.Request[pb.CreateTextRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateText(ctx, rpc.CreateTextFromProto(req.Msg)))
+	r := rpc.CreateTextFromProto(req.Msg)
+	r.GridID = h.localID(r.GridID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.CreateText(ctx, r))
 }
 func (h *connectHandler) CreateURL(ctx context.Context, req *connect.Request[pb.CreateURLRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateURL(ctx, rpc.CreateURLFromProto(req.Msg)))
+	r := rpc.CreateURLFromProto(req.Msg)
+	r.GridID = h.localID(r.GridID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.CreateURL(ctx, r))
 }
 func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Request[pb.CreateFileWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateFileWell(ctx, rpc.CreateFileWellFromProto(req.Msg)))
+	r := rpc.CreateFileWellFromProto(req.Msg)
+	r.GridID = h.localID(r.GridID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.CreateFileWell(ctx, r))
 }
 func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Request[pb.CreateProcessWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateProcessWell(ctx, rpc.CreateProcessWellFromProto(req.Msg)))
+	r := rpc.CreateProcessWellFromProto(req.Msg)
+	r.GridID = h.localID(r.GridID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.CreateProcessWell(ctx, r))
 }
 func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[pb.CreateShellRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CreateShell(ctx, rpc.CreateShellFromProto(req.Msg)))
+	r := rpc.CreateShellFromProto(req.Msg)
+	r.GridID = h.localID(r.GridID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.CreateShell(ctx, r))
 }
 
 func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.MoveTile(ctx, rpc.MoveTileFromProto(req.Msg)))
+	r := rpc.MoveTileFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.DestGridID = h.localID(r.DestGridID)
+	r.Path = h.localPath(r.Path)
+	r.DestPath = h.localPath(r.DestPath)
+	return h.tileRespQ(h.srv.store.MoveTile(ctx, r))
 }
 func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.CloneTile(ctx, rpc.CloneTileFromProto(req.Msg)))
+	r := rpc.CloneTileFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.DestGridID = h.localID(r.DestGridID)
+	r.Path = h.localPath(r.Path)
+	r.DestPath = h.localPath(r.DestPath)
+	return h.tileRespQ(h.srv.store.CloneTile(ctx, r))
 }
 func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb.ResizeTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.ResizeTile(ctx, rpc.ResizeTileFromProto(req.Msg)))
+	r := rpc.ResizeTileFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.ResizeTile(ctx, r))
 }
 func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[pb.SetWellViewRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.SetWellView(ctx, rpc.SetWellViewFromProto(req.Msg)))
+	r := rpc.SetWellViewFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.SetWellView(ctx, r))
 }
 func (h *connectHandler) SetTextView(ctx context.Context, req *connect.Request[pb.SetTextViewRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.SetTextView(ctx, rpc.SetTextViewFromProto(req.Msg)))
+	r := rpc.SetTextViewFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.SetTextView(ctx, r))
 }
 func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Request[pb.SetShellPreviewRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.SetShellPreview(ctx, rpc.SetShellPreviewFromProto(req.Msg)))
+	r := rpc.SetShellPreviewFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.SetShellPreview(ctx, r))
 }
 
 // ShellSessionAlive answers the wasm's per-descent probe by asking
@@ -124,16 +249,17 @@ func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Reque
 // hide. Returns not-alive when no streamer is wired up (defensive;
 // production always wires one).
 func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
-	in := rpc.ShellSessionAliveFromProto(req.Msg)
+	tileID := h.localID(req.Msg.TileId)
 	if h.srv.shellStreamer == nil {
 		return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: false})), nil
 	}
 	alive := false
-	if tileIDInt, err := strconv.ParseInt(in.TileID, 10, 64); err == nil {
+	if tileIDInt, err := strconv.ParseInt(tileID, 10, 64); err == nil {
 		alive, _ = h.srv.shellStreamer.HasSession(tileIDInt)
 	}
 	return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: alive})), nil
 }
+
 func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
 	if err := h.srv.store.SetRootView(ctx, rpc.SetRootViewFromProto(req.Msg)); err != nil {
 		return nil, asConnectError(err)
@@ -141,14 +267,23 @@ func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[p
 	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
 }
 func (h *connectHandler) SetURLState(ctx context.Context, req *connect.Request[pb.SetURLStateRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.SetURLState(ctx, rpc.SetURLStateFromProto(req.Msg)))
+	r := rpc.SetURLStateFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.SetURLState(ctx, r))
 }
 func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb.UpdateTextRequest]) (*connect.Response[pb.TileResponse], error) {
-	return tileResp(h.srv.store.UpdateText(ctx, rpc.UpdateTextFromProto(req.Msg)))
+	r := rpc.UpdateTextFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	return h.tileRespQ(h.srv.store.UpdateText(ctx, r))
 }
+
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
-	tileID := req.Msg.TileId
-	if err := h.srv.store.DeleteTile(ctx, rpc.DeleteTileFromProto(req.Msg)); err != nil {
+	r := rpc.DeleteTileFromProto(req.Msg)
+	r.TileID = h.localID(r.TileID)
+	r.Path = h.localPath(r.Path)
+	if err := h.srv.store.DeleteTile(ctx, r); err != nil {
 		return nil, asConnectError(err)
 	}
 	// A deleted shell tile's tmux session would otherwise survive across
@@ -159,14 +294,14 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	// never touches the original's PTY). Fire-and-forget; a missed kill is
 	// caught by the orphan-cleanup pass at startup.
 	if h.srv.shellStreamer != nil {
-		exists, err := h.srv.store.ShellTileExists(ctx, tileID)
+		exists, err := h.srv.store.ShellTileExists(ctx, r.TileID)
 		switch {
 		case err != nil:
-			log.Printf("[shellstream] kill-on-delete existence tile=%s err=%v", tileID, err)
+			log.Printf("[shellstream] kill-on-delete existence tile=%s err=%v", r.TileID, err)
 		case !exists:
-			if tileIDInt, perr := strconv.ParseInt(tileID, 10, 64); perr == nil {
+			if tileIDInt, perr := strconv.ParseInt(r.TileID, 10, 64); perr == nil {
 				if err := h.srv.shellStreamer.Kill(tileIDInt); err != nil {
-					log.Printf("[shellstream] kill-on-delete tile=%s err=%v", tileID, err)
+					log.Printf("[shellstream] kill-on-delete tile=%s err=%v", r.TileID, err)
 				}
 			}
 		}
@@ -186,7 +321,7 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 			if !ok {
 				return nil
 			}
-			if err := stream.Send(rpc.EventToProto(ev)); err != nil {
+			if err := stream.Send(h.qualifyLocaldbEvent(ev)); err != nil {
 				return err
 			}
 		case <-ctx.Done():

@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
@@ -33,6 +34,8 @@ type Config struct {
 type Server struct {
 	cfg           Config
 	store         *store.Store
+	pluginReg     *plugin.Registry
+	localdbUUID   string // UUID that identifies the local store as a plugin
 	mux           *http.ServeMux
 	shellStreamer shellStreamer
 
@@ -52,6 +55,21 @@ func New(s *store.Store, cfg Config) *Server {
 	}
 	srv.routes()
 	return srv
+}
+
+// SetPluginRegistry wires a plugin registry into the server. When set,
+// GetGrid calls whose grid_id has a "<uuid>/" prefix are routed to the
+// matching plugin instead of the local store.
+func (s *Server) SetPluginRegistry(reg *plugin.Registry) {
+	s.pluginReg = reg
+}
+
+// SetLocaldbUUID tells the server the UUID for the local store so that
+// all IDs returned from the store are qualified as "<uuid>/<local>" on the
+// wire, and incoming "<uuid>/<local>" IDs are stripped back to "<local>"
+// before being passed to the store.
+func (s *Server) SetLocaldbUUID(uuid string) {
+	s.localdbUUID = uuid
 }
 
 func (s *Server) Handler() http.Handler { return s.mux }

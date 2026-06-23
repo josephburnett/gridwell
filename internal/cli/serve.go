@@ -142,6 +142,10 @@ func RunServe(args []string) int {
 	defer func() { _ = tmuxCleanup() }()
 
 	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
+	srv.SetPluginRegistry(reg)
+	if uuid, uErr := s.PluginUUID(context.Background()); uErr == nil && uuid != "" {
+		srv.SetLocaldbUUID(uuid)
+	}
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	// Bound the orphan leak: any tmux session whose tile id no longer
