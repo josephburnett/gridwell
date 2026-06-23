@@ -856,18 +856,22 @@ func (a *App) fetchTileContent(tileID string) {
 // store tiles carry a blob id; plugin tiles (blob id 0) are fetched by tile id
 // via GetTileContent.
 func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {
-	if n.BlobID != 0 {
-		if b, ok := a.c.Blob(n.BlobID); ok {
-			return b, true
-		}
-		a.fetchBlob(n.BlobID)
-		return nil, false
-	}
+	// A tile owned by another plugin (fs/proc, or a mounted second DB) serves
+	// its body via GetTileContent, routable by tile id. GetBlob is keyed by a
+	// bare int64 and only resolves against the primary, so it must NOT be used
+	// for non-primary tiles even when they carry a (plugin-local) blob id.
 	if a.isPluginTile(n) {
 		if b, ok := a.c.TileContent(n.ID); ok {
 			return b, true
 		}
 		a.fetchTileContent(n.ID)
+		return nil, false
+	}
+	if n.BlobID != 0 {
+		if b, ok := a.c.Blob(n.BlobID); ok {
+			return b, true
+		}
+		a.fetchBlob(n.BlobID)
 		return nil, false
 	}
 	return nil, false
