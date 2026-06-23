@@ -1,4 +1,10 @@
-package store
+// Package trash moves host files into the freedesktop.org "home trash"
+// instead of unlinking them, so discarding a file (or a directory) through
+// Gridwell is recoverable rather than an irreversible rm -rf. It implements
+// the spec's home trash ($XDG_DATA_HOME/Trash, default ~/.local/share/Trash)
+// directly — no trash CLI is assumed present — so a desktop file manager can
+// list and restore what Gridwell discarded.
+package trash
 
 import (
 	"errors"
@@ -12,16 +18,19 @@ import (
 	"time"
 )
 
-// Trashing host files instead of unlinking them is what makes deleting a
-// file-well tile recoverable: discarding a directory would otherwise be an
-// irreversible rm -rf. We implement the freedesktop.org Trash
-// spec's "home trash" ($XDG_DATA_HOME/Trash, default ~/.local/share/Trash)
-// directly — no trash CLI is assumed present — so a desktop file manager
-// can list and restore what Gridwell discarded.
+// Trash moves path into the freedesktop home trash, writing the matching
+// .trashinfo record. path may be a file, directory, or symlink.
+func Trash(path string) error {
+	dir, err := homeDir()
+	if err != nil {
+		return err
+	}
+	return into(dir, path)
+}
 
-// trashHomeDir resolves the freedesktop home-trash directory. Honors
+// homeDir resolves the freedesktop home-trash directory. Honors
 // XDG_DATA_HOME, falling back to ~/.local/share.
-func trashHomeDir() (string, error) {
+func homeDir() (string, error) {
 	base := os.Getenv("XDG_DATA_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -33,11 +42,11 @@ func trashHomeDir() (string, error) {
 	return filepath.Join(base, "Trash"), nil
 }
 
-// trashFileInto moves src into the trash directory trashDir, writing the
-// matching .trashinfo record (original path + deletion time) per the spec.
-// src may be a file, directory, or symlink. The info record is reserved
-// atomically (O_EXCL) so two deletes of same-named files never collide.
-func trashFileInto(trashDir, src string) error {
+// into moves src into the trash directory trashDir, writing the matching
+// .trashinfo record (original path + deletion time) per the spec. src may be a
+// file, directory, or symlink. The info record is reserved atomically (O_EXCL)
+// so two deletes of same-named files never collide.
+func into(trashDir, src string) error {
 	abs, err := filepath.Abs(src)
 	if err != nil {
 		return err
@@ -56,7 +65,7 @@ func trashFileInto(trashDir, src string) error {
 	}
 
 	record := []byte(fmt.Sprintf("[Trash Info]\nPath=%s\nDeletionDate=%s\n",
-		trashEncodePath(abs), time.Now().Format("2006-01-02T15:04:05")))
+		encodePath(abs), time.Now().Format("2006-01-02T15:04:05")))
 
 	base := filepath.Base(abs)
 	for i := 1; ; i++ {
@@ -152,9 +161,9 @@ func copyTree(src, dst string) error {
 	}
 }
 
-// trashEncodePath percent-encodes an absolute path for a .trashinfo Path=
-// field per the spec, preserving the '/' separators.
-func trashEncodePath(p string) string {
+// encodePath percent-encodes an absolute path for a .trashinfo Path= field
+// per the spec, preserving the '/' separators.
+func encodePath(p string) string {
 	segs := strings.Split(p, "/")
 	for i, s := range segs {
 		segs[i] = url.PathEscape(s)

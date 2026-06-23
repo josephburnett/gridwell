@@ -20,9 +20,6 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
-	"github.com/josephburnett/gridwell/internal/source"
-	fssrc "github.com/josephburnett/gridwell/internal/source/fs"
-	procsrc "github.com/josephburnett/gridwell/internal/source/proc"
 
 	_ "modernc.org/sqlite"
 )
@@ -42,12 +39,11 @@ var (
 
 // Store wraps a SQLite database. It is safe for concurrent use.
 type Store struct {
-	db      *sql.DB
-	now     func() time.Time // overridden in tests
-	newID   func() string    // overridden in tests
-	mu      sync.Mutex       // protects subscriber list
-	subs    map[*subscriber]struct{}
-	sources *source.Registry
+	db    *sql.DB
+	now   func() time.Time // overridden in tests
+	newID func() string    // overridden in tests
+	mu    sync.Mutex       // protects subscriber list
+	subs  map[*subscriber]struct{}
 }
 
 const (
@@ -82,15 +78,11 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
-	reg := source.NewRegistry()
-	reg.Register(fssrc.New(realHostActor{}))
-	reg.Register(procsrc.New("", nil))
 	s := &Store{
-		db:      db,
-		now:     time.Now,
-		newID:   newUUID,
-		subs:    map[*subscriber]struct{}{},
-		sources: reg,
+		db:    db,
+		now:   time.Now,
+		newID: newUUID,
+		subs:  map[*subscriber]struct{}{},
 	}
 	if err := s.bootstrapRoot(context.Background()); err != nil {
 		db.Close()
@@ -99,10 +91,6 @@ func Open(path string) (*Store, error) {
 	if err := s.applyMigrations(context.Background()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
-	}
-	if err := s.rebindExitWells(context.Background()); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("rebind exit wells: %w", err)
 	}
 	return s, nil
 }
@@ -255,12 +243,6 @@ func (s *Store) SetClock(now func() time.Time) {
 // object_ids.
 func (s *Store) SetIDGenerator(f func() string) {
 	s.newID = f
-}
-
-// setRegistry replaces the source registry. Used by tests to inject stub
-// sources without touching the real /proc or host filesystem.
-func (s *Store) setRegistry(r *source.Registry) {
-	s.sources = r
 }
 
 // withTx runs fn inside a transaction.

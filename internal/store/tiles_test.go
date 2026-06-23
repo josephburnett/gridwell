@@ -403,45 +403,6 @@ func TestSetWellViewRejectsNonWell(t *testing.T) {
 	}
 }
 
-// TestSetWellViewAcceptsAllWellKinds locks in the contract that
-// SetWellView works on every kind that has a child grid — interior
-// wells AND the two exit-wells (file-well, process-well). Without this
-// the parent-grid framing of a file/process well snaps back to (0,0,0)
-// on every ascent because the persistence path silently bounces.
-func TestSetWellViewAcceptsAllWellKinds(t *testing.T) {
-	s := newTestStore(t)
-	root := rootID(t, s)
-	ctx := context.Background()
-	s.setRegistry(makeEmptyRegistry(t))
-	emptyDir := t.TempDir()
-
-	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: emptyDir,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	pw, err := s.CreateProcessWell(ctx, &rpc.CreateProcessWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 1, Y: 0, W: 1, H: 1, PID: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, w := range []*rpc.Tile{fw, pw} {
-		got, err := s.SetWellView(ctx, &rpc.SetWellViewRequest{
-			Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
-			ViewX: 5, ViewY: 7, ViewZoom: 0.5,
-		})
-		if err != nil {
-			t.Fatalf("SetWellView %s: %v", w.Kind, err)
-		}
-		if got.ViewX != 5 || got.ViewY != 7 || got.ViewZoom != 0.5 {
-			t.Errorf("%s view = (%d, %d, %v), want (5, 7, 0.5)",
-				w.Kind, got.ViewX, got.ViewY, got.ViewZoom)
-		}
-	}
-}
-
 func TestSetTextViewRejectsNonText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)

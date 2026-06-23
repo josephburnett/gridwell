@@ -9,10 +9,10 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// GetGrid returns the grid plus all of its tiles. For source-backed
-// (fs / proc) grids, GetGrid first reconciles the tile rows against the
-// current host state — this is a read RPC that may mutate, but only for
-// grids whose contents come from outside Gridwell.
+// GetGrid returns the grid plus all of its tiles. It is a pure read: the
+// local store holds only Gridwell-owned grids now, so there is no host-state
+// reconciliation here — that lives in the fs/proc plugins, which the server
+// routes to directly.
 func (s *Store) GetGrid(ctx context.Context, gridID string) (*rpc.GetGridResponse, error) {
 	id, err := parseID(gridID)
 	if err != nil {
@@ -21,16 +21,6 @@ func (s *Store) GetGrid(ctx context.Context, gridID string) (*rpc.GetGridRespons
 	g, err := s.loadGrid(ctx, s.db, id)
 	if err != nil {
 		return nil, err
-	}
-	if g.SourceKind != "" {
-		if err := s.reconcileSourceGrid(ctx, g); err != nil {
-			return nil, err
-		}
-		// Reload — reconcile may have bumped the version.
-		g, err = s.loadGrid(ctx, s.db, id)
-		if err != nil {
-			return nil, err
-		}
 	}
 	tiles, err := s.loadTilesInGrid(ctx, s.db, id)
 	if err != nil {

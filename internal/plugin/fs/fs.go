@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
+	"github.com/josephburnett/gridwell/internal/trash"
 	_ "modernc.org/sqlite"
 )
 
@@ -33,10 +34,20 @@ type Host interface {
 	RemoveAll(path string) error
 }
 
+// osHost unlinks paths permanently. It is the default when no Host is wired
+// (tests, which operate on temp dirs).
 type osHost struct{}
 
 func (osHost) Remove(p string) error    { return os.Remove(p) }
 func (osHost) RemoveAll(p string) error { return os.RemoveAll(p) }
+
+// trashHost is the production deletion surface: deleting a file/dir tile moves
+// the path into the freedesktop trash so it stays recoverable, rather than an
+// irreversible rm. Wired by NewFactory.
+type trashHost struct{}
+
+func (trashHost) Remove(p string) error    { return trash.Trash(p) }
+func (trashHost) RemoveAll(p string) error { return trash.Trash(p) }
 
 // Plugin implements gridwellv1.GridwellServer for a filesystem source.
 type Plugin struct {
@@ -104,7 +115,7 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 	if dbPath == "" {
 		return nil, fmt.Errorf("fs plugin %q: db_file config key required", cfg.Name)
 	}
-	return Open(dbPath, nil)
+	return Open(dbPath, trashHost{})
 }
 
 // Info returns the static plugin descriptor.

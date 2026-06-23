@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/josephburnett/gridwell/client/markdown"
@@ -346,9 +347,13 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 	return out, err
 }
 
-// DeleteTile removes a single tile by ID. Tiles inside fs / proc-backed
-// grids are routed through deleteSourceTile so the host-side artifact
-// (file, directory, process) is removed too.
+// DeleteTile removes a single tile by ID, releasing the references it held
+// (its blob, preview blob, and — for an interior well — its child grid). A
+// well whose child lives in another plugin (an exit well) carries a qualified
+// "<uuid>/<id>" child_grid_id that doesn't parse as a local grid id, so no
+// local child is GC'd; only the reference is dropped. Tiles inside fs/proc
+// grids are deleted by the plugin that owns them (the server routes there),
+// never through the local store.
 func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -359,20 +364,18 @@ func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) erro
 		if err != nil {
 			return err
 		}
-		parentID, _ := parseID(t.GridID)
-		parent, err := s.loadGrid(ctx, tx, parentID)
-		if err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 			return err
 		}
-		if parent.SourceKind != "" {
-			handled, err := s.deleteSourceTile(ctx, tx, t, parent, events)
-			if err != nil {
-				return err
-			}
-			if handled {
-				return nil
-			}
+		childGridID, _ := strconv.ParseInt(t.ChildGridID, 10, 64)
+		if err := s.decTileRefs(ctx, tx, t.Kind, childGridID, t.BlobID, t.PreviewBlobID); err != nil {
+			return err
 		}
-		return s.dropTileRow(ctx, tx, t, events)
+		gridID, _ := parseID(t.GridID)
+		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+			return err
+		}
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: t.GridID, TileID: t.ID}})
+		return nil
 	})
 }

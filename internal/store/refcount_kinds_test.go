@@ -18,14 +18,6 @@ func blobExists(t *testing.T, s *Store, id int64) bool {
 	return n > 0
 }
 
-func gridExists(t *testing.T, s *Store, id string) bool {
-	t.Helper()
-	var n int64
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM grids WHERE id = ?`, id).Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	return n > 0
-}
 
 // TestCloneShellCarriesScreenshot: a PTY can't be forked, so cloning a
 // shell with a frozen preview must carry the preview blob (the screenshot)
@@ -129,10 +121,8 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 }
 
 // TestDeleteGridReleasesAllKindRefs: GC'ing a grid (its last well deleted)
-// must release every reference its tiles held — in particular the shell's
-// preview blob. File-well source grids are shared by identity (not
-// refcounted), so they persist in the main DB after the file-well is deleted;
-// they are not "owned" by the file-well tile.
+// must release every reference its tiles held — in particular a shell's
+// preview blob — so deleting the containing well doesn't leak the blob.
 func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -146,12 +136,6 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	}
 	inner := rpc.Path{WellIDs: []string{well.ID}}
 
-	fw, err := s.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
-		Path: inner, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
 		Path: inner, GridID: well.ChildGridID, X: 2, Y: 0, W: 1, H: 1,
 	})
@@ -164,14 +148,13 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fsGrid := fw.ChildGridID
 	previewBlob := framed.PreviewBlobID
-	if fsGrid == "" || previewBlob == 0 {
-		t.Fatalf("setup: fsGrid=%s previewBlob=%d", fsGrid, previewBlob)
+	if previewBlob == 0 {
+		t.Fatalf("setup: previewBlob=%d", previewBlob)
 	}
 
 	// Delete the only well pointing at the child grid → child grid GCs,
-	// cascading through the file-well and shell inside it.
+	// cascading through the shell inside it.
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
 		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
 	}); err != nil {
@@ -179,11 +162,6 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	}
 
 	verifyRefcounts(t, s)
-	// Source grids are shared by identity (not refcounted), so the fs-grid
-	// persists in the main DB after the file-well is deleted.
-	if !gridExists(t, s, fsGrid) {
-		t.Errorf("fs-grid %s was deleted — source grids must persist (shared by identity)", fsGrid)
-	}
 	if blobExists(t, s, previewBlob) {
 		t.Errorf("shell preview blob %d survived GC — refcount leaked", previewBlob)
 	}
