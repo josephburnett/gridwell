@@ -165,6 +165,32 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 		})
 }
 
+// CreateExitWell creates a well tile whose child grid lives in a different
+// plugin — a file well or process well. Unlike CreateWell it allocates no
+// interior child grid and holds no refcount on the child: the child grid is
+// owned by the destination plugin and named by a qualified "<uuid>/<id>"
+// string. Deleting the well removes only the reference, never the backing
+// directory or process (that is a separate gesture on a tile *inside* the
+// grid).
+func (s *Store) CreateExitWell(ctx context.Context, path rpc.Path, gridID string, x, y, w, h int64, childGridID, alt string) (*rpc.Tile, error) {
+	if childGridID == "" {
+		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
+	}
+	return s.createTile(ctx, path, gridID, x, y, w, h,
+		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+					view_x, view_y, view_zoom, child_grid_id, alt_text,
+					created_at, updated_at)
+				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+				objID, gid, x, y, w, h, childGridID, nullableString(alt), now, now)
+			if err != nil {
+				return 0, fmt.Errorf("insert exit well: %w", err)
+			}
+			return res.LastInsertId()
+		})
+}
+
 // CreateText creates a markdown text tile.
 func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rpc.Tile, error) {
 	if int64(len(req.Data)) > MaxBlobBytes {

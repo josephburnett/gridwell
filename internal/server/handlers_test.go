@@ -2,12 +2,79 @@ package server
 
 import (
 	"context"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/internal/plugin"
+	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
+	procplugin "github.com/josephburnett/gridwell/internal/plugin/proc"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/store"
 )
+
+// fsPluginUUID / procPluginUUID are the registry keys used by the
+// plugin-wired test server.
+const (
+	fsPluginUUID   = "fs-test-uuid"
+	procPluginUUID = "proc-test-uuid"
+)
+
+// newTestServerWithPlugins builds a server wired to in-process fs and proc
+// plugins (with the localdb UUID set), so file/process-well creation routes
+// through the plugins exactly as in production. Returns the client and the
+// bare local root grid id.
+func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
+	t.Helper()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	root, err := st.RootGridID(context.Background())
+	if err != nil {
+		t.Fatalf("root grid id: %v", err)
+	}
+	uuid, err := st.PluginUUID(context.Background())
+	if err != nil {
+		t.Fatalf("plugin uuid: %v", err)
+	}
+
+	reg := plugin.NewRegistry()
+	fsP, err := fsplugin.Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("fs open: %v", err)
+	}
+	t.Cleanup(func() { _ = fsP.Close() })
+	fsClient, fsCloser, err := plugin.ServeInProcess(fsP)
+	if err != nil {
+		t.Fatalf("fs serve: %v", err)
+	}
+	t.Cleanup(fsCloser)
+	reg.Register(fsPluginUUID, "fs", fsClient, nil)
+
+	procP, err := procplugin.Open(":memory:", t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("proc open: %v", err)
+	}
+	t.Cleanup(func() { _ = procP.Close() })
+	procClient, procCloser, err := plugin.ServeInProcess(procP)
+	if err != nil {
+		t.Fatalf("proc serve: %v", err)
+	}
+	t.Cleanup(procCloser)
+	reg.Register(procPluginUUID, "proc", procClient, nil)
+
+	srv := New(st, Config{})
+	srv.SetPluginRegistry(reg)
+	srv.SetLocaldbUUID(uuid)
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	return cl, root
+}
 
 func TestCreateTextRPC(t *testing.T) {
 	_, cl, root := newTestServer(t)
@@ -51,35 +118,43 @@ func TestCreateURLRPC(t *testing.T) {
 	}
 }
 
+// TestCreateFileWellRPC: a file well is a plain well tile whose child grid
+// lives in the fs plugin — child_grid_id is the qualified "<fs-uuid>/<id>"
+// returned by the plugin's Attach.
 func TestCreateFileWellRPC(t *testing.T) {
-	_, cl, root := newTestServer(t)
+	cl, root := newTestServerWithPlugins(t)
 	tile, err := cl.CreateFileWell(context.Background(), &rpc.CreateFileWellRequest{
 		GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
 	})
 	if err != nil {
 		t.Fatalf("create file well: %v", err)
 	}
-	if tile.Kind != rpc.KindFileWell {
-		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindFileWell)
+	if tile.Kind != rpc.KindWell {
+		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindWell)
 	}
-	if tile.FSPath != "/etc" {
-		t.Errorf("fs_path = %q", tile.FSPath)
+	if !strings.HasPrefix(tile.ChildGridID, fsPluginUUID+"/") {
+		t.Errorf("child_grid_id = %q, want prefix %q/", tile.ChildGridID, fsPluginUUID)
+	}
+	if tile.AltText != "etc" {
+		t.Errorf("alt_text = %q, want %q (plugin-supplied label)", tile.AltText, "etc")
 	}
 }
 
+// TestCreateProcessWellRPC: a process well is a plain well whose child grid is
+// in the proc plugin.
 func TestCreateProcessWellRPC(t *testing.T) {
-	_, cl, root := newTestServer(t)
+	cl, root := newTestServerWithPlugins(t)
 	tile, err := cl.CreateProcessWell(context.Background(), &rpc.CreateProcessWellRequest{
 		GridID: root, X: 0, Y: 0, W: 1, H: 1, PID: 1,
 	})
 	if err != nil {
 		t.Fatalf("create process well: %v", err)
 	}
-	if tile.Kind != rpc.KindProcessWell {
-		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindProcessWell)
+	if tile.Kind != rpc.KindWell {
+		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindWell)
 	}
-	if tile.PID != 1 {
-		t.Errorf("pid = %d, want 1", tile.PID)
+	if !strings.HasPrefix(tile.ChildGridID, procPluginUUID+"/") {
+		t.Errorf("child_grid_id = %q, want prefix %q/", tile.ChildGridID, procPluginUUID)
 	}
 }
 

@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -235,15 +237,40 @@ func (h *connectHandler) CreateURL(ctx context.Context, req *connect.Request[pb.
 }
 func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Request[pb.CreateFileWellRequest]) (*connect.Response[pb.TileResponse], error) {
 	r := rpc.CreateFileWellFromProto(req.Msg)
-	r.GridID = h.localID(r.GridID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.CreateFileWell(ctx, r))
+	if strings.TrimSpace(r.FSPath) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("fs_path required"))
+	}
+	return h.createExitWell(ctx, "fs", map[string]string{"path": r.FSPath}, r.Path, r.GridID, r.X, r.Y, r.W, r.H)
 }
 func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Request[pb.CreateProcessWellRequest]) (*connect.Response[pb.TileResponse], error) {
 	r := rpc.CreateProcessWellFromProto(req.Msg)
-	r.GridID = h.localID(r.GridID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.CreateProcessWell(ctx, r))
+	if r.PID <= 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("pid must be positive"))
+	}
+	return h.createExitWell(ctx, "proc", map[string]string{"pid": strconv.FormatInt(r.PID, 10)}, r.Path, r.GridID, r.X, r.Y, r.W, r.H)
+}
+
+// createExitWell attaches the named source plugin (fs / proc) for the given
+// config, then drops a well tile in the local store whose child_grid_id is the
+// qualified "<plugin-uuid>/<grid-id>" the plugin returned. The plugin owns the
+// grid and supplies its own display label, so the cross-plugin reference and
+// the well's name come straight from Attach — no source bookkeeping lives in
+// the store.
+func (h *connectHandler) createExitWell(ctx context.Context, kind string, config map[string]string, path rpc.Path, gridID string, x, y, w, ht int64) (*connect.Response[pb.TileResponse], error) {
+	if h.srv.pluginReg == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no %s plugin configured", kind))
+	}
+	uuid, client, ok := h.srv.pluginReg.FirstByKind(kind)
+	if !ok {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no %s plugin configured", kind))
+	}
+	att, err := client.Attach(ctx, &pb.AttachRequest{Config: config})
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	childGridID := qualifyID(uuid, att.RootGridId)
+	tile, err := h.srv.store.CreateExitWell(ctx, h.localPath(path), h.localID(gridID), x, y, w, ht, childGridID, att.Label)
+	return h.tileRespQ(tile, err)
 }
 func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[pb.CreateShellRequest]) (*connect.Response[pb.TileResponse], error) {
 	r := rpc.CreateShellFromProto(req.Msg)
