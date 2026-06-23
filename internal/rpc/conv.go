@@ -181,10 +181,10 @@ func EventFromProto(e *pb.Event) Event {
 // Create request converters.
 
 func CreateWellFromProto(r *pb.CreateWellRequest) *CreateWellRequest {
-	return &CreateWellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
+	return &CreateWellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridID: r.ChildGridId, Label: r.Label}
 }
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateWellRequest {
-	return &pb.CreateWellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
+	return &pb.CreateWellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, Label: r.Label}
 }
 
 func CreateTextFromProto(r *pb.CreateTextRequest) *CreateTextRequest {

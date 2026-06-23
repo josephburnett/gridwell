@@ -25,16 +25,29 @@ func TestStripUUID(t *testing.T) {
 }
 
 func TestLocalPathFor(t *testing.T) {
-	in := &pb.Path{WellIds: []string{"fs/1", "fs/2", "proc/3"}}
-	out := localPathFor(in, "fs")
-	want := []string{"1", "2", "proc/3"}
-	if len(out.WellIds) != len(want) {
-		t.Fatalf("len = %d, want %d", len(out.WellIds), len(want))
+	cases := []struct {
+		name string
+		in   []string
+		uuid string
+		want []string
+	}{
+		{"all same plugin", []string{"fs/1", "fs/2"}, "fs", []string{"1", "2"}},
+		{"trailing run after boundary", []string{"p/1", "fs/2", "fs/3"}, "fs", []string{"2", "3"}},
+		{"leaf in other plugin → empty", []string{"fs/1", "fs/2", "proc/3"}, "fs", []string{}},
+		{"single", []string{"p/9"}, "p", []string{"9"}},
 	}
-	for i := range want {
-		if out.WellIds[i] != want[i] {
-			t.Errorf("seg %d = %q, want %q", i, out.WellIds[i], want[i])
-		}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := localPathFor(&pb.Path{WellIds: c.in}, c.uuid)
+			if len(out.WellIds) != len(c.want) {
+				t.Fatalf("got %v, want %v", out.WellIds, c.want)
+			}
+			for i := range c.want {
+				if out.WellIds[i] != c.want[i] {
+					t.Errorf("seg %d = %q, want %q", i, out.WellIds[i], c.want[i])
+				}
+			}
+		})
 	}
 	if localPathFor(nil, "fs") != nil {
 		t.Error("localPathFor(nil) should be nil")

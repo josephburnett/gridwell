@@ -68,16 +68,27 @@ func stripUUID(id, uuid string) string {
 	return id
 }
 
-// localPathFor strips a plugin uuid prefix from every segment of a path.
+// localPathFor returns the descent path local to the target plugin. A path can
+// cross plugin boundaries (`…/<p1>/<t>/<p2>/<u>`); only the trailing run of
+// segments owned by the target plugin form its COW spine, so segments above the
+// last boundary (owned by other plugins) are dropped and the rest are stripped
+// of the uuid prefix.
 func localPathFor(p *pb.Path, uuid string) *pb.Path {
 	if p == nil {
 		return nil
 	}
-	ids := make([]string, len(p.WellIds))
-	for i, id := range p.WellIds {
-		ids[i] = stripUUID(id, uuid)
+	start := len(p.WellIds)
+	for start > 0 {
+		if u, _, ok := splitPluginID(p.WellIds[start-1]); !ok || u != uuid {
+			break // a bare or foreign-plugin segment marks the boundary
+		}
+		start--
 	}
-	return &pb.Path{WellIds: ids}
+	out := make([]string, 0, len(p.WellIds)-start)
+	for _, id := range p.WellIds[start:] {
+		out = append(out, stripUUID(id, uuid))
+	}
+	return &pb.Path{WellIds: out}
 }
 
 // pluginTileResp qualifies a plugin's TileResponse for the client.

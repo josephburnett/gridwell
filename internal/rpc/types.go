@@ -166,10 +166,15 @@ type TileResponse struct {
 type CreateWellRequest struct {
 	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
-	X      int64 `json:"x"`
-	Y      int64 `json:"y"`
-	W      int64 `json:"w"`
-	H      int64 `json:"h"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
+	// ChildGridID, when set, makes this an exit well pointing at an existing
+	// grid in another plugin (a mounted DB, an fs/proc grid). Label is the
+	// display name for such a well. Empty → an ordinary interior well.
+	ChildGridID string `json:"child_grid_id,omitempty"`
+	Label       string `json:"label,omitempty"`
 }
 
 type CreateTextRequest struct {

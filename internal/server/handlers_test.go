@@ -304,10 +304,11 @@ func TestErrorCodeMapping(t *testing.T) {
 		t.Errorf("overlap: code %v, want FailedPrecondition", got)
 	}
 
-	// Invalid path (bogus well id) → InvalidArgument.
+	// Invalid path (bogus well id, qualified to the primary) → InvalidArgument.
+	pUUID, _, _ := splitPluginID(root)
 	_, err = cl.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []string{"99"}},
-		GridID: "1", X: 10, Y: 10, W: 1, H: 1,
+		Path:   rpc.Path{WellIDs: []string{pUUID + "/99"}},
+		GridID: root, X: 10, Y: 10, W: 1, H: 1,
 	})
 	if got := errCode(err); got != connect.CodeInvalidArgument {
 		t.Errorf("invalid path: code %v, want InvalidArgument", got)
