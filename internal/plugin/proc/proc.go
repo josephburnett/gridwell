@@ -203,6 +203,40 @@ func (p *Plugin) SetWellView(_ context.Context, req *gridwellv1.SetWellViewReque
 	return griddb.ApplySetWellView(p.db, procLabelCol, req)
 }
 
+// GetTileContent returns the descent body for the @info tile: a markdown
+// summary of the grid's root process metadata. Non-@info tiles and gone
+// processes return empty content rather than an error.
+func (p *Plugin) GetTileContent(_ context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
+	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("proc GetTileContent: invalid tile_id %q", req.TileId)
+	}
+	var gridID int64
+	var key, kind string
+	err = p.db.QueryRow(`SELECT grid_id, key, kind FROM tiles WHERE id = ?`, tileID).Scan(&gridID, &key, &kind)
+	if err == sql.ErrNoRows {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if kind != "text" || key != infoKey {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	rootPID, err := p.gridPID(gridID)
+	if err != nil {
+		return nil, err
+	}
+	info, err := procsource.Get(p.procRoot, rootPID)
+	if err != nil {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	return &gridwellv1.GetTileContentResponse{
+		Data:      []byte(procsource.MetadataMarkdown(info)),
+		MediaType: "text/markdown",
+	}, nil
+}
+
 // Probe checks whether the process backing tile_id still exists.
 func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	tileID, err := strconv.ParseInt(req.TileId, 10, 64)

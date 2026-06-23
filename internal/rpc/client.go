@@ -76,6 +76,17 @@ func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Jpeg, nil
 }
 
+// GetTileContent fetches a text tile's descent body bytes. Routable by tile
+// id, so it resolves content for plugin-owned tiles (a file's metadata, a
+// process's @info) as well as local store tiles.
+func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, error) {
+	r, err := c.cl.GetTileContent(ctx, connect.NewRequest(&pb.GetTileContentRequest{TileId: tileID}))
+	if err != nil {
+		return nil, err
+	}
+	return r.Msg.Data, nil
+}
+
 // tileResp unwraps a TileResponse from any of the Tile-returning RPCs into a
 // Go rpc.Tile (or the transport error). The mirror of the server's tileResp:
 // every Create / Move / Clone / Resize / Set / Update method ends the same way,

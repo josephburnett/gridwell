@@ -217,6 +217,32 @@ func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Reques
 	return connect.NewResponse(&pb.GetTilePreviewResponse{Jpeg: jpeg}), nil
 }
 
+// GetTileContent returns a text tile's descent body. For a plugin-owned tile
+// (a file in an fs grid, a process's @info) it forwards to the plugin, which
+// derives the body from host state. For a local store tile it returns the
+// tile's stored blob bytes.
+func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Request[pb.GetTileContentRequest]) (*connect.Response[pb.GetTileContentResponse], error) {
+	if client, local, _, ok := h.pluginRoute(req.Msg.TileId); ok {
+		resp, err := client.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: local})
+		if err != nil {
+			return nil, asConnectError(err)
+		}
+		return connect.NewResponse(resp), nil
+	}
+	tile, err := h.srv.store.GetTile(ctx, h.localID(req.Msg.TileId))
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	if tile.BlobID == 0 {
+		return connect.NewResponse(&pb.GetTileContentResponse{}), nil
+	}
+	data, err := h.srv.store.GetBlob(ctx, tile.BlobID)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	return connect.NewResponse(&pb.GetTileContentResponse{Data: data, MediaType: "text/markdown"}), nil
+}
+
 func (h *connectHandler) CreateWell(ctx context.Context, req *connect.Request[pb.CreateWellRequest]) (*connect.Response[pb.TileResponse], error) {
 	r := rpc.CreateWellFromProto(req.Msg)
 	r.GridID = h.localID(r.GridID)

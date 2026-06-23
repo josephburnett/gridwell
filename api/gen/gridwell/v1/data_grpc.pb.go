@@ -43,6 +43,7 @@ const (
 	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
 	Gridwell_GetBlob_FullMethodName           = "/gridwell.v1.Gridwell/GetBlob"
 	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
+	Gridwell_GetTileContent_FullMethodName    = "/gridwell.v1.Gridwell/GetTileContent"
 	Gridwell_CreateWell_FullMethodName        = "/gridwell.v1.Gridwell/CreateWell"
 	Gridwell_CreateText_FullMethodName        = "/gridwell.v1.Gridwell/CreateText"
 	Gridwell_CreateURL_FullMethodName         = "/gridwell.v1.Gridwell/CreateURL"
@@ -85,6 +86,7 @@ type GridwellClient interface {
 	GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error)
 	GetBlob(ctx context.Context, in *GetBlobRequest, opts ...grpc.CallOption) (*GetBlobResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
+	GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error)
 	CreateWell(ctx context.Context, in *CreateWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateURL(ctx context.Context, in *CreateURLRequest, opts ...grpc.CallOption) (*TileResponse, error)
@@ -232,6 +234,16 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetTilePreviewResponse)
 	err := c.cc.Invoke(ctx, Gridwell_GetTilePreview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTileContentResponse)
+	err := c.cc.Invoke(ctx, Gridwell_GetTileContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -449,6 +461,7 @@ type GridwellServer interface {
 	GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error)
 	GetBlob(context.Context, *GetBlobRequest) (*GetBlobResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
+	GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error)
 	CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error)
 	CreateText(context.Context, *CreateTextRequest) (*TileResponse, error)
 	CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error)
@@ -509,6 +522,9 @@ func (UnimplementedGridwellServer) GetBlob(context.Context, *GetBlobRequest) (*G
 }
 func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
+}
+func (UnimplementedGridwellServer) GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTileContent not implemented")
 }
 func (UnimplementedGridwellServer) CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateWell not implemented")
@@ -750,6 +766,24 @@ func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).GetTilePreview(ctx, req.(*GetTilePreviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_GetTileContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTileContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).GetTileContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_GetTileContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).GetTileContent(ctx, req.(*GetTileContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1109,6 +1143,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTilePreview",
 			Handler:    _Gridwell_GetTilePreview_Handler,
+		},
+		{
+			MethodName: "GetTileContent",
+			Handler:    _Gridwell_GetTileContent_Handler,
 		},
 		{
 			MethodName: "CreateWell",

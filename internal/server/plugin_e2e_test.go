@@ -68,6 +68,15 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 		t.Errorf("subdir child_grid_id = %q, want %q prefix", sub.ChildGridID, fsPluginUUID)
 	}
 
+	// 2b. The file tile's descent body (its metadata) routes to the plugin.
+	body, err := cl.GetTileContent(ctx, alpha.ID)
+	if err != nil {
+		t.Fatalf("GetTileContent: %v", err)
+	}
+	if !strings.Contains(string(body), "alpha.txt") {
+		t.Errorf("file content %q does not mention the file name", body)
+	}
+
 	// 3. Move alpha.txt and confirm the new position survives a re-descent.
 	moved, err := cl.MoveTile(ctx, &rpc.MoveTileRequest{
 		Path:       rpc.Path{WellIDs: []string{well.ID}},

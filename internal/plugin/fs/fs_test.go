@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -555,5 +556,36 @@ func TestMoveTile_CrossGridRejected(t *testing.T) {
 	_, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, DestGridId: "999999", X: 1, Y: 1})
 	if err == nil {
 		t.Error("expected error for cross-grid move, got nil")
+	}
+}
+
+// TestGetTileContent_FileMetadata: a file tile's content is a markdown
+// summary of the file's metadata (parity with the legacy source reconciler);
+// a directory tile has empty content.
+func TestGetTileContent_FileMetadata(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+
+	note := tileByName(t, r.Tiles, "note.txt")
+	resp, err := p.GetTileContent(context.Background(), &gridwellv1.GetTileContentRequest{TileId: note.Id})
+	if err != nil {
+		t.Fatalf("GetTileContent: %v", err)
+	}
+	if !strings.Contains(string(resp.Data), "note.txt") {
+		t.Errorf("content %q does not mention the file name", resp.Data)
+	}
+	if resp.MediaType != "text/markdown" {
+		t.Errorf("media_type = %q, want text/markdown", resp.MediaType)
+	}
+
+	sub := tileByName(t, r.Tiles, "sub")
+	dresp, err := p.GetTileContent(context.Background(), &gridwellv1.GetTileContentRequest{TileId: sub.Id})
+	if err != nil {
+		t.Fatalf("GetTileContent dir: %v", err)
+	}
+	if len(dresp.Data) != 0 {
+		t.Errorf("directory tile content = %q, want empty", dresp.Data)
 	}
 }

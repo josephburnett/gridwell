@@ -211,6 +211,18 @@ message GetTilePreviewResponse {
   bytes jpeg = 1;
 }
 
+// GetTileContent fetches the body bytes of a text tile. Routable by tile_id,
+// so it works for tiles owned by a plugin (e.g. a file's contents read from
+// disk by the fs plugin) as well as local store tiles. media_type is the
+// stored content type (e.g. text/markdown).
+message GetTileContentRequest {
+  string tile_id = 1;
+}
+message GetTileContentResponse {
+  bytes data = 1;
+  string media_type = 2;
+}
+
 // TileResponse is the shape returned by every tile-producing mutation.
 message TileResponse {
   Tile tile = 1;
@@ -446,6 +458,7 @@ service Gridwell {
   rpc GetGrid(GetGridRequest) returns (GetGridResponse);
   rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
+  rpc GetTileContent(GetTileContentRequest) returns (GetTileContentResponse);
 
   rpc CreateWell(CreateWellRequest) returns (TileResponse);
   rpc CreateText(CreateTextRequest) returns (TileResponse);

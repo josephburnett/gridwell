@@ -193,6 +193,41 @@ func (p *Plugin) SetWellView(_ context.Context, req *gridwellv1.SetWellViewReque
 	return griddb.ApplySetWellView(p.db, fsLabelCol, req)
 }
 
+// GetTileContent returns the descent body for a file tile: a small markdown
+// summary of the file's metadata (the same body the legacy source reconciler
+// produced). Directories and unreadable paths return empty content rather than
+// an error.
+func (p *Plugin) GetTileContent(_ context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
+	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("fs GetTileContent: invalid tile_id %q", req.TileId)
+	}
+	var gridID int64
+	var name, kind string
+	err = p.db.QueryRow(`SELECT grid_id, name, kind FROM tiles WHERE id = ?`, tileID).Scan(&gridID, &name, &kind)
+	if err == sql.ErrNoRows {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if kind != "text" {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	dirPath, err := p.gridPath(gridID)
+	if err != nil {
+		return nil, err
+	}
+	entry, err := fssource.Stat(filepath.Join(dirPath, name))
+	if err != nil {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	return &gridwellv1.GetTileContentResponse{
+		Data:      []byte(fssource.MetadataMarkdown(entry)),
+		MediaType: "text/markdown",
+	}, nil
+}
+
 // Probe checks whether the tile at tile_id still has its backing path on disk.
 func (p *Plugin) Probe(_ context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	tileID, err := strconv.ParseInt(req.TileId, 10, 64)

@@ -68,6 +68,8 @@ const (
 	GridwellGetBlobProcedure = "/gridwell.v1.Gridwell/GetBlob"
 	// GridwellGetTilePreviewProcedure is the fully-qualified name of the Gridwell's GetTilePreview RPC.
 	GridwellGetTilePreviewProcedure = "/gridwell.v1.Gridwell/GetTilePreview"
+	// GridwellGetTileContentProcedure is the fully-qualified name of the Gridwell's GetTileContent RPC.
+	GridwellGetTileContentProcedure = "/gridwell.v1.Gridwell/GetTileContent"
 	// GridwellCreateWellProcedure is the fully-qualified name of the Gridwell's CreateWell RPC.
 	GridwellCreateWellProcedure = "/gridwell.v1.Gridwell/CreateWell"
 	// GridwellCreateTextProcedure is the fully-qualified name of the Gridwell's CreateText RPC.
@@ -126,6 +128,7 @@ type GridwellClient interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetBlob(context.Context, *connect.Request[v1.GetBlobRequest]) (*connect.Response[v1.GetBlobResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
+	GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error)
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
@@ -221,6 +224,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellGetTilePreviewProcedure,
 			connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
+			connect.WithClientOptions(opts...),
+		),
+		getTileContent: connect.NewClient[v1.GetTileContentRequest, v1.GetTileContentResponse](
+			httpClient,
+			baseURL+GridwellGetTileContentProcedure,
+			connect.WithSchema(gridwellMethods.ByName("GetTileContent")),
 			connect.WithClientOptions(opts...),
 		),
 		createWell: connect.NewClient[v1.CreateWellRequest, v1.TileResponse](
@@ -347,6 +356,7 @@ type gridwellClient struct {
 	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
 	getBlob           *connect.Client[v1.GetBlobRequest, v1.GetBlobResponse]
 	getTilePreview    *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
+	getTileContent    *connect.Client[v1.GetTileContentRequest, v1.GetTileContentResponse]
 	createWell        *connect.Client[v1.CreateWellRequest, v1.TileResponse]
 	createText        *connect.Client[v1.CreateTextRequest, v1.TileResponse]
 	createURL         *connect.Client[v1.CreateURLRequest, v1.TileResponse]
@@ -420,6 +430,11 @@ func (c *gridwellClient) GetBlob(ctx context.Context, req *connect.Request[v1.Ge
 // GetTilePreview calls gridwell.v1.Gridwell.GetTilePreview.
 func (c *gridwellClient) GetTilePreview(ctx context.Context, req *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error) {
 	return c.getTilePreview.CallUnary(ctx, req)
+}
+
+// GetTileContent calls gridwell.v1.Gridwell.GetTileContent.
+func (c *gridwellClient) GetTileContent(ctx context.Context, req *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error) {
+	return c.getTileContent.CallUnary(ctx, req)
 }
 
 // CreateWell calls gridwell.v1.Gridwell.CreateWell.
@@ -529,6 +544,7 @@ type GridwellHandler interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetBlob(context.Context, *connect.Request[v1.GetBlobRequest]) (*connect.Response[v1.GetBlobResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
+	GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error)
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
@@ -620,6 +636,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellGetTilePreviewProcedure,
 		svc.GetTilePreview,
 		connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellGetTileContentHandler := connect.NewUnaryHandler(
+		GridwellGetTileContentProcedure,
+		svc.GetTileContent,
+		connect.WithSchema(gridwellMethods.ByName("GetTileContent")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellCreateWellHandler := connect.NewUnaryHandler(
@@ -754,6 +776,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellGetBlobHandler.ServeHTTP(w, r)
 		case GridwellGetTilePreviewProcedure:
 			gridwellGetTilePreviewHandler.ServeHTTP(w, r)
+		case GridwellGetTileContentProcedure:
+			gridwellGetTileContentHandler.ServeHTTP(w, r)
 		case GridwellCreateWellProcedure:
 			gridwellCreateWellHandler.ServeHTTP(w, r)
 		case GridwellCreateTextProcedure:
@@ -841,6 +865,10 @@ func (UnimplementedGridwellHandler) GetBlob(context.Context, *connect.Request[v1
 
 func (UnimplementedGridwellHandler) GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTilePreview is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTileContent is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error) {
