@@ -13,15 +13,15 @@ import (
 	"time"
 )
 
-// EntryKind is one of the abstract tile kinds an fs entry can map to.
-// "file-well" for subdirectories, "text" for everything else (the V1
-// universal kind for files; file contents themselves are deferred —
-// V1 descent shows a metadata blurb).
+// EntryKind classifies a directory entry: a subdirectory (which the fs plugin
+// projects as a well) or a file (projected as a text tile whose descent body
+// is a metadata blurb — file contents themselves are not rendered yet). The
+// string values are internal markers; callers compare by constant.
 type EntryKind string
 
 const (
-	KindDir  EntryKind = "file-well"
-	KindFile EntryKind = "text"
+	KindDir  EntryKind = "dir"
+	KindFile EntryKind = "file"
 )
 
 // Entry is one synthesized item from a directory listing. Name is the
