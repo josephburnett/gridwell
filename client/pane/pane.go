@@ -54,12 +54,12 @@ func (s Side) Direction() Direction {
 // text tile's view_y on save.
 type Pane struct {
 	ID   string
-	Path []int64
+	Path []string
 	Cx   float64
 	Cy   float64
 	Zoom float64
 
-	TextFocus   int64   `json:"file_focus,omitempty"`
+	TextFocus   string  `json:"file_focus,omitempty"`
 	TextMode    string  `json:"file_mode,omitempty"`
 	TextScrollX float64 `json:"file_scroll_x,omitempty"`
 	TextScrollY float64 `json:"file_scroll_y,omitempty"`

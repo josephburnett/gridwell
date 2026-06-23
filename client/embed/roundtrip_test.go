@@ -32,7 +32,7 @@ func linkSpans(n markdown.Node) []markdown.Span {
 // preview by intercepting the href pattern.
 func TestDropRoundTripsThroughParser(t *testing.T) {
 	doc := "first line\nsecond line\n"
-	link := embed.Markdown(testOrigin, 5, embed.DefaultAlt("text", 5))
+	link := embed.Markdown(testOrigin, "5", embed.DefaultAlt("text", "5"))
 
 	off := embed.LineEndOffset(doc, 0)
 	out := embed.Insert(doc, link, off)
@@ -43,8 +43,8 @@ func TestDropRoundTripsThroughParser(t *testing.T) {
 	}
 	linkSpan := &spans[0]
 
-	if got := embed.LeafTileIDFromHref(linkSpan.Href); got != 5 {
-		t.Errorf("href %q resolved to id %d, want 5", linkSpan.Href, got)
+	if got := embed.LeafTileIDFromHref(linkSpan.Href); got != "5" {
+		t.Errorf("href %q resolved to id %q, want 5", linkSpan.Href, got)
 	}
 	if linkSpan.Text != "text tile 5" {
 		t.Errorf("link text = %q, want %q", linkSpan.Text, "text tile 5")
@@ -58,7 +58,7 @@ func TestDropRoundTripsThroughParser(t *testing.T) {
 // or duplicate the text that follows the insertion point.
 func TestDropPreservesFollowingContent(t *testing.T) {
 	doc := "alpha\nbravo\ncharlie\n"
-	link := embed.Markdown(testOrigin, 7, "x")
+	link := embed.Markdown(testOrigin, "7", "x")
 	off := embed.LineEndOffset(doc, 1)
 	out := embed.Insert(doc, link, off)
 
@@ -73,9 +73,9 @@ func TestDropPreservesFollowingContent(t *testing.T) {
 // TestDropOnDocWithExistingLink makes sure dropping near an existing
 // tile-link doesn't corrupt the existing link's syntax.
 func TestDropOnDocWithExistingLink(t *testing.T) {
-	existing := embed.Markdown(testOrigin, 3, "existing")
+	existing := embed.Markdown(testOrigin, "3", "existing")
 	doc := "intro " + existing + " trailing"
-	link := embed.Markdown(testOrigin, 7, "new")
+	link := embed.Markdown(testOrigin, "7", "new")
 
 	out := embed.Insert(doc, link, len(doc))
 

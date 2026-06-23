@@ -18,7 +18,7 @@ import (
 type docDropTarget struct {
 	pane         *pane.Pane
 	rect         pane.Rect
-	tileID       int64
+	tileID       string
 	version      int64
 	insertOffset int
 }
@@ -33,7 +33,7 @@ func (a *App) classifyDocTargetAt(sx, sy float64) (embedpkg.DocTarget, *pane.Pan
 		return embedpkg.DocTargetNone, nil, pane.Rect{}
 	}
 	state := embedpkg.PaneState{
-		HasTextFocus: p.TextFocus != 0,
+		HasTextFocus: p.TextFocus != "",
 		IsURLDescent: a.isURLDescent(p),
 		TextMode:     p.TextMode,
 		Inside:       pointInFileInner(p, r, sx, sy),

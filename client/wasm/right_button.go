@@ -146,12 +146,12 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	in := gesture.Input{
 		OnCornerCircle: pointInPlus(r, sx, sy),
 		CanAscend:      a.canAscend(p),
-		InGridView:     p.TextFocus == 0,
+		InGridView:     p.TextFocus == "",
 		Region:         pane.ClassifyRegion(r, resizeBandPx, sx, sy),
 	}
 
 	var hit *embedHit
-	if p.TextFocus != 0 && p.TextMode == rpc.TextModeRendered {
+	if p.TextFocus != "" && p.TextMode == rpc.TextModeRendered {
 		hit = a.embedHitAt(p.ID, sx, sy)
 		in.OverEmbed = hit != nil
 	}
@@ -602,7 +602,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 // dropTarget is optional (nil when deleting via the button) — it only refines
 // which destination grid's cache to refresh.
 func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
-	var dstGridID int64
+	var dstGridID string
 	if t != nil {
 		dstGridID = t.gridID
 	}
@@ -691,7 +691,7 @@ func (a *App) flushDroppedSubtree(n pane.TreeNode) {
 // doesn't apply (kind guard inside saveFileBeforeAscent; the close* helpers
 // no-op when the pane has no live stream).
 func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
 			if file, ok := g.Tiles[p.TextFocus]; ok {
 				a.saveFileBeforeAscent(p, file)

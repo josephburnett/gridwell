@@ -20,14 +20,14 @@ func TestEncodeRootWithViewport(t *testing.T) {
 }
 
 func TestEncodePath(t *testing.T) {
-	got := Encode(State{TileIDs: []int64{3, 4, 5}})
+	got := Encode(State{TileIDs: []string{"3", "4", "5"}})
 	if got != "/3/4/5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeFileText(t *testing.T) {
-	got := Encode(State{TileIDs: []int64{3, 4, 5, 9}, CursorMode: true, Col: 24, Row: 10})
+	got := Encode(State{TileIDs: []string{"3", "4", "5", "9"}, CursorMode: true, Col: 24, Row: 10})
 	want := "/3/4/5/9?c=24&r=10"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -36,7 +36,7 @@ func TestEncodeFileText(t *testing.T) {
 
 func TestEncodeFileTextAtOrigin(t *testing.T) {
 	// Cursor at (0, 0) is still emitted: presence implies text mode.
-	got := Encode(State{TileIDs: []int64{9}, CursorMode: true})
+	got := Encode(State{TileIDs: []string{"9"}, CursorMode: true})
 	want := "/9?c=0&r=0"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -44,24 +44,32 @@ func TestEncodeFileTextAtOrigin(t *testing.T) {
 }
 
 func TestEncodeOmitsDefaultZoom(t *testing.T) {
-	if got := Encode(State{TileIDs: []int64{1}, Zoom: 1.0}); got != "/1" {
+	if got := Encode(State{TileIDs: []string{"1"}, Zoom: 1.0}); got != "/1" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeOmitsZeroXY(t *testing.T) {
-	got := Encode(State{TileIDs: []int64{1}, Zoom: 1.5})
+	got := Encode(State{TileIDs: []string{"1"}, Zoom: 1.5})
 	if got != "/1?z=1.5" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEncodeStripsTrailingZeros(t *testing.T) {
-	got := Encode(State{TileIDs: []int64{1}, X: 0.5, Y: 1.0, Zoom: 2.0})
+	got := Encode(State{TileIDs: []string{"1"}, X: 0.5, Y: 1.0, Zoom: 2.0})
 	// X=0.5 → "0.5"; Y=1.0 → "1"; Zoom=2.0 → "2"
 	want := "/1?x=0.5&y=1&z=2"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// Encode strips plugin UUID prefix so URLs stay readable.
+func TestEncodeStripsUUIDPrefix(t *testing.T) {
+	got := Encode(State{TileIDs: []string{"abc-uuid/3", "abc-uuid/4"}})
+	if got != "/3/4" {
+		t.Errorf("got %q, want /3/4", got)
 	}
 }
 
@@ -82,7 +90,7 @@ func TestDecodePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4, 5}) {
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "5"}) {
 		t.Errorf("TileIDs = %v", s.TileIDs)
 	}
 }
@@ -122,7 +130,7 @@ func TestDecodeIgnoresTrailingSlash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4}) {
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4"}) {
 		t.Errorf("TileIDs = %v", s.TileIDs)
 	}
 }
@@ -130,10 +138,10 @@ func TestDecodeIgnoresTrailingSlash(t *testing.T) {
 func TestRoundTrip(t *testing.T) {
 	cases := []State{
 		{},
-		{TileIDs: []int64{3, 4, 5}, X: 12.5, Y: -3.25, Zoom: 1.5},
-		{TileIDs: []int64{9}, CursorMode: true, Col: 0, Row: 0},
-		{TileIDs: []int64{42, 100, 99}, CursorMode: true, Col: 100, Row: 25},
-		{TileIDs: []int64{7}, Zoom: 1.234},
+		{TileIDs: []string{"3", "4", "5"}, X: 12.5, Y: -3.25, Zoom: 1.5},
+		{TileIDs: []string{"9"}, CursorMode: true, Col: 0, Row: 0},
+		{TileIDs: []string{"42", "100", "99"}, CursorMode: true, Col: 100, Row: 25},
+		{TileIDs: []string{"7"}, Zoom: 1.234},
 	}
 	for _, in := range cases {
 		raw := Encode(in)
@@ -149,8 +157,8 @@ func TestRoundTrip(t *testing.T) {
 
 func TestDecodeMalformed(t *testing.T) {
 	cases := []struct {
-		name   string
-		raw    string
+		name    string
+		raw     string
 		wantErr bool
 	}{
 		{"no leading slash", "3/4/5", true},
@@ -174,7 +182,7 @@ func TestDecodeEmptyMiddleSegment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s.TileIDs, []int64{3, 5}) {
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "5"}) {
 		t.Errorf("TileIDs = %v, want [3 5]", s.TileIDs)
 	}
 }
@@ -184,7 +192,7 @@ func TestDecodeNegativeID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s.TileIDs, []int64{-2, 3}) {
+	if !reflect.DeepEqual(s.TileIDs, []string{"-2", "3"}) {
 		t.Errorf("TileIDs = %v, want [-2 3]", s.TileIDs)
 	}
 }
@@ -235,8 +243,8 @@ func TestDecodeBadCursorIgnored(t *testing.T) {
 
 func TestTextStateRendered(t *testing.T) {
 	// Rendered text leaf: no cursor encoded.
-	s := TextState([]int64{3, 4}, 9, false, 12, 7)
-	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4, 9}) {
+	s := TextState([]string{"3", "4"}, "9", false, 12, 7)
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "9"}) {
 		t.Errorf("TileIDs = %v, want [3 4 9]", s.TileIDs)
 	}
 	if s.CursorMode {
@@ -248,8 +256,8 @@ func TestTextStateRendered(t *testing.T) {
 }
 
 func TestTextStateTextMode(t *testing.T) {
-	s := TextState([]int64{3}, 9, true, 12, 7)
-	if !reflect.DeepEqual(s.TileIDs, []int64{3, 9}) {
+	s := TextState([]string{"3"}, "9", true, 12, 7)
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "9"}) {
 		t.Errorf("TileIDs = %v", s.TileIDs)
 	}
 	if !s.CursorMode || s.Col != 12 || s.Row != 7 {
@@ -258,17 +266,17 @@ func TestTextStateTextMode(t *testing.T) {
 }
 
 func TestTextStateClonesPath(t *testing.T) {
-	path := []int64{3, 4}
-	s := TextState(path, 9, false, 0, 0)
-	s.TileIDs[0] = 99 // mutating the result must not touch the caller's slice
-	if path[0] != 3 {
+	path := []string{"3", "4"}
+	s := TextState(path, "9", false, 0, 0)
+	s.TileIDs[0] = "99" // mutating the result must not touch the caller's slice
+	if path[0] != "3" {
 		t.Errorf("TextState retained/aliased caller path: %v", path)
 	}
 }
 
 func TestGridState(t *testing.T) {
-	s := GridState([]int64{3, 4, 5}, 12.5, -3, 1.5)
-	if !reflect.DeepEqual(s.TileIDs, []int64{3, 4, 5}) {
+	s := GridState([]string{"3", "4", "5"}, 12.5, -3, 1.5)
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4", "5"}) {
 		t.Errorf("TileIDs = %v", s.TileIDs)
 	}
 	if s.X != 12.5 || s.Y != -3 || s.Zoom != 1.5 {
@@ -280,20 +288,20 @@ func TestGridState(t *testing.T) {
 }
 
 func TestGridStateClonesPath(t *testing.T) {
-	path := []int64{7}
+	path := []string{"7"}
 	s := GridState(path, 0, 0, 1)
-	s.TileIDs[0] = 99
-	if path[0] != 7 {
+	s.TileIDs[0] = "99"
+	if path[0] != "7" {
 		t.Errorf("GridState retained/aliased caller path: %v", path)
 	}
 }
 
 func TestBootViewport(t *testing.T) {
 	cases := []struct {
-		name                         string
-		ux, uy, uz                   float64
-		rx, ry, rz                   float64
-		want                         BootView
+		name           string
+		ux, uy, uz     float64
+		rx, ry, rz     float64
+		want           BootView
 	}{
 		{"url viewport with zoom wins", 5, -3, 1.5, 9, 9, 2,
 			BootView{Apply: true, Cx: 5, Cy: -3, SetZoom: true, Zoom: 1.5}},

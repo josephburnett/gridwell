@@ -11,7 +11,7 @@ package textedit
 // fires the world may have moved on, so three things must still hold:
 //
 //   - hasFocusedPane — there is a focused pane to read from.
-//   - textFocusTileID != 0 && isTextMode — that pane is editing a text
+//   - textFocusTileID != "" && isTextMode — that pane is editing a text
 //     tile in raw-text mode (rendered mode is read-only; a non-text or
 //     unfocused pane has nothing to save).
 //   - lastTextareaTileID == textFocusTileID — the shared textarea
@@ -20,8 +20,8 @@ package textedit
 //     user has descended into tile B: it would read A's stale buffer out
 //     of the singleton and persist it as B's content (the "new tile
 //     contains the last edited tile's text" regression).
-func ShouldDebouncedSaveFire(hasFocusedPane bool, textFocusTileID int64, isTextMode bool, lastTextareaTileID int64) bool {
-	if !hasFocusedPane || textFocusTileID == 0 || !isTextMode {
+func ShouldDebouncedSaveFire(hasFocusedPane bool, textFocusTileID string, isTextMode bool, lastTextareaTileID string) bool {
+	if !hasFocusedPane || textFocusTileID == "" || !isTextMode {
 		return false
 	}
 	return lastTextareaTileID == textFocusTileID

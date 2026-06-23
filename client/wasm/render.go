@@ -294,7 +294,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// was the zoom cue, which no longer applies. The margin around the
 	// inner box is just a plain ascent zone. (URL content fills the pane
 	// and covers this anyway.)
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
@@ -310,7 +310,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// pattern is visible). Inner-box bounds match the textarea
 		// exactly so the user's "outside textarea = grid rules"
 		// mental model is consistent.
-		if p.TextFocus != 0 {
+		if p.TextFocus != "" {
 			if file, ok := g.Tiles[p.TextFocus]; ok {
 				switch file.Kind {
 				case rpc.KindText:
@@ -363,9 +363,9 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	} else {
 		// Status line in the upper-left so the user knows what state
 		// we're in and which grid id we're trying to load.
-		msg := fmt.Sprintf("loading grid %d…", gid)
+		msg := fmt.Sprintf("loading grid %s…", gid)
 		if a.gridLoadFailed[gid] {
-			msg = fmt.Sprintf("grid %d unavailable", gid)
+			msg = fmt.Sprintf("grid %s unavailable", gid)
 		}
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "12px ui-monospace")
@@ -400,7 +400,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// (refreshFileToggle). The matching click hit-tests in onMouseDown are
 	// gated on the pre-click focus, so clicking an unfocused pane's (hidden)
 	// corner just focuses it rather than silently firing the button.
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		if focused && a.isURLDescent(p) {
 			if a.urlStreams[p.ID] != nil {
 				a.drawURLBackButton(p, r)
@@ -569,9 +569,9 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// children via the flat drawNode — no further fetches. Off-screen
 	// culling in drawPane bounds how many top-level wells trigger a
 	// fetch on first descent.
-	child, haveChild := a.c.Grid(parseGridID(n.ChildGridID))
+	child, haveChild := a.c.Grid(n.ChildGridID)
 	if !haveChild {
-		a.fetchGrid(parseGridID(n.ChildGridID))
+		a.fetchGrid(n.ChildGridID)
 	}
 	// Background matches the surrounding pane so there's no color jump
 	// when the well's outline crosses the screen edges during descent.
@@ -604,7 +604,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	drawGridLinesIn(a.cctx, wellGridLineColor(n.Kind), x, y, w, h, previewCell, originX, originY)
 
 	if haveChild && previewCell >= 0.5 {
-		var hide int64
+		var hide string
 		if a.hiddenPaneID == a.previewPaneID {
 			hide = a.hiddenTileID
 		}
@@ -662,7 +662,7 @@ func wellGridLineColor(kind string) string {
 // the leaf grid hasn't loaded yet, since "we're descended into
 // something Gridwell-owned" is the safe assumption mid-load.
 func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
-	if len(p.Path) == 0 && p.TextFocus == 0 {
+	if len(p.Path) == 0 && p.TextFocus == "" {
 		return colorGridLineRoot
 	}
 	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
@@ -812,7 +812,7 @@ func bannerTextColor(n *rpc.Tile, outside bool) string {
 // paneFocusedOnFile returns any pane currently descended into the given
 // file tile id, or nil if none. Used by the renderer to pull the live
 // scroll/mode state instead of the saved view_y.
-func (a *App) paneFocusedOnFile(fileTileID int64) *pane.Pane {
+func (a *App) paneFocusedOnFile(fileTileID string) *pane.Pane {
 	var found *pane.Pane
 	a.tree.Walk(func(p *pane.Pane) {
 		if p.TextFocus == fileTileID {
@@ -859,7 +859,7 @@ func (a *App) fetchBlob(blobID int64) {
 func drawChildPreview(c js.Value, child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
-	hiddenTileID int64,
+	hiddenTileID string,
 ) {
 	childInSource := child != nil && (child.Meta.SourceKind == rpc.GridSourceFS || child.Meta.SourceKind == rpc.GridSourceProc)
 	// Scale the inner-tile border so a child grid viewed from a distance
@@ -867,7 +867,7 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 	// use 2px; previews glide down with the cell scale.
 	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
-		if hiddenTileID != 0 && n.ID == hiddenTileID {
+		if hiddenTileID != "" && n.ID == hiddenTileID {
 			continue
 		}
 		nodeScreenX := centerScreenX + (float64(n.X)-centerCellX)*previewCell
@@ -979,12 +979,12 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 // blue so the user still sees "descended into something".
 func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
 	in := pane.BorderInput{
-		HasTextFocus: p.TextFocus != 0,
+		HasTextFocus: p.TextFocus != "",
 		DescentDepth: len(p.Path),
 		Focused:      focused,
 		URLLive:      urlLive,
 	}
-	if p.TextFocus != 0 && gridOK {
+	if p.TextFocus != "" && gridOK {
 		if tile, ok := g.Tiles[p.TextFocus]; ok {
 			in.TileKnown = true
 			in.TileKind = tile.Kind
@@ -1024,7 +1024,7 @@ var paneBorderColors = pane.BorderColors{
 // every tile whose footprint lies entirely outside the visible viewport.
 // Each marker is positioned where the ray from the viewport center to the
 // tile's center crosses the pane's inset rectangle, and points outward.
-func (a *App) drawEdgeIndicators(nodes map[int64]rpc.Tile, ps dragdrop.Pane, r pane.Rect) {
+func (a *App) drawEdgeIndicators(nodes map[string]rpc.Tile, ps dragdrop.Pane, r pane.Rect) {
 	cellSize := ps.CellPx * ps.Zoom
 	const inset = 12.0
 	innerL := r.X + inset

@@ -33,7 +33,9 @@ import (
 type State struct {
 	// TileIDs is the descent path of tile row ids. Empty means "root
 	// grid". The trailing id may be a file-tile (resolved post-Decode).
-	TileIDs []int64
+	// IDs are bare decimal strings (e.g. "42"); the client qualifies them
+	// with the localdb UUID after decoding.
+	TileIDs []string
 
 	// Viewport — set when the leaf is a grid (or a file in the floating
 	// view, eventually). Encoder only emits these if at least one
@@ -54,7 +56,7 @@ const DefaultZoom = 1.0
 // the leaf is in raw-text mode and carries its cursor (col, row) so the
 // position is restored on reload; in rendered mode no cursor is encoded.
 // path is cloned — the caller's slice is never retained.
-func TextState(path []int64, textFocusTileID int64, isTextMode bool, col, row int) State {
+func TextState(path []string, textFocusTileID string, isTextMode bool, col, row int) State {
 	s := State{TileIDs: append(slices.Clone(path), textFocusTileID)}
 	if isTextMode {
 		s.CursorMode = true
@@ -102,7 +104,7 @@ func BootViewport(urlX, urlY, urlZoom, rootCx, rootCy, rootZoom float64) BootVie
 // GridState builds the State for a grid (or rendered-file) descent: the
 // descent path as the tile ids and the pane viewport (center + zoom).
 // path is cloned.
-func GridState(path []int64, cx, cy, zoom float64) State {
+func GridState(path []string, cx, cy, zoom float64) State {
 	return State{
 		TileIDs: slices.Clone(path),
 		X:       cx,
@@ -122,7 +124,13 @@ func Encode(s State) string {
 	} else {
 		for _, id := range s.TileIDs {
 			path.WriteByte('/')
-			path.WriteString(strconv.FormatInt(id, 10))
+			// Strip plugin UUID prefix (e.g. "uuid/42" → "42") for
+			// human-readable URLs; the client re-qualifies on decode.
+			seg := id
+			if i := strings.LastIndexByte(id, '/'); i >= 0 {
+				seg = id[i+1:]
+			}
+			path.WriteString(seg)
 		}
 	}
 
@@ -178,16 +186,18 @@ func Decode(raw string) (State, error) {
 			return State{}, errors.New("path does not start with /")
 		}
 		segs := strings.Split(pathPart[1:], "/")
-		ids := make([]int64, 0, len(segs))
+		ids := make([]string, 0, len(segs))
 		for _, seg := range segs {
 			if seg == "" {
 				continue // tolerate trailing slash
 			}
-			id, err := strconv.ParseInt(seg, 10, 64)
-			if err != nil {
+			// Validate that the segment is an integer (Gridwell URL
+			// detection), but return it as a string; the client
+			// qualifies with the localdb UUID after decoding.
+			if _, err := strconv.ParseInt(seg, 10, 64); err != nil {
 				return State{}, err
 			}
-			ids = append(ids, id)
+			ids = append(ids, seg)
 		}
 		s.TileIDs = ids
 	}

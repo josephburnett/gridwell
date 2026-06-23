@@ -132,7 +132,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	// cursor; inner area scrolls (rendered mode) or is handled by the
 	// textarea natively (text mode — those events never reach the
 	// canvas listener).
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		// URL descent: a live tile is a native WebContentsView over the
 		// content box and scrolls itself (the canvas never sees those wheel
 		// events). When live, swallow any stray wheel that does reach the
@@ -243,7 +243,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 	// In file-focus mode the lower-right button is a text/rendered toggle
 	// rather than the + creation menu.
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		// Shell tile descent: the plus button refreshes a frozen
 		// shell (spawns a new bash), and the outer margin ascends.
 		// Inside the xterm overlay, clicks are captured by xterm.js
@@ -310,7 +310,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.urlPanDragging = true
 			a.dragging = &dragState{
 				originPaneID: p.ID,
-				tileID:       0,
+				tileID:       "",
 				startScreenX: sx,
 				startScreenY: sy,
 				curScreenX:   sx,
@@ -347,7 +347,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			}
 			a.dragging = &dragState{
 				originPaneID: p.ID,
-				tileID:       0,
+				tileID:       "",
 				startScreenX: sx,
 				startScreenY: sy,
 				curScreenX:   sx,
@@ -396,7 +396,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	ps := paneToDragdrop(p, r)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		tileID:       0,
+		tileID:       "",
 		startScreenX: sx,
 		startScreenY: sy,
 		curScreenX:   sx,
@@ -426,7 +426,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.originScreenX = tlX
 			a.dragging.originScreenY = tlY
 			a.dragging.originPaneRect = r
-			a.dragging.srcGridID = parseGridID(n.ChildGridID)
+			a.dragging.srcGridID = n.ChildGridID
 			a.dragging.srcPath = append(slices.Clone(p.Path), n.ID)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
@@ -530,7 +530,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// the original at its stored position so we don't see two
 			// copies of the same stone. Template drags also need a
 			// ghost so the synthetic tile follows the cursor.
-			if d.tileID != 0 || d.isTemplate {
+			if d.tileID != "" || d.isTemplate {
 				size := d.srcCellSize
 				if size <= 0 {
 					// Template drag: srcCellSize wasn't set by the
@@ -550,7 +550,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					displayedCellSize: size,
 					targetCellSize:    size,
 				}
-				if d.tileID != 0 {
+				if d.tileID != "" {
 					// Hide by ROW id, not ObjectID — clones share an
 					// ObjectID with the source, so a by-lineage hide
 					// makes every clone vanish whenever its sibling
@@ -564,14 +564,14 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			return nil
 		}
 	}
-	if d.tileID == 0 && !d.isTemplate {
+	if d.tileID == "" && !d.isTemplate {
 		// Pan the source pane smoothly. For frozen URL descents, pan
 		// translates the cover-mode crop (urlPanX/Y). In file-rendered
 		// mode the drag scrolls the file's logical content; in grid mode
 		// it pans the parent-grid view.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.TextFocus != 0 && a.isURLDescent(focused) && a.urlStreams[focused.ID] == nil {
+			if focused.TextFocus != "" && a.isURLDescent(focused) && a.urlStreams[focused.ID] == nil {
 				// Frozen URL descent: translate cover-crop pan. The delta
 				// is negated because dragging right should shift the image
 				// right (show left portion), i.e., decrease panX.
@@ -580,7 +580,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 				// Clamping is deferred to draw time (clampURLPan) because
 				// we need the image natural dimensions which may vary frame
 				// to frame as frames arrive.
-			} else if focused.TextFocus != 0 && focused.TextMode == rpc.TextModeRendered {
+			} else if focused.TextFocus != "" && focused.TextMode == rpc.TextModeRendered {
 				z := nonzero(focused.TextZoom)
 				focused.TextScrollX -= (sx - d.curScreenX) / z
 				focused.TextScrollY -= (sy - d.curScreenY) / z
@@ -791,7 +791,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 // nodeAtCellInGrid returns the cached tile covering (cellX, cellY) in
 // gridID, or nil. Mirrors tileAtCell but works against an arbitrary
 // grid id rather than the focused pane's leaf grid.
-func (a *App) nodeAtCellInGrid(gridID, cellX, cellY int64) *rpc.Tile {
+func (a *App) nodeAtCellInGrid(gridID string, cellX, cellY int64) *rpc.Tile {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
 		return nil
@@ -871,7 +871,7 @@ func paneRectFor(a *App, p *pane.Pane) pane.Rect {
 // state in which the source pane's + button turns into the trashcan
 // delete target.
 func (a *App) tileDragInFlight() bool {
-	return a.dragging != nil && a.dragging.started && a.dragging.tileID != 0
+	return a.dragging != nil && a.dragging.started && a.dragging.tileID != ""
 }
 
 // overDeleteButton reports whether (sx, sy) is over the delete target for the
@@ -886,11 +886,11 @@ func (a *App) tileDragInFlight() bool {
 // focus) so it works for both the left-drag move and the right-drag clone; a
 // descended pane has no + button, so it's never a delete target.
 func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
-	if d == nil || !d.started || d.tileID == 0 {
+	if d == nil || !d.started || d.tileID == "" {
 		return false
 	}
 	p := a.tree.FindPane(d.originPaneID)
-	if p == nil || p.TextFocus != 0 {
+	if p == nil || p.TextFocus != "" {
 		return false
 	}
 	return pointInPlus(paneRectFor(a, p), sx, sy)
@@ -909,7 +909,7 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 // Returns true if a navigation gesture was performed (caller should skip
 // further interpretation of the click).
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		// Inside a text/url/shell descent, a bare click isn't navigation:
 		// ascent moved to the middle button / a right-click on the corner
 		// circle. Pan-drag (rendered mode) is handled in mousemove.
@@ -960,7 +960,7 @@ func zoomDist(z1, z2 float64) float64 {
 // descended into a text/url/shell tile (TextFocus) or into a child grid
 // (non-empty Path). At the user's root neither holds.
 func (a *App) canAscend(p *pane.Pane) bool {
-	return p.TextFocus != 0 || len(p.Path) > 0
+	return p.TextFocus != "" || len(p.Path) > 0
 }
 
 // ascendPane performs the appropriate ascent for pane p: a file ascent
@@ -969,7 +969,7 @@ func (a *App) canAscend(p *pane.Pane) bool {
 // entry point for both ascent gestures (middle button, right-click on
 // the corner circle).
 func (a *App) ascendPane(p *pane.Pane) {
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		a.startFileAscent(p)
 	} else if len(p.Path) > 0 {
 		a.startAscent(p)
@@ -1092,7 +1092,7 @@ func (a *App) startAscent(p *pane.Pane) {
 			},
 		},
 		onComplete: func() {
-			if restoreFocus == 0 {
+			if restoreFocus == "" {
 				return
 			}
 			fp := a.tree.FindPane(p.ID)
@@ -1112,7 +1112,7 @@ func (a *App) startAscent(p *pane.Pane) {
 // instantAscend is the fallback path when the parent grid isn't cached or
 // the well row vanished. We just drop the last entry of the path; the user
 // can wait for the parent to load and reposition manually.
-func (a *App) instantAscend(p *pane.Pane, parentPath []int64) {
+func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
 	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
 	p.Path = parentPath
 	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
@@ -1148,7 +1148,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
 	mid, swap, final := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
-	a.fetchGrid(parseGridID(well.ChildGridID))
+	a.fetchGrid(well.ChildGridID)
 
 	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
 		zoomDist(from.Zoom, mid.Zoom)
@@ -1304,7 +1304,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 // tile's footprint back to the saved viewport, then clear TextFocus and
 // save the tile's content + scroll.
 func (a *App) startFileAscent(p *pane.Pane) {
-	if p.TextFocus == 0 {
+	if p.TextFocus == "" {
 		return
 	}
 	gid := a.gridIDForPath(p.Path)
@@ -1357,7 +1357,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// button, textarea) goes away as the animation begins.
 	p.Zoom = overtake
 	p.Cx, p.Cy = wellCx, wellCy
-	p.TextFocus = 0
+	p.TextFocus = ""
 	a.refreshFileOverlay()
 
 	// If the saved state had a TextFocus, the descent originated from
@@ -1380,7 +1380,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 			},
 		},
 		onComplete: func() {
-			if restoreFocus == 0 {
+			if restoreFocus == "" {
 				return
 			}
 			fp := a.tree.FindPane(p.ID)
@@ -1404,12 +1404,12 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.closeURLStream(p.ID)   // no-op if not a URL descent
 	a.closeShellStream(p.ID) // no-op if not a shell descent
 	saved := a.popPaneState(p.ID)
-	p.TextFocus = 0
+	p.TextFocus = ""
 	if saved != nil {
 		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
 		// If the saved state captured a text descent (embed click), restore
 		// it so a single ascent lands on the doc, not the grid behind it.
-		if saved.TextFocus != 0 {
+		if saved.TextFocus != "" {
 			p.TextFocus = saved.TextFocus
 			p.TextMode = saved.TextMode
 			p.TextScrollX = saved.TextScrollX
@@ -1435,7 +1435,7 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 // No-op if the user's current center hasn't moved from the well's
 // stored view (rounded to int cells), so casual ascents don't churn
 // the DB.
-func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []int64) {
+func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []string) {
 	newViewX := int64(math.Round(p.Cx)) - well.W/2
 	newViewY := int64(math.Round(p.Cy)) - well.H/2
 	r := paneRectFor(a, p)
@@ -1736,14 +1736,14 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 		// Find the focused pane and descend into the new tile, then
 		// open the live stream once the transition completes.
 		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.TextFocus != 0 {
+		if fp == nil || fp.TextFocus != "" {
 			// Pane is gone or already descended — skip.
 			return
 		}
 		a.startFileDescent(fp, &tile, func() {
 			// afterDescend: open the URL stream so the pane goes live.
 			ffp := a.tree.FindPane(paneID)
-			if ffp == nil || ffp.TextFocus == 0 {
+			if ffp == nil || ffp.TextFocus == "" {
 				return
 			}
 			a.openURLStream(ffp, tile.ID)
@@ -1800,7 +1800,7 @@ func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 		return a.cl.CreateShell(ctx, req)
 	}, func(tile rpc.Tile) {
 		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.TextFocus != 0 {
+		if fp == nil || fp.TextFocus != "" {
 			return
 		}
 		// Mirror createURLAtCell: descend, and once the transition
@@ -1810,7 +1810,7 @@ func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 		// openShellStream looks for it.
 		a.startFileDescent(fp, &tile, func() {
 			ffp := a.tree.FindPane(paneID)
-			if ffp == nil || ffp.TextFocus == 0 {
+			if ffp == nil || ffp.TextFocus == "" {
 				return
 			}
 			a.openShellStream(ffp, tile.ID)

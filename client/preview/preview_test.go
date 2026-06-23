@@ -86,7 +86,7 @@ func (d *fakeDecoder) pendingCount() int {
 // dirty cache by accident.
 func TestGetEmptyReturnsNotOK(t *testing.T) {
 	c := NewCache(&fakeDecoder{})
-	if _, ok := c.Get(42, 1); ok {
+	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get on empty cache returned ok")
 	}
 }
@@ -99,7 +99,7 @@ func TestPutGetRoundTrip(t *testing.T) {
 	c := NewCache(d)
 
 	var ready bool
-	c.Put(42, 7, []byte("jpeg-bytes"), func() { ready = true })
+	c.Put("42", 7, []byte("jpeg-bytes"), func() { ready = true })
 	if !ready && d.pendingCount() != 1 {
 		t.Fatalf("expected one pending decode, got %d", d.pendingCount())
 	}
@@ -107,7 +107,7 @@ func TestPutGetRoundTrip(t *testing.T) {
 	if !ready {
 		t.Errorf("onReady never fired")
 	}
-	got, ok := c.Get(42, 7)
+	got, ok := c.Get("42", 7)
 	if !ok {
 		t.Fatalf("Get(42, 7) not ok after Put")
 	}
@@ -124,13 +124,13 @@ func TestPutGetRoundTrip(t *testing.T) {
 func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 7, []byte("old"), nil)
+	c.Put("42", 7, []byte("old"), nil)
 	d.resolveAll()
-	if _, ok := c.Get(42, 8); ok {
+	if _, ok := c.Get("42", 8); ok {
 		t.Errorf("Get(42, 8) returned ok despite cached entry being blob 7")
 	}
 	// And the same blob id still hits — staleness is asymmetric.
-	if _, ok := c.Get(42, 7); !ok {
+	if _, ok := c.Get("42", 7); !ok {
 		t.Errorf("Get(42, 7) missed despite cached entry being blob 7")
 	}
 }
@@ -141,9 +141,9 @@ func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 func TestGetWithZeroBlobIDAlwaysMisses(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 7, []byte("x"), nil)
+	c.Put("42", 7, []byte("x"), nil)
 	d.resolveAll()
-	if _, ok := c.Get(42, 0); ok {
+	if _, ok := c.Get("42", 0); ok {
 		t.Errorf("Get with wantBlobID=0 returned ok")
 	}
 }
@@ -155,15 +155,15 @@ func TestGetWithZeroBlobIDAlwaysMisses(t *testing.T) {
 func TestPutWildcardMatchesAnyBlobID(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.PutWildcard(42, []byte("captured-locally"), nil)
+	c.PutWildcard("42", []byte("captured-locally"), nil)
 	d.resolveAll()
 	for _, want := range []int64{1, 99, 12345} {
-		if _, ok := c.Get(42, want); !ok {
+		if _, ok := c.Get("42", want); !ok {
 			t.Errorf("wildcard entry missed Get(42, %d)", want)
 		}
 	}
 	// But wantBlobID=0 still misses, even for a wildcard.
-	if _, ok := c.Get(42, 0); ok {
+	if _, ok := c.Get("42", 0); ok {
 		t.Errorf("wildcard entry hit Get(42, 0); zero means no-preview")
 	}
 }
@@ -174,14 +174,14 @@ func TestPutWildcardMatchesAnyBlobID(t *testing.T) {
 func TestPutSupersedesPreviousImage(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, []byte("first"), nil)
+	c.Put("42", 1, []byte("first"), nil)
 	imgs1 := d.resolveAll()
-	c.Put(42, 2, []byte("second"), nil)
+	c.Put("42", 2, []byte("second"), nil)
 	imgs2 := d.resolveAll()
 	if !imgs1[0].revoked.Load() {
 		t.Errorf("first image was not revoked after second Put")
 	}
-	got, ok := c.Get(42, 2)
+	got, ok := c.Get("42", 2)
 	if !ok || got != imgs2[0] {
 		t.Errorf("Get(42, 2) did not return the second image")
 	}
@@ -194,11 +194,11 @@ func TestPutSupersedesPreviousImage(t *testing.T) {
 func TestPutLateResultIsDiscarded(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, []byte("first"), nil)  // pending[0]
-	c.Put(42, 2, []byte("second"), nil) // pending[1]
+	c.Put("42", 1, []byte("first"), nil)  // pending[0]
+	c.Put("42", 2, []byte("second"), nil) // pending[1]
 	// Resolve the second one first. It should install.
 	imgSecond := d.resolve(1)
-	got, ok := c.Get(42, 2)
+	got, ok := c.Get("42", 2)
 	if !ok || got != imgSecond {
 		t.Fatalf("Get did not return the in-order winner")
 	}
@@ -208,7 +208,7 @@ func TestPutLateResultIsDiscarded(t *testing.T) {
 	if !imgFirst.revoked.Load() {
 		t.Errorf("late-arriving first decode was not revoked")
 	}
-	got, ok = c.Get(42, 2)
+	got, ok = c.Get("42", 2)
 	if !ok || got != imgSecond {
 		t.Errorf("late decode displaced the in-order winner")
 	}
@@ -221,8 +221,8 @@ func TestPutLateResultIsDiscarded(t *testing.T) {
 func TestPutWithEmptyBytesIsNoOp(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, nil, nil)
-	c.Put(42, 1, []byte{}, nil)
+	c.Put("42", 1, nil, nil)
+	c.Put("42", 1, []byte{}, nil)
 	if d.pendingCount() != 0 {
 		t.Errorf("empty Put queued %d decodes; want 0", d.pendingCount())
 	}
@@ -234,18 +234,18 @@ func TestPutWithEmptyBytesIsNoOp(t *testing.T) {
 func TestPutDecodeErrorLeavesEntryUntouched(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, []byte("good"), nil)
+	c.Put("42", 1, []byte("good"), nil)
 	d.resolveAll()
 	// Get baseline image.
-	good, ok := c.Get(42, 1)
+	good, ok := c.Get("42", 1)
 	if !ok {
 		t.Fatal("setup: good Put didn't land")
 	}
 	// Now a Put whose decode will fail.
-	c.Put(42, 2, []byte("corrupt"), nil)
+	c.Put("42", 2, []byte("corrupt"), nil)
 	d.failNext(0)
 	// The good image must still be present (under blob 1).
-	got, ok := c.Get(42, 1)
+	got, ok := c.Get("42", 1)
 	if !ok || got != good {
 		t.Errorf("decode failure clobbered the prior good entry")
 	}
@@ -257,16 +257,16 @@ func TestPutDecodeErrorLeavesEntryUntouched(t *testing.T) {
 func TestDropRemovesEntry(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, []byte("x"), nil)
+	c.Put("42", 1, []byte("x"), nil)
 	imgs := d.resolveAll()
-	c.Drop(42)
+	c.Drop("42")
 	if !imgs[0].revoked.Load() {
 		t.Errorf("Drop did not revoke the image")
 	}
-	if _, ok := c.Get(42, 1); ok {
+	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get after Drop returned ok")
 	}
-	c.Drop(42) // must not panic
+	c.Drop("42") // must not panic
 }
 
 // TestMarkFetchingExcludesDuplicateCallers: the cache is also the
@@ -274,25 +274,25 @@ func TestDropRemovesEntry(t *testing.T) {
 // fetchers must collapse into one network request.
 func TestMarkFetchingExcludesDuplicateCallers(t *testing.T) {
 	c := NewCache(&fakeDecoder{})
-	if !c.MarkFetching(42) {
+	if !c.MarkFetching("42") {
 		t.Errorf("first MarkFetching returned false")
 	}
-	if c.MarkFetching(42) {
+	if c.MarkFetching("42") {
 		t.Errorf("second MarkFetching for same tile returned true; want false")
 	}
-	c.ClearFetching(42)
-	if !c.MarkFetching(42) {
+	c.ClearFetching("42")
+	if !c.MarkFetching("42") {
 		t.Errorf("MarkFetching after ClearFetching returned false")
 	}
-	c.ClearFetching(42)
-	c.ClearFetching(42) // must not panic
+	c.ClearFetching("42")
+	c.ClearFetching("42") // must not panic
 }
 
 // TestMarkFetchingIsPerTile: different tiles must not block each
 // other's fetches.
 func TestMarkFetchingIsPerTile(t *testing.T) {
 	c := NewCache(&fakeDecoder{})
-	if !c.MarkFetching(1) || !c.MarkFetching(2) {
+	if !c.MarkFetching("1") || !c.MarkFetching("2") {
 		t.Errorf("MarkFetching on distinct tiles refused the second")
 	}
 }
@@ -303,13 +303,13 @@ func TestMarkFetchingIsPerTile(t *testing.T) {
 func TestGetWhileDecodingReturnsNotOK(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, []byte("pending"), nil)
+	c.Put("42", 1, []byte("pending"), nil)
 	// Decode not yet resolved.
-	if _, ok := c.Get(42, 1); ok {
+	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get returned ok while decode was still pending")
 	}
 	d.resolveAll()
-	if _, ok := c.Get(42, 1); !ok {
+	if _, ok := c.Get("42", 1); !ok {
 		t.Errorf("Get missed after decode completed")
 	}
 }
@@ -320,10 +320,10 @@ func TestGetWhileDecodingReturnsNotOK(t *testing.T) {
 func TestRevokedImageReportsNotTruthyAndGetMisses(t *testing.T) {
 	d := &fakeDecoder{}
 	c := NewCache(d)
-	c.Put(42, 1, []byte("x"), nil)
+	c.Put("42", 1, []byte("x"), nil)
 	imgs := d.resolveAll()
 	imgs[0].Revoke()
-	if _, ok := c.Get(42, 1); ok {
+	if _, ok := c.Get("42", 1); ok {
 		t.Errorf("Get returned ok for a revoked image")
 	}
 }

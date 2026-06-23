@@ -71,18 +71,21 @@ func TestRawIsTheOnlyDropTarget(t *testing.T) {
 func TestHrefForTile(t *testing.T) {
 	cases := []struct {
 		origin string
-		id     int64
+		id     string
 		want   string
 	}{
-		{"", 5, "/5"},
-		{"http://localhost:8080", 5, "http://localhost:8080/5"},
-		{"http://localhost:8080/", 5, "http://localhost:8080/5"}, // trailing slash trimmed
-		{"https://gridwell.example.com", 12345, "https://gridwell.example.com/12345"},
+		{"", "5", "/5"},
+		{"http://localhost:8080", "5", "http://localhost:8080/5"},
+		{"http://localhost:8080/", "5", "http://localhost:8080/5"}, // trailing slash trimmed
+		{"https://gridwell.example.com", "12345", "https://gridwell.example.com/12345"},
+		// UUID-qualified IDs: prefix is stripped.
+		{"", "uuid-abc/5", "/5"},
+		{"http://localhost:8080", "uuid-abc/42", "http://localhost:8080/42"},
 	}
 	for _, tc := range cases {
 		got := HrefForTile(tc.origin, tc.id)
 		if got != tc.want {
-			t.Errorf("HrefForTile(%q,%d) = %q, want %q", tc.origin, tc.id, got, tc.want)
+			t.Errorf("HrefForTile(%q,%s) = %q, want %q", tc.origin, tc.id, got, tc.want)
 		}
 	}
 }
@@ -90,38 +93,38 @@ func TestHrefForTile(t *testing.T) {
 func TestLeafTileIDFromHref(t *testing.T) {
 	cases := []struct {
 		href string
-		want int64
+		want string
 	}{
-		{"/5", 5},
-		{"/3/4/5", 5}, // descent path → leaf
-		{"/12345", 12345},
+		{"/5", "5"},
+		{"/3/4/5", "5"}, // descent path → leaf
+		{"/12345", "12345"},
 		// Absolute URLs — the path component is what matters.
-		{"http://localhost:8080/5", 5},
-		{"http://localhost:8080/3/4/5", 5},
-		{"https://gridwell.example.com/42", 42},
-		{"", 0},
-		{"https://example.com", 0},      // external URL, no path
-		{"example.com/5", 0},             // missing leading slash and no scheme
-		{"#anchor", 0},
-		{"mailto:x@example.com", 0},
-		{"/notanumber", 0},
-		{"/", 0},
-		{"/0", 0}, // tile id must be positive
-		{"  /5  ", 5}, // trims whitespace
-		{"http://localhost:8080/path/notnumeric", 0},
+		{"http://localhost:8080/5", "5"},
+		{"http://localhost:8080/3/4/5", "5"},
+		{"https://gridwell.example.com/42", "42"},
+		{"", ""},
+		{"https://example.com", ""},     // external URL, no path
+		{"example.com/5", ""},           // missing leading slash and no scheme
+		{"#anchor", ""},
+		{"mailto:x@example.com", ""},
+		{"/notanumber", ""},
+		{"/", ""},
+		{"/0", ""},     // tile id must be positive
+		{"  /5  ", "5"}, // trims whitespace
+		{"http://localhost:8080/path/notnumeric", ""},
 		// Non-numeric LEAF must not be an embed even when an ancestor segment
 		// is numeric — the regression for external links being mis-classified.
-		{"/2024/recap", 0},
-		{"https://blog.example.com/2024/01/post", 0},
-		{"/page/3/comments", 0},
-		{"/5/", 5},      // trailing slash tolerated
-		{"/3/4/5?x=1", 5}, // query stripped
-		{"/-5", 0},      // negative leaf is not a tile id
+		{"/2024/recap", ""},
+		{"https://blog.example.com/2024/01/post", ""},
+		{"/page/3/comments", ""},
+		{"/5/", "5"},      // trailing slash tolerated
+		{"/3/4/5?x=1", "5"}, // query stripped
+		{"/-5", ""},      // negative leaf is not a tile id
 	}
 	for _, tc := range cases {
 		t.Run(tc.href, func(t *testing.T) {
 			if got := LeafTileIDFromHref(tc.href); got != tc.want {
-				t.Errorf("LeafTileIDFromHref(%q) = %d, want %d", tc.href, got, tc.want)
+				t.Errorf("LeafTileIDFromHref(%q) = %q, want %q", tc.href, got, tc.want)
 			}
 		})
 	}
@@ -130,26 +133,32 @@ func TestLeafTileIDFromHref(t *testing.T) {
 func TestMarkdown(t *testing.T) {
 	cases := []struct {
 		origin string
-		id     int64
+		id     string
 		alt    string
 		want   string
 	}{
-		{"", 5, "first heading", "[first heading](/5)"},
-		{"http://localhost:8080", 5, "Tab Title", "[Tab Title](http://localhost:8080/5)"},
-		{"http://localhost:8080", 5, "", "[](http://localhost:8080/5)"}, // empty alt allowed
+		{"", "5", "first heading", "[first heading](/5)"},
+		{"http://localhost:8080", "5", "Tab Title", "[Tab Title](http://localhost:8080/5)"},
+		{"http://localhost:8080", "5", "", "[](http://localhost:8080/5)"}, // empty alt allowed
+		// UUID-qualified: prefix stripped in link.
+		{"", "uuid-abc/5", "x", "[x](/5)"},
 	}
 	for _, tc := range cases {
 		got := Markdown(tc.origin, tc.id, tc.alt)
 		if got != tc.want {
-			t.Errorf("Markdown(%q,%d,%q) = %q, want %q",
+			t.Errorf("Markdown(%q,%s,%q) = %q, want %q",
 				tc.origin, tc.id, tc.alt, got, tc.want)
 		}
 	}
 }
 
 func TestDefaultAlt(t *testing.T) {
-	if got := DefaultAlt("text", 5); got != "text tile 5" {
+	if got := DefaultAlt("text", "5"); got != "text tile 5" {
 		t.Errorf("DefaultAlt = %q", got)
+	}
+	// UUID-qualified: prefix stripped in display.
+	if got := DefaultAlt("text", "uuid-abc/5"); got != "text tile 5" {
+		t.Errorf("DefaultAlt (qualified) = %q", got)
 	}
 }
 
@@ -289,22 +298,22 @@ func TestDecideTextareaSync(t *testing.T) {
 			// follow-up call seeds rather than re-clears.
 			name: "different tile, blob not cached → clear and advance",
 			in: TextareaSyncInput{
-				FocusedTileID: 7,
-				LastTileID:    4,
+				FocusedTileID: "7",
+				LastTileID:    "4",
 				CurrentValue:  "old content",
 				BlobCached:    false,
 			},
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "",
-				NewLastTileID: 7,
+				NewLastTileID: "7",
 			},
 		},
 		{
 			name: "different tile, blob cached → seed with content",
 			in: TextareaSyncInput{
-				FocusedTileID: 7,
-				LastTileID:    4,
+				FocusedTileID: "7",
+				LastTileID:    "4",
 				CurrentValue:  "old content",
 				BlobCached:    true,
 				BlobContent:   "tile 7 body",
@@ -312,14 +321,14 @@ func TestDecideTextareaSync(t *testing.T) {
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "tile 7 body",
-				NewLastTileID: 7,
+				NewLastTileID: "7",
 			},
 		},
 		{
-			name: "first focus (LastTileID 0), blob cached → seed",
+			name: `first focus (LastTileID ""), blob cached → seed`,
 			in: TextareaSyncInput{
-				FocusedTileID: 5,
-				LastTileID:    0,
+				FocusedTileID: "5",
+				LastTileID:    "",
 				CurrentValue:  "",
 				BlobCached:    true,
 				BlobContent:   "first focus body",
@@ -327,14 +336,14 @@ func TestDecideTextareaSync(t *testing.T) {
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "first focus body",
-				NewLastTileID: 5,
+				NewLastTileID: "5",
 			},
 		},
 		{
 			name: "same tile, textarea empty (post-toggle), blob cached → seed",
 			in: TextareaSyncInput{
-				FocusedTileID: 5,
-				LastTileID:    5,
+				FocusedTileID: "5",
+				LastTileID:    "5",
 				CurrentValue:  "",
 				BlobCached:    true,
 				BlobContent:   "tile 5 body",
@@ -342,41 +351,41 @@ func TestDecideTextareaSync(t *testing.T) {
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "tile 5 body",
-				NewLastTileID: 5,
+				NewLastTileID: "5",
 			},
 		},
 		{
 			name: "same tile, textarea non-empty → preserve typing",
 			in: TextareaSyncInput{
-				FocusedTileID: 5,
-				LastTileID:    5,
+				FocusedTileID: "5",
+				LastTileID:    "5",
 				CurrentValue:  "user just typed this",
 				BlobCached:    true,
 				BlobContent:   "stale cache content",
 			},
 			want: TextareaSyncDecision{
 				SetValue:      false,
-				NewLastTileID: 5,
+				NewLastTileID: "5",
 			},
 		},
 		{
 			name: "same tile, textarea empty, blob still loading → wait",
 			in: TextareaSyncInput{
-				FocusedTileID: 5,
-				LastTileID:    5,
+				FocusedTileID: "5",
+				LastTileID:    "5",
 				CurrentValue:  "",
 				BlobCached:    false,
 			},
 			want: TextareaSyncDecision{
 				SetValue:      false,
-				NewLastTileID: 5,
+				NewLastTileID: "5",
 			},
 		},
 		{
 			name: "different tile, blob cached but empty (fresh tile) → clear",
 			in: TextareaSyncInput{
-				FocusedTileID: 9,
-				LastTileID:    4,
+				FocusedTileID: "9",
+				LastTileID:    "4",
 				CurrentValue:  "previous content",
 				BlobCached:    true,
 				BlobContent:   "",
@@ -384,7 +393,7 @@ func TestDecideTextareaSync(t *testing.T) {
 			want: TextareaSyncDecision{
 				SetValue:      true,
 				Value:         "",
-				NewLastTileID: 9,
+				NewLastTileID: "9",
 			},
 		},
 	}
@@ -432,7 +441,7 @@ func TestInsertAtComputedOffset(t *testing.T) {
 	if off != len("# heading") {
 		t.Fatalf("offset = %d, want %d", off, len("# heading"))
 	}
-	link := Markdown("http://localhost:8080", 5, "first heading")
+	link := Markdown("http://localhost:8080", "5", "first heading")
 	got := Insert(src, link, off)
 	wantPrefix := "# heading [first heading](http://localhost:8080/5)"
 	if !strings.HasPrefix(got, wantPrefix) {
@@ -448,21 +457,21 @@ func TestInsertAtComputedOffset(t *testing.T) {
 func TestEmbedDescentAllowed(t *testing.T) {
 	cases := []struct {
 		name          string
-		hitTileID     int64
+		hitTileID     string
 		targetFound   bool
-		targetGridID  int64
-		currentGridID int64
+		targetGridID  string
+		currentGridID string
 		want          bool
 	}{
-		{"all gates pass", 5, true, 100, 100, true},
-		{"zero tile id rejected", 0, true, 100, 100, false},
-		{"target not found rejected", 5, false, 100, 100, false},
-		{"cross-grid target rejected", 5, true, 200, 100, false},
-		{"zero id beats found+same-grid", 0, true, 100, 100, false},
+		{"all gates pass", "5", true, "100", "100", true},
+		{"empty tile id rejected", "", true, "100", "100", false},
+		{"target not found rejected", "5", false, "100", "100", false},
+		{"cross-grid target rejected", "5", true, "200", "100", false},
+		{"empty id beats found+same-grid", "", true, "100", "100", false},
 	}
 	for _, c := range cases {
 		if got := EmbedDescentAllowed(c.hitTileID, c.targetFound, c.targetGridID, c.currentGridID); got != c.want {
-			t.Errorf("%s: EmbedDescentAllowed(%d,%v,%d,%d) = %v, want %v",
+			t.Errorf("%s: EmbedDescentAllowed(%q,%v,%q,%q) = %v, want %v",
 				c.name, c.hitTileID, c.targetFound, c.targetGridID, c.currentGridID, got, c.want)
 		}
 	}

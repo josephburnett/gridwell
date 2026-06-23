@@ -89,8 +89,8 @@ func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
 // share a lineage. Hiding by ObjectID therefore makes every clone of
 // the dragged tile vanish during the drag; hiding by row id keeps
 // each clone visible.
-func HiddenMatch(hiddenTileID int64, hiddenPaneID, currentPaneID string, tileID int64) bool {
-	return hiddenTileID != 0 && hiddenPaneID == currentPaneID && tileID == hiddenTileID
+func HiddenMatch(hiddenTileID string, hiddenPaneID, currentPaneID string, tileID string) bool {
+	return hiddenTileID != "" && hiddenPaneID == currentPaneID && tileID == hiddenTileID
 }
 
 // ChildPreview describes a well's child-grid preview as drawn inside
@@ -293,8 +293,8 @@ const (
 type DropInput struct {
 	Started    bool
 	IsTemplate bool
-	Clone      bool  // right-drag armed
-	TileID     int64 // 0 = pan / empty-space drag
+	Clone      bool   // right-drag armed
+	TileID     string // "" = pan / empty-space drag
 	OverDelete bool
 	OverDoc    bool
 	DocReject  bool
@@ -317,7 +317,7 @@ type DropInput struct {
 //
 //  1. !Started      → Navigate     (bare click beats everything)
 //  2. IsTemplate    → CreateTemplate
-//  3. TileID == 0   → PanEnd
+//  3. TileID == ""  → PanEnd
 //  4. OverDelete    → Delete
 //  5. OverDoc       → Embed
 //  6. DocReject     → Rejected      (read-only rendered doc)
@@ -332,7 +332,7 @@ func DecideDrop(in DropInput) DropAction {
 		return DropNavigate
 	case in.IsTemplate:
 		return DropCreateTemplate
-	case in.TileID == 0:
+	case in.TileID == "":
 		return DropPanEnd
 	case in.OverDelete:
 		return DropDelete

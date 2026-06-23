@@ -48,14 +48,14 @@ func (b viewBounds) toJS() js.Value {
 
 // bridgePlace asks main to create/attach a WebContentsView for paneID
 // showing url on the tile's persistent session partition, at bounds.
-func bridgePlace(paneID string, tileID int64, objectID, url string, b viewBounds) {
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds) {
 	g := bridge()
 	if !g.Truthy() {
 		return
 	}
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
-	args.Set("tileId", float64(tileID))
+	args.Set("tileId", tileID)
 	args.Set("objectId", objectID)
 	args.Set("url", url)
 	args.Set("bounds", b.toJS())
@@ -142,7 +142,7 @@ func (a *App) installWebviewListeners() {
 	}
 	onFrame := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
-		tileID := int64(ev.Get("tileId").Float())
+		tileID := jsString(ev.Get("tileId"))
 		jpeg := decodeBase64(ev.Get("jpegBase64"))
 		if len(jpeg) > 0 {
 			a.urlPreview.PutWildcard(tileID, jpeg, func() { a.draw() })
@@ -151,7 +151,7 @@ func (a *App) installWebviewListeners() {
 	})
 	onNav := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
-		tileID := int64(ev.Get("tileId").Float())
+		tileID := jsString(ev.Get("tileId"))
 		url := jsString(ev.Get("url"))
 		if url != "" {
 			a.updateCachedTileURL(tileID, url)

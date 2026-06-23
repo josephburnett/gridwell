@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"strconv"
+	"strings"
 	"syscall/js"
 	"time"
 
@@ -55,7 +56,8 @@ type App struct {
 	// served from. All server reads and mutations go through it.
 	cl *rpc.Client
 
-	rootGridID int64
+	rootGridID  string
+	localdbUUID string // UUID prefix extracted from rootGridID at bootstrap
 	// Seeded from Bootstrap and refreshed by scheduleRootViewSave.
 	// Used to restore the focused pane's initial framing on boot, and
 	// as the fallback target when ascending all the way back to root.
@@ -67,8 +69,8 @@ type App struct {
 
 	dragging *dragState
 
-	// Per-pane selection: paneID → node id (0 means nothing selected).
-	selectedTileID map[string]int64
+	// Per-pane selection: paneID → node id ("" means nothing selected).
+	selectedTileID map[string]string
 
 	// Plus-button popover state.
 	menuOpen   bool
@@ -78,27 +80,27 @@ type App struct {
 	// gridLoadFailed records grids whose last fetch returned non-200, so
 	// the renderer can show a meaningful message and we don't retry in
 	// a tight loop.
-	gridLoadFailed map[int64]bool
+	gridLoadFailed map[string]bool
 
 	// gridInflight tracks grid ids with a pending GetGrid request so
 	// repeated draws (which call fetchGrid on every cache miss) don't
 	// dogpile the server. Cleared in the fetch goroutine after the
 	// response lands.
-	gridInflight map[int64]bool
+	gridInflight map[string]bool
 
 	// ghost is the in-flight visual representation of a node being dragged
 	// or animated to/from somewhere. The dragged node renders here at
 	// sub-cell screen precision instead of at its stored cell position.
 	ghost *ghost
 
-	// hiddenTileID, when non-zero, suppresses rendering of the cached
+	// hiddenTileID, when non-empty, suppresses rendering of the cached
 	// tile row with this primary-key id in the named pane. Set on drag
 	// start so the dragged source doesn't paint underneath its own
 	// ghost. Matches the dragged ROW, not its ObjectID — a tile and
 	// any clones of it share an ObjectID, and the old by-ObjectID
 	// match made every clone vanish whenever its sibling was picked
 	// up. See dragdrop.HiddenMatch for the predicate + test.
-	hiddenTileID int64
+	hiddenTileID string
 	hiddenPaneID string
 
 	// previewPaneID is the pane currently being painted; set by
@@ -182,8 +184,8 @@ type App struct {
 	// probes so a rapid sequence of redraws doesn't fan out into
 	// many RPC calls. A missing key means "unknown" — the renderer
 	// kicks off a probe and hides the button until the result lands.
-	shellAlive        map[int64]bool
-	shellAliveProbing map[int64]bool
+	shellAlive        map[string]bool
+	shellAliveProbing map[string]bool
 
 	// fileTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
@@ -227,13 +229,13 @@ type App struct {
 
 	// lastTextareaTileID tracks which text-tile id the singleton
 	// textarea is currently bound to (i.e., whose blob it holds in its
-	// value). 0 means "bound to nothing" (textarea is hidden or never
+	// value). "" means "bound to nothing" (textarea is hidden or never
 	// seeded). refreshFileOverlay uses this to decide whether to re-seed
 	// from the cached blob on a focus shift: same tile → preserve typing,
 	// different tile → fresh content. Embed drops also consult it to
 	// push new content into the textarea when it's already bound to the
 	// drop target.
-	lastTextareaTileID int64
+	lastTextareaTileID string
 }
 
 // scheduler holds the App's debounce / requestAnimationFrame bookkeeping.
@@ -265,8 +267,8 @@ type scheduler struct {
 // originated from inside a text-tile, the text descent context to
 // restore on matching ascent.
 //
-// TextFocus == 0 means "the parent was a plain grid view" — the common
-// case. A non-zero TextFocus is set when descending out of a text tile
+// TextFocus == "" means "the parent was a plain grid view" — the common
+// case. A non-empty TextFocus is set when descending out of a text tile
 // (e.g. clicking a tile-embed); on ascent the saved TextMode and scroll
 // are reinstalled so a single ascent lands back in the doc rather than
 // in the grid behind it.
@@ -274,7 +276,7 @@ type paneState struct {
 	Cx          float64 `json:"cx"`
 	Cy          float64 `json:"cy"`
 	Zoom        float64 `json:"zoom"`
-	TextFocus   int64   `json:"text_focus,omitempty"`
+	TextFocus   string  `json:"text_focus,omitempty"`
 	TextMode    string  `json:"text_mode,omitempty"`
 	TextScrollX float64 `json:"text_scroll_x,omitempty"`
 	TextScrollY float64 `json:"text_scroll_y,omitempty"`
@@ -304,7 +306,7 @@ type paneTransition struct {
 }
 
 type transSegment struct {
-	path                     []int64
+	path                     []string
 	fromCx, fromCy, fromZoom float64
 	toCx, toCy, toZoom       float64
 	durationMs               float64
@@ -361,7 +363,7 @@ type ghost struct {
 // original position if the drop is rejected.
 type dragState struct {
 	originPaneID string
-	tileID       int64
+	tileID       string
 	cellOffsetX  float64
 	cellOffsetY  float64
 	startScreenX float64
@@ -390,8 +392,8 @@ type dragState struct {
 	// out of well" drags. Carried separately so the drop commit can
 	// build a MoveTile RPC with the right Path/grid id even when source
 	// and dest are different grids inside the same pane.
-	srcGridID   int64
-	srcPath     []int64
+	srcGridID   string
+	srcPath     []string
 	srcCellSize float64
 }
 
@@ -406,16 +408,16 @@ func main() {
 		win:               js.Global().Get("window"),
 		cl:                rpc.NewDefaultClient(origin),
 		c:                 cache.New(),
-		selectedTileID:    map[string]int64{},
+		selectedTileID:    map[string]string{},
 		menuHover:         -1,
-		gridLoadFailed:    map[int64]bool{},
-		gridInflight:      map[int64]bool{},
+		gridLoadFailed:    map[string]bool{},
+		gridInflight:      map[string]bool{},
 		paneStateStack:    map[string][]paneState{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		urlStreams:        map[string]*urlView{},
 		shellStreams:      map[string]*shellStreamConn{},
-		shellAlive:        map[int64]bool{},
-		shellAliveProbing: map[int64]bool{},
+		shellAlive:        map[string]bool{},
+		shellAliveProbing: map[string]bool{},
 		urlPanX:           map[string]float64{},
 		urlPanY:           map[string]float64{},
 	}
@@ -459,6 +461,9 @@ func (a *App) bootstrap() {
 		return
 	}
 	a.rootGridID = resp.RootGridID
+	if i := strings.IndexByte(a.rootGridID, '/'); i > 0 {
+		a.localdbUUID = a.rootGridID[:i]
+	}
 	a.rootViewCx = resp.RootViewCx
 	a.rootViewCy = resp.RootViewCy
 	a.rootViewZoom = resp.RootZoom
@@ -520,7 +525,10 @@ func (a *App) resize() {
 // id are deduped: drawNodeWithPreview fires fetchGrid on every cache miss
 // every frame, so without the guard a single descent into a parent of
 // many wells would dogpile the server.
-func (a *App) fetchGrid(id int64) {
+func (a *App) fetchGrid(id string) {
+	if id == "" {
+		return
+	}
 	if a.gridInflight[id] {
 		return
 	}
@@ -542,13 +550,6 @@ func (a *App) fetchGrid(id int64) {
 		a.c.PutGrid(resp.Grid, resp.Tiles)
 		a.draw()
 	}()
-}
-
-// parseGridID converts a ChildGridID string (plain decimal integer) to int64.
-// Invalid or empty strings return 0.
-func parseGridID(s string) int64 {
-	id, _ := strconv.ParseInt(s, 10, 64)
-	return id
 }
 
 // nowMs returns the current time in milliseconds since the epoch as
@@ -656,7 +657,7 @@ func (a *App) completeTransition() {
 		return
 	}
 	delete(a.selectedTileID, p.ID)
-	a.gridLoadFailed = map[int64]bool{}
+	a.gridLoadFailed = map[string]bool{}
 	a.fetchGrid(a.gridIDForPath(p.Path))
 	if tr.onComplete != nil {
 		tr.onComplete()
@@ -671,7 +672,7 @@ func (a *App) completeTransition() {
 func (a *App) animationDone() {
 	a.animation = nil
 	a.ghost = nil
-	a.hiddenTileID = 0
+	a.hiddenTileID = ""
 	a.hiddenPaneID = ""
 }
 
@@ -739,29 +740,29 @@ func (a *App) startSSE() {
 
 // gridIDForPath walks the pane's descent path and returns the grid id at the
 // leaf. Returns root if the path is empty or stale prefixes don't resolve.
-func (a *App) gridIDForPath(p []int64) int64 {
+func (a *App) gridIDForPath(p []string) string {
 	// The walk (follow each well's child grid, stop at a stale prefix) is the
 	// pure gridpath.ResolveLeafGrid; the closure does the cache read and kicks
 	// a background fetch on an uncached grid.
 	return gridpath.ResolveLeafGrid(a.rootGridID, p,
-		func(gid, wellID int64) (int64, bool, bool) {
+		func(gid, wellID string) (string, bool, bool) {
 			g, ok := a.c.Grid(gid)
 			if !ok {
 				a.fetchGrid(gid)
-				return 0, false, false
+				return "", false, false
 			}
 			w, ok := g.Tiles[wellID]
 			if !ok {
-				return 0, true, false
+				return "", true, false
 			}
-			return parseGridID(w.ChildGridID), true, true
+			return w.ChildGridID, true, true
 		})
 }
 
 // refetchGridOnConflict logs a 409 version-conflict and refetches the
 // affected grid so the cache catches up to the server's authoritative
 // version.
-func (a *App) refetchGridOnConflict(gridID int64, where string) {
+func (a *App) refetchGridOnConflict(gridID string, where string) {
 	js.Global().Get("console").Call("warn", "gridwell: version conflict on "+where+", refetching grid")
 	a.fetchGrid(gridID)
 }

@@ -26,7 +26,7 @@ type shellStreamConn struct {
 	canvasAdd js.Value // CanvasAddon — gives the terminal a single <canvas>
 	container js.Value // host <div> in the DOM
 
-	tileID int64
+	tileID string
 	paneID string
 
 	onMessage js.Func
@@ -54,7 +54,7 @@ func shellLog(format string, args ...any) {
 // gestures to PTY input forwarding (and to gate ascent on a freeze
 // capture).
 func (a *App) isShellDescent(p *pane.Pane) bool {
-	if p == nil || p.TextFocus == 0 {
+	if p == nil || p.TextFocus == "" {
 		return false
 	}
 	gid := a.gridIDForPath(p.Path)
@@ -107,7 +107,7 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 // probeShellSessionAlive fires ShellSessionAlive RPC for tileID,
 // caches the result, and triggers a redraw on completion. Idempotent:
 // short-circuits if a probe is already in flight.
-func (a *App) probeShellSessionAlive(tileID int64) {
+func (a *App) probeShellSessionAlive(tileID string) {
 	if a.shellAliveProbing[tileID] {
 		return
 	}
@@ -117,7 +117,7 @@ func (a *App) probeShellSessionAlive(tileID int64) {
 		// Probing flag clears regardless so a future probe can retry.
 		delete(a.shellAliveProbing, tileID)
 		if err != nil {
-			shellLog("ShellSessionAlive tile=%d err=%v", tileID, err)
+			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
 			return
 		}
 		a.shellAlive[tileID] = res.Alive
@@ -129,7 +129,7 @@ func (a *App) probeShellSessionAlive(tileID int64) {
 // when the wasm has firsthand knowledge: a successful WS attach
 // means the session IS alive; a WS rejection with PolicyViolation
 // means it ISN'T. Triggers a redraw.
-func (a *App) setShellAlive(tileID int64, alive bool) {
+func (a *App) setShellAlive(tileID string, alive bool) {
 	cur, ok := a.shellAlive[tileID]
 	a.shellAlive[tileID] = alive
 	if !ok || cur != alive {
@@ -141,7 +141,7 @@ func (a *App) setShellAlive(tileID int64, alive bool) {
 // the pane's content area, opens a WebSocket to /rpc/ShellStream, and
 // wires the two together. Idempotent: a second call for the same pane
 // closes the previous attachment first.
-func (a *App) openShellStream(p *pane.Pane, tileID int64) {
+func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	a.closeShellStream(p.ID)
 
 	doc := js.Global().Get("document")
@@ -233,9 +233,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 	cols := term.Get("cols").Int()
 	rows := term.Get("rows").Int()
 	wsURL := proto + "//" + host + "/rpc/ShellStream?tile_id=" +
-		strconv.FormatInt(tileID, 10) +
+		tileID +
 		"&cols=" + strconv.Itoa(cols) + "&rows=" + strconv.Itoa(rows)
-	shellLog("open pane=%s tile=%d url=%s cols=%d rows=%d", p.ID, tileID, wsURL, cols, rows)
+	shellLog("open pane=%s tile=%s url=%s cols=%d rows=%d", p.ID, tileID, wsURL, cols, rows)
 
 	ws := js.Global().Get("WebSocket").New(wsURL)
 	ws.Set("binaryType", "arraybuffer")
@@ -270,7 +270,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 	conn.onOpen = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		pending := conn.pending
 		conn.pending = nil
-		shellLog("onOpen pane=%s tile=%d flushing=%d", p.ID, tileID, len(pending))
+		shellLog("onOpen pane=%s tile=%s flushing=%d", p.ID, tileID, len(pending))
 		for _, q := range pending {
 			conn.ws.Call("send", q)
 		}
@@ -283,7 +283,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 			code = args[0].Get("code").Int()
 			reason = args[0].Get("reason").String()
 		}
-		shellLog("onClose pane=%s tile=%d code=%d reason=%q", p.ID, tileID, code, reason)
+		shellLog("onClose pane=%s tile=%s code=%d reason=%q", p.ID, tileID, code, reason)
 		// PolicyViolation (1008) is the server's definitive "session is
 		// gone" signal — flip the cache to dead so the refresh button
 		// hides. Any other close code (normal teardown, 1006 abnormal,
@@ -302,7 +302,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID int64) {
 		return nil
 	})
 	conn.onError = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		shellLog("onError pane=%s tile=%d readyState=%d", p.ID, tileID, conn.ws.Get("readyState").Int())
+		shellLog("onError pane=%s tile=%s readyState=%d", p.ID, tileID, conn.ws.Get("readyState").Int())
 		return nil
 	})
 
@@ -533,7 +533,7 @@ func snapshotShellCanvas(container js.Value) []byte {
 // JPEG. The previous tile version is needed for optimistic
 // concurrency; we look it up from the cache to avoid a synchronous
 // GetTile round-trip in the ascent path.
-func (a *App) postSetShellPreview(tileID int64, jpeg []byte) {
+func (a *App) postSetShellPreview(tileID string, jpeg []byte) {
 	// Find the tile in any cached grid.
 	var version int64
 	for _, gid := range a.c.KnownGridIDs() {
@@ -553,6 +553,6 @@ func (a *App) postSetShellPreview(tileID int64, jpeg []byte) {
 	}
 	_, err := a.cl.SetShellPreview(context.Background(), req)
 	if err != nil {
-		shellLog("SetShellPreview tile=%d err=%v", tileID, err)
+		shellLog("SetShellPreview tile=%s err=%v", tileID, err)
 	}
 }

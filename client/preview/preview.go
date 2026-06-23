@@ -42,8 +42,8 @@ type Cache struct {
 	dec Decoder
 
 	mu       sync.Mutex
-	entries  map[int64]*entry
-	fetching map[int64]bool
+	entries  map[string]*entry
+	fetching map[string]bool
 }
 
 // entry holds one tile's cached preview state.
@@ -72,8 +72,8 @@ const wildcardBlobID int64 = -1
 func NewCache(dec Decoder) *Cache {
 	return &Cache{
 		dec:      dec,
-		entries:  map[int64]*entry{},
-		fetching: map[int64]bool{},
+		entries:  map[string]*entry{},
+		fetching: map[string]bool{},
 	}
 }
 
@@ -87,7 +87,7 @@ func NewCache(dec Decoder) *Cache {
 // wantBlobID == 0 means the tile has no server-side preview; Get
 // always returns not-ok in that case so callers don't show a
 // possibly-stale cached image on a tile the server says is blank.
-func (c *Cache) Get(tileID, wantBlobID int64) (Image, bool) {
+func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 	if wantBlobID == 0 {
 		return nil, false
 	}
@@ -112,7 +112,7 @@ func (c *Cache) Get(tileID, wantBlobID int64) (Image, bool) {
 // entry is installed; it may be nil. If a newer Put for the same
 // tileID supersedes this one before decode finishes, the late
 // result is discarded and onReady is not called.
-func (c *Cache) Put(tileID, blobID int64, bytes []byte, onReady func()) {
+func (c *Cache) Put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	c.put(tileID, blobID, bytes, onReady)
 }
 
@@ -122,11 +122,11 @@ func (c *Cache) Put(tileID, blobID int64, bytes []byte, onReady func()) {
 // frame-by-frame WebSocket payload and the shell freeze snapshot.
 // The entry matches any non-zero wantBlobID in Get until a specific
 // Put supersedes it.
-func (c *Cache) PutWildcard(tileID int64, bytes []byte, onReady func()) {
+func (c *Cache) PutWildcard(tileID string, bytes []byte, onReady func()) {
 	c.put(tileID, wildcardBlobID, bytes, onReady)
 }
 
-func (c *Cache) put(tileID, blobID int64, bytes []byte, onReady func()) {
+func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	if len(bytes) == 0 {
 		return
 	}
@@ -174,7 +174,7 @@ func (c *Cache) put(tileID, blobID int64, bytes []byte, onReady func()) {
 
 // Drop removes the entry for tileID and revokes its image, if any.
 // Idempotent. Called when a tile is deleted.
-func (c *Cache) Drop(tileID int64) {
+func (c *Cache) Drop(tileID string) {
 	c.mu.Lock()
 	e, ok := c.entries[tileID]
 	if ok {
@@ -190,7 +190,7 @@ func (c *Cache) Drop(tileID int64) {
 // Returns false if a fetch was already in flight — callers must skip
 // the duplicate request. Pair with ClearFetching once the fetch
 // finishes (success or failure).
-func (c *Cache) MarkFetching(tileID int64) bool {
+func (c *Cache) MarkFetching(tileID string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.fetching[tileID] {
@@ -201,7 +201,7 @@ func (c *Cache) MarkFetching(tileID int64) bool {
 }
 
 // ClearFetching releases the in-flight slot for tileID. Idempotent.
-func (c *Cache) ClearFetching(tileID int64) {
+func (c *Cache) ClearFetching(tileID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.fetching, tileID)

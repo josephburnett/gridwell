@@ -23,7 +23,7 @@ import (
 // as descent path, viewport center in cells (sub-cell precision), and
 // zoom multiplier.
 type Endpoints struct {
-	Path    []int64
+	Path    []string
 	Cx, Cy  float64
 	Zoom    float64
 }
@@ -41,7 +41,7 @@ type Endpoints struct {
 // visited"; in that case the descent and preview fall back to the
 // PreviewFactor calibration.
 type Well struct {
-	ID       int64
+	ID       string
 	X, Y     int64
 	W, H     int64
 	ViewX    int64
@@ -245,7 +245,7 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 // child grid coords, then atomically switches to `to` in parent coords.
 // Same calibration rule as Descent, in reverse: at the switch the
 // child's rendered cell size matches the parent's preview cell size.
-func Ascent(from Endpoints, w Well, parentPath []int64, paneW, paneH, cellPx float64) (mid, to Endpoints) {
+func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx float64) (mid, to Endpoints) {
 	zPTarget := OvertakeZoom(w, paneW, paneH, cellPx)
 	// Mid-state child zoom: matches the preview cell size so the
 	// path-swap into the parent's preview is continuous (mirrors

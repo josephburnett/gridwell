@@ -26,8 +26,8 @@ import (
 type dropTarget struct {
 	pane     *pane.Pane
 	rect     pane.Rect
-	gridID   int64
-	path     []int64
+	gridID   string
+	path     []string
 	cellSize float64
 	originX  float64
 	originY  float64
@@ -103,12 +103,12 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 // well X around can't accidentally drop X into its own child grid
 // when the cursor is still on top of X. Pass d.tileID from the
 // dragState; it's a safe no-op when the source isn't a well.
-func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bool) {
+func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil, false
 	}
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		return nil, false
 	}
 	parentCell := cellPx * p.Zoom
@@ -138,7 +138,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID int64) (*dropTarget, bo
 		return &dropTarget{
 			pane:     p,
 			rect:     r,
-			gridID:   parseGridID(n.ChildGridID),
+			gridID:   n.ChildGridID,
 			path:     path,
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
@@ -170,7 +170,7 @@ func tileCopy(n *rpc.Tile) *rpc.Tile {
 // regular Gridwell-owned grid or an unknown grid id. Wraps the cache
 // lookup so callers can use the SourceKind comparison directly without
 // repeating the Meta-field dance.
-func (a *App) gridSourceKind(gridID int64) string {
+func (a *App) gridSourceKind(gridID string) string {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
 		return ""
@@ -217,7 +217,7 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *rpc.Tile, sx, s
 	if !rpc.IsWellKind(well.Kind) || well.ChildGridID == "" {
 		return nil
 	}
-	g, ok := a.c.Grid(parseGridID(well.ChildGridID))
+	g, ok := a.c.Grid(well.ChildGridID)
 	if !ok {
 		return nil
 	}

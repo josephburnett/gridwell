@@ -232,7 +232,7 @@ func previewImage(img preview.Image) (js.Value, bool) {
 // flight, or if a cached entry is already valid for blobID. blobID
 // is the tile's current PreviewBlobID — passed through so the cache
 // can detect a server-side update and re-fetch on the next call.
-func (a *App) fetchURLPreview(tileID, blobID int64) {
+func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if blobID == 0 {
 		return
 	}

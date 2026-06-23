@@ -6,8 +6,6 @@
 // `go test` coverage. A misstep here lands the user in the wrong grid.
 package urlwalk
 
-import "strconv"
-
 // Tile is the minimum a walk step needs to know about a tile: whether it
 // descends into a child grid (a well), whether it is a content leaf
 // (text/url), and — for a well — which grid it points at. The caller
@@ -23,11 +21,11 @@ type Tile struct {
 // necessary. It returns false when the grid can't be loaded — the walk
 // then stops where it is (a failed fetch never invents a path). It is
 // called for the root grid and for each well child grid descended into.
-type GridLookup func(gid int64) (tiles map[int64]Tile, ok bool)
+type GridLookup func(gid string) (tiles map[string]Tile, ok bool)
 
 // Walk resolves tileIDs against the grids reachable from rootGridID and
 // returns the descent path (well ids, in order) plus the trailing
-// file-tile id (0 if the leaf is a grid, not a content tile).
+// file-tile id ("" if the leaf is a grid, not a content tile).
 //
 // Rules (loose on input, by design — a bookmarked URL must degrade
 // gracefully as the canvas changes underneath it):
@@ -38,9 +36,9 @@ type GridLookup func(gid int64) (tiles map[int64]Tile, ok bool)
 //   - A content tile is accepted only as the LAST id; a content tile
 //     mid-path is nonsense and skipped.
 //   - A grid that fails to load ends the walk with what's resolved so far.
-func Walk(rootGridID int64, tileIDs []int64, lookup GridLookup) (path []int64, fileTileID int64) {
+func Walk(rootGridID string, tileIDs []string, lookup GridLookup) (path []string, fileTileID string) {
 	gid := rootGridID
-	path = []int64{}
+	path = []string{}
 	for i, id := range tileIDs {
 		isLast := i == len(tileIDs)-1
 		tiles, ok := lookup(gid)
@@ -56,7 +54,7 @@ func Walk(rootGridID int64, tileIDs []int64, lookup GridLookup) (path []int64, f
 		switch {
 		case t.IsWell:
 			path = append(path, id)
-			gid, _ = strconv.ParseInt(t.ChildGridID, 10, 64)
+			gid = t.ChildGridID
 		case t.IsContent:
 			if !isLast {
 				// Content tile mid-path is nonsense; ignore and keep walking.

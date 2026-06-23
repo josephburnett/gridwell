@@ -59,7 +59,7 @@ func logRPCError(label string, err error) {
 // (Connect status), so it is computed here and handed to clientsync.Classify,
 // which owns the pure decision. Returns true when err was nil (success), so
 // callers can early-out on failure.
-func (a *App) reactToErr(label string, gid int64, err error) bool {
+func (a *App) reactToErr(label string, gid string, err error) bool {
 	r := clientsync.Classify(err, isVersionConflict(err))
 	if r.Refetch {
 		a.refetchGridOnConflict(gid, label)
@@ -80,7 +80,7 @@ func (a *App) reactToErr(label string, gid int64, err error) bool {
 // refetch of the source grid (if version-conflict) and snaps the
 // dragged ghost back. `label` is the breadcrumb name for the
 // conflict log.
-func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID int64, call tileCall, d *dragState) {
+func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, call tileCall, d *dragState) {
 	go func() {
 		_, err := call(context.Background())
 		if err != nil {
@@ -97,7 +97,7 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID int64, call
 // patched the cache, the server-side write is the durable mirror. Used
 // by SetWellView, where the cache has already been updated
 // optimistically before the goroutine fires.
-func (a *App) postPersist(label string, gid int64, call tileCall) {
+func (a *App) postPersist(label string, gid string, call tileCall) {
 	go func() {
 		_, err := call(context.Background())
 		a.reactToErr(label, gid, err)
@@ -109,11 +109,11 @@ func (a *App) postPersist(label string, gid int64, call tileCall) {
 // a failed delete still needs the cache refreshed but there's no
 // ghost to roll back to. Skips the dstGrid refetch when it equals
 // srcGrid (delete onto a black hole in the same grid).
-func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID int64, call voidCall) {
+func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID string, call voidCall) {
 	go func() {
 		a.reactToErr(label, srcGridID, call(context.Background()))
 		a.fetchGrid(srcGridID)
-		if dstGridID != 0 && dstGridID != srcGridID {
+		if dstGridID != "" && dstGridID != srcGridID {
 			a.fetchGrid(dstGridID)
 		}
 	}()
@@ -124,7 +124,7 @@ func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID int64, call v
 // version-conflict it triggers a grid refetch. Returns the updated
 // tile and ok=true on success; ok=false on any failure (callers
 // should stop further work).
-func (a *App) postUpdateText(gid int64, req *rpc.UpdateTextRequest, newContent []byte) (rpc.Tile, bool) {
+func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent []byte) (rpc.Tile, bool) {
 	tile, err := a.cl.UpdateText(context.Background(), req)
 	if !a.reactToErr("UpdateText", gid, err) {
 		return rpc.Tile{}, false
@@ -139,7 +139,7 @@ func (a *App) postUpdateText(gid int64, req *rpc.UpdateTextRequest, newContent [
 // grid refetch so the cache catches up to the server's authoritative
 // tile state and returns the response tile. All "Create<X>",
 // "ResizeTile", "SetTextView" calls fit this shape.
-func (a *App) doTileMutate(label string, gid int64, call tileCall) (rpc.Tile, bool) {
+func (a *App) doTileMutate(label string, gid string, call tileCall) (rpc.Tile, bool) {
 	tile, err := call(context.Background())
 	if !a.reactToErr(label, gid, err) {
 		return rpc.Tile{}, false
@@ -150,7 +150,7 @@ func (a *App) doTileMutate(label string, gid int64, call tileCall) (rpc.Tile, bo
 
 // postTileMutate runs doTileMutate in a goroutine; onSuccess (if
 // non-nil) fires once the success-path refetch is scheduled.
-func (a *App) postTileMutate(label string, gid int64, call tileCall, onSuccess func(rpc.Tile)) {
+func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(rpc.Tile)) {
 	go func() {
 		if tile, ok := a.doTileMutate(label, gid, call); ok && onSuccess != nil {
 			onSuccess(tile)

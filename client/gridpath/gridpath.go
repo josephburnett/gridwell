@@ -10,15 +10,15 @@ package gridpath
 // returning the LAST good grid id — when lookup reports the current grid
 // isn't cached (gridCached=false) or a path id isn't a tile in it
 // (tileFound=false): a stale path prefix resolves as deep as it can and
-// never past a gap. Returns 0 when rootGridID is 0.
+// never past a gap. Returns "" when rootGridID is "".
 //
 // lookup(gid, wellID) returns the well's child grid id plus whether the grid
 // was cached and the tile found; the wasm caller does the cache read (and
 // may kick a background fetch on a miss) inside it.
-func ResolveLeafGrid(rootGridID int64, path []int64,
-	lookup func(gid, wellID int64) (childGridID int64, gridCached, tileFound bool)) int64 {
-	if rootGridID == 0 {
-		return 0
+func ResolveLeafGrid(rootGridID string, path []string,
+	lookup func(gid, wellID string) (childGridID string, gridCached, tileFound bool)) string {
+	if rootGridID == "" {
+		return ""
 	}
 	gid := rootGridID
 	for _, wellID := range path {

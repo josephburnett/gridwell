@@ -130,7 +130,7 @@ func (a *App) ensureFileTextarea() {
 		// textedit.ShouldDebouncedSaveFire — see there for why the
 		// last-bound check matters (the cross-tile stale-buffer regression).
 		var (
-			textFocus int64
+			textFocus string
 			textMode  bool
 		)
 		if p != nil {
@@ -169,7 +169,7 @@ func (a *App) ensureFileTextarea() {
 		// Mirror the browser scroll position onto the focused pane so
 		// SetTextView on ascent persists the right value.
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == 0 {
+		if p == nil || p.TextFocus == "" {
 			return nil
 		}
 		p.TextScrollY = a.fileTextarea.Get("scrollTop").Float()
@@ -224,7 +224,7 @@ func (a *App) ensureFileTextarea() {
 			return nil
 		}
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == 0 {
+		if p == nil || p.TextFocus == "" {
 			return nil
 		}
 		r := paneRectFor(a, p)
@@ -314,7 +314,7 @@ func (a *App) ensureFileToggle() {
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
 		p := a.tree.FocusedPane()
-		if p == nil || p.TextFocus == 0 {
+		if p == nil || p.TextFocus == "" {
 			return nil
 		}
 		// Right-click on the round button ascends, like every other corner
@@ -348,7 +348,7 @@ func (a *App) refreshFileToggle() {
 	hide := func() { style.Set("display", "none") }
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == 0 || a.isURLDescent(p) {
+	if p == nil || p.TextFocus == "" || a.isURLDescent(p) {
 		hide()
 		return
 	}
@@ -399,7 +399,7 @@ func (a *App) refreshFileOverlay() {
 	ta := a.fileTextarea
 
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
+	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
 		ta.Get("style").Set("display", "none")
 		// Move focus back to the canvas so ascent and other gestures
 		// continue to work.
@@ -482,7 +482,7 @@ func (a *App) syncFileOverlayPosition() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || p.TextFocus == 0 || p.TextMode != rpc.TextModeText {
+	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
 		a.fileTextarea.Get("style").Set("display", "none")
 		return
 	}
@@ -522,7 +522,7 @@ const fileSideInset = 6.0
 // rendered→text just shows the textarea (the buffer is the cached blob
 // from the last save).
 func (a *App) onToggleFileMode(p *pane.Pane) {
-	if p.TextFocus == 0 {
+	if p.TextFocus == "" {
 		return
 	}
 	// No editable mode for source-backed text — toggle would put us in

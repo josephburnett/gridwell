@@ -70,7 +70,7 @@ func ClassifyDocTarget(s PaneState) DocTarget {
 // its target tile — the three gates a leaf-swap descent must pass before
 // the wasm side stashes the doc context and dispatches the descent:
 //
-//   - hitTileID != 0   — the click resolved to a real embed reference.
+//   - hitTileID != ""  — the click resolved to a real embed reference.
 //   - targetFound       — a tile with that id exists in the cache.
 //   - same grid         — targetGridID == currentGridID. v1 only follows
 //     embeds whose target lives in the current descended grid;
@@ -79,8 +79,8 @@ func ClassifyDocTarget(s PaneState) DocTarget {
 //
 // Pure: the wasm caller resolves the inputs (findTileByID, gridIDForPath)
 // and performs the descent only when this returns true.
-func EmbedDescentAllowed(hitTileID int64, targetFound bool, targetGridID, currentGridID int64) bool {
-	if hitTileID == 0 || !targetFound {
+func EmbedDescentAllowed(hitTileID string, targetFound bool, targetGridID, currentGridID string) bool {
+	if hitTileID == "" || !targetFound {
 		return false
 	}
 	return targetGridID == currentGridID
@@ -90,8 +90,15 @@ func EmbedDescentAllowed(hitTileID int64, targetFound bool, targetGridID, curren
 // tile by id, anchored at `origin` (e.g., "http://localhost:8080") so
 // the link resolves when the doc is rendered outside Gridwell. An empty
 // origin produces a same-origin relative href ("/N").
-func HrefForTile(origin string, tileID int64) string {
-	leaf := "/" + strconv.FormatInt(tileID, 10)
+//
+// The plugin UUID prefix is stripped from qualified IDs (e.g. "uuid/42"
+// → "/42") so links remain human-readable; the client re-qualifies on read.
+func HrefForTile(origin string, tileID string) string {
+	seg := tileID
+	if i := strings.LastIndexByte(tileID, '/'); i >= 0 {
+		seg = tileID[i+1:]
+	}
+	leaf := "/" + seg
 	if origin == "" {
 		return leaf
 	}
@@ -104,7 +111,7 @@ func HrefForTile(origin string, tileID int64) string {
 //   - same-origin relative paths: "/5", "/3/4/5"
 //   - absolute URLs: "http://localhost:8080/5", "https://host/3/4/5"
 //
-// Returns 0 for anything else (external links, anchors, malformed input).
+// Returns "" for anything else (external links, anchors, malformed input).
 // Origin is not validated — a tile link is any URL whose path is a chain of
 // positive integers (tile row ids in descent order); the leaf is the last.
 //
@@ -114,31 +121,31 @@ func HrefForTile(origin string, tileID int64) string {
 // link with a non-numeric leaf must not be mistaken for an embed. Cross-origin
 // "false positives" (a foreign all-numeric path) remain possible but degrade
 // gracefully: if no tile with that id exists the embed renders as "missing".
-func LeafTileIDFromHref(href string) int64 {
+func LeafTileIDFromHref(href string) string {
 	href = strings.TrimSpace(href)
 	if href == "" {
-		return 0
+		return ""
 	}
 	// Reduce to the path component. Absolute URLs keep their path; relative
 	// hrefs ("/3/4/5", "/5?x=1") parse with an empty scheme and the path we
 	// want. A parse error, or a path that isn't rooted at "/", isn't a link.
 	u, err := url.Parse(href)
 	if err != nil {
-		return 0
+		return ""
 	}
 	if !strings.HasPrefix(u.Path, "/") {
-		return 0
+		return ""
 	}
-	var leaf int64
+	var leaf string
 	for seg := range strings.SplitSeq(strings.TrimPrefix(u.Path, "/"), "/") {
 		if seg == "" {
 			continue // tolerate a trailing (or doubled) slash
 		}
 		id, err := strconv.ParseInt(seg, 10, 64)
 		if err != nil || id <= 0 {
-			return 0
+			return ""
 		}
-		leaf = id
+		leaf = seg
 	}
 	return leaf
 }
@@ -155,7 +162,7 @@ func LeafTileIDFromHref(href string) int64 {
 // and there it broke without an absolute URL anyway. Plain link with
 // absolute origin degrades cleanly: working clickable link everywhere,
 // with a preview embed reserved for the inside-Gridwell view.
-func Markdown(origin string, tileID int64, alt string) string {
+func Markdown(origin string, tileID string, alt string) string {
 	return fmt.Sprintf("[%s](%s)", alt, HrefForTile(origin, tileID))
 }
 
@@ -163,8 +170,12 @@ func Markdown(origin string, tileID int64, alt string) string {
 // stored alt yet (a freshly-created text tile, a never-visited URL).
 // Should be replaced by the per-tile stored alt at insert time when
 // available.
-func DefaultAlt(kind string, tileID int64) string {
-	return fmt.Sprintf("%s tile %d", kind, tileID)
+func DefaultAlt(kind string, tileID string) string {
+	seg := tileID
+	if i := strings.LastIndexByte(tileID, '/'); i >= 0 {
+		seg = tileID[i+1:]
+	}
+	return fmt.Sprintf("%s tile %s", kind, seg)
 }
 
 // Insert places `link` into `src` at byte offset `off`, padding with
@@ -221,8 +232,8 @@ func LineEndOffset(src string, row int) int {
 // field), what the textarea is showing right now, and whether the
 // focused tile's blob is cached and what its content is.
 type TextareaSyncInput struct {
-	FocusedTileID int64
-	LastTileID    int64
+	FocusedTileID string
+	LastTileID    string
 	CurrentValue  string
 	BlobCached    bool
 	BlobContent   string
@@ -238,7 +249,7 @@ type TextareaSyncInput struct {
 type TextareaSyncDecision struct {
 	SetValue      bool
 	Value         string
-	NewLastTileID int64
+	NewLastTileID string
 }
 
 // DecideTextareaSync drives the textarea singleton's value across focus

@@ -19,7 +19,7 @@ import (
 // WebSocket streaming rod JPEGs); the map field is still named urlStreams so
 // the many liveness checks (a.urlStreams[p.ID] != nil) read unchanged.
 type urlView struct {
-	tileID   int64
+	tileID   string
 	objectID string
 	paneID   string
 	bounds   viewBounds
@@ -27,7 +27,7 @@ type urlView struct {
 	// captured when the view went live. The freeze (SetURLState) needs it
 	// to validate the edit lands in this tile's leaf grid (copy-on-clone:
 	// tiles are unshared, so the write is in-place — no fork).
-	path []int64
+	path []string
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -47,7 +47,7 @@ func contentViewBounds(r pane.Rect) viewBounds {
 }
 
 // urlTileForPane resolves the URL tile a pane is descended into.
-func (a *App) urlTileForPane(p *pane.Pane, tileID int64) (rpc.Tile, bool) {
+func (a *App) urlTileForPane(p *pane.Pane, tileID string) (rpc.Tile, bool) {
 	gid := a.gridIDForPath(p.Path)
 	g, ok := a.c.Grid(gid)
 	if !ok {
@@ -63,7 +63,7 @@ func (a *App) urlTileForPane(p *pane.Pane, tileID int64) (rpc.Tile, bool) {
 // urlTileVersion returns the cached version of the URL tile at (path,
 // tileID), or 0 if it isn't cached. Read at freeze time so SetURLState can
 // claim the right version for its in-place, versioned content edit.
-func (a *App) urlTileVersion(path []int64, tileID int64) int64 {
+func (a *App) urlTileVersion(path []string, tileID string) int64 {
 	g, ok := a.c.Grid(a.gridIDForPath(path))
 	if !ok {
 		return 0
@@ -79,7 +79,7 @@ func (a *App) urlTileVersion(path []int64, tileID int64) int64 {
 // the tile's persistent session partition. Bounds are computed from the
 // pane's current rect and kept in step by syncURLViews. No-op outside the
 // Electron shell.
-func (a *App) openURLStream(p *pane.Pane, tileID int64) {
+func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if !bridgeAvailable() {
 		urlLog("no bridge; live URL unavailable (not running in Electron shell)")
 		return
@@ -94,7 +94,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID int64) {
 		a.urlStreams = map[string]*urlView{}
 	}
 	a.urlStreams[p.ID] = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, path: slices.Clone(p.Path)}
-	urlLog("place pane=%s tile=%d obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
+	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
 	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b)
 	a.draw()
 }
@@ -110,7 +110,7 @@ func (a *App) closeURLStream(paneID string) {
 	delete(a.urlStreams, paneID)
 	tileID := v.tileID
 	path := slices.Clone(v.path)
-	urlLog("close pane=%s tile=%d", paneID, tileID)
+	urlLog("close pane=%s tile=%s", paneID, tileID)
 	bridgeRemove(paneID, func(jpeg []byte, url, title string) {
 		if len(jpeg) > 0 || url != "" || title != "" {
 			// Look up the tile's current version from cache so the freeze is
@@ -125,7 +125,7 @@ func (a *App) closeURLStream(paneID string) {
 					JPEG:    jpeg, URL: url, Title: title,
 				})
 				if err != nil {
-					urlLog("SetURLState tile=%d err=%v", tileID, err)
+					urlLog("SetURLState tile=%s err=%v", tileID, err)
 				}
 			}()
 		}
@@ -188,7 +188,7 @@ func (a *App) liveOverlaysHidden() bool {
 // tile. Drives the input handlers' branch between gridwell-native gestures
 // and (now-native) URL interaction.
 func (a *App) isURLDescent(p *pane.Pane) bool {
-	if p == nil || p.TextFocus == 0 {
+	if p == nil || p.TextFocus == "" {
 		return false
 	}
 	gid := a.gridIDForPath(p.Path)
@@ -205,7 +205,7 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 
 // updateCachedTileURL walks every cached grid and rewrites the URLString
 // field on a tile with the given id. Driven by nav events from the bridge.
-func (a *App) updateCachedTileURL(tileID int64, newURL string) {
+func (a *App) updateCachedTileURL(tileID string, newURL string) {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
 		if !ok {

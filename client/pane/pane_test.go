@@ -44,7 +44,7 @@ func TestNewTreeHasOneFocusedPane(t *testing.T) {
 func TestSplitHorizontalCreatesSibling(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
-	first.Path = []int64{1, 2, 3}
+	first.Path = []string{"1", "2", "3"}
 	first.Cx, first.Cy, first.Zoom = 10, 20, 2.0
 
 	newP, err := tr.Split(Horizontal)
@@ -65,8 +65,8 @@ func TestSplitHorizontalCreatesSibling(t *testing.T) {
 		t.Errorf("path not cloned: %+v", newP.Path)
 	}
 	// Mutating the original should not affect the clone (deep copy).
-	first.Path[0] = 99
-	if newP.Path[0] == 99 {
+	first.Path[0] = "99"
+	if newP.Path[0] == "99" {
 		t.Error("path was shallow-copied")
 	}
 }
@@ -163,24 +163,24 @@ func TestSetFocusUnknown(t *testing.T) {
 func TestCloneCarriesTextFields(t *testing.T) {
 	src := &Pane{
 		ID:          "p1",
-		Path:        []int64{1, 2},
+		Path:        []string{"1", "2"},
 		Cx:          3, Cy: 4, Zoom: 5,
-		TextFocus:   42,
+		TextFocus:   "42",
 		TextMode:    "text",
 		TextScrollX: 1.5,
 		TextScrollY: 7.25,
 		TextZoom:    1.1,
 	}
 	dst := src.Clone("p2")
-	if dst.TextFocus != 42 || dst.TextMode != "text" {
+	if dst.TextFocus != "42" || dst.TextMode != "text" {
 		t.Errorf("text focus/mode not cloned: %+v", dst)
 	}
 	if dst.TextScrollX != 1.5 || dst.TextScrollY != 7.25 || dst.TextZoom != 1.1 {
 		t.Errorf("text scroll/zoom not cloned: %+v", dst)
 	}
 	// And changing the source post-clone shouldn't bleed through.
-	src.TextFocus = 99
-	if dst.TextFocus == 99 {
+	src.TextFocus = "99"
+	if dst.TextFocus == "99" {
 		t.Error("clone shares TextFocus with source")
 	}
 }
@@ -188,7 +188,7 @@ func TestCloneCarriesTextFields(t *testing.T) {
 func TestSplitInheritsTextFields(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
-	first.TextFocus = 77
+	first.TextFocus = "77"
 	first.TextMode = "rendered"
 	first.TextScrollY = 12.5
 	first.TextZoom = 0.85
@@ -197,7 +197,7 @@ func TestSplitInheritsTextFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if newP.TextFocus != 77 || newP.TextMode != "rendered" {
+	if newP.TextFocus != "77" || newP.TextMode != "rendered" {
 		t.Errorf("text fields not inherited: %+v", newP)
 	}
 	if newP.TextScrollY != 12.5 || newP.TextZoom != 0.85 {

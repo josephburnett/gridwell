@@ -340,7 +340,7 @@ func (a *App) layoutMarkdown(src string, width float64, m markdown.Measure, styl
 // href, including the legacy image-in-link form), a real external image, or
 // flowing text — see markdown.ClassifyFunc.
 func classifyAtom(sp markdown.Span) markdown.AtomKind {
-	if embedpkg.LeafTileIDFromHref(sp.Href) != 0 {
+	if embedpkg.LeafTileIDFromHref(sp.Href) != "" {
 		return markdown.AtomEmbed
 	}
 	if sp.Style&markdown.StyleEmbed != 0 {

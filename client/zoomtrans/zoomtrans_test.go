@@ -42,7 +42,7 @@ func TestOvertakeZoomGuards(t *testing.T) {
 
 func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	from := Endpoints{Path: nil, Cx: 0, Cy: 0, Zoom: 1.0}
-	w := Well{ID: 7, X: 5, Y: 3, W: 1, H: 1, ViewX: 0, ViewY: 0}
+	w := Well{ID: "7", X: 5, Y: 3, W: 1, H: 1, ViewX: 0, ViewY: 0}
 	mid, swap, final := Descent(from, w, standardPaneW, standardPaneH, cellPx)
 
 	// Mid centers on well center; zoom is the overtake zoom (30 for the
@@ -56,7 +56,7 @@ func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	// Swap has new path with well appended; viewport on well's view
 	// region; zoom = mid.Zoom / PreviewFactor (legacy calibration check
 	// for the unvisited fallback).
-	if len(swap.Path) != 1 || swap.Path[0] != 7 {
+	if len(swap.Path) != 1 || swap.Path[0] != "7" {
 		t.Errorf("swap path = %v", swap.Path)
 	}
 	if !near(swap.Cx, 0.5) || !near(swap.Cy, 0.5) {
@@ -78,7 +78,7 @@ func TestDescentFinalReconstructsLiveZoom(t *testing.T) {
 	// Property: final.Zoom = ViewZoom × Overtake, for any from.Zoom
 	// (including past Overtake — final still reconstructs the saved live
 	// zoom, while swap.Zoom may differ for continuity).
-	w := Well{ID: 1, W: 3, H: 2, ViewZoom: 0.671}
+	w := Well{ID: "1", W: 3, H: 2, ViewZoom: 0.671}
 	overtake := OvertakeZoom(w, standardPaneW, standardPaneH, cellPx)
 	wantLive := 0.671 * overtake
 	for _, fromZoom := range []float64{0.5, 1.0, overtake, overtake * 2, 100} {
@@ -102,19 +102,19 @@ func TestDescentNeverZoomsOut(t *testing.T) {
 }
 
 func TestDescentDoesNotShareSlice(t *testing.T) {
-	from := Endpoints{Path: []int64{1, 2, 3}, Zoom: 1}
-	w := Well{ID: 9}
+	from := Endpoints{Path: []string{"1", "2", "3"}, Zoom: 1}
+	w := Well{ID: "9"}
 	_, swap, _ := Descent(from, w, 100, 100, cellPx)
-	swap.Path[0] = 999
-	if from.Path[0] == 999 {
+	swap.Path[0] = "999"
+	if from.Path[0] == "999" {
 		t.Error("Descent shared the path slice")
 	}
 }
 
 func TestAscentNeverZoomsIn(t *testing.T) {
 	// Caller is already at a tiny zoom; ascent must not zoom in.
-	from := Endpoints{Path: []int64{42}, Zoom: 0.5}
-	w := Well{ID: 42, W: 1, H: 1, ViewX: 1, ViewY: 1}
+	from := Endpoints{Path: []string{"42"}, Zoom: 0.5}
+	w := Well{ID: "42", W: 1, H: 1, ViewX: 1, ViewY: 1}
 	mid, _ := Ascent(from, w, nil, standardPaneW, standardPaneH, cellPx)
 	if mid.Zoom > from.Zoom {
 		t.Errorf("mid.Zoom = %v, want <= %v", mid.Zoom, from.Zoom)
@@ -125,8 +125,8 @@ func TestAscentSwitchContinuity(t *testing.T) {
 	// At the switch: child cell = cellPx * mid.Zoom; preview cell =
 	// cellPx * to.Zoom / PreviewFactor. Equal => to.Zoom = mid.Zoom *
 	// PreviewFactor.
-	from := Endpoints{Path: []int64{42}, Zoom: 5.0}
-	w := Well{ID: 42, X: 1, Y: 2, W: 2, H: 1, ViewX: 0, ViewY: 0}
+	from := Endpoints{Path: []string{"42"}, Zoom: 5.0}
+	w := Well{ID: "42", X: 1, Y: 2, W: 2, H: 1, ViewX: 0, ViewY: 0}
 	mid, to := Ascent(from, w, nil, standardPaneW, standardPaneH, cellPx)
 	if !near(to.Zoom, mid.Zoom*PreviewFactor) {
 		t.Errorf("to.Zoom = %v, mid.Zoom*PreviewFactor = %v", to.Zoom, mid.Zoom*PreviewFactor)
@@ -229,7 +229,7 @@ func TestWellRoundTripSamePane(t *testing.T) {
 	// the bug fix landed on (`final.Zoom = ViewZoom × Overtake`) and
 	// edge cases (very small / very large live zoom).
 	for _, L0 := range []float64{0.5, 1.0, 2.98, 10.0, 50.0} {
-		w := Well{ID: 1, W: 3, H: 2}
+		w := Well{ID: "1", W: 3, H: 2}
 
 		// Ascend: save the intrinsic ratio that lives on the well.
 		overtake := OvertakeZoom(w, standardPaneW, standardPaneH, cellPx)
@@ -253,7 +253,7 @@ func TestWellRoundTripAcrossPaneResize(t *testing.T) {
 	// must be invariant. That's the pane-independent property the
 	// intrinsic-ratio model exists to guarantee.
 	for _, L0 := range []float64{1.0, 2.98, 7.5} {
-		w := Well{ID: 1, W: 3, H: 2}
+		w := Well{ID: "1", W: 3, H: 2}
 		// Ascent in pane A.
 		ot1 := OvertakeZoom(w, standardPaneW, standardPaneH, cellPx)
 		w.ViewZoom = IntrinsicFromLive(L0, ot1)
@@ -288,7 +288,7 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 	// tests the populated-ratio path.
 	from := Endpoints{Zoom: 1}
 	for _, vz := range []float64{0.1, 0.25, 0.671, 1.0, 3.0} {
-		w := Well{ID: 1, W: 3, H: 2, ViewZoom: vz}
+		w := Well{ID: "1", W: 3, H: 2, ViewZoom: vz}
 		overtake := OvertakeZoom(w, standardPaneW, standardPaneH, cellPx)
 		_, swap, _ := Descent(from, w, standardPaneW, standardPaneH, cellPx)
 		// Just-before-swap parent zoom is the mid (= overtake when
@@ -420,9 +420,9 @@ func TestAscentMidContinuityForIntrinsicRatio(t *testing.T) {
 	// at the switch, the just-before child cell equals the just-after
 	// preview cell. Equivalent: mid.Zoom = ViewZoom × overtake.
 	for _, vz := range []float64{0.25, 0.671, 1.0, 3.0} {
-		w := Well{ID: 1, W: 3, H: 2, ViewZoom: vz}
+		w := Well{ID: "1", W: 3, H: 2, ViewZoom: vz}
 		overtake := OvertakeZoom(w, standardPaneW, standardPaneH, cellPx)
-		from := Endpoints{Path: []int64{1}, Zoom: vz * overtake}
+		from := Endpoints{Path: []string{"1"}, Zoom: vz * overtake}
 		mid, _ := Ascent(from, w, nil, standardPaneW, standardPaneH, cellPx)
 		want := vz * overtake
 		// Note: Ascent caps mid.Zoom at from.Zoom, so we expect equality.

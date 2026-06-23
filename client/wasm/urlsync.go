@@ -31,7 +31,7 @@ func (a *App) scheduleRootViewSave() {
 	if a.sched.rootViewSaveScheduled {
 		return
 	}
-	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.TextFocus != 0 {
+	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.TextFocus != "" {
 		return
 	}
 	a.sched.rootViewSaveScheduled = true
@@ -41,11 +41,11 @@ func (a *App) scheduleRootViewSave() {
 // flushRootViewSave reads the focused pane's viewport and posts
 // SetRootView. Triggered by the debounce timer; safe to call manually.
 func (a *App) flushRootViewSave() {
-	if a.rootGridID == 0 {
+	if a.rootGridID == "" {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || len(p.Path) > 0 || p.TextFocus != 0 {
+	if p == nil || len(p.Path) > 0 || p.TextFocus != "" {
 		return
 	}
 	zoom := p.Zoom
@@ -76,7 +76,7 @@ func (a *App) scheduleURLUpdate() {
 // history.replaceState. Idempotent; safe even when no user change has
 // happened.
 func (a *App) replaceURLNow() {
-	if a.rootGridID == 0 {
+	if a.rootGridID == "" {
 		return
 	}
 	state := a.encodeFocusedPaneURL()
@@ -93,7 +93,7 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	if p == nil {
 		return url.State{}
 	}
-	if p.TextFocus != 0 {
+	if p.TextFocus != "" {
 		isText := p.TextMode == rpc.TextModeText
 		var col, row int
 		if isText {
@@ -164,14 +164,14 @@ func (a *App) applyURLOnBoot() {
 	// the cache-or-fetch). The pure walk skips ids missing from the current
 	// grid, descends at well boundaries, and stops at a content leaf.
 	resolvedPath, fileTileID := urlwalk.Walk(rootID, state.TileIDs,
-		func(gid int64) (map[int64]urlwalk.Tile, bool) {
+		func(gid string) (map[string]urlwalk.Tile, bool) {
 			if _, ok := a.c.Grid(gid); !ok {
 				if !a.fetchGridSync(gid) {
 					return nil, false
 				}
 			}
 			g, _ := a.c.Grid(gid)
-			tiles := make(map[int64]urlwalk.Tile, len(g.Tiles))
+			tiles := make(map[string]urlwalk.Tile, len(g.Tiles))
 			for id, n := range g.Tiles {
 				tiles[id] = urlwalk.Tile{
 					ChildGridID: n.ChildGridID,
@@ -187,7 +187,7 @@ func (a *App) applyURLOnBoot() {
 		return
 	}
 	p.Path = resolvedPath
-	if fileTileID != 0 {
+	if fileTileID != "" {
 		p.TextFocus = fileTileID
 		// Mode follows the tile's persisted text_mode; a URL that encodes
 		// a text cursor forces text mode. Scale is fixed; scroll restores
@@ -223,7 +223,7 @@ func (a *App) applyURLOnBoot() {
 // cachedFile returns the file tile at the leaf of `path` with id
 // tileID, if cached. Used during URL boot to honor a previously
 // stored ViewZoom before the blob arrives.
-func (a *App) cachedFile(path []int64, tileID int64) (rpc.Tile, bool) {
+func (a *App) cachedFile(path []string, tileID string) (rpc.Tile, bool) {
 	gid := a.gridIDForPath(path)
 	g, ok := a.c.Grid(gid)
 	if !ok {
@@ -236,7 +236,7 @@ func (a *App) cachedFile(path []int64, tileID int64) (rpc.Tile, bool) {
 // fetchGridSync fetches a grid and waits for the result. Returns true
 // on success. Used during URL walk where we need the cache populated
 // before continuing the walk.
-func (a *App) fetchGridSync(id int64) bool {
+func (a *App) fetchGridSync(id string) bool {
 	if a.gridLoadFailed[id] {
 		return false
 	}
@@ -256,7 +256,7 @@ func (a *App) fetchGridSync(id int64) bool {
 // fetchBlobAndSetCursor pulls the file's bytes and, once they're in
 // the cache, places the cursor at (state.Col, state.Row) inside the
 // textarea. Asynchronous because GetBlob is over the wire.
-func (a *App) fetchBlobAndSetCursor(fileTileID int64, state url.State) {
+func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
 	gid := a.gridIDForPath(a.tree.FocusedPane().Path)
 	g, ok := a.c.Grid(gid)
 	if !ok {

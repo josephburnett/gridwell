@@ -18,7 +18,7 @@ type embedHit struct {
 	x, y   float64
 	w, h   float64
 	href   string
-	tileID int64 // resolved leaf tile id; 0 if href didn't parse or target missing
+	tileID string // resolved leaf tile id; "" if href didn't parse or target missing
 }
 
 // embedDrawer paints a single tile-embed at the given screen rect and
@@ -42,7 +42,7 @@ func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
 	return func(x, y, w, h float64, href, alt string) {
 		tileID := embed.LeafTileIDFromHref(href)
 		var tile *rpc.Tile
-		if tileID != 0 {
+		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
 		a.drawEmbedAt(x, y, w, h, tile, alt)
@@ -67,7 +67,7 @@ func (a *App) makePreviewEmbedDrawer() embedDrawer {
 	return func(x, y, w, h float64, href, alt string) {
 		tileID := embed.LeafTileIDFromHref(href)
 		var tile *rpc.Tile
-		if tileID != 0 {
+		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
 		a.drawEmbedAt(x, y, w, h, tile, alt)
@@ -139,7 +139,7 @@ func drawEmbedLabel(c js.Value, text string, x, y, w, h float64) {
 
 // findTileByID walks the client tile cache for any cached row with the
 // given id. Used to resolve embed hrefs.
-func (a *App) findTileByID(id int64) *rpc.Tile {
+func (a *App) findTileByID(id string) *rpc.Tile {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
 		if !ok {
@@ -169,7 +169,7 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 		return false
 	}
 	target := a.findTileByID(hit.tileID)
-	var targetGridID int64
+	var targetGridID string
 	if target != nil {
 		targetGridID = target.GridID
 	}
@@ -187,7 +187,7 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	savedMode := p.TextMode
 	savedScrollX := p.TextScrollX
 	savedScrollY := p.TextScrollY
-	p.TextFocus = 0
+	p.TextFocus = ""
 	p.TextMode = ""
 	a.refreshFileOverlay()
 	if rpc.IsWellKind(target.Kind) {
