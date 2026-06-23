@@ -229,3 +229,63 @@ func TestSetRootView_RoundTrip(t *testing.T) {
 		t.Errorf("got cx=%v cy=%v zoom=%v, want 100 200 1.5", boot.RootViewCx, boot.RootViewCy, boot.RootZoom)
 	}
 }
+
+// TestCreateWell_InteriorVsExit: CreateWell with no child_grid_id allocates an
+// interior child grid; with a qualified child_grid_id it stores a cross-plugin
+// exit well pointing at that grid (no interior grid, the reference verbatim).
+func TestCreateWell_InteriorVsExit(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	root, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	interior, err := p.CreateWell(ctx, &gridwellv1.CreateWellRequest{
+		GridId: root.RootGridId, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("interior CreateWell: %v", err)
+	}
+	if interior.Tile.ChildGridId == "" || interior.Tile.ChildGridId == "0" {
+		t.Errorf("interior well child = %q, want a fresh local grid", interior.Tile.ChildGridId)
+	}
+
+	exit, err := p.CreateWell(ctx, &gridwellv1.CreateWellRequest{
+		GridId: root.RootGridId, X: 2, Y: 0, W: 1, H: 1,
+		ChildGridId: "other-plugin-uuid/9", Label: "mounted",
+	})
+	if err != nil {
+		t.Fatalf("exit CreateWell: %v", err)
+	}
+	if exit.Tile.ChildGridId != "other-plugin-uuid/9" {
+		t.Errorf("exit well child = %q, want verbatim cross-plugin ref", exit.Tile.ChildGridId)
+	}
+	if exit.Tile.AltText != "mounted" {
+		t.Errorf("exit well label = %q, want mounted", exit.Tile.AltText)
+	}
+}
+
+// TestGetTileContent_ReturnsBody: a text tile's body is fetched through the
+// plugin (delegating to the store's blob).
+func TestGetTileContent_ReturnsBody(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	root, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt, err := p.CreateText(ctx, &gridwellv1.CreateTextRequest{
+		GridId: root.RootGridId, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
+	})
+	if err != nil {
+		t.Fatalf("CreateText: %v", err)
+	}
+	resp, err := p.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: txt.Tile.Id})
+	if err != nil {
+		t.Fatalf("GetTileContent: %v", err)
+	}
+	if string(resp.Data) != "# hello" {
+		t.Errorf("content = %q, want %q", resp.Data, "# hello")
+	}
+}

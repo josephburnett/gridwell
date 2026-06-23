@@ -139,10 +139,33 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
 
+// GetTileContent returns a text tile's stored body bytes (the markdown source).
+func (p *Plugin) GetTileContent(ctx context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
+	tile, err := p.st.GetTile(ctx, req.TileId)
+	if err != nil {
+		return nil, err
+	}
+	if tile.BlobID == 0 {
+		return &gridwellv1.GetTileContentResponse{}, nil
+	}
+	data, err := p.st.GetBlob(ctx, tile.BlobID)
+	if err != nil {
+		return nil, err
+	}
+	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: "text/markdown"}, nil
+}
+
 // ── Creates ──────────────────────────────────────────────────────────────────
 
 func (p *Plugin) CreateWell(ctx context.Context, req *gridwellv1.CreateWellRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CreateWell(ctx, rpc.CreateWellFromProto(req)))
+	r := rpc.CreateWellFromProto(req)
+	// child_grid_id set → an exit well pointing at a grid owned by another
+	// plugin (e.g. a mounted second DB, or an fs/proc grid). No interior child
+	// grid is allocated; the cross-plugin reference is stored verbatim.
+	if req.ChildGridId != "" {
+		return tileResp(p.st.CreateExitWell(ctx, r.Path, r.GridID, r.X, r.Y, r.W, r.H, req.ChildGridId, req.Label))
+	}
+	return tileResp(p.st.CreateWell(ctx, r))
 }
 
 func (p *Plugin) CreateText(ctx context.Context, req *gridwellv1.CreateTextRequest) (*gridwellv1.TileResponse, error) {

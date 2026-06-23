@@ -1915,13 +1915,20 @@ func (x *TileResponse) GetTile() *Tile {
 }
 
 type CreateWellRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	GridId        string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	X             int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
-	Y             int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
-	W             int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
-	H             int64                  `protobuf:"varint,6,opt,name=h,proto3" json:"h,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Path   *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	GridId string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	X      int64                  `protobuf:"varint,3,opt,name=x,proto3" json:"x,omitempty"`
+	Y      int64                  `protobuf:"varint,4,opt,name=y,proto3" json:"y,omitempty"`
+	W      int64                  `protobuf:"varint,5,opt,name=w,proto3" json:"w,omitempty"`
+	H      int64                  `protobuf:"varint,6,opt,name=h,proto3" json:"h,omitempty"`
+	// child_grid_id, when set, makes this an exit well pointing at an existing
+	// grid in another plugin (a qualified "<plugin-uuid>/<grid-id>"): no interior
+	// child grid is allocated. Empty → an ordinary interior well with a fresh
+	// child grid. label is the display name for an exit well (the mounted
+	// plugin's Attach label); ignored for interior wells.
+	ChildGridId   string `protobuf:"bytes,7,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
+	Label         string `protobuf:"bytes,8,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1996,6 +2003,20 @@ func (x *CreateWellRequest) GetH() int64 {
 		return x.H
 	}
 	return 0
+}
+
+func (x *CreateWellRequest) GetChildGridId() string {
+	if x != nil {
+		return x.ChildGridId
+	}
+	return ""
+}
+
+func (x *CreateWellRequest) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
 }
 
 type CreateTextRequest struct {
@@ -3844,14 +3865,16 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\"5\n" +
 	"\fTileResponse\x12%\n" +
-	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\x8b\x01\n" +
+	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\xc5\x01\n" +
 	"\x11CreateWellRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
 	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x05 \x01(\x03R\x01w\x12\f\n" +
-	"\x01h\x18\x06 \x01(\x03R\x01h\"\x9f\x01\n" +
+	"\x01h\x18\x06 \x01(\x03R\x01h\x12\"\n" +
+	"\rchild_grid_id\x18\a \x01(\tR\vchildGridId\x12\x14\n" +
+	"\x05label\x18\b \x01(\tR\x05label\"\x9f\x01\n" +
 	"\x11CreateTextRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
 	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12\f\n" +

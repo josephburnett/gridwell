@@ -230,6 +230,13 @@ message CreateWellRequest {
   int64 y = 4;
   int64 w = 5;
   int64 h = 6;
+  // child_grid_id, when set, makes this an exit well pointing at an existing
+  // grid in another plugin (a qualified "<plugin-uuid>/<grid-id>"): no interior
+  // child grid is allocated. Empty → an ordinary interior well with a fresh
+  // child grid. label is the display name for an exit well (the mounted
+  // plugin's Attach label); ignored for interior wells.
+  string child_grid_id = 7;
+  string label = 8;
 }
 
 message CreateTextRequest {
