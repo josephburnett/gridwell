@@ -40,16 +40,14 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 
 	hideForTextarea := mode == rpc.TextModeText && p.ID == a.tree.Focus
 	if !hideForTextarea {
-		if blob, ok := a.c.Blob(n.BlobID); ok {
-			a.drawMarkdownInRect(string(blob),
+		if body, ok := a.tileBody(n); ok {
+			a.drawMarkdownInRect(string(body),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
 				scale, mode, a.makeEmbedDrawer(p.ID))
-		} else if n.BlobID != 0 {
-			a.fetchBlob(n.BlobID)
 		}
-	} else if _, ok := a.c.Blob(n.BlobID); !ok && n.BlobID != 0 {
-		a.fetchBlob(n.BlobID)
+	} else {
+		a.tileBody(n) // warm the cache so the textarea has content when shown
 	}
 
 	a.cctx.Call("restore")
@@ -93,16 +91,14 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 
 	hideForTextarea := fp != nil && fp.TextMode == rpc.TextModeText && fp.ID == a.tree.Focus
 	if !hideForTextarea {
-		if blob, ok := a.c.Blob(n.BlobID); ok {
-			a.drawMarkdownInRect(string(blob),
+		if body, ok := a.tileBody(n); ok {
+			a.drawMarkdownInRect(string(body),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
 				scale, mode, a.makePreviewEmbedDrawer())
-		} else if n.BlobID != 0 {
-			a.fetchBlob(n.BlobID)
 		}
-	} else if _, ok := a.c.Blob(n.BlobID); !ok && n.BlobID != 0 {
-		a.fetchBlob(n.BlobID)
+	} else {
+		a.tileBody(n) // warm the cache so the textarea has content when shown
 	}
 
 	a.cctx.Call("restore")

@@ -84,9 +84,9 @@ const (
 	// confirming "release here deletes".
 	colorPlusBgDelete = "#6e2b22"
 	colorPlusFg       = "#c8c9ce"
-	colorMenuBg        = "#16181f"
-	colorMenuItemHi    = "#e8e9ee"
-	colorMuted         = "#6c6f78"
+	colorMenuBg       = "#16181f"
+	colorMenuItemHi   = "#e8e9ee"
+	colorMuted        = "#6c6f78"
 	// Inline-markdown body colors used by the rendered-markdown
 	// drawing path (drawInlineLines, drawMarkdownRendered).
 	colorMarkdownBody    = "#d8d9de"
@@ -560,7 +560,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	}
-	if n.Kind != rpc.KindWell && n.Kind != rpc.KindFileWell && n.Kind != rpc.KindProcessWell {
+	if n.Kind != rpc.KindWell {
 		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx)
 		return
 	}
@@ -601,7 +601,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	wellCenterY := y + h/2
 	originX := wellCenterX - viewCenterX*previewCell
 	originY := wellCenterY - viewCenterY*previewCell
-	drawGridLinesIn(a.cctx, wellGridLineColor(n.Kind), x, y, w, h, previewCell, originX, originY)
+	drawGridLinesIn(a.cctx, wellGridLineColor(n), x, y, w, h, previewCell, originX, originY)
 
 	if haveChild && previewCell >= 0.5 {
 		var hide string
@@ -613,15 +613,15 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	}
 	a.cctx.Call("restore")
 
-	// Outline: blue for interior wells, red for exit-wells (file-well /
-	// process-well). The kind drives the color so the color grammar
-	// is consistent whether the user sees the tile as a preview or
-	// descends into it (where the same kind drives the pane border).
+	// Outline: blue for interior wells, red for exit-wells (whose child grid
+	// lives in another plugin). The child-grid uuid drives the color so the
+	// grammar is consistent whether the user sees the tile as a preview or
+	// descends into it (where the same distinction drives the pane border).
 	// Dashed when this well is a link in a regular grid (see isLinkTile).
 	if dashed {
 		setTileDash(a.cctx)
 	}
-	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n.Kind), tileBorderPx)
+	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n), tileBorderPx)
 	if dashed {
 		clearTileDash(a.cctx)
 	}
@@ -634,22 +634,21 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// wellOutlineColor picks the well-tile outline color from its kind.
-// Blue for interior wells (Gridwell-owned), red for exit-wells whose
-// contents come from outside Gridwell.
-func wellOutlineColor(kind string) string {
-	if kind == rpc.KindFileWell || kind == rpc.KindProcessWell {
+// wellOutlineColor picks the well-tile outline color. Blue for interior wells
+// (Gridwell-owned), red for exit-wells whose child grid lives in another
+// plugin (a host directory, the process table) — see isExitWell.
+func wellOutlineColor(n *rpc.Tile) string {
+	if isExitWell(n) {
 		return colorExitBorder
 	}
 	return colorFocusBorder
 }
 
-// wellGridLineColor picks the grid-line color drawn inside a well's
-// preview region from the well's kind. Matches wellOutlineColor's
-// grammar one shade quieter — interior wells get a blue grid, exit
-// wells (file / process) get a red grid.
-func wellGridLineColor(kind string) string {
-	if kind == rpc.KindFileWell || kind == rpc.KindProcessWell {
+// wellGridLineColor picks the grid-line color drawn inside a well's preview
+// region. Matches wellOutlineColor's grammar one shade quieter — interior
+// wells get a blue grid, exit wells (file / process) get a red grid.
+func wellGridLineColor(n *rpc.Tile) string {
+	if isExitWell(n) {
 		return colorGridLineExit
 	}
 	return colorGridLineInterior
@@ -678,28 +677,30 @@ func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
 // rendered/raw toggle, the textarea overlay, and the UpdateText round-
 // trip on ascent all consult this so the user can't type into one of
 // these, and a stale local buffer can't be silently re-posted.
-func tileReadOnly(n *rpc.Tile) bool {
-	return n.Kind == rpc.KindText && n.SourceKey != ""
+func (a *App) tileReadOnly(n *rpc.Tile) bool {
+	return n.Kind == rpc.KindText && (n.SourceKey != "" || a.isPluginTile(n))
 }
 
 // tileOutside reports whether a tile should be rendered with the "outside
 // Gridwell" treatment (red outline / banner). True when:
 //   - the tile's parent grid is a source-backed grid (fs/proc), so every
 //     row in it represents host state, not Gridwell-owned data
-//   - the tile is itself an exit-well kind (file-well / process-well)
-//     anywhere — its child grid lives outside Gridwell regardless of
-//     where the well sits
-//   - the tile is a text tile carrying an source_key, i.e. it was cloned
+//   - the tile is itself an exit well (its child grid lives in another
+//     plugin) anywhere — outside regardless of where the well sits
+//   - the tile is a shell tile (bash runs outside Gridwell's data world)
+//   - the tile is a text tile carrying a source_key, i.e. it was cloned
 //     out of an fs-grid and still represents an outside reference
 func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 	if parentInSource {
 		return true
 	}
-	switch n.Kind {
-	case rpc.KindFileWell, rpc.KindProcessWell, rpc.KindShell:
-		// Exit kinds: their contents come from outside Gridwell (a host
-		// directory, the process table, a bash session). Red border. Shell
-		// is the same shape: bash runs outside Gridwell's data world.
+	if isExitWell(n) {
+		// The child grid lives in another plugin (a host directory, the
+		// process table). Red border, regardless of where the well sits.
+		return true
+	}
+	if n.Kind == rpc.KindShell {
+		// Bash runs outside Gridwell's data world. Same treatment.
 		return true
 	}
 	if n.Kind == rpc.KindText && n.SourceKey != "" {
@@ -716,10 +717,10 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 // dropping them on /dev/null deletes for real (rm / SIGTERM) — the store's
 // DeleteTile already routes on the parent grid's source_kind.
 func isLinkTile(n *rpc.Tile) bool {
-	switch n.Kind {
-	case rpc.KindFileWell, rpc.KindProcessWell:
+	if isExitWell(n) {
 		return true
-	case rpc.KindText:
+	}
+	if n.Kind == rpc.KindText {
 		return n.SourceKey != ""
 	}
 	return false
@@ -795,7 +796,7 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 // outline so the label and the border read as one. Outside-tiles
 // (anything red-bordered) win regardless of kind.
 func bannerTextColor(n *rpc.Tile, outside bool) string {
-	if outside || n.Kind == rpc.KindFileWell || n.Kind == rpc.KindProcessWell || n.Kind == rpc.KindShell {
+	if outside || isExitWell(n) || n.Kind == rpc.KindShell {
 		return colorExitBorder
 	}
 	switch n.Kind {
@@ -842,6 +843,48 @@ func (a *App) fetchBlob(blobID int64) {
 		a.refreshFileOverlay()
 		a.draw()
 	}()
+}
+
+// fetchTileContent issues GetTileContent for a plugin tile (file / proc @info)
+// and caches the body by tile id. Idempotent: a successful previous fetch
+// short-circuits.
+func (a *App) fetchTileContent(tileID string) {
+	if tileID == "" {
+		return
+	}
+	if _, ok := a.c.TileContent(tileID); ok {
+		return
+	}
+	go func() {
+		data, err := a.cl.GetTileContent(context.Background(), tileID)
+		if err != nil {
+			return
+		}
+		a.c.PutTileContent(tileID, data)
+		a.refreshFileOverlay()
+		a.draw()
+	}()
+}
+
+// tileBody returns a text tile's body bytes, fetching lazily on a miss. Local
+// store tiles carry a blob id; plugin tiles (blob id 0) are fetched by tile id
+// via GetTileContent.
+func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {
+	if n.BlobID != 0 {
+		if b, ok := a.c.Blob(n.BlobID); ok {
+			return b, true
+		}
+		a.fetchBlob(n.BlobID)
+		return nil, false
+	}
+	if a.isPluginTile(n) {
+		if b, ok := a.c.TileContent(n.ID); ok {
+			return b, true
+		}
+		a.fetchTileContent(n.ID)
+		return nil, false
+	}
+	return nil, false
 }
 
 // drawChildPreview paints the cached child grid's tiles inside a clipped
@@ -893,10 +936,10 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 	// the inset border for all kinds that have one. borderPx lets the
 	// caller scale the outline down for distant previews.
 	switch n.Kind {
-	case rpc.KindWell, rpc.KindFileWell, rpc.KindProcessWell:
+	case rpc.KindWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n.Kind), borderPx)
+		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n), borderPx)
 	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)

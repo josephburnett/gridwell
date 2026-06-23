@@ -22,6 +22,10 @@ type Cache struct {
 	mu    sync.Mutex
 	grids map[string]*Grid
 	blobs map[int64][]byte
+	// content holds plugin tile bodies keyed by tile id. Plugin tiles (files,
+	// proc @info) carry no blob id; their body is fetched by tile id via
+	// GetTileContent. See TileContent / PutTileContent.
+	content map[string][]byte
 	// localBlobSeq generates client-local optimistic blob ids. It decrements
 	// from 0, so optimistic ids are always negative and can never collide with
 	// a server blob id (those are positive autoincrement rowids). See
@@ -37,7 +41,25 @@ type Grid struct {
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[string]*Grid{}, blobs: map[int64][]byte{}}
+	return &Cache{grids: map[string]*Grid{}, blobs: map[int64][]byte{}, content: map[string][]byte{}}
+}
+
+// PutTileContent stores a plugin tile's body bytes keyed by tile id.
+func (c *Cache) PutTileContent(tileID string, data []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	c.content[tileID] = cp
+}
+
+// TileContent returns the cached body for a plugin tile, or (nil, false) if
+// absent. Bytes are returned by reference; treat as read-only.
+func (c *Cache) TileContent(tileID string) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.content[tileID]
+	return b, ok
 }
 
 // PutBlob stores a blob. Blobs are text bytes (the only blob-bearing tile

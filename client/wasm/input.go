@@ -1235,7 +1235,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 		// the tile at the freshest blob, which the next render frame
 		// fetches automatically. The user briefly sees the previous
 		// snapshot, then it snaps to current.
-		if tileReadOnly(file) {
+		if a.tileReadOnly(file) {
 			a.fetchGrid(a.gridIDForPath(p.Path))
 		}
 	}
@@ -1252,7 +1252,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	// blinking caret over content they can't change.
 	var mode string
 	if file.Kind == rpc.KindText {
-		if tileReadOnly(file) {
+		if a.tileReadOnly(file) {
 			mode = rpc.TextModeRendered
 		} else {
 			mode = file.TextMode
@@ -1495,7 +1495,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// "text" and the textarea had a buffer, we must not post it as the
 	// new content (the server would reject it, and the local cache would
 	// be transiently wrong).
-	readOnly := tileReadOnly(&file)
+	readOnly := a.tileReadOnly(&file)
 	var buf string
 	hasBuf := false
 	if !readOnly && p.TextMode == rpc.TextModeText {
@@ -1610,9 +1610,9 @@ func templateGhostNode(kind templateKind) rpc.Tile {
 	case tplURL:
 		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
 	case tplFileWell:
-		return rpc.Tile{Kind: rpc.KindFileWell, W: 1, H: 1, FSPath: "/", AltText: rpc.AltFiles}
+		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1, AltText: rpc.AltFiles}
 	case tplProcessWell:
-		return rpc.Tile{Kind: rpc.KindProcessWell, W: 1, H: 1, PID: 1, AltText: rpc.AltProcesses}
+		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1, AltText: rpc.AltProcesses}
 	case tplShell:
 		return rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"}
 	}

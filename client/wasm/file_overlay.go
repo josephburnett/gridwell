@@ -363,7 +363,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	if tileReadOnly(&file) {
+	if a.tileReadOnly(&file) {
 		// Source-backed text tiles have no editable mode to toggle to —
 		// the body is reconciler output, not user content. Hiding the
 		// glyph keeps the read-only contract visible at a glance.
@@ -411,7 +411,7 @@ func (a *App) refreshFileOverlay() {
 	// and can outlive the source-key being set, so this is the only
 	// place we can enforce the invariant client-side.)
 	if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok && tileReadOnly(&file) {
+		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
 			ta.Get("style").Set("display", "none")
 			a.canvas.Call("focus")
 			return
@@ -449,9 +449,9 @@ func (a *App) refreshFileOverlay() {
 	}
 	if g, ok := a.c.Grid(gid); ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok {
-			if blob, ok := a.c.Blob(file.BlobID); ok {
+			if body, ok := a.tileBody(&file); ok {
 				in.BlobCached = true
-				in.BlobContent = string(blob)
+				in.BlobContent = string(body)
 			}
 		}
 	}
@@ -528,7 +528,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	// No editable mode for source-backed text — toggle would put us in
 	// a state with a visible textarea over a read-only blob.
 	if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok && tileReadOnly(&file) {
+		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
 			return
 		}
 	}
