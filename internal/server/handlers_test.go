@@ -33,16 +33,10 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	root, err := st.RootGridID(context.Background())
-	if err != nil {
-		t.Fatalf("root grid id: %v", err)
-	}
-	uuid, err := st.PluginUUID(context.Background())
-	if err != nil {
-		t.Fatalf("plugin uuid: %v", err)
-	}
 
 	reg := plugin.NewRegistry()
+	primaryUUID, root := registerPrimaryLocaldb(t, reg, st)
+
 	fsP, err := fsplugin.Open(":memory:", nil)
 	if err != nil {
 		t.Fatalf("fs open: %v", err)
@@ -67,9 +61,7 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 	t.Cleanup(procCloser)
 	reg.Register(procPluginUUID, "proc", procClient, nil)
 
-	srv := New(st, Config{})
-	srv.SetPluginRegistry(reg)
-	srv.SetLocaldbUUID(uuid)
+	srv := New(reg, primaryUUID, st, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

@@ -148,7 +148,7 @@ func (s *Server) CleanupOrphanedShellSessions(ctx context.Context) (int, error) 
 	if len(live) == 0 {
 		return 0, nil
 	}
-	tileIDs, err := s.store.AllShellTileIDs(ctx)
+	tileIDs, err := s.primary.AllShellTileIDs(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list shell tiles: %w", err)
 	}
@@ -266,7 +266,7 @@ func (s *Server) captureShellTitle(tileID int64) {
 	if err != nil || cmd == "" {
 		return
 	}
-	if err := s.store.SetTileAlt(context.Background(), tileID, cmd); err != nil {
+	if err := s.primary.SetTileAlt(context.Background(), tileID, cmd); err != nil {
 		log.Printf("[shellstream] set-title tile=%d cmd=%q err=%v", tileID, cmd, err)
 	}
 }
@@ -284,13 +284,14 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "shell driver not configured", http.StatusServiceUnavailable)
 		return
 	}
-	tileIDStr := r.URL.Query().Get("tile_id")
+	// Shell tiles live in the primary localdb; the wire id is qualified.
+	tileIDStr := stripUUID(r.URL.Query().Get("tile_id"), s.primaryUUID)
 	tileID, err := strconv.ParseInt(tileIDStr, 10, 64)
 	if err != nil || tileID <= 0 {
 		http.Error(w, "missing or invalid tile_id", http.StatusBadRequest)
 		return
 	}
-	tile, err := s.store.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
+	tile, err := s.primary.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
 	if err != nil {
 		writeHTTPError(w, err)
 		return

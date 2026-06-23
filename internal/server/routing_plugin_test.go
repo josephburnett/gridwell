@@ -41,44 +41,39 @@ func TestLocalPathFor(t *testing.T) {
 	}
 }
 
-// TestPluginRoute covers the routing decision: only a qualified id whose uuid
-// names a registered non-localdb plugin routes away from the local store.
-func TestPluginRoute(t *testing.T) {
+// TestRoute covers the uniform routing decision: a qualified id resolves to the
+// named plugin; a bare id resolves to the primary; an unregistered uuid errors.
+func TestRoute(t *testing.T) {
 	reg := plugin.NewRegistry()
-	// A nil client is fine here — the test only checks the routing decision,
-	// not a forwarded call.
+	// nil clients are fine — the test only checks the routing decision.
 	reg.Register("fsuuid", "fs", nil, nil)
-	h := &connectHandler{srv: &Server{localdbUUID: "localdb", pluginReg: reg}}
+	reg.Register("primary", "localdb", nil, nil)
+	h := &connectHandler{srv: &Server{primaryUUID: "primary", pluginReg: reg}}
 
 	cases := []struct {
-		name      string
-		id        string
-		wantOK    bool
-		wantLocal string
-		wantUUID  string
+		name, id, wantLocal, wantUUID string
+		wantErr                       bool
 	}{
-		{"foreign plugin", "fsuuid/7", true, "7", "fsuuid"},
-		{"bare id", "42", false, "", ""},
-		{"localdb-qualified", "localdb/42", false, "", ""},
-		{"unregistered plugin", "ghost/3", false, "", ""},
+		{"foreign plugin", "fsuuid/7", "7", "fsuuid", false},
+		{"bare → primary", "42", "42", "primary", false},
+		{"primary-qualified", "primary/9", "9", "primary", false},
+		{"unregistered", "ghost/3", "", "", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, local, uuid, ok := h.pluginRoute(c.id)
-			if ok != c.wantOK {
-				t.Fatalf("ok = %v, want %v", ok, c.wantOK)
+			_, local, uuid, err := h.route(c.id)
+			if c.wantErr {
+				if err == nil {
+					t.Fatal("expected error for unregistered plugin")
+				}
+				return
 			}
-			if ok && (local != c.wantLocal || uuid != c.wantUUID) {
-				t.Errorf("local=%q uuid=%q, want local=%q uuid=%q", local, uuid, c.wantLocal, c.wantUUID)
+			if err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			if local != c.wantLocal || uuid != c.wantUUID {
+				t.Errorf("local=%q uuid=%q, want %q/%q", local, uuid, c.wantLocal, c.wantUUID)
 			}
 		})
-	}
-}
-
-// TestPluginRouteNoRegistry: with no registry wired, everything routes local.
-func TestPluginRouteNoRegistry(t *testing.T) {
-	h := &connectHandler{srv: &Server{localdbUUID: "localdb"}}
-	if _, _, _, ok := h.pluginRoute("fsuuid/7"); ok {
-		t.Error("pluginRoute should be false with no registry")
 	}
 }

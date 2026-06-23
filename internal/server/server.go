@@ -29,13 +29,23 @@ type Config struct {
 	StaticDir string
 }
 
-// Server is the wired-up HTTP server. Construct with New and mount via
-// Server.Handler() into an http.Server.
+// Server is the wired-up HTTP server. It holds NO Gridwell tile/grid/blob
+// state of its own: every native-tile operation is routed through the plugin
+// registry to a localdb plugin (the primary, plus any mounted DBs) exactly
+// like fs/proc. Construct with New and mount via Server.Handler().
 type Server struct {
-	cfg           Config
-	store         *store.Store
-	pluginReg     *plugin.Registry
-	localdbUUID   string // UUID that identifies the local store as a plugin
+	cfg         Config
+	pluginReg   *plugin.Registry
+	primaryUUID string // the localdb plugin whose root grid is the app root
+
+	// primary is the primary localdb plugin's store, borrowed for two pieces
+	// of co-located infrastructure that need privileged access beyond the gRPC
+	// surface: the shell PTY metadata (orphan sweep, command-title updates) and
+	// the external-viewer preview endpoint (which is addressed by bare tile id).
+	// The connect data plane never touches this — it goes through pluginReg.
+	// The state is owned by the plugin; the server only borrows a handle.
+	primary *store.Store
+
 	mux           *http.ServeMux
 	shellStreamer shellStreamer
 
@@ -46,30 +56,20 @@ type Server struct {
 	activeShellSessions map[int64]*shellSessionEntry
 }
 
-// New constructs a Server bound to the given store.
-func New(s *store.Store, cfg Config) *Server {
+// New constructs a Server that routes all native-tile operations through reg.
+// primaryUUID names the localdb plugin whose root is the app root (used for
+// id-less RPCs: Bootstrap, SetRootView, Subscribe). primary is that plugin's
+// store, borrowed for the shell + preview infrastructure only.
+func New(reg *plugin.Registry, primaryUUID string, primary *store.Store, cfg Config) *Server {
 	srv := &Server{
-		cfg:   cfg,
-		store: s,
-		mux:   http.NewServeMux(),
+		cfg:         cfg,
+		pluginReg:   reg,
+		primaryUUID: primaryUUID,
+		primary:     primary,
+		mux:         http.NewServeMux(),
 	}
 	srv.routes()
 	return srv
-}
-
-// SetPluginRegistry wires a plugin registry into the server. When set,
-// GetGrid calls whose grid_id has a "<uuid>/" prefix are routed to the
-// matching plugin instead of the local store.
-func (s *Server) SetPluginRegistry(reg *plugin.Registry) {
-	s.pluginReg = reg
-}
-
-// SetLocaldbUUID tells the server the UUID for the local store so that
-// all IDs returned from the store are qualified as "<uuid>/<local>" on the
-// wire, and incoming "<uuid>/<local>" IDs are stripped back to "<local>"
-// before being passed to the store.
-func (s *Server) SetLocaldbUUID(uuid string) {
-	s.localdbUUID = uuid
 }
 
 func (s *Server) Handler() http.Handler { return s.mux }

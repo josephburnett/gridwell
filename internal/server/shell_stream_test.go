@@ -205,6 +205,16 @@ func (s *fakeShellSession) resizesCopy() [][2]uint16 {
 	return out
 }
 
+
+// bareID strips a qualified "<uuid>/<id>" down to the local id, for tests that
+// reach past the RPC surface into the primary store directly.
+func bareID(id string) string {
+	if i := strings.LastIndexByte(id, '/'); i >= 0 {
+		return id[i+1:]
+	}
+	return id
+}
+
 func createShellTileViaRPC(t *testing.T, hs *httptest.Server, root string) string {
 	t.Helper()
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -311,11 +321,11 @@ func TestCaptureShellTitleStampsLabel(t *testing.T) {
 	fake.paneCommand = "claude"
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(tileID, 10, 64)
+	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
 
 	srv.captureShellTitle(tileIDInt)
 
-	tile, err := srv.store.GetTile(context.Background(), tileID)
+	tile, err := srv.primary.GetTile(context.Background(), bareID(tileID))
 	if err != nil {
 		t.Fatalf("get tile: %v", err)
 	}
@@ -349,7 +359,7 @@ func TestShellStreamFreshTileOpensInCreateMode(t *testing.T) {
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(tileID, 10, 64)
+	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -381,7 +391,7 @@ func TestShellStreamSnapshottedTileWithLiveSessionOpensInAttachMode(t *testing.T
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(tileID, 10, 64)
+	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
 
 	// Stash a JPEG so the tile reads as "previously activated".
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -418,7 +428,7 @@ func TestShellStreamSnapshottedTileWithDeadSessionIsRejected(t *testing.T) {
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(tileID, 10, 64)
+	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
 
 	// Snapshot present, but no tmux session alive.
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -661,7 +671,7 @@ func TestCleanupOrphanedShellSessions(t *testing.T) {
 
 	// Real shell tile in the DB.
 	live := createShellTileViaRPC(t, hs, root)
-	liveIDInt, _ := strconv.ParseInt(live, 10, 64)
+	liveIDInt, _ := strconv.ParseInt(bareID(live), 10, 64)
 	fake.setAlive(liveIDInt, true)
 	// Orphan: alive on the socket, no matching DB row.
 	const orphan int64 = 999999
@@ -706,7 +716,7 @@ func TestDeleteTileKillsShellSession(t *testing.T) {
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(tileID, 10, 64)
+	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
 	fake.setAlive(tileIDInt, true)
 
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -742,7 +752,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shellIDInt, _ := strconv.ParseInt(shell.ID, 10, 64)
+	shellIDInt, _ := strconv.ParseInt(bareID(shell.ID), 10, 64)
 	fake.setAlive(shellIDInt, true)
 
 	// Clone the well: copy-on-clone deep-copies its child grid, so the clone
@@ -755,7 +765,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneChild, err := srv.store.GetGrid(ctx, clone.ChildGridID)
+	cloneChild, err := srv.primary.GetGrid(ctx, bareID(clone.ChildGridID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -782,7 +792,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 			t.Errorf("original shell %d session was killed by deleting the clone's copy", shellIDInt)
 		}
 	}
-	if exists, err := srv.store.ShellTileExists(ctx, shell.ID); err != nil || !exists {
+	if exists, err := srv.primary.ShellTileExists(ctx, bareID(shell.ID)); err != nil || !exists {
 		t.Errorf("original shell %d should survive the clone-copy delete (exists=%v err=%v)", shellIDInt, exists, err)
 	}
 }
@@ -809,7 +819,7 @@ func TestShellSessionAliveReportsStreamerProbe(t *testing.T) {
 		t.Errorf("alive = true for fresh tile; want false")
 	}
 
-	tileIDInt2, _ := strconv.ParseInt(tileID, 10, 64)
+	tileIDInt2, _ := strconv.ParseInt(bareID(tileID), 10, 64)
 	fake.setAlive(tileIDInt2, true)
 	res, err = cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: tileID})
 	if err != nil {

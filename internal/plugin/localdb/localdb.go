@@ -17,6 +17,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // SessionManager is the shell-session lifecycle surface. Wire in the real
@@ -59,7 +61,7 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 func (p *Plugin) Attach(ctx context.Context, _ *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
 	id, err := p.st.RootGridID(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.AttachResponse{
 		RootGridId: id,
@@ -86,7 +88,7 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
 }
@@ -96,11 +98,11 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 func (p *Plugin) Bootstrap(ctx context.Context, _ *gridwellv1.BootstrapRequest) (*gridwellv1.BootstrapResponse, error) {
 	id, err := p.st.RootGridID(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	cx, cy, zoom, err := p.st.RootView(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.BootstrapResponse{
 		RootGridId: id,
@@ -115,7 +117,7 @@ func (p *Plugin) Bootstrap(ctx context.Context, _ *gridwellv1.BootstrapRequest) 
 func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	r, err := p.st.GetGrid(ctx, req.GridId)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.GetGridResponse{
 		Grid:  rpc.GridToProto(&r.Grid),
@@ -126,7 +128,7 @@ func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 func (p *Plugin) GetBlob(ctx context.Context, req *gridwellv1.GetBlobRequest) (*gridwellv1.GetBlobResponse, error) {
 	data, err := p.st.GetBlob(ctx, req.BlobId)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.GetBlobResponse{Data: data}, nil
 }
@@ -134,7 +136,7 @@ func (p *Plugin) GetBlob(ctx context.Context, req *gridwellv1.GetBlobRequest) (*
 func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	jpeg, err := p.st.GetTilePreview(ctx, req.TileId)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
@@ -143,14 +145,14 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 func (p *Plugin) GetTileContent(ctx context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
 	tile, err := p.st.GetTile(ctx, req.TileId)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	if tile.BlobID == 0 {
 		return &gridwellv1.GetTileContentResponse{}, nil
 	}
 	data, err := p.st.GetBlob(ctx, tile.BlobID)
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: "text/markdown"}, nil
 }
@@ -224,7 +226,7 @@ func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessi
 
 func (p *Plugin) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
 	if err := p.st.SetRootView(ctx, rpc.SetRootViewFromProto(req)); err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.SetRootViewResponse{}, nil
 }
@@ -240,7 +242,7 @@ func (p *Plugin) UpdateText(ctx context.Context, req *gridwellv1.UpdateTextReque
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	tileID := req.TileId
 	if err := p.st.DeleteTile(ctx, rpc.DeleteTileFromProto(req)); err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	// Clean up any orphaned shell session for the deleted tile.
 	if p.sess != nil {
@@ -278,7 +280,32 @@ func (p *Plugin) Subscribe(_ *gridwellv1.SubscribeRequest, stream grpc.ServerStr
 
 func tileResp(t *rpc.Tile, err error) (*gridwellv1.TileResponse, error) {
 	if err != nil {
-		return nil, err
+		return nil, errToStatus(err)
 	}
 	return &gridwellv1.TileResponse{Tile: rpc.TileToProto(t)}, nil
+}
+
+// errToStatus maps a store sentinel error to a gRPC status code so the
+// classification survives the routing hop to the server (which maps the code
+// to a Connect status). Mirrors the server's classifyStoreError; an unmatched
+// error passes through (grpc wraps it as codes.Unknown → CodeInternal).
+func errToStatus(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, store.ErrNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, store.ErrInvalidArgument),
+		errors.Is(err, store.ErrInvalidPath),
+		errors.Is(err, store.ErrNotURLTile),
+		errors.Is(err, store.ErrNotTextTile),
+		errors.Is(err, store.ErrNotWellTile),
+		errors.Is(err, store.ErrNotShellTile):
+		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, store.ErrOverlap),
+		errors.Is(err, store.ErrVersionConflict):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	default:
+		return err
+	}
 }

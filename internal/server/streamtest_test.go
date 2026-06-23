@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
@@ -20,11 +21,9 @@ func streamTestServer(t *testing.T) (*Server, *httptest.Server, string) {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	root, err := st.RootGridID(context.Background())
-	if err != nil {
-		t.Fatalf("root: %v", err)
-	}
-	srv := New(st, Config{})
+	reg := plugin.NewRegistry()
+	uuid, root := registerPrimaryLocaldb(t, reg, st)
+	srv := New(reg, uuid, st, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return srv, hs, root

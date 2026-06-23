@@ -2,22 +2,27 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
+	gcodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// connectHandler implements gridwellv1connect.GridwellHandler. It is the
-// thin proto↔rpc bridge: every method converts the wire request into a
-// Go rpc.* value, calls the store, and packs the result into a wire
-// response. The Go rpc types remain the internal source of truth.
+// connectHandler implements gridwellv1connect.GridwellHandler as a thin router
+// over the plugin registry. It holds no Gridwell state: every request is
+// forwarded to the plugin that owns the id it carries (the primary localdb,
+// a mounted localdb, fs, proc, …), with the plugin-uuid prefix stripped on the
+// way in and re-applied to the response on the way out. Id-less RPCs
+// (Bootstrap, SetRootView, Subscribe) target the primary localdb plugin.
 type connectHandler struct {
 	gridwellv1connect.UnimplementedGridwellHandler
 	srv *Server
@@ -27,100 +32,35 @@ func newConnectHandler(srv *Server) *connectHandler {
 	return &connectHandler{srv: srv}
 }
 
-// ── ID translation helpers ────────────────────────────────────────────────────
+// ── routing ────────────────────────────────────────────────────────────────────
 
-// localID strips the localdb UUID prefix from an incoming ID so the store
-// always receives bare decimal strings. A bare ID (no "/") is returned
-// unchanged. An ID with a different plugin's UUID is also returned unchanged
-// (the caller is responsible for routing to the right plugin first).
-func (h *connectHandler) localID(id string) string {
-	if h.srv.localdbUUID == "" || id == "" {
-		return id
+// route resolves the plugin that owns id, returning its client, the local
+// (unprefixed) id, and the owning plugin uuid. A bare id (no "<uuid>/" prefix)
+// is treated as belonging to the primary plugin.
+func (h *connectHandler) route(id string) (client pb.GridwellClient, local, uuid string, err error) {
+	uuid, local, ok := splitPluginID(id)
+	if !ok {
+		uuid, local = h.srv.primaryUUID, id
 	}
-	if uuid, local, ok := splitPluginID(id); ok && uuid == h.srv.localdbUUID {
-		return local
-	}
-	return id
-}
-
-// localPath strips localdb UUID prefixes from every WellID in a Path.
-func (h *connectHandler) localPath(p rpc.Path) rpc.Path {
-	if len(p.WellIDs) == 0 {
-		return p
-	}
-	ids := make([]string, len(p.WellIDs))
-	for i, id := range p.WellIDs {
-		ids[i] = h.localID(id)
-	}
-	return rpc.Path{WellIDs: ids}
-}
-
-// qualifyLocaldbTile converts a store Tile to its proto form and qualifies
-// all IDs with the localdb UUID (when set).
-func (h *connectHandler) qualifyLocaldbTile(t *rpc.Tile) *pb.Tile {
-	pt := rpc.TileToProto(t)
-	if pt == nil || h.srv.localdbUUID == "" {
-		return pt
-	}
-	return qualifyTiles(h.srv.localdbUUID, []*pb.Tile{pt})[0]
-}
-
-// tileRespQ packs a store tile into a TileResponse with qualified IDs.
-func (h *connectHandler) tileRespQ(t *rpc.Tile, err error) (*connect.Response[pb.TileResponse], error) {
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(&pb.TileResponse{Tile: h.qualifyLocaldbTile(t)}), nil
-}
-
-// qualifyLocaldbEvent rewrites all grid/tile IDs in a store event.
-func (h *connectHandler) qualifyLocaldbEvent(e rpc.Event) *pb.Event {
-	uuid := h.srv.localdbUUID
-	if uuid == "" {
-		return rpc.EventToProto(e)
-	}
-	switch e.Kind {
-	case rpc.EventGridChanged:
-		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
-			GridId: qualifyID(uuid, e.GridChanged.GridID),
-		}}}
-	case rpc.EventTileChanged:
-		pt := rpc.TileToProto(&e.TileChanged.Tile)
-		qualified := qualifyTiles(uuid, []*pb.Tile{pt})
-		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: qualified[0]}}}
-	case rpc.EventTileRemoved:
-		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
-			GridId: qualifyID(uuid, e.TileRemoved.GridID),
-			TileId: qualifyID(uuid, e.TileRemoved.TileID),
-		}}}
-	}
-	return rpc.EventToProto(e)
-}
-
-// ── plugin routing ────────────────────────────────────────────────────────────
-
-// pluginRoute resolves the plugin that owns a qualified id. It returns the
-// plugin's gRPC client, the local (unprefixed) id, and the plugin uuid when id
-// is a qualified reference to a non-localdb plugin present in the registry.
-// ok is false for bare ids, localdb-qualified ids, and unknown plugins — all
-// of which route to the local store.
-func (h *connectHandler) pluginRoute(id string) (client pb.GridwellClient, local, uuid string, ok bool) {
-	if h.srv.pluginReg == nil {
-		return nil, "", "", false
-	}
-	u, l, split := splitPluginID(id)
-	if !split || u == h.srv.localdbUUID {
-		return nil, "", "", false
-	}
-	c, found := h.srv.pluginReg.Get(u)
+	c, found := h.srv.pluginReg.Get(uuid)
 	if !found {
-		return nil, "", "", false
+		return nil, "", "", connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", uuid))
 	}
-	return c, l, u, true
+	return c, local, uuid, nil
+}
+
+// primaryClient resolves the primary localdb plugin (for id-less RPCs).
+func (h *connectHandler) primaryClient() (pb.GridwellClient, string, error) {
+	c, found := h.srv.pluginReg.Get(h.srv.primaryUUID)
+	if !found {
+		return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no primary plugin registered"))
+	}
+	return c, h.srv.primaryUUID, nil
 }
 
 // stripUUID removes a specific plugin uuid prefix from an id, leaving bare and
-// foreign-prefixed ids untouched.
+// foreign-prefixed ids untouched (so a cross-plugin reference stays qualified
+// and the target plugin rejects it rather than misresolving it locally).
 func stripUUID(id, uuid string) string {
 	if u, l, ok := splitPluginID(id); ok && u == uuid {
 		return l
@@ -128,8 +68,7 @@ func stripUUID(id, uuid string) string {
 	return id
 }
 
-// localPathFor strips a plugin uuid prefix from every segment of a path, so a
-// path qualified for the client becomes plugin-local on the way in.
+// localPathFor strips a plugin uuid prefix from every segment of a path.
 func localPathFor(p *pb.Path, uuid string) *pb.Path {
 	if p == nil {
 		return nil
@@ -153,342 +92,402 @@ func pluginTileResp(uuid string, resp *pb.TileResponse, err error) (*connect.Res
 	return connect.NewResponse(&pb.TileResponse{Tile: t}), nil
 }
 
-// ── RPC handlers ──────────────────────────────────────────────────────────────
+// qualifyEvent re-applies a plugin's uuid to the ids in a change event.
+func qualifyEvent(uuid string, ev *pb.Event) *pb.Event {
+	switch p := ev.Payload.(type) {
+	case *pb.Event_GridChanged:
+		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
+			GridId: qualifyID(uuid, p.GridChanged.GridId),
+		}}}
+	case *pb.Event_TileChanged:
+		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
+			Tile: qualifyTiles(uuid, []*pb.Tile{p.TileChanged.Tile})[0],
+		}}}
+	case *pb.Event_TileRemoved:
+		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
+			GridId: qualifyID(uuid, p.TileRemoved.GridId),
+			TileId: qualifyID(uuid, p.TileRemoved.TileId),
+		}}}
+	}
+	return ev
+}
+
+// ── reads ──────────────────────────────────────────────────────────────────────
 
 func (h *connectHandler) Bootstrap(ctx context.Context, _ *connect.Request[pb.BootstrapRequest]) (*connect.Response[pb.BootstrapResponse], error) {
-	id, err := h.srv.store.RootGridID(ctx)
+	c, uuid, err := h.primaryClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.Bootstrap(ctx, &pb.BootstrapRequest{})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	if h.srv.localdbUUID != "" {
-		id = qualifyID(h.srv.localdbUUID, id)
-	}
-	cx, cy, zoom, err := h.srv.store.RootView(ctx)
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(&pb.BootstrapResponse{
-		RootGridId: id,
-		RootViewCx: cx,
-		RootViewCy: cy,
-		RootZoom:   zoom,
-	}), nil
+	resp.RootGridId = qualifyID(uuid, resp.RootGridId)
+	return connect.NewResponse(resp), nil
 }
 
 func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.GetGridRequest]) (*connect.Response[pb.GetGridResponse], error) {
-	gridID := req.Msg.GridId
-	if client, local, uuid, ok := h.pluginRoute(gridID); ok {
-		resp, err := client.GetGrid(ctx, &pb.GetGridRequest{GridId: local})
-		if err != nil {
-			return nil, asConnectError(err)
-		}
-		return connect.NewResponse(&pb.GetGridResponse{
-			Grid:  qualifyGrid(uuid, resp.Grid),
-			Tiles: qualifyTiles(uuid, resp.Tiles),
-		}), nil
+	c, local, uuid, err := h.route(req.Msg.GridId)
+	if err != nil {
+		return nil, err
 	}
-	localGridID := h.localID(gridID)
-	r, err := h.srv.store.GetGrid(ctx, localGridID)
+	resp, err := c.GetGrid(ctx, &pb.GetGridRequest{GridId: local})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	pg := rpc.GridToProto(&r.Grid)
-	pts := rpc.TilesToProto(r.Tiles)
-	if h.srv.localdbUUID != "" {
-		pg = qualifyGrid(h.srv.localdbUUID, pg)
-		pts = qualifyTiles(h.srv.localdbUUID, pts)
-	}
-	return connect.NewResponse(&pb.GetGridResponse{Grid: pg, Tiles: pts}), nil
+	return connect.NewResponse(&pb.GetGridResponse{
+		Grid:  qualifyGrid(uuid, resp.Grid),
+		Tiles: qualifyTiles(uuid, resp.Tiles),
+	}), nil
 }
 
+// GetBlob is addressed by an int64 blob id, which carries no plugin namespace,
+// so it resolves against the primary localdb. Tiles owned by other plugins
+// serve their body via GetTileContent (routable by tile id) instead.
 func (h *connectHandler) GetBlob(ctx context.Context, req *connect.Request[pb.GetBlobRequest]) (*connect.Response[pb.GetBlobResponse], error) {
-	data, err := h.srv.store.GetBlob(ctx, req.Msg.BlobId)
+	c, _, err := h.primaryClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.GetBlob(ctx, req.Msg)
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	return connect.NewResponse(&pb.GetBlobResponse{Data: data}), nil
+	return connect.NewResponse(resp), nil
 }
 
 func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Request[pb.GetTilePreviewRequest]) (*connect.Response[pb.GetTilePreviewResponse], error) {
-	jpeg, err := h.srv.store.GetTilePreview(ctx, h.localID(req.Msg.TileId))
+	c, local, _, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: local})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	return connect.NewResponse(&pb.GetTilePreviewResponse{Jpeg: jpeg}), nil
+	return connect.NewResponse(resp), nil
 }
 
-// GetTileContent returns a text tile's descent body. For a plugin-owned tile
-// (a file in an fs grid, a process's @info) it forwards to the plugin, which
-// derives the body from host state. For a local store tile it returns the
-// tile's stored blob bytes.
 func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Request[pb.GetTileContentRequest]) (*connect.Response[pb.GetTileContentResponse], error) {
-	if client, local, _, ok := h.pluginRoute(req.Msg.TileId); ok {
-		resp, err := client.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: local})
-		if err != nil {
-			return nil, asConnectError(err)
-		}
-		return connect.NewResponse(resp), nil
+	c, local, _, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
 	}
-	tile, err := h.srv.store.GetTile(ctx, h.localID(req.Msg.TileId))
+	resp, err := c.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: local})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	if tile.BlobID == 0 {
-		return connect.NewResponse(&pb.GetTileContentResponse{}), nil
-	}
-	data, err := h.srv.store.GetBlob(ctx, tile.BlobID)
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(&pb.GetTileContentResponse{Data: data, MediaType: "text/markdown"}), nil
+	return connect.NewResponse(resp), nil
 }
+
+// ── creates ──────────────────────────────────────────────────────────────────
 
 func (h *connectHandler) CreateWell(ctx context.Context, req *connect.Request[pb.CreateWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CreateWellFromProto(req.Msg)
-	r.GridID = h.localID(r.GridID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.CreateWell(ctx, r))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.GridId)
+	if err != nil {
+		return nil, err
+	}
+	m.GridId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.CreateWell(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) CreateText(ctx context.Context, req *connect.Request[pb.CreateTextRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CreateTextFromProto(req.Msg)
-	r.GridID = h.localID(r.GridID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.CreateText(ctx, r))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.GridId)
+	if err != nil {
+		return nil, err
+	}
+	m.GridId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.CreateText(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) CreateURL(ctx context.Context, req *connect.Request[pb.CreateURLRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CreateURLFromProto(req.Msg)
-	r.GridID = h.localID(r.GridID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.CreateURL(ctx, r))
-}
-func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Request[pb.CreateFileWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CreateFileWellFromProto(req.Msg)
-	if strings.TrimSpace(r.FSPath) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("fs_path required"))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.GridId)
+	if err != nil {
+		return nil, err
 	}
-	return h.createExitWell(ctx, "fs", map[string]string{"path": r.FSPath}, r.Path, r.GridID, r.X, r.Y, r.W, r.H)
+	m.GridId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.CreateURL(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
-func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Request[pb.CreateProcessWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CreateProcessWellFromProto(req.Msg)
-	if r.PID <= 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("pid must be positive"))
+func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[pb.CreateShellRequest]) (*connect.Response[pb.TileResponse], error) {
+	m := req.Msg
+	c, local, uuid, err := h.route(m.GridId)
+	if err != nil {
+		return nil, err
 	}
-	return h.createExitWell(ctx, "proc", map[string]string{"pid": strconv.FormatInt(r.PID, 10)}, r.Path, r.GridID, r.X, r.Y, r.W, r.H)
+	m.GridId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.CreateShell(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 
-// createExitWell attaches the named source plugin (fs / proc) for the given
-// config, then drops a well tile in the local store whose child_grid_id is the
-// qualified "<plugin-uuid>/<grid-id>" the plugin returned. The plugin owns the
-// grid and supplies its own display label, so the cross-plugin reference and
-// the well's name come straight from Attach — no source bookkeeping lives in
-// the store.
-func (h *connectHandler) createExitWell(ctx context.Context, kind string, config map[string]string, path rpc.Path, gridID string, x, y, w, ht int64) (*connect.Response[pb.TileResponse], error) {
-	if h.srv.pluginReg == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no %s plugin configured", kind))
+func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Request[pb.CreateFileWellRequest]) (*connect.Response[pb.TileResponse], error) {
+	m := req.Msg
+	if strings.TrimSpace(m.FsPath) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("fs_path required"))
 	}
-	uuid, client, ok := h.srv.pluginReg.FirstByKind(kind)
+	return h.createExitWell(ctx, "fs", map[string]string{"path": m.FsPath}, m.Path, m.GridId, m.X, m.Y, m.W, m.H)
+}
+func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Request[pb.CreateProcessWellRequest]) (*connect.Response[pb.TileResponse], error) {
+	m := req.Msg
+	if m.Pid <= 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("pid must be positive"))
+	}
+	return h.createExitWell(ctx, "proc", map[string]string{"pid": strconv.FormatInt(m.Pid, 10)}, m.Path, m.GridId, m.X, m.Y, m.W, m.H)
+}
+
+// createExitWell attaches the named source plugin (fs / proc) for config, then
+// asks the destination plugin (the one that owns gridID — wherever the user
+// dropped the well) to create a well tile whose child_grid_id is the qualified
+// "<src-uuid>/<grid-id>" the source returned. Pure cross-plugin orchestration:
+// no store touch, no localdb special-casing.
+func (h *connectHandler) createExitWell(ctx context.Context, kind string, config map[string]string, path *pb.Path, gridID string, x, y, w, ht int64) (*connect.Response[pb.TileResponse], error) {
+	srcUUID, srcClient, ok := h.srv.pluginReg.FirstByKind(kind)
 	if !ok {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no %s plugin configured", kind))
 	}
-	att, err := client.Attach(ctx, &pb.AttachRequest{Config: config})
+	att, err := srcClient.Attach(ctx, &pb.AttachRequest{Config: config})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	childGridID := qualifyID(uuid, att.RootGridId)
-	tile, err := h.srv.store.CreateExitWell(ctx, h.localPath(path), h.localID(gridID), x, y, w, ht, childGridID, att.Label)
-	return h.tileRespQ(tile, err)
+	childGridID := qualifyID(srcUUID, att.RootGridId)
+
+	dstClient, dstLocal, dstUUID, err := h.route(gridID)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := dstClient.CreateWell(ctx, &pb.CreateWellRequest{
+		Path:        localPathFor(path, dstUUID),
+		GridId:      dstLocal,
+		X:           x,
+		Y:           y,
+		W:           w,
+		H:           ht,
+		ChildGridId: childGridID,
+		Label:       att.Label,
+	})
+	return pluginTileResp(dstUUID, resp, err)
 }
-func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[pb.CreateShellRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CreateShellFromProto(req.Msg)
-	r.GridID = h.localID(r.GridID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.CreateShell(ctx, r))
-}
+
+// ── mutations ──────────────────────────────────────────────────────────────────
 
 func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
-		resp, err := client.MoveTile(ctx, &pb.MoveTileRequest{
-			Path:       localPathFor(req.Msg.Path, uuid),
-			TileId:     local,
-			Version:    req.Msg.Version,
-			DestGridId: stripUUID(req.Msg.DestGridId, uuid),
-			DestPath:   localPathFor(req.Msg.DestPath, uuid),
-			X:          req.Msg.X,
-			Y:          req.Msg.Y,
-		})
-		return pluginTileResp(uuid, resp, err)
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
 	}
-	r := rpc.MoveTileFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.DestGridID = h.localID(r.DestGridID)
-	r.Path = h.localPath(r.Path)
-	r.DestPath = h.localPath(r.DestPath)
-	return h.tileRespQ(h.srv.store.MoveTile(ctx, r))
+	m.TileId = local
+	m.DestGridId = stripUUID(m.DestGridId, uuid)
+	m.Path = localPathFor(m.Path, uuid)
+	m.DestPath = localPathFor(m.DestPath, uuid)
+	resp, err := c.MoveTile(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.CloneTileFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.DestGridID = h.localID(r.DestGridID)
-	r.Path = h.localPath(r.Path)
-	r.DestPath = h.localPath(r.DestPath)
-	return h.tileRespQ(h.srv.store.CloneTile(ctx, r))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
+	}
+	m.TileId = local
+	m.DestGridId = stripUUID(m.DestGridId, uuid)
+	m.Path = localPathFor(m.Path, uuid)
+	m.DestPath = localPathFor(m.DestPath, uuid)
+	resp, err := c.CloneTile(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb.ResizeTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
-		resp, err := client.ResizeTile(ctx, &pb.ResizeTileRequest{
-			Path:    localPathFor(req.Msg.Path, uuid),
-			TileId:  local,
-			Version: req.Msg.Version,
-			X:       req.Msg.X,
-			Y:       req.Msg.Y,
-			W:       req.Msg.W,
-			H:       req.Msg.H,
-		})
-		return pluginTileResp(uuid, resp, err)
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
 	}
-	r := rpc.ResizeTileFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.ResizeTile(ctx, r))
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.ResizeTile(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[pb.SetWellViewRequest]) (*connect.Response[pb.TileResponse], error) {
-	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
-		resp, err := client.SetWellView(ctx, &pb.SetWellViewRequest{
-			Path:     localPathFor(req.Msg.Path, uuid),
-			TileId:   local,
-			Version:  req.Msg.Version,
-			ViewX:    req.Msg.ViewX,
-			ViewY:    req.Msg.ViewY,
-			ViewZoom: req.Msg.ViewZoom,
-		})
-		return pluginTileResp(uuid, resp, err)
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
 	}
-	r := rpc.SetWellViewFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.SetWellView(ctx, r))
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.SetWellView(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) SetTextView(ctx context.Context, req *connect.Request[pb.SetTextViewRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.SetTextViewFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.SetTextView(ctx, r))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
+	}
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.SetTextView(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Request[pb.SetShellPreviewRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.SetShellPreviewFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.SetShellPreview(ctx, r))
-}
-
-// ShellSessionAlive answers the wasm's per-descent probe by asking
-// the streamer (which delegates to the tmux controller) whether the
-// tile's session exists. An infrastructure error here is reported as
-// not-alive rather than as a Connect error — the wasm doesn't care
-// why the session isn't there, only that the refresh button should
-// hide. Returns not-alive when no streamer is wired up (defensive;
-// production always wires one).
-func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
-	tileID := h.localID(req.Msg.TileId)
-	if h.srv.shellStreamer == nil {
-		return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: false})), nil
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
 	}
-	alive := false
-	if tileIDInt, err := strconv.ParseInt(tileID, 10, 64); err == nil {
-		alive, _ = h.srv.shellStreamer.HasSession(tileIDInt)
-	}
-	return connect.NewResponse(rpc.ShellSessionAliveResponseToProto(&rpc.ShellSessionAliveResponse{Alive: alive})), nil
-}
-
-func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
-	if err := h.srv.store.SetRootView(ctx, rpc.SetRootViewFromProto(req.Msg)); err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.SetShellPreview(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) SetURLState(ctx context.Context, req *connect.Request[pb.SetURLStateRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.SetURLStateFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.SetURLState(ctx, r))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
+	}
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.SetURLState(ctx, m)
+	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb.UpdateTextRequest]) (*connect.Response[pb.TileResponse], error) {
-	r := rpc.UpdateTextFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	return h.tileRespQ(h.srv.store.UpdateText(ctx, r))
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
+	}
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	resp, err := c.UpdateText(ctx, m)
+	return pluginTileResp(uuid, resp, err)
+}
+
+// SetRootView frames the app root, which lives in the primary plugin.
+func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
+	c, _, err := h.primaryClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.SetRootView(ctx, req.Msg)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
-	// A tile inside a plugin grid (file / process) is deleted by the plugin
-	// itself — trashing the file or signalling the process. No shell-session
-	// reaping applies to plugin tiles.
-	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
-		if _, err := client.DeleteTile(ctx, &pb.DeleteTileRequest{
-			Path:    localPathFor(req.Msg.Path, uuid),
-			TileId:  local,
-			Version: req.Msg.Version,
-		}); err != nil {
-			return nil, asConnectError(err)
-		}
-		return connect.NewResponse(&pb.DeleteTileResponse{}), nil
+	m := req.Msg
+	c, local, uuid, err := h.route(m.TileId)
+	if err != nil {
+		return nil, err
 	}
-	r := rpc.DeleteTileFromProto(req.Msg)
-	r.TileID = h.localID(r.TileID)
-	r.Path = h.localPath(r.Path)
-	if err := h.srv.store.DeleteTile(ctx, r); err != nil {
+	m.TileId = local
+	m.Path = localPathFor(m.Path, uuid)
+	if _, err := c.DeleteTile(ctx, m); err != nil {
 		return nil, asConnectError(err)
 	}
-	// A deleted shell tile's tmux session would otherwise survive across
-	// gridwell restarts and leak, so reap it once the row is gone. The
-	// ShellTileExists guard is a belt-and-braces check that this exact id
-	// really is deleted before we kill its session (a cloned shell is an
-	// independent copy with its own id and no session, so deleting a copy
-	// never touches the original's PTY). Fire-and-forget; a missed kill is
-	// caught by the orphan-cleanup pass at startup.
-	if h.srv.shellStreamer != nil {
-		exists, err := h.srv.store.ShellTileExists(ctx, r.TileID)
-		switch {
-		case err != nil:
-			log.Printf("[shellstream] kill-on-delete existence tile=%s err=%v", r.TileID, err)
-		case !exists:
-			if tileIDInt, perr := strconv.ParseInt(r.TileID, 10, 64); perr == nil {
-				if err := h.srv.shellStreamer.Kill(tileIDInt); err != nil {
-					log.Printf("[shellstream] kill-on-delete tile=%s err=%v", r.TileID, err)
-				}
-			}
-		}
+	// Shell PTYs only back tiles in the primary localdb; reap the tmux session
+	// once the row is gone so it can't survive a restart and leak.
+	if uuid == h.srv.primaryUUID && h.srv.shellStreamer != nil {
+		h.reapShellIfGone(ctx, local)
 	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
 }
 
-// Subscribe is a server-streaming RPC. Each event from the store is
-// converted and pushed onto the wire until the client disconnects or
-// the store closes its subscriber channel.
-func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
-	ch, cancel := h.srv.store.SubscribeEvents()
-	defer cancel()
-	for {
-		select {
-		case ev, ok := <-ch:
-			if !ok {
-				return nil
+// reapShellIfGone kills the tmux session for a just-deleted primary tile when
+// that exact id is truly gone (a cloned shell is an independent copy with its
+// own id and no session, so deleting a copy never touches the original's PTY).
+// Fire-and-forget; a missed kill is caught by the startup orphan-cleanup pass.
+func (h *connectHandler) reapShellIfGone(ctx context.Context, localTileID string) {
+	exists, err := h.srv.primary.ShellTileExists(ctx, localTileID)
+	switch {
+	case err != nil:
+		log.Printf("[shellstream] kill-on-delete existence tile=%s err=%v", localTileID, err)
+	case !exists:
+		if tileIDInt, perr := strconv.ParseInt(localTileID, 10, 64); perr == nil {
+			if err := h.srv.shellStreamer.Kill(tileIDInt); err != nil {
+				log.Printf("[shellstream] kill-on-delete tile=%s err=%v", localTileID, err)
 			}
-			if err := stream.Send(h.qualifyLocaldbEvent(ev)); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return nil
 		}
 	}
 }
 
-// asConnectError maps store sentinel errors to Connect status codes so
-// the wire surface matches the raw-HTTP status mapping — both route through
-// the single classifyStoreError categorization.
+// ShellSessionAlive answers the wasm's per-descent probe by asking the streamer
+// (the tmux controller) whether the tile's session exists. Shell tiles live in
+// the primary localdb, so the id is stripped of the primary prefix. An infra
+// error is reported as not-alive rather than a Connect error — the wasm only
+// cares whether the refresh button should hide.
+func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
+	if h.srv.shellStreamer == nil {
+		return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: false}), nil
+	}
+	tileID := stripUUID(req.Msg.TileId, h.srv.primaryUUID)
+	alive := false
+	if tileIDInt, err := strconv.ParseInt(tileID, 10, 64); err == nil {
+		alive, _ = h.srv.shellStreamer.HasSession(tileIDInt)
+	}
+	return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: alive}), nil
+}
+
+// Subscribe proxies the primary plugin's change-event stream to the client,
+// re-qualifying each event's ids with the primary uuid. (Mounted plugins are
+// polled via GetGrid; only the primary streams live events for now.)
+func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
+	c, uuid, err := h.primaryClient()
+	if err != nil {
+		return err
+	}
+	ps, err := c.Subscribe(ctx, &pb.SubscribeRequest{})
+	if err != nil {
+		return asConnectError(err)
+	}
+	for {
+		ev, err := ps.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if err := stream.Send(qualifyEvent(uuid, ev)); err != nil {
+			return err
+		}
+	}
+}
+
+// asConnectError maps an error returned from a plugin (or, on the borrowed
+// store paths, a raw store sentinel) to a Connect status code. Plugin errors
+// arrive as gRPC status errors — the plugins translate store sentinels into
+// codes (see localdb.errToStatus) so NotFound / InvalidArgument / overlap and
+// version conflicts survive the routing hop; a non-gRPC error falls through to
+// the same classifyStoreError categorization used by the raw-HTTP endpoints.
 func asConnectError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if st, ok := status.FromError(err); ok {
+		switch st.Code() {
+		case gcodes.NotFound:
+			return connect.NewError(connect.CodeNotFound, errors.New(st.Message()))
+		case gcodes.InvalidArgument:
+			return connect.NewError(connect.CodeInvalidArgument, errors.New(st.Message()))
+		case gcodes.FailedPrecondition:
+			return connect.NewError(connect.CodeFailedPrecondition, errors.New(st.Message()))
+		default:
+			return connect.NewError(connect.CodeInternal, errors.New(st.Message()))
+		}
 	}
 	switch classifyStoreError(err) {
 	case classNotFound:

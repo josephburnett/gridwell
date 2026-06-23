@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
+	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	procplugin "github.com/josephburnett/gridwell/internal/plugin/proc"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/store"
@@ -78,12 +79,25 @@ func parseServeFlags(args []string, cfgPath string) (serveFlags, error) {
 }
 
 // builtinFactories are the in-process plugin factories recognised by LoadAll.
+// "localdb" lets server.yaml mount additional Gridwell DBs beyond the primary
+// `db:`; each opens its own store and is served like any other plugin.
 var builtinFactories = map[string]plugin.ServerFactory{
 	"fs": func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 		return fsplugin.NewFactory(cfg)
 	},
 	"proc": func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 		return procplugin.NewFactory(cfg)
+	},
+	"localdb": func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
+		dbFile := cfg.Config["db_file"]
+		if dbFile == "" {
+			return nil, fmt.Errorf("localdb plugin %q: db_file config key required", cfg.Name)
+		}
+		st, err := store.Open(dbFile)
+		if err != nil {
+			return nil, fmt.Errorf("localdb plugin %q: %w", cfg.Name, err)
+		}
+		return localdb.New(st, nil), nil
 	},
 }
 
@@ -129,6 +143,22 @@ func RunServe(args []string) int {
 	}
 	defer reg.Close()
 
+	// Register the primary store as a localdb plugin under its own stable UUID
+	// (the namespace existing bookmarks/URLs resolve against). After this the
+	// server holds no Gridwell state of its own: every native-tile operation is
+	// routed through the registry, the primary included.
+	primaryUUID, err := s.PluginUUID(context.Background())
+	if err != nil || primaryUUID == "" {
+		fmt.Fprintf(os.Stderr, "serve: primary plugin uuid: %v\n", err)
+		return 1
+	}
+	primaryClient, primaryCloser, err := plugin.ServeInProcess(localdb.New(s, nil))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: serve primary localdb: %v\n", err)
+		return 1
+	}
+	reg.Register(primaryUUID, "localdb", primaryClient, primaryCloser)
+
 	// The gridwell-private tmux server backs every shell tile. One
 	// socket per gridwell process; sessions named `gridwell-<tileID>`
 	// survive ascents and gridwell restarts (bash + scrollback live
@@ -141,11 +171,7 @@ func RunServe(args []string) int {
 	}
 	defer func() { _ = tmuxCleanup() }()
 
-	srv := server.New(s, server.Config{StaticDir: f.StaticDir})
-	srv.SetPluginRegistry(reg)
-	if uuid, uErr := s.PluginUUID(context.Background()); uErr == nil && uuid != "" {
-		srv.SetLocaldbUUID(uuid)
-	}
+	srv := server.New(reg, primaryUUID, s, server.Config{StaticDir: f.StaticDir})
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	// Bound the orphan leak: any tmux session whose tile id no longer

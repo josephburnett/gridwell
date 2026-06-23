@@ -23,14 +23,16 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	rest := strings.TrimPrefix(r.URL.Path, "/preview/tile/")
+	// Embed links may carry a qualified "<primary-uuid>/<id>"; the preview
+	// endpoint serves the primary localdb only, so strip the prefix.
+	rest := stripUUID(strings.TrimPrefix(r.URL.Path, "/preview/tile/"), s.primaryUUID)
 	tileID, err := strconv.ParseInt(rest, 10, 64)
 	if err != nil || tileID <= 0 {
 		http.Error(w, "invalid tile id", http.StatusBadRequest)
 		return
 	}
 
-	tile, err := s.store.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
+	tile, err := s.primary.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
 	if err != nil {
 		writeHTTPError(w, err)
 		return
@@ -39,7 +41,7 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 	width, height := parsePreviewSize(r.URL.Query().Get("w"), r.URL.Query().Get("h"))
 
 	if tile.Kind == rpc.KindURL {
-		jpeg, err := s.store.GetTilePreview(r.Context(), strconv.FormatInt(tileID, 10))
+		jpeg, err := s.primary.GetTilePreview(r.Context(), strconv.FormatInt(tileID, 10))
 		if err == nil && len(jpeg) > 0 {
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Header().Set("Cache-Control", "no-cache")

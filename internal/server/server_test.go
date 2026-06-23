@@ -13,13 +13,37 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
-// newTestServer wires up a Server backed by an in-memory store and
-// returns the httptest server, a typed Connect client pointed at it,
-// and the bootstrapped root grid id.
+// registerPrimaryLocaldb serves st as a localdb plugin in reg under its stable
+// uuid — exactly how production registers the primary DB. Returns the uuid and
+// the qualified root grid id the client should open at.
+func registerPrimaryLocaldb(t *testing.T, reg *plugin.Registry, st *store.Store) (uuid, qualifiedRoot string) {
+	t.Helper()
+	uuid, err := st.PluginUUID(context.Background())
+	if err != nil {
+		t.Fatalf("plugin uuid: %v", err)
+	}
+	client, closer, err := plugin.ServeInProcess(localdb.New(st, nil))
+	if err != nil {
+		t.Fatalf("serve primary localdb: %v", err)
+	}
+	t.Cleanup(closer)
+	reg.Register(uuid, "localdb", client, nil)
+	bareRoot, err := st.RootGridID(context.Background())
+	if err != nil {
+		t.Fatalf("root grid id: %v", err)
+	}
+	return uuid, uuid + "/" + bareRoot
+}
+
+// newTestServer wires up a Server whose primary DB is a registered localdb
+// plugin (the server holds no store of its own for the data plane) and returns
+// the httptest server, a typed Connect client, and the qualified root grid id.
 func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
@@ -28,12 +52,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	root, err := st.RootGridID(context.Background())
-	if err != nil {
-		t.Fatalf("root grid id: %v", err)
-	}
+	reg := plugin.NewRegistry()
+	uuid, root := registerPrimaryLocaldb(t, reg, st)
 
-	srv := New(st, Config{})
+	srv := New(reg, uuid, st, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -145,7 +167,9 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		t.Fatalf("write asset: %v", err)
 	}
 
-	srv := New(st, Config{StaticDir: dir})
+	reg := plugin.NewRegistry()
+	uuid, _ := registerPrimaryLocaldb(t, reg, st)
+	srv := New(reg, uuid, st, Config{StaticDir: dir})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 
