@@ -70,6 +70,10 @@ const (
 	GridwellGetTilePreviewProcedure = "/gridwell.v1.Gridwell/GetTilePreview"
 	// GridwellGetTileContentProcedure is the fully-qualified name of the Gridwell's GetTileContent RPC.
 	GridwellGetTileContentProcedure = "/gridwell.v1.Gridwell/GetTileContent"
+	// GridwellGetTileProcedure is the fully-qualified name of the Gridwell's GetTile RPC.
+	GridwellGetTileProcedure = "/gridwell.v1.Gridwell/GetTile"
+	// GridwellSetTileAltProcedure is the fully-qualified name of the Gridwell's SetTileAlt RPC.
+	GridwellSetTileAltProcedure = "/gridwell.v1.Gridwell/SetTileAlt"
 	// GridwellCreateWellProcedure is the fully-qualified name of the Gridwell's CreateWell RPC.
 	GridwellCreateWellProcedure = "/gridwell.v1.Gridwell/CreateWell"
 	// GridwellCreateTextProcedure is the fully-qualified name of the Gridwell's CreateText RPC.
@@ -129,6 +133,8 @@ type GridwellClient interface {
 	GetBlob(context.Context, *connect.Request[v1.GetBlobRequest]) (*connect.Response[v1.GetBlobResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
 	GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error)
+	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
+	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
@@ -230,6 +236,18 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellGetTileContentProcedure,
 			connect.WithSchema(gridwellMethods.ByName("GetTileContent")),
+			connect.WithClientOptions(opts...),
+		),
+		getTile: connect.NewClient[v1.GetTileRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellGetTileProcedure,
+			connect.WithSchema(gridwellMethods.ByName("GetTile")),
+			connect.WithClientOptions(opts...),
+		),
+		setTileAlt: connect.NewClient[v1.SetTileAltRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellSetTileAltProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
 			connect.WithClientOptions(opts...),
 		),
 		createWell: connect.NewClient[v1.CreateWellRequest, v1.TileResponse](
@@ -357,6 +375,8 @@ type gridwellClient struct {
 	getBlob           *connect.Client[v1.GetBlobRequest, v1.GetBlobResponse]
 	getTilePreview    *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
 	getTileContent    *connect.Client[v1.GetTileContentRequest, v1.GetTileContentResponse]
+	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
+	setTileAlt        *connect.Client[v1.SetTileAltRequest, v1.TileResponse]
 	createWell        *connect.Client[v1.CreateWellRequest, v1.TileResponse]
 	createText        *connect.Client[v1.CreateTextRequest, v1.TileResponse]
 	createURL         *connect.Client[v1.CreateURLRequest, v1.TileResponse]
@@ -435,6 +455,16 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, req *connect.Reques
 // GetTileContent calls gridwell.v1.Gridwell.GetTileContent.
 func (c *gridwellClient) GetTileContent(ctx context.Context, req *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error) {
 	return c.getTileContent.CallUnary(ctx, req)
+}
+
+// GetTile calls gridwell.v1.Gridwell.GetTile.
+func (c *gridwellClient) GetTile(ctx context.Context, req *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.getTile.CallUnary(ctx, req)
+}
+
+// SetTileAlt calls gridwell.v1.Gridwell.SetTileAlt.
+func (c *gridwellClient) SetTileAlt(ctx context.Context, req *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.setTileAlt.CallUnary(ctx, req)
 }
 
 // CreateWell calls gridwell.v1.Gridwell.CreateWell.
@@ -545,6 +575,8 @@ type GridwellHandler interface {
 	GetBlob(context.Context, *connect.Request[v1.GetBlobRequest]) (*connect.Response[v1.GetBlobResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
 	GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error)
+	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
+	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
@@ -642,6 +674,18 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellGetTileContentProcedure,
 		svc.GetTileContent,
 		connect.WithSchema(gridwellMethods.ByName("GetTileContent")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellGetTileHandler := connect.NewUnaryHandler(
+		GridwellGetTileProcedure,
+		svc.GetTile,
+		connect.WithSchema(gridwellMethods.ByName("GetTile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellSetTileAltHandler := connect.NewUnaryHandler(
+		GridwellSetTileAltProcedure,
+		svc.SetTileAlt,
+		connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellCreateWellHandler := connect.NewUnaryHandler(
@@ -778,6 +822,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellGetTilePreviewHandler.ServeHTTP(w, r)
 		case GridwellGetTileContentProcedure:
 			gridwellGetTileContentHandler.ServeHTTP(w, r)
+		case GridwellGetTileProcedure:
+			gridwellGetTileHandler.ServeHTTP(w, r)
+		case GridwellSetTileAltProcedure:
+			gridwellSetTileAltHandler.ServeHTTP(w, r)
 		case GridwellCreateWellProcedure:
 			gridwellCreateWellHandler.ServeHTTP(w, r)
 		case GridwellCreateTextProcedure:
@@ -869,6 +917,14 @@ func (UnimplementedGridwellHandler) GetTilePreview(context.Context, *connect.Req
 
 func (UnimplementedGridwellHandler) GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTileContent is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTile is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTileAlt is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error) {

@@ -157,6 +157,23 @@ func (p *Plugin) GetTileContent(ctx context.Context, req *gridwellv1.GetTileCont
 	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: "text/markdown"}, nil
 }
 
+// GetTile reads a single tile's metadata.
+func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.GetTile(ctx, req.TileId))
+}
+
+// SetTileAlt stamps a tile's display label and returns the updated tile.
+func (p *Plugin) SetTileAlt(ctx context.Context, req *gridwellv1.SetTileAltRequest) (*gridwellv1.TileResponse, error) {
+	id, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid tile_id")
+	}
+	if err := p.st.SetTileAlt(ctx, id, req.Alt); err != nil {
+		return nil, errToStatus(err)
+	}
+	return tileResp(p.st.GetTile(ctx, req.TileId))
+}
+
 // ── Creates ──────────────────────────────────────────────────────────────────
 
 func (p *Plugin) CreateWell(ctx context.Context, req *gridwellv1.CreateWellRequest) (*gridwellv1.TileResponse, error) {

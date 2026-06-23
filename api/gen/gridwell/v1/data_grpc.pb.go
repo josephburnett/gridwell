@@ -44,6 +44,8 @@ const (
 	Gridwell_GetBlob_FullMethodName           = "/gridwell.v1.Gridwell/GetBlob"
 	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
 	Gridwell_GetTileContent_FullMethodName    = "/gridwell.v1.Gridwell/GetTileContent"
+	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
+	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
 	Gridwell_CreateWell_FullMethodName        = "/gridwell.v1.Gridwell/CreateWell"
 	Gridwell_CreateText_FullMethodName        = "/gridwell.v1.Gridwell/CreateText"
 	Gridwell_CreateURL_FullMethodName         = "/gridwell.v1.Gridwell/CreateURL"
@@ -87,6 +89,8 @@ type GridwellClient interface {
 	GetBlob(ctx context.Context, in *GetBlobRequest, opts ...grpc.CallOption) (*GetBlobResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
 	GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error)
+	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateWell(ctx context.Context, in *CreateWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateURL(ctx context.Context, in *CreateURLRequest, opts ...grpc.CallOption) (*TileResponse, error)
@@ -244,6 +248,26 @@ func (c *gridwellClient) GetTileContent(ctx context.Context, in *GetTileContentR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetTileContentResponse)
 	err := c.cc.Invoke(ctx, Gridwell_GetTileContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_GetTile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetTileAlt_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -462,6 +486,8 @@ type GridwellServer interface {
 	GetBlob(context.Context, *GetBlobRequest) (*GetBlobResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
 	GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error)
+	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
+	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
 	CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error)
 	CreateText(context.Context, *CreateTextRequest) (*TileResponse, error)
 	CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error)
@@ -525,6 +551,12 @@ func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePrevi
 }
 func (UnimplementedGridwellServer) GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTileContent not implemented")
+}
+func (UnimplementedGridwellServer) GetTile(context.Context, *GetTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTile not implemented")
+}
+func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetTileAlt not implemented")
 }
 func (UnimplementedGridwellServer) CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateWell not implemented")
@@ -784,6 +816,42 @@ func _Gridwell_GetTileContent_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).GetTileContent(ctx, req.(*GetTileContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_GetTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).GetTile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_GetTile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).GetTile(ctx, req.(*GetTileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_SetTileAlt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetTileAltRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).SetTileAlt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_SetTileAlt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).SetTileAlt(ctx, req.(*SetTileAltRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1147,6 +1215,14 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTileContent",
 			Handler:    _Gridwell_GetTileContent_Handler,
+		},
+		{
+			MethodName: "GetTile",
+			Handler:    _Gridwell_GetTile_Handler,
+		},
+		{
+			MethodName: "SetTileAlt",
+			Handler:    _Gridwell_SetTileAlt_Handler,
 		},
 		{
 			MethodName: "CreateWell",

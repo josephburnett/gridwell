@@ -289,3 +289,36 @@ func TestGetTileContent_ReturnsBody(t *testing.T) {
 		t.Errorf("content = %q, want %q", resp.Data, "# hello")
 	}
 }
+
+// TestGetTileAndSetTileAlt: GetTile reads a tile's metadata; SetTileAlt stamps
+// its label and returns the updated tile.
+func TestGetTileAndSetTileAlt(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	root, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt, err := p.CreateText(ctx, &gridwellv1.CreateTextRequest{
+		GridId: root.RootGridId, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
+	})
+	if err != nil {
+		t.Fatalf("CreateText: %v", err)
+	}
+
+	got, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: txt.Tile.Id})
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if got.Tile.Id != txt.Tile.Id || got.Tile.Kind != "text" {
+		t.Errorf("GetTile = %+v, want the text tile", got.Tile)
+	}
+
+	stamped, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: txt.Tile.Id, Alt: "claude"})
+	if err != nil {
+		t.Fatalf("SetTileAlt: %v", err)
+	}
+	if stamped.Tile.AltText != "claude" {
+		t.Errorf("alt = %q, want claude", stamped.Tile.AltText)
+	}
+}

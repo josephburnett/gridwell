@@ -216,6 +216,19 @@ message GetTileContentResponse {
   string media_type = 2;
 }
 
+// GetTile reads a single tile's metadata. The server's preview + shell
+// infrastructure uses it to check a tile's kind without enumerating a grid.
+message GetTileRequest {
+  string tile_id = 1;
+}
+
+// SetTileAlt stamps a tile's display label. Used by the shell title-capture
+// path (the foreground command becomes the tile name on detach).
+message SetTileAltRequest {
+  string tile_id = 1;
+  string alt = 2;
+}
+
 // TileResponse is the shape returned by every tile-producing mutation.
 message TileResponse {
   Tile tile = 1;
@@ -459,6 +472,8 @@ service Gridwell {
   rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
   rpc GetTileContent(GetTileContentRequest) returns (GetTileContentResponse);
+  rpc GetTile(GetTileRequest) returns (TileResponse);
+  rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
 
   rpc CreateWell(CreateWellRequest) returns (TileResponse);
   rpc CreateText(CreateTextRequest) returns (TileResponse);
