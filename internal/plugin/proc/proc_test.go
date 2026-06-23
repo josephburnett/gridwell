@@ -305,3 +305,60 @@ func TestProcsourceIntegration(t *testing.T) {
 		t.Logf("procsource.Children(1): %v (non-fatal — PID 1 might be unreadable)", err)
 	}
 }
+
+// TestMoveTile_PersistsAndSurvivesReopen: a moved process tile keeps its
+// position across GetGrid and across a DB reopen — placement persists for the
+// proc plugin too.
+func TestMoveTile_PersistsAndSurvivesReopen(t *testing.T) {
+	root, parentPID, childPID := stubProcRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "proc.db")
+	p, err := proc.Open(dbPath, root, &recordKiller{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	att, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
+		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
+	})
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	gridID := att.RootGridId
+	r, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	childKey := strconv.FormatInt(childPID, 10)
+	var childTile *gridwellv1.Tile
+	for _, tile := range r.Tiles {
+		if tile.AltText == childKey {
+			childTile = tile
+		}
+	}
+	if childTile == nil {
+		t.Fatalf("child tile %q not found in %+v", childKey, r.Tiles)
+	}
+
+	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: childTile.Id, X: 4, Y: 6}); err != nil {
+		t.Fatalf("MoveTile: %v", err)
+	}
+	p.Close()
+
+	p2, err := proc.Open(dbPath, root, &recordKiller{})
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer p2.Close()
+	r2, err := p2.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if err != nil {
+		t.Fatalf("GetGrid after reopen: %v", err)
+	}
+	for _, tile := range r2.Tiles {
+		if tile.AltText == childKey {
+			if tile.X != 4 || tile.Y != 6 {
+				t.Errorf("after reopen child at (%d,%d), want (4,6)", tile.X, tile.Y)
+			}
+			return
+		}
+	}
+	t.Fatalf("child tile %q missing after reopen", childKey)
+}

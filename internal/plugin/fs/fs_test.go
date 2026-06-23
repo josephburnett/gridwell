@@ -422,3 +422,138 @@ func TestDeleteTile_MissingIsOK(t *testing.T) {
 		t.Fatalf("DeleteTile missing: %v", err)
 	}
 }
+
+// openFilePlugin opens a plugin backed by a real file (not :memory:) so a
+// reopen test can verify positions survive a process restart. Returns the
+// plugin and the db path.
+func openFilePlugin(t *testing.T) (*fs.Plugin, string) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "fs.db")
+	p, err := fs.Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { p.Close() })
+	return p, dbPath
+}
+
+// tileByName returns the tile with the given AltText (directory entry name).
+func tileByName(t *testing.T, tiles []*gridwellv1.Tile, name string) *gridwellv1.Tile {
+	t.Helper()
+	for _, tile := range tiles {
+		if tile.AltText == name {
+			return tile
+		}
+	}
+	t.Fatalf("tile %q not found", name)
+	return nil
+}
+
+// TestMoveTile_Persists: a moved tile keeps its new position across a
+// subsequent GetGrid (reconcile must not re-lay-out an existing entry). This
+// is the "placement is persistent" face of the primary rule.
+func TestMoveTile_Persists(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	note := tileByName(t, r.Tiles, "note.txt")
+
+	moved, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 5, Y: 7})
+	if err != nil {
+		t.Fatalf("MoveTile: %v", err)
+	}
+	if moved.Tile.X != 5 || moved.Tile.Y != 7 {
+		t.Fatalf("MoveTile returned (%d,%d), want (5,7)", moved.Tile.X, moved.Tile.Y)
+	}
+
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	note2 := tileByName(t, r2.Tiles, "note.txt")
+	if note2.X != 5 || note2.Y != 7 {
+		t.Errorf("after GetGrid note.txt at (%d,%d), want (5,7)", note2.X, note2.Y)
+	}
+	if note2.Id != note.Id {
+		t.Errorf("note.txt id changed %s→%s (must never re-row)", note.Id, note2.Id)
+	}
+}
+
+// TestMoveTile_SurvivesReopen: a moved tile keeps its position after the
+// plugin DB is closed and reopened — placement persists across a restart.
+func TestMoveTile_SurvivesReopen(t *testing.T) {
+	dir := tempTree(t)
+	p, dbPath := openFilePlugin(t)
+	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	gridID := att.RootGridId
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	note := tileByName(t, r.Tiles, "note.txt")
+	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 3, Y: 4}); err != nil {
+		t.Fatalf("MoveTile: %v", err)
+	}
+	p.Close()
+
+	p2, err := fs.Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer p2.Close()
+	r2, err := p2.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if err != nil {
+		t.Fatalf("GetGrid after reopen: %v", err)
+	}
+	note2 := tileByName(t, r2.Tiles, "note.txt")
+	if note2.X != 3 || note2.Y != 4 {
+		t.Errorf("after reopen note.txt at (%d,%d), want (3,4)", note2.X, note2.Y)
+	}
+}
+
+// TestResizeTile_Persists: a resized tile keeps its footprint across GetGrid.
+func TestResizeTile_Persists(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub := tileByName(t, r.Tiles, "sub")
+
+	if _, err := p.ResizeTile(context.Background(), &gridwellv1.ResizeTileRequest{TileId: sub.Id, X: 2, Y: 2, W: 3, H: 4}); err != nil {
+		t.Fatalf("ResizeTile: %v", err)
+	}
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub2 := tileByName(t, r2.Tiles, "sub")
+	if sub2.X != 2 || sub2.Y != 2 || sub2.W != 3 || sub2.H != 4 {
+		t.Errorf("resized sub = (%d,%d,%d,%d), want (2,2,3,4)", sub2.X, sub2.Y, sub2.W, sub2.H)
+	}
+}
+
+// TestSetWellView_Persists: a well's preview framing persists across GetGrid,
+// so descent restores the same view (preview = descent target = ascent return).
+func TestSetWellView_Persists(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub := tileByName(t, r.Tiles, "sub")
+
+	if _, err := p.SetWellView(context.Background(), &gridwellv1.SetWellViewRequest{TileId: sub.Id, ViewX: 6, ViewY: 8, ViewZoom: 2.5}); err != nil {
+		t.Fatalf("SetWellView: %v", err)
+	}
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub2 := tileByName(t, r2.Tiles, "sub")
+	if sub2.ViewX != 6 || sub2.ViewY != 8 || sub2.ViewZoom != 2.5 {
+		t.Errorf("well view = (%d,%d,%v), want (6,8,2.5)", sub2.ViewX, sub2.ViewY, sub2.ViewZoom)
+	}
+}
+
+// TestMoveTile_CrossGridRejected: moving a tile to a different grid is not
+// supported (it would require an on-disk mv) and must error rather than
+// silently corrupt placement.
+func TestMoveTile_CrossGridRejected(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	note := tileByName(t, r.Tiles, "note.txt")
+	_, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, DestGridId: "999999", X: 1, Y: 1})
+	if err == nil {
+		t.Error("expected error for cross-grid move, got nil")
+	}
+}

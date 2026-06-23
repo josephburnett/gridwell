@@ -18,11 +18,17 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/procsource"
 	_ "modernc.org/sqlite"
 )
 
 const autoGridWidth = 8
+
+// procLabelCol is the tiles-table column holding a tile's display label for
+// the proc plugin (the source key: a PID string or "@info"). Passed to the
+// shared griddb helpers.
+const procLabelCol = "key"
 
 // infoKey is the stable source key for the tile representing the root
 // process's own metadata.
@@ -167,7 +173,7 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		return nil, err
 	}
 
-	tiles, err := p.loadTiles(gridID)
+	tiles, err := griddb.LoadTiles(p.db, procLabelCol, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +184,23 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		SourceId:   strconv.FormatInt(rootPID, 10),
 	}
 	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
+}
+
+// MoveTile repositions a process tile within its grid and persists the new
+// position so it survives the next GetGrid and a restart.
+func (p *Plugin) MoveTile(_ context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplyMove(p.db, procLabelCol, req)
+}
+
+// ResizeTile persists a new footprint for a process tile.
+func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplyResize(p.db, procLabelCol, req)
+}
+
+// SetWellView persists a process well's preview framing so descent and ascent
+// restore the same view.
+func (p *Plugin) SetWellView(_ context.Context, req *gridwellv1.SetWellViewRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplySetWellView(p.db, procLabelCol, req)
 }
 
 // Probe checks whether the process backing tile_id still exists.
@@ -395,40 +418,3 @@ func (p *Plugin) reconcileTiles(gridID, rootPID int64) error {
 	return tx.Commit()
 }
 
-// loadTiles loads tile rows for a grid and converts them to proto Tiles.
-func (p *Plugin) loadTiles(gridID int64) ([]*gridwellv1.Tile, error) {
-	rows, err := p.db.Query(`
-		SELECT id, key, pid, kind, x, y, w, h,
-		       COALESCE(child_grid_id,0), view_x, view_y, view_zoom
-		FROM tiles WHERE grid_id = ? ORDER BY id`, gridID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []*gridwellv1.Tile
-	for rows.Next() {
-		var id, pid, x, y, w, h, childGrid, vx, vy int64
-		var vz float64
-		var key, kind string
-		if err := rows.Scan(&id, &key, &pid, &kind, &x, &y, &w, &h, &childGrid, &vx, &vy, &vz); err != nil {
-			return nil, err
-		}
-		t := &gridwellv1.Tile{
-			Id:          strconv.FormatInt(id, 10),
-			GridId:      strconv.FormatInt(gridID, 10),
-			Kind:        kind,
-			X:           x,
-			Y:           y,
-			W:           w,
-			H:           h,
-			AltText:     key,
-			ChildGridId: strconv.FormatInt(childGrid, 10),
-			ViewX:       vx,
-			ViewY:       vy,
-			ViewZoom:    vz,
-		}
-		out = append(out, t)
-	}
-	return out, rows.Err()
-}
