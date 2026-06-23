@@ -131,7 +131,7 @@ func TestRegistry_Deregister(t *testing.T) {
 		t.Fatalf("ServeInProcess: %v", err)
 	}
 	reg := plugin.NewRegistry()
-	reg.Register("test-id", client, closer)
+	reg.Register("test-id", "stub", client, closer)
 
 	if _, ok := reg.Get("test-id"); !ok {
 		t.Fatal("plugin not registered")

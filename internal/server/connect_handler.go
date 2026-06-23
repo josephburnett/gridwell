@@ -95,6 +95,62 @@ func (h *connectHandler) qualifyLocaldbEvent(e rpc.Event) *pb.Event {
 	return rpc.EventToProto(e)
 }
 
+// ── plugin routing ────────────────────────────────────────────────────────────
+
+// pluginRoute resolves the plugin that owns a qualified id. It returns the
+// plugin's gRPC client, the local (unprefixed) id, and the plugin uuid when id
+// is a qualified reference to a non-localdb plugin present in the registry.
+// ok is false for bare ids, localdb-qualified ids, and unknown plugins — all
+// of which route to the local store.
+func (h *connectHandler) pluginRoute(id string) (client pb.GridwellClient, local, uuid string, ok bool) {
+	if h.srv.pluginReg == nil {
+		return nil, "", "", false
+	}
+	u, l, split := splitPluginID(id)
+	if !split || u == h.srv.localdbUUID {
+		return nil, "", "", false
+	}
+	c, found := h.srv.pluginReg.Get(u)
+	if !found {
+		return nil, "", "", false
+	}
+	return c, l, u, true
+}
+
+// stripUUID removes a specific plugin uuid prefix from an id, leaving bare and
+// foreign-prefixed ids untouched.
+func stripUUID(id, uuid string) string {
+	if u, l, ok := splitPluginID(id); ok && u == uuid {
+		return l
+	}
+	return id
+}
+
+// localPathFor strips a plugin uuid prefix from every segment of a path, so a
+// path qualified for the client becomes plugin-local on the way in.
+func localPathFor(p *pb.Path, uuid string) *pb.Path {
+	if p == nil {
+		return nil
+	}
+	ids := make([]string, len(p.WellIds))
+	for i, id := range p.WellIds {
+		ids[i] = stripUUID(id, uuid)
+	}
+	return &pb.Path{WellIds: ids}
+}
+
+// pluginTileResp qualifies a plugin's TileResponse for the client.
+func pluginTileResp(uuid string, resp *pb.TileResponse, err error) (*connect.Response[pb.TileResponse], error) {
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	t := resp.GetTile()
+	if t != nil {
+		t = qualifyTiles(uuid, []*pb.Tile{t})[0]
+	}
+	return connect.NewResponse(&pb.TileResponse{Tile: t}), nil
+}
+
 // ── RPC handlers ──────────────────────────────────────────────────────────────
 
 func (h *connectHandler) Bootstrap(ctx context.Context, _ *connect.Request[pb.BootstrapRequest]) (*connect.Response[pb.BootstrapResponse], error) {
@@ -119,19 +175,15 @@ func (h *connectHandler) Bootstrap(ctx context.Context, _ *connect.Request[pb.Bo
 
 func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.GetGridRequest]) (*connect.Response[pb.GetGridResponse], error) {
 	gridID := req.Msg.GridId
-	if uuid, local, ok := splitPluginID(gridID); ok && h.srv.pluginReg != nil {
-		if uuid != h.srv.localdbUUID {
-			if client, found := h.srv.pluginReg.Get(uuid); found {
-				resp, err := client.GetGrid(ctx, &pb.GetGridRequest{GridId: local})
-				if err != nil {
-					return nil, asConnectError(err)
-				}
-				return connect.NewResponse(&pb.GetGridResponse{
-					Grid:  qualifyGrid(uuid, resp.Grid),
-					Tiles: qualifyTiles(uuid, resp.Tiles),
-				}), nil
-			}
+	if client, local, uuid, ok := h.pluginRoute(gridID); ok {
+		resp, err := client.GetGrid(ctx, &pb.GetGridRequest{GridId: local})
+		if err != nil {
+			return nil, asConnectError(err)
 		}
+		return connect.NewResponse(&pb.GetGridResponse{
+			Grid:  qualifyGrid(uuid, resp.Grid),
+			Tiles: qualifyTiles(uuid, resp.Tiles),
+		}), nil
 	}
 	localGridID := h.localID(gridID)
 	r, err := h.srv.store.GetGrid(ctx, localGridID)
@@ -201,6 +253,18 @@ func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[p
 }
 
 func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
+	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
+		resp, err := client.MoveTile(ctx, &pb.MoveTileRequest{
+			Path:       localPathFor(req.Msg.Path, uuid),
+			TileId:     local,
+			Version:    req.Msg.Version,
+			DestGridId: stripUUID(req.Msg.DestGridId, uuid),
+			DestPath:   localPathFor(req.Msg.DestPath, uuid),
+			X:          req.Msg.X,
+			Y:          req.Msg.Y,
+		})
+		return pluginTileResp(uuid, resp, err)
+	}
 	r := rpc.MoveTileFromProto(req.Msg)
 	r.TileID = h.localID(r.TileID)
 	r.DestGridID = h.localID(r.DestGridID)
@@ -217,12 +281,35 @@ func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.
 	return h.tileRespQ(h.srv.store.CloneTile(ctx, r))
 }
 func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb.ResizeTileRequest]) (*connect.Response[pb.TileResponse], error) {
+	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
+		resp, err := client.ResizeTile(ctx, &pb.ResizeTileRequest{
+			Path:    localPathFor(req.Msg.Path, uuid),
+			TileId:  local,
+			Version: req.Msg.Version,
+			X:       req.Msg.X,
+			Y:       req.Msg.Y,
+			W:       req.Msg.W,
+			H:       req.Msg.H,
+		})
+		return pluginTileResp(uuid, resp, err)
+	}
 	r := rpc.ResizeTileFromProto(req.Msg)
 	r.TileID = h.localID(r.TileID)
 	r.Path = h.localPath(r.Path)
 	return h.tileRespQ(h.srv.store.ResizeTile(ctx, r))
 }
 func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[pb.SetWellViewRequest]) (*connect.Response[pb.TileResponse], error) {
+	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
+		resp, err := client.SetWellView(ctx, &pb.SetWellViewRequest{
+			Path:     localPathFor(req.Msg.Path, uuid),
+			TileId:   local,
+			Version:  req.Msg.Version,
+			ViewX:    req.Msg.ViewX,
+			ViewY:    req.Msg.ViewY,
+			ViewZoom: req.Msg.ViewZoom,
+		})
+		return pluginTileResp(uuid, resp, err)
+	}
 	r := rpc.SetWellViewFromProto(req.Msg)
 	r.TileID = h.localID(r.TileID)
 	r.Path = h.localPath(r.Path)
@@ -280,6 +367,19 @@ func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb
 }
 
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
+	// A tile inside a plugin grid (file / process) is deleted by the plugin
+	// itself — trashing the file or signalling the process. No shell-session
+	// reaping applies to plugin tiles.
+	if client, local, uuid, ok := h.pluginRoute(req.Msg.TileId); ok {
+		if _, err := client.DeleteTile(ctx, &pb.DeleteTileRequest{
+			Path:    localPathFor(req.Msg.Path, uuid),
+			TileId:  local,
+			Version: req.Msg.Version,
+		}); err != nil {
+			return nil, asConnectError(err)
+		}
+		return connect.NewResponse(&pb.DeleteTileResponse{}), nil
+	}
 	r := rpc.DeleteTileFromProto(req.Msg)
 	r.TileID = h.localID(r.TileID)
 	r.Path = h.localPath(r.Path)

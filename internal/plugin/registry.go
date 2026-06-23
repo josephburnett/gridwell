@@ -13,6 +13,9 @@ import (
 type Registry struct {
 	mu      sync.RWMutex
 	clients map[string]gridwellv1.GridwellClient
+	// kinds maps plugin UUID → kind ("fs", "proc", "localdb", …) so callers
+	// that need "the fs plugin" can resolve one by kind.
+	kinds map[string]string
 	// closers holds the cleanup function for each managed (subprocess) plugin.
 	closers map[string]func()
 }
@@ -21,19 +24,35 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		clients: make(map[string]gridwellv1.GridwellClient),
+		kinds:   make(map[string]string),
 		closers: make(map[string]func()),
 	}
 }
 
-// Register adds a plugin client for the given UUID. closer, if non-nil, is
-// called on Close() to terminate the backing subprocess.
-func (r *Registry) Register(id string, client gridwellv1.GridwellClient, closer func()) {
+// Register adds a plugin client for the given UUID and kind. closer, if
+// non-nil, is called on Close() to terminate the backing subprocess.
+func (r *Registry) Register(id, kind string, client gridwellv1.GridwellClient, closer func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.clients[id] = client
+	r.kinds[id] = kind
 	if closer != nil {
 		r.closers[id] = closer
 	}
+}
+
+// FirstByKind returns the UUID and client of the first registered plugin of
+// the given kind. Order is unspecified; intended for single-instance kinds
+// (one fs / one proc plugin), which is the current configuration.
+func (r *Registry) FirstByKind(kind string) (uuid string, client gridwellv1.GridwellClient, ok bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for id, k := range r.kinds {
+		if k == kind {
+			return id, r.clients[id], true
+		}
+	}
+	return "", nil, false
 }
 
 // Deregister removes a plugin from the registry and calls its closer. Silently
@@ -46,6 +65,7 @@ func (r *Registry) Deregister(id string) {
 		delete(r.closers, id)
 	}
 	delete(r.clients, id)
+	delete(r.kinds, id)
 }
 
 // Get returns the client for id, or (nil, false) if not registered.
@@ -86,4 +106,5 @@ func (r *Registry) Close() {
 		delete(r.closers, id)
 	}
 	r.clients = make(map[string]gridwellv1.GridwellClient)
+	r.kinds = make(map[string]string)
 }
