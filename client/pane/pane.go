@@ -53,11 +53,15 @@ func (s Side) Direction() Direction {
 // scroll inside the text's interior in logical pixels; mirrored to the
 // text tile's view_y on save.
 type Pane struct {
-	ID   string
-	Path []string
-	Cx   float64
-	Cy   float64
-	Zoom float64
+	ID string
+	// Anchor is the qualified grid id of the plugin root this pane is currently
+	// inside; Path's well ids are relative to it. Anchor == "" means the pane is
+	// at the launcher start screen (no grid, no descent).
+	Anchor string `json:"anchor,omitempty"`
+	Path   []string
+	Cx     float64
+	Cy     float64
+	Zoom   float64
 
 	TextFocus   string  `json:"file_focus,omitempty"`
 	TextMode    string  `json:"file_mode,omitempty"`
@@ -67,16 +71,69 @@ type Pane struct {
 	// parent-grid Zoom). 1.0 means "natural reading size"; the wheel
 	// adjusts this directly when TextFocus != 0.
 	TextZoom float64 `json:"file_zoom,omitempty"`
+
+	// Up is the portal ascent stack: each frame is the pane state at a previous
+	// plugin level, restored on ascent when Path is empty. Entering a plugin
+	// (a portal jump that crosses plugin boundaries without a well tile in the
+	// current grid) pushes the current level here.
+	Up []Frame `json:"up,omitempty"`
 }
 
-// Clone returns a deep copy of the pane (including the path slice).
+// Frame snapshots a pane's per-plugin navigation level so a portal ascent can
+// restore the exact level the user jumped from.
+type Frame struct {
+	Anchor      string   `json:"anchor,omitempty"`
+	Path        []string `json:"path,omitempty"`
+	Cx          float64  `json:"cx,omitempty"`
+	Cy          float64  `json:"cy,omitempty"`
+	Zoom        float64  `json:"zoom,omitempty"`
+	TextFocus   string   `json:"tf,omitempty"`
+	TextMode    string   `json:"tm,omitempty"`
+	TextScrollX float64  `json:"tsx,omitempty"`
+	TextScrollY float64  `json:"tsy,omitempty"`
+	TextZoom    float64  `json:"tz,omitempty"`
+}
+
+// Clone returns a deep copy of the pane (including the path + Up slices).
 func (p *Pane) Clone(newID string) *Pane {
 	c := *p
 	c.ID = newID
 	if len(p.Path) > 0 {
 		c.Path = slices.Clone(p.Path)
 	}
+	if len(p.Up) > 0 {
+		c.Up = slices.Clone(p.Up)
+		for i := range c.Up {
+			c.Up[i].Path = slices.Clone(p.Up[i].Path)
+		}
+	}
 	return &c
+}
+
+// PushFrame snapshots the pane's current level onto the Up stack (called when
+// entering a plugin via the launcher).
+func (p *Pane) PushFrame() {
+	p.Up = append(p.Up, Frame{
+		Anchor: p.Anchor, Path: slices.Clone(p.Path),
+		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom,
+		TextFocus: p.TextFocus, TextMode: p.TextMode,
+		TextScrollX: p.TextScrollX, TextScrollY: p.TextScrollY, TextZoom: p.TextZoom,
+	})
+}
+
+// PopFrame restores the most recent Up frame into the pane and returns true.
+// Returns false when the stack is empty.
+func (p *Pane) PopFrame() bool {
+	if len(p.Up) == 0 {
+		return false
+	}
+	f := p.Up[len(p.Up)-1]
+	p.Up = p.Up[:len(p.Up)-1]
+	p.Anchor, p.Path = f.Anchor, f.Path
+	p.Cx, p.Cy, p.Zoom = f.Cx, f.Cy, f.Zoom
+	p.TextFocus, p.TextMode = f.TextFocus, f.TextMode
+	p.TextScrollX, p.TextScrollY, p.TextZoom = f.TextScrollX, f.TextScrollY, f.TextZoom
+	return true
 }
 
 // Split is an internal tile in the pane tree. Ratio is in [0, 1]; A is the

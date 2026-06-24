@@ -150,7 +150,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	return &dropTarget{
 		pane:     p,
 		rect:     r,
-		gridID:   a.gridIDForPath(p.Path),
+		gridID:   a.gridIDForPane(p),
 		path:     slices.Clone(p.Path),
 		cellSize: parentCell,
 		originX:  parentOriginX,

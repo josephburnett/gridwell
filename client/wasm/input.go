@@ -88,7 +88,7 @@ func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64) {
 // tileAtCell returns the tile in the pane's grid that covers the given cell,
 // or nil. Used for click hit-testing.
 func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return nil
@@ -254,7 +254,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// pane (it's hidden otherwise). A click here on a just-focused
 			// pane falls through to the content/xterm path below.
 			if prevFocus == p.ID && pointInPlus(r, sx, sy) && !a.hasShellStream(p.ID) {
-				gid := a.gridIDForPath(p.Path)
+				gid := a.gridIDForPane(p)
 				if g, ok := a.c.Grid(gid); ok {
 					if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
 						a.openShellStream(p, tile.ID)
@@ -288,7 +288,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				} else {
 					// Frozen: go live (place the native view), same as
 					// right-drag-down.
-					gid := a.gridIDForPath(p.Path)
+					gid := a.gridIDForPane(p)
 					if g, ok := a.c.Grid(gid); ok {
 						if tile, ok := g.Tiles[p.TextFocus]; ok {
 							a.openURLStream(p, tile.ID)
@@ -403,7 +403,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		curScreenY:   sy,
 		// Default source = the focused pane's leaf grid; overridden
 		// below if we land on a child preview tile.
-		srcGridID:   a.gridIDForPath(p.Path),
+		srcGridID:   a.gridIDForPane(p),
 		srcPath:     slices.Clone(p.Path),
 		srcCellSize: parentCell,
 	}
@@ -997,7 +997,7 @@ func (a *App) startAscent(p *pane.Pane) {
 	var well rpc.Tile
 	for ; level >= 0; level-- {
 		parentPath := p.Path[:level]
-		parentGridID := a.gridIDForPath(parentPath)
+		parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
 		g, ok := a.c.Grid(parentGridID)
 		if !ok {
 			a.fetchGrid(parentGridID)
@@ -1045,17 +1045,9 @@ func (a *App) startAscent(p *pane.Pane) {
 
 	saved := a.popPaneState(p.ID)
 	if saved == nil {
-		// No in-session saved state (e.g., user reloaded mid-descent
-		// and is now ascending). Fall back to the bootstrap-supplied
-		// root view when ascending all the way to root, so the user
-		// returns to their preferred viewport rather than a forced
-		// "well center, zoom 1" pose.
-		if level == 0 && a.rootViewZoom > 0 {
-			saved = &paneState{Cx: a.rootViewCx, Cy: a.rootViewCy, Zoom: a.rootViewZoom}
-		}
-		if saved == nil {
-			saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
-		}
+		// No in-session saved state (e.g., user reloaded mid-descent and
+		// is now ascending). Land on the parent well centered at zoom 1.
+		saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
 	}
 
 	// Distances in shared px-equivalent units so SplitN can apportion
@@ -1227,7 +1219,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	// transition lands. URL tiles don't have a blob; their preview
 	// path goes through urlPreview instead.
 	if file.Kind == rpc.KindText {
-		a.fetchBlob(file.BlobID)
+		a.fetchTileContent(file.ID)
 		// Source-backed text tiles (the @info tile in a proc-well, fs
 		// file metadata) are reconciled server-side from live host
 		// state. Trigger a parent GetGrid so the reconciler runs again
@@ -1236,7 +1228,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 		// fetches automatically. The user briefly sees the previous
 		// snapshot, then it snaps to current.
 		if a.tileReadOnly(file) {
-			a.fetchGrid(a.gridIDForPath(p.Path))
+			a.fetchGrid(a.gridIDForPane(p))
 		}
 	}
 
@@ -1307,7 +1299,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	if p.TextFocus == "" {
 		return
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		// Parent grid not cached — give up gracefully.
@@ -1458,7 +1450,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 		TileChanged: &rpc.TileChanged{Tile: updated},
 	})
 
-	parentGridID := a.gridIDForPath(parentPath)
+	parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
 	req := &rpc.SetWellViewRequest{
 		Path:     rpc.Path{WellIDs: slices.Clone(parentPath)},
 		TileID:   well.ID,
@@ -1485,7 +1477,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	if file.Kind != rpc.KindText {
 		return
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	r := paneRectFor(a, p)
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
@@ -1508,7 +1500,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// Pre-write the parent-grid preview to the user's edits before the ascent
 	// transition. Tile-scoped (OptimisticEdit) so the optimistic content lands
 	// only on this tile, not on any clone that shares its content-addressed blob.
-	if hasBuf && file.BlobID != 0 {
+	if hasBuf {
 		a.c.OptimisticEdit(gid, file.ID, []byte(buf))
 	}
 
@@ -1687,7 +1679,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
 	req := &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: path},
@@ -1701,7 +1693,7 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 // createTextAtCell fires CreateText at the given cell with the given
 // initial bytes. Footprint is 1×1.
 func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
 	req := &rpc.CreateTextRequest{
 		Path:   rpc.Path{WellIDs: path},
@@ -1720,7 +1712,7 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 // This is the only auto-go-live path; all other descents into URL tiles
 // start frozen and require an explicit refresh gesture.
 func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
 	paneID := p.ID
 	req := &rpc.CreateURLRequest{
@@ -1755,7 +1747,7 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 // fsPath (canonical absolute). Palette default is "/" — the rest of the
 // filesystem is reached by descending.
 func (a *App) createFileWellAtCell(p *pane.Pane, fsPath string, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
 	req := &rpc.CreateFileWellRequest{
 		Path:   rpc.Path{WellIDs: path},
@@ -1770,7 +1762,7 @@ func (a *App) createFileWellAtCell(p *pane.Pane, fsPath string, cellX, cellY int
 // createProcessWellAtCell fires CreateProcessWell at the given cell,
 // rooted at pid. Palette default is PID 1 (init).
 func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
 	req := &rpc.CreateProcessWellRequest{
 		Path:   rpc.Path{WellIDs: path},
@@ -1789,7 +1781,7 @@ func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int6
 // ascent / re-descent shows the frozen JPEG and refresh reattaches
 // to the same tmux session (state preserved).
 func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
 	paneID := p.ID
 	req := &rpc.CreateShellRequest{

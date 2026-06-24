@@ -360,7 +360,7 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	var g *cache.Grid
 	gridOK := false
 	if p != nil {
-		gid := a.gridIDForPath(p.Path)
+		gid := a.gridIDForPane(p)
 		g, gridOK = a.c.Grid(gid)
 	}
 	urlLive := false

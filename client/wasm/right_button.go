@@ -491,7 +491,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 		originScreenX:  tlX,
 		originScreenY:  tlY,
 		originPaneRect: r,
-		srcGridID:      a.gridIDForPath(p.Path),
+		srcGridID:      a.gridIDForPane(p),
 		srcPath:        slices.Clone(p.Path),
 		srcCellSize:    cellSize,
 	}
@@ -642,7 +642,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	if p == nil {
 		return
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	req := &rpc.ResizeTileRequest{
 		Path:    rpc.Path{WellIDs: slices.Clone(p.Path)},
 		TileID:  n.ID,
@@ -692,7 +692,7 @@ func (a *App) flushDroppedSubtree(n pane.TreeNode) {
 // no-op when the pane has no live stream).
 func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 	if p.TextFocus != "" {
-		if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
+		if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 			if file, ok := g.Tiles[p.TextFocus]; ok {
 				a.saveFileBeforeAscent(p, file)
 			}

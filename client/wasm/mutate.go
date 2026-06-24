@@ -129,7 +129,7 @@ func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent 
 	if !a.reactToErr("UpdateText", gid, err) {
 		return rpc.Tile{}, false
 	}
-	a.c.PutBlob(tile.BlobID, newContent)
+	a.c.PutTileContent(tile.ID, newContent)
 	return *tile, true
 }
 

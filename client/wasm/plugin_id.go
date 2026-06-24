@@ -27,10 +27,28 @@ func isExitWell(n *rpc.Tile) bool {
 		uuidOf(n.ChildGridID) != uuidOf(n.GridID)
 }
 
-// isPluginTile reports whether a tile is owned by a non-local plugin (its id
-// is qualified with a uuid other than the local store's). Such tiles are
-// read-only and fetch their body via GetTileContent rather than a blob id.
-func (a *App) isPluginTile(n *rpc.Tile) bool {
-	u := uuidOf(n.ID)
-	return u != "" && u != a.localdbUUID
+// gridWritable reports whether the plugin owning gridID accepts new/edited
+// tiles (only localdb plugins do). Looked up by the grid's uuid against the
+// plugin list. An unknown uuid (not yet loaded) is treated as not writable.
+func (a *App) gridWritable(gridID string) bool {
+	u := uuidOf(gridID)
+	if u == "" {
+		return false
+	}
+	for i := range a.plugins {
+		if a.plugins[i].UUID == u {
+			return a.plugins[i].Writable
+		}
+	}
+	return false
+}
+
+// pluginByUUID returns the configured plugin with the given uuid, or false.
+func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
+	for i := range a.plugins {
+		if a.plugins[i].UUID == u {
+			return a.plugins[i], true
+		}
+	}
+	return rpc.PluginInfo{}, false
 }

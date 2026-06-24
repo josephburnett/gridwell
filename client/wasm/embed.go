@@ -175,7 +175,7 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	}
 	// Three gates: a real reference, a found target, and (v1) a same-grid
 	// target. Cross-grid embeds aren't supported yet.
-	if !embed.EmbedDescentAllowed(hit.tileID, target != nil, targetGridID, a.gridIDForPath(p.Path)) {
+	if !embed.EmbedDescentAllowed(hit.tileID, target != nil, targetGridID, a.gridIDForPane(p)) {
 		return false
 	}
 	// Stash the doc's descent context before clearing it, then dispatch

@@ -352,7 +352,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		hide()
@@ -410,7 +410,7 @@ func (a *App) refreshFileOverlay() {
 	// even if a stale TextMode says "text". (The mode is server-stored
 	// and can outlive the source-key being set, so this is the only
 	// place we can enforce the invariant client-side.)
-	if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
+	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
 			ta.Get("style").Set("display", "none")
 			a.canvas.Call("focus")
@@ -441,7 +441,7 @@ func (a *App) refreshFileOverlay() {
 	// previous tile's buffer doesn't appear as the new tile's
 	// "default" content. The blob-fetch onComplete fires
 	// refreshFileOverlay again with the actual content.
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	in := embedpkg.TextareaSyncInput{
 		FocusedTileID: p.TextFocus,
 		LastTileID:    a.lastTextareaTileID,
@@ -527,7 +527,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	}
 	// No editable mode for source-backed text — toggle would put us in
 	// a state with a visible textarea over a read-only blob.
-	if g, ok := a.c.Grid(a.gridIDForPath(p.Path)); ok {
+	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
 			return
 		}
@@ -563,7 +563,7 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 		return
 	}
 	buf := a.fileTextarea.Get("value").String()
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return

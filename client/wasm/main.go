@@ -10,7 +10,6 @@ package main
 import (
 	"context"
 	"strconv"
-	"strings"
 	"syscall/js"
 	"time"
 
@@ -57,17 +56,11 @@ type App struct {
 	cl *rpc.Client
 
 	// plugins is the configured plugin list from ListPlugins, used to build the
-	// launcher / + menu (rootless model).
+	// launcher / + menu (rootless model). Order is config order.
 	plugins []rpc.PluginInfo
 
-	rootGridID  string
-	localdbUUID string // UUID prefix extracted from rootGridID at bootstrap
-	// Seeded from Bootstrap and refreshed by scheduleRootViewSave.
-	// Used to restore the focused pane's initial framing on boot, and
-	// as the fallback target when ascending all the way back to root.
-	rootViewCx, rootViewCy, rootViewZoom float64
-	tree                                 *pane.Tree
-	c                                    *cache.Cache
+	tree *pane.Tree
+	c    *cache.Cache
 
 	width, height float64
 
@@ -457,20 +450,13 @@ func main() {
 	select {}
 }
 
-// bootstrap fetches the current root grid id from the server, then starts
-// the rest of the client.
+// bootstrap loads the plugin list (the launcher source) and starts the rest of
+// the client. Rootless: there is no server root — panes start at the empty
+// launcher screen (Anchor == "") and the user enters a plugin from the + menu.
 func (a *App) bootstrap() {
-	// Rootless model: there is no server root. Fetch the plugin list and (until
-	// the full launcher lands) enter the first plugin's root grid as the de-facto
-	// home — the client picks a plugin rather than the server designating one.
 	plugins, err := a.cl.ListPlugins(context.Background())
-	if err != nil || len(plugins) == 0 {
-		return
-	}
-	a.plugins = plugins
-	a.rootGridID = plugins[0].RootGridID
-	if i := strings.IndexByte(a.rootGridID, '/'); i > 0 {
-		a.localdbUUID = a.rootGridID[:i]
+	if err == nil {
+		a.plugins = plugins
 	}
 	a.afterBootstrap()
 }
@@ -478,21 +464,9 @@ func (a *App) bootstrap() {
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
 	p := a.tree.FocusedPane()
+	p.Anchor = "" // start at the launcher; applyURLOnBoot may restore a location
 	p.Path = nil
-	// Seed the root pane with the framing the server told us about.
-	// URL boot may overwrite this in applyURLOnBoot if the URL pins
-	// the focused pane to a specific spot.
-	if a.rootViewZoom > 0 {
-		p.Cx = a.rootViewCx
-		p.Cy = a.rootViewCy
-		p.Zoom = a.rootViewZoom
-	}
 
-	a.sched.rootViewSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.rootViewSaveScheduled = false
-		a.flushRootViewSave()
-		return nil
-	})
 	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.urlUpdateScheduled = false
 		a.replaceURLNow()
@@ -663,7 +637,7 @@ func (a *App) completeTransition() {
 	}
 	delete(a.selectedTileID, p.ID)
 	a.gridLoadFailed = map[string]bool{}
-	a.fetchGrid(a.gridIDForPath(p.Path))
+	a.fetchGrid(a.gridIDForPane(p))
 	if tr.onComplete != nil {
 		tr.onComplete()
 	}
@@ -743,13 +717,21 @@ func (a *App) startSSE() {
 // across reloads. Text tile mode (rendered/text) is persisted on the
 // tile row, so it survives reload.
 
-// gridIDForPath walks the pane's descent path and returns the grid id at the
-// leaf. Returns root if the path is empty or stale prefixes don't resolve.
-func (a *App) gridIDForPath(p []string) string {
+// gridIDForPane returns the grid id at the leaf of the pane's descent path,
+// walking from the pane's Anchor (the plugin root it currently sits inside).
+// Returns "" when the pane is at the launcher start screen (Anchor == "").
+func (a *App) gridIDForPane(p *pane.Pane) string {
+	return a.gridIDForPathFrom(p.Anchor, p.Path)
+}
+
+// gridIDForPathFrom walks `path` (well row ids) from `anchor` and returns the
+// grid id at the leaf. Returns anchor if the path is empty or stale prefixes
+// don't resolve, and "" when anchor is "" (start screen).
+func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 	// The walk (follow each well's child grid, stop at a stale prefix) is the
 	// pure gridpath.ResolveLeafGrid; the closure does the cache read and kicks
 	// a background fetch on an uncached grid.
-	return gridpath.ResolveLeafGrid(a.rootGridID, p,
+	return gridpath.ResolveLeafGrid(anchor, p,
 		func(gid, wellID string) (string, bool, bool) {
 			g, ok := a.c.Grid(gid)
 			if !ok {

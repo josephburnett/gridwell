@@ -270,7 +270,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		a.previewPaneID = ""
 		a.previewPaneRect = pane.Rect{}
 	}()
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, gridOK := a.c.Grid(gid)
 
 	// Clip content to the inside of the border. The border itself is
@@ -677,7 +677,7 @@ func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
 // trip on ascent all consult this to keep the user from typing into one and
 // silently re-posting a stale buffer.
 func (a *App) tileReadOnly(n *rpc.Tile) bool {
-	return n.Kind == rpc.KindText && a.isPluginTile(n)
+	return n.Kind == rpc.KindText && !a.gridWritable(n.GridID)
 }
 
 // tileOutside reports whether a tile should be rendered with the "outside
@@ -809,28 +809,6 @@ func (a *App) paneFocusedOnFile(fileTileID string) *pane.Pane {
 	return found
 }
 
-// fetchBlob issues GetBlob for the given blob id and stores the bytes in
-// the cache. Idempotent: a successful previous fetch short-circuits.
-func (a *App) fetchBlob(blobID int64) {
-	if blobID == 0 {
-		return
-	}
-	if _, ok := a.c.Blob(blobID); ok {
-		return
-	}
-	go func() {
-		data, err := a.cl.GetBlob(context.Background(), blobID)
-		if err != nil {
-			return
-		}
-		a.c.PutBlob(blobID, data)
-		// If the focused pane is waiting on this blob to populate its
-		// text-mode editor, seed the textarea now.
-		a.refreshFileOverlay()
-		a.draw()
-	}()
-}
-
 // fetchTileContent issues GetTileContent for a plugin tile (file / proc @info)
 // and caches the body by tile id. Idempotent: a successful previous fetch
 // short-circuits.
@@ -852,28 +830,14 @@ func (a *App) fetchTileContent(tileID string) {
 	}()
 }
 
-// tileBody returns a text tile's body bytes, fetching lazily on a miss. Local
-// store tiles carry a blob id; plugin tiles (blob id 0) are fetched by tile id
-// via GetTileContent.
+// tileBody returns a text tile's body bytes, fetching lazily on a miss. In the
+// rootless model every tile is owned by some plugin, so the body always comes
+// via GetTileContent (routable by tile id) — blob ids aren't routable.
 func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {
-	// A tile owned by another plugin (fs/proc, or a mounted second DB) serves
-	// its body via GetTileContent, routable by tile id. GetBlob is keyed by a
-	// bare int64 and only resolves against the primary, so it must NOT be used
-	// for non-primary tiles even when they carry a (plugin-local) blob id.
-	if a.isPluginTile(n) {
-		if b, ok := a.c.TileContent(n.ID); ok {
-			return b, true
-		}
-		a.fetchTileContent(n.ID)
-		return nil, false
+	if b, ok := a.c.TileContent(n.ID); ok {
+		return b, true
 	}
-	if n.BlobID != 0 {
-		if b, ok := a.c.Blob(n.BlobID); ok {
-			return b, true
-		}
-		a.fetchBlob(n.BlobID)
-		return nil, false
-	}
+	a.fetchTileContent(n.ID)
 	return nil, false
 }
 

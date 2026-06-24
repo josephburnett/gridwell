@@ -23,11 +23,12 @@ type urlView struct {
 	objectID string
 	paneID   string
 	bounds   viewBounds
-	// path is the descent path to the grid that holds this URL tile,
-	// captured when the view went live. The freeze (SetURLState) needs it
-	// to validate the edit lands in this tile's leaf grid (copy-on-clone:
-	// tiles are unshared, so the write is in-place — no fork).
-	path []string
+	// anchor + path are the plugin-root grid id and the descent path to the
+	// grid that holds this URL tile, captured when the view went live. The
+	// freeze (SetURLState) needs them to resolve this tile's leaf grid
+	// (copy-on-clone: tiles are unshared, so the write is in-place — no fork).
+	anchor string
+	path   []string
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -48,7 +49,7 @@ func contentViewBounds(r pane.Rect) viewBounds {
 
 // urlTileForPane resolves the URL tile a pane is descended into.
 func (a *App) urlTileForPane(p *pane.Pane, tileID string) (rpc.Tile, bool) {
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return rpc.Tile{}, false
@@ -63,8 +64,8 @@ func (a *App) urlTileForPane(p *pane.Pane, tileID string) (rpc.Tile, bool) {
 // urlTileVersion returns the cached version of the URL tile at (path,
 // tileID), or 0 if it isn't cached. Read at freeze time so SetURLState can
 // claim the right version for its in-place, versioned content edit.
-func (a *App) urlTileVersion(path []string, tileID string) int64 {
-	g, ok := a.c.Grid(a.gridIDForPath(path))
+func (a *App) urlTileVersion(anchor string, path []string, tileID string) int64 {
+	g, ok := a.c.Grid(a.gridIDForPathFrom(anchor, path))
 	if !ok {
 		return 0
 	}
@@ -93,7 +94,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if a.urlStreams == nil {
 		a.urlStreams = map[string]*urlView{}
 	}
-	a.urlStreams[p.ID] = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, path: slices.Clone(p.Path)}
+	a.urlStreams[p.ID] = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path)}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
 	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b)
 	a.draw()
@@ -109,6 +110,7 @@ func (a *App) closeURLStream(paneID string) {
 	}
 	delete(a.urlStreams, paneID)
 	tileID := v.tileID
+	anchor := v.anchor
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
 	bridgeRemove(paneID, func(jpeg []byte, url, title string) {
@@ -116,7 +118,7 @@ func (a *App) closeURLStream(paneID string) {
 			// Look up the tile's current version from cache so the freeze is
 			// a versioned, in-place content edit (copy-on-clone: nothing is
 			// shared, so there is no fork — the write lands on this tile's row).
-			version := a.urlTileVersion(path, tileID)
+			version := a.urlTileVersion(anchor, path, tileID)
 			go func() {
 				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
 					Path:    rpc.Path{WellIDs: path},
@@ -191,7 +193,7 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 	if p == nil || p.TextFocus == "" {
 		return false
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return false

@@ -57,7 +57,7 @@ func (a *App) isShellDescent(p *pane.Pane) bool {
 	if p == nil || p.TextFocus == "" {
 		return false
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return false

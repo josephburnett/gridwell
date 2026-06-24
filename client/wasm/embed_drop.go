@@ -57,7 +57,7 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 	if mode != embedpkg.DocTargetRaw {
 		return nil, false
 	}
-	gid := a.gridIDForPath(p.Path)
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return nil, false
@@ -66,7 +66,7 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 	if !ok {
 		return nil, false
 	}
-	blob, ok := a.c.Blob(tile.BlobID)
+	blob, ok := a.c.TileContent(tile.ID)
 	if !ok {
 		return nil, false
 	}
@@ -97,7 +97,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	}
 	link := embedpkg.Markdown(browserOrigin(), src.ID, alt)
 
-	gid := a.gridIDForPath(dt.pane.Path)
+	gid := a.gridIDForPane(dt.pane)
 	g, hasGrid := a.c.Grid(gid)
 	if !hasGrid {
 		return
@@ -106,7 +106,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	if !hasTile {
 		return
 	}
-	bytes, hasBlob := a.c.Blob(tile.BlobID)
+	bytes, hasBlob := a.c.TileContent(tile.ID)
 	if !hasBlob {
 		return
 	}

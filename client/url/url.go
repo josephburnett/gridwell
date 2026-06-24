@@ -31,10 +31,15 @@ import (
 
 // State is the parsed/about-to-be-encoded URL state.
 type State struct {
-	// TileIDs is the descent path of tile row ids. Empty means "root
-	// grid". The trailing id may be a file-tile (resolved post-Decode).
-	// IDs are bare decimal strings (e.g. "42"); the client qualifies them
-	// with the localdb UUID after decoding.
+	// Anchor is the qualified grid id of the plugin root the pane currently
+	// sits inside ("<uuid>/<id>"). Empty → the launcher start screen. TileIDs
+	// are the well descents within that plugin, relative to Anchor.
+	Anchor string
+
+	// TileIDs is the descent path of tile row ids. Empty means "anchor
+	// grid" (or, with no anchor, the start screen). The trailing id may be a
+	// file-tile (resolved post-Decode). IDs are bare decimal strings (e.g.
+	// "42"); the client qualifies them with the anchor's plugin UUID.
 	TileIDs []string
 
 	// Viewport — set when the leaf is a grid (or a file in the floating
@@ -135,6 +140,9 @@ func Encode(s State) string {
 	}
 
 	q := url.Values{}
+	if s.Anchor != "" {
+		q.Set("a", s.Anchor)
+	}
 	if s.CursorMode {
 		// Text mode: always emit c and r so presence can be detected
 		// even when both are zero.
@@ -208,6 +216,9 @@ func Decode(raw string) (State, error) {
 	q, err := url.ParseQuery(queryPart)
 	if err != nil {
 		return s, err
+	}
+	if v, ok := q["a"]; ok {
+		s.Anchor = v[0]
 	}
 	if cv, ok := q["c"]; ok {
 		if rv, okR := q["r"]; okR {

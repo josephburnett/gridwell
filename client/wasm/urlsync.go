@@ -6,6 +6,7 @@ import (
 	"context"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/urlwalk"
@@ -24,42 +25,14 @@ const urlUpdateDebounceMs = 150
 // values — we only care about the resting state.
 const rootViewSaveDebounceMs = 600
 
-// scheduleRootViewSave queues a debounced SetRootView for the user's root
-// grid. Cheap to call from any code path that mutates the focused pane's
-// viewport; no-op when the focused pane isn't at root.
-func (a *App) scheduleRootViewSave() {
-	if a.sched.rootViewSaveScheduled {
-		return
-	}
-	if p := a.tree.FocusedPane(); p == nil || len(p.Path) > 0 || p.TextFocus != "" {
-		return
-	}
-	a.sched.rootViewSaveScheduled = true
-	js.Global().Call("setTimeout", a.sched.rootViewSaveCb, rootViewSaveDebounceMs)
-}
+// scheduleRootViewSave is a no-op: there is no privileged root grid anymore, so
+// no root viewport is persisted server-side. A pane's viewport lives in the URL
+// (replaceURLNow) instead. Kept as a no-op so the viewport-mutating call sites
+// don't need to special-case the rootless model.
+func (a *App) scheduleRootViewSave() {}
 
-// flushRootViewSave reads the focused pane's viewport and posts
-// SetRootView. Triggered by the debounce timer; safe to call manually.
-func (a *App) flushRootViewSave() {
-	if a.rootGridID == "" {
-		return
-	}
-	p := a.tree.FocusedPane()
-	if p == nil || len(p.Path) > 0 || p.TextFocus != "" {
-		return
-	}
-	zoom := p.Zoom
-	if zoom <= 0 {
-		zoom = 1.0
-	}
-	a.rootViewCx = p.Cx
-	a.rootViewCy = p.Cy
-	a.rootViewZoom = zoom
-	req := &rpc.SetRootViewRequest{Cx: p.Cx, Cy: p.Cy, Zoom: zoom}
-	go func() {
-		_ = a.cl.SetRootView(context.Background(), req)
-	}()
-}
+// flushRootViewSave is a no-op (see scheduleRootViewSave).
+func (a *App) flushRootViewSave() {}
 
 // scheduleURLUpdate marks that the URL is out of date and arranges for
 // it to be replaced on the next debounce tick. Cheap to call from any
@@ -76,9 +49,6 @@ func (a *App) scheduleURLUpdate() {
 // history.replaceState. Idempotent; safe even when no user change has
 // happened.
 func (a *App) replaceURLNow() {
-	if a.rootGridID == "" {
-		return
-	}
 	state := a.encodeFocusedPaneURL()
 	raw := url.Encode(state)
 	js.Global().Get("history").Call("replaceState", nil, "", raw)
@@ -93,15 +63,21 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	if p == nil {
 		return url.State{}
 	}
+	var s url.State
 	if p.TextFocus != "" {
 		isText := p.TextMode == rpc.TextModeText
 		var col, row int
 		if isText {
 			col, row = a.textareaCursorRowCol()
 		}
-		return url.TextState(p.Path, p.TextFocus, isText, col, row)
+		s = url.TextState(p.Path, p.TextFocus, isText, col, row)
+	} else {
+		s = url.GridState(p.Path, p.Cx, p.Cy, p.Zoom)
 	}
-	return url.GridState(p.Path, p.Cx, p.Cy, p.Zoom)
+	// Anchor records which plugin root the pane sits inside (empty = launcher),
+	// so a reload re-enters the same plugin and walks the path within it.
+	s.Anchor = p.Anchor
+	return s
 }
 
 // textareaCursorRowCol returns the cursor position in the file
@@ -136,23 +112,37 @@ func (a *App) applyURLOnBoot() {
 		state = url.State{}
 	}
 
-	// Always start by fetching the user's root grid so the walk has
-	// something to read. If the URL has no path, we're done.
-	rootID := a.rootGridID
-	if len(state.TileIDs) == 0 {
-		a.fetchGridSync(rootID)
-		p := a.tree.FocusedPane()
-		if p != nil {
-			// Precedence (URL viewport > stored root view > bootstrap default)
-			// is the pure url.BootViewport — re-framing the root pane the user
-			// didn't touch would violate "things stay where you put them".
-			if bv := url.BootViewport(state.X, state.Y, state.Zoom,
-				a.rootViewCx, a.rootViewCy, a.rootViewZoom); bv.Apply {
-				p.Cx = bv.Cx
-				p.Cy = bv.Cy
-				if bv.SetZoom {
-					p.Zoom = bv.Zoom
-				}
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+
+	// No anchor → the launcher start screen (the pane is already there).
+	if state.Anchor == "" {
+		p.Anchor = ""
+		p.Path = nil
+		a.draw()
+		a.scheduleURLUpdate()
+		return
+	}
+	p.Anchor = state.Anchor
+
+	// The URL's path segments are bare well ids within the anchor's plugin;
+	// qualify them with the anchor's plugin uuid so they match the grid's keys.
+	anchorUUID := uuidOf(state.Anchor)
+	qualified := make([]string, len(state.TileIDs))
+	for i, id := range state.TileIDs {
+		qualified[i] = anchorUUID + "/" + id
+	}
+
+	// No path → sit at the anchor's root grid.
+	if len(qualified) == 0 {
+		a.fetchGridSync(state.Anchor)
+		if bv := url.BootViewport(state.X, state.Y, state.Zoom, 0, 0, 1); bv.Apply {
+			p.Cx = bv.Cx
+			p.Cy = bv.Cy
+			if bv.SetZoom {
+				p.Zoom = bv.Zoom
 			}
 		}
 		a.draw()
@@ -160,10 +150,10 @@ func (a *App) applyURLOnBoot() {
 		return
 	}
 
-	// Walk the path, fetching each grid as we go (the lookup closure does
-	// the cache-or-fetch). The pure walk skips ids missing from the current
-	// grid, descends at well boundaries, and stops at a content leaf.
-	resolvedPath, fileTileID := urlwalk.Walk(rootID, state.TileIDs,
+	// Walk the path from the anchor, fetching each grid as we go. The pure walk
+	// skips ids missing from the current grid, descends at well boundaries, and
+	// stops at a content leaf.
+	resolvedPath, fileTileID := urlwalk.Walk(state.Anchor, qualified,
 		func(gid string) (map[string]urlwalk.Tile, bool) {
 			if _, ok := a.c.Grid(gid); !ok {
 				if !a.fetchGridSync(gid) {
@@ -182,17 +172,13 @@ func (a *App) applyURLOnBoot() {
 			return tiles, true
 		})
 
-	p := a.tree.FocusedPane()
-	if p == nil {
-		return
-	}
 	p.Path = resolvedPath
 	if fileTileID != "" {
 		p.TextFocus = fileTileID
 		// Mode follows the tile's persisted text_mode; a URL that encodes
 		// a text cursor forces text mode. Scale is fixed; scroll restores
 		// from the tile's stored text_y.
-		if file, ok := a.cachedFile(p.Path, fileTileID); ok {
+		if file, ok := a.cachedFile(p, fileTileID); ok {
 			p.TextMode = file.TextMode
 			p.TextScrollY = float64(file.TextY)
 		}
@@ -214,7 +200,7 @@ func (a *App) applyURLOnBoot() {
 		}
 	}
 
-	a.fetchGrid(a.gridIDForPath(p.Path))
+	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
 	// Replace the URL in case we truncated.
 	a.scheduleURLUpdate()
@@ -223,8 +209,8 @@ func (a *App) applyURLOnBoot() {
 // cachedFile returns the file tile at the leaf of `path` with id
 // tileID, if cached. Used during URL boot to honor a previously
 // stored ViewZoom before the blob arrives.
-func (a *App) cachedFile(path []string, tileID string) (rpc.Tile, bool) {
-	gid := a.gridIDForPath(path)
+func (a *App) cachedFile(p *pane.Pane, tileID string) (rpc.Tile, bool) {
+	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return rpc.Tile{}, false
@@ -257,7 +243,7 @@ func (a *App) fetchGridSync(id string) bool {
 // the cache, places the cursor at (state.Col, state.Row) inside the
 // textarea. Asynchronous because GetBlob is over the wire.
 func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
-	gid := a.gridIDForPath(a.tree.FocusedPane().Path)
+	gid := a.gridIDForPane(a.tree.FocusedPane())
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return
