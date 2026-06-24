@@ -47,6 +47,7 @@ const (
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
 	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
 	Gridwell_ListPlugins_FullMethodName       = "/gridwell.v1.Gridwell/ListPlugins"
+	Gridwell_Mount_FullMethodName             = "/gridwell.v1.Gridwell/Mount"
 	Gridwell_CreateWell_FullMethodName        = "/gridwell.v1.Gridwell/CreateWell"
 	Gridwell_CreateText_FullMethodName        = "/gridwell.v1.Gridwell/CreateText"
 	Gridwell_CreateURL_FullMethodName         = "/gridwell.v1.Gridwell/CreateURL"
@@ -93,6 +94,7 @@ type GridwellClient interface {
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
+	Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateWell(ctx context.Context, in *CreateWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateURL(ctx context.Context, in *CreateURLRequest, opts ...grpc.CallOption) (*TileResponse, error)
@@ -280,6 +282,16 @@ func (c *gridwellClient) ListPlugins(ctx context.Context, in *ListPluginsRequest
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListPluginsResponse)
 	err := c.cc.Invoke(ctx, Gridwell_ListPlugins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_Mount_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -501,6 +513,7 @@ type GridwellServer interface {
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
 	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
+	Mount(context.Context, *MountRequest) (*TileResponse, error)
 	CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error)
 	CreateText(context.Context, *CreateTextRequest) (*TileResponse, error)
 	CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error)
@@ -573,6 +586,9 @@ func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltReques
 }
 func (UnimplementedGridwellServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
+}
+func (UnimplementedGridwellServer) Mount(context.Context, *MountRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Mount not implemented")
 }
 func (UnimplementedGridwellServer) CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateWell not implemented")
@@ -886,6 +902,24 @@ func _Gridwell_ListPlugins_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).ListPlugins(ctx, req.(*ListPluginsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_Mount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).Mount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_Mount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).Mount(ctx, req.(*MountRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1261,6 +1295,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPlugins",
 			Handler:    _Gridwell_ListPlugins_Handler,
+		},
+		{
+			MethodName: "Mount",
+			Handler:    _Gridwell_Mount_Handler,
 		},
 		{
 			MethodName: "CreateWell",

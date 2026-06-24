@@ -124,6 +124,20 @@ func tileResp(r *connect.Response[pb.TileResponse], err error) (*Tile, error) {
 func (c *Client) CreateWell(ctx context.Context, req *CreateWellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateWell(ctx, connect.NewRequest(CreateWellToProto(req))))
 }
+
+// Mount attaches a plugin (by uuid, default config) and drops a mount well in
+// the destination grid. The drag-a-plugin-onto-a-grid gesture.
+func (c *Client) Mount(ctx context.Context, req *MountRequest) (*Tile, error) {
+	return tileResp(c.cl.Mount(ctx, connect.NewRequest(&pb.MountRequest{
+		PluginUuid: req.PluginUUID,
+		Path:       PathToProto(req.Path),
+		GridId:     req.GridID,
+		X:          req.X,
+		Y:          req.Y,
+		W:          req.W,
+		H:          req.H,
+	})))
+}
 func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateText(ctx, connect.NewRequest(CreateTextToProto(req))))
 }

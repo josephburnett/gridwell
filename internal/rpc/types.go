@@ -163,6 +163,18 @@ type TileResponse struct {
 
 // Creates: no Version (the tile doesn't exist yet).
 
+// MountRequest mounts a plugin (by uuid, default config) as an exit well in
+// the destination grid.
+type MountRequest struct {
+	PluginUUID string `json:"plugin_uuid"`
+	Path       Path   `json:"path"`
+	GridID     string `json:"grid_id"`
+	X          int64  `json:"x"`
+	Y          int64  `json:"y"`
+	W          int64  `json:"w"`
+	H          int64  `json:"h"`
+}
+
 // PluginInfo describes one configured plugin for the launcher / + menu.
 type PluginInfo struct {
 	UUID     string `json:"uuid"`

@@ -76,6 +76,8 @@ const (
 	GridwellSetTileAltProcedure = "/gridwell.v1.Gridwell/SetTileAlt"
 	// GridwellListPluginsProcedure is the fully-qualified name of the Gridwell's ListPlugins RPC.
 	GridwellListPluginsProcedure = "/gridwell.v1.Gridwell/ListPlugins"
+	// GridwellMountProcedure is the fully-qualified name of the Gridwell's Mount RPC.
+	GridwellMountProcedure = "/gridwell.v1.Gridwell/Mount"
 	// GridwellCreateWellProcedure is the fully-qualified name of the Gridwell's CreateWell RPC.
 	GridwellCreateWellProcedure = "/gridwell.v1.Gridwell/CreateWell"
 	// GridwellCreateTextProcedure is the fully-qualified name of the Gridwell's CreateText RPC.
@@ -138,6 +140,7 @@ type GridwellClient interface {
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
 	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
@@ -257,6 +260,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellListPluginsProcedure,
 			connect.WithSchema(gridwellMethods.ByName("ListPlugins")),
+			connect.WithClientOptions(opts...),
+		),
+		mount: connect.NewClient[v1.MountRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellMountProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Mount")),
 			connect.WithClientOptions(opts...),
 		),
 		createWell: connect.NewClient[v1.CreateWellRequest, v1.TileResponse](
@@ -387,6 +396,7 @@ type gridwellClient struct {
 	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
 	setTileAlt        *connect.Client[v1.SetTileAltRequest, v1.TileResponse]
 	listPlugins       *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
+	mount             *connect.Client[v1.MountRequest, v1.TileResponse]
 	createWell        *connect.Client[v1.CreateWellRequest, v1.TileResponse]
 	createText        *connect.Client[v1.CreateTextRequest, v1.TileResponse]
 	createURL         *connect.Client[v1.CreateURLRequest, v1.TileResponse]
@@ -480,6 +490,11 @@ func (c *gridwellClient) SetTileAlt(ctx context.Context, req *connect.Request[v1
 // ListPlugins calls gridwell.v1.Gridwell.ListPlugins.
 func (c *gridwellClient) ListPlugins(ctx context.Context, req *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
 	return c.listPlugins.CallUnary(ctx, req)
+}
+
+// Mount calls gridwell.v1.Gridwell.Mount.
+func (c *gridwellClient) Mount(ctx context.Context, req *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.mount.CallUnary(ctx, req)
 }
 
 // CreateWell calls gridwell.v1.Gridwell.CreateWell.
@@ -593,6 +608,7 @@ type GridwellHandler interface {
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
 	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
@@ -708,6 +724,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellListPluginsProcedure,
 		svc.ListPlugins,
 		connect.WithSchema(gridwellMethods.ByName("ListPlugins")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellMountHandler := connect.NewUnaryHandler(
+		GridwellMountProcedure,
+		svc.Mount,
+		connect.WithSchema(gridwellMethods.ByName("Mount")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellCreateWellHandler := connect.NewUnaryHandler(
@@ -850,6 +872,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellSetTileAltHandler.ServeHTTP(w, r)
 		case GridwellListPluginsProcedure:
 			gridwellListPluginsHandler.ServeHTTP(w, r)
+		case GridwellMountProcedure:
+			gridwellMountHandler.ServeHTTP(w, r)
 		case GridwellCreateWellProcedure:
 			gridwellCreateWellHandler.ServeHTTP(w, r)
 		case GridwellCreateTextProcedure:
@@ -953,6 +977,10 @@ func (UnimplementedGridwellHandler) SetTileAlt(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ListPlugins is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Mount is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error) {

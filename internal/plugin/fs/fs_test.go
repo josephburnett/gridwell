@@ -589,3 +589,25 @@ func TestGetTileContent_FileMetadata(t *testing.T) {
 		t.Errorf("directory tile content = %q, want empty", dresp.Data)
 	}
 }
+
+// TestAttach_DefaultsToConfiguredRoot: with no path in the Attach config, the
+// plugin falls back to its configured root (the launcher-mount path).
+func TestAttach_DefaultsToConfiguredRoot(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	p.SetRoot(dir)
+	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: nil})
+	if err != nil {
+		t.Fatalf("Attach with no path: %v", err)
+	}
+	if resp.RootGridId == "" {
+		t.Error("RootGridId empty")
+	}
+	r, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: resp.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	if len(r.Tiles) != 2 { // note.txt + sub/
+		t.Errorf("default-root grid has %d tiles, want 2 (the temp tree)", len(r.Tiles))
+	}
+}

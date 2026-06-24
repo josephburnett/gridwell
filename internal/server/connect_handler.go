@@ -293,6 +293,37 @@ func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Req
 	return h.createExitWell(ctx, "proc", map[string]string{"pid": strconv.FormatInt(m.Pid, 10)}, m.Path, m.GridId, m.X, m.Y, m.W, m.H)
 }
 
+// Mount attaches plugin_uuid (default config) and drops an exit well in the
+// destination grid pointing at the attached root — the drag-a-plugin gesture.
+func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.MountRequest]) (*connect.Response[pb.TileResponse], error) {
+	m := req.Msg
+	srcClient, found := h.srv.pluginReg.Get(m.PluginUuid)
+	if !found {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", m.PluginUuid))
+	}
+	att, err := srcClient.Attach(ctx, &pb.AttachRequest{Config: map[string]string{}})
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	childGridID := qualifyID(m.PluginUuid, att.RootGridId)
+
+	dstClient, dstLocal, dstUUID, err := h.route(m.GridId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := dstClient.CreateWell(ctx, &pb.CreateWellRequest{
+		Path:        localPathFor(m.Path, dstUUID),
+		GridId:      dstLocal,
+		X:           m.X,
+		Y:           m.Y,
+		W:           m.W,
+		H:           m.H,
+		ChildGridId: childGridID,
+		Label:       att.Label,
+	})
+	return pluginTileResp(dstUUID, resp, err)
+}
+
 // createExitWell attaches the named source plugin (fs / proc) for config, then
 // asks the destination plugin (the one that owns gridID — wherever the user
 // dropped the well) to create a well tile whose child_grid_id is the qualified

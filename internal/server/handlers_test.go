@@ -401,3 +401,21 @@ func TestListPlugins(t *testing.T) {
 		t.Errorf("plugin[2] = %+v, want read-only proc", plugins[2])
 	}
 }
+
+// TestMountRPC: mounting a plugin drops an exit well in the destination grid
+// whose child is the plugin's (default-config) root.
+func TestMountRPC(t *testing.T) {
+	cl, root := newTestServerWithPlugins(t)
+	tile, err := cl.Mount(context.Background(), &rpc.MountRequest{
+		PluginUUID: procPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	if tile.Kind != rpc.KindWell {
+		t.Errorf("kind = %q, want well", tile.Kind)
+	}
+	if !strings.HasPrefix(tile.ChildGridID, procPluginUUID+"/") {
+		t.Errorf("child_grid_id = %q, want %q prefix", tile.ChildGridID, procPluginUUID)
+	}
+}

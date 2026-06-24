@@ -54,7 +54,14 @@ type Plugin struct {
 	gridwellv1.UnimplementedGridwellServer
 	db   *sql.DB
 	host Host
+	// root is the plugin's configured default directory. Attach uses it when
+	// no explicit path is given (e.g. mounting "files" from the launcher).
+	root string
 }
+
+// SetRoot sets the configured default directory used by Attach when no path is
+// supplied. Wired by NewFactory from config["root"].
+func (p *Plugin) SetRoot(root string) { p.root = root }
 
 // Open opens (or creates) the plugin SQLite DB at dbPath. A nil host uses
 // plain os.Remove/os.RemoveAll.
@@ -115,7 +122,12 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 	if dbPath == "" {
 		return nil, fmt.Errorf("fs plugin %q: db_file config key required", cfg.Name)
 	}
-	return Open(dbPath, trashHost{})
+	p, err := Open(dbPath, trashHost{})
+	if err != nil {
+		return nil, err
+	}
+	p.SetRoot(cfg.Config["root"])
+	return p, nil
 }
 
 // Info returns the static plugin descriptor.
@@ -127,11 +139,16 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 	}, nil
 }
 
-// Attach turns config["path"] into a root grid in the plugin's namespace.
+// Attach turns config["path"] (or the plugin's configured root when no path is
+// given) into a root grid in the plugin's namespace.
 func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
-	path := filepath.Clean(req.Config["path"])
+	raw := req.Config["path"]
+	if raw == "" {
+		raw = p.root
+	}
+	path := filepath.Clean(raw)
 	if path == "" || path == "." {
-		return nil, fmt.Errorf("fs plugin: Attach requires a non-empty path")
+		return nil, fmt.Errorf("fs plugin: Attach requires a path (none given and no configured root)")
 	}
 	gridID, err := p.getOrCreateGrid(path)
 	if err != nil {
