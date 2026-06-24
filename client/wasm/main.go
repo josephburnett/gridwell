@@ -56,6 +56,10 @@ type App struct {
 	// served from. All server reads and mutations go through it.
 	cl *rpc.Client
 
+	// plugins is the configured plugin list from ListPlugins, used to build the
+	// launcher / + menu (rootless model).
+	plugins []rpc.PluginInfo
+
 	rootGridID  string
 	localdbUUID string // UUID prefix extracted from rootGridID at bootstrap
 	// Seeded from Bootstrap and refreshed by scheduleRootViewSave.
@@ -456,17 +460,18 @@ func main() {
 // bootstrap fetches the current root grid id from the server, then starts
 // the rest of the client.
 func (a *App) bootstrap() {
-	resp, err := a.cl.Bootstrap(context.Background())
-	if err != nil {
+	// Rootless model: there is no server root. Fetch the plugin list and (until
+	// the full launcher lands) enter the first plugin's root grid as the de-facto
+	// home — the client picks a plugin rather than the server designating one.
+	plugins, err := a.cl.ListPlugins(context.Background())
+	if err != nil || len(plugins) == 0 {
 		return
 	}
-	a.rootGridID = resp.RootGridID
+	a.plugins = plugins
+	a.rootGridID = plugins[0].RootGridID
 	if i := strings.IndexByte(a.rootGridID, '/'); i > 0 {
 		a.localdbUUID = a.rootGridID[:i]
 	}
-	a.rootViewCx = resp.RootViewCx
-	a.rootViewCy = resp.RootViewCy
-	a.rootViewZoom = resp.RootZoom
 	a.afterBootstrap()
 }
 
