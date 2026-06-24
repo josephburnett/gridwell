@@ -55,7 +55,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	reg := plugin.NewRegistry()
 	uuid, root := registerPrimaryLocaldb(t, reg, st)
 
-	srv := New(reg, uuid, st, Config{})
+	srv := New(reg, uuid, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -169,7 +169,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	uuid, _ := registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, uuid, st, Config{StaticDir: dir})
+	srv := New(reg, uuid, Config{StaticDir: dir})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 

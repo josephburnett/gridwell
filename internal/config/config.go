@@ -17,9 +17,13 @@ import (
 // ServerConfig is the top-level ~/.gridwell/server.yaml structure.
 type ServerConfig struct {
 	Bind      string         `yaml:"bind"`
-	DB        string         `yaml:"db"`
 	StaticDir string         `yaml:"static"` // "" → headless (no static files served)
 	Plugins   []PluginConfig `yaml:"plugins"`
+	// Root names the plugin (by ID) whose grid is the app root — the target of
+	// id-less RPCs (Bootstrap, SetRootView) and the home of native tiles. It
+	// must match one of the Plugins entries (a localdb). There is no implicit
+	// "db" root: the root is an explicitly designated plugin.
+	Root string `yaml:"root"`
 }
 
 // PluginConfig describes one plugin instance. ID is the UUID assigned once
@@ -39,7 +43,6 @@ type PluginConfig struct {
 // config file or no config file exists.
 var Defaults = ServerConfig{
 	Bind:      "127.0.0.1:8080",
-	DB:        "~/.gridwell/gridwell.db",
 	StaticDir: "./web",
 }
 
@@ -74,9 +77,6 @@ func Load(path string) (*ServerConfig, error) {
 	if cfg.Bind == "" {
 		cfg.Bind = Defaults.Bind
 	}
-	if cfg.DB == "" {
-		cfg.DB = Defaults.DB
-	}
 	if err := expandPaths(&cfg); err != nil {
 		return nil, err
 	}
@@ -86,9 +86,6 @@ func Load(path string) (*ServerConfig, error) {
 // expandPaths expands "~/" prefixes in every path field of cfg.
 func expandPaths(cfg *ServerConfig) error {
 	var err error
-	if cfg.DB, err = expandHome(cfg.DB); err != nil {
-		return err
-	}
 	if cfg.StaticDir != "" {
 		if cfg.StaticDir, err = expandHome(cfg.StaticDir); err != nil {
 			return err

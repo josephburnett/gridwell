@@ -94,10 +94,11 @@ func TestParseServeFlagsRejectsUnknown(t *testing.T) {
 }
 
 func TestParseServeFlagsFromConfigFile(t *testing.T) {
-	// Write a temp server.yaml and verify its values become defaults.
+	// server.yaml supplies non-db defaults (bind). The root DB is designated by
+	// a root plugin entry, not a top-level db: field, so --db is flag-only.
 	dir := t.TempDir()
 	cfgFile := dir + "/server.yaml"
-	if err := os.WriteFile(cfgFile, []byte("bind: \"0.0.0.0:9090\"\ndb: \"/tmp/test.db\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, []byte("bind: \"0.0.0.0:9090\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	f, err := parseServeFlags(nil, cfgFile)
@@ -107,27 +108,26 @@ func TestParseServeFlagsFromConfigFile(t *testing.T) {
 	if f.Bind != "0.0.0.0:9090" {
 		t.Errorf("Bind = %q, want 0.0.0.0:9090 from config", f.Bind)
 	}
-	if f.DB != "/tmp/test.db" {
-		t.Errorf("DB = %q, want /tmp/test.db from config", f.DB)
+	if f.DB != cliDefaultDB {
+		t.Errorf("DB = %q, want flag default %q", f.DB, cliDefaultDB)
 	}
 }
 
 func TestParseServeFlagsCliOverridesConfig(t *testing.T) {
-	// CLI flags should override config file values.
+	// CLI flags override config; --db sets the synthesized root DB path.
 	dir := t.TempDir()
 	cfgFile := dir + "/server.yaml"
-	if err := os.WriteFile(cfgFile, []byte("bind: \"0.0.0.0:9090\"\ndb: \"/tmp/test.db\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, []byte("bind: \"0.0.0.0:9090\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f, err := parseServeFlags([]string{"--bind", ":8888"}, cfgFile)
+	f, err := parseServeFlags([]string{"--bind", ":8888", "--db", "/tmp/override.db"}, cfgFile)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if f.Bind != ":8888" {
 		t.Errorf("Bind = %q, want :8888 (CLI should override config)", f.Bind)
 	}
-	// DB not overridden — comes from config.
-	if f.DB != "/tmp/test.db" {
-		t.Errorf("DB = %q, want /tmp/test.db from config", f.DB)
+	if f.DB != "/tmp/override.db" {
+		t.Errorf("DB = %q, want /tmp/override.db from --db", f.DB)
 	}
 }

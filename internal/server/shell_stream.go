@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/shelldriver"
 	"github.com/josephburnett/gridwell/internal/tmux"
@@ -148,19 +149,26 @@ func (s *Server) CleanupOrphanedShellSessions(ctx context.Context) (int, error) 
 	if len(live) == 0 {
 		return 0, nil
 	}
-	tileIDs, err := s.primary.AllShellTileIDs(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("list shell tiles: %w", err)
+	client, ok := s.rootClient()
+	if !ok {
+		return 0, fmt.Errorf("no root plugin")
 	}
-	known := make(map[string]bool, len(tileIDs))
-	for _, id := range tileIDs {
-		known[id] = true
-	}
+	// For each live tmux session, ask the root plugin whether its tile still
+	// exists. Ids are never reused, so GONE means the row was deleted while the
+	// session leaked — kill it. (Inverted from "list all shell tiles": Probe
+	// over the bounded set of live sessions needs no enumeration RPC.)
 	killed := 0
 	var firstErr error
 	for _, id := range live {
-		if known[strconv.FormatInt(id, 10)] {
+		resp, err := client.Probe(ctx, &pb.ProbeRequest{TileId: strconv.FormatInt(id, 10)})
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("probe tile %d: %w", id, err)
+			}
 			continue
+		}
+		if resp.Presence == pb.ProbeResponse_PRESENCE_PRESENT {
+			continue // tile still exists; keep its session
 		}
 		if err := s.shellStreamer.Kill(id); err != nil {
 			if firstErr == nil {
@@ -266,7 +274,13 @@ func (s *Server) captureShellTitle(tileID int64) {
 	if err != nil || cmd == "" {
 		return
 	}
-	if err := s.primary.SetTileAlt(context.Background(), tileID, cmd); err != nil {
+	client, ok := s.rootClient()
+	if !ok {
+		return
+	}
+	if _, err := client.SetTileAlt(context.Background(), &pb.SetTileAltRequest{
+		TileId: strconv.FormatInt(tileID, 10), Alt: cmd,
+	}); err != nil {
 		log.Printf("[shellstream] set-title tile=%d cmd=%q err=%v", tileID, cmd, err)
 	}
 }
@@ -291,11 +305,17 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing or invalid tile_id", http.StatusBadRequest)
 		return
 	}
-	tile, err := s.primary.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
+	client, ok := s.rootClient()
+	if !ok {
+		http.Error(w, "no root plugin", http.StatusInternalServerError)
+		return
+	}
+	tr, err := client.GetTile(r.Context(), &pb.GetTileRequest{TileId: strconv.FormatInt(tileID, 10)})
 	if err != nil {
 		writeHTTPError(w, err)
 		return
 	}
+	tile := tr.Tile
 	if tile.Kind != rpc.KindShell {
 		http.Error(w, "not a shell tile", http.StatusBadRequest)
 		return
@@ -308,7 +328,7 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 	// historical record we won't quietly overwrite by booting a new
 	// shell. acquireShellSession turns this into ModeCreate vs
 	// ModeAttach below.
-	allowCreate := tile.PreviewBlobID == 0
+	allowCreate := tile.PreviewBlobId == 0
 
 	// Enforce same-origin. The renderer loads from http://127.0.0.1:<port>
 	// — the same origin as this server (apps/desktop loadURL(origin+'/')) —

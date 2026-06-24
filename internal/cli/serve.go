@@ -35,13 +35,20 @@ type serveFlags struct {
 
 // cliDefaults are the flag-level defaults: what you get with no config file
 // and no flags. Distinct from config.Defaults (which describe server.yaml
-// defaults). The DB path is local for dev convenience; production users
-// supply --db or server.yaml.
+// defaults).
 var cliDefaults = config.ServerConfig{
 	Bind:      "127.0.0.1:8080",
-	DB:        "./gridwell.db",
 	StaticDir: "./web",
 }
+
+// cliDefaultDB is the --db default: the db_file for the synthesized root
+// localdb plugin when no server.yaml designates one. Local for dev
+// convenience; production users supply --db or a server.yaml root plugin.
+const cliDefaultDB = "./gridwell.db"
+
+// defaultRootID is the plugin id assigned to the synthesized root localdb when
+// no server.yaml is present. Stable so ids stored against it keep resolving.
+const defaultRootID = "gridwell-root"
 
 // parseServeFlags parses the `serve` flag set. Returns the populated
 // struct, or an error if flag parsing fails (so the caller can decide
@@ -61,7 +68,7 @@ func parseServeFlags(args []string, cfgPath string) (serveFlags, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var f serveFlags
 	f.cfgPath = cfgPath
-	db := resolveDB(fs, fileCfg.DB)
+	db := resolveDB(fs, cliDefaultDB)
 	fs.StringVar(&f.Bind, "bind", fileCfg.Bind, "HTTP listen address")
 	fs.StringVar(&f.StaticDir, "static", fileCfg.StaticDir, "directory of static files served at / (empty = headless)")
 	args = reorderFlagsFirst(args, func(name string) bool {
@@ -116,48 +123,42 @@ func RunServe(args []string) int {
 		return 2
 	}
 
-	s, err := store.Open(f.DB)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: open db: %v\n", err)
-		return 1
-	}
-	defer s.Close()
-
-	// Build the plugin registry from server.yaml. Non-localdb plugins (fs,
-	// proc) are loaded in-process via ServeInProcess. The registry is closed
-	// at shutdown, which stops their gRPC listeners. Missing or empty plugin
-	// list is fine — the registry is just empty.
-	var reg *plugin.Registry
+	// Build the effective config. A server.yaml designates the root plugin and
+	// lists every plugin; with no config we synthesize a single root localdb
+	// plugin backed by --db, so the root is always an explicit plugin entry —
+	// never hidden "db:" sugar.
+	cfg := &config.ServerConfig{Bind: f.Bind, StaticDir: f.StaticDir}
 	if f.cfgPath != "" {
-		if fileCfg, cfgErr := config.Load(f.cfgPath); cfgErr == nil {
-			if r, rErr := plugin.LoadAll(fileCfg, builtinFactories); rErr != nil {
-				fmt.Fprintf(os.Stderr, "serve: load plugins: %v\n", rErr)
-				return 1
-			} else {
-				reg = r
-			}
+		if loaded, cfgErr := config.Load(f.cfgPath); cfgErr == nil {
+			cfg = loaded
 		}
 	}
-	if reg == nil {
-		reg = plugin.NewRegistry()
+	if len(cfg.Plugins) == 0 {
+		cfg.Plugins = []config.PluginConfig{{
+			ID:     defaultRootID,
+			Name:   "root",
+			Kind:   "localdb",
+			Config: map[string]string{"db_file": f.DB},
+		}}
+		cfg.Root = defaultRootID
+	}
+	if cfg.Root == "" {
+		fmt.Fprintf(os.Stderr, "serve: server.yaml must set `root:` to a plugin id\n")
+		return 1
+	}
+
+	reg, err := plugin.LoadAll(cfg, builtinFactories)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: load plugins: %v\n", err)
+		return 1
 	}
 	defer reg.Close()
 
-	// Register the primary store as a localdb plugin under its own stable UUID
-	// (the namespace existing bookmarks/URLs resolve against). After this the
-	// server holds no Gridwell state of its own: every native-tile operation is
-	// routed through the registry, the primary included.
-	primaryUUID, err := s.PluginUUID(context.Background())
-	if err != nil || primaryUUID == "" {
-		fmt.Fprintf(os.Stderr, "serve: primary plugin uuid: %v\n", err)
+	primaryUUID := cfg.Root
+	if _, ok := reg.Get(primaryUUID); !ok {
+		fmt.Fprintf(os.Stderr, "serve: root %q names no configured plugin\n", primaryUUID)
 		return 1
 	}
-	primaryClient, primaryCloser, err := plugin.ServeInProcess(localdb.New(s, nil))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: serve primary localdb: %v\n", err)
-		return 1
-	}
-	reg.Register(primaryUUID, "localdb", primaryClient, primaryCloser)
 
 	// The gridwell-private tmux server backs every shell tile. One
 	// socket per gridwell process; sessions named `gridwell-<tileID>`
@@ -171,7 +172,7 @@ func RunServe(args []string) int {
 	}
 	defer func() { _ = tmuxCleanup() }()
 
-	srv := server.New(reg, primaryUUID, s, server.Config{StaticDir: f.StaticDir})
+	srv := server.New(reg, primaryUUID, server.Config{StaticDir: f.StaticDir})
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	// Bound the orphan leak: any tmux session whose tile id no longer

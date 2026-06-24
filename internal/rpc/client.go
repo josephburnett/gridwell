@@ -87,6 +87,15 @@ func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Data, nil
 }
 
+// GetTile reads a single tile's metadata by id.
+func (c *Client) GetTile(ctx context.Context, tileID string) (*Tile, error) {
+	r, err := c.cl.GetTile(ctx, connect.NewRequest(&pb.GetTileRequest{TileId: tileID}))
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(r.Msg.Tile), nil
+}
+
 // tileResp unwraps a TileResponse from any of the Tile-returning RPCs into a
 // Go rpc.Tile (or the transport error). The mirror of the server's tileResp:
 // every Create / Move / Clone / Resize / Set / Update method ends the same way,

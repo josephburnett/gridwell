@@ -325,7 +325,8 @@ func TestCaptureShellTitleStampsLabel(t *testing.T) {
 
 	srv.captureShellTitle(tileIDInt)
 
-	tile, err := srv.primary.GetTile(context.Background(), bareID(tileID))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	tile, err := cl.GetTile(context.Background(), tileID)
 	if err != nil {
 		t.Fatalf("get tile: %v", err)
 	}
@@ -765,7 +766,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneChild, err := srv.primary.GetGrid(ctx, bareID(clone.ChildGridID))
+	cloneChild, err := cl.GetGrid(ctx, clone.ChildGridID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -792,8 +793,8 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 			t.Errorf("original shell %d session was killed by deleting the clone's copy", shellIDInt)
 		}
 	}
-	if exists, err := srv.primary.ShellTileExists(ctx, bareID(shell.ID)); err != nil || !exists {
-		t.Errorf("original shell %d should survive the clone-copy delete (exists=%v err=%v)", shellIDInt, exists, err)
+	if _, err := cl.GetTile(ctx, shell.ID); err != nil {
+		t.Errorf("original shell %d should survive the clone-copy delete: %v", shellIDInt, err)
 	}
 }
 

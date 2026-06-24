@@ -61,7 +61,7 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 	t.Cleanup(procCloser)
 	reg.Register(procPluginUUID, "proc", procClient, nil)
 
-	srv := New(reg, primaryUUID, st, Config{})
+	srv := New(reg, primaryUUID, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

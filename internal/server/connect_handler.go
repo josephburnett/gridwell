@@ -192,6 +192,23 @@ func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Reques
 	return connect.NewResponse(resp), nil
 }
 
+func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.GetTileRequest]) (*connect.Response[pb.TileResponse], error) {
+	c, local, uuid, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
+	return pluginTileResp(uuid, resp, err)
+}
+func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb.SetTileAltRequest]) (*connect.Response[pb.TileResponse], error) {
+	c, local, uuid, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.SetTileAlt(ctx, &pb.SetTileAltRequest{TileId: local, Alt: req.Msg.Alt})
+	return pluginTileResp(uuid, resp, err)
+}
+
 // ── creates ──────────────────────────────────────────────────────────────────
 
 func (h *connectHandler) CreateWell(ctx context.Context, req *connect.Request[pb.CreateWellRequest]) (*connect.Response[pb.TileResponse], error) {
@@ -419,11 +436,15 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 // own id and no session, so deleting a copy never touches the original's PTY).
 // Fire-and-forget; a missed kill is caught by the startup orphan-cleanup pass.
 func (h *connectHandler) reapShellIfGone(ctx context.Context, localTileID string) {
-	exists, err := h.srv.primary.ShellTileExists(ctx, localTileID)
+	c, ok := h.srv.rootClient()
+	if !ok {
+		return
+	}
+	resp, err := c.Probe(ctx, &pb.ProbeRequest{TileId: localTileID})
 	switch {
 	case err != nil:
-		log.Printf("[shellstream] kill-on-delete existence tile=%s err=%v", localTileID, err)
-	case !exists:
+		log.Printf("[shellstream] kill-on-delete probe tile=%s err=%v", localTileID, err)
+	case resp.Presence != pb.ProbeResponse_PRESENCE_PRESENT:
 		if tileIDInt, perr := strconv.ParseInt(localTileID, 10, 64); perr == nil {
 			if err := h.srv.shellStreamer.Kill(tileIDInt); err != nil {
 				log.Printf("[shellstream] kill-on-delete tile=%s err=%v", localTileID, err)

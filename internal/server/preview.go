@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -32,20 +33,27 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tile, err := s.primary.GetTile(r.Context(), strconv.FormatInt(tileID, 10))
+	client, ok := s.rootClient()
+	if !ok {
+		http.Error(w, "no root plugin", http.StatusInternalServerError)
+		return
+	}
+	localID := strconv.FormatInt(tileID, 10)
+	tr, err := client.GetTile(r.Context(), &pb.GetTileRequest{TileId: localID})
 	if err != nil {
 		writeHTTPError(w, err)
 		return
 	}
+	tile := tr.Tile
 
 	width, height := parsePreviewSize(r.URL.Query().Get("w"), r.URL.Query().Get("h"))
 
 	if tile.Kind == rpc.KindURL {
-		jpeg, err := s.primary.GetTilePreview(r.Context(), strconv.FormatInt(tileID, 10))
-		if err == nil && len(jpeg) > 0 {
+		pr, err := client.GetTilePreview(r.Context(), &pb.GetTilePreviewRequest{TileId: localID})
+		if err == nil && len(pr.Jpeg) > 0 {
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(jpeg)
+			_, _ = w.Write(pr.Jpeg)
 			return
 		}
 	}

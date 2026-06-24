@@ -18,6 +18,10 @@ import (
 	"strings"
 	"sync"
 
+	gcodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/store"
@@ -29,22 +33,15 @@ type Config struct {
 	StaticDir string
 }
 
-// Server is the wired-up HTTP server. It holds NO Gridwell tile/grid/blob
-// state of its own: every native-tile operation is routed through the plugin
-// registry to a localdb plugin (the primary, plus any mounted DBs) exactly
-// like fs/proc. Construct with New and mount via Server.Handler().
+// Server is the wired-up HTTP server. It holds NO Gridwell state of its own —
+// no *store.Store anywhere. Every operation, data plane and infrastructure
+// alike (shell PTY tile metadata, the preview endpoint), is routed through the
+// plugin registry; the root plugin is the localdb instance whose grid is the
+// app root. Construct with New and mount via Server.Handler().
 type Server struct {
 	cfg         Config
 	pluginReg   *plugin.Registry
-	primaryUUID string // the localdb plugin whose root grid is the app root
-
-	// primary is the primary localdb plugin's store, borrowed for two pieces
-	// of co-located infrastructure that need privileged access beyond the gRPC
-	// surface: the shell PTY metadata (orphan sweep, command-title updates) and
-	// the external-viewer preview endpoint (which is addressed by bare tile id).
-	// The connect data plane never touches this — it goes through pluginReg.
-	// The state is owned by the plugin; the server only borrows a handle.
-	primary *store.Store
+	primaryUUID string // the root localdb plugin (app root; target of id-less RPCs)
 
 	mux           *http.ServeMux
 	shellStreamer shellStreamer
@@ -56,20 +53,23 @@ type Server struct {
 	activeShellSessions map[int64]*shellSessionEntry
 }
 
-// New constructs a Server that routes all native-tile operations through reg.
-// primaryUUID names the localdb plugin whose root is the app root (used for
-// id-less RPCs: Bootstrap, SetRootView, Subscribe). primary is that plugin's
-// store, borrowed for the shell + preview infrastructure only.
-func New(reg *plugin.Registry, primaryUUID string, primary *store.Store, cfg Config) *Server {
+// New constructs a Server that routes everything through reg. primaryUUID names
+// the root localdb plugin (used for id-less RPCs and for the shell/preview
+// infrastructure, which addresses the root plugin by tile id).
+func New(reg *plugin.Registry, primaryUUID string, cfg Config) *Server {
 	srv := &Server{
 		cfg:         cfg,
 		pluginReg:   reg,
 		primaryUUID: primaryUUID,
-		primary:     primary,
 		mux:         http.NewServeMux(),
 	}
 	srv.routes()
 	return srv
+}
+
+// rootClient returns the gRPC client for the root plugin.
+func (s *Server) rootClient() (pb.GridwellClient, bool) {
+	return s.pluginReg.Get(s.primaryUUID)
 }
 
 func (s *Server) Handler() http.Handler { return s.mux }
@@ -150,19 +150,32 @@ func classifyStoreError(err error) storeErrorClass {
 	}
 }
 
-// writeHTTPError maps a store sentinel error to the right HTTP status
-// and writes a plain-text body. Used by the non-Connect endpoints
-// (preview image, ShellStream) where Connect's code mapping doesn't
-// apply.
+// writeHTTPError maps an error to the right HTTP status and writes a plain-text
+// body. Used by the non-Connect endpoints (preview image, ShellStream). Errors
+// now arrive from plugins as gRPC status errors, so map those codes; a raw
+// store sentinel (should not occur post-routing) falls through to the same
+// classifyStoreError categorization.
 func writeHTTPError(w http.ResponseWriter, err error) {
-	status := http.StatusInternalServerError
+	code := http.StatusInternalServerError
+	if st, ok := status.FromError(err); ok {
+		switch st.Code() {
+		case gcodes.NotFound:
+			code = http.StatusNotFound
+		case gcodes.InvalidArgument:
+			code = http.StatusBadRequest
+		case gcodes.FailedPrecondition:
+			code = http.StatusConflict
+		}
+		http.Error(w, st.Message(), code)
+		return
+	}
 	switch classifyStoreError(err) {
 	case classNotFound:
-		status = http.StatusNotFound
+		code = http.StatusNotFound
 	case classInvalidArgument:
-		status = http.StatusBadRequest
+		code = http.StatusBadRequest
 	case classConflict:
-		status = http.StatusConflict
+		code = http.StatusConflict
 	}
-	http.Error(w, err.Error(), status)
+	http.Error(w, err.Error(), code)
 }

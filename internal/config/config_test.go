@@ -21,7 +21,7 @@ func TestLoad_full(t *testing.T) {
 	dir := t.TempDir()
 	yml := `
 bind: "127.0.0.1:9090"
-db: "/tmp/test.db"
+root: "abc123"
 static: "/var/www"
 plugins:
   - id: "abc123"
@@ -47,8 +47,8 @@ plugins:
 	if cfg.Bind != "127.0.0.1:9090" {
 		t.Errorf("bind: got %q", cfg.Bind)
 	}
-	if cfg.DB != "/tmp/test.db" {
-		t.Errorf("db: got %q", cfg.DB)
+	if cfg.Root != "abc123" {
+		t.Errorf("root: got %q", cfg.Root)
 	}
 	if cfg.StaticDir != "/var/www" {
 		t.Errorf("static: got %q", cfg.StaticDir)
@@ -76,16 +76,11 @@ func TestLoad_defaults_for_missing_fields(t *testing.T) {
 	if cfg.Bind != "0.0.0.0:7070" {
 		t.Errorf("bind: got %q", cfg.Bind)
 	}
-	// DB should have fallen back to default
-	if cfg.DB == "" {
-		t.Error("db should not be empty")
-	}
 }
 
 func TestLoad_tilde_expansion(t *testing.T) {
 	dir := t.TempDir()
 	yml := `
-db: "~/gridwell.db"
 plugins:
   - id: "xyz"
     name: "files"
@@ -103,9 +98,6 @@ plugins:
 		t.Fatalf("Load: %v", err)
 	}
 	home, _ := os.UserHomeDir()
-	if !strings.HasPrefix(cfg.DB, home) {
-		t.Errorf("db tilde not expanded: %q", cfg.DB)
-	}
 	if !strings.HasPrefix(cfg.Plugins[0].Binary, home) {
 		t.Errorf("binary tilde not expanded: %q", cfg.Plugins[0].Binary)
 	}
