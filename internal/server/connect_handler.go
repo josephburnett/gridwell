@@ -440,55 +440,51 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
+	qualifiedID := m.TileId
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
 	if _, err := c.DeleteTile(ctx, m); err != nil {
 		return nil, asConnectError(err)
 	}
-	// Shell PTYs only back tiles in the primary localdb; reap the tmux session
-	// once the row is gone so it can't survive a restart and leak.
-	if uuid == h.srv.primaryUUID && h.srv.shellStreamer != nil {
-		h.reapShellIfGone(ctx, local)
+	// Reap the tmux session keyed by the qualified id once the row is gone, so
+	// it can't survive a restart and leak. Harmless for non-shell tiles (no
+	// session → Kill is a no-op).
+	if h.srv.shellStreamer != nil {
+		h.reapShellIfGone(ctx, qualifiedID)
 	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
 }
 
-// reapShellIfGone kills the tmux session for a just-deleted primary tile when
-// that exact id is truly gone (a cloned shell is an independent copy with its
-// own id and no session, so deleting a copy never touches the original's PTY).
-// Fire-and-forget; a missed kill is caught by the startup orphan-cleanup pass.
-func (h *connectHandler) reapShellIfGone(ctx context.Context, localTileID string) {
-	c, ok := h.srv.rootClient()
+// reapShellIfGone kills the tmux session for a just-deleted tile (keyed by its
+// qualified id) when that exact id is truly gone — a cloned shell is an
+// independent copy with its own id and no session, so deleting a copy never
+// touches the original's PTY. Fire-and-forget; a missed kill is caught by the
+// startup orphan-cleanup pass.
+func (h *connectHandler) reapShellIfGone(ctx context.Context, qualifiedID string) {
+	client, local, ok := h.srv.clientForID(qualifiedID)
 	if !ok {
 		return
 	}
-	resp, err := c.Probe(ctx, &pb.ProbeRequest{TileId: localTileID})
+	resp, err := client.Probe(ctx, &pb.ProbeRequest{TileId: local})
 	switch {
 	case err != nil:
-		log.Printf("[shellstream] kill-on-delete probe tile=%s err=%v", localTileID, err)
+		log.Printf("[shellstream] kill-on-delete probe tile=%s err=%v", qualifiedID, err)
 	case resp.Presence != pb.ProbeResponse_PRESENCE_PRESENT:
-		if tileIDInt, perr := strconv.ParseInt(localTileID, 10, 64); perr == nil {
-			if err := h.srv.shellStreamer.Kill(tileIDInt); err != nil {
-				log.Printf("[shellstream] kill-on-delete tile=%s err=%v", localTileID, err)
-			}
+		if err := h.srv.shellStreamer.Kill(qualifiedID); err != nil {
+			log.Printf("[shellstream] kill-on-delete tile=%s err=%v", qualifiedID, err)
 		}
 	}
 }
 
 // ShellSessionAlive answers the wasm's per-descent probe by asking the streamer
-// (the tmux controller) whether the tile's session exists. Shell tiles live in
-// the primary localdb, so the id is stripped of the primary prefix. An infra
-// error is reported as not-alive rather than a Connect error — the wasm only
-// cares whether the refresh button should hide.
+// (the tmux controller) whether the tile's session exists. The session is keyed
+// by the qualified tile id. An infra error is reported as not-alive rather than
+// a Connect error — the wasm only cares whether the refresh button should hide.
 func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
 	if h.srv.shellStreamer == nil {
 		return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: false}), nil
 	}
-	tileID := stripUUID(req.Msg.TileId, h.srv.primaryUUID)
-	alive := false
-	if tileIDInt, err := strconv.ParseInt(tileID, 10, 64); err == nil {
-		alive, _ = h.srv.shellStreamer.HasSession(tileIDInt)
-	}
+	alive, _ := h.srv.shellStreamer.HasSession(req.Msg.TileId)
 	return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: alive}), nil
 }
 

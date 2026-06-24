@@ -50,7 +50,7 @@ type Server struct {
 	// Same takeover semantics as URL (a refresh from another pane
 	// evicts the previous holder).
 	activeShellMu       sync.Mutex
-	activeShellSessions map[int64]*shellSessionEntry
+	activeShellSessions map[string]*shellSessionEntry
 }
 
 // New constructs a Server that routes everything through reg. primaryUUID names
@@ -70,6 +70,21 @@ func New(reg *plugin.Registry, primaryUUID string, cfg Config) *Server {
 // rootClient returns the gRPC client for the root plugin.
 func (s *Server) rootClient() (pb.GridwellClient, bool) {
 	return s.pluginReg.Get(s.primaryUUID)
+}
+
+// clientForID resolves the plugin that owns a qualified id, returning its
+// client and the local (unprefixed) id. Used by the shell + preview
+// infrastructure to address a tile in whichever plugin holds it.
+func (s *Server) clientForID(id string) (client pb.GridwellClient, local string, ok bool) {
+	uuid, local, split := splitPluginID(id)
+	if !split {
+		return nil, "", false
+	}
+	c, found := s.pluginReg.Get(uuid)
+	if !found {
+		return nil, "", false
+	}
+	return c, local, true
 }
 
 func (s *Server) Handler() http.Handler { return s.mux }

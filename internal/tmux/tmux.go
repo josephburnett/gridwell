@@ -17,6 +17,7 @@ package tmux
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -111,7 +112,7 @@ func New(socketName, binary string) (*Controller, func() error, error) {
 //
 // cols and rows seed the tmux window size; tmux propagates SIGWINCH
 // from later client resizes through the existing PTY interface.
-func (c *Controller) Args(tileID int64, mode Mode, cols, rows uint16, startDir string) []string {
+func (c *Controller) Args(tileID string, mode Mode, cols, rows uint16, startDir string) []string {
 	name := SessionName(tileID)
 	args := []string{c.binary, "-L", c.socketName, "-f", c.configPath}
 	switch mode {
@@ -147,29 +148,29 @@ const (
 	ModeAttach
 )
 
-// SessionName is the canonical mapping from tile id to tmux session
-// name. Stable across server restarts so the same tile reattaches.
-// Uses the numeric tile id (not object_id) per the design choice
-// that clones diverge — see CLAUDE.md and the shell-tile design
-// discussion. Public so callers building HasSession args can derive
-// the name the same way.
-func SessionName(tileID int64) string {
-	return fmt.Sprintf("gridwell-%d", tileID)
+// SessionName is the canonical mapping from a (qualified) tile id to a tmux
+// session name. The tile id is the globally-qualified "<plugin-uuid>/<id>" so
+// shells in different localdb plugins never collide. It is base64url-encoded
+// because tmux session names can't contain "/" / "." / ":"; the encoding is
+// reversible (ParseSessionName) so the orphan sweep can map a session back to
+// its tile id. Stable across restarts so the same tile reattaches.
+func SessionName(tileID string) string {
+	return "gridwell-" + base64.RawURLEncoding.EncodeToString([]byte(tileID))
 }
 
-// ParseSessionName is the inverse of SessionName. Returns the tile
-// id and ok=true when name matches the gridwell prefix. Used by the
-// startup orphan cleanup to map listed sessions back to tile ids.
-func ParseSessionName(name string) (int64, bool) {
+// ParseSessionName is the inverse of SessionName. Returns the qualified tile id
+// and ok=true when name matches the gridwell prefix and decodes cleanly. Used
+// by the startup orphan cleanup to map listed sessions back to tile ids.
+func ParseSessionName(name string) (string, bool) {
 	const prefix = "gridwell-"
 	if !strings.HasPrefix(name, prefix) {
-		return 0, false
+		return "", false
 	}
-	n, err := strconv.ParseInt(name[len(prefix):], 10, 64)
-	if err != nil || n <= 0 {
-		return 0, false
+	raw, err := base64.RawURLEncoding.DecodeString(name[len(prefix):])
+	if err != nil || len(raw) == 0 {
+		return "", false
 	}
-	return n, true
+	return string(raw), true
 }
 
 // HasSession reports whether the gridwell session for tileID exists
@@ -182,7 +183,7 @@ func ParseSessionName(name string) (int64, bool) {
 //
 // Concurrency: safe to call from multiple goroutines; tmux's IPC
 // serializes commands on the socket.
-func (c *Controller) HasSession(tileID int64) (bool, error) {
+func (c *Controller) HasSession(tileID string) (bool, error) {
 	name := SessionName(tileID)
 	out, err := c.run("has-session", "-t", name)
 	if err == nil {
@@ -197,7 +198,7 @@ func (c *Controller) HasSession(tileID int64) (bool, error) {
 // KillSession terminates the session for tileID. No-op if the
 // session is already gone OR the tmux server isn't running.
 // Returns an error only on infrastructure failures.
-func (c *Controller) KillSession(tileID int64) error {
+func (c *Controller) KillSession(tileID string) error {
 	name := SessionName(tileID)
 	out, err := c.run("kill-session", "-t", name)
 	if err == nil {
@@ -214,7 +215,7 @@ func (c *Controller) KillSession(tileID int64) error {
 // match the gridwell pattern are silently ignored. An empty result
 // is returned with no error when the tmux server isn't running yet
 // (first-launch state).
-func (c *Controller) ListSessions() ([]int64, error) {
+func (c *Controller) ListSessions() ([]string, error) {
 	out, err := c.run("list-sessions", "-F", "#{session_name}")
 	if err != nil {
 		if isNoServerErr(out, err) {
@@ -222,7 +223,7 @@ func (c *Controller) ListSessions() ([]int64, error) {
 		}
 		return nil, fmt.Errorf("tmux list-sessions: %w", err)
 	}
-	var ids []int64
+	var ids []string
 	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -239,7 +240,7 @@ func (c *Controller) ListSessions() ([]int64, error) {
 // tmux session — what tmux shows as the window's automatic name (e.g.
 // "claude", "vim", "bash"). Returns "" with no error when the session is
 // gone or the server isn't running, so callers can simply skip relabeling.
-func (c *Controller) PaneCommand(tileID int64) (string, error) {
+func (c *Controller) PaneCommand(tileID string) (string, error) {
 	name := SessionName(tileID)
 	out, err := c.run("display-message", "-t", name, "-p", "#{pane_current_command}")
 	if err != nil {
@@ -331,4 +332,3 @@ func filterEnv(env []string, drop ...string) []string {
 	}
 	return out
 }
-

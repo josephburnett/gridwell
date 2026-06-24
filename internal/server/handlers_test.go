@@ -378,3 +378,26 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 		t.Errorf("stale version: code %v, want FailedPrecondition", got)
 	}
 }
+
+// TestListPlugins: the launcher source lists configured plugins in config
+// order, with kind, label, and writability (only localdb accepts new tiles).
+func TestListPlugins(t *testing.T) {
+	cl, _ := newTestServerWithPlugins(t)
+	plugins, err := cl.ListPlugins(context.Background())
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	// Registration order: primary localdb, then fs, then proc.
+	if len(plugins) != 3 {
+		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
+	}
+	if plugins[0].Kind != "localdb" || !plugins[0].Writable {
+		t.Errorf("plugin[0] = %+v, want writable localdb", plugins[0])
+	}
+	if plugins[1].Kind != "fs" || plugins[1].Writable {
+		t.Errorf("plugin[1] = %+v, want read-only fs", plugins[1])
+	}
+	if plugins[2].Kind != "proc" || plugins[2].Writable {
+		t.Errorf("plugin[2] = %+v, want read-only proc", plugins[2])
+	}
+}

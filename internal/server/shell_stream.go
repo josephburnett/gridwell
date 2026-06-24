@@ -36,19 +36,19 @@ import (
 // Kill removes the tile's tmux session. Idempotent. Called from
 // DeleteTile and from the startup orphan cleanup.
 type shellStreamer interface {
-	OpenSession(tileID int64, mode tmux.Mode, cols, rows uint16) (shellSession, error)
-	HasSession(tileID int64) (bool, error)
-	Kill(tileID int64) error
+	OpenSession(tileID string, mode tmux.Mode, cols, rows uint16) (shellSession, error)
+	HasSession(tileID string) (bool, error)
+	Kill(tileID string) error
 	// ListLiveTileIDs returns the tile ids of every gridwell-owned
 	// tmux session currently alive on the backing socket. Used by the
 	// startup orphan-cleanup pass to find sessions whose tiles no
 	// longer exist.
-	ListLiveTileIDs() ([]int64, error)
+	ListLiveTileIDs() ([]string, error)
 	// PaneCommand returns the foreground command of the tile's session
 	// (e.g. "claude", "vim", "bash"), or "" if the session is gone. Used
 	// to label the frozen shell tile on detach, the way URL tiles capture
 	// the page title.
-	PaneCommand(tileID int64) (string, error)
+	PaneCommand(tileID string) (string, error)
 }
 
 // shellSession is the per-tile handle the ShellStream handler holds.
@@ -90,10 +90,10 @@ type liveShellStreamer struct {
 	ctrl *tmux.Controller
 }
 
-func (l *liveShellStreamer) OpenSession(tileID int64, mode tmux.Mode, cols, rows uint16) (shellSession, error) {
+func (l *liveShellStreamer) OpenSession(tileID string, mode tmux.Mode, cols, rows uint16) (shellSession, error) {
 	argv := l.ctrl.Args(tileID, mode, cols, rows, "")
 	if len(argv) == 0 {
-		return nil, fmt.Errorf("shellstream: empty tmux argv for tile %d mode %v", tileID, mode)
+		return nil, fmt.Errorf("shellstream: empty tmux argv for tile %s mode %v", tileID, mode)
 	}
 	s, err := shelldriver.Start(shelldriver.Config{
 		Cols: cols, Rows: rows,
@@ -106,19 +106,19 @@ func (l *liveShellStreamer) OpenSession(tileID int64, mode tmux.Mode, cols, rows
 	return s, nil
 }
 
-func (l *liveShellStreamer) HasSession(tileID int64) (bool, error) {
+func (l *liveShellStreamer) HasSession(tileID string) (bool, error) {
 	return l.ctrl.HasSession(tileID)
 }
 
-func (l *liveShellStreamer) Kill(tileID int64) error {
+func (l *liveShellStreamer) Kill(tileID string) error {
 	return l.ctrl.KillSession(tileID)
 }
 
-func (l *liveShellStreamer) ListLiveTileIDs() ([]int64, error) {
+func (l *liveShellStreamer) ListLiveTileIDs() ([]string, error) {
 	return l.ctrl.ListSessions()
 }
 
-func (l *liveShellStreamer) PaneCommand(tileID int64) (string, error) {
+func (l *liveShellStreamer) PaneCommand(tileID string) (string, error) {
 	return l.ctrl.PaneCommand(tileID)
 }
 
@@ -149,21 +149,21 @@ func (s *Server) CleanupOrphanedShellSessions(ctx context.Context) (int, error) 
 	if len(live) == 0 {
 		return 0, nil
 	}
-	client, ok := s.rootClient()
-	if !ok {
-		return 0, fmt.Errorf("no root plugin")
-	}
-	// For each live tmux session, ask the root plugin whether its tile still
-	// exists. Ids are never reused, so GONE means the row was deleted while the
-	// session leaked — kill it. (Inverted from "list all shell tiles": Probe
-	// over the bounded set of live sessions needs no enumeration RPC.)
+	// For each live tmux session (keyed by qualified tile id), ask the owning
+	// plugin whether its tile still exists. Ids are never reused, so GONE means
+	// the row was deleted while the session leaked — kill it. Probing the
+	// bounded set of live sessions needs no enumeration RPC.
 	killed := 0
 	var firstErr error
 	for _, id := range live {
-		resp, err := client.Probe(ctx, &pb.ProbeRequest{TileId: strconv.FormatInt(id, 10)})
+		client, local, ok := s.clientForID(id)
+		if !ok {
+			continue // session for an unknown/unqualified id: leave it be
+		}
+		resp, err := client.Probe(ctx, &pb.ProbeRequest{TileId: local})
 		if err != nil {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("probe tile %d: %w", id, err)
+				firstErr = fmt.Errorf("probe tile %s: %w", id, err)
 			}
 			continue
 		}
@@ -172,7 +172,7 @@ func (s *Server) CleanupOrphanedShellSessions(ctx context.Context) (int, error) 
 		}
 		if err := s.shellStreamer.Kill(id); err != nil {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("kill orphan tile %d: %w", id, err)
+				firstErr = fmt.Errorf("kill orphan tile %s: %w", id, err)
 			}
 			continue
 		}
@@ -204,7 +204,7 @@ const (
 // no snapshot yet have allowCreate=true (fresh tile, user expects a
 // new bash to spawn); tiles with a snapshot have allowCreate=false
 // (we won't silently fabricate state behind the JPEG).
-func (s *Server) acquireShellSession(tileID int64, allowCreate bool, cols, rows uint16) (shellSession, chan struct{}, error) {
+func (s *Server) acquireShellSession(tileID string, allowCreate bool, cols, rows uint16) (shellSession, chan struct{}, error) {
 	s.activeShellMu.Lock()
 	defer s.activeShellMu.Unlock()
 	if entry, ok := s.activeShellSessions[tileID]; ok {
@@ -215,7 +215,7 @@ func (s *Server) acquireShellSession(tileID int64, allowCreate bool, cols, rows 
 
 	alive, err := s.shellStreamer.HasSession(tileID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("shellstream: probe tile %d: %w", tileID, err)
+		return nil, nil, fmt.Errorf("shellstream: probe tile %s: %w", tileID, err)
 	}
 	mode := tmux.ModeAttach
 	if !alive {
@@ -230,7 +230,7 @@ func (s *Server) acquireShellSession(tileID int64, allowCreate bool, cols, rows 
 		return nil, nil, err
 	}
 	if s.activeShellSessions == nil {
-		s.activeShellSessions = make(map[int64]*shellSessionEntry)
+		s.activeShellSessions = make(map[string]*shellSessionEntry)
 	}
 	s.activeShellSessions[tileID] = &shellSessionEntry{
 		session: sess,
@@ -245,7 +245,7 @@ func (s *Server) acquireShellSession(tileID int64, allowCreate bool, cols, rows 
 // CLIENT but leaves the tmux SERVER + bash running, so the next
 // refresh re-attaches to the same state). On takeover this is a
 // no-op — the new WS handler keeps the same session.
-func (s *Server) releaseShellSession(tileID int64, mySession shellSession, myStopOld chan struct{}) {
+func (s *Server) releaseShellSession(tileID string, mySession shellSession, myStopOld chan struct{}) {
 	s.activeShellMu.Lock()
 	entry, ok := s.activeShellSessions[tileID]
 	matches := ok && entry.session == mySession && entry.stopOld == myStopOld
@@ -254,7 +254,7 @@ func (s *Server) releaseShellSession(tileID int64, mySession shellSession, mySto
 	}
 	s.activeShellMu.Unlock()
 	if matches {
-		log.Printf("[shellstream] detach tile=%d", tileID)
+		log.Printf("[shellstream] detach tile=%s", tileID)
 		_ = mySession.Close()
 		// Capture the foreground program (e.g. "claude") into the tile's
 		// label, the way URL tiles capture the page title on close. The
@@ -266,7 +266,7 @@ func (s *Server) releaseShellSession(tileID int64, mySession shellSession, mySto
 
 // captureShellTitle stamps the tile's label with its tmux session's
 // foreground command. No-op if the session is gone or the query fails.
-func (s *Server) captureShellTitle(tileID int64) {
+func (s *Server) captureShellTitle(tileID string) {
 	if s.shellStreamer == nil {
 		return
 	}
@@ -274,14 +274,14 @@ func (s *Server) captureShellTitle(tileID int64) {
 	if err != nil || cmd == "" {
 		return
 	}
-	client, ok := s.rootClient()
+	client, local, ok := s.clientForID(tileID)
 	if !ok {
 		return
 	}
 	if _, err := client.SetTileAlt(context.Background(), &pb.SetTileAltRequest{
-		TileId: strconv.FormatInt(tileID, 10), Alt: cmd,
+		TileId: local, Alt: cmd,
 	}); err != nil {
-		log.Printf("[shellstream] set-title tile=%d cmd=%q err=%v", tileID, cmd, err)
+		log.Printf("[shellstream] set-title tile=%s cmd=%q err=%v", tileID, cmd, err)
 	}
 }
 
@@ -298,19 +298,16 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "shell driver not configured", http.StatusServiceUnavailable)
 		return
 	}
-	// Shell tiles live in the primary localdb; the wire id is qualified.
-	tileIDStr := stripUUID(r.URL.Query().Get("tile_id"), s.primaryUUID)
-	tileID, err := strconv.ParseInt(tileIDStr, 10, 64)
-	if err != nil || tileID <= 0 {
+	// The wire tile_id is the globally-qualified "<plugin-uuid>/<id>"; it is
+	// the tmux session key (so shells in different localdbs don't collide) and
+	// it routes GetTile to the owning plugin.
+	tileID := r.URL.Query().Get("tile_id")
+	client, local, ok := s.clientForID(tileID)
+	if !ok {
 		http.Error(w, "missing or invalid tile_id", http.StatusBadRequest)
 		return
 	}
-	client, ok := s.rootClient()
-	if !ok {
-		http.Error(w, "no root plugin", http.StatusInternalServerError)
-		return
-	}
-	tr, err := client.GetTile(r.Context(), &pb.GetTileRequest{TileId: strconv.FormatInt(tileID, 10)})
+	tr, err := client.GetTile(r.Context(), &pb.GetTileRequest{TileId: local})
 	if err != nil {
 		writeHTTPError(w, err)
 		return
@@ -349,7 +346,7 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 
 	session, myStopOld, err := s.acquireShellSession(tileID, allowCreate, cols, rows)
 	if err != nil {
-		log.Printf("[shellstream] open-err tile=%d allowCreate=%v err=%v", tileID, allowCreate, err)
+		log.Printf("[shellstream] open-err tile=%s allowCreate=%v err=%v", tileID, allowCreate, err)
 		if errors.Is(err, ErrShellSessionGone) {
 			_ = conn.Close(websocket.StatusPolicyViolation, "shell session gone")
 		} else {
@@ -357,7 +354,7 @@ func (s *Server) shellStream(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	log.Printf("[shellstream] attach tile=%d allowCreate=%v", tileID, allowCreate)
+	log.Printf("[shellstream] attach tile=%s allowCreate=%v", tileID, allowCreate)
 
 	// Cancel when the session dies, on takeover, or on client close.
 	go func() {
@@ -411,7 +408,7 @@ func parseShellSize(q map[string][]string) (uint16, uint16) {
 // the session's output channel rather than a blocking read lets the
 // detach path return immediately without orphaning a goroutine on a
 // PTY syscall.
-func shellWriteLoop(ctx context.Context, conn *websocket.Conn, session shellSession, tileID int64, done chan<- struct{}) {
+func shellWriteLoop(ctx context.Context, conn *websocket.Conn, session shellSession, tileID string, done chan<- struct{}) {
 	defer close(done)
 	out := session.Output()
 	for {
@@ -428,7 +425,7 @@ func shellWriteLoop(ctx context.Context, conn *websocket.Conn, session shellSess
 			err := conn.Write(wctx, websocket.MessageBinary, chunk)
 			wcancel()
 			if err != nil {
-				log.Printf("[shellstream] writer-exit tile=%d err=%v", tileID, err)
+				log.Printf("[shellstream] writer-exit tile=%s err=%v", tileID, err)
 				return
 			}
 		}
@@ -437,26 +434,26 @@ func shellWriteLoop(ctx context.Context, conn *websocket.Conn, session shellSess
 
 // shellReadLoop reads from the WS. Binary frames are forwarded as
 // stdin; text frames are parsed as ShellStreamMessage control signals.
-func shellReadLoop(ctx context.Context, conn *websocket.Conn, session shellSession, tileID int64) {
+func shellReadLoop(ctx context.Context, conn *websocket.Conn, session shellSession, tileID string) {
 	for {
 		mt, data, err := conn.Read(ctx)
 		if err != nil {
-			log.Printf("[shellstream] reader-exit tile=%d err=%v", tileID, err)
+			log.Printf("[shellstream] reader-exit tile=%s err=%v", tileID, err)
 			return
 		}
 		switch mt {
 		case websocket.MessageBinary:
 			if _, err := session.Write(data); err != nil {
 				if errors.Is(err, io.ErrClosedPipe) {
-					log.Printf("[shellstream] session-dead tile=%d", tileID)
+					log.Printf("[shellstream] session-dead tile=%s", tileID)
 					return
 				}
-				log.Printf("[shellstream] forward-err tile=%d err=%v", tileID, err)
+				log.Printf("[shellstream] forward-err tile=%s err=%v", tileID, err)
 			}
 		case websocket.MessageText:
 			var msg rpc.ShellStreamMessage
 			if err := json.Unmarshal(data, &msg); err != nil {
-				log.Printf("[shellstream] bad-json tile=%d err=%v body=%q", tileID, err, string(data))
+				log.Printf("[shellstream] bad-json tile=%s err=%v body=%q", tileID, err, string(data))
 				continue
 			}
 			if msg.Kind == "resize" {
@@ -468,7 +465,7 @@ func shellReadLoop(ctx context.Context, conn *websocket.Conn, session shellSessi
 					rows = minShellRows
 				}
 				if err := session.Resize(cols, rows); err != nil {
-					log.Printf("[shellstream] resize-err tile=%d cols=%d rows=%d err=%v", tileID, cols, rows, err)
+					log.Printf("[shellstream] resize-err tile=%s cols=%d rows=%d err=%v", tileID, cols, rows, err)
 				}
 			}
 		}

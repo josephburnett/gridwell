@@ -29,27 +29,27 @@ type fakeShellStreamer struct {
 
 	// alive maps tileID → "is there a live tmux session?". HasSession
 	// reports from this map. Defaults to false (nothing exists).
-	alive map[int64]bool
+	alive map[string]bool
 
 	sessions []*fakeShellSession
-	killed   []int64
+	killed   []string
 
 	// paneCommand is the canned PaneCommand answer (the foreground program).
 	paneCommand string
 }
 
 func newFakeShellStreamer() *fakeShellStreamer {
-	return &fakeShellStreamer{alive: map[int64]bool{}}
+	return &fakeShellStreamer{alive: map[string]bool{}}
 }
 
 // setAlive programs HasSession's answer for tileID.
-func (f *fakeShellStreamer) setAlive(tileID int64, alive bool) {
+func (f *fakeShellStreamer) setAlive(tileID string, alive bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.alive[tileID] = alive
 }
 
-func (f *fakeShellStreamer) OpenSession(tid int64, mode tmux.Mode, cols, rows uint16) (shellSession, error) {
+func (f *fakeShellStreamer) OpenSession(tid string, mode tmux.Mode, cols, rows uint16) (shellSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s := &fakeShellSession{
@@ -68,13 +68,13 @@ func (f *fakeShellStreamer) OpenSession(tid int64, mode tmux.Mode, cols, rows ui
 	return s, nil
 }
 
-func (f *fakeShellStreamer) HasSession(tileID int64) (bool, error) {
+func (f *fakeShellStreamer) HasSession(tileID string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.alive[tileID], nil
 }
 
-func (f *fakeShellStreamer) Kill(tileID int64) error {
+func (f *fakeShellStreamer) Kill(tileID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.killed = append(f.killed, tileID)
@@ -82,10 +82,10 @@ func (f *fakeShellStreamer) Kill(tileID int64) error {
 	return nil
 }
 
-func (f *fakeShellStreamer) ListLiveTileIDs() ([]int64, error) {
+func (f *fakeShellStreamer) ListLiveTileIDs() ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var ids []int64
+	var ids []string
 	for id, alive := range f.alive {
 		if alive {
 			ids = append(ids, id)
@@ -94,7 +94,7 @@ func (f *fakeShellStreamer) ListLiveTileIDs() ([]int64, error) {
 	return ids, nil
 }
 
-func (f *fakeShellStreamer) PaneCommand(tileID int64) (string, error) {
+func (f *fakeShellStreamer) PaneCommand(tileID string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.paneCommand, nil
@@ -115,16 +115,16 @@ func (f *fakeShellStreamer) sessionCount() int {
 	return len(f.sessions)
 }
 
-func (f *fakeShellStreamer) killedIDs() []int64 {
+func (f *fakeShellStreamer) killedIDs() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]int64, len(f.killed))
+	out := make([]string, len(f.killed))
 	copy(out, f.killed)
 	return out
 }
 
 type fakeShellSession struct {
-	tileID      int64
+	tileID      string
 	openMode    tmux.Mode
 	initialCols uint16
 	initialRows uint16
@@ -321,7 +321,7 @@ func TestCaptureShellTitleStampsLabel(t *testing.T) {
 	fake.paneCommand = "claude"
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
+	tileIDInt := tileID
 
 	srv.captureShellTitle(tileIDInt)
 
@@ -360,7 +360,7 @@ func TestShellStreamFreshTileOpensInCreateMode(t *testing.T) {
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
+	tileIDInt := tileID
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -372,7 +372,7 @@ func TestShellStreamFreshTileOpensInCreateMode(t *testing.T) {
 
 	s := waitForShellSession(t, fake)
 	if s.tileID != tileIDInt {
-		t.Errorf("session tileID = %d, want %d", s.tileID, tileIDInt)
+		t.Errorf("session tileID = %s, want %s", s.tileID, tileIDInt)
 	}
 	if s.openMode != tmux.ModeCreate {
 		t.Errorf("openMode = %v, want ModeCreate (fresh tile)", s.openMode)
@@ -392,7 +392,7 @@ func TestShellStreamSnapshottedTileWithLiveSessionOpensInAttachMode(t *testing.T
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
+	tileIDInt := tileID
 
 	// Stash a JPEG so the tile reads as "previously activated".
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -429,7 +429,7 @@ func TestShellStreamSnapshottedTileWithDeadSessionIsRejected(t *testing.T) {
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
+	tileIDInt := tileID
 
 	// Snapshot present, but no tmux session alive.
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -672,10 +672,12 @@ func TestCleanupOrphanedShellSessions(t *testing.T) {
 
 	// Real shell tile in the DB.
 	live := createShellTileViaRPC(t, hs, root)
-	liveIDInt, _ := strconv.ParseInt(bareID(live), 10, 64)
+	liveIDInt := live
 	fake.setAlive(liveIDInt, true)
-	// Orphan: alive on the socket, no matching DB row.
-	const orphan int64 = 999999
+	// Orphan: alive on the socket, in the same (registered) plugin namespace
+	// but with no matching DB row — a session whose tile was deleted.
+	uuid, _, _ := splitPluginID(live)
+	orphan := uuid + "/999999"
 	fake.setAlive(orphan, true)
 
 	killed, err := srv.CleanupOrphanedShellSessions(context.Background())
@@ -687,7 +689,7 @@ func TestCleanupOrphanedShellSessions(t *testing.T) {
 	}
 	got := fake.killedIDs()
 	if len(got) != 1 || got[0] != orphan {
-		t.Errorf("killed ids = %v, want [%d]", got, orphan)
+		t.Errorf("killed ids = %v, want [%s]", got, orphan)
 	}
 	// The live tile's session must still be marked alive.
 	if alive, _ := fake.HasSession(liveIDInt); !alive {
@@ -717,7 +719,7 @@ func TestDeleteTileKillsShellSession(t *testing.T) {
 	fake := newFakeShellStreamer()
 	srv.SetShellStreamer(fake)
 	tileID := createShellTileViaRPC(t, hs, root)
-	tileIDInt, _ := strconv.ParseInt(bareID(tileID), 10, 64)
+	tileIDInt := tileID
 	fake.setAlive(tileIDInt, true)
 
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -728,7 +730,7 @@ func TestDeleteTileKillsShellSession(t *testing.T) {
 	}
 	killed := fake.killedIDs()
 	if len(killed) != 1 || killed[0] != tileIDInt {
-		t.Errorf("Kill not called for deleted shell tile %d; got %v", tileIDInt, killed)
+		t.Errorf("Kill not called for deleted shell tile %s; got %v", tileIDInt, killed)
 	}
 }
 
@@ -753,7 +755,7 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shellIDInt, _ := strconv.ParseInt(bareID(shell.ID), 10, 64)
+	shellIDInt := shell.ID
 	fake.setAlive(shellIDInt, true)
 
 	// Clone the well: copy-on-clone deep-copies its child grid, so the clone
@@ -790,11 +792,11 @@ func TestDeleteShellCopyKeepsOriginalSession(t *testing.T) {
 
 	for _, id := range fake.killedIDs() {
 		if id == shellIDInt {
-			t.Errorf("original shell %d session was killed by deleting the clone's copy", shellIDInt)
+			t.Errorf("original shell %s session was killed by deleting the clone's copy", shellIDInt)
 		}
 	}
 	if _, err := cl.GetTile(ctx, shell.ID); err != nil {
-		t.Errorf("original shell %d should survive the clone-copy delete: %v", shellIDInt, err)
+		t.Errorf("original shell %s should survive the clone-copy delete: %v", shellIDInt, err)
 	}
 }
 
@@ -820,7 +822,7 @@ func TestShellSessionAliveReportsStreamerProbe(t *testing.T) {
 		t.Errorf("alive = true for fresh tile; want false")
 	}
 
-	tileIDInt2, _ := strconv.ParseInt(bareID(tileID), 10, 64)
+	tileIDInt2 := tileID
 	fake.setAlive(tileIDInt2, true)
 	res, err = cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: tileID})
 	if err != nil {

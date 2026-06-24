@@ -18,11 +18,13 @@ import (
 // orphan cleanup (which parses names from `tmux list-sessions`) and
 // makes pre-existing sessions un-attachable after a server upgrade.
 func TestSessionNameRoundtrip(t *testing.T) {
-	for _, id := range []int64{1, 7, 1000, 1<<31 - 1} {
+	// Qualified ids contain "/" and the uuid may contain "-"/"_"; the encoding
+	// must round-trip all of them.
+	for _, id := range []string{"localdb-uuid/1", "a1b2c3d4/7", "my_db/1000", "gridwell-root/2147483647"} {
 		name := SessionName(id)
 		got, ok := ParseSessionName(name)
 		if !ok || got != id {
-			t.Errorf("SessionName(%d) = %q; ParseSessionName roundtrip got (%d, %v)", id, name, got, ok)
+			t.Errorf("SessionName(%q) = %q; ParseSessionName roundtrip got (%q, %v)", id, name, got, ok)
 		}
 	}
 }
@@ -32,7 +34,9 @@ func TestSessionNameRoundtrip(t *testing.T) {
 // to share our socket (shouldn't happen given private socket, but
 // defensive).
 func TestParseSessionNameRejectsNonGridwell(t *testing.T) {
-	cases := []string{"", "main", "work", "gridwell-", "gridwell-abc", "gridwell-0", "gridwell--5"}
+	// Non-gridwell names, the bare prefix (empty payload), and invalid base64
+	// must all be rejected.
+	cases := []string{"", "main", "work", "gridwell-", "gridwell-!@#$", "gridwell-not base64"}
 	for _, name := range cases {
 		if _, ok := ParseSessionName(name); ok {
 			t.Errorf("ParseSessionName(%q) = ok; want not-ok", name)
@@ -47,10 +51,10 @@ func TestParseSessionNameRejectsNonGridwell(t *testing.T) {
 // same socket, etc.
 func TestArgsCreate(t *testing.T) {
 	c := &Controller{binary: "/usr/bin/tmux", socketName: "test", configPath: "/tmp/cfg.conf"}
-	got := c.Args(42, ModeCreate, 80, 24, "/home/joe")
+	got := c.Args("t/42", ModeCreate, 80, 24, "/home/joe")
 	want := []string{
 		"/usr/bin/tmux", "-L", "test", "-f", "/tmp/cfg.conf",
-		"new-session", "-A", "-s", "gridwell-42",
+		"new-session", "-A", "-s", SessionName("t/42"),
 		"-c", "/home/joe",
 		"-x", "80", "-y", "24", "bash",
 	}
@@ -65,7 +69,7 @@ func TestArgsCreate(t *testing.T) {
 // would create the session in / rather than $HOME).
 func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c"}
-	got := c.Args(1, ModeCreate, 80, 24, "")
+	got := c.Args("t/1", ModeCreate, 80, 24, "")
 	for _, a := range got {
 		if a == "-c" {
 			t.Errorf("argv contained -c with empty startDir: %v", got)
@@ -79,10 +83,10 @@ func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
 // attach must fail in that case so the wasm hides the button.
 func TestArgsAttach(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c"}
-	got := c.Args(7, ModeAttach, 80, 24, "/ignored")
+	got := c.Args("t/7", ModeAttach, 80, 24, "/ignored")
 	want := []string{
 		"tmux", "-L", "s", "-f", "/tmp/c",
-		"attach-session", "-t", "gridwell-7",
+		"attach-session", "-t", SessionName("t/7"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ModeAttach argv mismatch\n got=%v\nwant=%v", got, want)
@@ -217,7 +221,7 @@ func newTestController(t *testing.T) *Controller {
 func TestHasSessionMissingReturnsFalseNoErr(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
-	alive, err := c.HasSession(42)
+	alive, err := c.HasSession("t/42")
 	if err != nil {
 		t.Fatalf("HasSession with no server: err=%v; want nil", err)
 	}
@@ -237,23 +241,23 @@ func TestCreateThenHasSessionThenKill(t *testing.T) {
 	// Spawn a session by exec'ing the create argv detached. We use
 	// `-d` to skip the attach (we just want to provoke session
 	// creation; no client needed).
-	createArgs := c.Args(101, ModeCreate, 80, 24, "")
+	createArgs := c.Args("t/101", ModeCreate, 80, 24, "")
 	// Insert -d to keep the session detached for the test.
 	createArgs = injectDetach(createArgs)
 	if out, err := exec.Command(createArgs[0], createArgs[1:]...).CombinedOutput(); err != nil {
 		t.Fatalf("create session: %v: %s", err, out)
 	}
 
-	alive, err := c.HasSession(101)
+	alive, err := c.HasSession("t/101")
 	if err != nil || !alive {
 		t.Fatalf("HasSession(101) after create = (%v, %v); want (true, nil)", alive, err)
 	}
 
-	if err := c.KillSession(101); err != nil {
+	if err := c.KillSession("t/101"); err != nil {
 		t.Fatalf("KillSession: %v", err)
 	}
 
-	alive, err = c.HasSession(101)
+	alive, err = c.HasSession("t/101")
 	if err != nil || alive {
 		t.Errorf("HasSession after kill = (%v, %v); want (false, nil)", alive, err)
 	}
@@ -265,7 +269,7 @@ func TestCreateThenHasSessionThenKill(t *testing.T) {
 func TestKillSessionMissingIsNoOp(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
-	if err := c.KillSession(99999); err != nil {
+	if err := c.KillSession("t/99999"); err != nil {
 		t.Errorf("KillSession on missing = %v; want nil", err)
 	}
 }
@@ -294,19 +298,19 @@ func TestListSessionsEnumeratesGridwellOnly(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
 
-	mustExec(t, c.Args(7, ModeCreate, 80, 24, ""))
-	mustExec(t, c.Args(11, ModeCreate, 80, 24, ""))
+	mustExec(t, c.Args("t/7", ModeCreate, 80, 24, ""))
+	mustExec(t, c.Args("t/11", ModeCreate, 80, 24, ""))
 	mustExec(t, c.run, "new-session", "-d", "-s", "user-session")
 
 	ids, err := c.ListSessions()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[int64]bool{}
+	got := map[string]bool{}
 	for _, id := range ids {
 		got[id] = true
 	}
-	if !got[7] || !got[11] {
+	if !got["t/7"] || !got["t/11"] {
 		t.Errorf("ListSessions = %v; missing gridwell tiles 7, 11", ids)
 	}
 	if len(got) != 2 {
@@ -324,7 +328,7 @@ func TestListSessionsEnumeratesGridwellOnly(t *testing.T) {
 func TestAttachModeFailsWhenSessionMissing(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
-	args := c.Args(404, ModeAttach, 80, 24, "")
+	args := c.Args("t/404", ModeAttach, 80, 24, "")
 	cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
