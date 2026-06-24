@@ -224,9 +224,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if a.menuOpen {
 		if mp := a.tree.FindPane(a.menuPaneID); mp != nil {
 			mr := paneRectFor(a, mp)
-			if pointInPalette(mp, mr, sx, sy) {
-				if idx := paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
-					a.startTemplateDrag(mp, mr, idx, sx, sy)
+			if a.pointInPalette(mp, mr, sx, sy) {
+				if idx := a.paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
+					a.startPaletteDrag(mp, mr, idx, sx, sy)
 				}
 				return nil // swallow; missing a swatch keeps the palette open
 			}
@@ -377,10 +377,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// open) if it landed in the gutter. Click outside the popover
 	// dismisses it and falls through to normal interaction.
 	if a.menuOpen && a.menuPaneID == p.ID {
-		if pointInPalette(p, r, sx, sy) {
-			idx := paletteTileIndexAt(p, r, sx, sy)
+		if a.pointInPalette(p, r, sx, sy) {
+			idx := a.paletteTileIndexAt(p, r, sx, sy)
 			if idx >= 0 {
-				a.startTemplateDrag(p, r, idx, sx, sy)
+				a.startPaletteDrag(p, r, idx, sx, sy)
 				return nil
 			}
 			return nil
@@ -509,7 +509,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		p, r, ok := a.paneAtScreen(sx, sy)
 		hover := -1
 		if ok && p.ID == a.menuPaneID {
-			hover = paletteTileIndexAt(p, r, sx, sy)
+			hover = a.paletteTileIndexAt(p, r, sx, sy)
 		}
 		if hover != a.menuHover {
 			a.menuHover = hover
@@ -663,6 +663,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// hovering a doc with the left button).
 	a.canvas.Get("style").Set("cursor", "")
 	sx, sy = mouseXY(args[0], a.canvas)
+
+	// A plugin swatch clicked without dragging (no movement past the
+	// threshold) enters that plugin: the launcher / + menu "click to
+	// descend" gesture. A drag instead mounts a link (DropCreateTemplate).
+	if d.isTemplate && d.item.isPlugin && !d.started {
+		a.enterPlugin(d.originPaneID, d.item.plugin)
+		return nil
+	}
 
 	// Snapshot every world-read the drop decision needs, ONCE, using the
 	// local d (a.dragging is already nil above). DecideDrop then picks the
@@ -957,23 +965,62 @@ func zoomDist(z1, z2 float64) float64 {
 }
 
 // canAscend reports whether pane p has somewhere to ascend to: it's
-// descended into a text/url/shell tile (TextFocus) or into a child grid
-// (non-empty Path). At the user's root neither holds.
+// descended into a text/url/shell tile (TextFocus), into a child grid
+// (non-empty Path), or it entered a plugin via the + menu and has a frame
+// to pop (non-empty Up). At the launcher start screen none hold.
 func (a *App) canAscend(p *pane.Pane) bool {
-	return p.TextFocus != "" || len(p.Path) > 0
+	return p.TextFocus != "" || len(p.Path) > 0 || len(p.Up) > 0
 }
 
 // ascendPane performs the appropriate ascent for pane p: a file ascent
-// when it's descended into a text/url/shell tile, a well ascent when
-// it's in a child grid, nothing at the user's root. This is the single
-// entry point for both ascent gestures (middle button, right-click on
-// the corner circle).
+// when it's descended into a text/url/shell tile, a well ascent when it's
+// in a child grid, a portal ascent (pop the + menu entry stack) when it
+// entered a plugin at its root, nothing at the launcher. This is the single
+// entry point for every ascent gesture (middle button, right-click on the
+// corner circle).
 func (a *App) ascendPane(p *pane.Pane) {
-	if p.TextFocus != "" {
+	switch {
+	case p.TextFocus != "":
 		a.startFileAscent(p)
-	} else if len(p.Path) > 0 {
+	case len(p.Path) > 0:
 		a.startAscent(p)
+	case len(p.Up) > 0:
+		a.ascendPortal(p)
 	}
+}
+
+// enterPlugin performs a portal jump into a plugin from the + menu: it pushes
+// the pane's current level onto the ascent stack (so a later ascent returns
+// here — STACK semantics), re-anchors the pane at the plugin's root grid, and
+// fetches it. Drives the launcher's click-to-enter and the in-grid + menu's
+// plugin items.
+func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo) {
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return
+	}
+	a.menuOpen = false
+	p.PushFrame()
+	p.Anchor = pl.RootGridID
+	p.Path = nil
+	p.TextFocus = ""
+	p.Cx, p.Cy, p.Zoom = 0, 0, 1
+	a.fetchGrid(a.gridIDForPane(p))
+	a.draw()
+	a.scheduleURLUpdate()
+}
+
+// ascendPortal pops the most recent + menu entry frame, returning the pane to
+// wherever it jumped into the current plugin from (another plugin, or the
+// launcher). No animation: the jump crosses plugin id spaces with no well
+// tile to zoom out of.
+func (a *App) ascendPortal(p *pane.Pane) {
+	if !p.PopFrame() {
+		return
+	}
+	a.fetchGrid(a.gridIDForPane(p))
+	a.draw()
+	a.scheduleURLUpdate()
 }
 
 // startAscent zooms a pane out of a child grid and back to the parent
@@ -1557,28 +1604,30 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	}()
 }
 
-// startTemplateDrag arms a template drag from the i'th palette tile.
-// The dragState is set up so the existing ghost machinery treats it
-// like a regular tile drag (snapshot tile + cell offset), but with
-// isTemplate=true so onMouseUp branches to creation instead of move.
-// The palette stays open during the drag — it'll close on commit.
-func (a *App) startTemplateDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) {
-	if idx < 0 || idx >= len(templateKinds) {
+// startPaletteDrag arms a drag from the i'th palette item. The dragState is
+// set up so the existing ghost machinery treats it like a regular tile drag
+// (snapshot tile + cell offset), but with isTemplate=true so onMouseUp
+// branches to creation/mount instead of move. The palette stays open during
+// the drag — it'll close on commit. For a plugin item the release path also
+// distinguishes a click (enter the plugin) from a drag (mount a link).
+func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) {
+	items := a.paletteItems(p)
+	if idx < 0 || idx >= len(items) {
 		return
 	}
-	kind := templateKinds[idx]
-	tx, ty, tw, _ := paletteTileRect(p, r, idx)
+	item := items[idx]
+	tx, ty, tw, _ := a.paletteTileRect(p, r, idx)
 	a.dragging = &dragState{
 		originPaneID:   p.ID,
 		isTemplate:     true,
-		template:       kind,
+		item:           item,
 		startScreenX:   sx,
 		startScreenY:   sy,
 		curScreenX:     sx,
 		curScreenY:     sy,
 		cellOffsetX:    0.5,
 		cellOffsetY:    0.5,
-		snapshotTile:   templateGhostNode(kind),
+		snapshotTile:   paletteItemGhostNode(item),
 		originScreenX:  tx,
 		originScreenY:  ty,
 		originPaneRect: r,
@@ -1590,21 +1639,21 @@ func (a *App) startTemplateDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float
 	}
 }
 
-// templateGhostNode synthesizes a 1×1 rpc.Tile matching the kind, so
-// the ghost renderer can paint the in-flight tile using the same
-// drawNode path that a real tile would use.
-func templateGhostNode(kind templateKind) rpc.Tile {
-	switch kind {
+// paletteItemGhostNode synthesizes a 1×1 rpc.Tile matching the palette item,
+// so the ghost renderer can paint the in-flight tile using the same drawNode
+// path that a real tile would use. A plugin item paints as an exit well
+// carrying the plugin's label (the same as the mount well it will create).
+func paletteItemGhostNode(item paletteItem) rpc.Tile {
+	if item.isPlugin {
+		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1, AltText: item.plugin.Label}
+	}
+	switch item.primitive {
 	case tplWell:
 		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1}
 	case tplMarkdown:
 		return rpc.Tile{Kind: rpc.KindText, W: 1, H: 1}
 	case tplURL:
 		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
-	case tplFileWell:
-		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1, AltText: rpc.AltFiles}
-	case tplProcessWell:
-		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1, AltText: rpc.AltProcesses}
 	case tplShell:
 		return rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"}
 	}
@@ -1632,10 +1681,28 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
+	// A plugin item mounts as an exit-well link in the destination grid
+	// (drag-a-plugin-onto-a-grid). Only writable grids accept it; a
+	// read-only grid snaps it back.
+	if d.item.isPlugin {
+		if !a.gridWritable(a.gridIDForPane(destPane)) {
+			a.cancelDragSnapBack(d)
+			return
+		}
+		targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
+		if a.ghost != nil {
+			a.ghost.paneID = destPane.ID
+		}
+		a.startSnap(targetX, targetY, snapMs)
+		a.mountPluginAtCell(destPane, d.item.plugin, dropX, dropY)
+		a.menuOpen = false
+		return
+	}
+
 	// URL still needs a URL up front; without one the tile is inert.
 	// Every other template commits immediately with the snap-and-
 	// create gesture wells use.
-	if d.template == tplURL {
+	if d.item.primitive == tplURL {
 		a.ghost = nil
 		a.draw()
 		dp := destPane
@@ -1662,15 +1729,11 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	}
 	a.startSnap(targetX, targetY, snapMs)
 
-	switch d.template {
+	switch d.item.primitive {
 	case tplWell:
 		a.createWellAtCell(destPane, dropX, dropY)
 	case tplMarkdown:
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
-	case tplFileWell:
-		a.createFileWellAtCell(destPane, "/", dropX, dropY)
-	case tplProcessWell:
-		a.createProcessWellAtCell(destPane, 1, dropX, dropY)
 	case tplShell:
 		a.createShellAtCell(destPane, dropX, dropY)
 	}
@@ -1743,34 +1806,19 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	})
 }
 
-// createFileWellAtCell fires CreateFileWell at the given cell, rooted at
-// fsPath (canonical absolute). Palette default is "/" — the rest of the
-// filesystem is reached by descending.
-func (a *App) createFileWellAtCell(p *pane.Pane, fsPath string, cellX, cellY int64) {
+// mountPluginAtCell fires Mount at the given cell: it attaches the plugin
+// (by uuid, default config) and drops an exit-well link to its root grid.
+// The drag-a-plugin-onto-a-writable-grid gesture.
+func (a *App) mountPluginAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
-	req := &rpc.CreateFileWellRequest{
-		Path:   rpc.Path{WellIDs: path},
-		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		FSPath: fsPath,
+	req := &rpc.MountRequest{
+		PluginUUID: pl.UUID,
+		Path:       rpc.Path{WellIDs: path},
+		GridID:     gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
-	a.postTileMutate("CreateFileWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CreateFileWell(ctx, req)
-	}, nil)
-}
-
-// createProcessWellAtCell fires CreateProcessWell at the given cell,
-// rooted at pid. Palette default is PID 1 (init).
-func (a *App) createProcessWellAtCell(p *pane.Pane, pid int64, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
-	req := &rpc.CreateProcessWellRequest{
-		Path:   rpc.Path{WellIDs: path},
-		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		PID: pid,
-	}
-	a.postTileMutate("CreateProcessWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CreateProcessWell(ctx, req)
+	a.postTileMutate("Mount", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.Mount(ctx, req)
 	}, nil)
 }
 

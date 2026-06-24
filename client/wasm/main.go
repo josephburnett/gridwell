@@ -378,11 +378,12 @@ type dragState struct {
 	originScreenY  float64
 	originPaneRect pane.Rect
 
-	// Template drag from the + palette: tileID is 0 (no real node yet)
-	// but isTemplate is true and template carries the kind that was
-	// grabbed. Drop creates the node at the snapped cell.
+	// Palette drag from the + menu: tileID is "" (no real node yet) but
+	// isTemplate is true and item carries the grabbed palette entry — a
+	// tile primitive (drop creates it) or a plugin (drop mounts it as an
+	// exit-well link; a click with no drag enters the plugin instead).
 	isTemplate bool
-	template   templateKind
+	item       paletteItem
 
 	// Source-grid info — set at mousedown; same as the focused pane's
 	// grid for parent-grid drags, or the well's child grid for "pull

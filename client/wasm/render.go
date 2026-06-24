@@ -152,31 +152,52 @@ func drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
 // palette.Config every time.
 const plusButtonRadius = 18
 
-// templateKind identifies one entry in the creation palette. Order
-// matters: it determines layout in the popover and the indices used
-// by hit-testing.
+// templateKind identifies one built-in tile primitive in the creation
+// palette. Order matters: primitiveKinds determines layout in the popover
+// and the indices used by hit-testing. File and process wells are no longer
+// primitives — they are reached by dragging the fs / proc *plugin* items.
 type templateKind int
 
 const (
 	tplWell templateKind = iota
 	tplMarkdown
 	tplURL
-	// tplFileWell spawns a file-well rooted at "/" (the host
-	// filesystem root). Outlined red — its contents come from outside
-	// Gridwell.
-	tplFileWell
-	// tplProcessWell spawns a process-well rooted at PID 1 (init).
-	// Also red — host-owned state.
-	tplProcessWell
 	// tplShell spawns an interactive bash shell tile. Starts frozen with
 	// no preview; the user refreshes to spawn the PTY.
 	tplShell
 )
 
-// templateKinds is the palette layout order, left to right. The two
-// exit-wells go after the interior kinds so the in-Gridwell tiles stay
-// grouped on the left.
-var templateKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplFileWell, tplProcessWell, tplShell}
+// primitiveKinds is the palette layout order of the built-in tile
+// primitives, left to right. These appear only in writable grids (a
+// read-only plugin grid and the launcher show plugins only).
+var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell}
+
+// paletteItem is one entry in the creation palette. It is either a
+// configured plugin (click to enter, drag to mount as an exit-well link)
+// or a built-in tile primitive (drag to create). isPlugin selects which
+// of plugin / primitive carries meaning.
+type paletteItem struct {
+	isPlugin  bool
+	plugin    rpc.PluginInfo // when isPlugin
+	primitive templateKind   // when !isPlugin
+}
+
+// paletteItems returns the palette entries for pane p, in display order:
+// every configured plugin first (config order), then — only when the
+// pane's current grid is writable — the tile primitives. The launcher
+// (Anchor == "") and read-only plugin grids therefore show plugins only.
+func (a *App) paletteItems(p *pane.Pane) []paletteItem {
+	items := make([]paletteItem, 0, len(a.plugins)+len(primitiveKinds))
+	for _, pl := range a.plugins {
+		items = append(items, paletteItem{isPlugin: true, plugin: pl})
+	}
+	if a.gridWritable(a.gridIDForPane(p)) {
+		for _, k := range primitiveKinds {
+			items = append(items, paletteItem{primitive: k})
+		}
+	}
+	return items
+}
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
 // displayed cell size approaches its target. At 60 fps this gives a

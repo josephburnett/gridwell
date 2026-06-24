@@ -7,18 +7,19 @@ import (
 
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file holds the creation-palette: the screen-space layout adapters
 // over the pure client/palette package, the floating "+" button, and the
 // popover drawing (one swatch per templateKind, with its identity glyph).
 
-func paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
+func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 	return palette.Layout{
 		Cfg:      palette.Default(),
 		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
 		PaneZoom: p.Zoom,
-		NumTiles: len(templateKinds),
+		NumTiles: len(a.paletteItems(p)),
 	}
 }
 
@@ -89,73 +90,84 @@ func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
 }
 
 // paletteRect is the wasm-side adapter for palette.Layout.PopoverRect.
-func paletteRect(p *pane.Pane, r pane.Rect) (x, y, w, h float64) {
-	pop := paletteLayoutFor(p, r).PopoverRect()
+func (a *App) paletteRect(p *pane.Pane, r pane.Rect) (x, y, w, h float64) {
+	pop := a.paletteLayoutFor(p, r).PopoverRect()
 	return pop.X, pop.Y, pop.W, pop.H
 }
 
 // paletteTileRect is the wasm-side adapter for palette.Layout.TileRect.
-func paletteTileRect(p *pane.Pane, r pane.Rect, i int) (x, y, w, h float64) {
-	tr := paletteLayoutFor(p, r).TileRect(i)
+func (a *App) paletteTileRect(p *pane.Pane, r pane.Rect, i int) (x, y, w, h float64) {
+	tr := a.paletteLayoutFor(p, r).TileRect(i)
 	return tr.X, tr.Y, tr.W, tr.H
 }
 
 // drawPalette paints the creation popover: a background container and
-// a horizontal row of preview tiles, one per templateKind.
+// a horizontal row of preview tiles, one per palette item (plugins, then
+// the tile primitives in writable grids).
 func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
-	mx, my, mw, mh := paletteRect(p, r)
+	mx, my, mw, mh := a.paletteRect(p, r)
 	a.cctx.Set("fillStyle", colorMenuBg)
 	a.cctx.Call("fillRect", mx, my, mw, mh)
 	a.cctx.Set("strokeStyle", colorPaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
-	for i, kind := range templateKinds {
-		tx, ty, tw, th := paletteTileRect(p, r, i)
+	for i, item := range a.paletteItems(p) {
+		tx, ty, tw, th := a.paletteTileRect(p, r, i)
 		hovered := a.menuHover == i
-		a.drawPaletteTile(kind, tx, ty, tw, th, hovered)
+		a.drawPaletteItem(item, tx, ty, tw, th, hovered)
 	}
 }
 
-// drawPaletteTile renders one preview tile inside the palette. The body
-// (fill + border + banner) is shared with the live-tile renderer so a
-// palette swatch reads identical to what the user drops — same color
-// grammar, same "/dev/null"/"files"/"processes" banner. A kind-specific
-// glyph is overlaid on tile kinds where the live tile lacks a static
-// identity cue (markdown / url / file-well / process-well), so the
-// palette still reads "what is this?" before the tile has content.
-func (a *App) drawPaletteTile(kind templateKind, x, y, w, h float64, hovered bool) {
-	n := templateGhostNode(kind)
+// drawPaletteItem renders one preview tile inside the palette. The body
+// (fill + border) is shared with the live-tile renderer so a palette swatch
+// reads identical to what the user drops — same color grammar. A
+// kind-specific glyph is overlaid so the swatch reads "what is this?" before
+// the tile has content.
+func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
+	n := paletteItemGhostNode(item)
 	outside := tileOutside(&n, false)
 	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
-	// No banner in the palette — the glyph alone identifies the kind. (Placed
-	// exit tiles still carry their "/dev/null" / "files" / … label.) One
-	// consistent line glyph per kind, in that kind's own color, sized to
-	// mostly fill the swatch.
-	switch kind {
-	case tplWell:
-		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
-	case tplMarkdown:
-		drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine)
-	case tplURL:
-		drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
-	case tplFileWell:
-		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
-	case tplProcessWell:
-		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
-	case tplShell:
-		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	if item.isPlugin {
+		a.drawPluginGlyph(item.plugin, x, y, w, h)
+	} else {
+		switch item.primitive {
+		case tplWell:
+			drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		case tplMarkdown:
+			drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine)
+		case tplURL:
+			drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
+		case tplShell:
+			drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		}
 	}
 	if hovered {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
 }
 
+// drawPluginGlyph overlays the identity glyph for a plugin swatch, chosen by
+// the plugin's kind: a folder for fs, a process tree for proc, a well for a
+// localdb (interior) plugin, and a globe as the generic fallback (e.g. ssh).
+func (a *App) drawPluginGlyph(pl rpc.PluginInfo, x, y, w, h float64) {
+	switch pl.Kind {
+	case "fs":
+		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	case "proc":
+		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	case "localdb":
+		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+	default:
+		drawGlobeGlyph(a.cctx, x, y, w, h, colorExitBorder)
+	}
+}
+
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.
-func paletteTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
-	return paletteLayoutFor(p, r).TileIndexAt(x, y)
+func (a *App) paletteTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
+	return a.paletteLayoutFor(p, r).TileIndexAt(x, y)
 }
 
 // pointInPalette is the wasm-side adapter for palette.Layout.PointInPopover.
-func pointInPalette(p *pane.Pane, r pane.Rect, x, y float64) bool {
-	return paletteLayoutFor(p, r).PointInPopover(x, y)
+func (a *App) pointInPalette(p *pane.Pane, r pane.Rect, x, y float64) bool {
+	return a.paletteLayoutFor(p, r).PointInPopover(x, y)
 }
