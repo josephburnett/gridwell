@@ -57,12 +57,13 @@ func (a *App) drawRightDragPreview() {
 // an upward chevron when armed (cursor still inside the circle), dimmed
 // grey when the cursor has dragged out and release would cancel.
 func (a *App) drawAscendPreview(rd *rightDragState) {
+	p := a.tree.FindPane(rd.ascendPaneID)
 	pr := a.paneRectByID(rd.ascendPaneID)
-	if pr.W <= 0 || pr.H <= 0 {
+	if p == nil || pr.W <= 0 || pr.H <= 0 {
 		return
 	}
 	c := a.cctx
-	cx, cy := plusButtonCenter(pr)
+	cx, cy := plusButtonCenter(p, pr)
 	rad := float64(plusButtonRadius)
 
 	fill := colorSwapArrow // blue == armed (same "active gesture" blue)

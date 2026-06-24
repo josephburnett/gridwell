@@ -253,7 +253,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// The corner refresh button only acts on the already-focused
 			// pane (it's hidden otherwise). A click here on a just-focused
 			// pane falls through to the content/xterm path below.
-			if prevFocus == p.ID && pointInPlus(r, sx, sy) && !a.hasShellStream(p.ID) {
+			if prevFocus == p.ID && pointInPlus(p, r, sx, sy) && !a.hasShellStream(p.ID) {
 				gid := a.gridIDForPane(p)
 				if g, ok := a.c.Grid(gid); ok {
 					if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
@@ -282,7 +282,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// The corner back/refresh button only acts on the already-focused
 			// pane (it's hidden otherwise); a click on a just-focused pane
 			// falls through to the pan/native-view path below.
-			if prevFocus == p.ID && pointInPlus(r, sx, sy) {
+			if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
 				if a.urlStreams[p.ID] != nil {
 					bridgeGoBack(p.ID)
 				} else {
@@ -361,7 +361,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// only drawn on the focused pane, so it only acts when the pane was
 	// already focused before this click; a click that merely focuses the
 	// pane falls through to normal grid interaction (pan / palette).
-	if prevFocus == p.ID && pointInPlus(r, sx, sy) {
+	if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
 		if a.menuOpen && a.menuPaneID == p.ID {
 			a.menuOpen = false
 		} else {
@@ -466,7 +466,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			// Don't broadcast moves into the back-button area; the
 			// page would see phantom cursor activity over an empty
 			// region of its viewport.
-			if pointInPlus(r, sx, sy) {
+			if pointInPlus(p, r, sx, sy) {
 				a.canvas.Get("style").Set("cursor", "")
 				return nil
 			}
@@ -628,7 +628,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// so it doesn't leak into a gridwell gesture.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		if pointInPlus(r, sx, sy) && args[0].Get("button").Int() == 0 {
+		if pointInPlus(p, r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
 		if a.urlStreams[p.ID] != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
@@ -901,7 +901,7 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 	if p == nil || p.TextFocus != "" {
 		return false
 	}
-	return pointInPlus(paneRectFor(a, p), sx, sy)
+	return pointInPlus(p, paneRectFor(a, p), sx, sy)
 }
 
 // attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)

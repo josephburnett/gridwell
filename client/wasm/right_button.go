@@ -144,7 +144,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	// them instead of recomputing. Every lookup here is a pure read; the
 	// state edits happen only in the arming switch below.
 	in := gesture.Input{
-		OnCornerCircle: pointInPlus(r, sx, sy),
+		OnCornerCircle: pointInPlus(p, r, sx, sy),
 		CanAscend:      a.canAscend(p),
 		InGridView:     p.TextFocus == "",
 		Region:         pane.ClassifyRegion(r, resizeBandPx, sx, sy),
@@ -299,8 +299,9 @@ func (a *App) onRightMove(sx, sy float64) {
 	case rightDragAscend:
 		// Track whether the cursor is still over the circle so the
 		// preview can show armed-vs-cancel, and release knows what to do.
+		ap := a.tree.FindPane(rd.ascendPaneID)
 		pr := a.paneRectByID(rd.ascendPaneID)
-		rd.cursorInCircle = pr.W > 0 && pointInPlus(pr, sx, sy)
+		rd.cursorInCircle = ap != nil && pr.W > 0 && pointInPlus(ap, pr, sx, sy)
 	}
 	a.draw()
 }
@@ -724,7 +725,7 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	// gesture.ResizeAffordance owns the gating (corner-circle beats band beats
 	// missing divider); dividerResizeCursor shares it so the hover cursor can't
 	// disagree with where a drag actually arms. When arm is true, d is non-nil.
-	arm, _ := gesture.ResizeAffordance(pointInPlus(r, sx, sy), region, d != nil)
+	arm, _ := gesture.ResizeAffordance(pointInPlus(p, r, sx, sy), region, d != nil)
 	if !arm {
 		return false
 	}
@@ -751,7 +752,7 @@ func (a *App) dividerResizeCursor(sx, sy float64) string {
 	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
 	hasDivider := region.IsResize() && a.dividerOnSide(p, region.Side()) != nil
 	// Same gating as armLeftResize, via the shared gesture.ResizeAffordance.
-	_, cursor := gesture.ResizeAffordance(pointInPlus(r, sx, sy), region, hasDivider)
+	_, cursor := gesture.ResizeAffordance(pointInPlus(p, r, sx, sy), region, hasDivider)
 	return cursor
 }
 

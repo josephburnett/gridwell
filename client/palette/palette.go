@@ -57,10 +57,18 @@ type Layout struct {
 	Pane     Rect
 	PaneZoom float64
 	NumTiles int
+	// Centered places the + button at the pane's center instead of its
+	// lower-right corner. Used for the launcher start screen ("a blank
+	// screen with a + menu in the center"); once inside a plugin the +
+	// returns to its muscle-memory lower-right home.
+	Centered bool
 }
 
 // PlusCenter returns the screen-space center of the + button.
 func (l Layout) PlusCenter() (cx, cy float64) {
+	if l.Centered {
+		return l.Pane.X + l.Pane.W/2, l.Pane.Y + l.Pane.H/2
+	}
 	return l.Pane.X + l.Pane.W - l.Cfg.PlusInset, l.Pane.Y + l.Pane.H - l.Cfg.PlusInset
 }
 

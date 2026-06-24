@@ -20,29 +20,37 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
 		PaneZoom: p.Zoom,
 		NumTiles: len(a.paletteItems(p)),
+		Centered: isLauncherPane(p),
 	}
 }
 
-// plusButtonCenter returns the screen-space center of the + button for a
-// given pane. The pane's zoom does not influence the + button, but
-// using paletteLayoutFor keeps every screen-space layout computation
-// going through one helper.
-func plusButtonCenter(r pane.Rect) (float64, float64) {
-	l := palette.Layout{
-		Cfg:  palette.Default(),
-		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
-	}
-	return l.PlusCenter()
+// isLauncherPane reports whether pane p is at the launcher start screen — no
+// plugin entered (empty anchor), so it has no grid. The + button centers here
+// ("a blank screen with a + menu in the center") and returns to the lower
+// right once a plugin is entered.
+func isLauncherPane(p *pane.Pane) bool {
+	return p.Anchor == ""
 }
 
-// pointInPlus reports whether (x, y) lies within the + button for the given
-// pane rect.
-func pointInPlus(r pane.Rect, x, y float64) bool {
-	l := palette.Layout{
-		Cfg:  palette.Default(),
-		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
+// plusLayout builds the minimal Layout needed to place the + button for pane
+// p — just the rect plus the launcher-centering flag. The pane's zoom does
+// not influence the + button.
+func plusLayout(p *pane.Pane, r pane.Rect) palette.Layout {
+	return palette.Layout{
+		Cfg:      palette.Default(),
+		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
+		Centered: isLauncherPane(p),
 	}
-	return l.PointInPlus(x, y)
+}
+
+// plusButtonCenter returns the screen-space center of the + button for pane p.
+func plusButtonCenter(p *pane.Pane, r pane.Rect) (float64, float64) {
+	return plusLayout(p, r).PlusCenter()
+}
+
+// pointInPlus reports whether (x, y) lies within the + button for pane p.
+func pointInPlus(p *pane.Pane, r pane.Rect, x, y float64) bool {
+	return plusLayout(p, r).PointInPlus(x, y)
 }
 
 // drawPlusButton paints the floating circular + button in the pane's lower
@@ -52,9 +60,9 @@ func pointInPlus(r pane.Rect, x, y float64) bool {
 // here deletes"). The round chrome is identical either way so the position is
 // muscle-memory-stable.
 func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(r)
+	cx, cy := plusButtonCenter(p, r)
 	deleting := a.tileDragInFlight() && a.dragging.originPaneID == p.ID
-	hot := deleting && pointInPlus(r, a.dragging.curScreenX, a.dragging.curScreenY)
+	hot := deleting && pointInPlus(p, r, a.dragging.curScreenX, a.dragging.curScreenY)
 	bg := colorPlusBg
 	switch {
 	case hot:

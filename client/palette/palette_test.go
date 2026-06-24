@@ -22,6 +22,17 @@ func TestPlusCenter(t *testing.T) {
 	}
 }
 
+// TestPlusCenterCentered: with Centered set (the launcher start screen) the +
+// button sits at the pane's center rather than its lower-right corner.
+func TestPlusCenterCentered(t *testing.T) {
+	l := makeLayout()
+	l.Centered = true
+	cx, cy := l.PlusCenter()
+	if cx != 500 || cy != 400 {
+		t.Errorf("centered PlusCenter = (%v,%v), want (500,400)", cx, cy)
+	}
+}
+
 func TestPointInPlus(t *testing.T) {
 	l := makeLayout()
 	cx, cy := l.PlusCenter()

@@ -456,8 +456,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 // drawURLBackButton paints the lower-right button on a URL-tile descent.
 // Click → history.back() on the descended Chromium tab. Same circular
 // chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton(_ *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(r)
+func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
+	cx, cy := plusButtonCenter(p, r)
 	a.cctx.Set("fillStyle", colorPlusBg)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
@@ -487,8 +487,8 @@ func (a *App) drawURLBackButton(_ *pane.Pane, r pane.Rect) {
 // descent. Click → open URL stream (same action as the right-drag-down
 // refresh gesture). Same circular chrome as drawURLBackButton so the
 // position is muscle-memory-compatible.
-func (a *App) drawURLRefreshButton(_ *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(r)
+func (a *App) drawURLRefreshButton(p *pane.Pane, r pane.Rect) {
+	cx, cy := plusButtonCenter(p, r)
 	a.cctx.Set("fillStyle", colorPlusBg)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
