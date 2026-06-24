@@ -8,15 +8,32 @@ DONE so far:
 - SV1: tmux/shell keyed by qualified <uuid>/<tile-id> (41558d7)
 - SV2: preview endpoint routes qualified id to owning plugin (7bfadf8)
 - SV3: Mount RPC + fs Attach defaults to configured root (98055d1)
+- SV4/5/6: drop the root — Bootstrap empty, SetRootView no-op, GetBlob
+  Unimplemented (use GetTileContent), route() requires qualified ids, serve.go
+  synth default localdb (not root), removed cfg.Root/primaryUUID/rootClient (cc5b995)
+- PluginInfo.root_grid_id: ListPlugins reports each plugin's qualified root grid
+  for click-enter (2a6e723)
+- CL (partial): client bootstraps via ListPlugins and enters the FIRST plugin's
+  root as a de-facto home (f1d63e5). This restores function but is JUMP, not the
+  full launcher.
 
-REMAINING:
-- SV4/5/6: Bootstrap no-root; serve.go synth default localdb (not root); remove
-  cfg.Root + root: field + Server.primaryUUID/rootClient. (Currently primaryUUID
-  is unused by shell/preview after SV1/SV2 — only Bootstrap/SetRootView/rootClient
-  reference it.) Also retire CreateFileWell/CreateProcessWell once client uses Mount.
-- CL1/CL2: pane nav-stack + empty start state (the hard part).
-- CL3/CL4: data-driven palette + gestures (uses ListPlugins + Mount).
-- CL5: URL nav-stack encode/restore + e2e.
+REMAINING (the large client piece — NOT done; ~18 files, ~101 .Path/gridIDForPath
+refs, all-or-nothing for the wasm build):
+- CL1/CL2: replace pane.Path/gridIDForPath with the per-pane NAV STACK of
+  {GridID, ViaWell} frames; render blank + centered + when the stack is empty
+  (empty start screen). Migrate urlsync, gridpath, descent/ascent, drop_target,
+  render, embed/embed_drop, zoomtrans (the descent-animation COW-spine math
+  reads Path — trickiest). currentGridID = top frame; RPC well_ids = ViaWell ids
+  above the last portal frame.
+- CL3/CL4: data-driven palette from a.plugins (primitives gated by current grid
+  writability via uuidOf(currentGrid)→a.plugins[uuid].Writable; plugins always).
+  Gestures: drag primitive=create, drag plugin=cl.Mount, left-click plugin=push
+  portal frame {GridID: pluginInfo.RootGridID}, right-click=ascend. Delete
+  templateKinds hardcode + tplFileWell/tplProcessWell. Retire CreateFileWell/
+  CreateProcessWell (proto+handlers+client) once the palette uses Mount.
+- CL5: URL encode/restore the nav stack (portal vs well frames distinguishable).
+- e2e: empty start → enter localdb → primitives → drag-mount → click-enter +
+  ascend → split start panes.
 
 ## Goal
 
