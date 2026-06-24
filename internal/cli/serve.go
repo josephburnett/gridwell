@@ -123,10 +123,9 @@ func RunServe(args []string) int {
 		return 2
 	}
 
-	// Build the effective config. A server.yaml designates the root plugin and
-	// lists every plugin; with no config we synthesize a single root localdb
-	// plugin backed by --db, so the root is always an explicit plugin entry —
-	// never hidden "db:" sugar.
+	// Build the effective config: server.yaml lists every plugin. With no
+	// config we synthesize a single localdb plugin backed by --db — a plugin
+	// like any other (the client enters it from the launcher), not a root.
 	cfg := &config.ServerConfig{Bind: f.Bind, StaticDir: f.StaticDir}
 	if f.cfgPath != "" {
 		if loaded, cfgErr := config.Load(f.cfgPath); cfgErr == nil {
@@ -136,15 +135,10 @@ func RunServe(args []string) int {
 	if len(cfg.Plugins) == 0 {
 		cfg.Plugins = []config.PluginConfig{{
 			ID:     defaultRootID,
-			Name:   "root",
+			Name:   "local",
 			Kind:   "localdb",
 			Config: map[string]string{"db_file": f.DB},
 		}}
-		cfg.Root = defaultRootID
-	}
-	if cfg.Root == "" {
-		fmt.Fprintf(os.Stderr, "serve: server.yaml must set `root:` to a plugin id\n")
-		return 1
 	}
 
 	reg, err := plugin.LoadAll(cfg, builtinFactories)
@@ -153,12 +147,6 @@ func RunServe(args []string) int {
 		return 1
 	}
 	defer reg.Close()
-
-	primaryUUID := cfg.Root
-	if _, ok := reg.Get(primaryUUID); !ok {
-		fmt.Fprintf(os.Stderr, "serve: root %q names no configured plugin\n", primaryUUID)
-		return 1
-	}
 
 	// The gridwell-private tmux server backs every shell tile. One
 	// socket per gridwell process; sessions named `gridwell-<tileID>`
@@ -172,7 +160,7 @@ func RunServe(args []string) int {
 	}
 	defer func() { _ = tmuxCleanup() }()
 
-	srv := server.New(reg, primaryUUID, server.Config{StaticDir: f.StaticDir})
+	srv := server.New(reg, server.Config{StaticDir: f.StaticDir})
 	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
 
 	// Bound the orphan leak: any tmux session whose tile id no longer

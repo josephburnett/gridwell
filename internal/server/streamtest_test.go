@@ -22,8 +22,8 @@ func streamTestServer(t *testing.T) (*Server, *httptest.Server, string) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	reg := plugin.NewRegistry()
-	uuid, root := registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, uuid, Config{})
+	_, root := registerPrimaryLocaldb(t, reg, st)
+	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return srv, hs, root

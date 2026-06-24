@@ -53,9 +53,9 @@ func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	reg := plugin.NewRegistry()
-	uuid, root := registerPrimaryLocaldb(t, reg, st)
+	_, root := registerPrimaryLocaldb(t, reg, st)
 
-	srv := New(reg, uuid, Config{})
+	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -75,14 +75,14 @@ func errCode(err error) connect.Code {
 	return connect.CodeInternal
 }
 
-func TestBootstrapReturnsRoot(t *testing.T) {
-	_, cl, root := newTestServer(t)
+func TestBootstrapReturnsEmpty(t *testing.T) {
+	_, cl, _ := newTestServer(t)
 	resp, err := cl.Bootstrap(context.Background())
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
-	if resp.RootGridID != root {
-		t.Errorf("root_grid_id = %q, want %q", resp.RootGridID, root)
+	if resp.RootGridID != "" {
+		t.Errorf("root_grid_id = %q, want empty (rootless)", resp.RootGridID)
 	}
 }
 
@@ -168,8 +168,8 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 	}
 
 	reg := plugin.NewRegistry()
-	uuid, _ := registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, uuid, Config{StaticDir: dir})
+	registerPrimaryLocaldb(t, reg, st)
+	srv := New(reg, Config{StaticDir: dir})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 

@@ -35,7 +35,7 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	reg := plugin.NewRegistry()
-	primaryUUID, root := registerPrimaryLocaldb(t, reg, st)
+	_, root := registerPrimaryLocaldb(t, reg, st)
 
 	fsP, err := fsplugin.Open(":memory:", nil)
 	if err != nil {
@@ -61,7 +61,7 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 	t.Cleanup(procCloser)
 	reg.Register(procPluginUUID, "proc", procClient, nil)
 
-	srv := New(reg, primaryUUID, Config{})
+	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -85,12 +85,14 @@ func TestCreateTextRPC(t *testing.T) {
 		t.Error("blob_id = 0, want non-zero")
 	}
 
-	data, err := cl.GetBlob(ctx, tile.BlobID)
+	// Body is fetched by routable tile id (GetBlob is unroutable in the
+	// rootless model — blob ids carry no plugin namespace).
+	data, err := cl.GetTileContent(ctx, tile.ID)
 	if err != nil {
-		t.Fatalf("get blob: %v", err)
+		t.Fatalf("get tile content: %v", err)
 	}
 	if string(data) != "# hi" {
-		t.Errorf("blob data = %q", data)
+		t.Errorf("content = %q", data)
 	}
 }
 
@@ -206,19 +208,12 @@ func TestSetTextViewRPC(t *testing.T) {
 	}
 }
 
+// TestSetRootViewRPC: SetRootView is a no-op in the rootless model (no app
+// root; pane viewport lives in the URL). It must still succeed.
 func TestSetRootViewRPC(t *testing.T) {
 	_, cl, _ := newTestServer(t)
-	ctx := context.Background()
-
-	if err := cl.SetRootView(ctx, &rpc.SetRootViewRequest{Cx: 3, Cy: 4, Zoom: 2}); err != nil {
+	if err := cl.SetRootView(context.Background(), &rpc.SetRootViewRequest{Cx: 3, Cy: 4, Zoom: 2}); err != nil {
 		t.Fatalf("set root view: %v", err)
-	}
-	br, err := cl.Bootstrap(ctx)
-	if err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
-	if br.RootViewCx != 3 || br.RootViewCy != 4 || br.RootZoom != 2 {
-		t.Errorf("after SetRootView, bootstrap = %+v", br)
 	}
 }
 
@@ -249,12 +244,12 @@ func TestUpdateTextRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	data, err := cl.GetBlob(ctx, tile.BlobID)
+	data, err := cl.GetTileContent(ctx, tile.ID)
 	if err != nil {
-		t.Fatalf("get blob: %v", err)
+		t.Fatalf("get tile content: %v", err)
 	}
 	if string(data) != "v2" {
-		t.Errorf("blob = %q, want v2", data)
+		t.Errorf("content = %q, want v2", data)
 	}
 }
 
@@ -323,32 +318,16 @@ func TestErrorCodeMapping(t *testing.T) {
 	}
 }
 
-func TestBootstrapIncludesRootView(t *testing.T) {
-	_, cl, root := newTestServer(t)
-	ctx := context.Background()
-
-	resp, err := cl.Bootstrap(ctx)
+// TestBootstrapIsEmpty: in the rootless model Bootstrap returns no root grid —
+// the client starts with empty panes and builds the launcher from ListPlugins.
+func TestBootstrapIsEmpty(t *testing.T) {
+	_, cl, _ := newTestServer(t)
+	resp, err := cl.Bootstrap(context.Background())
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
-	if resp.RootGridID != root {
-		t.Errorf("root_grid_id = %q, want %q", resp.RootGridID, root)
-	}
-	if resp.RootViewCx != 0 || resp.RootViewCy != 0 || resp.RootZoom != 1 {
-		t.Errorf("initial bootstrap view = (%v,%v,%v), want (0,0,1)",
-			resp.RootViewCx, resp.RootViewCy, resp.RootZoom)
-	}
-
-	if err := cl.SetRootView(ctx, &rpc.SetRootViewRequest{Cx: 11, Cy: 22, Zoom: 3}); err != nil {
-		t.Fatalf("set root view: %v", err)
-	}
-	resp, err = cl.Bootstrap(ctx)
-	if err != nil {
-		t.Fatalf("bootstrap 2: %v", err)
-	}
-	if resp.RootViewCx != 11 || resp.RootViewCy != 22 || resp.RootZoom != 3 {
-		t.Errorf("after SetRootView, bootstrap = (%v,%v,%v), want (11,22,3)",
-			resp.RootViewCx, resp.RootViewCy, resp.RootZoom)
+	if resp.RootGridID != "" {
+		t.Errorf("root_grid_id = %q, want empty (no root)", resp.RootGridID)
 	}
 }
 

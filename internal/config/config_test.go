@@ -47,9 +47,6 @@ plugins:
 	if cfg.Bind != "127.0.0.1:9090" {
 		t.Errorf("bind: got %q", cfg.Bind)
 	}
-	if cfg.Root != "abc123" {
-		t.Errorf("root: got %q", cfg.Root)
-	}
 	if cfg.StaticDir != "/var/www" {
 		t.Errorf("static: got %q", cfg.StaticDir)
 	}

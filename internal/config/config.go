@@ -14,16 +14,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ServerConfig is the top-level ~/.gridwell/server.yaml structure.
+// ServerConfig is the top-level ~/.gridwell/server.yaml structure. There is no
+// root: every plugin is equal; the client enters one from the launcher.
 type ServerConfig struct {
 	Bind      string         `yaml:"bind"`
 	StaticDir string         `yaml:"static"` // "" → headless (no static files served)
 	Plugins   []PluginConfig `yaml:"plugins"`
-	// Root names the plugin (by ID) whose grid is the app root — the target of
-	// id-less RPCs (Bootstrap, SetRootView) and the home of native tiles. It
-	// must match one of the Plugins entries (a localdb). There is no implicit
-	// "db" root: the root is an explicitly designated plugin.
-	Root string `yaml:"root"`
 }
 
 // PluginConfig describes one plugin instance. ID is the UUID assigned once

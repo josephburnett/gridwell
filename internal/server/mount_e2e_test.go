@@ -55,7 +55,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	}
 	secondRoot := secondUUID + "/" + secondBareRoot
 
-	srv := New(reg, primaryUUID, Config{})
+	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

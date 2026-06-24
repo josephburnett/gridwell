@@ -39,9 +39,8 @@ type Config struct {
 // plugin registry; the root plugin is the localdb instance whose grid is the
 // app root. Construct with New and mount via Server.Handler().
 type Server struct {
-	cfg         Config
-	pluginReg   *plugin.Registry
-	primaryUUID string // the root localdb plugin (app root; target of id-less RPCs)
+	cfg       Config
+	pluginReg *plugin.Registry
 
 	mux           *http.ServeMux
 	shellStreamer shellStreamer
@@ -53,23 +52,17 @@ type Server struct {
 	activeShellSessions map[string]*shellSessionEntry
 }
 
-// New constructs a Server that routes everything through reg. primaryUUID names
-// the root localdb plugin (used for id-less RPCs and for the shell/preview
-// infrastructure, which addresses the root plugin by tile id).
-func New(reg *plugin.Registry, primaryUUID string, cfg Config) *Server {
+// New constructs a Server that routes everything through reg. There is no root:
+// startup is empty panes (the client builds the launcher from ListPlugins), and
+// every operation is addressed by a qualified id.
+func New(reg *plugin.Registry, cfg Config) *Server {
 	srv := &Server{
-		cfg:         cfg,
-		pluginReg:   reg,
-		primaryUUID: primaryUUID,
-		mux:         http.NewServeMux(),
+		cfg:       cfg,
+		pluginReg: reg,
+		mux:       http.NewServeMux(),
 	}
 	srv.routes()
 	return srv
-}
-
-// rootClient returns the gRPC client for the root plugin.
-func (s *Server) rootClient() (pb.GridwellClient, bool) {
-	return s.pluginReg.Get(s.primaryUUID)
 }
 
 // clientForID resolves the plugin that owns a qualified id, returning its

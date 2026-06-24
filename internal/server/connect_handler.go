@@ -34,27 +34,18 @@ func newConnectHandler(srv *Server) *connectHandler {
 // ── routing ────────────────────────────────────────────────────────────────────
 
 // route resolves the plugin that owns id, returning its client, the local
-// (unprefixed) id, and the owning plugin uuid. A bare id (no "<uuid>/" prefix)
-// is treated as belonging to the primary plugin.
+// (unprefixed) id, and the owning plugin uuid. Ids are always qualified in the
+// rootless model (there is no privileged plugin a bare id could fall back to).
 func (h *connectHandler) route(id string) (client pb.GridwellClient, local, uuid string, err error) {
 	uuid, local, ok := splitPluginID(id)
 	if !ok {
-		uuid, local = h.srv.primaryUUID, id
+		return nil, "", "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unqualified id %q", id))
 	}
 	c, found := h.srv.pluginReg.Get(uuid)
 	if !found {
 		return nil, "", "", connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", uuid))
 	}
 	return c, local, uuid, nil
-}
-
-// primaryClient resolves the primary localdb plugin (for id-less RPCs).
-func (h *connectHandler) primaryClient() (pb.GridwellClient, string, error) {
-	c, found := h.srv.pluginReg.Get(h.srv.primaryUUID)
-	if !found {
-		return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no primary plugin registered"))
-	}
-	return c, h.srv.primaryUUID, nil
 }
 
 // stripUUID removes a specific plugin uuid prefix from an id, leaving bare and
@@ -124,17 +115,11 @@ func qualifyEvent(uuid string, ev *pb.Event) *pb.Event {
 
 // ── reads ──────────────────────────────────────────────────────────────────────
 
-func (h *connectHandler) Bootstrap(ctx context.Context, _ *connect.Request[pb.BootstrapRequest]) (*connect.Response[pb.BootstrapResponse], error) {
-	c, uuid, err := h.primaryClient()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.Bootstrap(ctx, &pb.BootstrapRequest{})
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	resp.RootGridId = qualifyID(uuid, resp.RootGridId)
-	return connect.NewResponse(resp), nil
+// Bootstrap returns nothing meaningful in the rootless model: startup is empty
+// panes. The client builds the launcher from ListPlugins and enters a plugin to
+// get a grid. Kept so existing clients get a clean empty response.
+func (h *connectHandler) Bootstrap(_ context.Context, _ *connect.Request[pb.BootstrapRequest]) (*connect.Response[pb.BootstrapResponse], error) {
+	return connect.NewResponse(&pb.BootstrapResponse{}), nil
 }
 
 func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.GetGridRequest]) (*connect.Response[pb.GetGridResponse], error) {
@@ -152,19 +137,12 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 	}), nil
 }
 
-// GetBlob is addressed by an int64 blob id, which carries no plugin namespace,
-// so it resolves against the primary localdb. Tiles owned by other plugins
-// serve their body via GetTileContent (routable by tile id) instead.
-func (h *connectHandler) GetBlob(ctx context.Context, req *connect.Request[pb.GetBlobRequest]) (*connect.Response[pb.GetBlobResponse], error) {
-	c, _, err := h.primaryClient()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.GetBlob(ctx, req.Msg)
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(resp), nil
+// GetBlob is addressed by a bare int64 blob id, which carries no plugin
+// namespace, so it is not routable in the rootless model — every plugin has its
+// own blob id space. Clients fetch text bodies via GetTileContent (routable by
+// tile id) instead.
+func (h *connectHandler) GetBlob(_ context.Context, _ *connect.Request[pb.GetBlobRequest]) (*connect.Response[pb.GetBlobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("GetBlob is not routable without a root; use GetTileContent"))
 }
 
 func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Request[pb.GetTilePreviewRequest]) (*connect.Response[pb.GetTilePreviewResponse], error) {
@@ -452,17 +430,10 @@ func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb
 	return pluginTileResp(uuid, resp, err)
 }
 
-// SetRootView frames the app root, which lives in the primary plugin.
-func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
-	c, _, err := h.primaryClient()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.SetRootView(ctx, req.Msg)
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(resp), nil
+// SetRootView is a no-op in the rootless model: there is no app root, and a
+// pane's viewport is persisted in the URL, not server-side.
+func (h *connectHandler) SetRootView(_ context.Context, _ *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
+	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
 }
 
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
