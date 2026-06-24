@@ -177,10 +177,11 @@ type MountRequest struct {
 
 // PluginInfo describes one configured plugin for the launcher / + menu.
 type PluginInfo struct {
-	UUID     string `json:"uuid"`
-	Kind     string `json:"kind"`
-	Label    string `json:"label"`
-	Writable bool   `json:"writable"`
+	UUID       string `json:"uuid"`
+	Kind       string `json:"kind"`
+	Label      string `json:"label"`
+	Writable   bool   `json:"writable"`
+	RootGridID string `json:"root_grid_id"` // qualified; click-enter descends here
 }
 
 type CreateWellRequest struct {

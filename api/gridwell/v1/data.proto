@@ -246,10 +246,12 @@ message MountRequest {
 // builds the launcher / + menu from it. A leaf plugin returns an empty list.
 message ListPluginsRequest {}
 message PluginInfo {
-  string uuid     = 1;   // the plugin's namespace; child grids are <uuid>/<id>
-  string kind     = 2;   // "localdb", "fs", "proc", "ssh"
-  string label    = 3;   // display name
-  bool   writable = 4;   // accepts new tiles (primitives can be created in it)
+  string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
+  string kind          = 2;   // "localdb", "fs", "proc", "ssh"
+  string label         = 3;   // display name
+  bool   writable      = 4;   // accepts new tiles (primitives can be created in it)
+  string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
+                              // grid; click-enter descends here
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;

@@ -373,6 +373,10 @@ func TestListPlugins(t *testing.T) {
 	if plugins[0].Kind != "localdb" || !plugins[0].Writable {
 		t.Errorf("plugin[0] = %+v, want writable localdb", plugins[0])
 	}
+	// Each plugin advertises its qualified root grid id (for click-enter).
+	if !strings.HasPrefix(plugins[0].RootGridID, plugins[0].UUID+"/") {
+		t.Errorf("plugin[0] root_grid_id = %q, want %q prefix", plugins[0].RootGridID, plugins[0].UUID)
+	}
 	if plugins[1].Kind != "fs" || plugins[1].Writable {
 		t.Errorf("plugin[1] = %+v, want read-only fs", plugins[1])
 	}

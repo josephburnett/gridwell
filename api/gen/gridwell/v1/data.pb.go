@@ -2104,10 +2104,11 @@ func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
 
 type PluginInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`          // the plugin's namespace; child grids are <uuid>/<id>
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`          // "localdb", "fs", "proc", "ssh"
-	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`        // display name
-	Writable      bool                   `protobuf:"varint,4,opt,name=writable,proto3" json:"writable,omitempty"` // accepts new tiles (primitives can be created in it)
+	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "localdb", "fs", "proc", "ssh"
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
+	Writable      bool                   `protobuf:"varint,4,opt,name=writable,proto3" json:"writable,omitempty"`                        // accepts new tiles (primitives can be created in it)
+	RootGridId    string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2168,6 +2169,13 @@ func (x *PluginInfo) GetWritable() bool {
 		return x.Writable
 	}
 	return false
+}
+
+func (x *PluginInfo) GetRootGridId() string {
+	if x != nil {
+		return x.RootGridId
+	}
+	return ""
 }
 
 type ListPluginsResponse struct {
@@ -4223,13 +4231,15 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x01y\x18\x05 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x06 \x01(\x03R\x01w\x12\f\n" +
 	"\x01h\x18\a \x01(\x03R\x01h\"\x14\n" +
-	"\x12ListPluginsRequest\"f\n" +
+	"\x12ListPluginsRequest\"\x88\x01\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
-	"\bwritable\x18\x04 \x01(\bR\bwritable\"H\n" +
+	"\bwritable\x18\x04 \x01(\bR\bwritable\x12 \n" +
+	"\froot_grid_id\x18\x05 \x01(\tR\n" +
+	"rootGridId\"H\n" +
 	"\x13ListPluginsResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\"5\n" +
 	"\fTileResponse\x12%\n" +

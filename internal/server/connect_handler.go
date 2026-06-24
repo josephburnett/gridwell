@@ -177,16 +177,25 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 	var out []*pb.PluginInfo
 	for _, p := range h.srv.pluginReg.Ordered() {
 		label := p.Kind
+		var rootGridID string
 		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
 			if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil && info.DisplayName != "" {
 				label = info.DisplayName
 			}
+			// Attach with default config to learn the plugin's root grid id
+			// (fs uses its configured root, proc pid 1, localdb its root), so
+			// the client can click-enter straight into it. getOrCreate semantics
+			// make this idempotent.
+			if att, err := c.Attach(ctx, &pb.AttachRequest{Config: map[string]string{}}); err == nil && att.RootGridId != "" {
+				rootGridID = qualifyID(p.UUID, att.RootGridId)
+			}
 		}
 		out = append(out, &pb.PluginInfo{
-			Uuid:     p.UUID,
-			Kind:     p.Kind,
-			Label:    label,
-			Writable: p.Kind == "localdb",
+			Uuid:       p.UUID,
+			Kind:       p.Kind,
+			Label:      label,
+			Writable:   p.Kind == "localdb",
+			RootGridId: rootGridID,
 		})
 	}
 	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
