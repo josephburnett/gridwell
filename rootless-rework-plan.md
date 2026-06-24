@@ -1,9 +1,10 @@
 # Rootless Launcher Rework — Plan
 
-Status: in progress. This doc is the durable plan; the live todo list is in the
-task tool. Update both as work lands.
+Status: COMPLETE. This doc is the durable record; the live todo list is in the
+task tool. The rootless launcher is fully implemented, tested, and green
+(33 packages + wasm build).
 
-DONE so far:
+DONE:
 - Stage 16: ListPlugins RPC + federated Subscribe (e5e8c78)
 - SV1: tmux/shell keyed by qualified <uuid>/<tile-id> (41558d7)
 - SV2: preview endpoint routes qualified id to owning plugin (7bfadf8)
@@ -13,27 +14,32 @@ DONE so far:
   synth default localdb (not root), removed cfg.Root/primaryUUID/rootClient (cc5b995)
 - PluginInfo.root_grid_id: ListPlugins reports each plugin's qualified root grid
   for click-enter (2a6e723)
-- CL (partial): client bootstraps via ListPlugins and enters the FIRST plugin's
-  root as a de-facto home (f1d63e5). This restores function but is JUMP, not the
-  full launcher.
+- CL1/CL2: per-pane nav stack — pane.Anchor (plugin-root grid; ""=launcher),
+  Path (well descents within the anchor), Up []Frame (portal ascent stack).
+  gridIDForPane/gridIDForPathFrom resolve the leaf grid from anchor+path. URL
+  encodes the anchor in the `a=` param; applyURLOnBoot restores it. Root-view
+  persistence is a no-op (viewport lives in the URL). (f750f1f)
+- CL3/CL4: data-driven + menu — paletteItems(pane) = configured plugins (config
+  order) + tile primitives (only when the current grid is writable). Plugin
+  click = enterPlugin (push frame, re-anchor at plugin root); plugin drag =
+  mountPluginAtCell (Mount RPC, writable grids only); primitive drag = create.
+  Portal ascent (canAscend/ascendPane Up-stack case) pops back to the launcher
+  or prior plugin. (f44abf9)
+- CreateFileWell/CreateProcessWell retired end to end (proto+gen+rpc+server+
+  tests); Mount is the only path; dead createExitWell/FirstByKind removed.
+  (4d3a404)
+- Centered launcher: the + button sits at the pane center when the anchor is
+  empty (palette.Layout.Centered), returning to lower-right inside a plugin.
+  (aabd92c)
+- Tests: pane portal-stack round-trip + Clone deep-copy, URL anchor round-trip,
+  palette centered layout, server Mount (fs+proc) + fs lifecycle e2e. (f553ac5)
 
-REMAINING (the large client piece — NOT done; ~18 files, ~101 .Path/gridIDForPath
-refs, all-or-nothing for the wasm build):
-- CL1/CL2: replace pane.Path/gridIDForPath with the per-pane NAV STACK of
-  {GridID, ViaWell} frames; render blank + centered + when the stack is empty
-  (empty start screen). Migrate urlsync, gridpath, descent/ascent, drop_target,
-  render, embed/embed_drop, zoomtrans (the descent-animation COW-spine math
-  reads Path — trickiest). currentGridID = top frame; RPC well_ids = ViaWell ids
-  above the last portal frame.
-- CL3/CL4: data-driven palette from a.plugins (primitives gated by current grid
-  writability via uuidOf(currentGrid)→a.plugins[uuid].Writable; plugins always).
-  Gestures: drag primitive=create, drag plugin=cl.Mount, left-click plugin=push
-  portal frame {GridID: pluginInfo.RootGridID}, right-click=ascend. Delete
-  templateKinds hardcode + tplFileWell/tplProcessWell. Retire CreateFileWell/
-  CreateProcessWell (proto+handlers+client) once the palette uses Mount.
-- CL5: URL encode/restore the nav stack (portal vs well frames distinguishable).
-- e2e: empty start → enter localdb → primitives → drag-mount → click-enter +
-  ascend → split start panes.
+Not unit-tested (thin glue over tested pure cores + RPCs, per CLAUDE.md's
+glue-code exception): the wasm enterPlugin/ascendPortal/mountPluginAtCell wiring
+and the full browser interaction flow (empty start → enter → primitives →
+drag-mount → click-enter + ascend → split start panes). The pure pane stack,
+URL anchor, palette layout, and server Mount/descend/move/delete are all
+covered.
 
 ## Goal
 
