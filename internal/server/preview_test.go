@@ -97,8 +97,11 @@ func TestPreviewTileBadID(t *testing.T) {
 }
 
 func TestPreviewTileNotFound(t *testing.T) {
-	hs, _, _ := newTestServer(t)
-	got, err := http.Get(hs.URL + "/preview/tile/999999")
+	hs, _, root := newTestServer(t)
+	// A qualified id in the (registered) primary plugin namespace with a bogus
+	// local id → routes to the plugin → not found.
+	uuid, _, _ := splitPluginID(root)
+	got, err := http.Get(hs.URL + "/preview/tile/" + uuid + "/999999")
 	if err != nil {
 		t.Fatal(err)
 	}

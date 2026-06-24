@@ -24,21 +24,14 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// Embed links may carry a qualified "<primary-uuid>/<id>"; the preview
-	// endpoint serves the primary localdb only, so strip the prefix.
-	rest := stripUUID(strings.TrimPrefix(r.URL.Path, "/preview/tile/"), s.primaryUUID)
-	tileID, err := strconv.ParseInt(rest, 10, 64)
-	if err != nil || tileID <= 0 {
+	// Embed links carry a qualified "<plugin-uuid>/<id>"; route to the owning
+	// plugin (the path keeps the "/" between uuid and id).
+	qualifiedID := strings.TrimPrefix(r.URL.Path, "/preview/tile/")
+	client, localID, ok := s.clientForID(qualifiedID)
+	if !ok {
 		http.Error(w, "invalid tile id", http.StatusBadRequest)
 		return
 	}
-
-	client, ok := s.rootClient()
-	if !ok {
-		http.Error(w, "no root plugin", http.StatusInternalServerError)
-		return
-	}
-	localID := strconv.FormatInt(tileID, 10)
 	tr, err := client.GetTile(r.Context(), &pb.GetTileRequest{TileId: localID})
 	if err != nil {
 		writeHTTPError(w, err)
