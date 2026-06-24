@@ -218,33 +218,6 @@ type CreateURLRequest struct {
 	URL    string `json:"url"`
 }
 
-// CreateFileWellRequest creates a file-well at the given FSPath. The
-// canonical starting path from the palette is "/". The well's child grid
-// is the singleton fs-grid for FSPath: two file-wells at the same path
-// share the same backing grid (FS state is the source of truth, so
-// per-clone divergence is impossible).
-type CreateFileWellRequest struct {
-	Path   Path   `json:"path"`
-	GridID string `json:"grid_id"`
-	X      int64  `json:"x"`
-	Y      int64  `json:"y"`
-	W      int64  `json:"w"`
-	H      int64  `json:"h"`
-	FSPath string `json:"fs_path"`
-}
-
-// CreateProcessWellRequest creates a process-well at the given PID. The
-// canonical starting PID from the palette is 1 (init).
-type CreateProcessWellRequest struct {
-	Path   Path   `json:"path"`
-	GridID string `json:"grid_id"`
-	X      int64 `json:"x"`
-	Y      int64 `json:"y"`
-	W      int64 `json:"w"`
-	H      int64 `json:"h"`
-	PID    int64 `json:"pid"`
-}
-
 // CreateShellRequest creates a shell tile. The bash session is not
 // started until the user refreshes (matches the URL tile model — drop
 // + descend show the frozen preview placeholder until explicitly

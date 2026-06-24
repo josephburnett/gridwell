@@ -195,10 +195,9 @@ func (p *Plugin) CreateURL(ctx context.Context, req *gridwellv1.CreateURLRequest
 	return tileResp(p.st.CreateURL(ctx, rpc.CreateURLFromProto(req)))
 }
 
-// CreateFileWell / CreateProcessWell are intentionally not implemented here:
-// a file/process well is created by the server (which Attaches the fs/proc
-// plugin and stores a cross-plugin well), never by the localdb plugin. The
-// embedded UnimplementedGridwellServer answers them with Unimplemented.
+// A file/process well is created by the server's Mount handler (which
+// Attaches the fs/proc plugin and stores a cross-plugin well), never by the
+// localdb plugin.
 
 func (p *Plugin) CreateShell(ctx context.Context, req *gridwellv1.CreateShellRequest) (*gridwellv1.TileResponse, error) {
 	return tileResp(p.st.CreateShell(ctx, rpc.CreateShellFromProto(req)))

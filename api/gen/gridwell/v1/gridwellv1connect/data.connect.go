@@ -84,11 +84,6 @@ const (
 	GridwellCreateTextProcedure = "/gridwell.v1.Gridwell/CreateText"
 	// GridwellCreateURLProcedure is the fully-qualified name of the Gridwell's CreateURL RPC.
 	GridwellCreateURLProcedure = "/gridwell.v1.Gridwell/CreateURL"
-	// GridwellCreateFileWellProcedure is the fully-qualified name of the Gridwell's CreateFileWell RPC.
-	GridwellCreateFileWellProcedure = "/gridwell.v1.Gridwell/CreateFileWell"
-	// GridwellCreateProcessWellProcedure is the fully-qualified name of the Gridwell's
-	// CreateProcessWell RPC.
-	GridwellCreateProcessWellProcedure = "/gridwell.v1.Gridwell/CreateProcessWell"
 	// GridwellCreateShellProcedure is the fully-qualified name of the Gridwell's CreateShell RPC.
 	GridwellCreateShellProcedure = "/gridwell.v1.Gridwell/CreateShell"
 	// GridwellMoveTileProcedure is the fully-qualified name of the Gridwell's MoveTile RPC.
@@ -144,8 +139,6 @@ type GridwellClient interface {
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
-	CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error)
-	CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error)
 	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
@@ -286,18 +279,6 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("CreateURL")),
 			connect.WithClientOptions(opts...),
 		),
-		createFileWell: connect.NewClient[v1.CreateFileWellRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellCreateFileWellProcedure,
-			connect.WithSchema(gridwellMethods.ByName("CreateFileWell")),
-			connect.WithClientOptions(opts...),
-		),
-		createProcessWell: connect.NewClient[v1.CreateProcessWellRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellCreateProcessWellProcedure,
-			connect.WithSchema(gridwellMethods.ByName("CreateProcessWell")),
-			connect.WithClientOptions(opts...),
-		),
 		createShell: connect.NewClient[v1.CreateShellRequest, v1.TileResponse](
 			httpClient,
 			baseURL+GridwellCreateShellProcedure,
@@ -400,8 +381,6 @@ type gridwellClient struct {
 	createWell        *connect.Client[v1.CreateWellRequest, v1.TileResponse]
 	createText        *connect.Client[v1.CreateTextRequest, v1.TileResponse]
 	createURL         *connect.Client[v1.CreateURLRequest, v1.TileResponse]
-	createFileWell    *connect.Client[v1.CreateFileWellRequest, v1.TileResponse]
-	createProcessWell *connect.Client[v1.CreateProcessWellRequest, v1.TileResponse]
 	createShell       *connect.Client[v1.CreateShellRequest, v1.TileResponse]
 	moveTile          *connect.Client[v1.MoveTileRequest, v1.TileResponse]
 	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
@@ -512,16 +491,6 @@ func (c *gridwellClient) CreateURL(ctx context.Context, req *connect.Request[v1.
 	return c.createURL.CallUnary(ctx, req)
 }
 
-// CreateFileWell calls gridwell.v1.Gridwell.CreateFileWell.
-func (c *gridwellClient) CreateFileWell(ctx context.Context, req *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.createFileWell.CallUnary(ctx, req)
-}
-
-// CreateProcessWell calls gridwell.v1.Gridwell.CreateProcessWell.
-func (c *gridwellClient) CreateProcessWell(ctx context.Context, req *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.createProcessWell.CallUnary(ctx, req)
-}
-
 // CreateShell calls gridwell.v1.Gridwell.CreateShell.
 func (c *gridwellClient) CreateShell(ctx context.Context, req *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.createShell.CallUnary(ctx, req)
@@ -612,8 +581,6 @@ type GridwellHandler interface {
 	CreateWell(context.Context, *connect.Request[v1.CreateWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateText(context.Context, *connect.Request[v1.CreateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error)
-	CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error)
-	CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error)
 	CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error)
 	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
@@ -750,18 +717,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("CreateURL")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellCreateFileWellHandler := connect.NewUnaryHandler(
-		GridwellCreateFileWellProcedure,
-		svc.CreateFileWell,
-		connect.WithSchema(gridwellMethods.ByName("CreateFileWell")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellCreateProcessWellHandler := connect.NewUnaryHandler(
-		GridwellCreateProcessWellProcedure,
-		svc.CreateProcessWell,
-		connect.WithSchema(gridwellMethods.ByName("CreateProcessWell")),
-		connect.WithHandlerOptions(opts...),
-	)
 	gridwellCreateShellHandler := connect.NewUnaryHandler(
 		GridwellCreateShellProcedure,
 		svc.CreateShell,
@@ -880,10 +835,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellCreateTextHandler.ServeHTTP(w, r)
 		case GridwellCreateURLProcedure:
 			gridwellCreateURLHandler.ServeHTTP(w, r)
-		case GridwellCreateFileWellProcedure:
-			gridwellCreateFileWellHandler.ServeHTTP(w, r)
-		case GridwellCreateProcessWellProcedure:
-			gridwellCreateProcessWellHandler.ServeHTTP(w, r)
 		case GridwellCreateShellProcedure:
 			gridwellCreateShellHandler.ServeHTTP(w, r)
 		case GridwellMoveTileProcedure:
@@ -993,14 +944,6 @@ func (UnimplementedGridwellHandler) CreateText(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) CreateURL(context.Context, *connect.Request[v1.CreateURLRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateURL is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) CreateFileWell(context.Context, *connect.Request[v1.CreateFileWellRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateFileWell is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) CreateProcessWell(context.Context, *connect.Request[v1.CreateProcessWellRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CreateProcessWell is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) CreateShell(context.Context, *connect.Request[v1.CreateShellRequest]) (*connect.Response[v1.TileResponse], error) {

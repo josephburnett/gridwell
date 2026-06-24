@@ -144,12 +144,6 @@ func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile,
 func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateURL(ctx, connect.NewRequest(CreateURLToProto(req))))
 }
-func (c *Client) CreateFileWell(ctx context.Context, req *CreateFileWellRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateFileWell(ctx, connect.NewRequest(CreateFileWellToProto(req))))
-}
-func (c *Client) CreateProcessWell(ctx context.Context, req *CreateProcessWellRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateProcessWell(ctx, connect.NewRequest(CreateProcessWellToProto(req))))
-}
 func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateShell(ctx, connect.NewRequest(CreateShellToProto(req))))
 }

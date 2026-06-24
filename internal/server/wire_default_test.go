@@ -74,26 +74,16 @@ func TestCreateURLEmptyString(t *testing.T) {
 	}
 }
 
-// TestCreateFileWellEmptyPath asserts the empty-FSPath case is rejected
-// at the boundary, not somewhere deeper.
-func TestCreateFileWellEmptyPath(t *testing.T) {
+// TestMountUnknownPlugin asserts that mounting an unregistered plugin uuid is
+// rejected at the boundary with NotFound, not somewhere deeper. (File/process
+// wells are now created by Mount, so the old per-field FSPath/PID validation
+// no longer applies — Mount carries only a plugin uuid.)
+func TestMountUnknownPlugin(t *testing.T) {
 	_, cl, root := newTestServer(t)
-	_, err := cl.CreateFileWell(context.Background(), &rpc.CreateFileWellRequest{
-		GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "",
+	_, err := cl.Mount(context.Background(), &rpc.MountRequest{
+		PluginUUID: "no-such-plugin", GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
-	if got := errCode(err); got != connect.CodeInvalidArgument {
-		t.Errorf("empty FSPath: code %v, want InvalidArgument", got)
-	}
-}
-
-// TestCreateProcessWellZeroPID asserts the proto3-default PID=0 is
-// rejected. The palette default is PID 1; 0 is the wire-default.
-func TestCreateProcessWellZeroPID(t *testing.T) {
-	_, cl, root := newTestServer(t)
-	_, err := cl.CreateProcessWell(context.Background(), &rpc.CreateProcessWellRequest{
-		GridID: root, X: 0, Y: 0, W: 1, H: 1, PID: 0,
-	})
-	if got := errCode(err); got != connect.CodeInvalidArgument {
-		t.Errorf("PID=0: code %v, want InvalidArgument", got)
+	if got := errCode(err); got != connect.CodeNotFound {
+		t.Errorf("unknown plugin: code %v, want NotFound", got)
 	}
 }

@@ -18,7 +18,7 @@ import (
 // boundary and that the primary rule — things stay where you left them — holds
 // across it.
 func TestFileWellLifecycleE2E(t *testing.T) {
-	dir := t.TempDir()
+	cl, root, dir := newTestServerWithPlugins(t)
 	if err := os.WriteFile(filepath.Join(dir, "alpha.txt"), []byte("a"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -26,16 +26,15 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cl, root := newTestServerWithPlugins(t)
 	ctx := context.Background()
 
-	// 1. Create the file well. It is a plain well in the local store whose
-	//    child grid lives in the fs plugin.
-	well, err := cl.CreateFileWell(ctx, &rpc.CreateFileWellRequest{
-		GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: dir,
+	// 1. Mount the fs plugin (rooted at dir). It is a plain well in the local
+	//    store whose child grid lives in the fs plugin.
+	well, err := cl.Mount(ctx, &rpc.MountRequest{
+		PluginUUID: fsPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
-		t.Fatalf("CreateFileWell: %v", err)
+		t.Fatalf("Mount fs: %v", err)
 	}
 	child := well.ChildGridID
 	if !strings.HasPrefix(child, fsPluginUUID+"/") {

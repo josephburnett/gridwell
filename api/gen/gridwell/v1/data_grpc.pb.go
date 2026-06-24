@@ -51,8 +51,6 @@ const (
 	Gridwell_CreateWell_FullMethodName        = "/gridwell.v1.Gridwell/CreateWell"
 	Gridwell_CreateText_FullMethodName        = "/gridwell.v1.Gridwell/CreateText"
 	Gridwell_CreateURL_FullMethodName         = "/gridwell.v1.Gridwell/CreateURL"
-	Gridwell_CreateFileWell_FullMethodName    = "/gridwell.v1.Gridwell/CreateFileWell"
-	Gridwell_CreateProcessWell_FullMethodName = "/gridwell.v1.Gridwell/CreateProcessWell"
 	Gridwell_CreateShell_FullMethodName       = "/gridwell.v1.Gridwell/CreateShell"
 	Gridwell_MoveTile_FullMethodName          = "/gridwell.v1.Gridwell/MoveTile"
 	Gridwell_CloneTile_FullMethodName         = "/gridwell.v1.Gridwell/CloneTile"
@@ -98,8 +96,6 @@ type GridwellClient interface {
 	CreateWell(ctx context.Context, in *CreateWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateURL(ctx context.Context, in *CreateURLRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CreateFileWell(ctx context.Context, in *CreateFileWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CreateProcessWell(ctx context.Context, in *CreateProcessWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CreateShell(ctx context.Context, in *CreateShellRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	MoveTile(ctx context.Context, in *MoveTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
@@ -328,26 +324,6 @@ func (c *gridwellClient) CreateURL(ctx context.Context, in *CreateURLRequest, op
 	return out, nil
 }
 
-func (c *gridwellClient) CreateFileWell(ctx context.Context, in *CreateFileWellRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CreateFileWell_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) CreateProcessWell(ctx context.Context, in *CreateProcessWellRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CreateProcessWell_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) CreateShell(ctx context.Context, in *CreateShellRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
@@ -517,8 +493,6 @@ type GridwellServer interface {
 	CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error)
 	CreateText(context.Context, *CreateTextRequest) (*TileResponse, error)
 	CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error)
-	CreateFileWell(context.Context, *CreateFileWellRequest) (*TileResponse, error)
-	CreateProcessWell(context.Context, *CreateProcessWellRequest) (*TileResponse, error)
 	CreateShell(context.Context, *CreateShellRequest) (*TileResponse, error)
 	MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error)
 	CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error)
@@ -598,12 +572,6 @@ func (UnimplementedGridwellServer) CreateText(context.Context, *CreateTextReques
 }
 func (UnimplementedGridwellServer) CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateURL not implemented")
-}
-func (UnimplementedGridwellServer) CreateFileWell(context.Context, *CreateFileWellRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateFileWell not implemented")
-}
-func (UnimplementedGridwellServer) CreateProcessWell(context.Context, *CreateProcessWellRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateProcessWell not implemented")
 }
 func (UnimplementedGridwellServer) CreateShell(context.Context, *CreateShellRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateShell not implemented")
@@ -978,42 +946,6 @@ func _Gridwell_CreateURL_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_CreateFileWell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateFileWellRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).CreateFileWell(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_CreateFileWell_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CreateFileWell(ctx, req.(*CreateFileWellRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_CreateProcessWell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateProcessWellRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).CreateProcessWell(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_CreateProcessWell_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CreateProcessWell(ctx, req.(*CreateProcessWellRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Gridwell_CreateShell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateShellRequest)
 	if err := dec(in); err != nil {
@@ -1311,14 +1243,6 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateURL",
 			Handler:    _Gridwell_CreateURL_Handler,
-		},
-		{
-			MethodName: "CreateFileWell",
-			Handler:    _Gridwell_CreateFileWell_Handler,
-		},
-		{
-			MethodName: "CreateProcessWell",
-			Handler:    _Gridwell_CreateProcessWell_Handler,
 		},
 		{
 			MethodName: "CreateShell",

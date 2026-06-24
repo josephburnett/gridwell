@@ -26,7 +26,11 @@ const (
 // plugins (with the localdb UUID set), so file/process-well creation routes
 // through the plugins exactly as in production. Returns the client and the
 // bare local root grid id.
-func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
+// newTestServerWithPlugins stands up a rootless server with the primary
+// localdb plus built-in fs and proc plugins. The fs plugin is rooted at a
+// fresh temp dir (returned as fsRoot) so a Mount of fsPluginUUID — which
+// attaches with the plugin's default config — lands there.
+func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -35,12 +39,14 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	reg := plugin.NewRegistry()
-	_, root := registerPrimaryLocaldb(t, reg, st)
+	_, root = registerPrimaryLocaldb(t, reg, st)
 
+	fsRoot = t.TempDir()
 	fsP, err := fsplugin.Open(":memory:", nil)
 	if err != nil {
 		t.Fatalf("fs open: %v", err)
 	}
+	fsP.SetRoot(fsRoot)
 	t.Cleanup(func() { _ = fsP.Close() })
 	fsClient, fsCloser, err := plugin.ServeInProcess(fsP)
 	if err != nil {
@@ -64,8 +70,8 @@ func newTestServerWithPlugins(t *testing.T) (*rpc.Client, string) {
 	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	return cl, root
+	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	return cl, root, fsRoot
 }
 
 func TestCreateTextRPC(t *testing.T) {
@@ -112,43 +118,23 @@ func TestCreateURLRPC(t *testing.T) {
 	}
 }
 
-// TestCreateFileWellRPC: a file well is a plain well tile whose child grid
-// lives in the fs plugin — child_grid_id is the qualified "<fs-uuid>/<id>"
-// returned by the plugin's Attach.
-func TestCreateFileWellRPC(t *testing.T) {
-	cl, root := newTestServerWithPlugins(t)
-	tile, err := cl.CreateFileWell(context.Background(), &rpc.CreateFileWellRequest{
-		GridID: root, X: 0, Y: 0, W: 1, H: 1, FSPath: "/etc",
+// TestMountFsPlugin: mounting the fs plugin drops a plain well tile whose
+// child grid lives in the fs plugin — child_grid_id is the qualified
+// "<fs-uuid>/<id>" returned by the plugin's Attach. (TestMountRPC covers the
+// proc plugin; this covers fs, the other built-in source.)
+func TestMountFsPlugin(t *testing.T) {
+	cl, root, _ := newTestServerWithPlugins(t)
+	tile, err := cl.Mount(context.Background(), &rpc.MountRequest{
+		PluginUUID: fsPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
-		t.Fatalf("create file well: %v", err)
+		t.Fatalf("Mount fs: %v", err)
 	}
 	if tile.Kind != rpc.KindWell {
 		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindWell)
 	}
 	if !strings.HasPrefix(tile.ChildGridID, fsPluginUUID+"/") {
 		t.Errorf("child_grid_id = %q, want prefix %q/", tile.ChildGridID, fsPluginUUID)
-	}
-	if tile.AltText != "etc" {
-		t.Errorf("alt_text = %q, want %q (plugin-supplied label)", tile.AltText, "etc")
-	}
-}
-
-// TestCreateProcessWellRPC: a process well is a plain well whose child grid is
-// in the proc plugin.
-func TestCreateProcessWellRPC(t *testing.T) {
-	cl, root := newTestServerWithPlugins(t)
-	tile, err := cl.CreateProcessWell(context.Background(), &rpc.CreateProcessWellRequest{
-		GridID: root, X: 0, Y: 0, W: 1, H: 1, PID: 1,
-	})
-	if err != nil {
-		t.Fatalf("create process well: %v", err)
-	}
-	if tile.Kind != rpc.KindWell {
-		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindWell)
-	}
-	if !strings.HasPrefix(tile.ChildGridID, procPluginUUID+"/") {
-		t.Errorf("child_grid_id = %q, want prefix %q/", tile.ChildGridID, procPluginUUID)
 	}
 }
 
@@ -361,7 +347,7 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 // TestListPlugins: the launcher source lists configured plugins in config
 // order, with kind, label, and writability (only localdb accepts new tiles).
 func TestListPlugins(t *testing.T) {
-	cl, _ := newTestServerWithPlugins(t)
+	cl, _, _ := newTestServerWithPlugins(t)
 	plugins, err := cl.ListPlugins(context.Background())
 	if err != nil {
 		t.Fatalf("ListPlugins: %v", err)
@@ -388,7 +374,7 @@ func TestListPlugins(t *testing.T) {
 // TestMountRPC: mounting a plugin drops an exit well in the destination grid
 // whose child is the plugin's (default-config) root.
 func TestMountRPC(t *testing.T) {
-	cl, root := newTestServerWithPlugins(t)
+	cl, root, _ := newTestServerWithPlugins(t)
 	tile, err := cl.Mount(context.Background(), &rpc.MountRequest{
 		PluginUUID: procPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})

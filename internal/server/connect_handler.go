@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
-	"strings"
 
 	"connectrpc.com/connect"
 	gcodes "google.golang.org/grpc/codes"
@@ -265,21 +263,6 @@ func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[p
 	return pluginTileResp(uuid, resp, err)
 }
 
-func (h *connectHandler) CreateFileWell(ctx context.Context, req *connect.Request[pb.CreateFileWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	if strings.TrimSpace(m.FsPath) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("fs_path required"))
-	}
-	return h.createExitWell(ctx, "fs", map[string]string{"path": m.FsPath}, m.Path, m.GridId, m.X, m.Y, m.W, m.H)
-}
-func (h *connectHandler) CreateProcessWell(ctx context.Context, req *connect.Request[pb.CreateProcessWellRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	if m.Pid <= 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("pid must be positive"))
-	}
-	return h.createExitWell(ctx, "proc", map[string]string{"pid": strconv.FormatInt(m.Pid, 10)}, m.Path, m.GridId, m.X, m.Y, m.W, m.H)
-}
-
 // Mount attaches plugin_uuid (default config) and drops an exit well in the
 // destination grid pointing at the attached root — the drag-a-plugin gesture.
 func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.MountRequest]) (*connect.Response[pb.TileResponse], error) {
@@ -305,39 +288,6 @@ func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.Moun
 		Y:           m.Y,
 		W:           m.W,
 		H:           m.H,
-		ChildGridId: childGridID,
-		Label:       att.Label,
-	})
-	return pluginTileResp(dstUUID, resp, err)
-}
-
-// createExitWell attaches the named source plugin (fs / proc) for config, then
-// asks the destination plugin (the one that owns gridID — wherever the user
-// dropped the well) to create a well tile whose child_grid_id is the qualified
-// "<src-uuid>/<grid-id>" the source returned. Pure cross-plugin orchestration:
-// no store touch, no localdb special-casing.
-func (h *connectHandler) createExitWell(ctx context.Context, kind string, config map[string]string, path *pb.Path, gridID string, x, y, w, ht int64) (*connect.Response[pb.TileResponse], error) {
-	srcUUID, srcClient, ok := h.srv.pluginReg.FirstByKind(kind)
-	if !ok {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no %s plugin configured", kind))
-	}
-	att, err := srcClient.Attach(ctx, &pb.AttachRequest{Config: config})
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	childGridID := qualifyID(srcUUID, att.RootGridId)
-
-	dstClient, dstLocal, dstUUID, err := h.route(gridID)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := dstClient.CreateWell(ctx, &pb.CreateWellRequest{
-		Path:        localPathFor(path, dstUUID),
-		GridId:      dstLocal,
-		X:           x,
-		Y:           y,
-		W:           w,
-		H:           ht,
 		ChildGridId: childGridID,
 		Label:       att.Label,
 	})

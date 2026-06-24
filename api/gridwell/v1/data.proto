@@ -300,26 +300,6 @@ message CreateURLRequest {
   string url = 7;
 }
 
-message CreateFileWellRequest {
-  Path path = 1;
-  string grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-  string fs_path = 7;
-}
-
-message CreateProcessWellRequest {
-  Path path = 1;
-  string grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-  int64 pid = 7;
-}
-
 // CreateShellRequest creates an interactive bash tile. The bash
 // session is not started until the user explicitly refreshes
 // (matches the URL tile model where the Chromium tab is only opened
@@ -508,8 +488,6 @@ service Gridwell {
   rpc CreateWell(CreateWellRequest) returns (TileResponse);
   rpc CreateText(CreateTextRequest) returns (TileResponse);
   rpc CreateURL(CreateURLRequest) returns (TileResponse);
-  rpc CreateFileWell(CreateFileWellRequest) returns (TileResponse);
-  rpc CreateProcessWell(CreateProcessWellRequest) returns (TileResponse);
   rpc CreateShell(CreateShellRequest) returns (TileResponse);
 
   rpc MoveTile(MoveTileRequest) returns (TileResponse);

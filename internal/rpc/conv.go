@@ -201,20 +201,6 @@ func CreateURLToProto(r *CreateURLRequest) *pb.CreateURLRequest {
 	return &pb.CreateURLRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, Url: r.URL}
 }
 
-func CreateFileWellFromProto(r *pb.CreateFileWellRequest) *CreateFileWellRequest {
-	return &CreateFileWellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, FSPath: r.FsPath}
-}
-func CreateFileWellToProto(r *CreateFileWellRequest) *pb.CreateFileWellRequest {
-	return &pb.CreateFileWellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, FsPath: r.FSPath}
-}
-
-func CreateProcessWellFromProto(r *pb.CreateProcessWellRequest) *CreateProcessWellRequest {
-	return &CreateProcessWellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, PID: r.Pid}
-}
-func CreateProcessWellToProto(r *CreateProcessWellRequest) *pb.CreateProcessWellRequest {
-	return &pb.CreateProcessWellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, Pid: r.PID}
-}
-
 func CreateShellFromProto(r *pb.CreateShellRequest) *CreateShellRequest {
 	return &CreateShellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
 }

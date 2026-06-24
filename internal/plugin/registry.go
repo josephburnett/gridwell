@@ -61,20 +61,6 @@ func (r *Registry) Ordered() []struct{ UUID, Kind string } {
 	return out
 }
 
-// FirstByKind returns the UUID and client of the first registered plugin of
-// the given kind. Order is unspecified; intended for single-instance kinds
-// (one fs / one proc plugin), which is the current configuration.
-func (r *Registry) FirstByKind(kind string) (uuid string, client gridwellv1.GridwellClient, ok bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for id, k := range r.kinds {
-		if k == kind {
-			return id, r.clients[id], true
-		}
-	}
-	return "", nil, false
-}
-
 // Deregister removes a plugin from the registry and calls its closer. Silently
 // does nothing if id is not registered.
 func (r *Registry) Deregister(id string) {
