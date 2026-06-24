@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -190,6 +189,29 @@ func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Reques
 		return nil, asConnectError(err)
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// ListPlugins enumerates the configured plugins in config order so the client
+// can build the launcher / + menu. label comes from each plugin's Info;
+// writable (accepts new tiles) is derived from kind — only localdb grids can
+// hold created primitives.
+func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
+	var out []*pb.PluginInfo
+	for _, p := range h.srv.pluginReg.Ordered() {
+		label := p.Kind
+		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
+			if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil && info.DisplayName != "" {
+				label = info.DisplayName
+			}
+		}
+		out = append(out, &pb.PluginInfo{
+			Uuid:     p.UUID,
+			Kind:     p.Kind,
+			Label:    label,
+			Writable: p.Kind == "localdb",
+		})
+	}
+	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
 }
 
 func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.GetTileRequest]) (*connect.Response[pb.TileResponse], error) {
@@ -470,31 +492,50 @@ func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Reque
 	return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: alive}), nil
 }
 
-// Subscribe proxies the primary plugin's change-event stream to the client,
-// re-qualifying each event's ids with the primary uuid. (Mounted plugins are
-// polled via GetGrid; only the primary streams live events for now.)
+// Subscribe fans every localdb plugin's change-event stream into the client's
+// stream, re-qualifying each event's ids with the emitting plugin's uuid.
+// (fs/proc are polled via GetGrid; only localdb plugins emit events.) With no
+// single root, a client subscribes to the whole federation at once.
 func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
-	c, uuid, err := h.primaryClient()
-	if err != nil {
-		return err
-	}
-	ps, err := c.Subscribe(ctx, &pb.SubscribeRequest{})
-	if err != nil {
-		return asConnectError(err)
-	}
-	for {
-		ev, err := ps.Recv()
-		if err == io.EOF {
-			return nil
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	events := make(chan *pb.Event, 64)
+	for _, p := range h.srv.pluginReg.Ordered() {
+		if p.Kind != "localdb" {
+			continue
 		}
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
+		c, ok := h.srv.pluginReg.Get(p.UUID)
+		if !ok {
+			continue
+		}
+		go func(uuid string, client pb.GridwellClient) {
+			ps, err := client.Subscribe(subCtx, &pb.SubscribeRequest{})
+			if err != nil {
+				return
 			}
-			return err
-		}
-		if err := stream.Send(qualifyEvent(uuid, ev)); err != nil {
-			return err
+			for {
+				ev, err := ps.Recv()
+				if err != nil {
+					return // EOF, cancel, or transport error: this plugin's stream ends
+				}
+				select {
+				case events <- qualifyEvent(uuid, ev):
+				case <-subCtx.Done():
+					return
+				}
+			}
+		}(p.UUID, c)
+	}
+
+	for {
+		select {
+		case ev := <-events:
+			if err := stream.Send(ev); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }

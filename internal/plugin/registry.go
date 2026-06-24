@@ -16,6 +16,9 @@ type Registry struct {
 	// kinds maps plugin UUID → kind ("fs", "proc", "localdb", …) so callers
 	// that need "the fs plugin" can resolve one by kind.
 	kinds map[string]string
+	// order is the registration (config) order of plugin UUIDs, so the launcher
+	// can present plugins exactly as configured.
+	order []string
 	// closers holds the cleanup function for each managed (subprocess) plugin.
 	closers map[string]func()
 }
@@ -34,11 +37,28 @@ func NewRegistry() *Registry {
 func (r *Registry) Register(id, kind string, client gridwellv1.GridwellClient, closer func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.clients[id]; !exists {
+		r.order = append(r.order, id)
+	}
 	r.clients[id] = client
 	r.kinds[id] = kind
 	if closer != nil {
 		r.closers[id] = closer
 	}
+}
+
+// Ordered returns (uuid, kind) for every registered plugin in registration
+// (config) order.
+func (r *Registry) Ordered() []struct{ UUID, Kind string } {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]struct{ UUID, Kind string }, 0, len(r.order))
+	for _, id := range r.order {
+		if _, ok := r.clients[id]; ok {
+			out = append(out, struct{ UUID, Kind string }{id, r.kinds[id]})
+		}
+	}
+	return out
 }
 
 // FirstByKind returns the UUID and client of the first registered plugin of
@@ -66,6 +86,12 @@ func (r *Registry) Deregister(id string) {
 	}
 	delete(r.clients, id)
 	delete(r.kinds, id)
+	for i, oid := range r.order {
+		if oid == id {
+			r.order = append(r.order[:i], r.order[i+1:]...)
+			break
+		}
+	}
 }
 
 // Get returns the client for id, or (nil, false) if not registered.
@@ -107,4 +133,5 @@ func (r *Registry) Close() {
 	}
 	r.clients = make(map[string]gridwellv1.GridwellClient)
 	r.kinds = make(map[string]string)
+	r.order = nil
 }

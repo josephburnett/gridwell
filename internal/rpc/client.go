@@ -87,6 +87,20 @@ func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Data, nil
 }
 
+// ListPlugins returns the node's configured plugins in config order, for the
+// launcher / + menu.
+func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
+	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PluginInfo, len(r.Msg.Plugins))
+	for i, p := range r.Msg.Plugins {
+		out[i] = PluginInfo{UUID: p.Uuid, Kind: p.Kind, Label: p.Label, Writable: p.Writable}
+	}
+	return out, nil
+}
+
 // GetTile reads a single tile's metadata by id.
 func (c *Client) GetTile(ctx context.Context, tileID string) (*Tile, error) {
 	r, err := c.cl.GetTile(ctx, connect.NewRequest(&pb.GetTileRequest{TileId: tileID}))

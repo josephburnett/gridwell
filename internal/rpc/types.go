@@ -163,6 +163,14 @@ type TileResponse struct {
 
 // Creates: no Version (the tile doesn't exist yet).
 
+// PluginInfo describes one configured plugin for the launcher / + menu.
+type PluginInfo struct {
+	UUID     string `json:"uuid"`
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	Writable bool   `json:"writable"`
+}
+
 type CreateWellRequest struct {
 	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`

@@ -229,6 +229,19 @@ message SetTileAltRequest {
   string alt = 2;
 }
 
+// ListPlugins enumerates the plugins a node hosts, in config order. The client
+// builds the launcher / + menu from it. A leaf plugin returns an empty list.
+message ListPluginsRequest {}
+message PluginInfo {
+  string uuid     = 1;   // the plugin's namespace; child grids are <uuid>/<id>
+  string kind     = 2;   // "localdb", "fs", "proc", "ssh"
+  string label    = 3;   // display name
+  bool   writable = 4;   // accepts new tiles (primitives can be created in it)
+}
+message ListPluginsResponse {
+  repeated PluginInfo plugins = 1;
+}
+
 // TileResponse is the shape returned by every tile-producing mutation.
 message TileResponse {
   Tile tile = 1;
@@ -474,6 +487,7 @@ service Gridwell {
   rpc GetTileContent(GetTileContentRequest) returns (GetTileContentResponse);
   rpc GetTile(GetTileRequest) returns (TileResponse);
   rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
 
   rpc CreateWell(CreateWellRequest) returns (TileResponse);
   rpc CreateText(CreateTextRequest) returns (TileResponse);
