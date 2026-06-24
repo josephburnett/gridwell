@@ -1,8 +1,22 @@
 # Rootless Launcher Rework — Plan
 
-Status: in progress. Server foundation (ListPlugins + federated Subscribe) is
-committed (e5e8c78). This doc is the durable plan; the live todo list is in the
+Status: in progress. This doc is the durable plan; the live todo list is in the
 task tool. Update both as work lands.
+
+DONE so far:
+- Stage 16: ListPlugins RPC + federated Subscribe (e5e8c78)
+- SV1: tmux/shell keyed by qualified <uuid>/<tile-id> (41558d7)
+- SV2: preview endpoint routes qualified id to owning plugin (7bfadf8)
+- SV3: Mount RPC + fs Attach defaults to configured root (98055d1)
+
+REMAINING:
+- SV4/5/6: Bootstrap no-root; serve.go synth default localdb (not root); remove
+  cfg.Root + root: field + Server.primaryUUID/rootClient. (Currently primaryUUID
+  is unused by shell/preview after SV1/SV2 — only Bootstrap/SetRootView/rootClient
+  reference it.) Also retire CreateFileWell/CreateProcessWell once client uses Mount.
+- CL1/CL2: pane nav-stack + empty start state (the hard part).
+- CL3/CL4: data-driven palette + gestures (uses ListPlugins + Mount).
+- CL5: URL nav-stack encode/restore + e2e.
 
 ## Goal
 
