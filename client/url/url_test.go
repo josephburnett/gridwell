@@ -322,3 +322,37 @@ func TestBootViewport(t *testing.T) {
 		}
 	}
 }
+
+// TestEncodeAnchor: the anchor (the plugin root the pane sits inside) rides in
+// the `a=` query param alongside the descent path. A bare descent path keeps
+// its short, readable form; the anchor is the qualified grid id.
+func TestEncodeAnchor(t *testing.T) {
+	got := Encode(State{Anchor: "fs-uuid/1", TileIDs: []string{"3", "4"}})
+	want := "/3/4?a=fs-uuid%2F1"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestEncodeOmitsEmptyAnchor: the launcher start screen has no anchor, so no
+// `a=` param is emitted.
+func TestEncodeOmitsEmptyAnchor(t *testing.T) {
+	if got := Encode(State{}); got != "/" {
+		t.Errorf("got %q, want /", got)
+	}
+}
+
+// TestAnchorRoundTrip: Encode then Decode preserves the anchor and path.
+func TestAnchorRoundTrip(t *testing.T) {
+	in := State{Anchor: "db-uuid/9", TileIDs: []string{"12", "7"}}
+	out, err := Decode(Encode(in))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if out.Anchor != in.Anchor {
+		t.Errorf("anchor = %q, want %q", out.Anchor, in.Anchor)
+	}
+	if !reflect.DeepEqual(out.TileIDs, in.TileIDs) {
+		t.Errorf("tile ids = %v, want %v", out.TileIDs, in.TileIDs)
+	}
+}

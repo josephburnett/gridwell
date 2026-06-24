@@ -185,6 +185,60 @@ func TestCloneCarriesTextFields(t *testing.T) {
 	}
 }
 
+// TestPortalStackRoundTrip: entering a plugin pushes the current level onto
+// the Up stack; ascending pops it back, restoring the exact level — anchor,
+// path, viewport, and text focus. STACK semantics: ascend returns where you
+// were.
+func TestPortalStackRoundTrip(t *testing.T) {
+	p := &Pane{
+		ID:     "p1",
+		Anchor: "db-uuid/1",
+		Path:   []string{"3", "4"},
+		Cx:     5, Cy: 6, Zoom: 1.5,
+		TextFocus: "9", TextMode: "text", TextScrollY: 2.0, TextZoom: 1.2,
+	}
+	p.PushFrame()
+	// Jump into another plugin at its root.
+	p.Anchor = "fs-uuid/1"
+	p.Path = nil
+	p.Cx, p.Cy, p.Zoom = 0, 0, 1
+	p.TextFocus = ""
+
+	if !p.PopFrame() {
+		t.Fatal("PopFrame returned false with a frame on the stack")
+	}
+	if p.Anchor != "db-uuid/1" {
+		t.Errorf("anchor = %q, want db-uuid/1", p.Anchor)
+	}
+	if len(p.Path) != 2 || p.Path[0] != "3" || p.Path[1] != "4" {
+		t.Errorf("path = %v, want [3 4]", p.Path)
+	}
+	if p.Cx != 5 || p.Cy != 6 || p.Zoom != 1.5 {
+		t.Errorf("viewport = (%v,%v,%v), want (5,6,1.5)", p.Cx, p.Cy, p.Zoom)
+	}
+	if p.TextFocus != "9" || p.TextMode != "text" {
+		t.Errorf("text focus/mode not restored: %+v", p)
+	}
+	// Stack is now empty: nothing left to ascend to.
+	if p.PopFrame() {
+		t.Error("PopFrame returned true on an empty stack")
+	}
+}
+
+// TestCloneDeepCopiesUpStack: a clone must not share the Up stack (or its
+// frame paths) with the source, else editing one pane's nav history mutates
+// the other's.
+func TestCloneDeepCopiesUpStack(t *testing.T) {
+	src := &Pane{ID: "p1", Anchor: "fs-uuid/1"}
+	src.Up = []Frame{{Anchor: "db-uuid/1", Path: []string{"3", "4"}}}
+	dst := src.Clone("p2")
+	// Mutate the source frame's path in place.
+	src.Up[0].Path[0] = "99"
+	if dst.Up[0].Path[0] != "3" {
+		t.Error("clone shares Up frame path slice with source")
+	}
+}
+
 func TestSplitInheritsTextFields(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
