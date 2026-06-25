@@ -45,7 +45,7 @@ func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
 		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
-		a.drawEmbedAt(x, y, w, h, tile, alt)
+		a.drawEmbedAt(x, y, w, h, tile, alt, a.embedDashed(paneID, tile))
 		a.embedHits = append(a.embedHits, embedHit{
 			paneID: paneID,
 			x:      x,
@@ -70,8 +70,28 @@ func (a *App) makePreviewEmbedDrawer() embedDrawer {
 		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
-		a.drawEmbedAt(x, y, w, h, tile, alt)
+		// No pane (containing-grid) context in the preview pass, so fall back
+		// to "is the embedded tile itself a cross-plugin link".
+		a.drawEmbedAt(x, y, w, h, tile, alt, tile != nil && isLinkTile(tile))
 	}
+}
+
+// embedDashed reports whether an embed should render with a dashed border: a
+// cross-plugin embedding — the embedded tile lives in a different plugin than
+// the doc that embeds it — or a tile that is itself a cross-plugin link. The
+// dash is the "this is a reference you can unlink" hint.
+func (a *App) embedDashed(paneID string, tile *rpc.Tile) bool {
+	if tile == nil {
+		return false
+	}
+	if isLinkTile(tile) {
+		return true
+	}
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return false
+	}
+	return uuidOf(tile.GridID) != uuidOf(a.gridIDForPane(p))
 }
 
 // drawEmbedAt paints one embed into the canvas at the given screen rect.
@@ -84,7 +104,7 @@ func (a *App) makePreviewEmbedDrawer() embedDrawer {
 // The preview is drawn as a centered SQUARE inside (x, y, w, h): a tile is a
 // square in the grid, and the embed should look like one regardless of the
 // rect it was laid out in.
-func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string) {
+func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string, dashed bool) {
 	c := a.cctx
 
 	// Center a square of side min(w, h) inside the rect.
@@ -123,7 +143,7 @@ func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string) {
 	}
 	parentCellSize := side / cells
 	r := pane.Rect{X: sx, Y: sy, W: side, H: side}
-	a.drawNodeWithPreview(tile, sx, sy, side, side, parentCellSize, r, false /*selected*/, false /*outside*/, false /*dashed*/)
+	a.drawNodeWithPreview(tile, sx, sy, side, side, parentCellSize, r, false /*selected*/, false /*outside*/, dashed)
 }
 
 // drawEmbedLabel paints a short label centered in (x, y, w, h). Used by
