@@ -197,7 +197,10 @@ func TestPortalStackRoundTrip(t *testing.T) {
 		Cx:     5, Cy: 6, Zoom: 1.5,
 		TextFocus: "9", TextMode: "text", TextScrollY: 2.0, TextZoom: 1.2,
 	}
-	p.PushFrame()
+	p.PushFrame(true) // menu was open when we entered
+	if f, ok := p.TopFrame(); !ok || !f.MenuOpen {
+		t.Errorf("TopFrame MenuOpen = %v, want true", f.MenuOpen)
+	}
 	// Jump into another plugin at its root.
 	p.Anchor = "fs-uuid/1"
 	p.Path = nil

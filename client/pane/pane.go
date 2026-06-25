@@ -92,6 +92,10 @@ type Frame struct {
 	TextScrollX float64  `json:"tsx,omitempty"`
 	TextScrollY float64  `json:"tsy,omitempty"`
 	TextZoom    float64  `json:"tz,omitempty"`
+	// MenuOpen records whether the + menu was open on this pane when the user
+	// entered a plugin from it, so ascending back restores it — you come back
+	// with the menu open, just as you left it.
+	MenuOpen bool `json:"menu_open,omitempty"`
 }
 
 // Clone returns a deep copy of the pane (including the path + Up slices).
@@ -111,14 +115,25 @@ func (p *Pane) Clone(newID string) *Pane {
 }
 
 // PushFrame snapshots the pane's current level onto the Up stack (called when
-// entering a plugin via the launcher).
-func (p *Pane) PushFrame() {
+// entering a plugin). menuOpen records whether the + menu was open on the pane
+// at that moment, so a later ascent can reopen it.
+func (p *Pane) PushFrame(menuOpen bool) {
 	p.Up = append(p.Up, Frame{
 		Anchor: p.Anchor, Path: slices.Clone(p.Path),
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 		TextFocus: p.TextFocus, TextMode: p.TextMode,
 		TextScrollX: p.TextScrollX, TextScrollY: p.TextScrollY, TextZoom: p.TextZoom,
+		MenuOpen: menuOpen,
 	})
+}
+
+// TopFrame returns the most recent Up frame (the level a portal ascent would
+// return to), or false when the stack is empty.
+func (p *Pane) TopFrame() (Frame, bool) {
+	if len(p.Up) == 0 {
+		return Frame{}, false
+	}
+	return p.Up[len(p.Up)-1], true
 }
 
 // PopFrame restores the most recent Up frame into the pane and returns true.

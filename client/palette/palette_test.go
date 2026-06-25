@@ -22,17 +22,6 @@ func TestPlusCenter(t *testing.T) {
 	}
 }
 
-// TestPlusCenterCentered: with Centered set (the launcher start screen) the +
-// button sits at the pane's center rather than its lower-right corner.
-func TestPlusCenterCentered(t *testing.T) {
-	l := makeLayout()
-	l.Centered = true
-	cx, cy := l.PlusCenter()
-	if cx != 500 || cy != 400 {
-		t.Errorf("centered PlusCenter = (%v,%v), want (500,400)", cx, cy)
-	}
-}
-
 func TestPointInPlus(t *testing.T) {
 	l := makeLayout()
 	cx, cy := l.PlusCenter()
@@ -209,27 +198,29 @@ func TestSingleRowWhenTopRowCoversAll(t *testing.T) {
 	}
 }
 
-// TestLauncherTilesCentered: launcher tiles form a single row centered in the
-// pane (both axes), and the index round-trips.
-func TestLauncherTilesCentered(t *testing.T) {
-	l := makeLayout()
+// TestLauncherCellsCentered: launcher tiles form a single row of cells
+// centered on the origin (so the row sits at the pane's view center), and the
+// cell-space index round-trips.
+func TestLauncherCellsCentered(t *testing.T) {
 	n := 3
-	tile := l.LauncherTilePx()
-	first := l.LauncherTileRect(0, n)
-	last := l.LauncherTileRect(n-1, n)
-	if mid := (first.X + last.X + tile) / 2; mid != l.Pane.X+l.Pane.W/2 {
-		t.Errorf("row midpoint %v, want pane center %v", mid, l.Pane.X+l.Pane.W/2)
+	first := LauncherCellRect(0, n)
+	last := LauncherCellRect(n-1, n)
+	// Midpoint of the first and last tile centers is the origin.
+	if mid := (first.X + first.W/2 + last.X + last.W/2) / 2; mid != 0 {
+		t.Errorf("row midpoint = %v, want 0 (centered on origin)", mid)
 	}
-	if first.Y != l.Pane.Y+(l.Pane.H-tile)/2 {
-		t.Errorf("tile Y %v, want vertically centered", first.Y)
+	// Tiles are vertically centered on row 0.
+	if first.Y+first.H/2 != 0 {
+		t.Errorf("tile Y-center = %v, want 0", first.Y+first.H/2)
 	}
 	for i := range n {
-		r := l.LauncherTileRect(i, n)
-		if got := l.LauncherTileIndexAt(r.X+r.W/2, r.Y+r.H/2, n); got != i {
-			t.Errorf("LauncherTileIndexAt(center of %d) = %d", i, got)
+		r := LauncherCellRect(i, n)
+		if got := LauncherCellIndexAt(r.X+r.W/2, r.Y+r.H/2, n); got != i {
+			t.Errorf("LauncherCellIndexAt(center of %d) = %d", i, got)
 		}
 	}
-	if got := l.LauncherTileIndexAt(0, 0, n); got != -1 {
-		t.Errorf("LauncherTileIndexAt(corner) = %d, want -1", got)
+	// A point well off the row resolves to nothing.
+	if got := LauncherCellIndexAt(100, 100, n); got != -1 {
+		t.Errorf("LauncherCellIndexAt(far) = %d, want -1", got)
 	}
 }

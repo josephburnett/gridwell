@@ -21,8 +21,7 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 		NumTiles: len(a.paletteItems(p)),
 		// Plugins fill the top row; the primitives (if any) drop to a second
 		// row below. paletteItems always lists the plugins first.
-		TopRow:   len(a.plugins),
-		Centered: isLauncherPane(p),
+		TopRow: len(a.plugins),
 	}
 }
 
@@ -37,11 +36,13 @@ func isLauncherPane(p *pane.Pane) bool {
 // plusLayout builds the minimal Layout needed to place the + button for pane
 // p — just the rect plus the launcher-centering flag. The pane's zoom does
 // not influence the + button.
-func plusLayout(p *pane.Pane, r pane.Rect) palette.Layout {
+// plusLayout builds the layout for a pane's lower-right + button. The launcher
+// has no + button at all (it shows its plugin tiles directly), so the button
+// is always in the same corner home — no special-casing.
+func plusLayout(_ *pane.Pane, r pane.Rect) palette.Layout {
 	return palette.Layout{
-		Cfg:      palette.Default(),
-		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
-		Centered: isLauncherPane(p),
+		Cfg:  palette.Default(),
+		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
 	}
 }
 
@@ -193,24 +194,28 @@ func (a *App) drawLauncherTiles(p *pane.Pane, r pane.Rect) {
 	if n == 0 {
 		return
 	}
-	l := a.paletteLayoutFor(p, r)
+	ps := paneToDragdrop(p, r)
+	cell := ps.CellPx * ps.Zoom
 	focused := p.ID == a.tree.Focus
 	for i := range a.plugins {
-		tr := l.LauncherTileRect(i, n)
+		cr := palette.LauncherCellRect(i, n)
+		sx, sy := ps.CellToScreen(cr.X, cr.Y)
 		hovered := focused && a.launcherHover == i
-		a.drawPaletteItem(paletteItem{isPlugin: true, plugin: a.plugins[i]}, tr.X, tr.Y, tr.W, tr.H, hovered)
+		a.drawPaletteItem(paletteItem{isPlugin: true, plugin: a.plugins[i]}, sx, sy, cr.W*cell, cr.H*cell, hovered)
 	}
 }
 
 // launcherTileIndexAt returns the index of the launcher plugin tile under
 // (x, y) for pane p, or -1. Used by both the click handler (descend) and the
-// hover tracker.
+// hover tracker. The hit test runs in cell space so it tracks the tiles as the
+// viewport zooms during a descent transition.
 func (a *App) launcherTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
 	n := len(a.plugins)
 	if n == 0 {
 		return -1
 	}
-	return a.paletteLayoutFor(p, r).LauncherTileIndexAt(x, y, n)
+	cx, cy := paneToDragdrop(p, r).ScreenToCell(x, y)
+	return palette.LauncherCellIndexAt(cx, cy, n)
 }
 
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.

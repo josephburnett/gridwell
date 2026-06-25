@@ -62,11 +62,6 @@ type Layout struct {
 	// TopRow is unset (<=0) or covers every tile, the popover is a single
 	// row — the read-only-grid case, where only plugins show.
 	TopRow int
-	// Centered places the + button at the pane's center instead of its
-	// lower-right corner. Used for the launcher start screen ("a blank
-	// screen with a + menu in the center"); once inside a plugin the +
-	// returns to its muscle-memory lower-right home.
-	Centered bool
 }
 
 // topCount / bottomCount split NumTiles across the two popover rows. A TopRow
@@ -99,11 +94,9 @@ func maxF(a, b float64) float64 {
 	return b
 }
 
-// PlusCenter returns the screen-space center of the + button.
+// PlusCenter returns the screen-space center of the + button (the pane's
+// lower-right corner, inset by PlusInset).
 func (l Layout) PlusCenter() (cx, cy float64) {
-	if l.Centered {
-		return l.Pane.X + l.Pane.W/2, l.Pane.Y + l.Pane.H/2
-	}
 	return l.Pane.X + l.Pane.W - l.Cfg.PlusInset, l.Pane.Y + l.Pane.H - l.Cfg.PlusInset
 }
 
@@ -159,28 +152,38 @@ func (l Layout) TileRect(i int) Rect {
 	}
 }
 
-// LauncherTilePx is the size of a plugin tile on the launcher page — a full
-// default cell, larger than a menu swatch, since these tiles ARE the page
-// (the only affordance) rather than icons in a popover.
-func (l Layout) LauncherTilePx() float64 { return l.Cfg.CellPx }
+// Launcher tile geometry, in GRID-CELL coordinates centered on the origin.
+// The gridless launcher lays its plugin tiles out in cell space (not screen
+// space) so it renders through the pane's viewport transform — and therefore
+// zooms smoothly when you descend into a plugin, exactly like a well. A 1×1
+// cell per tile (so a tile reads the same size as the well it drops) in a
+// centered row with a small gap.
+const (
+	launcherTileCells = 1.0
+	launcherGapCells  = 0.3
+)
 
-// LauncherTileRect returns the screen rect of the i'th of n plugin tiles on
-// the launcher page: a single horizontal row centered in the pane.
-func (l Layout) LauncherTileRect(i, n int) Rect {
-	tile := l.LauncherTilePx()
-	gap := l.Cfg.GapPx
-	rowW := float64(n)*tile + float64(n-1)*gap
-	x0 := l.Pane.X + (l.Pane.W-rowW)/2
-	y0 := l.Pane.Y + (l.Pane.H-tile)/2
-	return Rect{X: x0 + float64(i)*(tile+gap), Y: y0, W: tile, H: tile}
+// LauncherCellRect returns the cell-space rect of the i'th of n launcher
+// plugin tiles, centered on the origin so the row sits at the pane's view
+// center (Cx=Cy=0). Pure geometry — the caller maps cells to screen through
+// the pane transform.
+func LauncherCellRect(i, n int) Rect {
+	pitch := launcherTileCells + launcherGapCells
+	cx := (float64(i) - float64(n-1)/2) * pitch
+	return Rect{
+		X: cx - launcherTileCells/2,
+		Y: -launcherTileCells / 2,
+		W: launcherTileCells,
+		H: launcherTileCells,
+	}
 }
 
-// LauncherTileIndexAt returns the index of the launcher tile under (x, y)
-// among n tiles, or -1 when the point is in a gutter or off the row.
-func (l Layout) LauncherTileIndexAt(x, y float64, n int) int {
+// LauncherCellIndexAt returns the index of the launcher tile whose cell rect
+// contains (cx, cy), or -1. The point is in cell coordinates.
+func LauncherCellIndexAt(cx, cy float64, n int) int {
 	for i := range n {
-		r := l.LauncherTileRect(i, n)
-		if x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H {
+		r := LauncherCellRect(i, n)
+		if cx >= r.X && cx <= r.X+r.W && cy >= r.Y && cy <= r.Y+r.H {
 			return i
 		}
 	}

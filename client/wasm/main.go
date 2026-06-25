@@ -312,6 +312,11 @@ type transSegment struct {
 	fromCx, fromCy, fromZoom float64
 	toCx, toCy, toZoom       float64
 	durationMs               float64
+	// setAnchor switches the pane's plugin anchor at this segment's start (a
+	// cross-plugin portal jump). anchor is the new plugin-root grid id. Normal
+	// same-plugin descents leave the anchor untouched.
+	setAnchor bool
+	anchor    string
 }
 
 // ghost is a transient floating render of a tile, positioned in screen
@@ -608,6 +613,9 @@ func (a *App) applySegmentStart(seg transSegment) {
 	p := a.tree.FindPane(a.transition.paneID)
 	if p == nil {
 		return
+	}
+	if seg.setAnchor {
+		p.Anchor = seg.anchor
 	}
 	p.Path = seg.path
 	p.Cx = seg.fromCx

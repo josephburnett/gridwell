@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gridpath"
+	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -365,7 +366,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if isLauncherPane(p) {
 		if prevFocus == p.ID {
 			if idx := a.launcherTileIndexAt(p, r, sx, sy); idx >= 0 {
-				a.enterPlugin(p.ID, a.plugins[idx])
+				// Zoom into the clicked tile's footprint (cell space).
+				a.enterPlugin(p.ID, a.plugins[idx], palette.LauncherCellRect(idx, len(a.plugins)))
 			}
 		}
 		return nil
@@ -692,8 +694,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// A plugin swatch clicked without dragging (no movement past the
 	// threshold) enters that plugin: the launcher / + menu "click to
 	// descend" gesture. A drag instead mounts a link (DropCreateTemplate).
+	// From an in-grid menu the descent zooms from the pane centre (a unit
+	// cell at the current view centre).
 	if d.isTemplate && d.item.isPlugin && !d.started {
-		a.enterPlugin(d.originPaneID, d.item.plugin)
+		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
+			a.enterPlugin(fp.ID, d.item.plugin,
+				palette.Rect{X: fp.Cx - 0.5, Y: fp.Cy - 0.5, W: 1, H: 1})
+		}
 		return nil
 	}
 
@@ -1014,34 +1021,52 @@ func (a *App) ascendPane(p *pane.Pane) {
 	}
 }
 
-// enterPlugin performs a portal jump into a plugin from the + menu: it pushes
-// the pane's current level onto the ascent stack (so a later ascent returns
-// here — STACK semantics), re-anchors the pane at the plugin's root grid, and
-// fetches it. Drives the launcher's click-to-enter and the in-grid + menu's
-// plugin items.
-func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo) {
+// enterPlugin performs a portal jump into a plugin: it pushes the pane's
+// current level onto the ascent stack (so a later ascent returns here — STACK
+// semantics, and reopens the + menu if it was open) and animates a descent
+// into the plugin's root grid with the SAME zoom transition as descending into
+// a well. cell is the footprint to zoom from, in the pane's current cell
+// space: the clicked launcher tile, or a unit cell at the pane centre for an
+// in-grid menu click. Drives both the launcher's click-to-enter and the
+// in-grid + menu's plugin items.
+func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo, cell palette.Rect) {
 	p := a.tree.FindPane(paneID)
-	if p == nil {
+	if p == nil || pl.RootGridID == "" {
 		return
 	}
+	// Remember whether the menu was open on this pane, then close it; the
+	// ascent reopens it so you come back exactly as you left.
+	wasMenu := a.menuOpen && a.menuPaneID == p.ID
 	a.menuOpen = false
-	p.PushFrame()
-	p.Anchor = pl.RootGridID
-	p.Path = nil
-	p.TextFocus = ""
-	p.Cx, p.Cy, p.Zoom = 0, 0, 1
-	a.fetchGrid(a.gridIDForPane(p))
-	a.draw()
-	a.scheduleURLUpdate()
+	p.PushFrame(wasMenu)
+
+	r := paneRectFor(a, p)
+	from := zoomtrans.Endpoints{
+		Path: slices.Clone(p.Path),
+		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
+	}
+	w := zoomtrans.Well{
+		ID: "portal",
+		X:  int64(math.Round(cell.X)), Y: int64(math.Round(cell.Y)),
+		W: int64(max(1.0, math.Round(cell.W))), H: int64(max(1.0, math.Round(cell.H))),
+	}
+	a.installDescent(p, r, from, w, pl.RootGridID, pl.RootGridID,
+		cell.X+cell.W/2, cell.Y+cell.H/2)
 }
 
 // ascendPortal pops the most recent + menu entry frame, returning the pane to
 // wherever it jumped into the current plugin from (another plugin, or the
-// launcher). No animation: the jump crosses plugin id spaces with no well
-// tile to zoom out of.
+// launcher), and reopens the + menu if it was open when the user entered.
+// Instant: the jump crosses plugin id spaces with no well tile to zoom out of.
 func (a *App) ascendPortal(p *pane.Pane) {
-	if !p.PopFrame() {
+	f, ok := p.TopFrame()
+	if !ok || !p.PopFrame() {
 		return
+	}
+	if f.MenuOpen {
+		a.menuOpen = true
+		a.menuPaneID = p.ID
+		a.menuHover = -1
 	}
 	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
@@ -1211,8 +1236,25 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
+	a.installDescent(p, r, from, w, well.ChildGridID, "", 0, 0)
+}
+
+// installDescent computes the standard two-segment descent transition into a
+// well's child grid and starts it. A portal jump (portalAnchor != "") swaps
+// the pane's plugin anchor at the path swap instead of appending to the path,
+// and recentres the parent zoom on (portalCx, portalCy) — the launcher tile,
+// or the pane centre for an in-grid menu — so that is what grows to fill the
+// pane. Same machinery as a same-plugin well descent, so the motion is
+// identical.
+func (a *App) installDescent(p *pane.Pane, r pane.Rect, from zoomtrans.Endpoints, w zoomtrans.Well, childGridID, portalAnchor string, portalCx, portalCy float64) {
 	mid, swap, final := zoomtrans.Descent(from, w, r.W, r.H, cellPx)
-	a.fetchGrid(well.ChildGridID)
+	if portalAnchor != "" {
+		// The synthetic well's integer cell rounds the launcher tile's
+		// position; recentre the parent zoom on the exact footprint center so
+		// the descent lands square on the tile.
+		mid.Cx, mid.Cy = portalCx, portalCy
+	}
+	a.fetchGrid(childGridID)
 
 	parentDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
 		zoomDist(from.Zoom, mid.Zoom)
@@ -1224,26 +1266,32 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		durations = []float64{totalTransitionMs, 0}
 	}
 
+	// C: after the atomic swap, ease the child zoom out to the stored ratio
+	// (zero-length when swap == final). A portal swaps the plugin anchor and
+	// resets the path to the plugin root instead of appending a well id.
+	segC := transSegment{
+		path:   swap.Path,
+		fromCx: swap.Cx, fromCy: swap.Cy, fromZoom: swap.Zoom,
+		toCx: final.Cx, toCy: final.Cy, toZoom: final.Zoom,
+		durationMs: durations[1],
+	}
+	if portalAnchor != "" {
+		segC.setAnchor = true
+		segC.anchor = portalAnchor
+		segC.path = nil
+	}
+
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
-			// A: parent pan+zoom toward well center at Overtake.
+			// A: parent pan+zoom toward the well/footprint center at Overtake.
 			{
 				path:   from.Path,
 				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
 				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
 				durationMs: durations[0],
 			},
-			// C: after the atomic path swap to (swap.Cx, swap.Cy, swap.Zoom),
-			// ease the child zoom out to the stored saved-ratio. Same Cx,Cy
-			// as swap (we landed where the saved view region is centered);
-			// only the zoom moves. Zero-length when swap == final.
-			{
-				path:   swap.Path,
-				fromCx: swap.Cx, fromCy: swap.Cy, fromZoom: swap.Zoom,
-				toCx: final.Cx, toCy: final.Cy, toZoom: final.Zoom,
-				durationMs: durations[1],
-			},
+			segC,
 		},
 	})
 }
