@@ -74,6 +74,11 @@ type App struct {
 	menuPaneID string
 	menuHover  int // index of hovered menu item, or -1
 
+	// launcherHover is the index of the launcher plugin tile under the cursor
+	// (the focused launcher pane), or -1. Drives the hover outline on the
+	// gridless start page, which has no + menu.
+	launcherHover int
+
 	// gridLoadFailed records grids whose last fetch returned non-200, so
 	// the renderer can show a meaningful message and we don't retry in
 	// a tight loop.
@@ -408,6 +413,7 @@ func main() {
 		c:                 cache.New(),
 		selectedTileID:    map[string]string{},
 		menuHover:         -1,
+		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
 		paneStateStack:    map[string][]paneState{},

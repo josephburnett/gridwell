@@ -20,6 +20,9 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
 		PaneZoom: p.Zoom,
 		NumTiles: len(a.paletteItems(p)),
+		// Plugins fill the top row; the primitives (if any) drop to a second
+		// row below. paletteItems always lists the plugins first.
+		TopRow:   len(a.plugins),
 		Centered: isLauncherPane(p),
 	}
 }
@@ -137,6 +140,9 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
 	if item.isPlugin {
 		a.drawPluginGlyph(item.plugin, x, y, w, h)
+		// Plugin swatches carry their name as a banner (AltText = label) so
+		// the menu and launcher read "files" / "processes" / … at a glance.
+		a.drawTileBannerLabel(&n, x, y, w, h, true)
 	} else {
 		switch item.primitive {
 		case tplWell:
@@ -168,6 +174,35 @@ func (a *App) drawPluginGlyph(pl rpc.PluginInfo, x, y, w, h float64) {
 	default:
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorExitBorder)
 	}
+}
+
+// drawLauncherTiles paints the launcher start page: the configured plugins as
+// a centered row of swatches (glyph + name) to descend into. No grid, no +
+// menu — these tiles are the whole page. Hover (focused pane only) outlines
+// the tile under the cursor.
+func (a *App) drawLauncherTiles(p *pane.Pane, r pane.Rect) {
+	n := len(a.plugins)
+	if n == 0 {
+		return
+	}
+	l := a.paletteLayoutFor(p, r)
+	focused := p.ID == a.tree.Focus
+	for i := range a.plugins {
+		tr := l.LauncherTileRect(i, n)
+		hovered := focused && a.launcherHover == i
+		a.drawPaletteItem(paletteItem{isPlugin: true, plugin: a.plugins[i]}, tr.X, tr.Y, tr.W, tr.H, hovered)
+	}
+}
+
+// launcherTileIndexAt returns the index of the launcher plugin tile under
+// (x, y) for pane p, or -1. Used by both the click handler (descend) and the
+// hover tracker.
+func (a *App) launcherTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
+	n := len(a.plugins)
+	if n == 0 {
+		return -1
+	}
+	return a.paletteLayoutFor(p, r).LauncherTileIndexAt(x, y, n)
 }
 
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.

@@ -357,6 +357,20 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
+	// Launcher start page: a click on a plugin tile descends into it. The
+	// launcher is gridless and has no + button, so every click is handled
+	// (and swallowed) here — gated on prior focus, like every other in-pane
+	// action, so a click that merely focuses the launcher doesn't also
+	// descend. Empty space is inert (it's not a grid: nothing to pan).
+	if isLauncherPane(p) {
+		if prevFocus == p.ID {
+			if idx := a.launcherTileIndexAt(p, r, sx, sy); idx >= 0 {
+				a.enterPlugin(p.ID, a.plugins[idx])
+			}
+		}
+		return nil
+	}
+
 	// Click on the + button toggles the menu for this pane. The button is
 	// only drawn on the focused pane, so it only acts when the pane was
 	// already focused before this click; a click that merely focuses the
@@ -513,6 +527,17 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 		if hover != a.menuHover {
 			a.menuHover = hover
+			a.draw()
+		}
+	}
+	// Track launcher-tile hover on the focused start page.
+	{
+		hover := -1
+		if p, r, ok := a.paneAtScreen(sx, sy); ok && p.ID == a.tree.Focus && isLauncherPane(p) {
+			hover = a.launcherTileIndexAt(p, r, sx, sy)
+		}
+		if hover != a.launcherHover {
+			a.launcherHover = hover
 			a.draw()
 		}
 	}

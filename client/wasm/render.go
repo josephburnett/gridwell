@@ -308,14 +308,19 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 
 	pscreen := paneToDragdrop(p, r)
 
+	// The launcher start screen is NOT a grid — it has no coordinate system,
+	// so drawing grid lines would imply you can place tiles there. It's a
+	// plain page that just lists the configured plugins to descend into.
+	launcher := isLauncherPane(p)
+
 	// Grid lines render against background regardless of whether the grid
 	// has loaded — they communicate the coordinate system to the user.
 	// A focused file has no grid coordinates and (now) no zoom, so it
 	// gets a plain background instead of a grid pattern: the old pattern
 	// was the zoom cue, which no longer applies. The margin around the
 	// inner box is just a plain ascent zone. (URL content fills the pane
-	// and covers this anyway.)
-	if p.TextFocus != "" {
+	// and covers this anyway.) The launcher is likewise gridless.
+	if p.TextFocus != "" || launcher {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
@@ -381,6 +386,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					a.ghost.displayedFragmentation)
 			}
 		}
+	} else if launcher {
+		// The launcher page itself: the configured plugins as a centered row
+		// of tiles to descend into. No grid, no + menu.
+		a.drawLauncherTiles(p, r)
 	} else {
 		// Status line in the upper-left so the user knows what state
 		// we're in and which grid id we're trying to load.
@@ -440,7 +449,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				a.drawURLRefreshButton(p, r)
 			}
 		}
-	} else if focused || (a.tileDragInFlight() && a.dragging.originPaneID == p.ID) {
+	} else if !launcher && (focused || (a.tileDragInFlight() && a.dragging.originPaneID == p.ID)) {
 		// + button: the focused grid's entry point for creating tiles (and a
 		// visible handle even when the grid is unreachable — you can still
 		// ascend). It also appears on a tile-drag's SOURCE pane even when that
@@ -448,7 +457,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// delete target ("drag a tile back to the menu it came from").
 		// drawPlusButton paints a trashcan instead of a + in that state. The
 		// palette popover itself is drawn after every pane (see draw) so it
-		// floats above neighbouring panes it overflows into.
+		// floats above neighbouring panes it overflows into. The launcher has
+		// no + button — its plugin tiles are the whole page.
 		a.drawPlusButton(p, r)
 	}
 }

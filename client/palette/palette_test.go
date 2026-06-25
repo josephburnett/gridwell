@@ -170,3 +170,66 @@ func TestTrackingPaneSize(t *testing.T) {
 		t.Errorf("PlusCenter delta = (%v,%v), want (500,500)", cx2-cx1, cy2-cy1)
 	}
 }
+
+// TestTwoRowPopover: plugins fill the top row, primitives the bottom. The
+// popover is two tiles tall and the bottom-row tiles sit below the top.
+func TestTwoRowPopover(t *testing.T) {
+	l := makeLayout()
+	l.NumTiles = 6
+	l.TopRow = 2
+	tile := l.TilePx()
+	gap := l.Cfg.GapPx
+	if got, want := l.PopoverRect().H, 2*tile+3*gap; got != want {
+		t.Errorf("popover height = %v, want %v (two rows)", got, want)
+	}
+	top := l.TileRect(0)
+	bottom := l.TileRect(2)
+	if bottom.Y <= top.Y {
+		t.Errorf("bottom-row Y %v not below top-row Y %v", bottom.Y, top.Y)
+	}
+	// Index round-trips through both rows.
+	for i := range l.NumTiles {
+		r := l.TileRect(i)
+		if got := l.TileIndexAt(r.X+r.W/2, r.Y+r.H/2); got != i {
+			t.Errorf("TileIndexAt(center of %d) = %d", i, got)
+		}
+	}
+}
+
+// TestSingleRowWhenTopRowCoversAll: when every tile is a plugin (TopRow ==
+// NumTiles, the read-only-grid case) the popover stays a single row.
+func TestSingleRowWhenTopRowCoversAll(t *testing.T) {
+	l := makeLayout()
+	l.NumTiles = 3
+	l.TopRow = 3
+	tile := l.TilePx()
+	gap := l.Cfg.GapPx
+	if got, want := l.PopoverRect().H, tile+2*gap; got != want {
+		t.Errorf("popover height = %v, want %v (single row)", got, want)
+	}
+}
+
+// TestLauncherTilesCentered: launcher tiles form a single row centered in the
+// pane (both axes), and the index round-trips.
+func TestLauncherTilesCentered(t *testing.T) {
+	l := makeLayout()
+	n := 3
+	tile := l.LauncherTilePx()
+	first := l.LauncherTileRect(0, n)
+	last := l.LauncherTileRect(n-1, n)
+	if mid := (first.X + last.X + tile) / 2; mid != l.Pane.X+l.Pane.W/2 {
+		t.Errorf("row midpoint %v, want pane center %v", mid, l.Pane.X+l.Pane.W/2)
+	}
+	if first.Y != l.Pane.Y+(l.Pane.H-tile)/2 {
+		t.Errorf("tile Y %v, want vertically centered", first.Y)
+	}
+	for i := range n {
+		r := l.LauncherTileRect(i, n)
+		if got := l.LauncherTileIndexAt(r.X+r.W/2, r.Y+r.H/2, n); got != i {
+			t.Errorf("LauncherTileIndexAt(center of %d) = %d", i, got)
+		}
+	}
+	if got := l.LauncherTileIndexAt(0, 0, n); got != -1 {
+		t.Errorf("LauncherTileIndexAt(corner) = %d, want -1", got)
+	}
+}

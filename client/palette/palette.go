@@ -57,11 +57,46 @@ type Layout struct {
 	Pane     Rect
 	PaneZoom float64
 	NumTiles int
+	// TopRow is how many of NumTiles sit in the popover's first row (the
+	// plugins); the rest (the primitives) go in a second row below. When
+	// TopRow is unset (<=0) or covers every tile, the popover is a single
+	// row — the read-only-grid case, where only plugins show.
+	TopRow int
 	// Centered places the + button at the pane's center instead of its
 	// lower-right corner. Used for the launcher start screen ("a blank
 	// screen with a + menu in the center"); once inside a plugin the +
 	// returns to its muscle-memory lower-right home.
 	Centered bool
+}
+
+// topCount / bottomCount split NumTiles across the two popover rows. A TopRow
+// that is unset or covers everything collapses to a single row.
+func (l Layout) topCount() int {
+	if l.TopRow <= 0 || l.TopRow >= l.NumTiles {
+		return l.NumTiles
+	}
+	return l.TopRow
+}
+
+func (l Layout) bottomCount() int { return l.NumTiles - l.topCount() }
+
+func (l Layout) rowCount() int {
+	if l.bottomCount() > 0 {
+		return 2
+	}
+	return 1
+}
+
+// rowWidthPx is the popover width a row of n tiles needs (tiles + gutters).
+func (l Layout) rowWidthPx(n int) float64 {
+	return float64(n)*l.TilePx() + float64(n+1)*l.Cfg.GapPx
+}
+
+func maxF(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // PlusCenter returns the screen-space center of the + button.
@@ -90,28 +125,66 @@ func (l Layout) TilePx() float64 {
 }
 
 // PopoverRect returns the screen rect of the entire palette popover,
-// anchored just above the + button.
+// anchored just above the + button. Wide enough for the wider of the two
+// rows; tall enough for however many rows (1 or 2) are populated.
 func (l Layout) PopoverRect() Rect {
 	tile := l.TilePx()
-	w := float64(l.NumTiles)*tile + float64(l.NumTiles+1)*l.Cfg.GapPx
-	h := tile + 2*l.Cfg.GapPx
+	w := maxF(l.rowWidthPx(l.topCount()), l.rowWidthPx(l.bottomCount()))
+	rows := float64(l.rowCount())
+	h := rows*tile + (rows+1)*l.Cfg.GapPx
 	cx, cy := l.PlusCenter()
 	x := cx + l.Cfg.PlusRadius - w
 	y := cy - l.Cfg.PlusRadius - h - 8
 	return Rect{X: x, Y: y, W: w, H: h}
 }
 
-// TileRect returns the screen rect of the i'th template tile inside
-// the popover.
+// TileRect returns the screen rect of the i'th template tile inside the
+// popover. Tiles 0..topCount-1 fill the top row; the rest fill the bottom
+// row. Each row is centered horizontally within the popover so a short row
+// sits under the middle of a wider one.
 func (l Layout) TileRect(i int) Rect {
 	pop := l.PopoverRect()
 	tile := l.TilePx()
+	gap := l.Cfg.GapPx
+	row, col, count := 0, i, l.topCount()
+	if i >= l.topCount() {
+		row, col, count = 1, i-l.topCount(), l.bottomCount()
+	}
+	rowX := pop.X + (pop.W-l.rowWidthPx(count))/2
 	return Rect{
-		X: pop.X + l.Cfg.GapPx + float64(i)*(tile+l.Cfg.GapPx),
-		Y: pop.Y + l.Cfg.GapPx,
+		X: rowX + gap + float64(col)*(tile+gap),
+		Y: pop.Y + gap + float64(row)*(tile+gap),
 		W: tile,
 		H: tile,
 	}
+}
+
+// LauncherTilePx is the size of a plugin tile on the launcher page — a full
+// default cell, larger than a menu swatch, since these tiles ARE the page
+// (the only affordance) rather than icons in a popover.
+func (l Layout) LauncherTilePx() float64 { return l.Cfg.CellPx }
+
+// LauncherTileRect returns the screen rect of the i'th of n plugin tiles on
+// the launcher page: a single horizontal row centered in the pane.
+func (l Layout) LauncherTileRect(i, n int) Rect {
+	tile := l.LauncherTilePx()
+	gap := l.Cfg.GapPx
+	rowW := float64(n)*tile + float64(n-1)*gap
+	x0 := l.Pane.X + (l.Pane.W-rowW)/2
+	y0 := l.Pane.Y + (l.Pane.H-tile)/2
+	return Rect{X: x0 + float64(i)*(tile+gap), Y: y0, W: tile, H: tile}
+}
+
+// LauncherTileIndexAt returns the index of the launcher tile under (x, y)
+// among n tiles, or -1 when the point is in a gutter or off the row.
+func (l Layout) LauncherTileIndexAt(x, y float64, n int) int {
+	for i := range n {
+		r := l.LauncherTileRect(i, n)
+		if x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H {
+			return i
+		}
+	}
+	return -1
 }
 
 // TileIndexAt returns the index of the template tile under (x, y), or
