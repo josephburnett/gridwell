@@ -6,21 +6,23 @@ package pane
 //
 // The grouping reflects Gridwell's color grammar:
 //
-//	Focused / FocusedFaded — descent into an interior well (or a tile
-//	  whose kind isn't known yet). Saturated when this pane has the
-//	  keyboard / cursor focus, faded otherwise.
-//	Root — the user's root grid: nothing descended.
+//	Focused / FocusedFaded — any grid the user is navigating, at any depth
+//	  and in any plugin (every grid is blue). Saturated when this pane has
+//	  the keyboard / cursor focus, faded otherwise.
+//	Root — the launcher home page (gridless): the brown plugin/home identity.
 //	Text / TextFaded — descent into a markdown text tile.
 //	URL / URLFaded — descent into a URL tile, frozen preview.
 //	URLLive — descent into a URL tile with a live stream open.
-//	Exit / ExitFaded — descent into a source-backed (fs / proc) grid
-//	  whose contents come from outside Gridwell. Red, mirroring the
-//	  exit-well outline on the parent.
+//	Shell / ShellFaded — descent into a shell tile (bash runs outside
+//	  Gridwell's data world). Orange.
+//	Exit / ExitFaded — read-only host content (a text tile inside a source
+//	  grid). Brown, echoing the plugin well that led here.
 type BorderColors struct {
 	Focused, FocusedFaded  string
 	Root                   string
 	Text, TextFaded        string
 	URL, URLFaded, URLLive string
+	Shell, ShellFaded      string
 	Exit, ExitFaded        string
 }
 
@@ -50,9 +52,13 @@ type BorderInput struct {
 	// descent into a URL tile.
 	URLLive bool
 	// InSourceGrid is true when the pane's currently-viewed grid is
-	// source-backed (fs or proc). Drives the red Exit border so the
-	// outline matches the red outline of the exit-well that led here.
+	// source-backed (fs or proc). Drives the brown Exit border for a
+	// read-only host text tile so it echoes the plugin well that led here.
+	// (The grid view itself is still blue — every grid is a grid.)
 	InSourceGrid bool
+	// IsLauncher is true when the pane is at the gridless launcher home
+	// (no anchor). The only place the brown Root identity shows.
+	IsLauncher bool
 }
 
 // BorderColor returns the CSS color string for the pane's outline,
@@ -60,10 +66,11 @@ type BorderInput struct {
 //
 //   - Descent into a URL tile, live   → URLLive
 //   - Descent into a URL tile, frozen → URL or URLFaded
+//   - Descent into a shell tile       → Shell or ShellFaded
+//   - Descent into a read-only host text tile → Exit or ExitFaded
 //   - Descent into a text tile        → Text or TextFaded
-//   - View inside a source-backed grid (no tile focus) → Exit or ExitFaded
-//   - Descent into an interior well (or descent target not yet cached) → Focused or FocusedFaded
-//   - Root grid                       → Root
+//   - Launcher home (gridless)        → Root
+//   - Any grid (any depth, any plugin) → Focused or FocusedFaded
 //
 // The pattern is: classify by what's inside, then pick the saturated
 // or faded variant based on focus.
@@ -75,45 +82,36 @@ func BorderColor(s BorderInput, c BorderColors) string {
 				if s.URLLive {
 					return c.URLLive
 				}
-				if s.Focused {
-					return c.URL
-				}
-				return c.URLFaded
+				return focused(s, c.URL, c.URLFaded)
+			case "shell":
+				return focused(s, c.Shell, c.ShellFaded)
 			case "text":
 				// A text tile that lives in a source-backed grid is a
 				// read-only window onto host state (the @info tile in a
 				// proc-well, file metadata in an fs-well). Its outline
-				// belongs to the Exit family so the frame keeps echoing
-				// the red exit-well that put us here, even at the deepest
-				// text-descent.
+				// belongs to the Exit (brown) family so the frame keeps
+				// echoing the plugin well that put us here.
 				if s.InSourceGrid {
-					if s.Focused {
-						return c.Exit
-					}
-					return c.ExitFaded
+					return focused(s, c.Exit, c.ExitFaded)
 				}
-				if s.Focused {
-					return c.Text
-				}
-				return c.TextFaded
+				return focused(s, c.Text, c.TextFaded)
 			}
 		}
-		if s.Focused {
-			return c.Focused
-		}
-		return c.FocusedFaded
+		return focused(s, c.Focused, c.FocusedFaded)
 	}
-	if s.InSourceGrid {
-		if s.Focused {
-			return c.Exit
-		}
-		return c.ExitFaded
+	// Not descended into a content tile: the launcher home is brown, every
+	// grid (any depth, any plugin — including source-backed fs/proc grids)
+	// is blue.
+	if s.IsLauncher {
+		return c.Root
 	}
-	if s.DescentDepth > 0 {
-		if s.Focused {
-			return c.Focused
-		}
-		return c.FocusedFaded
+	return focused(s, c.Focused, c.FocusedFaded)
+}
+
+// focused returns the saturated color when the pane has focus, else the faded.
+func focused(s BorderInput, sat, faded string) string {
+	if s.Focused {
+		return sat
 	}
-	return c.Root
+	return faded
 }

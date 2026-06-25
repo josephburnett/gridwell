@@ -136,14 +136,19 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 // the tile has content.
 func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
 	n := paletteItemGhostNode(item)
-	outside := tileOutside(&n, false)
-	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
 	if item.isPlugin {
+		// Plugin swatch: a brown-bordered well (the plugin / exit identity),
+		// its kind glyph inset below the name banner, and the name banner
+		// itself (AltText = label) so the menu and launcher read "files" /
+		// "processes" / … at a glance.
+		a.cctx.Set("fillStyle", colorBg)
+		a.cctx.Call("fillRect", x, y, w, h)
+		strokeTileBorder(a.cctx, x, y, w, h, colorPluginBorder, tileBorderPx)
 		a.drawPluginGlyph(item.plugin, x, y, w, h)
-		// Plugin swatches carry their name as a banner (AltText = label) so
-		// the menu and launcher read "files" / "processes" / … at a glance.
 		a.drawTileBannerLabel(&n, x, y, w, h, true)
 	} else {
+		outside := tileOutside(&n, false)
+		drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
 		switch item.primitive {
 		case tplWell:
 			drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
@@ -152,7 +157,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		case tplURL:
 			drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
 		case tplShell:
-			drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 		}
 	}
 	if hovered {
@@ -160,19 +165,25 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	}
 }
 
-// drawPluginGlyph overlays the identity glyph for a plugin swatch, chosen by
-// the plugin's kind: a folder for fs, a process tree for proc, a well for a
-// localdb (interior) plugin, and a globe as the generic fallback (e.g. ssh).
+// pluginGlyphTopInset reserves a strip at the top of a plugin swatch for its
+// name banner, so the glyph sits below the label instead of behind it.
+const pluginGlyphTopInset = 14
+
+// drawPluginGlyph overlays the identity glyph for a plugin swatch — all in the
+// plugin brown — chosen by the plugin's kind: a folder for fs, a process tree
+// for proc, a well for a localdb plugin, and a globe as the generic fallback
+// (e.g. ssh). The glyph is inset below the top name banner.
 func (a *App) drawPluginGlyph(pl rpc.PluginInfo, x, y, w, h float64) {
+	gy, gh := y+pluginGlyphTopInset, h-pluginGlyphTopInset
 	switch pl.Kind {
 	case "fs":
-		drawFolderGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		drawFolderGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
 	case "proc":
-		drawProcessGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		drawProcessGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
 	case "localdb":
-		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		drawWellGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
 	default:
-		drawGlobeGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		drawGlobeGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
 	}
 }
 

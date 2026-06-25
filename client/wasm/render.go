@@ -25,19 +25,21 @@ const (
 	// value so the focused pane still pops, but the others stay
 	// visible as "you're also looking inside something here".
 	colorFocusBorderFaded = "#2c3d70"
-	// colorRootBorder marks a pane that's at the user's root grid (no
-	// descent path, no file focus). Warm tan — earth-tone "ground",
-	// distinct from the descent blue and the file greens / purples so
-	// it never gets read as "you're descended into something".
-	colorRootBorder = "#7a6a4a"
-	// Grid-line colors per grid kind. Each echoes the matching border
-	// color (root tan, focus blue, exit red) but at the same low
-	// brightness as the legacy neutral grid line, so the lines tint
-	// the canvas with the grid's identity without overwhelming the
-	// content sitting on top.
-	colorGridLineRoot     = "#2a2419"
+	// colorPluginBorder is the warm brown that marks the plugin / host
+	// identity: the launcher home page, plugin (exit) wells and their icons,
+	// and read-only host content. Earth-tone "ground", distinct from the grid
+	// blue, text green, url purple, and shell orange — it reads as "a boundary
+	// into another world", never "a grid you can place tiles in".
+	colorPluginBorder      = "#7a6a4a"
+	colorPluginBorderFaded = "#4a4233"
+	// colorPluginFill is the body color for read-only host content (file
+	// metadata, the @info tile in a proc grid) — a dark brown of the same
+	// family so the tile reads as "host view", not editable green text.
+	colorPluginFill = "#2a2419"
+	// Grid lines are uniformly blue: every grid the user navigates is a grid,
+	// regardless of which plugin owns it. Quieter than the focus blue border
+	// so the lines tint the canvas without overwhelming the content.
 	colorGridLineInterior = "#1c2540"
-	colorGridLineExit     = "#3a2418"
 	// Content-tile colors. Each tile kind has its own identity; the
 	// user reads tiles by color at a glance and the icon / preview
 	// reveals the rest.
@@ -53,21 +55,22 @@ const (
 	// (WebSocket stream open). Same purple hue as colorURLLine but brighter
 	// and more saturated so it's clearly distinct from the frozen state.
 	colorURLLiveLine = "#a07acc"
-	// colorExitBorder is the outline used by file-well / process-well
-	// tiles and the pane border when descended into a source-backed
-	// grid. A brighter red that reads as a live container.
-	colorExitBorder      = "#c87a5a"
-	colorExitBorderFaded = "#6a4032"
-	// colorExitFill is the body color for a text-kind tile that lives in
-	// or comes from a source-backed grid (the @info tile inside a
-	// process-well, file metadata tiles in fs-grids, source-key-bearing
-	// text clones). Same dark red family as colorExitBorder so the tile
-	// reads as "read-only host view" at every zoom — green fill would
-	// invite editing the body the user cannot edit.
-	colorExitFill = "#3a241a"
+	// colorShellBorder is the orange identity for shell tiles and the pane
+	// border on a shell descent — bash runs outside Gridwell's data world, so
+	// it gets its own warm hue, distinct from plugin brown.
+	colorShellBorder      = "#d4863a"
+	colorShellBorderFaded = "#6e4a22"
+	// colorShellFill is the dark-orange body shown behind a shell tile's
+	// preview / placeholder glyph.
+	colorShellFill = "#2e220f"
+	// colorExitBorder / colorExitFill are the error red used for a broken
+	// embed reference (a link whose target no longer resolves) — a genuine
+	// "this is wrong" signal, distinct from the plugin/shell identities.
+	colorExitBorder = "#c87a5a"
+	colorExitFill   = "#3a241a"
 	// colorSourceLabelBg is the translucent strip behind the name label
-	// shown at the top of a tile inside an fs/proc grid. Dark enough that
-	// the red foreground reads clearly over any underlying preview.
+	// shown at the top of a tile (plugin / host content). Dark enough that
+	// the warm foreground reads clearly over any underlying preview.
 	colorSourceLabelBg = "rgba(20, 12, 8, 0.78)"
 	// colorNoEntry{Fill,Stroke} drive the international "no entry" badge
 	// drawn on the ghost when a drop would be rejected. International
@@ -666,38 +669,24 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 }
 
 // wellOutlineColor picks the well-tile outline color. Blue for interior wells
-// (Gridwell-owned), red for exit-wells whose child grid lives in another
+// (Gridwell-owned), brown for exit-wells whose child grid lives in another
 // plugin (a host directory, the process table) — see isExitWell.
 func wellOutlineColor(n *rpc.Tile) string {
 	if isExitWell(n) {
-		return colorExitBorder
+		return colorPluginBorder
 	}
 	return colorFocusBorder
 }
 
-// wellGridLineColor picks the grid-line color drawn inside a well's preview
-// region. Matches wellOutlineColor's grammar one shade quieter — interior
-// wells get a blue grid, exit wells (file / process) get a red grid.
-func wellGridLineColor(n *rpc.Tile) string {
-	if isExitWell(n) {
-		return colorGridLineExit
-	}
+// wellGridLineColor / paneGridLineColor pick the grid-line color drawn inside
+// a well's preview region and a pane's leaf grid. Every grid the user
+// navigates is uniformly blue, whichever plugin owns it (the launcher home,
+// which is gridless, never draws grid lines).
+func wellGridLineColor(*rpc.Tile) string {
 	return colorGridLineInterior
 }
 
-// paneGridLineColor picks the grid-line color for a pane's leaf grid:
-// brown at the root (zero descent depth), red when the leaf is a
-// source-backed (fs/proc) grid, blue otherwise. Mirrors the pane
-// border grammar one shade quieter. Falls back to interior blue when
-// the leaf grid hasn't loaded yet, since "we're descended into
-// something Gridwell-owned" is the safe assumption mid-load.
-func paneGridLineColor(p *pane.Pane, g *cache.Grid, gridOK bool) string {
-	if len(p.Path) == 0 && p.TextFocus == "" {
-		return colorGridLineRoot
-	}
-	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
-		return colorGridLineExit
-	}
+func paneGridLineColor(*pane.Pane, *cache.Grid, bool) string {
 	return colorGridLineInterior
 }
 
@@ -810,11 +799,15 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 }
 
 // bannerTextColor picks a banner-text color that echoes the tile's own
-// outline so the label and the border read as one. Outside-tiles
-// (anything red-bordered) win regardless of kind.
+// outline so the label and the border read as one. Shells are orange;
+// plugin (exit) wells and host content are brown; everything else follows
+// its kind color.
 func bannerTextColor(n *rpc.Tile, outside bool) string {
-	if outside || isExitWell(n) || n.Kind == rpc.KindShell {
-		return colorExitBorder
+	if n.Kind == rpc.KindShell {
+		return colorShellBorder
+	}
+	if outside || isExitWell(n) {
+		return colorPluginBorder
 	}
 	switch n.Kind {
 	case rpc.KindWell:
@@ -930,15 +923,15 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		c.Call("fillRect", x, y, w, h)
 		strokeTileBorder(c, x, y, w, h, colorURLLine, borderPx)
 	case rpc.KindShell:
-		c.Set("fillStyle", colorExitFill)
+		c.Set("fillStyle", colorShellFill)
 		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, colorExitBorder, borderPx)
+		strokeTileBorder(c, x, y, w, h, colorShellBorder, borderPx)
 	case rpc.KindText:
 		fill := colorMarkdownFill
 		line := colorMarkdownLine
 		if outside {
-			fill = colorExitFill
-			line = colorExitBorder
+			fill = colorPluginFill
+			line = colorPluginBorder
 		}
 		c.Set("fillStyle", fill)
 		c.Call("fillRect", x, y, w, h)
@@ -1011,6 +1004,7 @@ func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, 
 		DescentDepth: len(p.Path),
 		Focused:      focused,
 		URLLive:      urlLive,
+		IsLauncher:   isLauncherPane(p),
 	}
 	if p.TextFocus != "" && gridOK {
 		if tile, ok := g.Tiles[p.TextFocus]; ok {
@@ -1029,14 +1023,16 @@ func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, 
 var paneBorderColors = pane.BorderColors{
 	Focused:      colorFocusBorder,
 	FocusedFaded: colorFocusBorderFaded,
-	Root:         colorRootBorder,
+	Root:         colorPluginBorder,
 	Text:         colorMarkdownLine,
 	TextFaded:    colorMarkdownLineFaded,
 	URL:          colorURLLine,
 	URLFaded:     colorURLLineFaded,
 	URLLive:      colorURLLiveLine,
-	Exit:         colorExitBorder,
-	ExitFaded:    colorExitBorderFaded,
+	Shell:        colorShellBorder,
+	ShellFaded:   colorShellBorderFaded,
+	Exit:         colorPluginBorder,
+	ExitFaded:    colorPluginBorderFaded,
 }
 
 // The palette/identity glyphs all share one visual spec so the creation

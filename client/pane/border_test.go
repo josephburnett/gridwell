@@ -12,15 +12,28 @@ func testColors() BorderColors {
 		URL:          "URL",
 		URLFaded:     "URL_FADED",
 		URLLive:      "URL_LIVE",
+		Shell:        "SHELL",
+		ShellFaded:   "SHELL_FADED",
 		Exit:         "EXIT",
 		ExitFaded:    "EXIT_FADED",
 	}
 }
 
-func TestBorderColorRoot(t *testing.T) {
-	got := BorderColor(BorderInput{}, testColors())
-	if got != "ROOT" {
-		t.Errorf("root pane: got %q, want ROOT", got)
+func TestBorderColorLauncher(t *testing.T) {
+	// The gridless launcher home is the only place the brown Root shows.
+	if got := BorderColor(BorderInput{IsLauncher: true}, testColors()); got != "ROOT" {
+		t.Errorf("launcher: got %q, want ROOT", got)
+	}
+}
+
+func TestBorderColorPluginRootGridIsBlue(t *testing.T) {
+	// A pane at a plugin's root grid (no descent, not the launcher) is a
+	// grid like any other — blue, not brown.
+	if got := BorderColor(BorderInput{}, testColors()); got != "FOCUS_FADED" {
+		t.Errorf("plugin root grid + not focused: got %q, want FOCUS_FADED", got)
+	}
+	if got := BorderColor(BorderInput{Focused: true}, testColors()); got != "FOCUS" {
+		t.Errorf("plugin root grid + focused: got %q, want FOCUS", got)
 	}
 }
 
@@ -109,20 +122,37 @@ func TestBorderColorUnknownKindFallback(t *testing.T) {
 	}
 }
 
-func TestBorderColorSourceGrid(t *testing.T) {
-	// Descended into an fs / proc grid but not into a content tile:
-	// the pane border switches to the red Exit color, regardless of
-	// descent depth.
+func TestBorderColorSourceGridIsBlue(t *testing.T) {
+	// Viewing an fs / proc grid (not into a content tile) is still viewing a
+	// grid — blue like every other grid. (The read-only host *content* tiles
+	// inside it are brown; see TestBorderColorTextInSourceGridIsExit.)
 	in := BorderInput{
 		DescentDepth: 1,
 		InSourceGrid: true,
 	}
-	if got := BorderColor(in, testColors()); got != "EXIT_FADED" {
-		t.Errorf("source grid + not focused: got %q, want EXIT_FADED", got)
+	if got := BorderColor(in, testColors()); got != "FOCUS_FADED" {
+		t.Errorf("source grid + not focused: got %q, want FOCUS_FADED", got)
 	}
 	in.Focused = true
-	if got := BorderColor(in, testColors()); got != "EXIT" {
-		t.Errorf("source grid + focused: got %q, want EXIT", got)
+	if got := BorderColor(in, testColors()); got != "FOCUS" {
+		t.Errorf("source grid + focused: got %q, want FOCUS", got)
+	}
+}
+
+func TestBorderColorShellTile(t *testing.T) {
+	// Descent into a shell tile is orange — bash runs outside Gridwell.
+	in := BorderInput{
+		HasTextFocus: true,
+		DescentDepth: 1,
+		TileKnown:    true,
+		TileKind:     "shell",
+	}
+	if got := BorderColor(in, testColors()); got != "SHELL_FADED" {
+		t.Errorf("shell + not focused: got %q, want SHELL_FADED", got)
+	}
+	in.Focused = true
+	if got := BorderColor(in, testColors()); got != "SHELL" {
+		t.Errorf("shell + focused: got %q, want SHELL", got)
 	}
 }
 

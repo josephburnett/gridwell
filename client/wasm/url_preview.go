@@ -122,7 +122,7 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	a.cctx.Call("rect", x, y, w, h)
 	a.cctx.Call("clip")
 
-	a.cctx.Set("fillStyle", colorExitFill)
+	a.cctx.Set("fillStyle", colorShellFill)
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
@@ -134,8 +134,8 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	} else if !a.hasShellStream(p.ID) {
 		// No preview yet, no live stream — pre-refresh state. Show
 		// the shell glyph so the descent reads as a frozen shell
-		// rather than a blank red box.
-		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		// rather than a blank box.
+		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 	}
 
 	a.cctx.Call("restore")
@@ -143,18 +143,17 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 
 // drawShellTile renders a shell tile in the parent grid view. Same
 // pattern as drawURLTile: cached JPEG covers the cell when available,
-// otherwise a placeholder shows the cwd path on a dark fill. The
-// outline is the exit-red (shell tile lives in the red family — its
-// contents come from outside Gridwell). Reuses urlPreview as the JPEG
-// cache; the cache is keyed by tile id so URL and shell tiles can
-// share a single decode pool.
+// otherwise a placeholder shows the cwd path on a dark fill. The outline
+// is the shell orange — bash runs outside Gridwell's data world. Reuses
+// urlPreview as the JPEG cache; the cache is keyed by tile id so URL and
+// shell tiles can share a single decode pool.
 func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
 	a.cctx.Call("rect", x, y, w, h)
 	a.cctx.Call("clip")
 
-	a.cctx.Set("fillStyle", colorExitFill)
+	a.cctx.Set("fillStyle", colorShellFill)
 	a.cctx.Call("fillRect", x, y, w, h)
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
@@ -166,11 +165,11 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 	} else if w > 20 && h > 20 {
 		// No preview yet (palette drop never refreshed) — paint the
 		// shell glyph so the swatch reads as a shell rather than a
-		// blank red box.
-		drawShellGlyph(a.cctx, x, y, w, h, colorExitBorder)
+		// blank box.
+		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 	}
 
-	strokeTileBorder(a.cctx, x, y, w, h, colorExitBorder, tileBorderPx)
+	strokeTileBorder(a.cctx, x, y, w, h, colorShellBorder, tileBorderPx)
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}

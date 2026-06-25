@@ -205,7 +205,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	opts.Set("fontSize", 13)
 	opts.Set("convertEol", true)
 	opts.Set("cursorBlink", true)
-	// Dark theme tuned to colorExitFill / colorMarkdownBody.
+	// Dark theme tuned to the shell-fill / markdown-body backgrounds.
 	theme := js.Global().Get("Object").New()
 	theme.Set("background", "#0c0d11")
 	theme.Set("foreground", "#d8d9de")

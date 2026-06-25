@@ -105,7 +105,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 
 	outlineColor := colorMarkdownLine
 	if outside {
-		outlineColor = colorExitBorder
+		outlineColor = colorPluginBorder
 	}
 	if dashed {
 		setTileDash(a.cctx)
