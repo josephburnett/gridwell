@@ -619,33 +619,41 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// the just-after-swap live cell, making the path swap continuous.
 	ratio := zoomtrans.EffectiveViewZoom(n.ViewZoom, zoomtrans.DefaultWellViewZoom)
 	previewCell := parentCellSize * ratio
+	showPreview := haveChild && previewCell >= 0.5
 
-	a.cctx.Call("save")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("rect", x, y, w, h)
-	a.cctx.Call("clip")
+	if isExitWell(n) && !showPreview {
+		// A cross-plugin well with no preview loaded yet shows the plugin's
+		// identity glyph — the same drawing as its menu swatch and drag
+		// ghost, so it reads identically before, during, and after the drop.
+		a.drawPluginGlyph(a.pluginKind(n.ChildGridID), x, y, w, h)
+	} else {
+		a.cctx.Call("save")
+		a.cctx.Call("beginPath")
+		a.cctx.Call("rect", x, y, w, h)
+		a.cctx.Call("clip")
 
-	// Child grid lines inside the well, aligned so child cell (0, 0)
-	// lands at the well's center offset by the well's view region. This
-	// is exactly where the just-after-descent child viewport would put
-	// it, so the lines glide continuously across the path swap.
-	viewCenterX := float64(n.ViewX) + float64(n.W)/2
-	viewCenterY := float64(n.ViewY) + float64(n.H)/2
-	wellCenterX := x + w/2
-	wellCenterY := y + h/2
-	originX := wellCenterX - viewCenterX*previewCell
-	originY := wellCenterY - viewCenterY*previewCell
-	drawGridLinesIn(a.cctx, wellGridLineColor(n), x, y, w, h, previewCell, originX, originY)
+		// Child grid lines inside the well, aligned so child cell (0, 0)
+		// lands at the well's center offset by the well's view region. This
+		// is exactly where the just-after-descent child viewport would put
+		// it, so the lines glide continuously across the path swap.
+		viewCenterX := float64(n.ViewX) + float64(n.W)/2
+		viewCenterY := float64(n.ViewY) + float64(n.H)/2
+		wellCenterX := x + w/2
+		wellCenterY := y + h/2
+		originX := wellCenterX - viewCenterX*previewCell
+		originY := wellCenterY - viewCenterY*previewCell
+		drawGridLinesIn(a.cctx, wellGridLineColor(n), x, y, w, h, previewCell, originX, originY)
 
-	if haveChild && previewCell >= 0.5 {
-		var hide string
-		if a.hiddenPaneID == a.previewPaneID {
-			hide = a.hiddenTileID
+		if showPreview {
+			var hide string
+			if a.hiddenPaneID == a.previewPaneID {
+				hide = a.hiddenTileID
+			}
+			drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
+				wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
 		}
-		drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
-			wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
+		a.cctx.Call("restore")
 	}
-	a.cctx.Call("restore")
 
 	// Outline: blue for interior wells, red for exit-wells (whose child grid
 	// lives in another plugin). The child-grid uuid drives the color so the
@@ -668,13 +676,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
-// wellOutlineColor picks the well-tile outline color. Blue for interior wells
-// (Gridwell-owned), brown for exit-wells whose child grid lives in another
-// plugin (a host directory, the process table) — see isExitWell.
-func wellOutlineColor(n *rpc.Tile) string {
-	if isExitWell(n) {
-		return colorPluginBorder
-	}
+// wellOutlineColor picks the well-tile outline color: blue for every well,
+// interior or cross-plugin. A cross-plugin (exit) well is distinguished not by
+// hue but by a DASHED border (see isLinkTile / drawNodeWithPreview) — same
+// blue, dashed, signalling "a link you can unlink".
+func wellOutlineColor(*rpc.Tile) string {
 	return colorFocusBorder
 }
 
@@ -799,14 +805,18 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 }
 
 // bannerTextColor picks a banner-text color that echoes the tile's own
-// outline so the label and the border read as one. Shells are orange;
-// plugin (exit) wells and host content are brown; everything else follows
-// its kind color.
+// outline so the label and the border read as one. Shells are orange; a
+// cross-plugin (exit) well is blue like every well (it's dashed, not
+// recolored); read-only host content is brown; everything else follows its
+// kind color.
 func bannerTextColor(n *rpc.Tile, outside bool) string {
 	if n.Kind == rpc.KindShell {
 		return colorShellBorder
 	}
-	if outside || isExitWell(n) {
+	if isExitWell(n) {
+		return colorFocusBorder
+	}
+	if outside {
 		return colorPluginBorder
 	}
 	switch n.Kind {

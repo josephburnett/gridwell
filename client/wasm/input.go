@@ -1670,7 +1670,15 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 // carrying the plugin's label (the same as the mount well it will create).
 func paletteItemGhostNode(item paletteItem) rpc.Tile {
 	if item.isPlugin {
-		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1, AltText: item.plugin.Label}
+		// A plugin swatch is the exit-well it drops: child grid in the
+		// plugin's own id space makes isExitWell true, so it renders dashed
+		// (a cross-plugin link) and shows the plugin glyph, exactly as the
+		// menu / ghost / dropped tile.
+		return rpc.Tile{
+			Kind: rpc.KindWell, W: 1, H: 1,
+			AltText:     item.plugin.Label,
+			ChildGridID: item.plugin.RootGridID,
+		}
 	}
 	switch item.primitive {
 	case tplWell:

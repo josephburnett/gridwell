@@ -7,7 +7,6 @@ import (
 
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file holds the creation-palette: the screen-space layout adapters
@@ -137,15 +136,17 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
 	n := paletteItemGhostNode(item)
 	if item.isPlugin {
-		// Plugin swatch: a brown-bordered well (the plugin / exit identity),
-		// its kind glyph inset below the name banner, and the name banner
-		// itself (AltText = label) so the menu and launcher read "files" /
-		// "processes" / … at a glance.
+		// Plugin swatch == the linked well it drops into a grid: a blue,
+		// DASHED-bordered well (dashed = a cross-plugin link you can unlink),
+		// its kind glyph, and its name banner (AltText = the server.yaml
+		// label). Drawn identically here, as the drag ghost, and once dropped.
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", x, y, w, h)
-		strokeTileBorder(a.cctx, x, y, w, h, colorPluginBorder, tileBorderPx)
-		a.drawPluginGlyph(item.plugin, x, y, w, h)
-		a.drawTileBannerLabel(&n, x, y, w, h, true)
+		setTileDash(a.cctx)
+		strokeTileBorder(a.cctx, x, y, w, h, colorFocusBorder, tileBorderPx)
+		clearTileDash(a.cctx)
+		a.drawPluginGlyph(item.plugin.Kind, x, y, w, h)
+		a.drawTileBannerLabel(&n, x, y, w, h, false)
 	} else {
 		outside := tileOutside(&n, false)
 		drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
@@ -165,25 +166,21 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	}
 }
 
-// pluginGlyphTopInset reserves a strip at the top of a plugin swatch for its
-// name banner, so the glyph sits below the label instead of behind it.
-const pluginGlyphTopInset = 14
-
-// drawPluginGlyph overlays the identity glyph for a plugin swatch — all in the
-// plugin brown — chosen by the plugin's kind: a folder for fs, a process tree
-// for proc, a well for a localdb plugin, and a globe as the generic fallback
-// (e.g. ssh). The glyph is inset below the top name banner.
-func (a *App) drawPluginGlyph(pl rpc.PluginInfo, x, y, w, h float64) {
-	gy, gh := y+pluginGlyphTopInset, h-pluginGlyphTopInset
-	switch pl.Kind {
+// drawPluginGlyph overlays a plugin's identity glyph — all in the grid blue —
+// chosen by kind: a folder for fs, a process tree for proc, a well for a
+// localdb plugin, and a globe as the generic fallback (e.g. ssh). Full size
+// (glyphBox). One drawing shared by the menu swatch, the drag ghost, and a
+// cross-plugin well that has no preview yet, so all three read identically.
+func (a *App) drawPluginGlyph(kind string, x, y, w, h float64) {
+	switch kind {
 	case "fs":
-		drawFolderGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
+		drawFolderGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	case "proc":
-		drawProcessGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
+		drawProcessGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	case "localdb":
-		drawWellGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
+		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	default:
-		drawGlobeGlyph(a.cctx, x, gy, w, gh, colorPluginBorder)
+		drawGlobeGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	}
 }
 

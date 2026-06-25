@@ -52,3 +52,13 @@ func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 	}
 	return rpc.PluginInfo{}, false
 }
+
+// pluginKind returns the configured kind ("fs" / "proc" / "localdb" / …) of
+// the plugin owning the given qualified grid id, or "" if unknown. Drives the
+// identity glyph on a cross-plugin well that has no preview yet.
+func (a *App) pluginKind(gridID string) string {
+	if pl, ok := a.pluginByUUID(uuidOf(gridID)); ok {
+		return pl.Kind
+	}
+	return ""
+}

@@ -16,6 +16,10 @@ type Registry struct {
 	// kinds maps plugin UUID → kind ("fs", "proc", "localdb", …) so callers
 	// that need "the fs plugin" can resolve one by kind.
 	kinds map[string]string
+	// labels maps plugin UUID → the server.yaml display name. This is the
+	// authoritative label shown in the + menu and stamped on a mounted well,
+	// so the two always agree and never depend on a plugin-derived string.
+	labels map[string]string
 	// order is the registration (config) order of plugin UUIDs, so the launcher
 	// can present plugins exactly as configured.
 	order []string
@@ -28,8 +32,26 @@ func NewRegistry() *Registry {
 	return &Registry{
 		clients: make(map[string]gridwellv1.GridwellClient),
 		kinds:   make(map[string]string),
+		labels:  make(map[string]string),
 		closers: make(map[string]func()),
 	}
+}
+
+// SetLabel records the configured display name (server.yaml `name`) for a
+// plugin. Optional: an unset label falls back to the plugin's own Info /
+// kind in ListPlugins.
+func (r *Registry) SetLabel(id, label string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.labels[id] = label
+}
+
+// Label returns the configured display name for a plugin, or "" if none was
+// set.
+func (r *Registry) Label(id string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.labels[id]
 }
 
 // Register adds a plugin client for the given UUID and kind. closer, if

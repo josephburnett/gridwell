@@ -31,6 +31,7 @@ func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Reg
 			return nil, fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, err)
 		}
 		reg.Register(pc.ID, pc.Kind, client, closer)
+		reg.SetLabel(pc.ID, pc.Name)
 	}
 	return reg, nil
 }

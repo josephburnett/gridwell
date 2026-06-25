@@ -18,12 +18,12 @@ func glyphLineWidth(w, h float64) float64 {
 
 // glyphBox returns the centered square footprint (center + half-extent)
 // every glyph draws within, so they sit at a uniform size side by side.
-// half is ~34% of the smaller side — a touch smaller than the swatch so a
-// name banner across the top has room without covering the drawing (the
-// strokes stay thin via glyphLineWidth, so it still reads as a clean line
-// icon, not a cartoon).
+// half is ~38% of the smaller side, so a glyph mostly fills its tile — the
+// same proportion a tile renders at in the menu, as a drag ghost, and once
+// dropped on a grid ("things stay as you left them"). The strokes stay thin
+// via glyphLineWidth, so a big glyph still reads as a clean line icon.
 func glyphBox(x, y, w, h float64) (cx, cy, half float64) {
-	return x + w/2, y + h/2, math.Min(w, h) * 0.34
+	return x + w/2, y + h/2, math.Min(w, h) * 0.38
 }
 
 // beginGlyph sets the shared stroke/fill color and round line ends.

@@ -174,11 +174,16 @@ func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Reques
 func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
 	var out []*pb.PluginInfo
 	for _, p := range h.srv.pluginReg.Ordered() {
-		label := p.Kind
+		// The server.yaml display name is authoritative (the menu and a
+		// mounted well must agree). Fall back to the plugin's own Info name,
+		// then its kind, only when no name was configured.
+		label := h.srv.pluginReg.Label(p.UUID)
 		var rootGridID string
 		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
-			if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil && info.DisplayName != "" {
-				label = info.DisplayName
+			if label == "" {
+				if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil && info.DisplayName != "" {
+					label = info.DisplayName
+				}
 			}
 			// Attach with default config to learn the plugin's root grid id
 			// (fs uses its configured root, proc pid 1, localdb its root), so
@@ -187,6 +192,9 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 			if att, err := c.Attach(ctx, &pb.AttachRequest{Config: map[string]string{}}); err == nil && att.RootGridId != "" {
 				rootGridID = qualifyID(p.UUID, att.RootGridId)
 			}
+		}
+		if label == "" {
+			label = p.Kind
 		}
 		out = append(out, &pb.PluginInfo{
 			Uuid:       p.UUID,
@@ -277,6 +285,14 @@ func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.Moun
 	}
 	childGridID := qualifyID(m.PluginUuid, att.RootGridId)
 
+	// The mounted well's label is the server.yaml display name — exactly the
+	// label the + menu showed for this plugin — so menu and dropped tile
+	// agree. Fall back to the plugin's Attach label only when unconfigured.
+	label := h.srv.pluginReg.Label(m.PluginUuid)
+	if label == "" {
+		label = att.Label
+	}
+
 	dstClient, dstLocal, dstUUID, err := h.route(m.GridId)
 	if err != nil {
 		return nil, err
@@ -289,7 +305,7 @@ func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.Moun
 		W:           m.W,
 		H:           m.H,
 		ChildGridId: childGridID,
-		Label:       att.Label,
+		Label:       label,
 	})
 	return pluginTileResp(dstUUID, resp, err)
 }

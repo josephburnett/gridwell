@@ -141,3 +141,16 @@ func TestRegistry_Deregister(t *testing.T) {
 		t.Error("plugin still in registry after Deregister")
 	}
 }
+
+// TestRegistry_Label round-trips the configured display name and returns ""
+// for an unlabelled plugin (so callers fall back to Info / kind).
+func TestRegistry_Label(t *testing.T) {
+	reg := plugin.NewRegistry()
+	reg.SetLabel("p1", "files")
+	if got := reg.Label("p1"); got != "files" {
+		t.Errorf("Label(p1) = %q, want files", got)
+	}
+	if got := reg.Label("unset"); got != "" {
+		t.Errorf("Label(unset) = %q, want empty", got)
+	}
+}

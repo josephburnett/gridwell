@@ -54,6 +54,7 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	}
 	t.Cleanup(fsCloser)
 	reg.Register(fsPluginUUID, "fs", fsClient, nil)
+	reg.SetLabel(fsPluginUUID, "files")
 
 	procP, err := procplugin.Open(":memory:", t.TempDir(), nil)
 	if err != nil {
@@ -66,6 +67,7 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	}
 	t.Cleanup(procCloser)
 	reg.Register(procPluginUUID, "proc", procClient, nil)
+	reg.SetLabel(procPluginUUID, "processes")
 
 	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
@@ -135,6 +137,38 @@ func TestMountFsPlugin(t *testing.T) {
 	}
 	if !strings.HasPrefix(tile.ChildGridID, fsPluginUUID+"/") {
 		t.Errorf("child_grid_id = %q, want prefix %q/", tile.ChildGridID, fsPluginUUID)
+	}
+}
+
+// TestMenuAndMountLabelAgree: the label the + menu shows for a plugin
+// (ListPlugins) and the label stamped on the well it drops (Mount) are the
+// same server.yaml display name — never a plugin-derived string.
+func TestMenuAndMountLabelAgree(t *testing.T) {
+	cl, root, _ := newTestServerWithPlugins(t)
+	ctx := context.Background()
+
+	plugins, err := cl.ListPlugins(ctx)
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	var menuLabel string
+	for _, p := range plugins {
+		if p.UUID == fsPluginUUID {
+			menuLabel = p.Label
+		}
+	}
+	if menuLabel != "files" {
+		t.Fatalf("menu label = %q, want the configured %q", menuLabel, "files")
+	}
+
+	tile, err := cl.Mount(ctx, &rpc.MountRequest{
+		PluginUUID: fsPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("Mount fs: %v", err)
+	}
+	if tile.AltText != menuLabel {
+		t.Errorf("dropped well label = %q, want %q (must match the menu)", tile.AltText, menuLabel)
 	}
 }
 
