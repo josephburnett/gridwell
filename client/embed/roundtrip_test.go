@@ -54,6 +54,32 @@ func TestDropRoundTripsThroughParser(t *testing.T) {
 	}
 }
 
+// TestDropFromQualifiedTileResolvesBack is the regression test for the
+// "embed renders as an orange 'missing' square (and won't descend)" bug. A real
+// drop passes the source tile's QUALIFIED id ("uuid/42"); HrefForTile strips the
+// uuid for a human-readable link, so the client must re-qualify on read — with
+// the embedding doc's plugin uuid — to match the (qualified) tile-cache keys.
+// The other round-trip tests only ever used a bare id ("5"), so the uuid-strip
+// was a no-op and this strip-then-requalify gap was invisible; this exercises
+// the full chain from a qualified source.
+func TestDropFromQualifiedTileResolvesBack(t *testing.T) {
+	const anchor = "abc-uuid"
+	const src = anchor + "/42"
+	link := embed.Markdown(testOrigin, src, embed.DefaultAlt("text", src))
+
+	doc := "first line\n"
+	out := embed.Insert(doc, link, embed.LineEndOffset(doc, 0))
+
+	spans := linkSpans(markdown.Lower([]byte(out)))
+	if len(spans) == 0 {
+		t.Fatalf("no link span found after round-trip; src=%q", out)
+	}
+	if got := embed.ResolveEmbedTileID(anchor, spans[0].Href); got != src {
+		t.Errorf("qualified embed resolved to %q, want %q (href=%q)",
+			got, src, spans[0].Href)
+	}
+}
+
 // TestDropPreservesFollowingContent asserts the drop doesn't truncate
 // or duplicate the text that follows the insertion point.
 func TestDropPreservesFollowingContent(t *testing.T) {

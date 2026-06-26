@@ -476,3 +476,25 @@ func TestEmbedDescentAllowed(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveEmbedTileID(t *testing.T) {
+	cases := []struct {
+		name   string
+		anchor string
+		href   string
+		want   string
+	}{
+		{"bare leaf re-qualified with anchor", "uuid", "/42", "uuid/42"},
+		{"absolute url re-qualified", "uuid", "http://localhost:8080/42", "uuid/42"},
+		{"descent chain takes the leaf, re-qualified", "uuid", "/3/4/5", "uuid/5"},
+		{"no anchor leaves the bare leaf", "", "/42", "42"},
+		{"non-tile href resolves to empty", "uuid", "/blog/post", ""},
+		{"empty href resolves to empty", "uuid", "", ""},
+	}
+	for _, c := range cases {
+		if got := ResolveEmbedTileID(c.anchor, c.href); got != c.want {
+			t.Errorf("%s: ResolveEmbedTileID(%q, %q) = %q, want %q",
+				c.name, c.anchor, c.href, got, c.want)
+		}
+	}
+}

@@ -150,6 +150,26 @@ func LeafTileIDFromHref(href string) string {
 	return leaf
 }
 
+// ResolveEmbedTileID parses an embed href to its leaf tile id and re-qualifies
+// it with the embedding doc's plugin uuid (anchorUUID). It is the inverse of
+// HrefForTile: that function strips the uuid from a qualified id for a
+// human-readable link ("uuid/42" → "/42"), and this is the "client re-qualifies
+// on read" step its doc-comment promises — reconstructing the qualified id
+// ("uuid/42") that the client tile cache is keyed by.
+//
+// Returns "" when the href is not a tile link. When anchorUUID is empty (no
+// plugin context), the bare leaf is returned unchanged — a degraded lookup, but
+// never a panic. Same-plugin embeds (the common case: drag a tile into a doc in
+// the same grid) resolve exactly; a bare leaf can't carry a cross-plugin uuid,
+// which is the documented v1 limitation (see EmbedDescentAllowed).
+func ResolveEmbedTileID(anchorUUID, href string) string {
+	leaf := LeafTileIDFromHref(href)
+	if leaf == "" || anchorUUID == "" {
+		return leaf
+	}
+	return anchorUUID + "/" + leaf
+}
+
 // Markdown returns the markdown plain-link string for an embed pointing
 // at the given tile, anchored at `origin`. Inside Gridwell the
 // rendered-mode renderer intercepts hrefs whose path looks like a

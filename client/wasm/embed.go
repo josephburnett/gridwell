@@ -39,8 +39,12 @@ const (
 // makeEmbedDrawer returns an embedDrawer that renders into the named pane
 // and appends to a.embedHits.
 func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
+	anchor := ""
+	if p := a.tree.FindPane(paneID); p != nil {
+		anchor = uuidOf(a.gridIDForPane(p))
+	}
 	return func(x, y, w, h float64, href, alt string) {
-		tileID := embed.LeafTileIDFromHref(href)
+		tileID := embed.ResolveEmbedTileID(anchor, href)
 		var tile *rpc.Tile
 		if tileID != "" {
 			tile = a.findTileByID(tileID)
@@ -63,15 +67,18 @@ func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
 // live drawer, but skips hit-list registration. Clicking the parent text
 // tile's preview should descend INTO that tile, not into an embed target
 // — so the embed area doesn't need to be a separate click target here.
-func (a *App) makePreviewEmbedDrawer() embedDrawer {
+//
+// anchorUUID is the embedding doc's plugin uuid; the href stores a bare leaf
+// id (HrefForTile strips the uuid), so it's re-qualified here just as in the
+// live drawer — otherwise the lookup misses and every embed paints as the
+// "missing" placeholder.
+func (a *App) makePreviewEmbedDrawer(anchorUUID string) embedDrawer {
 	return func(x, y, w, h float64, href, alt string) {
-		tileID := embed.LeafTileIDFromHref(href)
+		tileID := embed.ResolveEmbedTileID(anchorUUID, href)
 		var tile *rpc.Tile
 		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
-		// No pane (containing-grid) context in the preview pass, so fall back
-		// to "is the embedded tile itself a cross-plugin link".
 		a.drawEmbedAt(x, y, w, h, tile, alt, tile != nil && isLinkTile(tile))
 	}
 }

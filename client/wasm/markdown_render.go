@@ -95,7 +95,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 			a.drawMarkdownInRect(string(body),
 				x-scrollX*scale, y-scrollY*scale,
 				fileNaturalContentPx*scale, h+scrollY*scale,
-				scale, mode, a.makePreviewEmbedDrawer())
+				scale, mode, a.makePreviewEmbedDrawer(uuidOf(n.GridID)))
 		}
 	} else {
 		a.tileBody(n) // warm the cache so the textarea has content when shown
