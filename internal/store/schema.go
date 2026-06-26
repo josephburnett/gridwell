@@ -82,15 +82,15 @@ CREATE TABLE IF NOT EXISTS blobs (
     -- cache key, so a recycled blob id could serve stale image bytes.
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     hash       TEXT NOT NULL UNIQUE,
-    size       INTEGER NOT NULL,
     data       BLOB NOT NULL,
     refcount   INTEGER NOT NULL DEFAULT 0,
-    -- Self-describing media: an IANA type ('text/markdown', 'image/jpeg')
-    -- so a blob is interpretable on its own, independent of the column that
-    -- points at it. created_at is first-seen time; blobs are immutable
-    -- (content-addressed), so there is no updated_at.
-    media_type TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL DEFAULT 0
+    -- Self-describing media: an IANA type ('text/markdown', 'image/jpeg') so a
+    -- blob is interpretable on its own, independent of the column that points
+    -- at it. Read back through GetBlob and returned over the wire by
+    -- GetTileContent, never hard-coded at the read site. Blobs are immutable
+    -- (content-addressed): size is recomputable from data and first-seen time
+    -- carries no meaning for dedup, so neither is stored.
+    media_type TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS tiles (

@@ -274,8 +274,8 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 //
 // mediaType is the IANA type stamped on a newly-created blob so it is
 // self-describing (see schema.go). An already-present blob (same hash) keeps
-// its original media_type and created_at — content-addressed blobs are
-// immutable, so the first writer's metadata stands.
+// its original media_type — content-addressed blobs are immutable, so the
+// first writer's metadata stands.
 //
 // nil is normalized to an empty (but non-nil) slice before binding:
 // database/sql maps nil-bytes to SQL NULL, which would trip the
@@ -291,8 +291,8 @@ func (s *Store) putBlob(ctx context.Context, tx *sql.Tx, hash string, data []byt
 	err := tx.QueryRowContext(ctx, `SELECT id FROM blobs WHERE hash = ?`, hash).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO blobs (hash, size, data, refcount, media_type, created_at) VALUES (?, ?, ?, 0, ?, ?)`,
-			hash, len(data), data, mediaType, s.now().Unix())
+			`INSERT INTO blobs (hash, data, refcount, media_type) VALUES (?, ?, 0, ?)`,
+			hash, data, mediaType)
 		if err != nil {
 			return 0, fmt.Errorf("insert blob: %w", err)
 		}

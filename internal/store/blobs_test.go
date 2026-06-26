@@ -35,20 +35,21 @@ func TestGetBlobReturnsBytes(t *testing.T) {
 	}
 }
 
-// blobMeta reads the self-describing columns for a blob row.
-func blobMeta(t *testing.T, s *Store, id int64) (mediaType string, createdAt int64) {
+// blobMedia reads back a blob's bytes and self-describing media type through
+// the public read path — the same route GetTileContent uses to report a type
+// instead of hard-coding one.
+func blobMedia(t *testing.T, s *Store, id int64) (data []byte, mediaType string) {
 	t.Helper()
-	if err := s.db.QueryRow(
-		`SELECT media_type, created_at FROM blobs WHERE id = ?`, id,
-	).Scan(&mediaType, &createdAt); err != nil {
-		t.Fatalf("read blob meta id=%d: %v", id, err)
+	data, mediaType, err := s.GetBlobWithMedia(context.Background(), id)
+	if err != nil {
+		t.Fatalf("read blob media id=%d: %v", id, err)
 	}
-	return mediaType, createdAt
+	return data, mediaType
 }
 
-// TestBlobSelfDescribing confirms text content blobs are stamped
-// text/markdown and frozen previews image/jpeg, both with a created_at, so a
-// blob is interpretable independent of the column that references it.
+// TestBlobSelfDescribing confirms text content blobs are stamped text/markdown
+// and frozen previews image/jpeg, read back through GetBlobWithMedia, so a blob
+// is interpretable independent of the column that references it.
 func TestBlobSelfDescribing(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -60,8 +61,8 @@ func TestBlobSelfDescribing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mt, ca := blobMeta(t, s, txt.BlobID); mt != mediaMarkdown || ca == 0 {
-		t.Errorf("text blob meta = (%q, %d), want (%q, >0)", mt, ca, mediaMarkdown)
+	if _, mt := blobMedia(t, s, txt.BlobID); mt != mediaMarkdown {
+		t.Errorf("text blob media = %q, want %q", mt, mediaMarkdown)
 	}
 
 	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
@@ -76,8 +77,8 @@ func TestBlobSelfDescribing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mt, ca := blobMeta(t, s, frozen.PreviewBlobID); mt != mediaJPEG || ca == 0 {
-		t.Errorf("preview blob meta = (%q, %d), want (%q, >0)", mt, ca, mediaJPEG)
+	if _, mt := blobMedia(t, s, frozen.PreviewBlobID); mt != mediaJPEG {
+		t.Errorf("preview blob media = %q, want %q", mt, mediaJPEG)
 	}
 }
 

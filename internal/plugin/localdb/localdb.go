@@ -116,11 +116,11 @@ func (p *Plugin) GetTileContent(ctx context.Context, req *gridwellv1.GetTileCont
 	if tile.BlobID == 0 {
 		return &gridwellv1.GetTileContentResponse{}, nil
 	}
-	data, err := p.st.GetBlob(ctx, tile.BlobID)
+	data, mediaType, err := p.st.GetBlobWithMedia(ctx, tile.BlobID)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: "text/markdown"}, nil
+	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: mediaType}, nil
 }
 
 // GetTile reads a single tile's metadata.

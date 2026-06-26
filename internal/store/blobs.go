@@ -18,15 +18,27 @@ const (
 
 // GetBlob returns the bytes of a blob.
 func (s *Store) GetBlob(ctx context.Context, blobID int64) ([]byte, error) {
-	var data []byte
+	data, _, err := s.GetBlobWithMedia(ctx, blobID)
+	return data, err
+}
+
+// GetBlobWithMedia returns a blob's bytes together with its self-describing
+// IANA media type (schema.go). The media type travels with the bytes so a
+// reader (GetTileContent over the wire) reports what the blob actually is
+// instead of hard-coding a type at the call site.
+func (s *Store) GetBlobWithMedia(ctx context.Context, blobID int64) ([]byte, string, error) {
+	var (
+		data      []byte
+		mediaType string
+	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT data FROM blobs WHERE id = ?`, blobID,
-	).Scan(&data)
+		`SELECT data, media_type FROM blobs WHERE id = ?`, blobID,
+	).Scan(&data, &mediaType)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, "", ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("load blob: %w", err)
+		return nil, "", fmt.Errorf("load blob: %w", err)
 	}
-	return data, nil
+	return data, mediaType, nil
 }
