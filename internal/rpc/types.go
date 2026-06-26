@@ -4,6 +4,8 @@
 // client uses the same encoding.
 package rpc
 
+import "strings"
+
 // Tile kinds. A tile is exactly one of these.
 //
 // The "interior" kinds — well, text, url — live inside Gridwell. file-well,
@@ -32,6 +34,58 @@ const (
 // validation, refcount holdings) and the client (drop-target resolution).
 func IsWellKind(kind string) bool {
 	return kind == KindWell
+}
+
+// The "<uuid>/<local>" shape is Gridwell's one cross-plugin id convention: a
+// plugin-scoped local id prefixed with the owning plugin's UUID. QualifyID and
+// UUIDOf are its only encode/decode points — shared by the server (id
+// qualification, routing.go) and the client (cache lookup, exit-well
+// classification) so the two can never disagree on the format.
+
+// QualifyID builds a qualified id "<uuid>/<local>" from its parts.
+func QualifyID(uuid, local string) string { return uuid + "/" + local }
+
+// UUIDOf returns the plugin-uuid segment of a qualified id ("<uuid>/<local>"),
+// or "" when the id has no "/" (a bare/unqualified id). Inverse of QualifyID on
+// the uuid segment.
+func UUIDOf(id string) string {
+	if i := strings.IndexByte(id, '/'); i >= 0 {
+		return id[:i]
+	}
+	return ""
+}
+
+// IsExitWell reports whether a well tile's child grid lives in a different
+// plugin than the well itself — descending it leaves the current plugin's id
+// space (a file/process/remote well, or a plugin mounted as a launcher tile).
+// Derived purely from the qualified ids: the well's own grid uuid versus its
+// child grid uuid.
+//
+// A non-well, or a well with no child grid, is never an exit well; nor is a
+// synthetic node with both grid ids empty (uuids equal). But a synthetic node
+// with an empty GridID and a qualified ChildGridID — exactly the shape the
+// launcher renders a plugin as (see PluginWellTile) — IS an exit well, because
+// "" != "<uuid>". That is what makes a launcher tile preview and descend into
+// the plugin's grid rather than draw as an inert interior well.
+func IsExitWell(t *Tile) bool {
+	return IsWellKind(t.Kind) && t.ChildGridID != "" &&
+		UUIDOf(t.ChildGridID) != UUIDOf(t.GridID)
+}
+
+// PluginWellTile builds the synthetic exit-well tile a plugin is rendered as
+// when it isn't sitting in a real grid: the drag ghost, the menu swatch, and
+// the launcher start-page tile (whose preview is the plugin's root grid). A 1×1
+// well whose child grid is the plugin's qualified RootGridID — so IsExitWell is
+// true (it has no owning grid uuid to match) and it previews / descends into
+// that grid. One definition so all three uses read identically.
+func PluginWellTile(pl PluginInfo) Tile {
+	return Tile{
+		Kind:        KindWell,
+		W:           1,
+		H:           1,
+		AltText:     pl.Label,
+		ChildGridID: pl.RootGridID,
+	}
 }
 
 // IsContentDescentKind reports whether a tile kind is a content tile you
@@ -220,10 +274,10 @@ type CreateURLRequest struct {
 type CreateShellRequest struct {
 	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
-	X      int64 `json:"x"`
-	Y      int64 `json:"y"`
-	W      int64 `json:"w"`
-	H      int64 `json:"h"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
 }
 
 // Mutations: Version is the claimed current version of TileID.
@@ -234,9 +288,9 @@ type MoveTileRequest struct {
 	TileID     string `json:"tile_id"`
 	Version    int64  `json:"version"`
 	DestGridID string `json:"dest_grid_id"`
-	DestPath   Path  `json:"dest_path"`
-	X          int64 `json:"x"`
-	Y          int64 `json:"y"`
+	DestPath   Path   `json:"dest_path"`
+	X          int64  `json:"x"`
+	Y          int64  `json:"y"`
 }
 
 type CloneTileRequest struct {
@@ -244,19 +298,19 @@ type CloneTileRequest struct {
 	TileID     string `json:"tile_id"`
 	Version    int64  `json:"version"`
 	DestGridID string `json:"dest_grid_id"`
-	DestPath   Path  `json:"dest_path"`
-	X          int64 `json:"x"`
-	Y          int64 `json:"y"`
+	DestPath   Path   `json:"dest_path"`
+	X          int64  `json:"x"`
+	Y          int64  `json:"y"`
 }
 
 type ResizeTileRequest struct {
 	Path    Path   `json:"path"`
 	TileID  string `json:"tile_id"`
-	Version int64 `json:"version"`
-	X       int64 `json:"x"`
-	Y       int64 `json:"y"`
-	W       int64 `json:"w"`
-	H       int64 `json:"h"`
+	Version int64  `json:"version"`
+	X       int64  `json:"x"`
+	Y       int64  `json:"y"`
+	W       int64  `json:"w"`
+	H       int64  `json:"h"`
 }
 
 type SetWellViewRequest struct {
@@ -333,7 +387,7 @@ type UpdateTextRequest struct {
 type DeleteTileRequest struct {
 	Path    Path   `json:"path"`
 	TileID  string `json:"tile_id"`
-	Version int64 `json:"version"`
+	Version int64  `json:"version"`
 }
 type DeleteTileResponse struct{}
 

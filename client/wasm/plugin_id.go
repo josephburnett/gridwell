@@ -3,29 +3,15 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// uuidOf returns the plugin-uuid segment of a qualified id ("<uuid>/<local>"),
-// or "" when the id has no "/" (a bare/unqualified id).
-func uuidOf(id string) string {
-	if i := strings.IndexByte(id, '/'); i >= 0 {
-		return id[:i]
-	}
-	return ""
-}
-
-// isExitWell reports whether a well tile's child grid lives in a different
-// plugin than the well itself — i.e. descending leaves the current plugin's
-// id space (a file or process well). Derived purely from the qualified ids:
-// the well's own grid uuid versus its child grid uuid. A synthetic tile with
-// empty grid/child ids is not an exit well.
-func isExitWell(n *rpc.Tile) bool {
-	return n.Kind == rpc.KindWell && n.ChildGridID != "" &&
-		uuidOf(n.ChildGridID) != uuidOf(n.GridID)
-}
+// uuidOf and isExitWell forward to the canonical rpc helpers: the
+// "<uuid>/<local>" id convention and its exit-well classification live once, in
+// internal/rpc (tested there). Kept as local names because the wasm renderer
+// reads them at many call sites.
+func uuidOf(id string) string     { return rpc.UUIDOf(id) }
+func isExitWell(n *rpc.Tile) bool { return rpc.IsExitWell(n) }
 
 // gridWritable reports whether the plugin owning gridID accepts new/edited
 // tiles (only localdb plugins do). Looked up by the grid's uuid against the

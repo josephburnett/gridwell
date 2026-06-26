@@ -33,3 +33,72 @@ func TestIsContentDescentKind(t *testing.T) {
 		}
 	}
 }
+
+func TestQualifyIDUUIDOfRoundTrip(t *testing.T) {
+	cases := []struct{ uuid, local string }{
+		{"abc-uuid", "42"},
+		{"u", "1"},
+	}
+	for _, c := range cases {
+		id := QualifyID(c.uuid, c.local)
+		if want := c.uuid + "/" + c.local; id != want {
+			t.Errorf("QualifyID(%q,%q) = %q, want %q", c.uuid, c.local, id, want)
+		}
+		if got := UUIDOf(id); got != c.uuid {
+			t.Errorf("UUIDOf(%q) = %q, want %q", id, got, c.uuid)
+		}
+	}
+	if got := UUIDOf("42"); got != "" {
+		t.Errorf("UUIDOf(bare) = %q, want \"\"", got)
+	}
+	if got := UUIDOf(""); got != "" {
+		t.Errorf("UUIDOf(empty) = %q, want \"\"", got)
+	}
+}
+
+func TestIsExitWell(t *testing.T) {
+	cases := []struct {
+		name string
+		tile Tile
+		want bool
+	}{
+		{"interior well (same plugin) is not an exit well",
+			Tile{Kind: KindWell, GridID: "u/1", ChildGridID: "u/2"}, false},
+		{"cross-plugin well is an exit well",
+			Tile{Kind: KindWell, GridID: "u/1", ChildGridID: "v/2"}, true},
+		{"non-well is never an exit well",
+			Tile{Kind: KindText, GridID: "u/1", ChildGridID: "v/2"}, false},
+		{"well with no child grid is not an exit well",
+			Tile{Kind: KindWell, GridID: "u/1"}, false},
+		{"synthetic node, both ids empty, is not an exit well",
+			Tile{Kind: KindWell}, false},
+		// The launcher's exact shape: no owning grid, qualified child grid.
+		{"synthetic launcher node (empty GridID, qualified ChildGridID) is an exit well",
+			Tile{Kind: KindWell, ChildGridID: "plugin-uuid/1"}, true},
+	}
+	for _, c := range cases {
+		if got := IsExitWell(&c.tile); got != c.want {
+			t.Errorf("%s: IsExitWell = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPluginWellTile(t *testing.T) {
+	pl := PluginInfo{Label: "files", RootGridID: "fs-uuid/1"}
+	got := PluginWellTile(pl)
+	// The load-bearing invariants the launcher preview depends on: the node is
+	// a well carrying the plugin's root grid as its child, which makes it an
+	// exit well (so drawNodeWithPreview fetches and previews that grid).
+	if !IsWellKind(got.Kind) {
+		t.Errorf("PluginWellTile kind = %q, want a well", got.Kind)
+	}
+	if got.ChildGridID != pl.RootGridID {
+		t.Errorf("PluginWellTile ChildGridID = %q, want %q", got.ChildGridID, pl.RootGridID)
+	}
+	if !IsExitWell(&got) {
+		t.Errorf("PluginWellTile is not an exit well; launcher would draw an inert interior well")
+	}
+	if got.AltText != pl.Label {
+		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
+	}
+}

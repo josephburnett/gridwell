@@ -1721,12 +1721,8 @@ func paletteItemGhostNode(item paletteItem) rpc.Tile {
 		// A plugin swatch is the exit-well it drops: child grid in the
 		// plugin's own id space makes isExitWell true, so it renders dashed
 		// (a cross-plugin link) and shows the plugin glyph, exactly as the
-		// menu / ghost / dropped tile.
-		return rpc.Tile{
-			Kind: rpc.KindWell, W: 1, H: 1,
-			AltText:     item.plugin.Label,
-			ChildGridID: item.plugin.RootGridID,
-		}
+		// menu / ghost / dropped tile / launcher preview.
+		return rpc.PluginWellTile(item.plugin)
 	}
 	switch item.primitive {
 	case tplWell:
