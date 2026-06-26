@@ -1,7 +1,8 @@
 import { BaseWindow, WebContentsView, session } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent } from './ipc';
-import { SESSION_PARTITION, roundBounds, boundsEqual } from './viewutil';
+import { SESSION_PARTITION, partitionFor, roundBounds, boundsEqual } from './viewutil';
+import { hydratePartition, dehydratePartition } from './session';
 import { captureJpegBase64 } from './capture';
 
 // urlViewPreload is the script injected into every live URL view; it forwards
@@ -19,6 +20,13 @@ interface Entry {
   objectId: string;
   bounds: Bounds;
   hidden: boolean;
+  // partition is the Electron session partition this view is bound to — the
+  // owning plugin's (persist:plugin-<uuid>). A pane re-targeted at a tile in a
+  // different plugin must tear down rather than cross sessions.
+  partition: string;
+  // pluginUuid owns the tile (the session boundary); used to dehydrate the
+  // session back to the plugin DB on ascent.
+  pluginUuid: string;
 }
 
 // CONTROL_SIZE / CONTROL_MARGIN place the corner button at the bottom-right
@@ -76,10 +84,15 @@ export interface RegistryCallbacks {
 export class WebviewRegistry {
   private readonly win: BaseWindow;
   private readonly cb: RegistryCallbacks;
+  private readonly origin: string;
   private readonly entries = new Map<string, Entry>();
+  // hydrated tracks which per-plugin partitions have had their session pulled
+  // down from the plugin DB this run, so we hydrate each at most once.
+  private readonly hydrated = new Set<string>();
 
-  constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
+  constructor(win: BaseWindow, origin: string, cb: RegistryCallbacks = {}) {
     this.win = win;
+    this.origin = origin;
     this.cb = cb;
   }
 
@@ -108,21 +121,30 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds): void {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string): Promise<void> {
     const rounded = roundBounds(bounds);
+    const partition = partitionFor(pluginUuid);
     let e = this.entries.get(paneId);
 
-    if (e && e.objectId !== objectId) {
-      // Different tile in the same pane — tear the old view down first so
-      // we don't leak a view or cross sessions.
+    if (e && (e.objectId !== objectId || e.partition !== partition)) {
+      // Different tile (or a tile in a different plugin → different session) in
+      // the same pane — tear the old view down first so we don't leak a view or
+      // cross sessions.
       this.remove(paneId).catch(() => {});
       e = undefined;
+    }
+
+    // Pull the plugin's session down into its partition before the first view
+    // for it loads, so url tiles open already logged in. Once per partition.
+    if (pluginUuid && !this.hydrated.has(partition)) {
+      this.hydrated.add(partition);
+      await hydratePartition(this.origin, pluginUuid);
     }
 
     if (!e) {
       const view = new WebContentsView({
         webPreferences: {
-          partition: SESSION_PARTITION,
+          partition,
           contextIsolation: true,
           nodeIntegration: false,
           // Forwards a right-button press to main → renderer so pane gestures
@@ -156,7 +178,7 @@ export class WebviewRegistry {
           event.preventDefault();
         }
       });
-      e = { view, control, tileId, objectId, bounds: rounded, hidden: false };
+      e = { view, control, tileId, objectId, bounds: rounded, hidden: false, partition, pluginUuid };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(rounded);
@@ -260,6 +282,9 @@ export class WebviewRegistry {
       // survive ascend → descend → go-live. Cheap and best-effort; the session
       // outlives the view, so the write lands even though the view goes away.
       e.view.webContents.session.flushStorageData();
+      // Capture the plugin's session back to its DB (the system of record) on
+      // ascent — fire-and-forget so teardown isn't blocked on the network.
+      void dehydratePartition(this.origin, e.pluginUuid);
       jpegBase64 = await captureJpegBase64(e.view);
     } catch {
       // Best-effort: a crashed/destroyed view yields an empty freeze.

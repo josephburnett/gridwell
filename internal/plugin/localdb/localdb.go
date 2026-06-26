@@ -314,6 +314,49 @@ func (p *Plugin) captureShellTitle(tileID string) {
 	_ = p.st.SetTileAlt(context.Background(), id, cmd)
 }
 
+// sessionChunkSize bounds each streamed session fragment.
+const sessionChunkSize = 64 * 1024
+
+// GetSession streams this DB's Chromium session blob down (cookies + web
+// storage). The plugin is the session boundary: one session per DB, shared by
+// all its url tiles. Empty when none has been captured yet.
+func (p *Plugin) GetSession(_ *gridwellv1.GetSessionRequest, stream grpc.ServerStreamingServer[gridwellv1.BlobChunk]) error {
+	data, err := p.st.GetSession(stream.Context())
+	if err != nil {
+		return errToStatus(err)
+	}
+	for off := 0; off < len(data); off += sessionChunkSize {
+		end := off + sessionChunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+		if err := stream.Send(&gridwellv1.BlobChunk{Data: data[off:end]}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// PutSession stores a session blob streamed up (checkout/checkin, last-writer-
+// wins). The first message's root_grid_id binds the stream; for localdb the
+// session is the DB's singleton, so it is advisory.
+func (p *Plugin) PutSession(stream grpc.ClientStreamingServer[gridwellv1.PutSessionRequest, gridwellv1.PutSessionResponse]) error {
+	var buf []byte
+	for {
+		msg, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			if err := p.st.PutSession(stream.Context(), buf); err != nil {
+				return errToStatus(err)
+			}
+			return stream.SendAndClose(&gridwellv1.PutSessionResponse{})
+		}
+		if err != nil {
+			return err
+		}
+		buf = append(buf, msg.Data...)
+	}
+}
+
 func (p *Plugin) UpdateText(ctx context.Context, req *gridwellv1.UpdateTextRequest) (*gridwellv1.TileResponse, error) {
 	return tileResp(p.st.UpdateText(ctx, rpc.UpdateTextFromProto(req)))
 }

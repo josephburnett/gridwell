@@ -1,17 +1,18 @@
 import type { Bounds } from './ipc';
 
-// SESSION_PARTITION is the single Electron session partition shared by ALL
-// live URL tiles. Tiles behave like browser tabs: one cookie jar and one
-// DOM-storage (localStorage) area for every tile, so a login — or an
-// autosaved, unsubmitted comment draft — made in one tile is visible in
-// every other tile and survives freeze/live cycles. The `persist:` prefix
-// makes it durable on disk, so it also survives app restarts.
-//
-// This is a deliberate change from the older per-tile partition
-// (`persist:tile-<objectId>`): the user wants shared sign-in across tiles,
-// not isolation. There is one owner of the partition name (here) so the
-// flush/clear helpers can't drift out of sync with the view creator.
+// SESSION_PARTITION is the fallback Electron partition for url tiles with no
+// owning plugin (a bare id). The real session boundary is per-plugin —
+// partitionFor(pluginUuid) — so each plugin's url tiles share one durable
+// cookie jar / DOM-storage area (logins, drafts) isolated from other plugins.
+// The `persist:` prefix makes it durable on disk across app restarts.
 export const SESSION_PARTITION = 'persist:gridwell';
+
+// partitionFor returns the durable partition for a plugin's session: each
+// plugin uuid gets its own (persist:plugin-<uuid>). The plugin is the session
+// boundary. An empty uuid falls back to the shared partition.
+export function partitionFor(pluginUuid: string): string {
+  return pluginUuid ? `persist:plugin-${pluginUuid}` : SESSION_PARTITION;
+}
 
 // roundBounds snaps a CSS-pixel rect to integer DIP for setBounds, clamping
 // width/height to a 1px floor so a collapsed pane never asks for a 0-sized

@@ -44,6 +44,17 @@ CREATE TABLE IF NOT EXISTS system (
 -- Keys: root_grid_id, root_view_cx, root_view_cy, root_zoom.
 `
 
+// sessionDDL is the singleton Chromium-session blob for this DB — the plugin is
+// the session boundary, so a DB carries exactly one session (cookies + web
+// storage), moved over the wire by GetSession/PutSession. Storage-only (not a
+// wire record), so it is invisible to the proto/DDL drift lint.
+const sessionDDL = `
+CREATE TABLE IF NOT EXISTS session (
+    id   INTEGER PRIMARY KEY CHECK (id = 1),
+    data BLOB NOT NULL
+);
+`
+
 // tablesDDL returns the grids/tiles/blobs DDL for the main database.
 func tablesDDL() string { return tablesTemplate }
 

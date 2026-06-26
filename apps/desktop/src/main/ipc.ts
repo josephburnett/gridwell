@@ -75,11 +75,14 @@ export interface PlaceArgs {
   tileId: number;
   // objectId identifies which tile a pane is showing, so a pane reused for a
   // different tile tears its old view down instead of just re-navigating.
-  // Session state is NOT keyed by it: all tiles share one persistent session
-  // (see SESSION_PARTITION) so logins/drafts are shared like browser tabs.
   objectId: string;
   url: string;
   bounds: Bounds;
+  // pluginUuid is the uuid of the plugin that owns the tile — the session
+  // boundary. It selects the Electron partition (persist:plugin-<uuid>) so url
+  // tiles in different plugins get isolated cookie jars / web storage. Empty
+  // falls back to the shared partition.
+  pluginUuid: string;
 }
 
 export interface SetBoundsArgs {

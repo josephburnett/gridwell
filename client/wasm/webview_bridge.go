@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/base64"
+	"strings"
 	"syscall/js"
 )
 
@@ -46,9 +47,10 @@ func (b viewBounds) toJS() js.Value {
 	return o
 }
 
-// bridgePlace asks main to create/attach a WebContentsView for paneID
-// showing url on the tile's persistent session partition, at bounds.
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds) {
+// bridgePlace asks main to create/attach a WebContentsView for paneID showing
+// url at bounds, bound to the owning plugin's session partition (pluginUUID is
+// the session boundary).
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -59,7 +61,17 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("objectId", objectID)
 	args.Set("url", url)
 	args.Set("bounds", b.toJS())
+	args.Set("pluginUuid", pluginUUID)
 	g.Call("placeWebview", args)
+}
+
+// pluginUUIDOf returns the owning plugin's uuid for a qualified tile id
+// ("<uuid>/<local>"), or "" if the id is bare.
+func pluginUUIDOf(qualifiedTileID string) string {
+	if i := strings.IndexByte(qualifiedTileID, '/'); i > 0 {
+		return qualifiedTileID[:i]
+	}
+	return ""
 }
 
 // bridgeSetBounds repositions/resizes the view for paneID.

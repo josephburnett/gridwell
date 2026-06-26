@@ -56,8 +56,8 @@ export function registerWebviewIpc(
     rootWC.send(EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
-  ipcMain.handle(CH.place, (_e, a: PlaceArgs): void => {
-    registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds);
+  ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
+    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid);
   });
 
   ipcMain.handle(CH.setBounds, (_e, a: SetBoundsArgs): void => {

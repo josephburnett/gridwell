@@ -33,7 +33,7 @@ async function boot(): Promise<void> {
   }
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;
-  const reg = new WebviewRegistry(win, { onNav: makeNavForwarder(rootWC) });
+  const reg = new WebviewRegistry(win, sidecar.origin, { onNav: makeNavForwarder(rootWC) });
   registry = reg;
   registerWebviewIpc(reg, rootWC, win);
 

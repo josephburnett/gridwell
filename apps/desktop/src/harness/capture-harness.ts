@@ -37,9 +37,9 @@ async function waitForNonEmptyCapture(
 app.whenReady().then(async () => {
   const navEvents: NavEvent[] = [];
   const win = new BaseWindow({ width: 800, height: 600, show: true });
-  const registry = new WebviewRegistry(win, { onNav: (ev) => navEvents.push(ev) });
+  const registry = new WebviewRegistry(win, '', { onNav: (ev) => navEvents.push(ev) });
 
-  registry.place('pane1', 42, 'obj-harness', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
+  registry.place('pane1', 42, 'obj-harness', DATA_URL, { x: 0, y: 0, width: 800, height: 600 }, '');
 
   const jpeg = await waitForNonEmptyCapture(registry, 'pane1', 6000);
   if (jpeg.length === 0) fail('capturePage produced no frame within 6s');

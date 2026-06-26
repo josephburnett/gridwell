@@ -78,6 +78,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if _, err := db.Exec(sessionDDL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply session schema: %w", err)
+	}
 	s := &Store{
 		db:    db,
 		now:   time.Now,
