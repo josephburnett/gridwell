@@ -101,11 +101,21 @@ filesystem plugin maps paths → integers; a proc plugin maps PIDs → integers;
 a localdb plugin *is* its DB. There is no separate ephemeral cache: plugin
 storage is the authoritative state for the plugin's tiles.
 
-**The SSH gateway is transparent.** When an SSH connection is established the
-local server calls `Info()` on the remote and adds its plugin UUIDs to the
-local routing table. Remote plugin ids appear directly in paths —
-`local_main_uuid/12/remote_main_uuid/45/remote_fs_uuid/7` — so a URL from the
-remote server works as-is locally when the connection is active.
+**Remote is just a transport.** The `ssh` plugin (a go-plugin binary like any
+other) dials a remote host over SSH, tunnels to that host's Gridwell gRPC
+endpoint, and serves a **transparent proxy** (`internal/plugin/proxy`) that
+forwards the *entire* service — unary calls, the `OpenShell` PTY stream, and the
+session blob — to the remote node with full fidelity. So a remote plugin's
+wells, tiles, live shells, and session reach the local server over the same
+interface as a local plugin; "remote" adds nothing to the vocabulary.
+
+Mounted under its own uuid, the ssh plugin projects one remote node as one
+namespace. The fuller *transparent federation* — the local server calling
+`ListPlugins` on the remote and surfacing each remote plugin's uuid directly in
+local paths (`local_main/12/remote_main/45/remote_fs/7`), plus a SOCKS endpoint
+(`NetworkContext.proxy`) so a remote url tile renders locally over the remote's
+network — builds on this proxy and the per-plugin session boundary; it is the
+remaining productionization.
 
 **URL and path format.** The descent path (the stack of tiles you descended
 through) is encoded as alternating plugin-uuid / tile-id segments, with the

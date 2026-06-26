@@ -4,6 +4,7 @@ BIN := ./gridwell
 FS_BIN := ./gridwell-fs
 PROC_BIN := ./gridwell-proc
 LOCALDB_BIN := ./gridwell-localdb
+SSH_BIN := ./gridwell-ssh
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -39,6 +40,7 @@ plugins:
 	CGO_ENABLED=0 go build -o $(LOCALDB_BIN) ./cmd/plugin/localdb
 	CGO_ENABLED=0 go build -o $(FS_BIN) ./cmd/plugin/fs
 	CGO_ENABLED=0 go build -o $(PROC_BIN) ./cmd/plugin/proc
+	CGO_ENABLED=0 go build -o $(SSH_BIN) ./cmd/plugin/ssh
 
 wasm: $(WASM_EXEC)
 	mkdir -p web
@@ -130,5 +132,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(LOCALDB_BIN) $(FS_BIN) $(PROC_BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(LOCALDB_BIN) $(FS_BIN) $(PROC_BIN) $(SSH_BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out

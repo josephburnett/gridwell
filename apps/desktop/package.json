@@ -54,6 +54,10 @@
         "to": "gridwell-proc"
       },
       {
+        "from": "../../gridwell-ssh",
+        "to": "gridwell-ssh"
+      },
+      {
         "from": "../../web",
         "to": "web"
       }

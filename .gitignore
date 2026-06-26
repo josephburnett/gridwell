@@ -2,6 +2,7 @@
 /gridwell-localdb
 /gridwell-fs
 /gridwell-proc
+/gridwell-ssh
 /web/gridwell.wasm
 /web/wasm_exec.js
 *.db
