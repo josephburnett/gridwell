@@ -155,6 +155,12 @@ func (s *Store) RootGridID(ctx context.Context) (string, error) {
 	return strconv.FormatInt(id, 10), nil
 }
 
+// SchemaVersion returns the on-disk schema generation this binary materializes
+// (stamped into the SQLite header as user_version). Exposed so the plugin's
+// Info handshake reports the real version instead of a hard-coded literal that
+// could silently drift from the stored one.
+func (s *Store) SchemaVersion() int { return schemaVersion }
+
 // PluginUUID returns the stable UUID that identifies this store as a plugin.
 // Generated once on first bootstrap; stable across restarts.
 func (s *Store) PluginUUID(ctx context.Context) (string, error) {

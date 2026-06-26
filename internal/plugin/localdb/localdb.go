@@ -69,7 +69,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	return &gridwellv1.InfoResponse{
 		Kind:          "localdb",
 		DisplayName:   "local",
-		SchemaVersion: 1,
+		SchemaVersion: int64(p.st.SchemaVersion()),
 		RootGridId:    id,
 		HasSession:    true,
 	}, nil
