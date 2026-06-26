@@ -88,7 +88,11 @@ func bridgeSetBounds(paneID string, b viewBounds) {
 
 // bridgeSetHidden parks/unparks the view so canvas overlays (palette, drag
 // ghosts, modals) can paint where the native view would otherwise occlude.
-func bridgeSetHidden(paneID string, hidden bool) {
+// focused additionally drives the corner control's visibility: only the
+// focused pane shows its back/ascend circle, so the menu handle is on exactly
+// one pane at a time (the native control can't honor the canvas focused-only
+// rule, since it paints above the canvas).
+func bridgeSetHidden(paneID string, hidden, focused bool) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -96,6 +100,7 @@ func bridgeSetHidden(paneID string, hidden bool) {
 	args := js.Global().Get("Object").New()
 	args.Set("paneId", paneID)
 	args.Set("hidden", hidden)
+	args.Set("focused", focused)
 	g.Call("setHidden", args)
 }
 

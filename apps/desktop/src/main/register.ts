@@ -65,7 +65,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.setHidden, (_e, a: SetHiddenArgs): void => {
-    registry.setHidden(a.paneId, a.hidden);
+    registry.setHidden(a.paneId, a.hidden, a.focused);
   });
 
   ipcMain.handle(CH.remove, async (_e, a: RemoveArgs): Promise<FreezeResult> => {

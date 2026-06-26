@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SESSION_PARTITION, roundBounds, boundsEqual } from './viewutil';
+import { SESSION_PARTITION, roundBounds, boundsEqual, controlVisible } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
   // `persist:` prefix → durable on disk (logins/storage survive restarts).
@@ -29,4 +29,13 @@ test('boundsEqual compares all four fields', () => {
   assert.ok(boundsEqual(a, { ...a }));
   assert.ok(!boundsEqual(a, { ...a, x: 9 }));
   assert.ok(!boundsEqual(a, { ...a, height: 9 }));
+});
+
+test('controlVisible shows the corner circle only on the focused, unparked pane', () => {
+  // The whole point of the bug fix: exactly one pane (the focused one) shows
+  // its corner control at a time.
+  assert.ok(controlVisible(false, true)); // focused, not parked → visible
+  assert.ok(!controlVisible(false, false)); // unfocused → hidden (the bug)
+  assert.ok(!controlVisible(true, true)); // focused but parked for a gesture → hidden
+  assert.ok(!controlVisible(true, false)); // unfocused and parked → hidden
 });

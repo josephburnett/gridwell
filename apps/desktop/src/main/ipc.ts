@@ -93,6 +93,11 @@ export interface SetBoundsArgs {
 export interface SetHiddenArgs {
   paneId: string;
   hidden: boolean;
+  // focused is whether this pane is the focused pane. Drives the corner
+  // control's visibility independently of `hidden`: an unfocused live pane
+  // keeps its web content on screen but hides its corner circle, so exactly
+  // one pane shows the control at a time (see webviews.ts controlVisible).
+  focused: boolean;
 }
 
 export interface RemoveArgs {

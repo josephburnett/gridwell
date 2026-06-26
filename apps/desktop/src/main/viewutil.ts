@@ -31,3 +31,14 @@ export function roundBounds(b: Bounds): Bounds {
 export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
+
+// controlVisible decides whether a live URL view's corner control (the
+// back/ascend circle) should be on screen. The control is the one piece of
+// pane chrome that a focused pane shows and an unfocused pane must not — it
+// mirrors the canvas rule "per-pane controls belong to the active pane only"
+// (render.go drawPane), which a canvas-drawn circle can't enforce here because
+// the native view paints on top of the canvas. So: visible only on the focused
+// pane, and never while the whole view is parked for a gesture (hidden).
+export function controlVisible(hidden: boolean, focused: boolean): boolean {
+  return !hidden && focused;
+}

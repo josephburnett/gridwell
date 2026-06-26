@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, session } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent } from './ipc';
-import { SESSION_PARTITION, partitionFor, roundBounds, boundsEqual } from './viewutil';
+import { SESSION_PARTITION, partitionFor, roundBounds, boundsEqual, controlVisible } from './viewutil';
 import { hydratePartition, dehydratePartition } from './session';
 import { captureJpegBase64 } from './capture';
 
@@ -20,6 +20,11 @@ interface Entry {
   objectId: string;
   bounds: Bounds;
   hidden: boolean;
+  // focused is whether this pane is the focused pane. The corner control shows
+  // only on the focused pane (controlVisible) — unfocused live panes keep their
+  // content but drop the circle, so the menu/ascend handle is on exactly one
+  // pane at a time.
+  focused: boolean;
   // partition is the Electron session partition this view is bound to — the
   // owning plugin's (persist:plugin-<uuid>). A pane re-targeted at a tile in a
   // different plugin must tear down rather than cross sessions.
@@ -178,13 +183,16 @@ export class WebviewRegistry {
           event.preventDefault();
         }
       });
-      e = { view, control, tileId, objectId, bounds: rounded, hidden: false, partition, pluginUuid };
+      // focused starts true: a pane only goes live by an action on the focused
+      // pane, so the control should appear immediately; syncURLViews corrects
+      // it on the next frame if focus has already moved.
+      e = { view, control, tileId, objectId, bounds: rounded, hidden: false, focused: true, partition, pluginUuid };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(rounded);
       this.win.contentView.addChildView(control);
       control.setBackgroundColor('#00000000');
-      control.setBounds(roundBounds(controlBounds(rounded)));
+      this.applyControlBounds(e);
       void control.webContents.loadURL(CONTROL_HTML);
       this.wireNav(paneId, e);
       this.applyMinWidthZoom(e);
@@ -197,7 +205,7 @@ export class WebviewRegistry {
     if (!boundsEqual(e.bounds, rounded)) {
       e.bounds = rounded;
       e.view.setBounds(rounded);
-      e.control.setBounds(roundBounds(controlBounds(rounded)));
+      this.applyControlBounds(e);
     }
     const current = e.view.webContents.getURL();
     if (current !== url && url) {
@@ -213,9 +221,21 @@ export class WebviewRegistry {
     e.bounds = rounded;
     if (!e.hidden) {
       e.view.setBounds(rounded);
-      e.control.setBounds(roundBounds(controlBounds(rounded)));
+      this.applyControlBounds(e);
     }
     this.applyMinWidthZoom(e);
+  }
+
+  // applyControlBounds places the corner control at the view's bottom-right, or
+  // parks it off-screen when it shouldn't show (unfocused pane, or the whole
+  // view parked for a gesture). One source of truth so the control's on-screen
+  // state can't drift from controlVisible.
+  private applyControlBounds(e: Entry): void {
+    if (controlVisible(e.hidden, e.focused)) {
+      e.control.setBounds(roundBounds(controlBounds(e.bounds)));
+    } else {
+      e.control.setBounds({ ...OFFSCREEN, width: CONTROL_SIZE, height: CONTROL_SIZE });
+    }
   }
 
   // controlPaneFor resolves a control view's webContents id back to its pane,
@@ -244,21 +264,27 @@ export class WebviewRegistry {
     }
   }
 
-  // setHidden hides/shows the view without destroying it. Used during drag
+  // setHidden hides/shows the view without destroying it, and tracks whether
+  // the pane is focused. `hidden` parks the whole view off-screen during drag
   // gestures and modals so canvas-drawn overlays (palette, ghosts) can paint
-  // where the native view would otherwise sit on top. Hiding parks the view
-  // off-screen (a portable stand-in for visibility toggling).
-  setHidden(paneId: string, hidden: boolean): void {
+  // where the native view would otherwise sit on top. `focused` drives only the
+  // corner control: an unfocused live pane keeps its content on screen but
+  // hides its circle, so exactly one pane shows the control at a time. Called
+  // every frame from syncURLViews, so it no-ops when nothing changed.
+  setHidden(paneId: string, hidden: boolean, focused: boolean): void {
     const e = this.entries.get(paneId);
-    if (!e || e.hidden === hidden) return;
+    if (!e || (e.hidden === hidden && e.focused === focused)) return;
+    const viewChanged = e.hidden !== hidden;
     e.hidden = hidden;
-    if (hidden) {
-      e.view.setBounds({ ...OFFSCREEN, width: e.bounds.width, height: e.bounds.height });
-      e.control.setBounds({ ...OFFSCREEN, width: CONTROL_SIZE, height: CONTROL_SIZE });
-    } else {
-      e.view.setBounds(e.bounds);
-      e.control.setBounds(roundBounds(controlBounds(e.bounds)));
+    e.focused = focused;
+    if (viewChanged) {
+      if (hidden) {
+        e.view.setBounds({ ...OFFSCREEN, width: e.bounds.width, height: e.bounds.height });
+      } else {
+        e.view.setBounds(e.bounds);
+      }
     }
+    this.applyControlBounds(e);
   }
 
   // remove captures a final frame + the page's URL/title, detaches and

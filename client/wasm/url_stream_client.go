@@ -170,13 +170,15 @@ func (a *App) syncURLViews() {
 	for paneID, v := range a.urlStreams {
 		r, ok := rects[paneID]
 		if !ok {
-			bridgeSetHidden(paneID, true)
+			bridgeSetHidden(paneID, true, false)
 			continue
 		}
 		b := contentViewBounds(r)
 		v.bounds = b
 		bridgeSetBounds(paneID, b)
-		bridgeSetHidden(paneID, hidden)
+		// The corner control belongs to the focused pane only — same rule the
+		// canvas applies to every other per-pane control (render.go drawPane).
+		bridgeSetHidden(paneID, hidden, paneID == a.tree.Focus)
 	}
 }
 
