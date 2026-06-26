@@ -1045,22 +1045,31 @@ func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo, cell palette.Rect) {
 		Path: slices.Clone(p.Path),
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
-	w := zoomtrans.Well{
-		ID: "portal",
-		X:  int64(math.Round(cell.X)), Y: int64(math.Round(cell.Y)),
-		W: int64(max(1.0, math.Round(cell.W))), H: int64(max(1.0, math.Round(cell.H))),
-	}
+	w := zoomtrans.PortalWell(cell.X, cell.Y, cell.W, cell.H)
 	a.installDescent(p, r, from, w, pl.RootGridID, pl.RootGridID,
 		cell.X+cell.W/2, cell.Y+cell.H/2)
 }
 
-// ascendPortal pops the most recent + menu entry frame, returning the pane to
-// wherever it jumped into the current plugin from (another plugin, or the
-// launcher), and reopens the + menu if it was open when the user entered.
-// Instant: the jump crosses plugin id spaces with no well tile to zoom out of.
+// ascendPortal returns the pane to wherever it jumped into the current plugin
+// from (another plugin, or the launcher), reopening the + menu if it was open
+// when the user entered.
+//
+// Returning to the launcher animates a symmetric zoom-out — the exact inverse
+// of enterPlugin's zoom-in, landing back on the plugin's launcher tile (now a
+// live grid preview). Returning to another plugin's grid via an in-grid + menu
+// portal stays an instant cut: that entry footprint isn't reconstructed here.
 func (a *App) ascendPortal(p *pane.Pane) {
 	f, ok := p.TopFrame()
-	if !ok || !p.PopFrame() {
+	if !ok {
+		return
+	}
+	// Animate only the launcher return: the frame has no plugin anchor and the
+	// launcher tile we entered from is resolvable from the current anchor.
+	if idx := a.launcherIndexForAnchor(p.Anchor); f.Anchor == "" && idx >= 0 {
+		a.animatePortalAscent(p, f, idx)
+		return
+	}
+	if !p.PopFrame() {
 		return
 	}
 	if f.MenuOpen {
@@ -1070,6 +1079,76 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	}
 	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
+	a.scheduleURLUpdate()
+}
+
+// launcherIndexForAnchor returns the index in a.plugins of the plugin whose
+// root grid is the pane's current anchor (so the launcher tile it occupies can
+// be located), or -1 when the anchor isn't a plugin root.
+func (a *App) launcherIndexForAnchor(anchor string) int {
+	for i := range a.plugins {
+		if a.plugins[i].RootGridID == anchor {
+			return i
+		}
+	}
+	return -1
+}
+
+// animatePortalAscent zooms the pane out of plugin index idx's root grid back
+// onto its launcher tile — the inverse of enterPlugin. It mirrors startAscent's
+// two-segment motion (child zoom-out to the calibrated swap state, then an
+// atomic anchor swap and a parent pan+zoom to the saved viewport), with the
+// launcher as the gridless "parent" reached by clearing the anchor.
+func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, idx int) {
+	r := paneRectFor(a, p)
+	cell := palette.LauncherCellRect(idx, len(a.plugins))
+	w := zoomtrans.PortalWell(cell.X, cell.Y, cell.W, cell.H)
+
+	from := zoomtrans.Endpoints{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
+	mid, to := zoomtrans.Ascent(from, w, nil, r.W, r.H, cellPx)
+	// Land square on the exact footprint center (the integer well rounds the
+	// tile's float position), mirroring installDescent's portal recentre.
+	to.Cx, to.Cy = cell.X+cell.W/2, cell.Y+cell.H/2
+	saved := zoomtrans.Endpoints{Cx: f.Cx, Cy: f.Cy, Zoom: f.Zoom}
+
+	childDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
+		zoomDist(from.Zoom, mid.Zoom)
+	parentDist := panDist(saved.Cx-to.Cx, saved.Cy-to.Cy, saved.Zoom) +
+		zoomDist(to.Zoom, saved.Zoom)
+	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
+
+	p.DropFrame() // the transition (below) drives the restore, not an instant pop
+	menuOpen := f.MenuOpen
+	a.startTransition(&paneTransition{
+		paneID: p.ID,
+		segments: []transSegment{
+			// Child: the plugin's root grid zooms out to the calibrated swap.
+			{
+				path:   nil,
+				fromCx: from.Cx, fromCy: from.Cy, fromZoom: from.Zoom,
+				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
+				durationMs: durations[0],
+			},
+			// Parent: clear the anchor back to the launcher, then pan+zoom to
+			// the saved launcher viewport.
+			{
+				setAnchor: true, anchor: "",
+				path:   nil,
+				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
+				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
+				durationMs: durations[1],
+			},
+		},
+		onComplete: func() {
+			if !menuOpen {
+				return
+			}
+			a.menuOpen = true
+			a.menuPaneID = p.ID
+			a.menuHover = -1
+			a.draw()
+		},
+	})
 	a.scheduleURLUpdate()
 }
 

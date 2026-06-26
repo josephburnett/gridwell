@@ -516,3 +516,21 @@ func TestWheelZoom(t *testing.T) {
 		t.Errorf("clamped at min: z=%v want %v", z, zmin)
 	}
 }
+
+func TestPortalWellRoundsAndFloors(t *testing.T) {
+	// Rounds the float cell rect to integer cells.
+	w := PortalWell(2.4, 3.6, 1.0, 1.0)
+	if w.ID != "portal" {
+		t.Errorf("ID = %q, want portal", w.ID)
+	}
+	if w.X != 2 || w.Y != 4 {
+		t.Errorf("rounded pos = (%d,%d), want (2,4)", w.X, w.Y)
+	}
+	if w.W != 1 || w.H != 1 {
+		t.Errorf("size = (%d,%d), want (1,1)", w.W, w.H)
+	}
+	// A sub-cell footprint floors to at least 1×1 so the well is never empty.
+	if w := PortalWell(0, 0, 0.2, 0.0); w.W != 1 || w.H != 1 {
+		t.Errorf("degenerate size = (%d,%d), want (1,1)", w.W, w.H)
+	}
+}

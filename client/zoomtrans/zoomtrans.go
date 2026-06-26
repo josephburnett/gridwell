@@ -23,9 +23,9 @@ import (
 // as descent path, viewport center in cells (sub-cell precision), and
 // zoom multiplier.
 type Endpoints struct {
-	Path    []string
-	Cx, Cy  float64
-	Zoom    float64
+	Path   []string
+	Cx, Cy float64
+	Zoom   float64
 }
 
 // Well is the minimal information about a well needed to compute a
@@ -274,6 +274,19 @@ func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx fl
 		Zoom: zPTarget,
 	}
 	return
+}
+
+// PortalWell builds the synthetic "portal" well that animates a plugin jump:
+// the launcher tile's (or + menu footprint's) float cell rect rounded to
+// integer cells, ID "portal", with W/H at least 1. Shared by the descent into
+// a plugin (zoom in) and the portal ascent back to the launcher (zoom out) so
+// the two motions are exact inverses of one another.
+func PortalWell(x, y, w, h float64) Well {
+	return Well{
+		ID: "portal",
+		X:  int64(math.Round(x)), Y: int64(math.Round(y)),
+		W: int64(max(1.0, math.Round(w))), H: int64(max(1.0, math.Round(h))),
+	}
 }
 
 // PanDist returns the pan motion distance in screen pixels for a (dx,

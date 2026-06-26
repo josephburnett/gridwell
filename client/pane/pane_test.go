@@ -151,7 +151,6 @@ func TestSetRatio(t *testing.T) {
 	}
 }
 
-
 // TestSetFocusUnknown returns an error.
 func TestSetFocusUnknown(t *testing.T) {
 	tr := NewTree()
@@ -162,9 +161,9 @@ func TestSetFocusUnknown(t *testing.T) {
 
 func TestCloneCarriesTextFields(t *testing.T) {
 	src := &Pane{
-		ID:          "p1",
-		Path:        []string{"1", "2"},
-		Cx:          3, Cy: 4, Zoom: 5,
+		ID:   "p1",
+		Path: []string{"1", "2"},
+		Cx:   3, Cy: 4, Zoom: 5,
 		TextFocus:   "42",
 		TextMode:    "text",
 		TextScrollX: 1.5,
@@ -225,6 +224,28 @@ func TestPortalStackRoundTrip(t *testing.T) {
 	// Stack is now empty: nothing left to ascend to.
 	if p.PopFrame() {
 		t.Error("PopFrame returned true on an empty stack")
+	}
+}
+
+// TestDropFrameRemovesWithoutApplying: an animated portal ascent drops the
+// frame (so it can't be ascended to twice) but leaves the pane's live state
+// alone — the transition, not the pop, drives the pane back to that viewport.
+func TestDropFrameRemovesWithoutApplying(t *testing.T) {
+	p := &Pane{ID: "p1", Anchor: "fs-uuid/1", Cx: 9, Cy: 9, Zoom: 2}
+	p.Up = []Frame{{Anchor: "", Cx: 1, Cy: 2, Zoom: 1}}
+
+	if !p.DropFrame() {
+		t.Fatal("DropFrame returned false with a frame on the stack")
+	}
+	if len(p.Up) != 0 {
+		t.Errorf("Up len = %d, want 0", len(p.Up))
+	}
+	// Live state is untouched — unlike PopFrame, DropFrame does not restore.
+	if p.Anchor != "fs-uuid/1" || p.Cx != 9 || p.Cy != 9 || p.Zoom != 2 {
+		t.Errorf("DropFrame mutated live state: %+v", p)
+	}
+	if p.DropFrame() {
+		t.Error("DropFrame returned true on an empty stack")
 	}
 }
 
@@ -327,8 +348,8 @@ func TestSplitOnSideAtRatio(t *testing.T) {
 		{SideLeft, 0.4, 0.4},
 		{SideBottom, 0.3, 0.7},
 		{SideRight, 0.25, 0.75},
-		{SideTop, -0.5, 0.0},  // clamps below
-		{SideTop, 1.5, 1.0},   // clamps above
+		{SideTop, -0.5, 0.0}, // clamps below
+		{SideTop, 1.5, 1.0},  // clamps above
 		{SideBottom, -1.0, 1.0},
 		{SideBottom, 5.0, 0.0},
 	}

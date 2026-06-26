@@ -151,6 +151,19 @@ func (p *Pane) PopFrame() bool {
 	return true
 }
 
+// DropFrame removes the most recent Up frame without applying it, returning
+// true on success. Used by an animated portal ascent: the transition itself
+// drives the pane back to the frame's viewport and anchor, so the frame is
+// dropped from the stack but its values are restored by the animation rather
+// than instantly (unlike PopFrame).
+func (p *Pane) DropFrame() bool {
+	if len(p.Up) == 0 {
+		return false
+	}
+	p.Up = p.Up[:len(p.Up)-1]
+	return true
+}
+
 // Split is an internal tile in the pane tree. Ratio is in [0, 1]; A is the
 // top/left child, B is the bottom/right.
 type Split struct {
@@ -512,4 +525,3 @@ func setRatio(n *TreeNode, paneID string, ratio float64) bool {
 	}
 	return setRatio(&n.Split.B, paneID, ratio)
 }
-
