@@ -35,19 +35,6 @@ func NewDefaultClient(baseURL string) *Client {
 	return NewClient(http.DefaultClient, baseURL, connect.WithProtoJSON())
 }
 
-func (c *Client) Bootstrap(ctx context.Context) (*BootstrapResponse, error) {
-	r, err := c.cl.Bootstrap(ctx, connect.NewRequest(&pb.BootstrapRequest{}))
-	if err != nil {
-		return nil, err
-	}
-	return &BootstrapResponse{
-		RootGridID: r.Msg.RootGridId,
-		RootViewCx: r.Msg.RootViewCx,
-		RootViewCy: r.Msg.RootViewCy,
-		RootZoom:   r.Msg.RootZoom,
-	}, nil
-}
-
 func (c *Client) GetGrid(ctx context.Context, gridID string) (*GetGridResponse, error) {
 	r, err := c.cl.GetGrid(ctx, connect.NewRequest(&pb.GetGridRequest{GridId: gridID}))
 	if err != nil {
@@ -58,14 +45,6 @@ func (c *Client) GetGrid(ctx context.Context, gridID string) (*GetGridResponse, 
 		out.Grid = *g
 	}
 	return out, nil
-}
-
-func (c *Client) GetBlob(ctx context.Context, blobID int64) ([]byte, error) {
-	r, err := c.cl.GetBlob(ctx, connect.NewRequest(&pb.GetBlobRequest{BlobId: blobID}))
-	if err != nil {
-		return nil, err
-	}
-	return r.Msg.Data, nil
 }
 
 func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, error) {
@@ -121,12 +100,38 @@ func tileResp(r *connect.Response[pb.TileResponse], err error) (*Tile, error) {
 	return TileFromProto(r.Msg.Tile), nil
 }
 
+// Create* are typed sugar over the single CreateTile RPC: each builds the
+// kind-tagged CreateTileRequest (see conv.go) and sends it. The wire has one
+// create; these keep call sites readable.
 func (c *Client) CreateWell(ctx context.Context, req *CreateWellRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateWell(ctx, connect.NewRequest(CreateWellToProto(req))))
+	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateWellToProto(req))))
+}
+func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateTextToProto(req))))
+}
+func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateURLToProto(req))))
+}
+func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateShellToProto(req))))
 }
 
-// Mount attaches a plugin (by uuid, default config) and drops a mount well in
-// the destination grid. The drag-a-plugin-onto-a-grid gesture.
+// Set* are typed sugar over the single SetTile RPC.
+func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetWellViewToProto(req))))
+}
+func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetTextViewToProto(req))))
+}
+func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewRequest) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetShellPreviewToProto(req))))
+}
+func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetURLStateToProto(req))))
+}
+
+// Mount drops a mount well in the destination grid pointing at the plugin's
+// default root. The drag-a-plugin-onto-a-grid gesture.
 func (c *Client) Mount(ctx context.Context, req *MountRequest) (*Tile, error) {
 	return tileResp(c.cl.Mount(ctx, connect.NewRequest(&pb.MountRequest{
 		PluginUuid: req.PluginUUID,
@@ -138,15 +143,6 @@ func (c *Client) Mount(ctx context.Context, req *MountRequest) (*Tile, error) {
 		H:          req.H,
 	})))
 }
-func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateText(ctx, connect.NewRequest(CreateTextToProto(req))))
-}
-func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateURL(ctx, connect.NewRequest(CreateURLToProto(req))))
-}
-func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateShell(ctx, connect.NewRequest(CreateShellToProto(req))))
-}
 
 func (c *Client) MoveTile(ctx context.Context, req *MoveTileRequest) (*Tile, error) {
 	return tileResp(c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req))))
@@ -157,28 +153,12 @@ func (c *Client) CloneTile(ctx context.Context, req *CloneTileRequest) (*Tile, e
 func (c *Client) ResizeTile(ctx context.Context, req *ResizeTileRequest) (*Tile, error) {
 	return tileResp(c.cl.ResizeTile(ctx, connect.NewRequest(ResizeTileToProto(req))))
 }
-func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Tile, error) {
-	return tileResp(c.cl.SetWellView(ctx, connect.NewRequest(SetWellViewToProto(req))))
-}
-func (c *Client) SetTextView(ctx context.Context, req *SetTextViewRequest) (*Tile, error) {
-	return tileResp(c.cl.SetTextView(ctx, connect.NewRequest(SetTextViewToProto(req))))
-}
-func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewRequest) (*Tile, error) {
-	return tileResp(c.cl.SetShellPreview(ctx, connect.NewRequest(SetShellPreviewToProto(req))))
-}
 func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
 	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(ShellSessionAliveToProto(req)))
 	if err != nil {
 		return nil, err
 	}
 	return ShellSessionAliveResponseFromProto(r.Msg), nil
-}
-func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error {
-	_, err := c.cl.SetRootView(ctx, connect.NewRequest(SetRootViewToProto(req)))
-	return err
-}
-func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Tile, error) {
-	return tileResp(c.cl.SetURLState(ctx, connect.NewRequest(SetURLStateToProto(req))))
 }
 func (c *Client) UpdateText(ctx context.Context, req *UpdateTextRequest) (*Tile, error) {
 	return tileResp(c.cl.UpdateText(ctx, connect.NewRequest(UpdateTextToProto(req))))

@@ -52,7 +52,14 @@ type Plugin struct {
 	db       *sql.DB
 	procRoot string
 	killer   Killer
+	// rootPID is the process the default root grid is rooted at (Info). 0/unset
+	// means pid 1. Set via SetRootPID (config["pid"]); mirrors fs's SetRoot.
+	rootPID int64
 }
+
+// SetRootPID configures the pid Info reports as the default root grid. Used by
+// the launcher-mount path and tests; defaults to pid 1.
+func (p *Plugin) SetRootPID(pid int64) { p.rootPID = pid }
 
 // Open opens or creates the plugin SQLite DB at dbPath. An empty procRoot
 // uses the default "/proc". A nil killer uses syscall.Kill.
@@ -115,24 +122,12 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 	return Open(dbPath, "", nil)
 }
 
-// Info returns the static plugin descriptor.
+// Info is the whole handshake: identity plus the default root grid (the process
+// table rooted at the configured root pid, default 1). No Attach/Detach.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	return &gridwellv1.InfoResponse{
-		Kind:          "proc",
-		DisplayName:   "processes",
-		SchemaVersion: 1,
-	}, nil
-}
-
-// Attach turns config["pid"] (default "1") into a root grid for that PID.
-func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
-	pidStr := req.Config["pid"]
-	if pidStr == "" {
-		pidStr = "1"
-	}
-	pid, err := strconv.ParseInt(pidStr, 10, 64)
-	if err != nil || pid <= 0 {
-		return nil, fmt.Errorf("proc plugin: invalid pid %q", pidStr)
+	pid := p.rootPID
+	if pid <= 0 {
+		pid = 1
 	}
 	gridID, err := p.getOrCreateGrid(pid)
 	if err != nil {
@@ -142,17 +137,12 @@ func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*grid
 	if pid != 1 {
 		label = fmt.Sprintf("pid %d", pid)
 	}
-	return &gridwellv1.AttachResponse{
-		RootGridId: strconv.FormatInt(gridID, 10),
-		Label:      label,
-		Caps:       &gridwellv1.PluginCaps{},
-		HasSession: false,
+	return &gridwellv1.InfoResponse{
+		Kind:          "proc",
+		DisplayName:   label,
+		SchemaVersion: 1,
+		RootGridId:    strconv.FormatInt(gridID, 10),
 	}, nil
-}
-
-// Detach is a no-op for the proc plugin.
-func (p *Plugin) Detach(_ context.Context, _ *gridwellv1.DetachRequest) (*gridwellv1.DetachResponse, error) {
-	return &gridwellv1.DetachResponse{}, nil
 }
 
 // GetGrid reads the process's children, reconciles tile rows, and returns tiles.
@@ -197,9 +187,12 @@ func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest
 	return griddb.ApplyResize(p.db, procLabelCol, req)
 }
 
-// SetWellView persists a process well's preview framing so descent and ascent
-// restore the same view.
-func (p *Plugin) SetWellView(_ context.Context, req *gridwellv1.SetWellViewRequest) (*gridwellv1.TileResponse, error) {
+// SetTile persists a process well's preview framing so descent and ascent
+// restore the same view. proc supports framing only on its process wells.
+func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
+	if k := req.GetTile().GetKind(); k != "well" {
+		return nil, fmt.Errorf("proc SetTile: only well framing supported, got %q", k)
+	}
 	return griddb.ApplySetWellView(p.db, procLabelCol, req)
 }
 

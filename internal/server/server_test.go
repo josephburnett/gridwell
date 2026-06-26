@@ -75,17 +75,6 @@ func errCode(err error) connect.Code {
 	return connect.CodeInternal
 }
 
-func TestBootstrapReturnsEmpty(t *testing.T) {
-	_, cl, _ := newTestServer(t)
-	resp, err := cl.Bootstrap(context.Background())
-	if err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
-	if resp.RootGridID != "" {
-		t.Errorf("root_grid_id = %q, want empty (rootless)", resp.RootGridID)
-	}
-}
-
 func TestCreateWell(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	tile, err := cl.CreateWell(context.Background(), &rpc.CreateWellRequest{

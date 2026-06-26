@@ -70,12 +70,16 @@ func ApplyResize(db *sql.DB, labelCol string, req *gridwellv1.ResizeTileRequest)
 // view_zoom). The framing *is* the well's preview and its descent target, so
 // storing it here is what makes descent/ascent idempotent for source-backed
 // wells.
-func ApplySetWellView(db *sql.DB, labelCol string, req *gridwellv1.SetWellViewRequest) (*gridwellv1.TileResponse, error) {
+// ApplySetWellView writes a well tile's framing from a SetTile request (the
+// single writeback). Only the view_* fields of req.Tile are read — fs/proc
+// support framing on their directory/process wells, nothing else.
+func ApplySetWellView(db *sql.DB, labelCol string, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	tileID, err := parseTileID(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	if err := exec(db, `UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ? WHERE id = ?`, req.ViewX, req.ViewY, req.ViewZoom, tileID); err != nil {
+	t := req.GetTile()
+	if err := exec(db, `UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ? WHERE id = ?`, t.GetViewX(), t.GetViewY(), t.GetViewZoom(), tileID); err != nil {
 		return nil, err
 	}
 	return tileResp(db, labelCol, tileID)

@@ -130,45 +130,23 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 	return p, nil
 }
 
-// Info returns the static plugin descriptor.
+// Info is the whole handshake: identity plus the default root grid (the
+// plugin's configured root directory, resolved to a grid id). No Attach/Detach.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	return &gridwellv1.InfoResponse{
-		Kind:          "fs",
-		DisplayName:   "files",
-		SchemaVersion: 1,
-	}, nil
-}
-
-// Attach turns config["path"] (or the plugin's configured root when no path is
-// given) into a root grid in the plugin's namespace.
-func (p *Plugin) Attach(_ context.Context, req *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
-	raw := req.Config["path"]
-	if raw == "" {
-		raw = p.root
-	}
-	path := filepath.Clean(raw)
+	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: 1}
+	path := filepath.Clean(p.root)
 	if path == "" || path == "." {
-		return nil, fmt.Errorf("fs plugin: Attach requires a path (none given and no configured root)")
+		return resp, nil // no configured root → no descendable default
 	}
 	gridID, err := p.getOrCreateGrid(path)
 	if err != nil {
 		return nil, err
 	}
-	label := filepath.Base(path)
-	if label == "/" || label == "." {
-		label = "files"
+	resp.RootGridId = strconv.FormatInt(gridID, 10)
+	if label := filepath.Base(path); label != "/" && label != "." {
+		resp.DisplayName = label
 	}
-	return &gridwellv1.AttachResponse{
-		RootGridId: strconv.FormatInt(gridID, 10),
-		Label:      label,
-		Caps:       &gridwellv1.PluginCaps{},
-		HasSession: false,
-	}, nil
-}
-
-// Detach is a no-op for the fs plugin.
-func (p *Plugin) Detach(_ context.Context, _ *gridwellv1.DetachRequest) (*gridwellv1.DetachResponse, error) {
-	return &gridwellv1.DetachResponse{}, nil
+	return resp, nil
 }
 
 // GetGrid reads the directory for the given grid_id, reconciles tile rows
@@ -215,9 +193,13 @@ func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest
 	return griddb.ApplyResize(p.db, fsLabelCol, req)
 }
 
-// SetWellView persists a directory well's preview framing so descent and
-// ascent restore the same view.
-func (p *Plugin) SetWellView(_ context.Context, req *gridwellv1.SetWellViewRequest) (*gridwellv1.TileResponse, error) {
+// SetTile persists a directory well's preview framing so descent and ascent
+// restore the same view. fs supports framing only on its directory wells;
+// other kinds/writebacks are not applicable.
+func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
+	if k := req.GetTile().GetKind(); k != "well" {
+		return nil, fmt.Errorf("fs SetTile: only well framing supported, got %q", k)
+	}
 	return griddb.ApplySetWellView(p.db, fsLabelCol, req)
 }
 

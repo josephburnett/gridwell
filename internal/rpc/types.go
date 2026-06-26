@@ -122,16 +122,6 @@ type Tile struct {
 	AltText string `json:"alt_text,omitempty"`
 }
 
-// Bootstrap RPC: client asks for the current root grid id and root framing.
-
-type BootstrapRequest struct{}
-type BootstrapResponse struct {
-	RootGridID string  `json:"root_grid_id"`
-	RootViewCx float64 `json:"root_view_cx"`
-	RootViewCy float64 `json:"root_view_cy"`
-	RootZoom   float64 `json:"root_zoom"`
-}
-
 // Reads.
 
 type GetGridRequest struct {
@@ -184,6 +174,9 @@ type PluginInfo struct {
 	RootGridID string `json:"root_grid_id"` // qualified; click-enter descends here
 }
 
+// CreateWellRequest is a typed create. On the wire every create is a single
+// CreateTile carrying a Tile; the Client exposes typed sugar (CreateWell, …)
+// over it and the localdb store keeps these as its internal create API.
 type CreateWellRequest struct {
 	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
@@ -308,12 +301,13 @@ type ShellSessionAliveResponse struct {
 	Alive bool `json:"alive"`
 }
 
+// SetRootViewRequest is the localdb store's root-framing setter (not on the
+// wire — the rootless model has no app root; kept as internal store API).
 type SetRootViewRequest struct {
 	Cx   float64 `json:"cx"`
 	Cy   float64 `json:"cy"`
 	Zoom float64 `json:"zoom"`
 }
-type SetRootViewResponse struct{}
 
 // SetURLStateRequest freezes a live URL tile (preview JPEG + address +
 // title) when its Electron WebContentsView is torn down on ascend. Path +

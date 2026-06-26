@@ -33,36 +33,25 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Gridwell_Info_FullMethodName              = "/gridwell.v1.Gridwell/Info"
-	Gridwell_Attach_FullMethodName            = "/gridwell.v1.Gridwell/Attach"
-	Gridwell_Detach_FullMethodName            = "/gridwell.v1.Gridwell/Detach"
 	Gridwell_Probe_FullMethodName             = "/gridwell.v1.Gridwell/Probe"
+	Gridwell_ListPlugins_FullMethodName       = "/gridwell.v1.Gridwell/ListPlugins"
 	Gridwell_GetSession_FullMethodName        = "/gridwell.v1.Gridwell/GetSession"
 	Gridwell_PutSession_FullMethodName        = "/gridwell.v1.Gridwell/PutSession"
 	Gridwell_OpenShell_FullMethodName         = "/gridwell.v1.Gridwell/OpenShell"
-	Gridwell_Bootstrap_FullMethodName         = "/gridwell.v1.Gridwell/Bootstrap"
 	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
-	Gridwell_GetBlob_FullMethodName           = "/gridwell.v1.Gridwell/GetBlob"
-	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
-	Gridwell_GetTileContent_FullMethodName    = "/gridwell.v1.Gridwell/GetTileContent"
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
-	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
-	Gridwell_ListPlugins_FullMethodName       = "/gridwell.v1.Gridwell/ListPlugins"
-	Gridwell_Mount_FullMethodName             = "/gridwell.v1.Gridwell/Mount"
-	Gridwell_CreateWell_FullMethodName        = "/gridwell.v1.Gridwell/CreateWell"
-	Gridwell_CreateText_FullMethodName        = "/gridwell.v1.Gridwell/CreateText"
-	Gridwell_CreateURL_FullMethodName         = "/gridwell.v1.Gridwell/CreateURL"
-	Gridwell_CreateShell_FullMethodName       = "/gridwell.v1.Gridwell/CreateShell"
+	Gridwell_GetTileContent_FullMethodName    = "/gridwell.v1.Gridwell/GetTileContent"
+	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
+	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
+	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
 	Gridwell_MoveTile_FullMethodName          = "/gridwell.v1.Gridwell/MoveTile"
 	Gridwell_CloneTile_FullMethodName         = "/gridwell.v1.Gridwell/CloneTile"
 	Gridwell_ResizeTile_FullMethodName        = "/gridwell.v1.Gridwell/ResizeTile"
-	Gridwell_SetWellView_FullMethodName       = "/gridwell.v1.Gridwell/SetWellView"
-	Gridwell_SetTextView_FullMethodName       = "/gridwell.v1.Gridwell/SetTextView"
-	Gridwell_SetShellPreview_FullMethodName   = "/gridwell.v1.Gridwell/SetShellPreview"
-	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
-	Gridwell_SetRootView_FullMethodName       = "/gridwell.v1.Gridwell/SetRootView"
-	Gridwell_SetURLState_FullMethodName       = "/gridwell.v1.Gridwell/SetURLState"
 	Gridwell_UpdateText_FullMethodName        = "/gridwell.v1.Gridwell/UpdateText"
 	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
+	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
+	Gridwell_Mount_FullMethodName             = "/gridwell.v1.Gridwell/Mount"
+	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
 )
 
@@ -73,41 +62,35 @@ const (
 // Gridwell is the unified RPC surface, implemented by every node: a local
 // server, a plugin process, and a remote server reached over SSH.
 type GridwellClient interface {
-	// ── Plugin lifecycle ────────────────────────────────────────────────────
+	// ── Lifecycle ───────────────────────────────────────────────────────────
+	// Info is the whole handshake (identity + default root); there is no
+	// Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+	// gateway calls it on a remote to learn that node's namespaces).
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
-	Attach(ctx context.Context, in *AttachRequest, opts ...grpc.CallOption) (*AttachResponse, error)
-	Detach(ctx context.Context, in *DetachRequest, opts ...grpc.CallOption) (*DetachResponse, error)
 	Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error)
-	// ── Session ─────────────────────────────────────────────────────────────
+	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
+	// ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
 	GetSession(ctx context.Context, in *GetSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BlobChunk], error)
 	PutSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutSessionRequest, PutSessionResponse], error)
-	// ── Shell ────────────────────────────────────────────────────────────────
+	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenShellRequest, OpenShellResponse], error)
-	// ── Bootstrap (kept for backward compat; superseded by Attach) ──────────
-	Bootstrap(ctx context.Context, in *BootstrapRequest, opts ...grpc.CallOption) (*BootstrapResponse, error)
+	// ── Reads ─────────────────────────────────────────────────────────────────
 	GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error)
-	GetBlob(ctx context.Context, in *GetBlobRequest, opts ...grpc.CallOption) (*GetBlobResponse, error)
-	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
-	GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error)
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
-	Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CreateWell(ctx context.Context, in *CreateWellRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CreateURL(ctx context.Context, in *CreateURLRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CreateShell(ctx context.Context, in *CreateShellRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error)
+	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
+	// ── Mutations (one create, one writeback, plus placement) ─────────────────
+	CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	MoveTile(ctx context.Context, in *MoveTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	ResizeTile(ctx context.Context, in *ResizeTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	SetWellView(ctx context.Context, in *SetWellViewRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	SetTextView(ctx context.Context, in *SetTextViewRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	SetShellPreview(ctx context.Context, in *SetShellPreviewRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
-	SetRootView(ctx context.Context, in *SetRootViewRequest, opts ...grpc.CallOption) (*SetRootViewResponse, error)
-	SetURLState(ctx context.Context, in *SetURLStateRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
+	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	// ShellSessionAlive gates the wasm refresh button on shell descent.
+	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
 }
 
@@ -129,30 +112,20 @@ func (c *gridwellClient) Info(ctx context.Context, in *InfoRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *gridwellClient) Attach(ctx context.Context, in *AttachRequest, opts ...grpc.CallOption) (*AttachResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AttachResponse)
-	err := c.cc.Invoke(ctx, Gridwell_Attach_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) Detach(ctx context.Context, in *DetachRequest, opts ...grpc.CallOption) (*DetachResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DetachResponse)
-	err := c.cc.Invoke(ctx, Gridwell_Detach_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ProbeResponse)
 	err := c.cc.Invoke(ctx, Gridwell_Probe_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPluginsResponse)
+	err := c.cc.Invoke(ctx, Gridwell_ListPlugins_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -204,50 +177,10 @@ func (c *gridwellClient) OpenShell(ctx context.Context, opts ...grpc.CallOption)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_OpenShellClient = grpc.BidiStreamingClient[OpenShellRequest, OpenShellResponse]
 
-func (c *gridwellClient) Bootstrap(ctx context.Context, in *BootstrapRequest, opts ...grpc.CallOption) (*BootstrapResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BootstrapResponse)
-	err := c.cc.Invoke(ctx, Gridwell_Bootstrap_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetGridResponse)
 	err := c.cc.Invoke(ctx, Gridwell_GetGrid_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) GetBlob(ctx context.Context, in *GetBlobRequest, opts ...grpc.CallOption) (*GetBlobResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetBlobResponse)
-	err := c.cc.Invoke(ctx, Gridwell_GetBlob_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTilePreviewResponse)
-	err := c.cc.Invoke(ctx, Gridwell_GetTilePreview_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTileContentResponse)
-	err := c.cc.Invoke(ctx, Gridwell_GetTileContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -264,70 +197,40 @@ func (c *gridwellClient) GetTile(ctx context.Context, in *GetTileRequest, opts .
 	return out, nil
 }
 
-func (c *gridwellClient) SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+func (c *gridwellClient) GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetTileAlt_FullMethodName, in, out, cOpts...)
+	out := new(GetTileContentResponse)
+	err := c.cc.Invoke(ctx, Gridwell_GetTileContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *gridwellClient) ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
+func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListPluginsResponse)
-	err := c.cc.Invoke(ctx, Gridwell_ListPlugins_FullMethodName, in, out, cOpts...)
+	out := new(GetTilePreviewResponse)
+	err := c.cc.Invoke(ctx, Gridwell_GetTilePreview_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *gridwellClient) Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+func (c *gridwellClient) CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_Mount_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Gridwell_CreateTile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *gridwellClient) CreateWell(ctx context.Context, in *CreateWellRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+func (c *gridwellClient) SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CreateWell_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CreateText_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) CreateURL(ctx context.Context, in *CreateURLRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CreateURL_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) CreateShell(ctx context.Context, in *CreateShellRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CreateShell_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Gridwell_SetTile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -364,66 +267,6 @@ func (c *gridwellClient) ResizeTile(ctx context.Context, in *ResizeTileRequest, 
 	return out, nil
 }
 
-func (c *gridwellClient) SetWellView(ctx context.Context, in *SetWellViewRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetWellView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetTextView(ctx context.Context, in *SetTextViewRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetTextView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetShellPreview(ctx context.Context, in *SetShellPreviewRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetShellPreview_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ShellSessionAliveResponse)
-	err := c.cc.Invoke(ctx, Gridwell_ShellSessionAlive_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetRootView(ctx context.Context, in *SetRootViewRequest, opts ...grpc.CallOption) (*SetRootViewResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SetRootViewResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetRootView_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetURLState(ctx context.Context, in *SetURLStateRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetURLState_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
@@ -438,6 +281,36 @@ func (c *gridwellClient) DeleteTile(ctx context.Context, in *DeleteTileRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteTileResponse)
 	err := c.cc.Invoke(ctx, Gridwell_DeleteTile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetTileAlt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_Mount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ShellSessionAliveResponse)
+	err := c.cc.Invoke(ctx, Gridwell_ShellSessionAlive_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -470,41 +343,35 @@ type Gridwell_SubscribeClient = grpc.ServerStreamingClient[Event]
 // Gridwell is the unified RPC surface, implemented by every node: a local
 // server, a plugin process, and a remote server reached over SSH.
 type GridwellServer interface {
-	// ── Plugin lifecycle ────────────────────────────────────────────────────
+	// ── Lifecycle ───────────────────────────────────────────────────────────
+	// Info is the whole handshake (identity + default root); there is no
+	// Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+	// gateway calls it on a remote to learn that node's namespaces).
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
-	Attach(context.Context, *AttachRequest) (*AttachResponse, error)
-	Detach(context.Context, *DetachRequest) (*DetachResponse, error)
 	Probe(context.Context, *ProbeRequest) (*ProbeResponse, error)
-	// ── Session ─────────────────────────────────────────────────────────────
+	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
+	// ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
 	GetSession(*GetSessionRequest, grpc.ServerStreamingServer[BlobChunk]) error
 	PutSession(grpc.ClientStreamingServer[PutSessionRequest, PutSessionResponse]) error
-	// ── Shell ────────────────────────────────────────────────────────────────
+	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]) error
-	// ── Bootstrap (kept for backward compat; superseded by Attach) ──────────
-	Bootstrap(context.Context, *BootstrapRequest) (*BootstrapResponse, error)
+	// ── Reads ─────────────────────────────────────────────────────────────────
 	GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error)
-	GetBlob(context.Context, *GetBlobRequest) (*GetBlobResponse, error)
-	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
-	GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error)
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
-	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
-	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
-	Mount(context.Context, *MountRequest) (*TileResponse, error)
-	CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error)
-	CreateText(context.Context, *CreateTextRequest) (*TileResponse, error)
-	CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error)
-	CreateShell(context.Context, *CreateShellRequest) (*TileResponse, error)
+	GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error)
+	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
+	// ── Mutations (one create, one writeback, plus placement) ─────────────────
+	CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error)
+	SetTile(context.Context, *SetTileRequest) (*TileResponse, error)
 	MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error)
 	CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error)
 	ResizeTile(context.Context, *ResizeTileRequest) (*TileResponse, error)
-	SetWellView(context.Context, *SetWellViewRequest) (*TileResponse, error)
-	SetTextView(context.Context, *SetTextViewRequest) (*TileResponse, error)
-	SetShellPreview(context.Context, *SetShellPreviewRequest) (*TileResponse, error)
-	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
-	SetRootView(context.Context, *SetRootViewRequest) (*SetRootViewResponse, error)
-	SetURLState(context.Context, *SetURLStateRequest) (*TileResponse, error)
 	UpdateText(context.Context, *UpdateTextRequest) (*TileResponse, error)
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
+	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
+	Mount(context.Context, *MountRequest) (*TileResponse, error)
+	// ShellSessionAlive gates the wasm refresh button on shell descent.
+	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
 	mustEmbedUnimplementedGridwellServer()
 }
@@ -519,14 +386,11 @@ type UnimplementedGridwellServer struct{}
 func (UnimplementedGridwellServer) Info(context.Context, *InfoRequest) (*InfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Info not implemented")
 }
-func (UnimplementedGridwellServer) Attach(context.Context, *AttachRequest) (*AttachResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Attach not implemented")
-}
-func (UnimplementedGridwellServer) Detach(context.Context, *DetachRequest) (*DetachResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Detach not implemented")
-}
 func (UnimplementedGridwellServer) Probe(context.Context, *ProbeRequest) (*ProbeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Probe not implemented")
+}
+func (UnimplementedGridwellServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
 }
 func (UnimplementedGridwellServer) GetSession(*GetSessionRequest, grpc.ServerStreamingServer[BlobChunk]) error {
 	return status.Error(codes.Unimplemented, "method GetSession not implemented")
@@ -537,44 +401,23 @@ func (UnimplementedGridwellServer) PutSession(grpc.ClientStreamingServer[PutSess
 func (UnimplementedGridwellServer) OpenShell(grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]) error {
 	return status.Error(codes.Unimplemented, "method OpenShell not implemented")
 }
-func (UnimplementedGridwellServer) Bootstrap(context.Context, *BootstrapRequest) (*BootstrapResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Bootstrap not implemented")
-}
 func (UnimplementedGridwellServer) GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetGrid not implemented")
-}
-func (UnimplementedGridwellServer) GetBlob(context.Context, *GetBlobRequest) (*GetBlobResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetBlob not implemented")
-}
-func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
-}
-func (UnimplementedGridwellServer) GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetTileContent not implemented")
 }
 func (UnimplementedGridwellServer) GetTile(context.Context, *GetTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTile not implemented")
 }
-func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetTileAlt not implemented")
+func (UnimplementedGridwellServer) GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTileContent not implemented")
 }
-func (UnimplementedGridwellServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
+func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
 }
-func (UnimplementedGridwellServer) Mount(context.Context, *MountRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Mount not implemented")
+func (UnimplementedGridwellServer) CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTile not implemented")
 }
-func (UnimplementedGridwellServer) CreateWell(context.Context, *CreateWellRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateWell not implemented")
-}
-func (UnimplementedGridwellServer) CreateText(context.Context, *CreateTextRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateText not implemented")
-}
-func (UnimplementedGridwellServer) CreateURL(context.Context, *CreateURLRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateURL not implemented")
-}
-func (UnimplementedGridwellServer) CreateShell(context.Context, *CreateShellRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateShell not implemented")
+func (UnimplementedGridwellServer) SetTile(context.Context, *SetTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetTile not implemented")
 }
 func (UnimplementedGridwellServer) MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MoveTile not implemented")
@@ -585,29 +428,20 @@ func (UnimplementedGridwellServer) CloneTile(context.Context, *CloneTileRequest)
 func (UnimplementedGridwellServer) ResizeTile(context.Context, *ResizeTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResizeTile not implemented")
 }
-func (UnimplementedGridwellServer) SetWellView(context.Context, *SetWellViewRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetWellView not implemented")
-}
-func (UnimplementedGridwellServer) SetTextView(context.Context, *SetTextViewRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetTextView not implemented")
-}
-func (UnimplementedGridwellServer) SetShellPreview(context.Context, *SetShellPreviewRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetShellPreview not implemented")
-}
-func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ShellSessionAlive not implemented")
-}
-func (UnimplementedGridwellServer) SetRootView(context.Context, *SetRootViewRequest) (*SetRootViewResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetRootView not implemented")
-}
-func (UnimplementedGridwellServer) SetURLState(context.Context, *SetURLStateRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetURLState not implemented")
-}
 func (UnimplementedGridwellServer) UpdateText(context.Context, *UpdateTextRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateText not implemented")
 }
 func (UnimplementedGridwellServer) DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteTile not implemented")
+}
+func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetTileAlt not implemented")
+}
+func (UnimplementedGridwellServer) Mount(context.Context, *MountRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Mount not implemented")
+}
+func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ShellSessionAlive not implemented")
 }
 func (UnimplementedGridwellServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
@@ -651,42 +485,6 @@ func _Gridwell_Info_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_Attach_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AttachRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).Attach(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_Attach_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).Attach(ctx, req.(*AttachRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_Detach_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DetachRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).Detach(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_Detach_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).Detach(ctx, req.(*DetachRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Gridwell_Probe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ProbeRequest)
 	if err := dec(in); err != nil {
@@ -701,6 +499,24 @@ func _Gridwell_Probe_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).Probe(ctx, req.(*ProbeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_ListPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).ListPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_ListPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).ListPlugins(ctx, req.(*ListPluginsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -730,24 +546,6 @@ func _Gridwell_OpenShell_Handler(srv interface{}, stream grpc.ServerStream) erro
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_OpenShellServer = grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]
 
-func _Gridwell_Bootstrap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BootstrapRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).Bootstrap(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_Bootstrap_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).Bootstrap(ctx, req.(*BootstrapRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Gridwell_GetGrid_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetGridRequest)
 	if err := dec(in); err != nil {
@@ -762,60 +560,6 @@ func _Gridwell_GetGrid_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).GetGrid(ctx, req.(*GetGridRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_GetBlob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetBlobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).GetBlob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_GetBlob_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).GetBlob(ctx, req.(*GetBlobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTilePreviewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).GetTilePreview(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_GetTilePreview_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).GetTilePreview(ctx, req.(*GetTilePreviewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_GetTileContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTileContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).GetTileContent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_GetTileContent_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).GetTileContent(ctx, req.(*GetTileContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -838,128 +582,74 @@ func _Gridwell_GetTile_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_SetTileAlt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetTileAltRequest)
+func _Gridwell_GetTileContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTileContentRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).SetTileAlt(ctx, in)
+		return srv.(GridwellServer).GetTileContent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_SetTileAlt_FullMethodName,
+		FullMethod: Gridwell_GetTileContent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetTileAlt(ctx, req.(*SetTileAltRequest))
+		return srv.(GridwellServer).GetTileContent(ctx, req.(*GetTileContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_ListPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPluginsRequest)
+func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTilePreviewRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).ListPlugins(ctx, in)
+		return srv.(GridwellServer).GetTilePreview(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_ListPlugins_FullMethodName,
+		FullMethod: Gridwell_GetTilePreview_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).ListPlugins(ctx, req.(*ListPluginsRequest))
+		return srv.(GridwellServer).GetTilePreview(ctx, req.(*GetTilePreviewRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_Mount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MountRequest)
+func _Gridwell_CreateTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateTileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).Mount(ctx, in)
+		return srv.(GridwellServer).CreateTile(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_Mount_FullMethodName,
+		FullMethod: Gridwell_CreateTile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).Mount(ctx, req.(*MountRequest))
+		return srv.(GridwellServer).CreateTile(ctx, req.(*CreateTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_CreateWell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateWellRequest)
+func _Gridwell_SetTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetTileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).CreateWell(ctx, in)
+		return srv.(GridwellServer).SetTile(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_CreateWell_FullMethodName,
+		FullMethod: Gridwell_SetTile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CreateWell(ctx, req.(*CreateWellRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_CreateText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateTextRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).CreateText(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_CreateText_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CreateText(ctx, req.(*CreateTextRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_CreateURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateURLRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).CreateURL(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_CreateURL_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CreateURL(ctx, req.(*CreateURLRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_CreateShell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateShellRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).CreateShell(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_CreateShell_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CreateShell(ctx, req.(*CreateShellRequest))
+		return srv.(GridwellServer).SetTile(ctx, req.(*SetTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1018,114 +708,6 @@ func _Gridwell_ResizeTile_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_SetWellView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetWellViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetWellView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetWellView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetWellView(ctx, req.(*SetWellViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetTextView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetTextViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetTextView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetTextView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetTextView(ctx, req.(*SetTextViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetShellPreview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetShellPreviewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetShellPreview(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetShellPreview_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetShellPreview(ctx, req.(*SetShellPreviewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_ShellSessionAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ShellSessionAliveRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).ShellSessionAlive(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_ShellSessionAlive_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).ShellSessionAlive(ctx, req.(*ShellSessionAliveRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetRootView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetRootViewRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetRootView(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetRootView_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetRootView(ctx, req.(*SetRootViewRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetURLState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetURLStateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetURLState(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetURLState_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetURLState(ctx, req.(*SetURLStateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Gridwell_UpdateText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateTextRequest)
 	if err := dec(in); err != nil {
@@ -1162,6 +744,60 @@ func _Gridwell_DeleteTile_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gridwell_SetTileAlt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetTileAltRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).SetTileAlt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_SetTileAlt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).SetTileAlt(ctx, req.(*SetTileAltRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_Mount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).Mount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_Mount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).Mount(ctx, req.(*MountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_ShellSessionAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShellSessionAliveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).ShellSessionAlive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_ShellSessionAlive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).ShellSessionAlive(ctx, req.(*ShellSessionAliveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gridwell_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1185,68 +821,36 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_Info_Handler,
 		},
 		{
-			MethodName: "Attach",
-			Handler:    _Gridwell_Attach_Handler,
-		},
-		{
-			MethodName: "Detach",
-			Handler:    _Gridwell_Detach_Handler,
-		},
-		{
 			MethodName: "Probe",
 			Handler:    _Gridwell_Probe_Handler,
-		},
-		{
-			MethodName: "Bootstrap",
-			Handler:    _Gridwell_Bootstrap_Handler,
-		},
-		{
-			MethodName: "GetGrid",
-			Handler:    _Gridwell_GetGrid_Handler,
-		},
-		{
-			MethodName: "GetBlob",
-			Handler:    _Gridwell_GetBlob_Handler,
-		},
-		{
-			MethodName: "GetTilePreview",
-			Handler:    _Gridwell_GetTilePreview_Handler,
-		},
-		{
-			MethodName: "GetTileContent",
-			Handler:    _Gridwell_GetTileContent_Handler,
-		},
-		{
-			MethodName: "GetTile",
-			Handler:    _Gridwell_GetTile_Handler,
-		},
-		{
-			MethodName: "SetTileAlt",
-			Handler:    _Gridwell_SetTileAlt_Handler,
 		},
 		{
 			MethodName: "ListPlugins",
 			Handler:    _Gridwell_ListPlugins_Handler,
 		},
 		{
-			MethodName: "Mount",
-			Handler:    _Gridwell_Mount_Handler,
+			MethodName: "GetGrid",
+			Handler:    _Gridwell_GetGrid_Handler,
 		},
 		{
-			MethodName: "CreateWell",
-			Handler:    _Gridwell_CreateWell_Handler,
+			MethodName: "GetTile",
+			Handler:    _Gridwell_GetTile_Handler,
 		},
 		{
-			MethodName: "CreateText",
-			Handler:    _Gridwell_CreateText_Handler,
+			MethodName: "GetTileContent",
+			Handler:    _Gridwell_GetTileContent_Handler,
 		},
 		{
-			MethodName: "CreateURL",
-			Handler:    _Gridwell_CreateURL_Handler,
+			MethodName: "GetTilePreview",
+			Handler:    _Gridwell_GetTilePreview_Handler,
 		},
 		{
-			MethodName: "CreateShell",
-			Handler:    _Gridwell_CreateShell_Handler,
+			MethodName: "CreateTile",
+			Handler:    _Gridwell_CreateTile_Handler,
+		},
+		{
+			MethodName: "SetTile",
+			Handler:    _Gridwell_SetTile_Handler,
 		},
 		{
 			MethodName: "MoveTile",
@@ -1261,36 +865,24 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_ResizeTile_Handler,
 		},
 		{
-			MethodName: "SetWellView",
-			Handler:    _Gridwell_SetWellView_Handler,
-		},
-		{
-			MethodName: "SetTextView",
-			Handler:    _Gridwell_SetTextView_Handler,
-		},
-		{
-			MethodName: "SetShellPreview",
-			Handler:    _Gridwell_SetShellPreview_Handler,
-		},
-		{
-			MethodName: "ShellSessionAlive",
-			Handler:    _Gridwell_ShellSessionAlive_Handler,
-		},
-		{
-			MethodName: "SetRootView",
-			Handler:    _Gridwell_SetRootView_Handler,
-		},
-		{
-			MethodName: "SetURLState",
-			Handler:    _Gridwell_SetURLState_Handler,
-		},
-		{
 			MethodName: "UpdateText",
 			Handler:    _Gridwell_UpdateText_Handler,
 		},
 		{
 			MethodName: "DeleteTile",
 			Handler:    _Gridwell_DeleteTile_Handler,
+		},
+		{
+			MethodName: "SetTileAlt",
+			Handler:    _Gridwell_SetTileAlt_Handler,
+		},
+		{
+			MethodName: "Mount",
+			Handler:    _Gridwell_Mount_Handler,
+		},
+		{
+			MethodName: "ShellSessionAlive",
+			Handler:    _Gridwell_ShellSessionAlive_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

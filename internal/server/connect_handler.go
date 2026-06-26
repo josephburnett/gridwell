@@ -113,13 +113,6 @@ func qualifyEvent(uuid string, ev *pb.Event) *pb.Event {
 
 // ── reads ──────────────────────────────────────────────────────────────────────
 
-// Bootstrap returns nothing meaningful in the rootless model: startup is empty
-// panes. The client builds the launcher from ListPlugins and enters a plugin to
-// get a grid. Kept so existing clients get a clean empty response.
-func (h *connectHandler) Bootstrap(_ context.Context, _ *connect.Request[pb.BootstrapRequest]) (*connect.Response[pb.BootstrapResponse], error) {
-	return connect.NewResponse(&pb.BootstrapResponse{}), nil
-}
-
 func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.GetGridRequest]) (*connect.Response[pb.GetGridResponse], error) {
 	c, local, uuid, err := h.route(req.Msg.GridId)
 	if err != nil {
@@ -133,14 +126,6 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 		Grid:  qualifyGrid(uuid, resp.Grid),
 		Tiles: qualifyTiles(uuid, resp.Tiles),
 	}), nil
-}
-
-// GetBlob is addressed by a bare int64 blob id, which carries no plugin
-// namespace, so it is not routable in the rootless model — every plugin has its
-// own blob id space. Clients fetch text bodies via GetTileContent (routable by
-// tile id) instead.
-func (h *connectHandler) GetBlob(_ context.Context, _ *connect.Request[pb.GetBlobRequest]) (*connect.Response[pb.GetBlobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("GetBlob is not routable without a root; use GetTileContent"))
 }
 
 func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Request[pb.GetTilePreviewRequest]) (*connect.Response[pb.GetTilePreviewResponse], error) {
@@ -180,17 +165,16 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		label := h.srv.pluginReg.Label(p.UUID)
 		var rootGridID string
 		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
-			if label == "" {
-				if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil && info.DisplayName != "" {
+			// Info is the whole handshake: it carries the plugin's default root
+			// grid id (fs its configured root, proc pid 1, localdb its root) so
+			// the client can click-enter straight into it, plus a fallback label.
+			if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil {
+				if info.RootGridId != "" {
+					rootGridID = qualifyID(p.UUID, info.RootGridId)
+				}
+				if label == "" {
 					label = info.DisplayName
 				}
-			}
-			// Attach with default config to learn the plugin's root grid id
-			// (fs uses its configured root, proc pid 1, localdb its root), so
-			// the client can click-enter straight into it. getOrCreate semantics
-			// make this idempotent.
-			if att, err := c.Attach(ctx, &pb.AttachRequest{Config: map[string]string{}}); err == nil && att.RootGridId != "" {
-				rootGridID = qualifyID(p.UUID, att.RootGridId)
 			}
 		}
 		if label == "" {
@@ -226,7 +210,11 @@ func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb
 
 // ── creates ──────────────────────────────────────────────────────────────────
 
-func (h *connectHandler) CreateWell(ctx context.Context, req *connect.Request[pb.CreateWellRequest]) (*connect.Response[pb.TileResponse], error) {
+// CreateTile is the single create router: resolve the owning plugin by
+// destination grid, localize grid_id + path, forward. tile.kind selects the
+// primitive; tile.child_grid_id (an exit well's cross-plugin reference) stays
+// qualified.
+func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb.CreateTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
 	c, local, uuid, err := h.route(m.GridId)
 	if err != nil {
@@ -234,78 +222,48 @@ func (h *connectHandler) CreateWell(ctx context.Context, req *connect.Request[pb
 	}
 	m.GridId = local
 	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.CreateWell(ctx, m)
-	return pluginTileResp(uuid, resp, err)
-}
-func (h *connectHandler) CreateText(ctx context.Context, req *connect.Request[pb.CreateTextRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.GridId)
-	if err != nil {
-		return nil, err
-	}
-	m.GridId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.CreateText(ctx, m)
-	return pluginTileResp(uuid, resp, err)
-}
-func (h *connectHandler) CreateURL(ctx context.Context, req *connect.Request[pb.CreateURLRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.GridId)
-	if err != nil {
-		return nil, err
-	}
-	m.GridId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.CreateURL(ctx, m)
-	return pluginTileResp(uuid, resp, err)
-}
-func (h *connectHandler) CreateShell(ctx context.Context, req *connect.Request[pb.CreateShellRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.GridId)
-	if err != nil {
-		return nil, err
-	}
-	m.GridId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.CreateShell(ctx, m)
+	resp, err := c.CreateTile(ctx, m)
 	return pluginTileResp(uuid, resp, err)
 }
 
-// Mount attaches plugin_uuid (default config) and drops an exit well in the
-// destination grid pointing at the attached root — the drag-a-plugin gesture.
+// Mount drops an exit well in the destination grid pointing at plugin_uuid's
+// default root (learned from its Info) — the drag-a-plugin gesture.
 func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.MountRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
 	srcClient, found := h.srv.pluginReg.Get(m.PluginUuid)
 	if !found {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", m.PluginUuid))
 	}
-	att, err := srcClient.Attach(ctx, &pb.AttachRequest{Config: map[string]string{}})
+	info, err := srcClient.Info(ctx, &pb.InfoRequest{})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	childGridID := qualifyID(m.PluginUuid, att.RootGridId)
+	if info.RootGridId == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("plugin %q has no root grid", m.PluginUuid))
+	}
+	childGridID := qualifyID(m.PluginUuid, info.RootGridId)
 
 	// The mounted well's label is the server.yaml display name — exactly the
 	// label the + menu showed for this plugin — so menu and dropped tile
-	// agree. Fall back to the plugin's Attach label only when unconfigured.
+	// agree. Fall back to the plugin's Info name only when unconfigured.
 	label := h.srv.pluginReg.Label(m.PluginUuid)
 	if label == "" {
-		label = att.Label
+		label = info.DisplayName
 	}
 
 	dstClient, dstLocal, dstUUID, err := h.route(m.GridId)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := dstClient.CreateWell(ctx, &pb.CreateWellRequest{
-		Path:        localPathFor(m.Path, dstUUID),
-		GridId:      dstLocal,
-		X:           m.X,
-		Y:           m.Y,
-		W:           m.W,
-		H:           m.H,
-		ChildGridId: childGridID,
-		Label:       label,
+	// An exit well is a well tile whose child_grid_id is a cross-plugin
+	// reference; alt_text is its label.
+	resp, err := dstClient.CreateTile(ctx, &pb.CreateTileRequest{
+		Path:   localPathFor(m.Path, dstUUID),
+		GridId: dstLocal,
+		Tile: &pb.Tile{
+			Kind: "well", X: m.X, Y: m.Y, W: m.W, H: m.H,
+			ChildGridId: childGridID, AltText: label,
+		},
 	})
 	return pluginTileResp(dstUUID, resp, err)
 }
@@ -349,7 +307,10 @@ func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb
 	resp, err := c.ResizeTile(ctx, m)
 	return pluginTileResp(uuid, resp, err)
 }
-func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[pb.SetWellViewRequest]) (*connect.Response[pb.TileResponse], error) {
+// SetTile is the single framing/preview writeback router. The owning plugin
+// dispatches on the target tile's kind to the one operation that kind supports
+// (well/text framing → no version bump; url/shell preview → bump).
+func (h *connectHandler) SetTile(ctx context.Context, req *connect.Request[pb.SetTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
 	c, local, uuid, err := h.route(m.TileId)
 	if err != nil {
@@ -357,40 +318,7 @@ func (h *connectHandler) SetWellView(ctx context.Context, req *connect.Request[p
 	}
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.SetWellView(ctx, m)
-	return pluginTileResp(uuid, resp, err)
-}
-func (h *connectHandler) SetTextView(ctx context.Context, req *connect.Request[pb.SetTextViewRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
-	if err != nil {
-		return nil, err
-	}
-	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.SetTextView(ctx, m)
-	return pluginTileResp(uuid, resp, err)
-}
-func (h *connectHandler) SetShellPreview(ctx context.Context, req *connect.Request[pb.SetShellPreviewRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
-	if err != nil {
-		return nil, err
-	}
-	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.SetShellPreview(ctx, m)
-	return pluginTileResp(uuid, resp, err)
-}
-func (h *connectHandler) SetURLState(ctx context.Context, req *connect.Request[pb.SetURLStateRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
-	if err != nil {
-		return nil, err
-	}
-	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.SetURLState(ctx, m)
+	resp, err := c.SetTile(ctx, m)
 	return pluginTileResp(uuid, resp, err)
 }
 func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb.UpdateTextRequest]) (*connect.Response[pb.TileResponse], error) {
@@ -403,12 +331,6 @@ func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb
 	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.UpdateText(ctx, m)
 	return pluginTileResp(uuid, resp, err)
-}
-
-// SetRootView is a no-op in the rootless model: there is no app root, and a
-// pane's viewport is persisted in the URL, not server-side.
-func (h *connectHandler) SetRootView(_ context.Context, _ *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
-	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
 }
 
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {

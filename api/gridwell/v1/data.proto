@@ -79,8 +79,8 @@ message Tile {
   // child_grid_id is a qualified "<plugin-uuid>/<grid-id>" reference.
 
   // alt_text is the canonical display label, rendered verbatim by the
-  // client. Stamped at insert time (for plugin-owned tiles, the plugin's
-  // Attach label or entry name).
+  // client. Stamped at insert time (for plugin-owned tiles, the entry name;
+  // for an exit well, the mounted plugin's label).
   string alt_text = 25;
 }
 
@@ -88,16 +88,6 @@ message Tile {
 // The same RPCs are exposed by a local server, a plugin process, and a
 // remote server reached over SSH. The client talks to the local server;
 // the server routes to plugins; an SSH gateway transparently proxies.
-
-// PluginCaps advertises which mutations a plugin instance allows.
-message PluginCaps {
-  bool delete = 1;
-  bool clone  = 2;
-  bool move   = 3;
-  bool write  = 4;
-  bool live   = 5;   // SHELL: live PTY is attachable
-  bool accept = 6;   // WELL: accepts children moved/cloned in
-}
 
 // NetworkContext declares how url tiles in this plugin reach the network.
 // Unset → url tiles are frozen-only (no live Chromium tab).
@@ -112,27 +102,22 @@ message ProxyEndpoint {
   string address = 2;   // e.g. "127.0.0.1:41234"
 }
 
+// Info is the whole plugin handshake: a plugin loaded from server.yaml is
+// simply "there", so Info reports its identity AND its default root grid (the
+// grid the launcher descends into). There is no Attach/Detach — the gRPC
+// connection, opened at load and closed at unload, is the only lifecycle.
 message InfoRequest {}
 message InfoResponse {
   string kind           = 1;   // e.g. "localdb", "fs", "proc", "ssh"
   string display_name   = 2;
   int64  schema_version = 3;
   bool   watch          = 4;   // implements Subscribe for live change events
+  // root_grid_id is the plugin's default root (fs uses its configured root,
+  // proc pid 1, localdb its singleton root). Click-enter descends here.
+  string root_grid_id   = 5;
+  NetworkContext network = 6;  // how url tiles reach the net; unset → frozen-only
+  bool   has_session    = 7;   // GetSession/PutSession meaningful
 }
-
-// Attach turns a config map into a root grid in the plugin's namespace.
-// The local server's Attach({}) returns its own root grid (replaces Bootstrap
-// once all callers have migrated).
-message AttachRequest  { map<string, string> config = 1; }
-message AttachResponse {
-  string         root_grid_id = 1;
-  string         label        = 2;
-  PluginCaps     caps         = 3;
-  NetworkContext network      = 4;   // unset → url tiles frozen-only
-  bool           has_session  = 5;   // GetSession/PutSession meaningful
-}
-message DetachRequest  { string root_grid_id = 1; }
-message DetachResponse {}
 
 // Probe reports the definitive presence of one tile. Used for non-
 // authoritative listings (proc) where an entry can vanish between List and
@@ -171,15 +156,6 @@ message OpenShellRequest  { string tile_id = 1; bytes data = 2; PTYSize resize =
 message OpenShellResponse { bytes data = 1; }
 message PTYSize           { int32 cols = 1; int32 rows = 2; }
 
-// ─── Bootstrap (kept for backward compatibility; superseded by Attach) ────
-message BootstrapRequest {}
-message BootstrapResponse {
-  string root_grid_id = 1;
-  double root_view_cx = 2;
-  double root_view_cy = 3;
-  double root_zoom = 4;
-}
-
 // Reads.
 
 message GetGridRequest {
@@ -188,13 +164,6 @@ message GetGridRequest {
 message GetGridResponse {
   Grid grid = 1;
   repeated Tile tiles = 2;
-}
-
-message GetBlobRequest {
-  int64 blob_id = 1;
-}
-message GetBlobResponse {
-  bytes data = 1;
 }
 
 message GetTilePreviewRequest {
@@ -229,9 +198,8 @@ message SetTileAltRequest {
   string alt = 2;
 }
 
-// Mount attaches plugin_uuid (with its default config — fs uses its configured
-// root, proc pid 1, localdb its root) and drops an exit well in the destination
-// grid whose child is the attached root. The drag-a-plugin-onto-a-grid gesture.
+// Mount drops an exit well in the destination grid whose child is plugin_uuid's
+// default root (from its Info). The drag-a-plugin-onto-a-grid gesture.
 message MountRequest {
   string plugin_uuid = 1;
   Path   path        = 2;   // descent path to the destination grid
@@ -262,68 +230,20 @@ message TileResponse {
   Tile tile = 1;
 }
 
-// Creates: no version (the tile doesn't exist yet).
-
-message CreateWellRequest {
-  Path path = 1;
+// CreateTileRequest creates one tile of any kind (no version — the tile does
+// not exist yet). tile.kind selects which fields are meaningful:
+//   well  → child_grid_id set makes an exit well pointing at a grid in another
+//           plugin (a qualified "<uuid>/<grid-id>"); empty allocates a fresh
+//           interior child grid. alt_text is the exit well's display label.
+//   text  → the markdown body rides in data (no blob yet).
+//   url   → url_string.
+//   shell → no extra fields (the bash session starts only on refresh).
+// Only localdb accepts creates; fs/proc/ssh leave this unimplemented.
+message CreateTileRequest {
+  Path   path    = 1;
   string grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-  // child_grid_id, when set, makes this an exit well pointing at an existing
-  // grid in another plugin (a qualified "<plugin-uuid>/<grid-id>"): no interior
-  // child grid is allocated. Empty → an ordinary interior well with a fresh
-  // child grid. label is the display name for an exit well (the mounted
-  // plugin's Attach label); ignored for interior wells.
-  string child_grid_id = 7;
-  string label = 8;
-}
-
-message CreateTextRequest {
-  Path path = 1;
-  string grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-  bytes data = 7;
-}
-
-message CreateURLRequest {
-  Path path = 1;
-  string grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-  string url = 7;
-}
-
-// CreateShellRequest creates an interactive bash tile. The bash
-// session is not started until the user explicitly refreshes
-// (matches the URL tile model where the Chromium tab is only opened
-// on refresh). Once refreshed, the session lives in a gridwell-named
-// tmux session that survives ascents until the tile is deleted or
-// the machine reboots.
-message CreateShellRequest {
-  Path path = 1;
-  string grid_id = 2;
-  int64 x = 3;
-  int64 y = 4;
-  int64 w = 5;
-  int64 h = 6;
-}
-
-// SetShellPreview stores the JPEG frame captured at ascent as the
-// frozen preview. Hash-deduped through the blobs table like every other
-// content blob — re-freezing an unchanged shell points at the same blob
-// row, no extra storage.
-message SetShellPreviewRequest {
-  Path path = 1;
-  string tile_id = 2;
-  int64 version = 3;
-  bytes jpeg = 4;
+  Tile   tile    = 3;
+  bytes  data    = 4;   // text body bytes; empty for other kinds
 }
 
 // ShellSessionAlive reports whether the tile's gridwell-private tmux
@@ -373,47 +293,23 @@ message ResizeTileRequest {
   int64 h = 7;
 }
 
-message SetWellViewRequest {
-  Path path = 1;
+// SetTileRequest is the single framing/preview writeback. It is dispatched on
+// tile.kind to the one operation that kind supports, and that mapping fixes the
+// version semantics (face #3 of the primary rule — framing is not a content
+// edit):
+//   well  → view_x/view_y/view_zoom              (framing; never bumps version)
+//   text  → text_x/text_y/text_w/text_h/text_mode (framing; never bumps version)
+//   url   → url_string, alt_text (page title), preview jpeg  (content; bumps)
+//   shell → preview jpeg                          (content; bumps version)
+// Empty preview/url_string/alt_text fields are skipped so a partial capture
+// never clobbers good state. path + version make a content write a proper
+// versioned, in-place edit.
+message SetTileRequest {
+  Path   path    = 1;
   string tile_id = 2;
-  int64 version = 3;
-  int64 view_x = 4;
-  int64 view_y = 5;
-  double view_zoom = 6;
-}
-
-message SetTextViewRequest {
-  Path path = 1;
-  string tile_id = 2;
-  int64 version = 3;
-  int64 text_x = 4;
-  int64 text_y = 5;
-  int64 text_w = 6;
-  int64 text_h = 7;
-  string text_mode = 8;
-}
-
-message SetRootViewRequest {
-  double cx = 1;
-  double cy = 2;
-  double zoom = 3;
-}
-message SetRootViewResponse {}
-
-// SetURLStateRequest freezes a live URL tile: it bakes the latest preview
-// JPEG, address, and page title into the tile when an Electron-hosted
-// WebContentsView is torn down on ascend. Carries path + version so the
-// freeze forks a shared (cloned) grid like any other content edit —
-// otherwise navigating/freezing a URL inside a clone would leak into every
-// other clone. Empty jpeg/url/title fields are skipped so a partial capture
-// never clobbers good state.
-message SetURLStateRequest {
-  Path path = 1;
-  string tile_id = 2;
-  int64 version = 3;
-  bytes jpeg = 4;
-  string url = 5;
-  string title = 6;
+  int64  version = 3;
+  Tile   tile    = 4;   // the fields to write for tile.kind
+  bytes  preview = 5;   // jpeg to freeze (url/shell)
 }
 
 message UpdateTextRequest {
@@ -461,47 +357,40 @@ message Event {
 // Gridwell is the unified RPC surface, implemented by every node: a local
 // server, a plugin process, and a remote server reached over SSH.
 service Gridwell {
-  // ── Plugin lifecycle ────────────────────────────────────────────────────
-  rpc Info(InfoRequest)       returns (InfoResponse);
-  rpc Attach(AttachRequest)   returns (AttachResponse);
-  rpc Detach(DetachRequest)   returns (DetachResponse);
-  rpc Probe(ProbeRequest)     returns (ProbeResponse);
+  // ── Lifecycle ───────────────────────────────────────────────────────────
+  // Info is the whole handshake (identity + default root); there is no
+  // Attach/Detach/Bootstrap. ListPlugins enumerates a node's plugins (the SSH
+  // gateway calls it on a remote to learn that node's namespaces).
+  rpc Info(InfoRequest)               returns (InfoResponse);
+  rpc Probe(ProbeRequest)             returns (ProbeResponse);
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
 
-  // ── Session ─────────────────────────────────────────────────────────────
-  rpc GetSession(GetSessionRequest)          returns (stream BlobChunk);
-  rpc PutSession(stream PutSessionRequest)     returns (PutSessionResponse);
+  // ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
+  rpc GetSession(GetSessionRequest)        returns (stream BlobChunk);
+  rpc PutSession(stream PutSessionRequest) returns (PutSessionResponse);
 
-  // ── Shell ────────────────────────────────────────────────────────────────
+  // ── Shell (live PTY, both ways) ───────────────────────────────────────────
   rpc OpenShell(stream OpenShellRequest) returns (stream OpenShellResponse);
 
-  // ── Bootstrap (kept for backward compat; superseded by Attach) ──────────
-  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse);
-  rpc GetGrid(GetGridRequest) returns (GetGridResponse);
-  rpc GetBlob(GetBlobRequest) returns (GetBlobResponse);
-  rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
+  // ── Reads ─────────────────────────────────────────────────────────────────
+  rpc GetGrid(GetGridRequest)               returns (GetGridResponse);
+  rpc GetTile(GetTileRequest)               returns (TileResponse);
   rpc GetTileContent(GetTileContentRequest) returns (GetTileContentResponse);
-  rpc GetTile(GetTileRequest) returns (TileResponse);
-  rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
-  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
-  rpc Mount(MountRequest) returns (TileResponse);
+  rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
 
-  rpc CreateWell(CreateWellRequest) returns (TileResponse);
-  rpc CreateText(CreateTextRequest) returns (TileResponse);
-  rpc CreateURL(CreateURLRequest) returns (TileResponse);
-  rpc CreateShell(CreateShellRequest) returns (TileResponse);
-
-  rpc MoveTile(MoveTileRequest) returns (TileResponse);
-  rpc CloneTile(CloneTileRequest) returns (TileResponse);
+  // ── Mutations (one create, one writeback, plus placement) ─────────────────
+  rpc CreateTile(CreateTileRequest) returns (TileResponse);
+  rpc SetTile(SetTileRequest)       returns (TileResponse);
+  rpc MoveTile(MoveTileRequest)     returns (TileResponse);
+  rpc CloneTile(CloneTileRequest)   returns (TileResponse);
   rpc ResizeTile(ResizeTileRequest) returns (TileResponse);
-
-  rpc SetWellView(SetWellViewRequest) returns (TileResponse);
-  rpc SetTextView(SetTextViewRequest) returns (TileResponse);
-  rpc SetShellPreview(SetShellPreviewRequest) returns (TileResponse);
-  rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);
-  rpc SetRootView(SetRootViewRequest) returns (SetRootViewResponse);
-  rpc SetURLState(SetURLStateRequest) returns (TileResponse);
   rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
+  rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
+  rpc Mount(MountRequest)           returns (TileResponse);
+
+  // ShellSessionAlive gates the wasm refresh button on shell descent.
+  rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);
 
   rpc Subscribe(SubscribeRequest) returns (stream Event);
 }

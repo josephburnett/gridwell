@@ -228,15 +228,6 @@ func TestSetTextViewRPC(t *testing.T) {
 	}
 }
 
-// TestSetRootViewRPC: SetRootView is a no-op in the rootless model (no app
-// root; pane viewport lives in the URL). It must still succeed.
-func TestSetRootViewRPC(t *testing.T) {
-	_, cl, _ := newTestServer(t)
-	if err := cl.SetRootView(context.Background(), &rpc.SetRootViewRequest{Cx: 3, Cy: 4, Zoom: 2}); err != nil {
-		t.Fatalf("set root view: %v", err)
-	}
-}
-
 func TestDeleteTileRPC(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
@@ -335,19 +326,6 @@ func TestErrorCodeMapping(t *testing.T) {
 	})
 	if got := errCode(err); got != connect.CodeInvalidArgument {
 		t.Errorf("bad url: code %v, want InvalidArgument", got)
-	}
-}
-
-// TestBootstrapIsEmpty: in the rootless model Bootstrap returns no root grid —
-// the client starts with empty panes and builds the launcher from ListPlugins.
-func TestBootstrapIsEmpty(t *testing.T) {
-	_, cl, _ := newTestServer(t)
-	resp, err := cl.Bootstrap(context.Background())
-	if err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
-	if resp.RootGridID != "" {
-		t.Errorf("root_grid_id = %q, want empty (no root)", resp.RootGridID)
 	}
 }
 

@@ -50,36 +50,20 @@ func (p *Plugin) Close() error { return p.st.Close() }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
-func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	return &gridwellv1.InfoResponse{
-		Kind:          "localdb",
-		DisplayName:   "local",
-		SchemaVersion: 1,
-	}, nil
-}
-
-func (p *Plugin) Attach(ctx context.Context, _ *gridwellv1.AttachRequest) (*gridwellv1.AttachResponse, error) {
+// Info is the whole handshake: identity plus the default root grid (localdb's
+// singleton root). No Attach/Detach — the gRPC connection is the lifecycle.
+func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	id, err := p.st.RootGridID(ctx)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.AttachResponse{
-		RootGridId: id,
-		Label:      "home",
-		Caps: &gridwellv1.PluginCaps{
-			Delete: true,
-			Clone:  true,
-			Move:   true,
-			Write:  true,
-			Live:   true,
-			Accept: true,
-		},
-		HasSession: true,
+	return &gridwellv1.InfoResponse{
+		Kind:          "localdb",
+		DisplayName:   "local",
+		SchemaVersion: 1,
+		RootGridId:    id,
+		HasSession:    true,
 	}, nil
-}
-
-func (p *Plugin) Detach(_ context.Context, _ *gridwellv1.DetachRequest) (*gridwellv1.DetachResponse, error) {
-	return &gridwellv1.DetachResponse{}, nil
 }
 
 func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
@@ -93,25 +77,6 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 	return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
 }
 
-// ── Bootstrap (backward compat) ──────────────────────────────────────────────
-
-func (p *Plugin) Bootstrap(ctx context.Context, _ *gridwellv1.BootstrapRequest) (*gridwellv1.BootstrapResponse, error) {
-	id, err := p.st.RootGridID(ctx)
-	if err != nil {
-		return nil, errToStatus(err)
-	}
-	cx, cy, zoom, err := p.st.RootView(ctx)
-	if err != nil {
-		return nil, errToStatus(err)
-	}
-	return &gridwellv1.BootstrapResponse{
-		RootGridId: id,
-		RootViewCx: cx,
-		RootViewCy: cy,
-		RootZoom:   zoom,
-	}, nil
-}
-
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
@@ -123,14 +88,6 @@ func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 		Grid:  rpc.GridToProto(&r.Grid),
 		Tiles: rpc.TilesToProto(r.Tiles),
 	}, nil
-}
-
-func (p *Plugin) GetBlob(ctx context.Context, req *gridwellv1.GetBlobRequest) (*gridwellv1.GetBlobResponse, error) {
-	data, err := p.st.GetBlob(ctx, req.BlobId)
-	if err != nil {
-		return nil, errToStatus(err)
-	}
-	return &gridwellv1.GetBlobResponse{Data: data}, nil
 }
 
 func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
@@ -176,31 +133,33 @@ func (p *Plugin) SetTileAlt(ctx context.Context, req *gridwellv1.SetTileAltReque
 
 // ── Creates ──────────────────────────────────────────────────────────────────
 
-func (p *Plugin) CreateWell(ctx context.Context, req *gridwellv1.CreateWellRequest) (*gridwellv1.TileResponse, error) {
-	r := rpc.CreateWellFromProto(req)
-	// child_grid_id set → an exit well pointing at a grid owned by another
-	// plugin (e.g. a mounted second DB, or an fs/proc grid). No interior child
-	// grid is allocated; the cross-plugin reference is stored verbatim.
-	if req.ChildGridId != "" {
-		return tileResp(p.st.CreateExitWell(ctx, r.Path, r.GridID, r.X, r.Y, r.W, r.H, req.ChildGridId, req.Label))
+// CreateTile is the single create: tile.kind selects which typed store create
+// to run. The wire carries one create; localdb fans it back out here.
+func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
+	t := req.Tile
+	if t == nil {
+		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
 	}
-	return tileResp(p.st.CreateWell(ctx, r))
-}
-
-func (p *Plugin) CreateText(ctx context.Context, req *gridwellv1.CreateTextRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CreateText(ctx, rpc.CreateTextFromProto(req)))
-}
-
-func (p *Plugin) CreateURL(ctx context.Context, req *gridwellv1.CreateURLRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CreateURL(ctx, rpc.CreateURLFromProto(req)))
-}
-
-// A file/process well is created by the server's Mount handler (which
-// Attaches the fs/proc plugin and stores a cross-plugin well), never by the
-// localdb plugin.
-
-func (p *Plugin) CreateShell(ctx context.Context, req *gridwellv1.CreateShellRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CreateShell(ctx, rpc.CreateShellFromProto(req)))
+	path := rpc.PathFromProto(req.Path)
+	switch t.Kind {
+	case rpc.KindWell:
+		// child_grid_id set → an exit well pointing at a grid owned by another
+		// plugin (a mounted DB, an fs/proc grid). No interior child grid is
+		// allocated; the cross-plugin reference is stored verbatim. alt_text is
+		// the exit well's label.
+		if t.ChildGridId != "" {
+			return tileResp(p.st.CreateExitWell(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.ChildGridId, t.AltText))
+		}
+		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
+	case rpc.KindText:
+		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Data: req.Data}))
+	case rpc.KindURL:
+		return tileResp(p.st.CreateURL(ctx, &rpc.CreateURLRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, URL: t.UrlString}))
+	case rpc.KindShell:
+		return tileResp(p.st.CreateShell(ctx, &rpc.CreateShellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
+	}
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────────
@@ -217,16 +176,27 @@ func (p *Plugin) ResizeTile(ctx context.Context, req *gridwellv1.ResizeTileReque
 	return tileResp(p.st.ResizeTile(ctx, rpc.ResizeTileFromProto(req)))
 }
 
-func (p *Plugin) SetWellView(ctx context.Context, req *gridwellv1.SetWellViewRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.SetWellView(ctx, rpc.SetWellViewFromProto(req)))
-}
-
-func (p *Plugin) SetTextView(ctx context.Context, req *gridwellv1.SetTextViewRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.SetTextView(ctx, rpc.SetTextViewFromProto(req)))
-}
-
-func (p *Plugin) SetShellPreview(ctx context.Context, req *gridwellv1.SetShellPreviewRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.SetShellPreview(ctx, rpc.SetShellPreviewFromProto(req)))
+// SetTile is the single framing/preview writeback: tile.kind selects the one
+// store operation that kind supports, and that mapping fixes the version
+// semantics — well/text framing never bumps version, url/shell preview does.
+func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
+	t := req.Tile
+	if t == nil {
+		return nil, status.Error(codes.InvalidArgument, "set: nil tile")
+	}
+	path := rpc.PathFromProto(req.Path)
+	switch t.Kind {
+	case rpc.KindWell:
+		return tileResp(p.st.SetWellView(ctx, &rpc.SetWellViewRequest{Path: path, TileID: req.TileId, Version: req.Version, ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}))
+	case rpc.KindText:
+		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{Path: path, TileID: req.TileId, Version: req.Version, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
+	case rpc.KindShell:
+		return tileResp(p.st.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{Path: path, TileID: req.TileId, Version: req.Version, JPEG: req.Preview}))
+	case rpc.KindURL:
+		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{Path: path, TileID: req.TileId, Version: req.Version, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText}))
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "set: unknown kind %q", t.Kind)
+	}
 }
 
 func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
@@ -238,17 +208,6 @@ func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessi
 		alive, _ = p.sess.HasSession(id)
 	}
 	return &gridwellv1.ShellSessionAliveResponse{Alive: alive}, nil
-}
-
-func (p *Plugin) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
-	if err := p.st.SetRootView(ctx, rpc.SetRootViewFromProto(req)); err != nil {
-		return nil, errToStatus(err)
-	}
-	return &gridwellv1.SetRootViewResponse{}, nil
-}
-
-func (p *Plugin) SetURLState(ctx context.Context, req *gridwellv1.SetURLStateRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.SetURLState(ctx, rpc.SetURLStateFromProto(req)))
 }
 
 func (p *Plugin) UpdateText(ctx context.Context, req *gridwellv1.UpdateTextRequest) (*gridwellv1.TileResponse, error) {

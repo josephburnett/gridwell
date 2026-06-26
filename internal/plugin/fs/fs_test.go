@@ -72,42 +72,47 @@ func TestInfo(t *testing.T) {
 	}
 }
 
-func TestAttach_ValidPath(t *testing.T) {
+// attachAt sets the plugin's configured root and reads Info — the whole
+// handshake (there is no Attach). Info carries the default root grid id and a
+// label derived from the directory basename.
+func attachAt(p *fs.Plugin, path string) (*gridwellv1.InfoResponse, error) {
+	p.SetRoot(path)
+	return p.Info(context.Background(), &gridwellv1.InfoRequest{})
+}
+
+func TestInfo_ValidPath(t *testing.T) {
 	p := openPlugin(t)
-	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": "/home/joe"},
-	})
+	resp, err := attachAt(p, "/home/joe")
 	if err != nil {
-		t.Fatalf("Attach: %v", err)
+		t.Fatalf("Info: %v", err)
 	}
 	if resp.RootGridId == "" {
 		t.Errorf("RootGridId: got %q, want non-empty", resp.RootGridId)
 	}
-	if resp.Label != "joe" {
-		t.Errorf("Label: got %q, want %q", resp.Label, "joe")
+	if resp.DisplayName != "joe" {
+		t.Errorf("DisplayName: got %q, want %q", resp.DisplayName, "joe")
 	}
 }
 
-func TestAttach_RootPath(t *testing.T) {
+func TestInfo_RootPath(t *testing.T) {
 	p := openPlugin(t)
-	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": "/"},
-	})
+	resp, err := attachAt(p, "/")
 	if err != nil {
-		t.Fatalf("Attach: %v", err)
+		t.Fatalf("Info: %v", err)
 	}
-	if resp.Label != "files" {
-		t.Errorf("Label: got %q, want %q", resp.Label, "files")
+	if resp.DisplayName != "files" {
+		t.Errorf("DisplayName: got %q, want %q", resp.DisplayName, "files")
 	}
 }
 
-func TestAttach_MissingPath(t *testing.T) {
+func TestInfo_NoConfiguredRoot(t *testing.T) {
 	p := openPlugin(t)
-	_, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{},
-	})
-	if err == nil {
-		t.Error("expected error for empty path")
+	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if resp.RootGridId != "" {
+		t.Errorf("RootGridId: got %q, want empty (no configured root)", resp.RootGridId)
 	}
 }
 
@@ -115,9 +120,7 @@ func TestGetGrid_ListsEntries(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
 
-	att, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, err := attachAt(p, dir)
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
@@ -162,9 +165,7 @@ func TestGetGrid_AutoLayout(t *testing.T) {
 	}
 
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	resp, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	if err != nil {
 		t.Fatalf("GetGrid: %v", err)
@@ -186,9 +187,7 @@ func TestGetGrid_AutoLayout(t *testing.T) {
 func TestGetGrid_StableIDs(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	gridID := att.RootGridId
 
 	r1, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
@@ -214,9 +213,7 @@ func TestGetGrid_StableIDs(t *testing.T) {
 func TestGetGrid_NewFileAppearsStably(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	gridID := att.RootGridId
 
 	r1, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
@@ -245,9 +242,7 @@ func TestGetGrid_NewFileAppearsStably(t *testing.T) {
 func TestGetGrid_RemovesTilesForDeletedFiles(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	gridID := att.RootGridId
 
 	p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
@@ -268,9 +263,7 @@ func TestGetGrid_RemovesTilesForDeletedFiles(t *testing.T) {
 
 func TestGetGrid_MissingDir_ReturnsEmptyNotError(t *testing.T) {
 	p := openPlugin(t)
-	att, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": "/nonexistent/path/that/doesnt/exist"},
-	})
+	att, err := attachAt(p, "/nonexistent/path/that/doesnt/exist")
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}
@@ -286,9 +279,7 @@ func TestGetGrid_MissingDir_ReturnsEmptyNotError(t *testing.T) {
 func TestProbe_Present(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
 	var noteID string
@@ -327,9 +318,7 @@ func TestDeleteTile_File(t *testing.T) {
 	// which lets the subsequent GetGrid see it gone via reconcile.
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
 	var noteID string
@@ -364,9 +353,7 @@ func TestDeleteTile_CallsRemoveMethod(t *testing.T) {
 	dir := tempTree(t)
 	h := &recordHost{}
 	p := openPluginWithHost(t, h)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
 	var noteID string
@@ -392,9 +379,7 @@ func TestDeleteTile_Dir(t *testing.T) {
 	dir := tempTree(t)
 	h := &recordHost{}
 	p := openPluginWithHost(t, h)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"path": dir},
-	})
+	att, _ := attachAt(p, dir)
 	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
 	var subID string
@@ -456,7 +441,7 @@ func tileByName(t *testing.T, tiles []*gridwellv1.Tile, name string) *gridwellv1
 func TestMoveTile_Persists(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	note := tileByName(t, r.Tiles, "note.txt")
 
@@ -483,7 +468,7 @@ func TestMoveTile_Persists(t *testing.T) {
 func TestMoveTile_SurvivesReopen(t *testing.T) {
 	dir := tempTree(t)
 	p, dbPath := openFilePlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	att, _ := attachAt(p, dir)
 	gridID := att.RootGridId
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
 	note := tileByName(t, r.Tiles, "note.txt")
@@ -511,7 +496,7 @@ func TestMoveTile_SurvivesReopen(t *testing.T) {
 func TestResizeTile_Persists(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	sub := tileByName(t, r.Tiles, "sub")
 
@@ -530,12 +515,15 @@ func TestResizeTile_Persists(t *testing.T) {
 func TestSetWellView_Persists(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	sub := tileByName(t, r.Tiles, "sub")
 
-	if _, err := p.SetWellView(context.Background(), &gridwellv1.SetWellViewRequest{TileId: sub.Id, ViewX: 6, ViewY: 8, ViewZoom: 2.5}); err != nil {
-		t.Fatalf("SetWellView: %v", err)
+	if _, err := p.SetTile(context.Background(), &gridwellv1.SetTileRequest{
+		TileId: sub.Id,
+		Tile:   &gridwellv1.Tile{Kind: "well", ViewX: 6, ViewY: 8, ViewZoom: 2.5},
+	}); err != nil {
+		t.Fatalf("SetTile: %v", err)
 	}
 	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	sub2 := tileByName(t, r2.Tiles, "sub")
@@ -550,7 +538,7 @@ func TestSetWellView_Persists(t *testing.T) {
 func TestMoveTile_CrossGridRejected(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	note := tileByName(t, r.Tiles, "note.txt")
 	_, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, DestGridId: "999999", X: 1, Y: 1})
@@ -565,7 +553,7 @@ func TestMoveTile_CrossGridRejected(t *testing.T) {
 func TestGetTileContent_FileMetadata(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
-	att, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: map[string]string{"path": dir}})
+	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
 	note := tileByName(t, r.Tiles, "note.txt")
@@ -590,15 +578,15 @@ func TestGetTileContent_FileMetadata(t *testing.T) {
 	}
 }
 
-// TestAttach_DefaultsToConfiguredRoot: with no path in the Attach config, the
-// plugin falls back to its configured root (the launcher-mount path).
-func TestAttach_DefaultsToConfiguredRoot(t *testing.T) {
+// TestInfo_DefaultsToConfiguredRoot: Info resolves the plugin's configured root
+// directory to a grid (the launcher-mount path).
+func TestInfo_DefaultsToConfiguredRoot(t *testing.T) {
 	dir := tempTree(t)
 	p := openPlugin(t)
 	p.SetRoot(dir)
-	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{Config: nil})
+	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
-		t.Fatalf("Attach with no path: %v", err)
+		t.Fatalf("Info: %v", err)
 	}
 	if resp.RootGridId == "" {
 		t.Error("RootGridId empty")

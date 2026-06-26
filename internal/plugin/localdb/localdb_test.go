@@ -19,6 +19,34 @@ func openPlugin(t *testing.T) *localdb.Plugin {
 	return localdb.New(st, nil)
 }
 
+// rootGrid returns the plugin's default root grid id (from Info — the whole
+// handshake; there is no Attach).
+func rootGrid(t *testing.T, p *localdb.Plugin) string {
+	t.Helper()
+	info, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.RootGridId == "" {
+		t.Fatal("Info.RootGridId empty")
+	}
+	return info.RootGridId
+}
+
+// createText is a CreateTile helper for a text tile.
+func createText(t *testing.T, p *localdb.Plugin, gridID string, data []byte) *gridwellv1.Tile {
+	t.Helper()
+	cr, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
+		GridId: gridID,
+		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 4, H: 4},
+		Data:   data,
+	})
+	if err != nil {
+		t.Fatalf("CreateTile(text): %v", err)
+	}
+	return cr.Tile
+}
+
 func TestInfo(t *testing.T) {
 	p := openPlugin(t)
 	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
@@ -28,77 +56,32 @@ func TestInfo(t *testing.T) {
 	if resp.Kind != "localdb" {
 		t.Errorf("Kind = %q, want localdb", resp.Kind)
 	}
-}
-
-func TestAttach_ReturnsRootGridID(t *testing.T) {
-	p := openPlugin(t)
-	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if resp.RootGridId == "" {
 		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
-	if !resp.Caps.Write {
-		t.Error("expected Write cap")
-	}
-}
-
-func TestBootstrap_ReturnsRootGridID(t *testing.T) {
-	p := openPlugin(t)
-	resp, err := p.Bootstrap(context.Background(), &gridwellv1.BootstrapRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.RootGridId == "" {
-		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
-	}
-}
-
-func TestAttach_MatchesBootstrap(t *testing.T) {
-	p := openPlugin(t)
-	ctx := context.Background()
-	a, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := p.Bootstrap(ctx, &gridwellv1.BootstrapRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a.RootGridId != b.RootGridId {
-		t.Errorf("Attach.RootGridId=%q != Bootstrap.RootGridId=%q", a.RootGridId, b.RootGridId)
+	if !resp.HasSession {
+		t.Error("expected HasSession=true")
 	}
 }
 
 func TestGetGrid_ReturnsGrid(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	a, _ := p.Attach(ctx, &gridwellv1.AttachRequest{})
-	resp, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: a.RootGridId})
+	root := rootGrid(t, p)
+	resp, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Grid.Id != a.RootGridId {
-		t.Errorf("grid id = %q, want %q", resp.Grid.Id, a.RootGridId)
+	if resp.Grid.Id != root {
+		t.Errorf("grid id = %q, want %q", resp.Grid.Id, root)
 	}
 }
 
 func TestProbe_Present(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	a, _ := p.Attach(ctx, &gridwellv1.AttachRequest{})
-
-	// Create a tile so we have something to probe.
-	cr, err := p.CreateText(ctx, &gridwellv1.CreateTextRequest{
-		GridId: a.RootGridId,
-		X: 0, Y: 0, W: 4, H: 4,
-		Data:  []byte("hello"),
-	})
-	if err != nil {
-		t.Fatalf("CreateText: %v", err)
-	}
-	pr, err := p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: cr.Tile.Id})
+	tile := createText(t, p, rootGrid(t, p), []byte("hello"))
+	pr, err := p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: tile.Id})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,20 +104,20 @@ func TestProbe_Gone(t *testing.T) {
 func TestCreateWell_ThenGetGrid(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	a, _ := p.Attach(ctx, &gridwellv1.AttachRequest{})
+	root := rootGrid(t, p)
 
-	cr, err := p.CreateWell(ctx, &gridwellv1.CreateWellRequest{
-		GridId: a.RootGridId,
-		X: 0, Y: 0, W: 4, H: 4,
+	cr, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: root,
+		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 4, H: 4},
 	})
 	if err != nil {
-		t.Fatalf("CreateWell: %v", err)
+		t.Fatalf("CreateTile(well): %v", err)
 	}
 	if cr.Tile.Kind != "well" {
 		t.Errorf("Kind = %q, want well", cr.Tile.Kind)
 	}
 
-	gr, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: a.RootGridId})
+	gr, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,21 +135,15 @@ func TestCreateWell_ThenGetGrid(t *testing.T) {
 func TestDeleteTile_RemovesTile(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	a, _ := p.Attach(ctx, &gridwellv1.AttachRequest{})
-
-	cr, _ := p.CreateText(ctx, &gridwellv1.CreateTextRequest{
-		GridId: a.RootGridId,
-		X: 0, Y: 0, W: 4, H: 4,
-		Data:  []byte("bye"),
-	})
+	tile := createText(t, p, rootGrid(t, p), []byte("bye"))
 	_, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
-		TileId:  cr.Tile.Id,
-		Version: cr.Tile.Version,
+		TileId:  tile.Id,
+		Version: tile.Version,
 	})
 	if err != nil {
 		t.Fatalf("DeleteTile: %v", err)
 	}
-	pr, _ := p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: cr.Tile.Id})
+	pr, _ := p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: tile.Id})
 	if pr.Presence != gridwellv1.ProbeResponse_PRESENCE_GONE {
 		t.Error("tile still PRESENT after DeleteTile")
 	}
@@ -213,50 +190,35 @@ func TestShellSessionAlive_WithSess(t *testing.T) {
 	}
 }
 
-func TestSetRootView_RoundTrip(t *testing.T) {
-	p := openPlugin(t)
-	ctx := context.Background()
-
-	_, err := p.SetRootView(ctx, &gridwellv1.SetRootViewRequest{Cx: 100, Cy: 200, Zoom: 1.5})
-	if err != nil {
-		t.Fatal(err)
-	}
-	boot, err := p.Bootstrap(ctx, &gridwellv1.BootstrapRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if boot.RootViewCx != 100 || boot.RootViewCy != 200 || boot.RootZoom != 1.5 {
-		t.Errorf("got cx=%v cy=%v zoom=%v, want 100 200 1.5", boot.RootViewCx, boot.RootViewCy, boot.RootZoom)
-	}
-}
-
-// TestCreateWell_InteriorVsExit: CreateWell with no child_grid_id allocates an
-// interior child grid; with a qualified child_grid_id it stores a cross-plugin
-// exit well pointing at that grid (no interior grid, the reference verbatim).
+// TestCreateWell_InteriorVsExit: a well CreateTile with no child_grid_id
+// allocates an interior child grid; with a qualified child_grid_id it stores a
+// cross-plugin exit well pointing at that grid (no interior grid, the reference
+// verbatim). alt_text is the exit well's label.
 func TestCreateWell_InteriorVsExit(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	root, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := rootGrid(t, p)
 
-	interior, err := p.CreateWell(ctx, &gridwellv1.CreateWellRequest{
-		GridId: root.RootGridId, X: 0, Y: 0, W: 1, H: 1,
+	interior, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: root,
+		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1},
 	})
 	if err != nil {
-		t.Fatalf("interior CreateWell: %v", err)
+		t.Fatalf("interior CreateTile: %v", err)
 	}
 	if interior.Tile.ChildGridId == "" || interior.Tile.ChildGridId == "0" {
 		t.Errorf("interior well child = %q, want a fresh local grid", interior.Tile.ChildGridId)
 	}
 
-	exit, err := p.CreateWell(ctx, &gridwellv1.CreateWellRequest{
-		GridId: root.RootGridId, X: 2, Y: 0, W: 1, H: 1,
-		ChildGridId: "other-plugin-uuid/9", Label: "mounted",
+	exit, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: root,
+		Tile: &gridwellv1.Tile{
+			Kind: "well", X: 2, Y: 0, W: 1, H: 1,
+			ChildGridId: "other-plugin-uuid/9", AltText: "mounted",
+		},
 	})
 	if err != nil {
-		t.Fatalf("exit CreateWell: %v", err)
+		t.Fatalf("exit CreateTile: %v", err)
 	}
 	if exit.Tile.ChildGridId != "other-plugin-uuid/9" {
 		t.Errorf("exit well child = %q, want verbatim cross-plugin ref", exit.Tile.ChildGridId)
@@ -271,17 +233,8 @@ func TestCreateWell_InteriorVsExit(t *testing.T) {
 func TestGetTileContent_ReturnsBody(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	root, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	txt, err := p.CreateText(ctx, &gridwellv1.CreateTextRequest{
-		GridId: root.RootGridId, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
-	})
-	if err != nil {
-		t.Fatalf("CreateText: %v", err)
-	}
-	resp, err := p.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: txt.Tile.Id})
+	txt := createText(t, p, rootGrid(t, p), []byte("# hello"))
+	resp, err := p.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: txt.Id})
 	if err != nil {
 		t.Fatalf("GetTileContent: %v", err)
 	}
@@ -295,30 +248,52 @@ func TestGetTileContent_ReturnsBody(t *testing.T) {
 func TestGetTileAndSetTileAlt(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	root, err := p.Attach(ctx, &gridwellv1.AttachRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	txt, err := p.CreateText(ctx, &gridwellv1.CreateTextRequest{
-		GridId: root.RootGridId, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
-	})
-	if err != nil {
-		t.Fatalf("CreateText: %v", err)
-	}
+	txt := createText(t, p, rootGrid(t, p), []byte("# hi"))
 
-	got, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: txt.Tile.Id})
+	got, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: txt.Id})
 	if err != nil {
 		t.Fatalf("GetTile: %v", err)
 	}
-	if got.Tile.Id != txt.Tile.Id || got.Tile.Kind != "text" {
+	if got.Tile.Id != txt.Id || got.Tile.Kind != "text" {
 		t.Errorf("GetTile = %+v, want the text tile", got.Tile)
 	}
 
-	stamped, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: txt.Tile.Id, Alt: "claude"})
+	stamped, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: txt.Id, Alt: "claude"})
 	if err != nil {
 		t.Fatalf("SetTileAlt: %v", err)
 	}
 	if stamped.Tile.AltText != "claude" {
 		t.Errorf("alt = %q, want claude", stamped.Tile.AltText)
+	}
+}
+
+// TestSetTile_WellFramingNoVersionBump: framing writes (well view) do not bump
+// version; a content writeback (url freeze) does. This pins the version rule
+// that the merged SetTile inherits from the store operations it dispatches to.
+func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	root := rootGrid(t, p)
+
+	well, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: root,
+		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1},
+	})
+	if err != nil {
+		t.Fatalf("CreateTile(well): %v", err)
+	}
+	set, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId:  well.Tile.Id,
+		Version: well.Tile.Version,
+		Tile:    &gridwellv1.Tile{Kind: "well", ViewX: 5, ViewY: 6, ViewZoom: 2},
+	})
+	if err != nil {
+		t.Fatalf("SetTile(well framing): %v", err)
+	}
+	if set.Tile.Version != well.Tile.Version {
+		t.Errorf("framing bumped version: %d → %d, want unchanged", well.Tile.Version, set.Tile.Version)
+	}
+	if set.Tile.ViewX != 5 || set.Tile.ViewY != 6 || set.Tile.ViewZoom != 2 {
+		t.Errorf("framing not persisted: %+v", set.Tile)
 	}
 }

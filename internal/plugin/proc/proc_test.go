@@ -92,45 +92,41 @@ func TestInfo(t *testing.T) {
 	}
 }
 
-func TestAttach_DefaultPID(t *testing.T) {
+// attachAt sets the plugin's configured root pid and reads Info — the whole
+// handshake (there is no Attach). Info carries the default root grid id and a
+// label ("processes" for pid 1, "pid N" otherwise).
+func attachAt(p *proc.Plugin, pid int64) (*gridwellv1.InfoResponse, error) {
+	p.SetRootPID(pid)
+	return p.Info(context.Background(), &gridwellv1.InfoRequest{})
+}
+
+func TestInfo_DefaultPID(t *testing.T) {
 	root, _, _ := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
-	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{})
+	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
-		t.Fatalf("Attach: %v", err)
+		t.Fatalf("Info: %v", err)
 	}
 	if resp.RootGridId == "" {
 		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
-	if resp.Label != "processes" {
-		t.Errorf("Label = %q, want %q", resp.Label, "processes")
+	if resp.DisplayName != "processes" {
+		t.Errorf("DisplayName = %q, want %q", resp.DisplayName, "processes")
 	}
 }
 
-func TestAttach_SpecificPID(t *testing.T) {
+func TestInfo_SpecificPID(t *testing.T) {
 	root, parentPID, _ := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
-	resp, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	resp, err := attachAt(p, parentPID)
 	if err != nil {
-		t.Fatalf("Attach: %v", err)
+		t.Fatalf("Info: %v", err)
 	}
 	if resp.RootGridId == "" {
 		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
 	}
-	if resp.Label == "processes" {
-		t.Errorf("Label should not be 'processes' for non-1 pid: %q", resp.Label)
-	}
-}
-
-func TestAttach_BadPID(t *testing.T) {
-	p := openPlugin(t, "", nil)
-	_, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": "not-a-pid"},
-	})
-	if err == nil {
-		t.Error("expected error for bad pid")
+	if resp.DisplayName == "processes" {
+		t.Errorf("DisplayName should not be 'processes' for non-1 pid: %q", resp.DisplayName)
 	}
 }
 
@@ -138,9 +134,7 @@ func TestGetGrid_ListsChildren(t *testing.T) {
 	root, parentPID, childPID := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
 
-	ar, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	ar, _ := attachAt(p, parentPID)
 	resp, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 	if err != nil {
 		t.Fatalf("GetGrid: %v", err)
@@ -165,9 +159,7 @@ func TestGetGrid_StableIDs(t *testing.T) {
 	root, parentPID, _ := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
 
-	ar, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	ar, _ := attachAt(p, parentPID)
 
 	r1, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
@@ -187,9 +179,7 @@ func TestGetGrid_SwepsDefinitelyGonePID(t *testing.T) {
 	root, parentPID, childPID := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
 
-	ar, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	ar, _ := attachAt(p, parentPID)
 
 	// First call: child appears.
 	r1, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
@@ -220,9 +210,7 @@ func TestProbe_Present(t *testing.T) {
 	root, parentPID, childPID := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
 
-	ar, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	ar, _ := attachAt(p, parentPID)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 
 	childKey := strconv.FormatInt(childPID, 10)
@@ -261,9 +249,7 @@ func TestDeleteTile_SignalsProcess(t *testing.T) {
 	killer := &recordKiller{}
 	p := openPlugin(t, root, killer)
 
-	ar, _ := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	ar, _ := attachAt(p, parentPID)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
 
 	childKey := strconv.FormatInt(childPID, 10)
@@ -316,9 +302,7 @@ func TestMoveTile_PersistsAndSurvivesReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	att, err := p.Attach(context.Background(), &gridwellv1.AttachRequest{
-		Config: map[string]string{"pid": strconv.FormatInt(parentPID, 10)},
-	})
+	att, err := attachAt(p, parentPID)
 	if err != nil {
 		t.Fatalf("Attach: %v", err)
 	}

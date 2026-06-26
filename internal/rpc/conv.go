@@ -178,34 +178,46 @@ func EventFromProto(e *pb.Event) Event {
 	return Event{}
 }
 
-// Create request converters.
+// Create converters. The wire has a single CreateTile carrying a Tile whose
+// Kind selects the meaningful fields; these per-kind helpers are the one place
+// each primitive's create maps onto that unified shape. The Client exposes
+// typed sugar over them; the plugin fans CreateTile back out by Kind.
 
-func CreateWellFromProto(r *pb.CreateWellRequest) *CreateWellRequest {
-	return &CreateWellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridID: r.ChildGridId, Label: r.Label}
+func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
+	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label}}
 }
-func CreateWellToProto(r *CreateWellRequest) *pb.CreateWellRequest {
-	return &pb.CreateWellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, Label: r.Label}
+func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
+	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H}, Data: r.Data}
 }
-
-func CreateTextFromProto(r *pb.CreateTextRequest) *CreateTextRequest {
-	return &CreateTextRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, Data: r.Data}
+func CreateURLToProto(r *CreateURLRequest) *pb.CreateTileRequest {
+	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindURL, X: r.X, Y: r.Y, W: r.W, H: r.H, UrlString: r.URL}}
 }
-func CreateTextToProto(r *CreateTextRequest) *pb.CreateTextRequest {
-	return &pb.CreateTextRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, Data: r.Data}
-}
-
-func CreateURLFromProto(r *pb.CreateURLRequest) *CreateURLRequest {
-	return &CreateURLRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H, URL: r.Url}
-}
-func CreateURLToProto(r *CreateURLRequest) *pb.CreateURLRequest {
-	return &pb.CreateURLRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H, Url: r.URL}
+func CreateShellToProto(r *CreateShellRequest) *pb.CreateTileRequest {
+	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H}}
 }
 
-func CreateShellFromProto(r *pb.CreateShellRequest) *CreateShellRequest {
-	return &CreateShellRequest{Path: PathFromProto(r.Path), GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
+// SetTile converters. The wire has a single SetTile dispatched on the target
+// tile's Kind; these helpers map each kind's framing/preview writeback onto it.
+
+func SetWellViewToProto(r *SetWellViewRequest) *pb.SetTileRequest {
+	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+		Tile: &pb.Tile{Kind: KindWell, ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
 }
-func CreateShellToProto(r *CreateShellRequest) *pb.CreateShellRequest {
-	return &pb.CreateShellRequest{Path: PathToProto(r.Path), GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
+func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTileRequest {
+	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+		Tile: &pb.Tile{Kind: KindText, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}}
+}
+func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetTileRequest {
+	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+		Tile: &pb.Tile{Kind: KindShell}, Preview: r.JPEG}
+}
+func SetURLStateToProto(r *SetURLStateRequest) *pb.SetTileRequest {
+	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+		Tile: &pb.Tile{Kind: KindURL, UrlString: r.URL, AltText: r.Title}, Preview: r.JPEG}
 }
 
 // Mutation request converters.
@@ -231,34 +243,6 @@ func ResizeTileToProto(r *ResizeTileRequest) *pb.ResizeTileRequest {
 	return &pb.ResizeTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, X: r.X, Y: r.Y, W: r.W, H: r.H}
 }
 
-func SetWellViewFromProto(r *pb.SetWellViewRequest) *SetWellViewRequest {
-	return &SetWellViewRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}
-}
-func SetWellViewToProto(r *SetWellViewRequest) *pb.SetWellViewRequest {
-	return &pb.SetWellViewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}
-}
-
-func SetTextViewFromProto(r *pb.SetTextViewRequest) *SetTextViewRequest {
-	return &SetTextViewRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}
-}
-func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTextViewRequest {
-	return &pb.SetTextViewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}
-}
-
-func SetShellPreviewFromProto(r *pb.SetShellPreviewRequest) *SetShellPreviewRequest {
-	return &SetShellPreviewRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, JPEG: r.Jpeg}
-}
-func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetShellPreviewRequest {
-	return &pb.SetShellPreviewRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, Jpeg: r.JPEG}
-}
-
-func SetURLStateFromProto(r *pb.SetURLStateRequest) *SetURLStateRequest {
-	return &SetURLStateRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, JPEG: r.Jpeg, URL: r.Url, Title: r.Title}
-}
-func SetURLStateToProto(r *SetURLStateRequest) *pb.SetURLStateRequest {
-	return &pb.SetURLStateRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, Jpeg: r.JPEG, Url: r.URL, Title: r.Title}
-}
-
 func ShellSessionAliveFromProto(r *pb.ShellSessionAliveRequest) *ShellSessionAliveRequest {
 	return &ShellSessionAliveRequest{TileID: r.TileId}
 }
@@ -270,13 +254,6 @@ func ShellSessionAliveResponseFromProto(r *pb.ShellSessionAliveResponse) *ShellS
 }
 func ShellSessionAliveResponseToProto(r *ShellSessionAliveResponse) *pb.ShellSessionAliveResponse {
 	return &pb.ShellSessionAliveResponse{Alive: r.Alive}
-}
-
-func SetRootViewFromProto(r *pb.SetRootViewRequest) *SetRootViewRequest {
-	return &SetRootViewRequest{Cx: r.Cx, Cy: r.Cy, Zoom: r.Zoom}
-}
-func SetRootViewToProto(r *SetRootViewRequest) *pb.SetRootViewRequest {
-	return &pb.SetRootViewRequest{Cx: r.Cx, Cy: r.Cy, Zoom: r.Zoom}
 }
 
 func UpdateTextFromProto(r *pb.UpdateTextRequest) *UpdateTextRequest {

@@ -253,7 +253,9 @@ func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
 		return
 	}
 	go func() {
-		data, err := a.cl.GetBlob(context.Background(), file.BlobID)
+		// Content is routable by tile id (GetTileContent); blob ids carry no
+		// plugin namespace and aren't routable on their own.
+		data, err := a.cl.GetTileContent(context.Background(), fileTileID)
 		if err != nil {
 			return
 		}
