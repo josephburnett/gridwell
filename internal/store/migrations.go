@@ -9,7 +9,7 @@ import (
 // applicationID marks a database file as a Gridwell DB. It is written into
 // the SQLite header via PRAGMA application_id (the bytes "GWeL", big-endian
 // ASCII) so file(1), archival tooling, and our own open path can recognize
-// the file without reading a single row. See CLAUDE.md (Storage).
+// the file without reading a single row. See internal/store/CLAUDE.md.
 const applicationID = 0x4757654C // "GWeL"
 
 // schemaVersion is the schema generation this binary materializes. It is
@@ -18,11 +18,15 @@ const applicationID = 0x4757654C // "GWeL"
 // fresh DB and refuses to open a DB stamped NEWER than this binary knows
 // about (an older binary against a future-schema DB would misread rows).
 //
-// Pre-release testing mode: there is no historical migration list yet. Every
-// schema change goes straight into schema.go and the user deletes the DB on
-// disk (see CLAUDE.md "Testing mode — no backward compatibility yet"). When
-// testing mode ends and the format is frozen, each additive change becomes
-// one entry in `migrations` that bumps schemaVersion.
+// Forward-compatibility guarantee — IN EFFECT for the localdb plugin. v1 is
+// frozen (see tablesV1 in schema.go). Data written by any released binary
+// stays readable forever; never delete the DB to absorb a schema change.
+// Every change is additive — an ALTER TABLE ADD COLUMN, or a new table/index —
+// that bumps schemaVersion by exactly one and appends one entry to `migrations`
+// (plus one test fixture). tablesTemplate (schema.go) stays the readable latest
+// shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
+// chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
+// sound. See internal/store/CLAUDE.md for the full contract.
 const schemaVersion = 1
 
 // migration is one additive, non-destructive step that brings a DB from
@@ -34,21 +38,34 @@ type migration struct {
 	run func(ctx context.Context, tx *sql.Tx) error
 }
 
-// migrations is the ordered list of post-freeze schema migrations. Empty in
-// testing mode (clean breaks instead). The framework runs so the discipline
-// is in place before the backward-compatibility promise is made.
+// migrations is the ordered list of additive post-v1 schema migrations; entry
+// i brings a DB from version i+1 to i+2. Empty until the first post-v1 change.
+// The forward-compatibility promise is now in effect — see the schemaVersion
+// doc above and internal/store/CLAUDE.md.
 var migrations []migration
 
-// applyMigrations enforces the on-disk format contract at Open time:
-//   - Fresh DB (application_id and user_version both 0): stamp the Gridwell
-//     application_id and the current schemaVersion. Schema already
-//     materializes the latest shape, so there is nothing to migrate.
-//   - Foreign DB (application_id set but not ours): refuse — not our file.
-//   - Newer DB (user_version > schemaVersion): refuse — an older binary must
-//     not misread a newer schema.
-//   - Older DB (user_version < schemaVersion): run each pending migration in
-//     order, then stamp schemaVersion.
+// applyMigrations enforces the on-disk format contract at Open time, bringing
+// the DB up to this binary's schemaVersion using the canonical migration list.
 func (s *Store) applyMigrations(ctx context.Context) error {
+	return s.migrateUp(ctx, migrations, schemaVersion)
+}
+
+// migrateUp brings the DB from its stored user_version up to target by running
+// the pending entries of migs. It is the whole on-disk format contract:
+//   - Fresh DB (application_id and user_version both 0): stamp the Gridwell
+//     application_id and target. A fresh Open already materializes the latest
+//     shape (tablesTemplate), so there is nothing to migrate — and
+//     TestSchemaEquivalence proves that shape equals tablesV1 + the full chain,
+//     which is what makes this shortcut sound.
+//   - Foreign DB (application_id set but not ours): refuse — not our file.
+//   - Newer DB (user_version > target): refuse — an older binary must not
+//     misread a newer schema.
+//   - Older DB (user_version < target): run each pending migration in order in
+//     one transaction, then stamp target.
+//
+// migs and target are parameters (not the globals directly) so the real engine
+// can be exercised by tests with a synthetic chain against a frozen-v1 DB.
+func (s *Store) migrateUp(ctx context.Context, migs []migration, target int) error {
 	appID, err := readPragmaInt(ctx, s.db, "application_id")
 	if err != nil {
 		return err
@@ -62,21 +79,21 @@ func (s *Store) applyMigrations(ctx context.Context) error {
 		if err := s.setPragmaInt(ctx, "application_id", applicationID); err != nil {
 			return err
 		}
-		return s.setPragmaInt(ctx, "user_version", schemaVersion)
+		return s.setPragmaInt(ctx, "user_version", int64(target))
 	}
 	if appID != applicationID {
 		return fmt.Errorf("not a Gridwell database: application_id %#x", appID)
 	}
-	if userVer > schemaVersion {
-		return fmt.Errorf("stored schema version %d is newer than this binary's %d", userVer, schemaVersion)
+	if userVer > int64(target) {
+		return fmt.Errorf("stored schema version %d is newer than this binary's %d", userVer, target)
 	}
-	if userVer == schemaVersion {
+	if userVer == int64(target) {
 		return nil
 	}
 
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
-		for _, m := range migrations {
-			if m.to <= int(userVer) || m.to > schemaVersion {
+		for _, m := range migs {
+			if m.to <= int(userVer) || m.to > target {
 				continue
 			}
 			if err := m.run(ctx, tx); err != nil {
@@ -90,7 +107,7 @@ func (s *Store) applyMigrations(ctx context.Context) error {
 	}
 	// user_version is a header field set outside the migration transaction;
 	// with a single connection (MaxOpenConns(1)) it lands on the same file.
-	return s.setPragmaInt(ctx, "user_version", schemaVersion)
+	return s.setPragmaInt(ctx, "user_version", int64(target))
 }
 
 // readPragmaInt reads an integer-valued PRAGMA (e.g. application_id,

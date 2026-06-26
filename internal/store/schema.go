@@ -61,7 +61,12 @@ CREATE TABLE IF NOT EXISTS session (
 );
 `
 
-// tablesDDL returns the grids/tiles/blobs DDL for the main database.
+// tablesDDL returns the grids/tiles/blobs DDL for the main database. This is
+// the canonical, always-current schema a fresh Open materializes directly, and
+// the single readable description of the present shape — read it here, not by
+// replaying migrations. Every column added here after v1 must be matched by an
+// additive migration (see migrations.go); TestSchemaEquivalence proves the two
+// agree. See internal/store/CLAUDE.md for the schema-evolution contract.
 func tablesDDL() string { return tablesTemplate }
 
 const tablesTemplate = `
@@ -139,6 +144,71 @@ CREATE TABLE IF NOT EXISTS tiles (
     -- Canonical display label. Stamped at insert time. The client renders
     -- alt_text verbatim (no derivation). Empty string until something stamps
     -- it (e.g. a URL tile before its page title is captured).
+    alt_text      TEXT NOT NULL DEFAULT '',
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    CHECK (
+       (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL    AND preview_blob_id IS NULL AND text_mode IS NULL)
+    OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
+    OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
+    OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
+CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
+`
+
+// tablesV1 is the FROZEN v1 grids/tiles/blobs schema. It is an immutable,
+// byte-for-byte copy of what tablesTemplate was at the moment the localdb
+// format was frozen (schemaVersion 1). NEVER edit it: tests build genuine
+// "old files" from this text and migrate them forward, so editing it would
+// rewrite history and hide migration bugs. New columns/tables go into
+// tablesTemplate (the live schema) plus a migration — never here.
+//
+// TestSchemaEquivalence asserts (tablesV1 + all migrations) produces a schema
+// identical to a fresh tablesTemplate; that is the proof that a brand-new DB
+// and an upgraded old DB converge on the same shape.
+const tablesV1 = `
+CREATE TABLE IF NOT EXISTS grids (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    object_id   TEXT NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_grids_object_id ON grids(object_id);
+
+CREATE TABLE IF NOT EXISTS blobs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    hash       TEXT NOT NULL UNIQUE,
+    data       BLOB NOT NULL,
+    refcount   INTEGER NOT NULL DEFAULT 0,
+    media_type TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS tiles (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    object_id     TEXT NOT NULL,
+    version       INTEGER NOT NULL DEFAULT 0,
+    grid_id       INTEGER NOT NULL REFERENCES grids(id),
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','shell')),
+    x             INTEGER NOT NULL,
+    y             INTEGER NOT NULL,
+    w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
+    h             INTEGER NOT NULL DEFAULT 1 CHECK (h > 0),
+    view_x        INTEGER NOT NULL DEFAULT 0,
+    view_y        INTEGER NOT NULL DEFAULT 0,
+    view_zoom     REAL NOT NULL DEFAULT 0,
+    child_grid_id INTEGER,
+    text_x        INTEGER NOT NULL DEFAULT 0,
+    text_y        INTEGER NOT NULL DEFAULT 0,
+    text_w        INTEGER NOT NULL DEFAULT 0,
+    text_h        INTEGER NOT NULL DEFAULT 0,
+    text_mode     TEXT,
+    blob_id       INTEGER REFERENCES blobs(id),
+    url_string       TEXT,
+    preview_blob_id  INTEGER REFERENCES blobs(id),
     alt_text      TEXT NOT NULL DEFAULT '',
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
