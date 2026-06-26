@@ -3,6 +3,7 @@
 BIN := ./gridwell
 FS_BIN := ./gridwell-fs
 PROC_BIN := ./gridwell-proc
+LOCALDB_BIN := ./gridwell-localdb
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -18,10 +19,12 @@ NPM_CACHE := $(CACHE)/npm
 export electron_config_cache := $(CACHE)/electron
 export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 
-# `bin` and `wasm` are phony so they always invoke `go build`. Go's
+# `bin`, `plugins`, and `wasm` are phony so they always invoke `go build`. Go's
 # build cache makes this fast when nothing changed, but it guarantees
-# we never serve a stale binary or wasm artifact.
-build: bin wasm
+# we never serve a stale binary or wasm artifact. Every plugin is its own
+# separately-compiled go-plugin binary, laid out beside $(BIN) so the server
+# resolves them by `gridwell-<kind>`.
+build: bin plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
 # pure Go, so nothing pulls cgo and the result has no libc-version coupling.
@@ -30,7 +33,10 @@ build: bin wasm
 bin:
 	CGO_ENABLED=0 go build -o $(BIN) ./cmd/gridwell
 
-plugins: $(FS_BIN) $(PROC_BIN)
+plugins: $(LOCALDB_BIN) $(FS_BIN) $(PROC_BIN)
+
+$(LOCALDB_BIN):
+	CGO_ENABLED=0 go build -o $(LOCALDB_BIN) ./cmd/plugin/localdb
 
 $(FS_BIN):
 	CGO_ENABLED=0 go build -o $(FS_BIN) ./cmd/plugin/fs
@@ -128,5 +134,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(FS_BIN) $(PROC_BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(LOCALDB_BIN) $(FS_BIN) $(PROC_BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out

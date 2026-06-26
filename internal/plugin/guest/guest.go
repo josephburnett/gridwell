@@ -9,6 +9,7 @@
 package guest
 
 import (
+	"encoding/json"
 	"os"
 
 	hclog "github.com/hashicorp/go-hclog"
@@ -17,6 +18,20 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	gplug "github.com/josephburnett/gridwell/internal/plugin"
 )
+
+// Config returns the config map the host handed this plugin at spawn (db_file,
+// root/pid, uuid, …), decoded from the GRIDWELL_PLUGIN_CONFIG environment
+// variable. An unset/empty value yields an empty map. This replaces the old
+// Attach config map: a plugin is configured once, at launch.
+func Config() map[string]string {
+	raw := os.Getenv(gplug.ConfigEnvVar)
+	if raw == "" {
+		return map[string]string{}
+	}
+	out := map[string]string{}
+	_ = json.Unmarshal([]byte(raw), &out)
+	return out
+}
 
 // Serve runs the plugin event loop. It blocks until the host process closes
 // the connection or the process is killed. impl must implement

@@ -8,18 +8,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
-	procplugin "github.com/josephburnett/gridwell/internal/plugin/proc"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/internal/tmux"
 )
 
@@ -85,27 +82,53 @@ func parseServeFlags(args []string, cfgPath string) (serveFlags, error) {
 	return f, nil
 }
 
-// builtinFactories are the in-process plugin factories recognised by LoadAll.
-// "localdb" lets server.yaml mount additional Gridwell DBs beyond the primary
-// `db:`; each opens its own store and is served like any other plugin.
-var builtinFactories = map[string]plugin.ServerFactory{
-	"fs": func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-		return fsplugin.NewFactory(cfg)
-	},
-	"proc": func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-		return procplugin.NewFactory(cfg)
-	},
-	"localdb": func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-		dbFile := cfg.Config["db_file"]
-		if dbFile == "" {
-			return nil, fmt.Errorf("localdb plugin %q: db_file config key required", cfg.Name)
+// resolvePluginBinary finds the go-plugin binary for a built-in kind:
+// "gridwell-<kind>". Every plugin runs as a separately-compiled subprocess;
+// the host locates the binary via GRIDWELL_PLUGIN_DIR, then beside the running
+// gridwell executable (how `make` lays them out), then on PATH.
+func resolvePluginBinary(kind string) (string, error) {
+	name := "gridwell-" + kind
+	var tried []string
+	if dir := os.Getenv("GRIDWELL_PLUGIN_DIR"); dir != "" {
+		p := filepath.Join(dir, name)
+		if isExecutable(p) {
+			return p, nil
 		}
-		st, err := store.Open(dbFile)
+		tried = append(tried, p)
+	}
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), name)
+		if isExecutable(p) {
+			return p, nil
+		}
+		tried = append(tried, p)
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("plugin binary %q not found (tried %v, then PATH); set GRIDWELL_PLUGIN_DIR or run `make plugins`", name, tried)
+}
+
+func isExecutable(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
+}
+
+// resolvePluginBinaries fills in Binary for every plugin that didn't pin one
+// explicitly in server.yaml, by kind. Production always runs subprocess plugins.
+func resolvePluginBinaries(cfg *config.ServerConfig) error {
+	for i := range cfg.Plugins {
+		pc := &cfg.Plugins[i]
+		if pc.Binary != "" {
+			continue
+		}
+		bin, err := resolvePluginBinary(pc.Kind)
 		if err != nil {
-			return nil, fmt.Errorf("localdb plugin %q: %w", cfg.Name, err)
+			return fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.Kind, err)
 		}
-		return localdb.New(st, nil), nil
-	},
+		pc.Binary = bin
+	}
+	return nil
 }
 
 // RunServe starts the backend HTTP server — the loopback data plane for the
@@ -141,7 +164,14 @@ func RunServe(args []string) int {
 		}}
 	}
 
-	reg, err := plugin.LoadAll(cfg, builtinFactories)
+	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
+	// each kind's binary (server.yaml may pin an explicit path instead).
+	if err := resolvePluginBinaries(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
+
+	reg, err := plugin.LoadAll(cfg, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: load plugins: %v\n", err)
 		return 1

@@ -112,14 +112,26 @@ CREATE TABLE IF NOT EXISTS tiles (
 // Close closes the underlying database.
 func (p *Plugin) Close() error { return p.db.Close() }
 
-// NewFactory returns a ServerFactory for the "proc" kind.
-// config["db_file"] is the path to the plugin's SQLite DB.
+// NewFactory returns a ServerFactory for the "proc" kind. config["db_file"] is
+// the plugin's SQLite DB; config["pid"] (optional, default 1) is the root pid
+// Info reports as the default root grid.
 func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 	dbPath := cfg.Config["db_file"]
 	if dbPath == "" {
 		return nil, fmt.Errorf("proc plugin %q: db_file config key required", cfg.Name)
 	}
-	return Open(dbPath, "", nil)
+	p, err := Open(dbPath, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	if pidStr := cfg.Config["pid"]; pidStr != "" {
+		pid, err := strconv.ParseInt(pidStr, 10, 64)
+		if err != nil || pid <= 0 {
+			return nil, fmt.Errorf("proc plugin %q: invalid pid %q", cfg.Name, pidStr)
+		}
+		p.SetRootPID(pid)
+	}
+	return p, nil
 }
 
 // Info is the whole handshake: identity plus the default root grid (the process

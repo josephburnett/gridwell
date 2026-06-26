@@ -42,6 +42,18 @@
         "to": "gridwell"
       },
       {
+        "from": "../../gridwell-localdb",
+        "to": "gridwell-localdb"
+      },
+      {
+        "from": "../../gridwell-fs",
+        "to": "gridwell-fs"
+      },
+      {
+        "from": "../../gridwell-proc",
+        "to": "gridwell-proc"
+      },
+      {
         "from": "../../web",
         "to": "web"
       }

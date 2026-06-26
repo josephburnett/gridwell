@@ -41,12 +41,19 @@ func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Reg
 type ServerFactory func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error)
 
 func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridwellv1.GridwellClient, func(), error) {
-	// External binary: use go-plugin subprocess transport.
+	// Subprocess binary (the production path): spawn it via go-plugin, handing
+	// it its config — including the uuid, so the plugin persists its own durable
+	// identity (see pluginmeta).
 	if pc.Binary != "" {
-		return LoadPlugin(pc.Binary)
+		cfg := make(map[string]string, len(pc.Config)+1)
+		for k, v := range pc.Config {
+			cfg[k] = v
+		}
+		cfg["uuid"] = pc.ID
+		return LoadPlugin(pc.Binary, cfg)
 	}
 
-	// Built-in: look up the factory by kind.
+	// In-process factory: a test-only path (production always sets Binary).
 	factory, ok := factories[pc.Kind]
 	if !ok {
 		return nil, nil, fmt.Errorf("no factory for kind %q and no binary path", pc.Kind)

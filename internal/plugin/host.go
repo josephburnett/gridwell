@@ -1,7 +1,9 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 
 	hclog "github.com/hashicorp/go-hclog"
@@ -10,19 +12,36 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// LoadPlugin spawns the plugin binary at binaryPath and performs the go-plugin
-// handshake. It returns a client and a closer; call closer() on shutdown.
-func LoadPlugin(binaryPath string) (gridwellv1.GridwellClient, func(), error) {
+// ConfigEnvVar is the environment variable the host uses to hand a plugin its
+// config map (JSON-encoded). The guest reads it back with guest.Config. This is
+// how db_file / root / pid / uuid reach a subprocess plugin — there is no
+// Attach config map anymore; a plugin is configured at spawn.
+const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
+
+// LoadPlugin spawns the plugin binary at binaryPath, hands it cfg via the
+// environment, and performs the go-plugin handshake. It returns a client and a
+// closer; call closer() on shutdown.
+func LoadPlugin(binaryPath string, cfg map[string]string) (gridwellv1.GridwellClient, func(), error) {
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin-host",
 		Output: hclog.DefaultOutput,
 		Level:  hclog.Error,
 	})
 
+	cmd := exec.Command(binaryPath)
+	cmd.Env = os.Environ()
+	if len(cfg) > 0 {
+		blob, err := json.Marshal(cfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("plugin %q: marshal config: %w", binaryPath, err)
+		}
+		cmd.Env = append(cmd.Env, ConfigEnvVar+"="+string(blob))
+	}
+
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins:         PluginMap(nil),
-		Cmd:             exec.Command(binaryPath),
+		Cmd:             cmd,
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolGRPC,
 		},

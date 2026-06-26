@@ -1,4 +1,7 @@
 /gridwell
+/gridwell-localdb
+/gridwell-fs
+/gridwell-proc
 /web/gridwell.wasm
 /web/wasm_exec.js
 *.db
