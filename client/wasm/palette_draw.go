@@ -186,9 +186,17 @@ func (a *App) drawPluginGlyph(kind string, x, y, w, h float64) {
 }
 
 // drawLauncherTiles paints the launcher start page: the configured plugins as
-// a centered row of swatches (glyph + name) to descend into. No grid, no +
-// menu — these tiles are the whole page. Hover (focused pane only) outlines
-// the tile under the cursor.
+// a centered row of tiles to descend into. No grid, no + menu — these tiles are
+// the whole page. Hover (focused pane only) outlines the tile under the cursor.
+//
+// Each tile renders through the same drawNodeWithPreview the grid uses for a
+// well, on the synthetic exit-well node a dropped plugin produces
+// (paletteItemGhostNode): so a plugin tile previews its real root grid — fetched
+// and cached exactly like an in-grid well — and the launcher's descent
+// (enterPlugin) reuses the same EffectiveViewZoom calibration, making the
+// zoom-in identical. Before the child grid loads it falls back to the same
+// plugin glyph the swatch shows (drawNodeWithPreview's exit-well glyph branch),
+// so there's no flash of a different placeholder.
 func (a *App) drawLauncherTiles(p *pane.Pane, r pane.Rect) {
 	n := len(a.plugins)
 	if n == 0 {
@@ -201,7 +209,10 @@ func (a *App) drawLauncherTiles(p *pane.Pane, r pane.Rect) {
 		cr := palette.LauncherCellRect(i, n)
 		sx, sy := ps.CellToScreen(cr.X, cr.Y)
 		hovered := focused && a.launcherHover == i
-		a.drawPaletteItem(paletteItem{isPlugin: true, plugin: a.plugins[i]}, sx, sy, cr.W*cell, cr.H*cell, hovered)
+		node := paletteItemGhostNode(paletteItem{isPlugin: true, plugin: a.plugins[i]})
+		w, h := cr.W*cell, cr.H*cell
+		a.drawNodeWithPreview(&node, sx, sy, w, h, cell,
+			pane.Rect{X: sx, Y: sy, W: w, H: h}, hovered, false, isLinkTile(&node))
 	}
 }
 
