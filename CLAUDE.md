@@ -127,17 +127,51 @@ Two kinds of links:
 ## The plugin gRPC interface (same as the server interface)
 
 Every Gridwell node — a local server, a plugin, a remote server reached over
-SSH — implements the same single gRPC service. The client calls the local server;
-the local server calls plugins; an SSH gateway proxies to a remote server. Same
-wire protocol at every hop.
+SSH — implements the **same single gRPC service**, defined once in
+`api/gridwell/v1/data.proto` and buf-generated. The client calls the local
+server; the local server calls plugins; an SSH gateway proxies to a remote
+server. Same wire protocol at every hop, no second service, no side channels —
+**every byte crosses this interface**, including live shell PTY and the Chromium
+session blob.
 
-The service extends the existing Gridwell API with lifecycle and session methods:
-`Info`, `Attach`/`Detach` (replaces `Bootstrap`; takes a config map, returns root
-grid id + capabilities + network context), `Probe` (confirmed presence), `GetSession`/
-`PutSession` (per-plugin Chromium session blob), `OpenShell` (replaces the WebSocket
-`/rpc/ShellStream`). The `CreateFileWell` and `CreateProcessWell` RPCs are removed;
-a well whose child lives in a different plugin is just a `well` tile with a
-cross-plugin `child_grid_id`.
+**Every plugin is a separately-compiled Hashicorp go-plugin binary** — including
+the localdb that owns your home space. The server spawns each binary named in
+`server.yaml` and talks to it over go-plugin's gRPC transport. There is no
+in-process plugin in production (the in-process path survives only as a test
+harness).
+
+The surface is orthogonal — one method per concept, not one per kind:
+
+- **Reads:** `GetGrid`, `GetTile`, `GetTileContent`, `GetTilePreview`.
+- **`CreateTile`** — one create for every primitive; `tile.kind` selects the
+  fields (a text body / url ride along as `data`). A file/process/remote well is
+  just a `well` tile with a cross-plugin `child_grid_id` (there is no
+  `CreateFileWell`/`CreateProcessWell`, no `well`-vs-leaf create split).
+- **`SetTile`** — one writeback for every framing/preview change. Pure framing
+  (`view_*`, text scroll) never bumps `version`; a content change (frozen
+  preview, url, title, text body) does. This is face #3 of the primary rule —
+  framing is not a content edit — enforced in one place.
+- **Placement mutations:** `MoveTile`, `CloneTile`, `ResizeTile`, `DeleteTile`.
+- **Lifecycle:** `Info` reports the plugin's kind, label, and **default root grid
+  id**. There is no `Attach`/`Detach`/`Bootstrap`: a plugin loaded from
+  `server.yaml` is simply *there*, and its gRPC connection (established at load,
+  closed at unload) is the only lifecycle. `Probe` confirms a single tile's
+  presence; `ListPlugins` enumerates a node's plugins (the SSH gateway calls it
+  on a remote to learn that node's namespaces and register them locally).
+- **Live bytes:** `OpenShell` streams a PTY both ways (served by the owning
+  plugin — the localdb runs the tmux, an ssh plugin proxies the remote's PTY);
+  `GetSession`/`PutSession` move the plugin's Chromium session blob.
+- **Events:** `Subscribe` streams change events (localdb emits; fs/proc are
+  polled via `GetGrid`).
+
+**The plugin is the session boundary.** Each plugin owns exactly one Chromium
+session (cookies + web storage), stored in its own DB and moved over the
+interface. When you enter a plugin's space the host pulls that blob down with
+`GetSession` and hydrates a dedicated Electron partition (`persist:plugin-<uuid>`);
+every live `url` tile in that plugin renders in a WebContentsView bound to that
+partition, over the plugin's declared `NetworkContext` (direct, or a proxy an ssh
+plugin stands up over its tunnel). On ascent the host flushes and writes the blob
+back with `PutSession`. Copy the plugin's DB and you copy its logins.
 
 ## Making changes
 
