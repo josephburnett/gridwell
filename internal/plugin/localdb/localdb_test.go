@@ -6,7 +6,9 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
+	"github.com/josephburnett/gridwell/internal/shellsvc"
 	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/internal/tmux"
 )
 
 func openPlugin(t *testing.T) *localdb.Plugin {
@@ -149,44 +151,44 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	}
 }
 
-func TestShellSessionAlive_NilSess(t *testing.T) {
-	p := openPlugin(t) // sess = nil
+func TestShellSessionAlive_NoShellHost(t *testing.T) {
+	p := openPlugin(t) // shell = nil
 	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.Alive {
-		t.Error("expected Alive=false with nil sess")
+		t.Error("expected Alive=false with no shell host")
 	}
 }
 
-// recordSession records Kill calls for verification.
-type recordSession struct {
-	killed []int64
-}
+// fakeStreamer is a shellsvc.Streamer stub: it reports a session is alive but
+// never opens a real PTY, so the manager can be exercised without tmux.
+type fakeStreamer struct{ alive bool }
 
-func (r *recordSession) HasSession(tileID int64) (bool, error) { return true, nil }
-func (r *recordSession) Kill(tileID int64) error {
-	r.killed = append(r.killed, tileID)
-	return nil
+func (f *fakeStreamer) OpenSession(string, tmux.Mode, uint16, uint16) (shellsvc.Session, error) {
+	return nil, nil
 }
+func (f *fakeStreamer) HasSession(string) (bool, error)   { return f.alive, nil }
+func (f *fakeStreamer) Kill(string) error                 { return nil }
+func (f *fakeStreamer) ListLiveTileIDs() ([]string, error) { return nil, nil }
+func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
 
-func TestShellSessionAlive_WithSess(t *testing.T) {
+func TestShellSessionAlive_WithShellHost(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
 
-	sess := &recordSession{}
-	p := localdb.New(st, sess)
+	p := localdb.New(st, shellsvc.NewManager(&fakeStreamer{alive: true}))
 
 	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !resp.Alive {
-		t.Error("expected Alive=true from recordSession.HasSession")
+		t.Error("expected Alive=true from the fake streamer")
 	}
 }
 

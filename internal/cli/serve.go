@@ -17,7 +17,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/tmux"
 )
 
 // serveFlags holds the parsed `serve` subcommand options. Split out from
@@ -178,28 +177,10 @@ func RunServe(args []string) int {
 	}
 	defer reg.Close()
 
-	// The gridwell-private tmux server backs every shell tile. One
-	// socket per gridwell process; sessions named `gridwell-<tileID>`
-	// survive ascents and gridwell restarts (bash + scrollback live
-	// in tmux). Reboots take everything with them; the snapshot
-	// remains and the wasm hides the refresh button.
-	tmuxCtrl, tmuxCleanup, err := tmux.New("gridwell", "")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: tmux init: %v\n", err)
-		return 1
-	}
-	defer func() { _ = tmuxCleanup() }()
-
+	// Shell PTYs now live in the owning plugin (OpenShell); the server is a pure
+	// bridge. tmux, the session lifecycle, and orphan cleanup all moved behind
+	// the interface — the localdb plugin binary owns them.
 	srv := server.New(reg, server.Config{StaticDir: f.StaticDir})
-	srv.SetShellStreamer(server.NewLiveShellStreamer(tmuxCtrl))
-
-	// Bound the orphan leak: any tmux session whose tile id no longer
-	// exists is left over from a delete that raced a previous crash.
-	if killed, err := srv.CleanupOrphanedShellSessions(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "gridwell: orphan cleanup: %v\n", err)
-	} else if killed > 0 {
-		fmt.Printf("gridwell: orphan cleanup killed %d stale shell session(s)\n", killed)
-	}
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()

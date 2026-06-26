@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,14 +41,7 @@ type Server struct {
 	cfg       Config
 	pluginReg *plugin.Registry
 
-	mux           *http.ServeMux
-	shellStreamer shellStreamer
-
-	// activeShellSessions tracks the single live shell PTY per tile_id.
-	// Same takeover semantics as URL (a refresh from another pane
-	// evicts the previous holder).
-	activeShellMu       sync.Mutex
-	activeShellSessions map[string]*shellSessionEntry
+	mux *http.ServeMux
 }
 
 // New constructs a Server that routes everything through reg. There is no root:

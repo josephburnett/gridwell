@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"connectrpc.com/connect"
 	gcodes "google.golang.org/grpc/codes"
@@ -18,8 +17,8 @@ import (
 // over the plugin registry. It holds no Gridwell state: every request is
 // forwarded to the plugin that owns the id it carries (the primary localdb,
 // a mounted localdb, fs, proc, …), with the plugin-uuid prefix stripped on the
-// way in and re-applied to the response on the way out. Id-less RPCs
-// (Bootstrap, SetRootView, Subscribe) target the primary localdb plugin.
+// way in and re-applied to the response on the way out. Subscribe fans in every
+// localdb plugin's event stream; ShellSessionAlive routes to the owning plugin.
 type connectHandler struct {
 	gridwellv1connect.UnimplementedGridwellHandler
 	srv *Server
@@ -339,52 +338,30 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	qualifiedID := m.TileId
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
+	// The owning plugin reaps the tile's shell session (if any) as part of
+	// DeleteTile — the PTY lives behind the interface now.
 	if _, err := c.DeleteTile(ctx, m); err != nil {
 		return nil, asConnectError(err)
-	}
-	// Reap the tmux session keyed by the qualified id once the row is gone, so
-	// it can't survive a restart and leak. Harmless for non-shell tiles (no
-	// session → Kill is a no-op).
-	if h.srv.shellStreamer != nil {
-		h.reapShellIfGone(ctx, qualifiedID)
 	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
 }
 
-// reapShellIfGone kills the tmux session for a just-deleted tile (keyed by its
-// qualified id) when that exact id is truly gone — a cloned shell is an
-// independent copy with its own id and no session, so deleting a copy never
-// touches the original's PTY. Fire-and-forget; a missed kill is caught by the
-// startup orphan-cleanup pass.
-func (h *connectHandler) reapShellIfGone(ctx context.Context, qualifiedID string) {
-	client, local, ok := h.srv.clientForID(qualifiedID)
-	if !ok {
-		return
-	}
-	resp, err := client.Probe(ctx, &pb.ProbeRequest{TileId: local})
-	switch {
-	case err != nil:
-		log.Printf("[shellstream] kill-on-delete probe tile=%s err=%v", qualifiedID, err)
-	case resp.Presence != pb.ProbeResponse_PRESENCE_PRESENT:
-		if err := h.srv.shellStreamer.Kill(qualifiedID); err != nil {
-			log.Printf("[shellstream] kill-on-delete tile=%s err=%v", qualifiedID, err)
-		}
-	}
-}
-
-// ShellSessionAlive answers the wasm's per-descent probe by asking the streamer
-// (the tmux controller) whether the tile's session exists. The session is keyed
-// by the qualified tile id. An infra error is reported as not-alive rather than
-// a Connect error — the wasm only cares whether the refresh button should hide.
-func (h *connectHandler) ShellSessionAlive(_ context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
-	if h.srv.shellStreamer == nil {
+// ShellSessionAlive routes the wasm's per-descent probe to the owning plugin,
+// which holds the PTY and answers whether the tile's session is alive. An infra
+// error is reported as not-alive rather than a Connect error — the wasm only
+// cares whether the refresh button should hide.
+func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
+	c, local, _, err := h.route(req.Msg.TileId)
+	if err != nil {
 		return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: false}), nil
 	}
-	alive, _ := h.srv.shellStreamer.HasSession(req.Msg.TileId)
-	return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: alive}), nil
+	resp, err := c.ShellSessionAlive(ctx, &pb.ShellSessionAliveRequest{TileId: local})
+	if err != nil {
+		return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: false}), nil
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // Subscribe fans every localdb plugin's change-event stream into the client's

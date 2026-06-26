@@ -11,34 +11,43 @@ package localdb
 import (
 	"context"
 	"errors"
+	"io"
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/shellsvc"
 	"github.com/josephburnett/gridwell/internal/store"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// SessionManager is the shell-session lifecycle surface. Wire in the real
-// tmux controller in production; leave nil in tests (ShellSessionAlive
-// returns false and DeleteTile skips the session cleanup).
-type SessionManager interface {
-	HasSession(tileID int64) (bool, error)
-	Kill(tileID int64) error
-}
-
-// Plugin wraps store.Store as a gridwellv1.GridwellServer.
+// Plugin wraps store.Store as a gridwellv1.GridwellServer. It also owns the
+// shell PTY lifecycle (shellsvc.Manager) so OpenShell — the live shell bytes —
+// crosses the Gridwell gRPC interface like every other call.
 type Plugin struct {
 	gridwellv1.UnimplementedGridwellServer
-	st   *store.Store
-	sess SessionManager // optional
+	st    *store.Store
+	shell *shellsvc.Manager // nil → this instance hosts no live shells
 }
 
-// New wraps an open store. sess may be nil.
-func New(st *store.Store, sess SessionManager) *Plugin {
-	return &Plugin{st: st, sess: sess}
+// New wraps an open store. shell may be nil (no live-shell host: ShellSessionAlive
+// returns false, OpenShell is unimplemented, and DeleteTile skips reaping).
+func New(st *store.Store, shell *shellsvc.Manager) *Plugin {
+	return &Plugin{st: st, shell: shell}
+}
+
+// CleanupOrphanedShells kills tmux sessions whose tile rows no longer exist —
+// the bounded leak from a delete that raced a crash. Called once at plugin
+// startup. No-op if this instance hosts no shells.
+func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
+	if p.shell == nil {
+		return 0, nil
+	}
+	return p.shell.CleanupOrphans(ctx, func(tileID string) (bool, error) {
+		return p.st.ShellTileExists(ctx, tileID)
+	})
 }
 
 // Store returns the underlying store (used by the server to wire shell
@@ -200,14 +209,109 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 }
 
 func (p *Plugin) ShellSessionAlive(_ context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
-	if p.sess == nil {
+	if p.shell == nil {
 		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
 	}
-	alive := false
-	if id, err := strconv.ParseInt(req.TileId, 10, 64); err == nil {
-		alive, _ = p.sess.HasSession(id)
-	}
+	alive, _ := p.shell.HasSession(req.TileId)
 	return &gridwellv1.ShellSessionAliveResponse{Alive: alive}, nil
+}
+
+// OpenShell streams a tile's live PTY both ways: the first request binds the
+// tile id (data empty), then keystrokes/resizes flow up and terminal output
+// flows down. The plugin owns the tmux/PTY, so these bytes cross the Gridwell
+// interface like everything else; the server only bridges a WebSocket to it.
+func (p *Plugin) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellRequest, gridwellv1.OpenShellResponse]) error {
+	if p.shell == nil {
+		return status.Error(codes.Unimplemented, "this plugin hosts no live shells")
+	}
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	tileID := first.TileId
+	if tileID == "" {
+		return status.Error(codes.InvalidArgument, "OpenShell: first message must bind tile_id")
+	}
+	var cols, rows uint16
+	if r := first.Resize; r != nil {
+		cols, rows = uint16(r.Cols), uint16(r.Rows)
+	}
+	cols, rows = shellsvc.ClampSize(cols, rows)
+
+	// A fresh tile (no frozen snapshot) may spawn a new bash; a snapshotted tile
+	// must not — we won't fabricate state behind the JPEG.
+	allowCreate := true
+	if tile, gerr := p.st.GetTile(stream.Context(), tileID); gerr == nil {
+		allowCreate = tile.PreviewBlobID == 0
+	}
+
+	session, stopOld, err := p.shell.Acquire(tileID, allowCreate, cols, rows)
+	if err != nil {
+		if errors.Is(err, shellsvc.ErrSessionGone) {
+			return status.Error(codes.FailedPrecondition, err.Error())
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	defer p.shell.Release(tileID, session, stopOld, func() { p.captureShellTitle(tileID) })
+
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	// Reader: keystrokes / resizes up. Exits on stream EOF/error or a dead PTY,
+	// cancelling the writer.
+	go func() {
+		defer cancel()
+		for {
+			msg, rerr := stream.Recv()
+			if rerr != nil {
+				return
+			}
+			if len(msg.Data) > 0 {
+				if _, werr := session.Write(msg.Data); errors.Is(werr, io.ErrClosedPipe) {
+					return
+				}
+			}
+			if r := msg.Resize; r != nil {
+				c, rw := shellsvc.ClampSize(uint16(r.Cols), uint16(r.Rows))
+				_ = session.Resize(c, rw)
+			}
+		}
+	}()
+
+	// Writer: PTY output down. Exits on cancel (reader done / our ctx), session
+	// death, or a takeover (stopOld), or a send error.
+	out := session.Output()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-session.Done():
+			return nil
+		case <-stopOld:
+			return nil
+		case chunk, ok := <-out:
+			if !ok {
+				return nil
+			}
+			if serr := stream.Send(&gridwellv1.OpenShellResponse{Data: chunk}); serr != nil {
+				return serr
+			}
+		}
+	}
+}
+
+// captureShellTitle stamps the tile's label with its tmux session's foreground
+// command on detach — the way URL tiles capture the page title. Best-effort.
+func (p *Plugin) captureShellTitle(tileID string) {
+	cmd, err := p.shell.PaneCommand(tileID)
+	if err != nil || cmd == "" {
+		return
+	}
+	id, err := strconv.ParseInt(tileID, 10, 64)
+	if err != nil {
+		return
+	}
+	_ = p.st.SetTileAlt(context.Background(), id, cmd)
 }
 
 func (p *Plugin) UpdateText(ctx context.Context, req *gridwellv1.UpdateTextRequest) (*gridwellv1.TileResponse, error) {
@@ -219,13 +323,12 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	if err := p.st.DeleteTile(ctx, rpc.DeleteTileFromProto(req)); err != nil {
 		return nil, errToStatus(err)
 	}
-	// Clean up any orphaned shell session for the deleted tile.
-	if p.sess != nil {
-		exists, err := p.st.ShellTileExists(ctx, tileID)
-		if err == nil && !exists {
-			if id, perr := strconv.ParseInt(tileID, 10, 64); perr == nil {
-				_ = p.sess.Kill(id) // fire-and-forget; startup orphan sweep is the safety net
-			}
+	// Reap the tile's shell session once its row is gone (a cloned shell is an
+	// independent copy with its own id, so deleting a copy never touches the
+	// original's PTY). Fire-and-forget; the startup orphan sweep is the net.
+	if p.shell != nil {
+		if exists, err := p.st.ShellTileExists(ctx, tileID); err == nil && !exists {
+			_ = p.shell.Kill(tileID)
 		}
 	}
 	return &gridwellv1.DeleteTileResponse{}, nil

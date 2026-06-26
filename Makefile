@@ -33,15 +33,11 @@ build: bin plugins wasm
 bin:
 	CGO_ENABLED=0 go build -o $(BIN) ./cmd/gridwell
 
-plugins: $(LOCALDB_BIN) $(FS_BIN) $(PROC_BIN)
-
-$(LOCALDB_BIN):
+# Phony so a source change always rebuilds (Go's build cache keeps it fast);
+# file-target rules would skip the build whenever the binary already existed.
+plugins:
 	CGO_ENABLED=0 go build -o $(LOCALDB_BIN) ./cmd/plugin/localdb
-
-$(FS_BIN):
 	CGO_ENABLED=0 go build -o $(FS_BIN) ./cmd/plugin/fs
-
-$(PROC_BIN):
 	CGO_ENABLED=0 go build -o $(PROC_BIN) ./cmd/plugin/proc
 
 wasm: $(WASM_EXEC)
