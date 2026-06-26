@@ -4,11 +4,24 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
+
+// seedDeterministic pins a fixed clock and counter-based object_ids so tests
+// are reproducible. Shared by the in-memory and file-backed constructors.
+func seedDeterministic(s *Store) {
+	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	s.SetClock(func() time.Time { return fixed })
+	var counter int
+	s.SetIDGenerator(func() string {
+		counter++
+		return fmt.Sprintf("obj-%028x", counter)
+	})
+}
 
 // newTestStore opens an in-memory store and seeds deterministic clocks/IDs so
 // tests are reproducible. Each test gets a fresh store with a bootstrapped
@@ -20,15 +33,24 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("open: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-
-	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	s.SetClock(func() time.Time { return fixed })
-	var counter int
-	s.SetIDGenerator(func() string {
-		counter++
-		return fmt.Sprintf("obj-%028x", counter)
-	})
+	seedDeterministic(s)
 	return s
+}
+
+// newTestStoreFile opens a file-backed store under t.TempDir and returns it
+// with its path so a test can Close and reopen the same file. File-backed
+// because a ":memory:" DB forces journal_mode=memory, so WAL and the pinned
+// synchronous level — the durability we most need to prove — are inert there.
+func newTestStoreFile(t *testing.T) (*Store, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	seedDeterministic(s)
+	return s, path
 }
 
 // rootID returns the bootstrapped root grid id as a string.

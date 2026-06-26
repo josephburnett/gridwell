@@ -29,9 +29,15 @@ package store
 // at close, hash-deduped through the blobs table just like text content).
 
 // pragmas are connection-level settings applied once at Open, before any
-// schema or attach.
+// schema or attach. synchronous is connection-scoped (not stored in the file)
+// and defaults to FULL regardless of journal mode, so it must be pinned on
+// every Open. NORMAL is the SQLite-recommended level under WAL: durable
+// against application and OS crashes, and a power loss can lose at most the
+// last not-yet-checkpointed transaction — never corrupt the file — in exchange
+// for far fewer fsyncs on this write-heavy store.
 const pragmas = `
 PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
 PRAGMA foreign_keys=ON;
 `
 
