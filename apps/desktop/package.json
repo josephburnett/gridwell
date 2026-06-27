@@ -12,13 +12,16 @@
     "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts",
     "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js",
     "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js",
+    "test:e2e": "playwright test",
     "dist": "npm run build && electron-builder",
     "dist:dir": "npm run build && electron-builder --dir"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@types/node": "^20.11.0",
     "electron": "^33.2.0",
     "electron-builder": "^26.15.3",
+    "electron-playwright-helpers": "^1.7.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },

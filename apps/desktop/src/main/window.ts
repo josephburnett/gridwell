@@ -51,7 +51,11 @@ export function createRootWindow(origin: string): RootWindow {
   // than as a free-floating window.
   win.maximize();
 
-  void win.loadURL(origin + '/');
+  // GRIDWELL_E2E=1 (set only by the Playwright e2e fixture) loads the renderer
+  // with ?e2e=1 so the wasm client installs its read-only window.__gridwellTest
+  // introspection surface. Inert in every normal launch.
+  const query = process.env.GRIDWELL_E2E === '1' ? '?e2e=1' : '';
+  void win.loadURL(origin + '/' + query);
 
   // When the display geometry changes (rotation, resolution / aspect change)
   // a fullscreen window can keep its old bounds and leave the canvas stretched

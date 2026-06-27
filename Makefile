@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm test test-cover check check-electron serve clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm test test-cover check check-electron check-e2e serve clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-fs
@@ -78,6 +78,18 @@ check:
 # a prior `make vendor` for node_modules.
 check-electron: node-modules
 	cd $(DESKTOP) && npm run test:integration && npm run test:bridge
+
+# check-e2e drives the REAL Electron app end to end: Playwright launches the same
+# `electron .` as `make launch` (which spawns the Go sidecar), points it at a
+# fresh throwaway DB, and drives the wasm canvas with synthetic mouse input —
+# asserting outcomes against the live server over Connect-RPC. This is the only
+# test that exercises the full renderer→wasm→RPC→server→SQLite composition (e.g.
+# drag-create in a descended grid). Heavier than `make check` (it builds the
+# binaries and boots Electron), so it's a pre-merge full-stack gate alongside
+# check-electron, not part of the fast per-commit `check`. Requires xvfb + a
+# prior `make vendor` for node_modules + Playwright.
+check-e2e: build node-modules
+	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e
 
 # serve runs the backend on its own (the desktop app spawns it as a sidecar;
 # this target is for poking at the RPC/SSE surface or loading the wasm client

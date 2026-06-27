@@ -3,3 +3,7 @@ dist/
 out/
 .cache/
 *.log
+
+# Playwright e2e artifacts (traces, screenshots, HTML report).
+test-results/
+playwright-report/
