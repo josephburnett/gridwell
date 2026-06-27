@@ -39,11 +39,6 @@ export function staticDir(): string {
   return path.join(repoRoot(), 'web');
 }
 
-export function dbPath(): string {
-  const env = process.env.GRIDWELL_DB;
-  if (env) return env;
-  // userData is the conventional per-user writable location across all
-  // three OSes. SQLite lives here so a packaged, read-only app still has
-  // a writable store.
-  return path.join(app.getPath('userData'), 'gridwell.db');
-}
+// The DB path is no longer resolved here: the Go server derives each plugin's
+// DB from its id under the Gridwell home (GRIDWELL_HOME, else ~/.gridwell), so
+// there is nothing for the Electron main process to compute or pass through.

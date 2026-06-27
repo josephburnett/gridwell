@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm test test-cover check check-electron check-e2e serve clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm test test-cover check check-electron check-e2e serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-fs
@@ -81,7 +81,7 @@ check-electron: node-modules
 
 # check-e2e drives the REAL Electron app end to end: Playwright launches the same
 # `electron .` as `make launch` (which spawns the Go sidecar), points it at a
-# fresh throwaway DB, and drives the wasm canvas with synthetic mouse input —
+# fresh throwaway home (seeded via `gridwell init`), and drives the wasm canvas with synthetic mouse input —
 # asserting outcomes against the live server over Connect-RPC. This is the only
 # test that exercises the full renderer→wasm→RPC→server→SQLite composition (e.g.
 # drag-create in a descended grid). Heavier than `make check` (it builds the
@@ -94,12 +94,23 @@ check-e2e: build node-modules
 # serve runs the backend on its own (the desktop app spawns it as a sidecar;
 # this target is for poking at the RPC/SSE surface or loading the wasm client
 # in a plain browser — note live URL tiles only work inside the Electron app).
+# It requires ~/.gridwell/server.yaml (run `make init` once to create it); every
+# plugin's DB path is derived from its id, so there is no --db flag.
 serve: build
-	$(BIN) serve --db ./gridwell.db $(SERVE_FLAGS)
+	$(BIN) serve $(SERVE_FLAGS)
 
 # SERVE_FLAGS passes extra flags through, e.g.
 # `make serve SERVE_FLAGS="--bind 0.0.0.0:8080"`.
 SERVE_FLAGS ?=
+
+# init bootstraps a fresh home: it mints a plugin id, creates its DB (with
+# identity metadata) under ~/.gridwell/db/<id>/, and registers it in
+# ~/.gridwell/server.yaml. Run once before `make serve` / `make launch`.
+#   make init                                  # localdb named "home"
+#   make init INIT_FLAGS="--kind fs --name files --config root=/home/joe"
+INIT_FLAGS ?= --kind localdb --name home
+init: bin
+	$(BIN) init $(INIT_FLAGS)
 
 # vendor is the ONE online step. It pins and caches everything the desktop
 # build needs — npm packages (into $(NPM_CACHE) + node_modules), the Electron
@@ -121,18 +132,18 @@ dist: bin wasm node-modules
 	@echo "AppImage: $(DESKTOP)/out/"
 
 # `make launch` is the one-shot dev run: build the sidecar + wasm, compile the
-# TS, and launch Electron against this repo's gridwell.db so your existing
-# grids are right there. Runs WITH Chromium's OS sandbox on (this box's kernel
-# allows unprivileged user namespaces, so no setuid helper is needed) — live
-# URL tiles load untrusted web content, so the sandbox is the containment that
+# TS, and launch Electron against ~/.gridwell (server.yaml + the plugin DBs it
+# names) so your existing grids are right there. Requires ~/.gridwell/server.yaml
+# — run `make init` once first; there is no fallback DB. Point at a different
+# home with GRIDWELL_HOME. Runs WITH Chromium's OS sandbox on (this box's kernel
+# allows unprivileged user namespaces, so no setuid helper is needed) — live URL
+# tiles load untrusted web content, so the sandbox is the containment that
 # matters. Needs a prior `make vendor` for node_modules.
 #
-#   make launch                         # use ./gridwell.db
-#   make launch LAUNCH_DB=/path/to.db   # use another db
-LAUNCH_DB ?= $(CURDIR)/gridwell.db
+#   make init && make launch                       # ~/.gridwell
+#   GRIDWELL_HOME=/path/to/home make launch         # another home
 launch: build node-modules
-	cd $(DESKTOP) && npm run build && \
-		GRIDWELL_DB="$(LAUNCH_DB)" ./node_modules/.bin/electron .
+	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron .
 
 # node-modules guards the offline targets: if the desktop deps aren't present,
 # point the user at the single online bootstrap instead of silently reaching

@@ -12,11 +12,12 @@ Build the sidecar + wasm and install the desktop deps once (online):
 cd ../.. && make vendor
 ```
 
-Then run the app (offline from here on):
+Then create a home and run the app (offline from here on):
 
 ```sh
-cd ../.. && make launch          # against ./gridwell.db
-make launch LAUNCH_DB=/path.db   # against another db
+cd ../.. && make init            # once: register a localdb plugin in ~/.gridwell
+make launch                      # against ~/.gridwell
+GRIDWELL_HOME=/path make launch  # against another home
 ```
 
 `make launch` builds the sidecar + wasm, compiles the TS, and runs Electron
@@ -24,11 +25,12 @@ with Chromium's OS sandbox on (no `--no-sandbox`): live URL tiles load
 untrusted web content, so the sandbox is the containment that matters, and a
 modern Linux/WSL2 kernel with unprivileged user namespaces needs no setuid
 helper for it. The app spawns `<repo>/gridwell serve`, waits for it to listen
-on an ephemeral loopback port, and loads the renderer from there. The SQLite DB
-lives in Electron's `userData` dir unless `GRIDWELL_DB` overrides it.
+on an ephemeral loopback port, and loads the renderer from there. `serve`
+requires `~/.gridwell/server.yaml`; each plugin's SQLite DB lives at
+`~/.gridwell/db/<id>/store.db`, derived from its id — there is no fallback DB.
 
 Overrides (env): `GRIDWELL_SIDECAR` (binary path), `GRIDWELL_STATIC`
-(web assets dir), `GRIDWELL_DB` (db path).
+(web assets dir), `GRIDWELL_HOME` (config + DB root, default `~/.gridwell`).
 
 ## Test
 

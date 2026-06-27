@@ -1,8 +1,7 @@
 import { test as base, expect, _electron as electron } from '@playwright/test';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import * as fs from 'node:fs';
-import { test } from './fixtures';
+import { test, seedHome } from './fixtures';
 
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(DESKTOP_DIR, '..', '..');
@@ -19,14 +18,14 @@ test('hook is installed under ?e2e=1', async ({ window }) => {
 // A normal launch (no GRIDWELL_E2E) must NOT expose the hook — this is what
 // keeps the surface out of production.
 base('hook is absent without the flag', async () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-nogate-'));
+  const home = seedHome();
   const app = await electron.launch({
     args: ['.'],
     cwd: DESKTOP_DIR,
     env: {
       ...process.env,
       GRIDWELL_E2E: '', // explicitly off
-      GRIDWELL_DB: path.join(tmp, 'e2e.db'),
+      GRIDWELL_HOME: home,
       GRIDWELL_SIDECAR: path.join(REPO_ROOT, 'gridwell'),
       GRIDWELL_STATIC: path.join(REPO_ROOT, 'web'),
     },
@@ -39,6 +38,6 @@ base('hook is absent without the flag', async () => {
     expect(await win.evaluate(() => (window as any).__gridwellTest)).toBeUndefined();
   } finally {
     await app.close().catch(() => {});
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
   }
 });

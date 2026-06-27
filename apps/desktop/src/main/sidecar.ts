@@ -1,8 +1,7 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { freePort } from './freeport';
-import { sidecarBinary, staticDir, dbPath } from './paths';
+import { sidecarBinary, staticDir } from './paths';
 import { isReadyLine, makeLineSplitter } from './lines';
 
 export interface Sidecar {
@@ -30,14 +29,15 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
     throw new Error(`sidecar binary not found at ${bin} (set GRIDWELL_SIDECAR)`);
   }
   const port = opts.port ?? (await freePort());
-  const db = dbPath();
-  fs.mkdirSync(path.dirname(db), { recursive: true });
 
   const onLog = opts.onLog ?? ((l: string) => console.log('[sidecar]', l));
+  // No --db: the server derives every plugin's DB path from its id under the
+  // Gridwell home (GRIDWELL_HOME, inherited from this process's env, else
+  // ~/.gridwell). It requires ~/.gridwell/server.yaml — run `gridwell init`
+  // (or `make init`) once to create it; there is no fallback DB.
   const args = [
     'serve',
     '--bind', `127.0.0.1:${port}`,
-    '--db', db,
     '--static', staticDir(),
   ];
   const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
