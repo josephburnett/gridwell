@@ -346,6 +346,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				// a pan that would scroll the doc away from the embed.
 				return nil
 			}
+			// Editable rendered mode: place the text caret at the click. A
+			// read-only tile (a plugin's @info / file metadata) gets no caret.
+			// A drag still pans (armed below); a bare click just places.
+			a.placeMarkdownCaret(p, r, sx, sy)
 			a.dragging = &dragState{
 				originPaneID: p.ID,
 				tileID:       "",
@@ -1478,6 +1482,9 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			// not tile state, so it does not survive across descents.
 			delete(a.urlPanX, fp.ID)
 			delete(a.urlPanY, fp.ID)
+			// Drop any rendered-mode caret from a previous occupant of this
+			// pane; a fresh doc starts with no caret until the user clicks.
+			delete(a.mdCaret, fp.ID)
 			a.refreshFileOverlay()
 			// URL / shell descent show the frozen JPEG preview by
 			// default. afterDescend fires here so an auto-go-live

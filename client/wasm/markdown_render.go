@@ -29,9 +29,11 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	if mode == "" {
 		mode = rpc.TextModeRendered
 	}
+	// (x, y) is the inner box top-left (fileInnerBox); markdownOrigin(p, r)
+	// rederives the same point for the caret hit-test, so they stay in sync.
 	scale := fileFixedScale
-	scrollX := p.TextScrollX
-	scrollY := p.TextScrollY
+	originX := x - p.TextScrollX*scale
+	originY := y - p.TextScrollY*scale
 
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
@@ -42,9 +44,14 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	if !hideForTextarea {
 		if body, ok := a.tileBody(n); ok {
 			a.drawMarkdownInRect(string(body),
-				x-scrollX*scale, y-scrollY*scale,
-				fileNaturalContentPx*scale, h+scrollY*scale,
+				originX, originY,
+				fileNaturalContentPx*scale, h+p.TextScrollY*scale,
 				scale, mode, a.makeEmbedDrawer(p.ID))
+			// The editing caret rides on the focused, rendered pane only — same
+			// origin/scale the markdown was painted with.
+			if mode == rpc.TextModeRendered && p.ID == a.tree.Focus {
+				a.drawMarkdownCaret(p, string(body), originX, originY, scale)
+			}
 		}
 	} else {
 		a.tileBody(n) // warm the cache so the textarea has content when shown
@@ -233,15 +240,7 @@ func (a *App) drawMarkdownRendered(src string, x, y, w, h, scale float64, drawEm
 		contentWidthLogical = 16
 	}
 
-	measure := func(text string, fontPx float64, style markdown.SpanStyle, mono bool) float64 {
-		family := st.sansSerif
-		if mono {
-			family = st.monospace
-		}
-		setFont(c, fontPx*scale, family, style&markdown.StyleBold != 0, style&markdown.StyleItalic != 0)
-		return c.Call("measureText", text).Get("width").Float() / scale
-	}
-
+	measure := a.markdownMeasure(st, scale)
 	res := a.layoutMarkdown(src, contentWidthLogical, measure, lstyle)
 
 	c.Set("textBaseline", "top")
@@ -300,6 +299,90 @@ func (a *App) drawMarkdownRendered(src string, x, y, w, h, scale float64, drawEm
 			}
 		}
 	}
+}
+
+// markdownMeasure builds the layout Measure backed by the canvas measureText,
+// at the given render scale. Shared by the painter and the caret hit-test so
+// click→offset and offset→screen agree with what was painted.
+func (a *App) markdownMeasure(st markdownStyle, scale float64) markdown.Measure {
+	c := a.cctx
+	return func(text string, fontPx float64, style markdown.SpanStyle, mono bool) float64 {
+		family := st.sansSerif
+		if mono {
+			family = st.monospace
+		}
+		setFont(c, fontPx*scale, family, style&markdown.StyleBold != 0, style&markdown.StyleItalic != 0)
+		return c.Call("measureText", text).Get("width").Float() / scale
+	}
+}
+
+// markdownOrigin is the drawing origin (top-left of logical content, already
+// scrolled) and render scale for the markdown of a descended pane — the single
+// source of truth the painter and the caret hit-test both transform through.
+func (a *App) markdownOrigin(p *pane.Pane, r pane.Rect) (originX, originY, scale float64) {
+	x, y, _, _ := fileInnerBox(p, r)
+	scale = fileFixedScale
+	return x - p.TextScrollX*scale, y - p.TextScrollY*scale, scale
+}
+
+// markdownCaretAt maps a screen point in a descended markdown pane to the
+// nearest source byte offset, via the same layout + transform the painter used.
+// ok is false when the tile has no cached body or no text to land on.
+func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float64) (int, bool) {
+	body, ok := a.tileBody(n)
+	if !ok {
+		return 0, false
+	}
+	st := defaultMarkdownStyle()
+	measure := a.markdownMeasure(st, fileFixedScale)
+	res := a.layoutMarkdown(string(body), fileNaturalContentPx, measure, markdownLayoutStyle(st))
+	originX, originY, scale := a.markdownOrigin(p, r)
+	return markdown.CaretFromPoint(res.Ops, (sx-originX)/scale, (sy-originY)/scale, measure)
+}
+
+// placeMarkdownCaret sets pane p's rendered-mode caret to the source offset
+// nearest the click (sx, sy), when the descended tile is an editable text tile.
+// No-op for url/shell descents, read-only tiles, or clicks that hit-test to no
+// text. The caret then renders on the next frame and anchors typing / drops.
+func (a *App) placeMarkdownCaret(p *pane.Pane, r pane.Rect, sx, sy float64) {
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return
+	}
+	file, ok := g.Tiles[p.TextFocus]
+	if !ok || file.Kind != rpc.KindText || a.tileReadOnly(&file) {
+		return
+	}
+	off, ok := a.markdownCaretAt(p, r, &file, sx, sy)
+	if !ok {
+		return
+	}
+	if a.mdCaret == nil {
+		a.mdCaret = map[string]int{}
+	}
+	a.mdCaret[p.ID] = off
+}
+
+// drawMarkdownCaret paints the rendered-mode editing caret for pane p (a
+// vertical bar at the stored source offset), if one is set. Called from within
+// the pane's clip after the markdown is painted. No-op when the pane has no
+// caret. originX/originY/scale must match what drawMarkdownInRect used.
+func (a *App) drawMarkdownCaret(p *pane.Pane, src string, originX, originY, scale float64) {
+	off, ok := a.mdCaret[p.ID]
+	if !ok {
+		return
+	}
+	st := defaultMarkdownStyle()
+	measure := a.markdownMeasure(st, scale)
+	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, markdownLayoutStyle(st))
+	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, off, measure)
+	if !ok {
+		return
+	}
+	c := a.cctx
+	c.Set("fillStyle", st.textColor)
+	// A 2px bar a touch taller than the glyph, anchored at the run's top.
+	c.Call("fillRect", originX+cx*scale, originY+cy*scale, 2.0, fontPx*scale*1.25)
 }
 
 // mdCacheKey identifies a memoized layout: a content hash plus the rounded

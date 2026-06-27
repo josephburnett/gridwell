@@ -168,6 +168,12 @@ type App struct {
 	mdImages     map[string]js.Value
 	mdImageState map[string]int8
 
+	// mdCaret is the rendered-mode editing caret: paneID → source byte offset
+	// into the descended text tile's body. Absent means "no caret in this pane"
+	// (never clicked / not in editable rendered mode). Set by a click in
+	// rendered mode and drawn as a vertical bar; rendered-mode editing reads it.
+	mdCaret map[string]int
+
 	// urlStreams holds the live native WebContentsView handle for each
 	// pane descended into a live URL tile. One per pane id; multiple panes
 	// may host views concurrently. Named "streams" for historical reasons
