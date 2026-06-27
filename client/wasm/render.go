@@ -466,11 +466,11 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	}
 }
 
-// drawURLBackButton paints the lower-right button on a URL-tile descent.
-// Click → history.back() on the descended Chromium tab. Same circular
-// chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(p, r)
+// drawCircleButtonChrome paints the filled, bordered circle shared by the
+// lower-right corner buttons (URL back / refresh), so the position and look
+// stay muscle-memory-compatible with the + button. The caller then draws its
+// glyph on top at (cx, cy).
+func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	a.cctx.Set("fillStyle", colorPlusBg)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
@@ -478,6 +478,14 @@ func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
 	a.cctx.Set("strokeStyle", colorPaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("stroke")
+}
+
+// drawURLBackButton paints the lower-right button on a URL-tile descent.
+// Click → history.back() on the descended Chromium tab. Same circular
+// chrome as the + button so the position is muscle-memory-compatible.
+func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
+	cx, cy := plusButtonCenter(p, r)
+	a.drawCircleButtonChrome(cx, cy)
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
 	a.cctx.Set("strokeStyle", colorPlusFg)
@@ -502,13 +510,7 @@ func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
 // position is muscle-memory-compatible.
 func (a *App) drawURLRefreshButton(p *pane.Pane, r pane.Rect) {
 	cx, cy := plusButtonCenter(p, r)
-	a.cctx.Set("fillStyle", colorPlusBg)
-	a.cctx.Call("beginPath")
-	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
-	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", colorPaneBorder)
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Call("stroke")
+	a.drawCircleButtonChrome(cx, cy)
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPlusFg)
