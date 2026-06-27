@@ -96,6 +96,11 @@ type App struct {
 	// fetches it. Deduped like gridInflight: the embed drawer fires this on
 	// every cache miss every frame.
 	tileInflight map[string]bool
+	// tileLoadFailed records tile ids whose GetTile failed (a broken embed: the
+	// tile was deleted, or its plugin isn't mounted). Without it a "missing"
+	// embed re-fires GetTile every frame forever — the same dogpile gridLoadFailed
+	// prevents for grids. Cleared only by a reload.
+	tileLoadFailed map[string]bool
 
 	// ghost is the in-flight visual representation of a node being dragged
 	// or animated to/from somewhere. The dragged node renders here at
@@ -446,6 +451,7 @@ func main() {
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
 		tileInflight:      map[string]bool{},
+		tileLoadFailed:    map[string]bool{},
 		paneStateStack:    map[string][]paneState{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		urlStreams:        map[string]*urlView{},
@@ -576,7 +582,7 @@ func (a *App) fetchGrid(id string) {
 // once the tile's grid is cached. Background, like fetchGrid — the embed paints
 // the missing placeholder until the grid lands, then resolves on the next frame.
 func (a *App) fetchTileByID(tileID string) {
-	if tileID == "" || a.tileInflight[tileID] {
+	if tileID == "" || a.tileInflight[tileID] || a.tileLoadFailed[tileID] {
 		return
 	}
 	a.tileInflight[tileID] = true
@@ -584,6 +590,9 @@ func (a *App) fetchTileByID(tileID string) {
 		defer delete(a.tileInflight, tileID)
 		tile, err := a.cl.GetTile(context.Background(), tileID)
 		if err != nil || tile == nil {
+			// Broken embed (deleted tile / unmounted plugin): stop re-firing so
+			// the per-frame draw doesn't dogpile the server. Cleared by a reload.
+			a.tileLoadFailed[tileID] = true
 			return
 		}
 		a.fetchGrid(tile.GridID)
