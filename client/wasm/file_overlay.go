@@ -137,6 +137,12 @@ func (a *App) ensureFileTextarea() {
 			textFocus = p.TextFocus
 			textMode = p.TextMode == rpc.TextModeText
 		}
+		// Rendered-mode edits don't flow through the textarea; persist them
+		// from the optimistically-updated cache instead.
+		if p != nil && p.TextMode == rpc.TextModeRendered {
+			a.saveFileFromCache(p)
+			return nil
+		}
 		if !textedit.ShouldDebouncedSaveFire(p != nil, textFocus, textMode, a.lastTextareaTileID) {
 			return nil
 		}

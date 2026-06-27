@@ -11,6 +11,7 @@ import (
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -338,6 +339,146 @@ func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy flo
 	res := a.layoutMarkdown(string(body), fileNaturalContentPx, measure, markdownLayoutStyle(st))
 	originX, originY, scale := a.markdownOrigin(p, r)
 	return markdown.CaretFromPoint(res.Ops, (sx-originX)/scale, (sy-originY)/scale, measure)
+}
+
+// editRenderedKey applies one keystroke to the focused rendered-mode text tile
+// at its caret: printable keys (and Enter/Tab) insert, Backspace/Delete remove,
+// arrows move. The edit goes through OptimisticEdit so the canvas re-renders
+// live, marks the pane dirty, and schedules the debounced save. A no-op unless
+// the focused pane is editing an editable text tile in rendered mode with a
+// caret placed; modifier combos are left to the browser.
+func (a *App) editRenderedKey(ev js.Value) {
+	p := a.tree.FocusedPane()
+	if p == nil || p.TextMode != rpc.TextModeRendered || p.TextFocus == "" {
+		return
+	}
+	if ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool() || ev.Get("altKey").Bool() {
+		return // copy/paste/shortcuts stay with the browser
+	}
+	caret, hasCaret := a.mdCaret[p.ID]
+	if !hasCaret {
+		return // click to place a caret before typing
+	}
+	gid := a.gridIDForPane(p)
+	g, ok := a.c.Grid(gid)
+	if !ok {
+		return
+	}
+	file, ok := g.Tiles[p.TextFocus]
+	if !ok || file.Kind != rpc.KindText || a.tileReadOnly(&file) {
+		return
+	}
+	body, ok := a.tileBody(&file)
+	if !ok {
+		return
+	}
+	src := string(body)
+	newSrc, newCaret, changed := src, caret, false
+	switch key := ev.Get("key").String(); key {
+	case "Backspace":
+		newSrc, newCaret = textedit.DeleteBefore(src, caret)
+		changed = newSrc != src
+	case "Delete":
+		newSrc = textedit.DeleteAt(src, caret)
+		changed = newSrc != src
+	case "Enter":
+		newSrc, newCaret = textedit.InsertAt(src, "\n", caret)
+		changed = true
+	case "Tab":
+		newSrc, newCaret = textedit.InsertAt(src, "\t", caret)
+		changed = true
+	case "ArrowLeft":
+		newCaret = textedit.MoveLeft(src, caret)
+	case "ArrowRight":
+		newCaret = textedit.MoveRight(src, caret)
+	case "ArrowUp":
+		newCaret = a.caretVertical(src, caret, false)
+	case "ArrowDown":
+		newCaret = a.caretVertical(src, caret, true)
+	case "Home", "End", "Escape", "PageUp", "PageDown":
+		return // not ours
+	default:
+		if r := []rune(key); len(r) == 1 {
+			newSrc, newCaret = textedit.InsertAt(src, key, caret)
+			changed = true
+		} else {
+			return // function / media / dead keys
+		}
+	}
+	ev.Call("preventDefault")
+	if changed {
+		if file.BlobID != 0 {
+			a.c.OptimisticEdit(gid, file.ID, []byte(newSrc))
+		}
+		if a.mdDirty == nil {
+			a.mdDirty = map[string]bool{}
+		}
+		a.mdDirty[p.ID] = true
+		a.scheduleFileSave()
+		a.scheduleURLUpdate()
+	}
+	a.mdCaret[p.ID] = newCaret
+	a.draw()
+}
+
+// caretVertical moves the caret one rendered line up or down, in logical layout
+// coordinates: map the offset to a point, shift y by a line height into the
+// adjacent line, and map back. Returns off unchanged when there's no adjacent
+// line. No screen transform needed — the layout coords suffice.
+func (a *App) caretVertical(src string, off int, down bool) int {
+	st := defaultMarkdownStyle()
+	lstyle := markdownLayoutStyle(st)
+	measure := a.markdownMeasure(st, fileFixedScale)
+	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, lstyle)
+	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, off, measure)
+	if !ok {
+		return off
+	}
+	lh := fontPx * lstyle.LineSpacing
+	if lh <= 0 {
+		lh = fontPx
+	}
+	// Aim at the vertical middle of the adjacent line so the nearest-line pick
+	// lands there rather than on the current line.
+	targetY := cy + fontPx*0.5
+	if down {
+		targetY += lh
+	} else {
+		targetY -= lh
+	}
+	if n, ok := markdown.CaretFromPoint(res.Ops, cx, targetY, measure); ok {
+		return n
+	}
+	return off
+}
+
+// saveFileFromCache posts the focused rendered-mode tile's current cached body
+// (already updated optimistically by each keystroke) and clears its dirty mark.
+// The raw-text path is saveFileFromTextarea; this is its rendered-mode twin.
+func (a *App) saveFileFromCache(p *pane.Pane) {
+	gid := a.gridIDForPane(p)
+	g, ok := a.c.Grid(gid)
+	if !ok {
+		return
+	}
+	file, ok := g.Tiles[p.TextFocus]
+	if !ok || file.Kind != rpc.KindText || a.tileReadOnly(&file) {
+		return
+	}
+	body, ok := a.tileBody(&file)
+	if !ok {
+		return
+	}
+	delete(a.mdDirty, p.ID)
+	content := append([]byte(nil), body...)
+	go func() {
+		a.postUpdateText(gid, &rpc.UpdateTextRequest{
+			Path:    rpc.Path{WellIDs: p.Path},
+			TileID:  file.ID,
+			Version: file.Version,
+			Data:    content,
+		}, content)
+	}()
 }
 
 // placeMarkdownCaret sets pane p's rendered-mode caret to the source offset

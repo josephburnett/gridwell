@@ -63,7 +63,18 @@ func (a *App) installCanvasInput() {
 // keyboard focus and handles its own input — the gridwell canvas never sees
 // those keystrokes. The handlers remain registered (and harmlessly inert) so
 // the listener wiring in installCanvasInput is unchanged.
-func (a *App) onKeyDown(this js.Value, args []js.Value) any { return nil }
+// onKeyDown is the canvas-level keyboard handler. Its one job today is
+// rendered-mode markdown editing: when the focused pane is editing a text tile
+// in rendered mode, keystrokes edit the source at the caret (the raw-text mode
+// is handled by its own DOM textarea, which owns its keys). Everything else
+// falls through untouched.
+func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
+	if len(args) == 0 {
+		return nil
+	}
+	a.editRenderedKey(args[0])
+	return nil
+}
 
 func (a *App) onKeyUp(this js.Value, args []js.Value) any { return nil }
 
@@ -1482,9 +1493,10 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			// not tile state, so it does not survive across descents.
 			delete(a.urlPanX, fp.ID)
 			delete(a.urlPanY, fp.ID)
-			// Drop any rendered-mode caret from a previous occupant of this
-			// pane; a fresh doc starts with no caret until the user clicks.
+			// Drop any rendered-mode caret + dirty mark from a previous occupant
+			// of this pane; a fresh doc starts with no caret until the user clicks.
 			delete(a.mdCaret, fp.ID)
+			delete(a.mdDirty, fp.ID)
 			a.refreshFileOverlay()
 			// URL / shell descent show the frozen JPEG preview by
 			// default. afterDescend fires here so an auto-go-live
@@ -1702,7 +1714,16 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			buf = ta.Get("value").String()
 			hasBuf = true
 		}
+	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.mdDirty[p.ID] {
+		// Rendered-mode edits live in the cache (OptimisticEdit per keystroke);
+		// flush them on ascent so a quick exit within the save debounce doesn't
+		// drop them.
+		if body, ok := a.tileBody(&file); ok {
+			buf = string(body)
+			hasBuf = true
+		}
 	}
+	delete(a.mdDirty, p.ID)
 	// Pre-write the parent-grid preview to the user's edits before the ascent
 	// transition. Tile-scoped (OptimisticEdit) so the optimistic content lands
 	// only on this tile, not on any clone that shares its content-addressed blob.

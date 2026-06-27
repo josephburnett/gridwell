@@ -174,6 +174,11 @@ type App struct {
 	// rendered mode and drawn as a vertical bar; rendered-mode editing reads it.
 	mdCaret map[string]int
 
+	// mdDirty marks panes whose rendered-mode body has unsaved edits, so a
+	// quick ascent (within the save debounce) still flushes them. Set on each
+	// keystroke edit, cleared when the content is posted.
+	mdDirty map[string]bool
+
 	// urlStreams holds the live native WebContentsView handle for each
 	// pane descended into a live URL tile. One per pane id; multiple panes
 	// may host views concurrently. Named "streams" for historical reasons
