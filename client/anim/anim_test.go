@@ -114,6 +114,19 @@ func TestSplitN(t *testing.T) {
 	if !near(got[1], 200) {
 		t.Errorf("middle phase: %v", got[1])
 	}
+	// A trailing zero-distance phase (the "instant" install segment of every
+	// descent) must be EXACTLY zero — the rounding remainder goes to the last
+	// phase that has distance, never onto a zero one where it could land
+	// negative. Non-round inputs surface the fp error the round cases hide.
+	for _, d := range []float64{37.3, 99.9, 0.123} {
+		z := SplitN([]float64{d, 0}, 250)
+		if z[1] != 0 {
+			t.Errorf("SplitN([%v,0],250) trailing zero phase = %v, want exactly 0", d, z[1])
+		}
+		if sum := z[0] + z[1]; !near(sum, 250) {
+			t.Errorf("SplitN([%v,0],250) sum = %v, want 250", d, sum)
+		}
+	}
 	// All zero → equal split fallback.
 	got = SplitN([]float64{0, 0, 0}, 90)
 	for _, v := range got {

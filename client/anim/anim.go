@@ -72,8 +72,10 @@ func (a Animation) At(nowMs float64) (x, y float64, done bool) {
 // every phase has zero distance, the time is divided equally so the
 // caller doesn't end up with a transition that completes instantly.
 //
-// The last phase absorbs floating-point rounding so the returned values
-// always sum to totalMs exactly.
+// The last phase WITH distance absorbs floating-point rounding so the
+// returned values always sum to totalMs exactly. The remainder must not land
+// on a zero-distance phase — that is an "instant" segment, and a spurious
+// (possibly negative) duration on it breaks the transition stepper.
 func SplitN(distances []float64, totalMs float64) []float64 {
 	out := make([]float64, len(distances))
 	if len(distances) == 0 {
@@ -93,13 +95,15 @@ func SplitN(distances []float64, totalMs float64) []float64 {
 		return out
 	}
 	var allocated float64
+	last := 0
 	for i, d := range distances {
 		if d > 1e-6 {
 			out[i] = totalMs * d / sum
 			allocated += out[i]
+			last = i
 		}
 	}
-	out[len(out)-1] += totalMs - allocated
+	out[last] += totalMs - allocated
 	return out
 }
 
