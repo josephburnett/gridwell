@@ -37,24 +37,39 @@ func (a *App) classifyDocTargetAt(sx, sy float64) (embedpkg.DocTarget, *pane.Pan
 		IsURLDescent: a.isURLDescent(p),
 		TextMode:     p.TextMode,
 		Inside:       pointInFileInner(p, r, sx, sy),
+		ReadOnly:     a.docPaneReadOnly(p),
 	}
 	return embedpkg.ClassifyDocTarget(state), p, r
 }
 
-// docRejectAt reports whether (sx, sy) lies over a text descent that's
-// in rendered mode (read-only). Used to flip the cursor to "not allowed"
-// while dragging.
-func (a *App) docRejectAt(sx, sy float64) bool {
-	mode, _, _ := a.classifyDocTargetAt(sx, sy)
-	return mode == embedpkg.DocTargetRendered
+// docPaneReadOnly reports whether the text tile a pane is descended into is
+// read-only (source-backed: a plugin's @info / file metadata). Such docs reject
+// drops even in an editable mode.
+func (a *App) docPaneReadOnly(p *pane.Pane) bool {
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return false
+	}
+	file, ok := g.Tiles[p.TextFocus]
+	return ok && a.tileReadOnly(&file)
 }
 
-// docDropTargetAt returns a populated docDropTarget when (sx, sy) lies
-// inside a raw-mode text descent pane. The insertion point is the end
-// of the line under the cursor.
+// docRejectAt reports whether (sx, sy) lies over a read-only text descent.
+// Used to flip the cursor to "not allowed" while dragging (editable docs —
+// raw or rendered — are now drop targets, not rejects).
+func (a *App) docRejectAt(sx, sy float64) bool {
+	mode, _, _ := a.classifyDocTargetAt(sx, sy)
+	return mode == embedpkg.DocTargetReject
+}
+
+// docDropTargetAt returns a populated docDropTarget when (sx, sy) lies inside
+// an editable text descent pane. In raw mode the insertion point is the end of
+// the line under the cursor; in rendered mode it's the source caret offset
+// under the cursor (so the embed lands where you drop it, and you see it right
+// away).
 func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 	mode, p, r := a.classifyDocTargetAt(sx, sy)
-	if mode != embedpkg.DocTargetRaw {
+	if mode != embedpkg.DocTargetRaw && mode != embedpkg.DocTargetRendered {
 		return nil, false
 	}
 	gid := a.gridIDForPane(p)
@@ -66,13 +81,22 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 	if !ok {
 		return nil, false
 	}
-	blob, ok := a.c.TileContent(tile.ID)
-	if !ok {
-		return nil, false
+	var offset int
+	if mode == embedpkg.DocTargetRendered {
+		off, ok := a.markdownCaretAt(p, r, &tile, sx, sy)
+		if !ok {
+			return nil, false
+		}
+		offset = off
+	} else {
+		blob, ok := a.c.TileContent(tile.ID)
+		if !ok {
+			return nil, false
+		}
+		_, iy, _, _ := fileInnerBox(p, r)
+		row := embedpkg.RowAt(iy, sy, p.TextScrollY, fileLineHeightPx)
+		offset = embedpkg.LineEndOffset(string(blob), row)
 	}
-	_, iy, _, _ := fileInnerBox(p, r)
-	row := embedpkg.RowAt(iy, sy, p.TextScrollY, fileLineHeightPx)
-	offset := embedpkg.LineEndOffset(string(blob), row)
 	return &docDropTarget{
 		pane:         p,
 		rect:         r,
@@ -127,6 +151,15 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	if a.lastTextareaTileID == dt.tileID &&
 		!a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
 		a.fileTextarea.Set("value", newSrc)
+	}
+	// In rendered mode, advance the caret past the just-inserted embed so it's
+	// visible and typing continues after it. The inserted length (link plus any
+	// padding spaces from Insert) is the source-length delta.
+	if dt.pane.TextMode == rpc.TextModeRendered {
+		if a.mdCaret == nil {
+			a.mdCaret = map[string]int{}
+		}
+		a.mdCaret[dt.pane.ID] = dt.insertOffset + (len(newSrc) - len(bytes))
 	}
 
 	path := slices.Clone(dt.pane.Path)

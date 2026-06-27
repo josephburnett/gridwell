@@ -35,11 +35,14 @@ const (
 	// DocTargetNone — not a doc context. Fall through to grid drop rules.
 	DocTargetNone DocTarget = iota
 	// DocTargetRaw — raw-mode text descent. Drop inserts a markdown
-	// reference; both buttons are accepted.
+	// reference at the line under the cursor; both buttons are accepted.
 	DocTargetRaw
-	// DocTargetRendered — rendered-mode text descent. Read-only;
-	// canvas cursor flips to "not allowed".
+	// DocTargetRendered — rendered-mode text descent (editable). Drop inserts
+	// a markdown reference at the caret (the source offset under the cursor).
 	DocTargetRendered
+	// DocTargetReject — a read-only doc (a plugin's @info / file metadata).
+	// Drops are not allowed; the canvas cursor flips to "not allowed".
+	DocTargetReject
 )
 
 // PaneState is the subset of pane fields ClassifyDocTarget needs. The
@@ -50,15 +53,20 @@ type PaneState struct {
 	IsURLDescent bool
 	TextMode     string
 	Inside       bool // cursor inside the file inner-box rect
+	ReadOnly     bool // the tile's content can't be edited (source-backed)
 }
 
 // ClassifyDocTarget tells the drag system how to treat a cursor over a
-// candidate doc pane. URL descents and clicks outside the file inner
-// box are never doc targets; raw-mode text descents accept drops;
-// rendered-mode text descents reject them.
+// candidate doc pane. URL descents and clicks outside the file inner box are
+// never doc targets; a read-only doc rejects drops; otherwise both raw and
+// rendered text descents accept them — raw inserts at the line under the
+// cursor, rendered at the caret.
 func ClassifyDocTarget(s PaneState) DocTarget {
 	if !s.HasTextFocus || s.IsURLDescent || !s.Inside {
 		return DocTargetNone
+	}
+	if s.ReadOnly {
+		return DocTargetReject
 	}
 	if s.TextMode == ModeRaw {
 		return DocTargetRaw

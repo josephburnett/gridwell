@@ -32,7 +32,7 @@ func TestClassifyDocTarget(t *testing.T) {
 			want: DocTargetRaw,
 		},
 		{
-			name: "rendered mode descent, inside → reject (read-only)",
+			name: "rendered mode descent, inside → accept (insert at caret)",
 			in:   PaneState{HasTextFocus: true, TextMode: ModeRendered, Inside: true},
 			want: DocTargetRendered,
 		},
@@ -40,6 +40,16 @@ func TestClassifyDocTarget(t *testing.T) {
 			name: "URL descent in rendered mode is still not a doc target",
 			in:   PaneState{HasTextFocus: true, IsURLDescent: true, TextMode: ModeRendered, Inside: true},
 			want: DocTargetNone,
+		},
+		{
+			name: "read-only raw doc → reject",
+			in:   PaneState{HasTextFocus: true, TextMode: ModeRaw, Inside: true, ReadOnly: true},
+			want: DocTargetReject,
+		},
+		{
+			name: "read-only rendered doc → reject",
+			in:   PaneState{HasTextFocus: true, TextMode: ModeRendered, Inside: true, ReadOnly: true},
+			want: DocTargetReject,
 		},
 	}
 	for _, tc := range tests {
@@ -51,10 +61,11 @@ func TestClassifyDocTarget(t *testing.T) {
 	}
 }
 
-// Regression: I once shipped this with raw/rendered inverted. The
-// table above protects against a swap, but pin the two named modes
-// explicitly so the intent is clear.
-func TestRawIsTheOnlyDropTarget(t *testing.T) {
+// Regression: I once shipped this with raw/rendered inverted. Pin the two
+// editable modes explicitly — both are drop targets now (raw inserts at the
+// line, rendered at the caret), but they must stay distinct so the wasm side
+// computes the right insert offset for each.
+func TestRawAndRenderedAreDistinctDropTargets(t *testing.T) {
 	raw := ClassifyDocTarget(PaneState{HasTextFocus: true, TextMode: ModeRaw, Inside: true})
 	rnd := ClassifyDocTarget(PaneState{HasTextFocus: true, TextMode: ModeRendered, Inside: true})
 	if raw != DocTargetRaw {
