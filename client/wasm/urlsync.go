@@ -248,18 +248,18 @@ func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
 	if !ok {
 		return
 	}
-	file, ok := g.Tiles[fileTileID]
-	if !ok {
+	if _, ok := g.Tiles[fileTileID]; !ok {
 		return
 	}
 	go func() {
 		// Content is routable by tile id (GetTileContent); blob ids carry no
-		// plugin namespace and aren't routable on their own.
+		// plugin namespace and aren't routable on their own. Store it in the
+		// content store — the single text-body store the overlay reads from.
 		data, err := a.cl.GetTileContent(context.Background(), fileTileID)
 		if err != nil {
 			return
 		}
-		a.c.PutBlob(file.BlobID, data)
+		a.c.PutTileContent(fileTileID, data)
 		// Refresh the overlay (in text mode this seeds the textarea
 		// from the blob), then place the cursor.
 		a.refreshFileOverlay()

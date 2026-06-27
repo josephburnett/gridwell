@@ -1715,9 +1715,9 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			hasBuf = true
 		}
 	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.mdDirty[p.ID] {
-		// Rendered-mode edits live in the cache (OptimisticEdit per keystroke);
-		// flush them on ascent so a quick exit within the save debounce doesn't
-		// drop them.
+		// Rendered-mode edits live in the content store (PutTileContent per
+		// keystroke); flush them on ascent so a quick exit within the save
+		// debounce doesn't drop them.
 		if body, ok := a.tileBody(&file); ok {
 			buf = string(body)
 			hasBuf = true
@@ -1725,10 +1725,10 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	}
 	delete(a.mdDirty, p.ID)
 	// Pre-write the parent-grid preview to the user's edits before the ascent
-	// transition. Tile-scoped (OptimisticEdit) so the optimistic content lands
-	// only on this tile, not on any clone that shares its content-addressed blob.
+	// transition. Tile-scoped (keyed by tile id) so the content lands only on
+	// this tile, not on any clone that shares its body.
 	if hasBuf {
-		a.c.OptimisticEdit(gid, file.ID, []byte(buf))
+		a.c.PutTileContent(file.ID, []byte(buf))
 	}
 
 	// The framed window in doc px: scroll position + the inner box size

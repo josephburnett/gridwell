@@ -407,9 +407,9 @@ func (a *App) editRenderedKey(ev js.Value) {
 	}
 	ev.Call("preventDefault")
 	if changed {
-		if file.BlobID != 0 {
-			a.c.OptimisticEdit(gid, file.ID, []byte(newSrc))
-		}
+		// Write through the content store — the same accessor the renderer reads
+		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
+		a.c.PutTileContent(file.ID, []byte(newSrc))
 		if a.mdDirty == nil {
 			a.mdDirty = map[string]bool{}
 		}

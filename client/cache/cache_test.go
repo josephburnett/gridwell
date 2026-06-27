@@ -11,7 +11,7 @@ func seedCache(t *testing.T) *Cache {
 	c := New()
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
 		{ID: "100", GridID: "1", Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridID: "2"},
-		{ID: "101", GridID: "1", Kind: rpc.KindText, X: 5, Y: 5, W: 1, H: 1, BlobID: 1},
+		{ID: "101", GridID: "1", Kind: rpc.KindText, X: 5, Y: 5, W: 1, H: 1},
 	})
 	return c
 }
@@ -32,65 +32,46 @@ func TestPutAndGet(t *testing.T) {
 	}
 }
 
-// TestOptimisticEditDoesNotLeakToClone is the regression for the cross-clone
-// content leak: two cloned text tiles (different ids, different grids) share
-// one content-addressed blob id. Optimistically editing one must NOT touch the
-// blob the other still points at, or the sibling renders — and then persists —
-// the wrong content (the "edit one clone, the other changed too" bug).
-func TestOptimisticEditDoesNotLeakToClone(t *testing.T) {
+// TestTileContentEditDoesNotLeakToClone is the regression for the cross-clone
+// content leak: two cloned text tiles have distinct ids. An edit to one writes
+// its body keyed by that id, so the sibling's body is untouched (the "edit one
+// clone, the other changed too" bug). Tile-id keying makes this hold by
+// construction — the blob-id store that once needed careful repointing is gone.
+func TestTileContentEditDoesNotLeakToClone(t *testing.T) {
 	c := New()
-	// gridA/textA and gridB/textB are clones: distinct tile rows, distinct
-	// grids, but the same shared blob id 5 ("Hello World").
-	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText, BlobID: 5}})
-	c.PutGrid(rpc.Grid{ID: "2"}, []rpc.Tile{{ID: "20", GridID: "2", Kind: rpc.KindText, BlobID: 5}})
-	c.PutBlob(5, []byte("Hello World"))
+	// Clones: distinct tile rows in distinct grids, both seeded with the same
+	// body — but each addressed by its own tile id.
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
+	c.PutGrid(rpc.Grid{ID: "2"}, []rpc.Tile{{ID: "20", GridID: "2", Kind: rpc.KindText}})
+	c.PutTileContent("10", []byte("Hello World"))
+	c.PutTileContent("20", []byte("Hello World"))
 
-	if !c.OptimisticEdit("1", "10", []byte("Goodbye")) {
-		t.Fatal("OptimisticEdit returned false")
-	}
+	c.PutTileContent("10", []byte("Goodbye"))
 
-	// The shared blob is untouched.
-	if b, _ := c.Blob(5); string(b) != "Hello World" {
-		t.Errorf("shared blob 5 = %q, want Hello World (edit leaked)", b)
+	if b, _ := c.TileContent("10"); string(b) != "Goodbye" {
+		t.Errorf("edited tile body = %q, want Goodbye", b)
 	}
-	// The sibling clone still points at the shared blob and renders the old
-	// content.
-	gB, _ := c.Grid("2")
-	if gB.Tiles["20"].BlobID != 5 {
-		t.Errorf("sibling BlobID = %d, want 5 (unchanged)", gB.Tiles["20"].BlobID)
-	}
-	// The edited tile points at a fresh local (negative) blob with the new
-	// content.
-	gA, _ := c.Grid("1")
-	newID := gA.Tiles["10"].BlobID
-	if newID >= 0 {
-		t.Errorf("edited BlobID = %d, want a negative optimistic id", newID)
-	}
-	if b, _ := c.Blob(newID); string(b) != "Goodbye" {
-		t.Errorf("optimistic blob = %q, want Goodbye", b)
+	if b, _ := c.TileContent("20"); string(b) != "Hello World" {
+		t.Errorf("sibling body = %q, want Hello World (edit leaked)", b)
 	}
 }
 
-// TestOptimisticEditReconcilesOnTileChanged: once the server's TileChanged
-// arrives with the real blob id, the optimistic local blob is dropped.
-func TestOptimisticEditReconcilesOnTileChanged(t *testing.T) {
+// TestRenderedEditVisibleThroughRenderAccessor reproduces the rendered-mode
+// "typing does nothing" bug: the renderer reads a text tile's body via
+// TileContent (tileBody -> TileContent, the tile-id content store), but the
+// edit path wrote through OptimisticEdit (the blob-id store). The two stores
+// disagree, so edits never appear. The fix routes edits through the same store
+// the renderer reads.
+func TestRenderedEditVisibleThroughRenderAccessor(t *testing.T) {
 	c := New()
-	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText, BlobID: 5}})
-	c.PutBlob(5, []byte("old"))
-	c.OptimisticEdit("1", "10", []byte("new"))
-	g, _ := c.Grid("1")
-	localID := g.Tiles["10"].BlobID
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
+	c.PutTileContent("10", []byte("Hello")) // what the renderer reads
 
-	c.Apply(rpc.Event{
-		Kind:        rpc.EventTileChanged,
-		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, BlobID: 9}},
-	})
-	if _, ok := c.Blob(localID); ok {
-		t.Errorf("optimistic blob %d survived reconciliation", localID)
-	}
-	g, _ = c.Grid("1")
-	if g.Tiles["10"].BlobID != 9 {
-		t.Errorf("tile BlobID = %d, want 9 (server id)", g.Tiles["10"].BlobID)
+	c.PutTileContent("10", []byte("Hello world")) // what an edit writes
+
+	got, _ := c.TileContent("10")
+	if string(got) != "Hello world" {
+		t.Fatalf("TileContent = %q, want %q (edit invisible to the renderer)", got, "Hello world")
 	}
 }
 
@@ -142,26 +123,26 @@ func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	}
 }
 
-func TestBlobPutGetInvalidate(t *testing.T) {
+func TestTileContentPutGet(t *testing.T) {
 	c := New()
-	if _, ok := c.Blob(7); ok {
-		t.Fatal("empty cache should not have blob 7")
+	if _, ok := c.TileContent("7"); ok {
+		t.Fatal("empty cache should not have content for tile 7")
 	}
-	c.PutBlob(7, []byte("hello"))
-	b, ok := c.Blob(7)
+	c.PutTileContent("7", []byte("hello"))
+	b, ok := c.TileContent("7")
 	if !ok {
-		t.Fatal("blob 7 missing after put")
+		t.Fatal("tile 7 content missing after put")
 	}
 	if string(b) != "hello" {
-		t.Errorf("blob data = %q, want hello", string(b))
+		t.Errorf("content = %q, want hello", string(b))
 	}
-	// PutBlob copies the bytes so caller mutations don't propagate.
+	// PutTileContent copies the bytes so caller mutations don't propagate.
 	src := []byte("world")
-	c.PutBlob(8, src)
+	c.PutTileContent("8", src)
 	src[0] = 'X'
-	got, _ := c.Blob(8)
+	got, _ := c.TileContent("8")
 	if string(got) != "world" {
-		t.Errorf("after mutating source, blob 8 = %q (cache should hold its own copy)", string(got))
+		t.Errorf("after mutating source, tile 8 content = %q (cache should hold its own copy)", string(got))
 	}
 }
 
@@ -209,34 +190,20 @@ func TestUpdateTile(t *testing.T) {
 	}
 }
 
-// TestRemoveTileFreesOptimisticBlob is the regression for an optimistic-blob
-// leak: editing a text tile stores a client-local (negative-id) blob and
-// repoints the tile at it. If the tile is then removed (e.g. dragged onto the
-// + trashcan) before the authoritative server tile arrives, the optimistic blob
-// must be dropped from the map — otherwise it strands forever, exactly the
-// unbounded growth OptimisticEdit and the EventTileChanged reconcile guard
-// against.
-func TestRemoveTileFreesOptimisticBlob(t *testing.T) {
+// TestRemoveTileFreesContent is the regression for a body leak: editing a text
+// tile stores its body in the content map keyed by tile id. If the tile is then
+// removed (e.g. dragged onto the + trashcan), its cached body must be dropped —
+// otherwise it strands in the map forever.
+func TestRemoveTileFreesContent(t *testing.T) {
 	c := New()
-	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText, BlobID: 5}})
-	c.PutBlob(5, []byte("Hello"))
-
-	if !c.OptimisticEdit("1", "10", []byte("Goodbye")) {
-		t.Fatal("OptimisticEdit returned false")
-	}
-	// The tile now points at a negative optimistic blob id.
-	g, _ := c.Grid("1")
-	optID := g.Tiles["10"].BlobID
-	if optID >= 0 {
-		t.Fatalf("expected negative optimistic blob id, got %d", optID)
-	}
-	if _, ok := c.Blob(optID); !ok {
-		t.Fatal("optimistic blob not stored")
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
+	c.PutTileContent("10", []byte("Goodbye"))
+	if _, ok := c.TileContent("10"); !ok {
+		t.Fatal("content not stored")
 	}
 
-	// Removing the tile must release its optimistic blob.
 	c.Apply(rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: "1", TileID: "10"}})
-	if _, ok := c.Blob(optID); ok {
-		t.Errorf("optimistic blob %d leaked after tile removal", optID)
+	if _, ok := c.TileContent("10"); ok {
+		t.Errorf("content leaked after tile removal")
 	}
 }

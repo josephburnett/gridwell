@@ -21,16 +21,13 @@ import (
 type Cache struct {
 	mu    sync.Mutex
 	grids map[string]*Grid
-	blobs map[int64][]byte
-	// content holds plugin tile bodies keyed by tile id. Plugin tiles (files,
-	// proc @info) carry no blob id; their body is fetched by tile id via
-	// GetTileContent. See TileContent / PutTileContent.
+	// content holds text tile bodies keyed by tile id — the single text-body
+	// store. A body is fetched by tile id via GetTileContent (routable; blob ids
+	// are not) and written back by PutTileContent, both for confirmed saves and
+	// for optimistic, not-yet-saved edits. Keying by tile id makes every write
+	// tile-scoped: editing one clone never touches a sibling's body. See
+	// TileContent / PutTileContent.
 	content map[string][]byte
-	// localBlobSeq generates client-local optimistic blob ids. It decrements
-	// from 0, so optimistic ids are always negative and can never collide with
-	// a server blob id (those are positive autoincrement rowids). See
-	// OptimisticEdit.
-	localBlobSeq int64
 }
 
 // Grid is a cached grid plus its tiles indexed by id for cheap upsert.
@@ -41,10 +38,15 @@ type Grid struct {
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[string]*Grid{}, blobs: map[int64][]byte{}, content: map[string][]byte{}}
+	return &Cache{grids: map[string]*Grid{}, content: map[string][]byte{}}
 }
 
-// PutTileContent stores a plugin tile's body bytes keyed by tile id.
+// PutTileContent stores a text tile's body bytes keyed by tile id. This is the
+// single text-body writer: confirmed saves (postUpdateText) and optimistic,
+// not-yet-saved edits (rendered-mode keystrokes, raw textarea input, embed
+// drops) all land here, so the renderer — which reads bodies through
+// TileContent — always reflects an edit immediately. Keyed by tile id, so a
+// write is tile-scoped and never leaks into a clone that shares content.
 func (c *Cache) PutTileContent(tileID string, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -60,62 +62,6 @@ func (c *Cache) TileContent(tileID string) ([]byte, bool) {
 	defer c.mu.Unlock()
 	b, ok := c.content[tileID]
 	return b, ok
-}
-
-// PutBlob stores a blob. Blobs are text bytes (the only blob-bearing tile
-// kind is KindText). Used after a fresh GetBlob call.
-func (c *Cache) PutBlob(blobID int64, data []byte) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	cp := make([]byte, len(data))
-	copy(cp, data)
-	c.blobs[blobID] = cp
-}
-
-// Blob returns the cached blob bytes for blobID, or (nil, false) if absent.
-// Bytes are returned by reference; treat as read-only.
-func (c *Cache) Blob(blobID int64) ([]byte, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	b, ok := c.blobs[blobID]
-	return b, ok
-}
-
-// OptimisticEdit reflects a not-yet-confirmed text edit to one tile, immediately
-// and *tile-scoped*. It stores `data` under a fresh client-local blob id and
-// repoints the tile to it, then returns true if the tile was found.
-//
-// Critically it does NOT mutate the blob the tile currently points at: blobs
-// are content-addressed and shared (two clones of a text tile share one blob
-// id), so overwriting it in place would leak the edit into every sibling that
-// shares it — and that corrupted content would then be persisted the next time
-// a sibling is saved. Repointing only this tile keeps clones independent.
-//
-// The authoritative server blob id arrives later via Apply(EventTileChanged),
-// which replaces the tile (and drops this optimistic blob). A prior optimistic
-// blob for the same tile is dropped here so the map can't grow without bound.
-func (c *Cache) OptimisticEdit(gridID, tileID string, data []byte) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	g, ok := c.grids[gridID]
-	if !ok {
-		return false
-	}
-	t, ok := g.Tiles[tileID]
-	if !ok {
-		return false
-	}
-	if t.BlobID < 0 {
-		delete(c.blobs, t.BlobID)
-	}
-	c.localBlobSeq--
-	id := c.localBlobSeq
-	cp := make([]byte, len(data))
-	copy(cp, data)
-	c.blobs[id] = cp
-	t.BlobID = id
-	g.Tiles[tileID] = t
-	return true
 }
 
 // PutGrid replaces a grid's metadata and tile set. Used after a fresh
@@ -192,12 +138,6 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if !ok {
 			return false
 		}
-		// Reconcile any optimistic edit: if the tile was pointing at a
-		// client-local optimistic blob, drop it now that the authoritative
-		// server tile (with its real blob id) has arrived.
-		if old, existed := g.Tiles[n.ID]; existed && old.BlobID < 0 && old.BlobID != n.BlobID {
-			delete(c.blobs, old.BlobID)
-		}
 		g.Tiles[n.ID] = n
 		return true
 	case rpc.EventTileRemoved:
@@ -208,14 +148,10 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if !ok {
 			return false
 		}
-		old, present := g.Tiles[ev.TileRemoved.TileID]
-		// Release any pending optimistic blob the removed tile pointed at, so
-		// deleting a tile mid-edit doesn't strand a client-local blob in the
-		// map forever (mirrors the cleanup OptimisticEdit and the
-		// EventTileChanged reconcile already do).
-		if present && old.BlobID < 0 {
-			delete(c.blobs, old.BlobID)
-		}
+		_, present := g.Tiles[ev.TileRemoved.TileID]
+		// Drop the removed tile's cached body so deleting a tile mid-edit doesn't
+		// strand its content in the map forever.
+		delete(c.content, ev.TileRemoved.TileID)
 		delete(g.Tiles, ev.TileRemoved.TileID)
 		return present
 	case rpc.EventGridChanged:

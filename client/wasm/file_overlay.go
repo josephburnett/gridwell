@@ -578,13 +578,10 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	// Optimistic local render: repoint THIS tile at a fresh cache blob with
-	// the typed content. Must be tile-scoped (OptimisticEdit), never a PutBlob
-	// over the shared content-addressed blob — that would leak the edit into
-	// every clone sharing it (and get persisted on their next save).
-	if file.BlobID != 0 {
-		a.c.OptimisticEdit(gid, file.ID, []byte(buf))
-	}
+	// Optimistic local render: write the typed content through the content
+	// store (tile-scoped by tile id, so it never leaks into a clone), the same
+	// accessor the renderer and parent-grid preview read.
+	a.c.PutTileContent(file.ID, []byte(buf))
 	go func() {
 		a.postUpdateText(gid, &rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: p.Path},
