@@ -1249,13 +1249,6 @@ func (a *App) startAscent(p *pane.Pane) {
 		zoomDist(switchTo.Zoom, saved.Zoom)
 	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
 
-	// If the saved state carries a text descent (an embed click
-	// originated the descent), restore it as the ascent landing.
-	restoreFocus := saved.TextFocus
-	restoreMode := saved.TextMode
-	restoreScrollX := saved.TextScrollX
-	restoreScrollY := saved.TextScrollY
-
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
@@ -1275,19 +1268,9 @@ func (a *App) startAscent(p *pane.Pane) {
 			},
 		},
 		onComplete: func() {
-			if restoreFocus == "" {
-				return
+			if fp := a.tree.FindPane(p.ID); fp != nil {
+				a.restoreEmbedReturn(fp, saved)
 			}
-			fp := a.tree.FindPane(p.ID)
-			if fp == nil {
-				return
-			}
-			fp.TextFocus = restoreFocus
-			fp.TextMode = restoreMode
-			fp.TextScrollX = restoreScrollX
-			fp.TextScrollY = restoreScrollY
-			fp.TextZoom = fileFixedScale
-			a.refreshFileOverlay()
 		},
 	})
 }
@@ -1513,6 +1496,27 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 // startFileAscent reverses the text tile descent: animate zoom-out from the
 // tile's footprint back to the saved viewport, then clear TextFocus and
 // save the tile's content + scroll.
+// restoreEmbedReturn applies a saved paneState's doc-return fields to fp when an
+// embed descent originated it: the captured text focus, and — for a cross-grid
+// or cross-plugin follow — the doc's grid Anchor + Path, so one ascent lands
+// back in the doc rather than in the foreign grid the embed jumped into. No-op
+// when the saved state carries no focus (an ordinary, non-embed ascent).
+func (a *App) restoreEmbedReturn(fp *pane.Pane, saved *paneState) {
+	if saved == nil || saved.TextFocus == "" {
+		return
+	}
+	if saved.Anchor != "" {
+		fp.Anchor = saved.Anchor
+		fp.Path = slices.Clone(saved.Path)
+	}
+	fp.TextFocus = saved.TextFocus
+	fp.TextMode = saved.TextMode
+	fp.TextScrollX = saved.TextScrollX
+	fp.TextScrollY = saved.TextScrollY
+	fp.TextZoom = fileFixedScale
+	a.refreshFileOverlay()
+}
+
 func (a *App) startFileAscent(p *pane.Pane) {
 	if p.TextFocus == "" {
 		return
@@ -1570,14 +1574,9 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	p.TextFocus = ""
 	a.refreshFileOverlay()
 
-	// If the saved state had a TextFocus, the descent originated from
-	// inside another text tile (an embed click) — restore that doc as
-	// the ascent landing on transition complete.
-	restoreFocus := saved.TextFocus
-	restoreMode := saved.TextMode
-	restoreScrollX := saved.TextScrollX
-	restoreScrollY := saved.TextScrollY
-
+	// If the saved state had a TextFocus, the descent originated from inside
+	// another text tile (an embed click) — restore that doc (and, for a
+	// cross-grid follow, its anchor + path) as the ascent landing on complete.
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
@@ -1590,19 +1589,9 @@ func (a *App) startFileAscent(p *pane.Pane) {
 			},
 		},
 		onComplete: func() {
-			if restoreFocus == "" {
-				return
+			if fp := a.tree.FindPane(p.ID); fp != nil {
+				a.restoreEmbedReturn(fp, saved)
 			}
-			fp := a.tree.FindPane(p.ID)
-			if fp == nil {
-				return
-			}
-			fp.TextFocus = restoreFocus
-			fp.TextMode = restoreMode
-			fp.TextScrollX = restoreScrollX
-			fp.TextScrollY = restoreScrollY
-			fp.TextZoom = fileFixedScale
-			a.refreshFileOverlay()
 		},
 	})
 }
@@ -1617,15 +1606,10 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	p.TextFocus = ""
 	if saved != nil {
 		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
-		// If the saved state captured a text descent (embed click), restore
-		// it so a single ascent lands on the doc, not the grid behind it.
-		if saved.TextFocus != "" {
-			p.TextFocus = saved.TextFocus
-			p.TextMode = saved.TextMode
-			p.TextScrollX = saved.TextScrollX
-			p.TextScrollY = saved.TextScrollY
-			p.TextZoom = fileFixedScale
-		}
+		// If the saved state captured a text descent (embed click), restore it
+		// (and its anchor/path for a cross-grid follow) so a single ascent
+		// lands on the doc, not the grid behind it.
+		a.restoreEmbedReturn(p, saved)
 	}
 	a.refreshFileOverlay()
 	a.draw()

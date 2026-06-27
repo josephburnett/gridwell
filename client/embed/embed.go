@@ -74,24 +74,42 @@ func ClassifyDocTarget(s PaneState) DocTarget {
 	return DocTargetRendered
 }
 
-// EmbedDescentAllowed reports whether an embed click can be followed to
-// its target tile — the three gates a leaf-swap descent must pass before
-// the wasm side stashes the doc context and dispatches the descent:
+// EmbedDescent is the plan for following an embed click into its target tile.
+// OK is false when the click resolved to no real, cached tile (the wasm side
+// then swallows it). Otherwise it says where to put the pane so the target
+// renders, and the wasm side stashes the doc as the one-step ascent return.
 //
-//   - hitTileID != ""  — the click resolved to a real embed reference.
-//   - targetFound       — a tile with that id exists in the cache.
-//   - same grid         — targetGridID == currentGridID. v1 only follows
-//     embeds whose target lives in the current descended grid;
-//     cross-grid embeds (which need fetching the target's parent chain)
-//     are a future extension.
+//   - Reanchor false: the target is in the doc's current grid — focus / descend
+//     it in place (Anchor / Path stay the doc's).
+//   - Reanchor true: the target lives in another grid (the common case — a url
+//     tile lives inside its own well, so embedding it is cross-grid). Move the
+//     pane to the target's grid first (Anchor = the target tile's grid, Path =
+//     its root) and then descend; this also crosses plugins, since Anchor
+//     carries the plugin uuid.
+type EmbedDescent struct {
+	OK       bool
+	Reanchor bool
+	Anchor   string   // new pane anchor when Reanchor (the target's grid id)
+	Path     []string // new pane path when Reanchor (nil = the target grid's root)
+}
+
+// PlanEmbedDescent decides how to follow an embed to its target. It replaces the
+// old same-grid *gate* (which rejected every cross-grid embed, so "descend into
+// a url tile" never worked — url tiles almost always live in a child grid) with
+// a *plan* that re-anchors onto the target's grid when needed.
 //
-// Pure: the wasm caller resolves the inputs (findTileByID, gridIDForPath)
-// and performs the descent only when this returns true.
-func EmbedDescentAllowed(hitTileID string, targetFound bool, targetGridID, currentGridID string) bool {
-	if hitTileID == "" || !targetFound {
-		return false
+// hitTileID is the resolved embed reference ("" if the href didn't parse);
+// targetGridID is the grid the found target lives in ("" if no tile was found);
+// currentGridID is the grid the doc pane is in. Pure: the wasm caller resolves
+// the inputs (findTileByID, gridIDForPane) and applies the plan.
+func PlanEmbedDescent(hitTileID, targetGridID, currentGridID string) EmbedDescent {
+	if hitTileID == "" || targetGridID == "" {
+		return EmbedDescent{} // no real, cached target → don't follow
 	}
-	return targetGridID == currentGridID
+	if targetGridID == currentGridID {
+		return EmbedDescent{OK: true} // same grid: focus / descend in place
+	}
+	return EmbedDescent{OK: true, Reanchor: true, Anchor: targetGridID, Path: nil}
 }
 
 // HrefForTile builds the markdown link href for an embed pointing at a

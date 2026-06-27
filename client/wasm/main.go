@@ -293,6 +293,12 @@ type paneState struct {
 	TextMode    string  `json:"text_mode,omitempty"`
 	TextScrollX float64 `json:"text_scroll_x,omitempty"`
 	TextScrollY float64 `json:"text_scroll_y,omitempty"`
+	// Anchor / Path are set only for an embed descent that re-anchored the pane
+	// onto another grid (a cross-grid / cross-plugin follow). On ascent they
+	// restore the doc's grid in one step, alongside TextFocus. Empty Anchor
+	// means "no re-anchor" — the within-grid ascent leaves Anchor/Path alone.
+	Anchor string   `json:"anchor,omitempty"`
+	Path   []string `json:"path,omitempty"`
 }
 
 // paneTransition is the active per-pane zoom animation. It is a series of

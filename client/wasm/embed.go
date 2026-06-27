@@ -3,6 +3,7 @@
 package main
 
 import (
+	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/embed"
@@ -179,18 +180,19 @@ func (a *App) findTileByID(id string) *rpc.Tile {
 	return nil
 }
 
-// descendIntoEmbed performs a leaf-swap descent from the current text-tile
-// descent into the tile referenced by an embed click. Returns true if the
-// descent was performed.
+// descendIntoEmbed descends from the current text-tile descent into the tile
+// an embed click references. Returns true if the descent was performed.
 //
-// v1 limitation: only embeds whose target tile is in the same grid as the
-// current descended pane are followed; cross-grid embeds are a future
-// extension (they require fetching the target's parent grid chain).
+// The target may live in the doc's own grid (a sibling tile) or — the common
+// case for a url/shell tile, which lives inside its own well — in another grid,
+// or another plugin. PlanEmbedDescent decides: a same-grid target is focused /
+// descended in place; a cross-grid target first re-anchors the pane onto the
+// target's grid (Anchor carries the plugin uuid, so this also crosses plugins).
 //
-// Ascent from the embed-target lands back on the doc with its mode and
-// scroll preserved (saved into paneState before the descent). Calling
-// startFileAscent again then leaves the doc — two ascents reach the
-// original grid, matching how a normal two-step descent works.
+// Either way the doc's full place — anchor, path, focus, mode, scroll — is
+// stashed onto the descent's saved paneState, so a single ascent restores the
+// doc (restoreEmbedReturn), matching "click a tile on a grid, ascend back to
+// the grid": here the doc is the grid.
 func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	if hit == nil {
 		return false
@@ -200,22 +202,26 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	if target != nil {
 		targetGridID = target.GridID
 	}
-	// Three gates: a real reference, a found target, and (v1) a same-grid
-	// target. Cross-grid embeds aren't supported yet.
-	if !embed.EmbedDescentAllowed(hit.tileID, target != nil, targetGridID, a.gridIDForPane(p)) {
+	plan := embed.PlanEmbedDescent(hit.tileID, targetGridID, a.gridIDForPane(p))
+	if !plan.OK {
 		return false
 	}
-	// Stash the doc's descent context before clearing it, then dispatch
-	// to the underlying descent. The well / file descent pushes its own
-	// {Cx,Cy,Zoom} state; we patch the doc context onto the top of the
-	// stack afterward so a single ascent restores the doc — TextFocus,
-	// mode, scroll, all of it.
+	// Stash the doc's full place before clearing focus; patched onto the saved
+	// paneState below so one ascent lands back on the doc.
+	savedAnchor := p.Anchor
+	savedPath := slices.Clone(p.Path)
 	savedFocus := p.TextFocus
 	savedMode := p.TextMode
 	savedScrollX := p.TextScrollX
 	savedScrollY := p.TextScrollY
 	p.TextFocus = ""
 	p.TextMode = ""
+	// Cross-grid / cross-plugin: move the pane onto the target's grid so the
+	// underlying descent focuses / descends a tile that is actually there.
+	if plan.Reanchor {
+		p.Anchor = plan.Anchor
+		p.Path = slices.Clone(plan.Path)
+	}
 	a.refreshFileOverlay()
 	if rpc.IsWellKind(target.Kind) {
 		a.startDescent(p, target)
@@ -225,6 +231,8 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 	}
 	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
 		top := &stack[len(stack)-1]
+		top.Anchor = savedAnchor
+		top.Path = savedPath
 		top.TextFocus = savedFocus
 		top.TextMode = savedMode
 		top.TextScrollX = savedScrollX

@@ -478,25 +478,42 @@ func TestInsertAtComputedOffset(t *testing.T) {
 	}
 }
 
-func TestEmbedDescentAllowed(t *testing.T) {
+func TestPlanEmbedDescent(t *testing.T) {
 	cases := []struct {
-		name          string
-		hitTileID     string
-		targetFound   bool
-		targetGridID  string
-		currentGridID string
-		want          bool
+		name                                   string
+		hitTileID, targetGridID, currentGridID string
+		want                                   EmbedDescent
 	}{
-		{"all gates pass", "5", true, "100", "100", true},
-		{"empty tile id rejected", "", true, "100", "100", false},
-		{"target not found rejected", "5", false, "100", "100", false},
-		{"cross-grid target rejected", "5", true, "200", "100", false},
-		{"empty id beats found+same-grid", "", true, "100", "100", false},
+		{
+			// The doc and the target share a grid: focus / descend in place,
+			// no re-anchor. (The same-grid text embed `[Inside](/9)`.)
+			"same grid focuses in place",
+			"uuid/9", "uuid/1", "uuid/1",
+			EmbedDescent{OK: true},
+		},
+		{
+			// The headline bug: a url tile (tile 12) lives in grid 4, embedded
+			// in a doc in grid 1. The old gate rejected this; now we re-anchor
+			// the pane onto grid 4 so the url renders, then descend.
+			"cross grid re-anchors onto the target grid",
+			"uuid/12", "uuid/4", "uuid/1",
+			EmbedDescent{OK: true, Reanchor: true, Anchor: "uuid/4"},
+		},
+		{
+			// Cross-plugin: the target's grid carries a different plugin uuid,
+			// so re-anchoring there also switches plugins.
+			"cross plugin re-anchors onto the other plugin's grid",
+			"other/7", "other/3", "uuid/1",
+			EmbedDescent{OK: true, Reanchor: true, Anchor: "other/3"},
+		},
+		{"unresolved href is not followed", "", "uuid/1", "uuid/1", EmbedDescent{}},
+		{"missing target (uncached grid) is not followed", "uuid/9", "", "uuid/1", EmbedDescent{}},
 	}
 	for _, c := range cases {
-		if got := EmbedDescentAllowed(c.hitTileID, c.targetFound, c.targetGridID, c.currentGridID); got != c.want {
-			t.Errorf("%s: EmbedDescentAllowed(%q,%v,%q,%q) = %v, want %v",
-				c.name, c.hitTileID, c.targetFound, c.targetGridID, c.currentGridID, got, c.want)
+		got := PlanEmbedDescent(c.hitTileID, c.targetGridID, c.currentGridID)
+		if got.OK != c.want.OK || got.Reanchor != c.want.Reanchor || got.Anchor != c.want.Anchor {
+			t.Errorf("%s: PlanEmbedDescent(%q,%q,%q) = %+v, want %+v",
+				c.name, c.hitTileID, c.targetGridID, c.currentGridID, got, c.want)
 		}
 	}
 }
