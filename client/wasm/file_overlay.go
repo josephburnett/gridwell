@@ -152,9 +152,14 @@ func (a *App) ensureFileTextarea() {
 			textMode = p.TextMode == rpc.TextModeText
 		}
 		// Rendered-mode edits don't flow through the textarea; persist them
-		// from the optimistically-updated cache instead.
+		// from the optimistically-updated cache instead. Only when the tile
+		// actually has a pending edit (mdDirty) — a timer that fires after the
+		// user navigated to a different, unedited rendered tile must not re-post
+		// its unchanged content.
 		if p != nil && p.TextMode == rpc.TextModeRendered {
-			a.saveFileFromCache(p)
+			if a.mdDirty[p.ID] {
+				a.saveFileFromCache(p)
+			}
 			return nil
 		}
 		if !textedit.ShouldDebouncedSaveFire(p != nil, textFocus, textMode, a.lastTextareaTileID) {

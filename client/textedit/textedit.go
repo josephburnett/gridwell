@@ -77,8 +77,9 @@ func clamp(off, n int) int {
 //
 //   - hasFocusedPane — there is a focused pane to read from.
 //   - textFocusTileID != "" && isTextMode — that pane is editing a text
-//     tile in raw-text mode (rendered mode is read-only; a non-text or
-//     unfocused pane has nothing to save).
+//     tile in raw-text mode. (Rendered-mode edits persist on their own path,
+//     saveFileFromCache, gated on the dirty mark; a non-text or unfocused
+//     pane has nothing to save.)
 //   - lastTextareaTileID == textFocusTileID — the shared textarea
 //     singleton is still bound to the SAME tile the timer was scheduled
 //     for. A save scheduled while editing tile A must NOT fire after the
