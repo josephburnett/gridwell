@@ -186,7 +186,18 @@ func (s *Store) UpdateText(ctx context.Context, req *rpc.UpdateTextRequest) (*rp
 			return err
 		}
 
-		if _, _, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", req.Data, mediaMarkdown); err != nil {
+		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", req.Data, mediaMarkdown)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			// Byte-identical content (same content-addressed blob). Re-saving
+			// unchanged bytes must NOT bump the version or fan a TileChanged —
+			// reading and no-op writes never mutate (the primary rule). alt_text
+			// is a pure function of the content, so it is unchanged too. A
+			// debounced auto-save that fires on a tile the user didn't actually
+			// edit is thereby a true no-op.
+			out, err = s.loadTile(ctx, tx, tileID)
 			return err
 		}
 		// alt_text is a deterministic function of the content; write it

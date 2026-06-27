@@ -117,6 +117,45 @@ func TestUpdateTextHappy(t *testing.T) {
 	}
 }
 
+// TestUpdateTextIdenticalContentNoOp: re-saving byte-identical content must not
+// bump the version (the edit-history spine) or change the blob — a debounced
+// auto-save that fires on a tile the user didn't actually edit is a true no-op,
+// per "things stay as you left them". The original version still validates after.
+func TestUpdateTextIdenticalContentNoOp(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	mdFile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: mdFile.ID, Version: mdFile.Version, Data: []byte("# hello"),
+	})
+	if err != nil {
+		t.Fatalf("no-op update: %v", err)
+	}
+	if same.Version != mdFile.Version {
+		t.Errorf("version after identical save = %d, want %d (no bump)", same.Version, mdFile.Version)
+	}
+	if same.BlobID != mdFile.BlobID {
+		t.Errorf("blob id changed on identical save: %d → %d", mdFile.BlobID, same.BlobID)
+	}
+	// The original version still validates (it was never bumped), and a real
+	// edit from it bumps exactly once.
+	changed, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: mdFile.ID, Version: mdFile.Version, Data: []byte("# changed"),
+	})
+	if err != nil {
+		t.Fatalf("real edit after no-op: %v", err)
+	}
+	if changed.Version != mdFile.Version+1 {
+		t.Errorf("version after real edit = %d, want %d", changed.Version, mdFile.Version+1)
+	}
+}
+
 func TestUpdateTextRejectsNonText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
