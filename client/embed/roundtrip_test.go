@@ -54,16 +54,14 @@ func TestDropRoundTripsThroughParser(t *testing.T) {
 	}
 }
 
-// TestDropFromQualifiedTileResolvesBack is the regression test for the
-// "embed renders as an orange 'missing' square (and won't descend)" bug. A real
-// drop passes the source tile's QUALIFIED id ("uuid/42"); HrefForTile strips the
-// uuid for a human-readable link, so the client must re-qualify on read — with
-// the embedding doc's plugin uuid — to match the (qualified) tile-cache keys.
-// The other round-trip tests only ever used a bare id ("5"), so the uuid-strip
-// was a no-op and this strip-then-requalify gap was invisible; this exercises
-// the full chain from a qualified source.
+// TestDropFromQualifiedTileResolvesBack exercises the full chain from a
+// qualified source id ("<uuid>/42"): build the markdown, insert it, parse it
+// back, and resolve. The link now CARRIES the plugin uuid, so it resolves to
+// the same tile self-describingly — even from a doc in the same plugin (anchor
+// matches). The other round-trip tests use a bare id ("5") where the uuid path
+// never exercises.
 func TestDropFromQualifiedTileResolvesBack(t *testing.T) {
-	const anchor = "abc-uuid"
+	const anchor = "0123456789abcdef0123456789abcdef"
 	const src = anchor + "/42"
 	link := embed.Markdown(testOrigin, src, embed.DefaultAlt("text", src))
 
@@ -76,6 +74,33 @@ func TestDropFromQualifiedTileResolvesBack(t *testing.T) {
 	}
 	if got := embed.ResolveEmbedTileID(anchor, spans[0].Href); got != src {
 		t.Errorf("qualified embed resolved to %q, want %q (href=%q)",
+			got, src, spans[0].Href)
+	}
+}
+
+// TestCrossPluginEmbedResolvesToSourcePlugin is the regression test for #4: an
+// embed whose tile lives in a DIFFERENT plugin than the embedding doc must
+// still descend. The drop carries the source tile's qualified id; the link
+// keeps that plugin uuid; resolving against the DOC's (different) plugin anchor
+// must still yield the source tile, not a mangled same-plugin id. Before the
+// fix the uuid was stripped and re-qualified with the doc's plugin, silently
+// resolving to a non-existent tile (rendered "missing", wouldn't descend).
+func TestCrossPluginEmbedResolvesToSourcePlugin(t *testing.T) {
+	const sourcePlugin = "0123456789abcdef0123456789abcdef"
+	const docPlugin = "fedcba9876543210fedcba9876543210" // a DIFFERENT plugin
+	const src = sourcePlugin + "/42"
+	link := embed.Markdown(testOrigin, src, embed.DefaultAlt("url", src))
+
+	doc := "notes\n"
+	out := embed.Insert(doc, link, embed.LineEndOffset(doc, 0))
+
+	spans := linkSpans(markdown.Lower([]byte(out)))
+	if len(spans) == 0 {
+		t.Fatalf("no link span found after round-trip; src=%q", out)
+	}
+	// Resolve with the DOC's plugin as the anchor — the href's own uuid must win.
+	if got := embed.ResolveEmbedTileID(docPlugin, spans[0].Href); got != src {
+		t.Errorf("cross-plugin embed resolved to %q, want %q (href=%q)",
 			got, src, spans[0].Href)
 	}
 }

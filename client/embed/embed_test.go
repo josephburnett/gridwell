@@ -78,9 +78,9 @@ func TestHrefForTile(t *testing.T) {
 		{"http://localhost:8080", "5", "http://localhost:8080/5"},
 		{"http://localhost:8080/", "5", "http://localhost:8080/5"}, // trailing slash trimmed
 		{"https://gridwell.example.com", "12345", "https://gridwell.example.com/12345"},
-		// UUID-qualified IDs: prefix is stripped.
-		{"", "uuid-abc/5", "/5"},
-		{"http://localhost:8080", "uuid-abc/42", "http://localhost:8080/42"},
+		// Qualified IDs keep the plugin uuid so the link is globally routable.
+		{"", "0123456789abcdef0123456789abcdef/5", "/0123456789abcdef0123456789abcdef/5"},
+		{"http://localhost:8080", "0123456789abcdef0123456789abcdef/42", "http://localhost:8080/0123456789abcdef0123456789abcdef/42"},
 	}
 	for _, tc := range cases {
 		got := HrefForTile(tc.origin, tc.id)
@@ -103,13 +103,13 @@ func TestLeafTileIDFromHref(t *testing.T) {
 		{"http://localhost:8080/3/4/5", "5"},
 		{"https://gridwell.example.com/42", "42"},
 		{"", ""},
-		{"https://example.com", ""},     // external URL, no path
-		{"example.com/5", ""},           // missing leading slash and no scheme
+		{"https://example.com", ""}, // external URL, no path
+		{"example.com/5", ""},       // missing leading slash and no scheme
 		{"#anchor", ""},
 		{"mailto:x@example.com", ""},
 		{"/notanumber", ""},
 		{"/", ""},
-		{"/0", ""},     // tile id must be positive
+		{"/0", ""},      // tile id must be positive
 		{"  /5  ", "5"}, // trims whitespace
 		{"http://localhost:8080/path/notnumeric", ""},
 		// Non-numeric LEAF must not be an embed even when an ancestor segment
@@ -117,9 +117,23 @@ func TestLeafTileIDFromHref(t *testing.T) {
 		{"/2024/recap", ""},
 		{"https://blog.example.com/2024/01/post", ""},
 		{"/page/3/comments", ""},
-		{"/5/", "5"},      // trailing slash tolerated
+		{"/5/", "5"},        // trailing slash tolerated
 		{"/3/4/5?x=1", "5"}, // query stripped
-		{"/-5", ""},      // negative leaf is not a tile id
+		{"/-5", ""},         // negative leaf is not a tile id
+		// Plugin-qualified links: "/<uuid>/<id>" → leaf id.
+		{"/0123456789abcdef0123456789abcdef/42", "42"},
+		{"http://localhost:8080/0123456789abcdef0123456789abcdef/7", "7"},
+		{"/0123456789abcdef0123456789abcdef/3/4/5", "5"}, // qualified descent chain
+		{"/0123456789abcdef0123456789abcdef", ""},        // a uuid alone is not a tile link
+		{"/0123456789abcdef0123456789abcdef/x", ""},      // qualified but non-numeric leaf
+		// An external link whose first segment merely isn't a uuid stays an
+		// external link — the regression a relaxed "non-numeric prefix" rule
+		// would cause (a real link mis-rendered as a tile embed).
+		{"/user/42", ""},
+		{"https://github.com/owner/123", ""},
+		// A near-uuid (wrong length / non-hex) is not a plugin uuid.
+		{"/0123456789abcdef0123456789abcde/42", ""},  // 31 hex chars
+		{"/0123456789abcdef0123456789abcdeg/42", ""}, // 'g' is not hex
 	}
 	for _, tc := range cases {
 		t.Run(tc.href, func(t *testing.T) {
@@ -140,8 +154,8 @@ func TestMarkdown(t *testing.T) {
 		{"", "5", "first heading", "[first heading](/5)"},
 		{"http://localhost:8080", "5", "Tab Title", "[Tab Title](http://localhost:8080/5)"},
 		{"http://localhost:8080", "5", "", "[](http://localhost:8080/5)"}, // empty alt allowed
-		// UUID-qualified: prefix stripped in link.
-		{"", "uuid-abc/5", "x", "[x](/5)"},
+		// Qualified: the plugin uuid is kept in the link.
+		{"", "0123456789abcdef0123456789abcdef/5", "x", "[x](/0123456789abcdef0123456789abcdef/5)"},
 	}
 	for _, tc := range cases {
 		got := Markdown(tc.origin, tc.id, tc.alt)
@@ -164,11 +178,11 @@ func TestDefaultAlt(t *testing.T) {
 
 func TestInsert(t *testing.T) {
 	cases := []struct {
-		name        string
-		src         string
-		off         int
-		link        string
-		want        string
+		name string
+		src  string
+		off  int
+		link string
+		want string
 	}{
 		{
 			name: "into empty doc",
@@ -453,7 +467,6 @@ func TestInsertAtComputedOffset(t *testing.T) {
 	}
 }
 
-
 func TestEmbedDescentAllowed(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -490,6 +503,12 @@ func TestResolveEmbedTileID(t *testing.T) {
 		{"no anchor leaves the bare leaf", "", "/42", "42"},
 		{"non-tile href resolves to empty", "uuid", "/blog/post", ""},
 		{"empty href resolves to empty", "uuid", "", ""},
+		// Qualified hrefs carry their own plugin uuid → resolve directly,
+		// ignoring the anchor. This is what lets an embed descend regardless of
+		// which plugin's doc holds it (the #4 fix).
+		{"qualified href resolves directly", "anchoruuid", "/0123456789abcdef0123456789abcdef/42", "0123456789abcdef0123456789abcdef/42"},
+		{"qualified href wins over a different anchor", "0000000000000000000000000000abcd", "http://localhost:8080/0123456789abcdef0123456789abcdef/9", "0123456789abcdef0123456789abcdef/9"},
+		{"qualified descent chain takes the leaf, keeps its uuid", "anchoruuid", "/0123456789abcdef0123456789abcdef/3/4/5", "0123456789abcdef0123456789abcdef/5"},
 	}
 	for _, c := range cases {
 		if got := ResolveEmbedTileID(c.anchor, c.href); got != c.want {

@@ -89,82 +89,138 @@ func EmbedDescentAllowed(hitTileID string, targetFound bool, targetGridID, curre
 // HrefForTile builds the markdown link href for an embed pointing at a
 // tile by id, anchored at `origin` (e.g., "http://localhost:8080") so
 // the link resolves when the doc is rendered outside Gridwell. An empty
-// origin produces a same-origin relative href ("/N").
+// origin produces a same-origin relative href.
 //
-// The plugin UUID prefix is stripped from qualified IDs (e.g. "uuid/42"
-// → "/42") so links remain human-readable; the client re-qualifies on read.
+// The plugin UUID is PRESERVED in the path: a qualified id "uuid/42" becomes
+// "/uuid/42", a bare id "42" becomes "/42". A markdown embed link is a single
+// globally-qualified id (CLAUDE.md), so carrying the uuid makes the link
+// resolve to the SAME tile from any client and from a doc in any plugin —
+// independent of which plugin embeds it. (It used to strip the uuid and have
+// the reader re-qualify with the embedding doc's plugin; that silently
+// mis-resolved every cross-plugin embed to a non-existent same-plugin id.)
 func HrefForTile(origin string, tileID string) string {
-	seg := tileID
-	if i := strings.LastIndexByte(tileID, '/'); i >= 0 {
-		seg = tileID[i+1:]
-	}
-	leaf := "/" + seg
+	path := "/" + tileID
 	if origin == "" {
-		return leaf
+		return path
 	}
-	return strings.TrimRight(origin, "/") + leaf
+	return strings.TrimRight(origin, "/") + path
 }
 
-// LeafTileIDFromHref parses a markdown link href and returns the leaf
-// tile id if it looks like a Gridwell descent path. Accepts:
-//
-//   - same-origin relative paths: "/5", "/3/4/5"
-//   - absolute URLs: "http://localhost:8080/5", "https://host/3/4/5"
-//
-// Returns "" for anything else (external links, anchors, malformed input).
-// Origin is not validated — a tile link is any URL whose path is a chain of
-// positive integers (tile row ids in descent order); the leaf is the last.
-//
-// EVERY segment must be a positive integer — including the leaf. A path like
-// "/2024/recap" or "/blog/01/post" is NOT a tile link just because some
-// segment is numeric: a real descent ends in a numeric tile id, so an external
-// link with a non-numeric leaf must not be mistaken for an embed. Cross-origin
-// "false positives" (a foreign all-numeric path) remain possible but degrade
-// gracefully: if no tile with that id exists the embed renders as "missing".
-func LeafTileIDFromHref(href string) string {
+// uuidHexLen is the character length of a plugin uuid (store/newUUID: a random
+// 128-bit id as lowercase hex). isPluginUUID matches exactly this shape so a
+// qualified embed path "/<uuid>/<id>" is told apart from an ordinary external
+// link like "/user/42" (whose first segment is not 32 hex chars) — without it,
+// every numeric-tailed external link would be mis-rendered as a tile embed.
+const uuidHexLen = 32
+
+// isPluginUUID reports whether s is a plugin uuid: exactly uuidHexLen lowercase
+// hex characters. Kept local because the embed package can't import the store
+// or rpc packages (cyclic); the format is a stable contract (store/uuid.go).
+func isPluginUUID(s string) bool {
+	if len(s) != uuidHexLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+// hrefSegments returns the non-empty path segments of href, or nil if href is
+// not a rooted path. Absolute URLs keep their path; relative hrefs ("/3/4/5",
+// "/5?x=1") parse with an empty scheme and the path we want. A parse error, or
+// a path not rooted at "/", yields nil.
+func hrefSegments(href string) []string {
 	href = strings.TrimSpace(href)
 	if href == "" {
-		return ""
+		return nil
 	}
-	// Reduce to the path component. Absolute URLs keep their path; relative
-	// hrefs ("/3/4/5", "/5?x=1") parse with an empty scheme and the path we
-	// want. A parse error, or a path that isn't rooted at "/", isn't a link.
 	u, err := url.Parse(href)
-	if err != nil {
-		return ""
+	if err != nil || !strings.HasPrefix(u.Path, "/") {
+		return nil
 	}
-	if !strings.HasPrefix(u.Path, "/") {
-		return ""
-	}
-	var leaf string
+	var segs []string
 	for seg := range strings.SplitSeq(strings.TrimPrefix(u.Path, "/"), "/") {
-		if seg == "" {
-			continue // tolerate a trailing (or doubled) slash
+		if seg != "" { // tolerate trailing/doubled slashes
+			segs = append(segs, seg)
 		}
+	}
+	return segs
+}
+
+// positiveIntLeaf returns the last segment if EVERY segment is a positive
+// integer, else ("", false). A real descent ends in a numeric tile id, so an
+// external link with a non-numeric segment (e.g. "/2024/recap", "/blog/01/post")
+// must not be mistaken for an embed.
+func positiveIntLeaf(segs []string) (string, bool) {
+	if len(segs) == 0 {
+		return "", false
+	}
+	leaf := ""
+	for _, seg := range segs {
 		id, err := strconv.ParseInt(seg, 10, 64)
 		if err != nil || id <= 0 {
-			return ""
+			return "", false
 		}
 		leaf = seg
+	}
+	return leaf, true
+}
+
+// parseEmbedHref interprets a markdown link href as a Gridwell tile link. Two
+// shapes are accepted:
+//
+//   - plugin-qualified "/<uuid>/<id>[/<id>...]" → (uuid, leaf, true): the link
+//     names its own plugin, so it resolves the same from any doc.
+//   - bare/legacy "/<id>[/<id>...]" (all positive ints) → ("", leaf, true): a
+//     pre-uuid link; the reader re-qualifies with the embedding doc's plugin.
+//
+// Anything else (external link, non-numeric leaf, malformed) → ("", "", false).
+func parseEmbedHref(href string) (uuid, leaf string, ok bool) {
+	segs := hrefSegments(href)
+	if len(segs) == 0 {
+		return "", "", false
+	}
+	if isPluginUUID(segs[0]) {
+		leaf, ok := positiveIntLeaf(segs[1:])
+		return segs[0], leaf, ok
+	}
+	leaf, ok = positiveIntLeaf(segs)
+	return "", leaf, ok
+}
+
+// LeafTileIDFromHref returns the leaf (last) tile id of a Gridwell tile-link
+// href, or "" if href isn't a tile link. Recognizes both the bare "/42" and the
+// plugin-qualified "/<uuid>/42" forms. Used to classify a rendered span as a
+// tile embed (vs an external link / image).
+func LeafTileIDFromHref(href string) string {
+	_, leaf, ok := parseEmbedHref(href)
+	if !ok {
+		return ""
 	}
 	return leaf
 }
 
-// ResolveEmbedTileID parses an embed href to its leaf tile id and re-qualifies
-// it with the embedding doc's plugin uuid (anchorUUID). It is the inverse of
-// HrefForTile: that function strips the uuid from a qualified id for a
-// human-readable link ("uuid/42" → "/42"), and this is the "client re-qualifies
-// on read" step its doc-comment promises — reconstructing the qualified id
-// ("uuid/42") that the client tile cache is keyed by.
+// ResolveEmbedTileID parses an embed href to the qualified tile id the client
+// tile cache is keyed by ("<uuid>/<local>"). A plugin-qualified href resolves
+// DIRECTLY to its own "<uuid>/<local>" — anchorUUID is ignored — so an embed
+// resolves to the same tile regardless of which plugin's doc holds it. A bare
+// legacy href is re-qualified with the embedding doc's plugin (anchorUUID); with
+// no anchor the bare leaf is returned unchanged.
 //
-// Returns "" when the href is not a tile link. When anchorUUID is empty (no
-// plugin context), the bare leaf is returned unchanged — a degraded lookup, but
-// never a panic. Same-plugin embeds (the common case: drag a tile into a doc in
-// the same grid) resolve exactly; a bare leaf can't carry a cross-plugin uuid,
-// which is the documented v1 limitation (see EmbedDescentAllowed).
+// Returns "" when href is not a tile link.
 func ResolveEmbedTileID(anchorUUID, href string) string {
-	leaf := LeafTileIDFromHref(href)
-	if leaf == "" || anchorUUID == "" {
+	uuid, leaf, ok := parseEmbedHref(href)
+	if !ok {
+		return ""
+	}
+	if uuid != "" {
+		return uuid + "/" + leaf // self-describing; anchor irrelevant
+	}
+	if anchorUUID == "" {
 		return leaf
 	}
 	return anchorUUID + "/" + leaf
