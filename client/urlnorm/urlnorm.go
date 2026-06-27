@@ -51,15 +51,19 @@ func Suggest(input string, candidates []string, limit int) []string {
 	var prefix, substr []string
 	for _, c := range candidates {
 		c = strings.TrimSpace(c)
-		if c == "" || seen[c] {
+		cmp := comparableURL(c)
+		// Dedupe by the COMPARABLE form, not the raw string, so scheme/www
+		// variants of one address (http://x.com, https://www.x.com) collapse to
+		// a single suggestion instead of crowding the list with look-alikes.
+		if c == "" || seen[cmp] {
 			continue
 		}
-		seen[c] = true
+		seen[cmp] = true
 		if q == "" {
 			prefix = append(prefix, c)
 			continue
 		}
-		switch idx := strings.Index(comparableURL(c), q); {
+		switch idx := strings.Index(cmp, q); {
 		case idx == 0:
 			prefix = append(prefix, c)
 		case idx > 0:
