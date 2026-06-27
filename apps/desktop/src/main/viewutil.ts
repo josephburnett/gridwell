@@ -32,6 +32,20 @@ export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+// RIGHT_DRAG_THRESHOLD is how far (CSS px) the cursor must move with the right
+// button held before a press over a live URL view becomes a Gridwell pane
+// gesture rather than a plain right-click. Mirrors the canvas dragThreshold
+// (client/wasm/main.go) so the live-view and canvas feel identical.
+export const RIGHT_DRAG_THRESHOLD = 4;
+
+// dragExceeded reports whether a pointer that started at the press point has
+// moved far enough to count as a drag (not a click). Used to tell a right-click
+// — which must reach the page's own context menu — apart from a right-drag,
+// which arms a pane gesture. dx/dy are the cursor's displacement from the press.
+export function dragExceeded(dx: number, dy: number, threshold: number): boolean {
+  return dx * dx + dy * dy > threshold * threshold;
+}
+
 // controlVisible decides whether a live URL view's corner control (the
 // back/ascend circle) should be on screen. The control is the one piece of
 // pane chrome that a focused pane shows and an unfocused pane must not — it
