@@ -40,6 +40,7 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 	client, closer, err := plugin.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "sub-uuid-1",
+		"kind":    "localdb",
 	})
 	if err != nil {
 		t.Fatalf("LoadPlugin: %v", err)
@@ -71,12 +72,41 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 		t.Errorf("content = %q, want %q", body.Data, "# over the wire")
 	}
 
-	// The plugin persisted its durable identity into its own DB.
-	stored, err := pluginmeta.Ensure(dbPath, "")
+	// The plugin persisted its durable identity (id + kind) into its own DB.
+	stored, err := pluginmeta.Ensure(dbPath, "", "")
 	if err != nil {
 		t.Fatalf("pluginmeta.Ensure(read): %v", err)
 	}
-	if stored != "sub-uuid-1" {
-		t.Errorf("persisted uuid = %q, want sub-uuid-1", stored)
+	if stored.ID != "sub-uuid-1" || stored.Kind != "localdb" {
+		t.Errorf("persisted identity = %+v, want {sub-uuid-1 localdb}", stored)
+	}
+}
+
+// TestSubprocessPlugin_IDMismatchRejected proves the strict identity check
+// fires across a restart: a DB that already carries one id refuses to be opened
+// by a plugin configured with a different id. The plugin exits non-zero during
+// startup, so LoadPlugin (the handshake) fails.
+func TestSubprocessPlugin_IDMismatchRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a plugin binary; skipped under -short")
+	}
+	bin := buildPluginBinary(t, "localdb")
+	dbPath := filepath.Join(t.TempDir(), "test.gwdb")
+
+	// Seed the DB's durable identity directly.
+	if _, err := pluginmeta.Ensure(dbPath, "id-A", "localdb"); err != nil {
+		t.Fatalf("seed identity: %v", err)
+	}
+
+	// Spawning the plugin against that DB with a different id must fail.
+	client, closer, err := plugin.LoadPlugin(bin, map[string]string{
+		"db_file": dbPath,
+		"uuid":    "id-B",
+		"kind":    "localdb",
+	})
+	if err == nil {
+		closer()
+		_ = client
+		t.Fatal("LoadPlugin should fail when the configured id diverges from the DB")
 	}
 }

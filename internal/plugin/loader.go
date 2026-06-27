@@ -45,11 +45,15 @@ func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridw
 	// it its config — including the uuid, so the plugin persists its own durable
 	// identity (see pluginmeta).
 	if pc.Binary != "" {
-		cfg := make(map[string]string, len(pc.Config)+1)
+		cfg := make(map[string]string, len(pc.Config)+2)
 		for k, v := range pc.Config {
 			cfg[k] = v
 		}
+		// Inject the identity the plugin persists and the server verifies against
+		// its DB (see pluginmeta): uuid is the durable routing id, kind selects
+		// the schema. Both are config-authoritative; db_file is derived upstream.
 		cfg["uuid"] = pc.ID
+		cfg["kind"] = pc.Kind
 		return LoadPlugin(pc.Binary, cfg)
 	}
 
@@ -91,4 +95,3 @@ func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, 
 	}
 	return gridwellv1.NewGridwellClient(cc), closer, nil
 }
-

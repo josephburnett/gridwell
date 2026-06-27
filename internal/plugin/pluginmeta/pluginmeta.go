@@ -1,8 +1,19 @@
 // Package pluginmeta persists a plugin instance's durable identity in its own
-// SQLite DB. CLAUDE.md: a plugin's UUID is "assigned once and stored
-// permanently (in the plugin's own DB and referenced in server.yaml)". This is
-// the in-DB half of that contract — the DB becomes self-describing, so a lost
-// or rewritten server.yaml can be reconciled against the authoritative source.
+// SQLite DB. CLAUDE.md: a plugin's id is "assigned once and stored permanently
+// (in the plugin's own DB and referenced in server.yaml)". This is the in-DB
+// half of that contract — every Gridwell DB is self-describing, so the server
+// can verify on each start that the DB it opens is the one the config names,
+// and a lost or rewritten server.yaml can be reconciled against the DB.
+//
+// Three keys live in the storage-only `_gridwell_meta` table (invisible to the
+// proto/DDL drift lint, which checks only grids/tiles):
+//   - gridwell : a marker identifying the file as a Gridwell DB
+//   - id       : the plugin's durable routing id (== config id)
+//   - kind     : the plugin kind (== config kind); selects the schema
+//
+// id and kind are immutable: once written they are strictly verified, both
+// directions, on every subsequent open. The display name is NOT stored here —
+// it is config-only and freely editable.
 package pluginmeta
 
 import (
@@ -11,47 +22,134 @@ import (
 	"fmt"
 )
 
-// ErrUUIDMismatch is returned when a DB already carries a different UUID than
-// the one configured — the durable identity must never silently change.
-var ErrUUIDMismatch = errors.New("pluginmeta: configured uuid does not match the one stored in the plugin DB")
+// Sentinel errors. Callers should use errors.Is to test for them.
+var (
+	// ErrIDMismatch is returned when a DB already carries a different id than
+	// the one configured — the durable identity must never silently change.
+	ErrIDMismatch = errors.New("pluginmeta: configured id does not match the one stored in the plugin DB")
+	// ErrKindMismatch is returned when a DB already carries a different kind —
+	// the kind selects the schema, so opening a DB as the wrong kind is refused.
+	ErrKindMismatch = errors.New("pluginmeta: configured kind does not match the one stored in the plugin DB")
+)
 
-// Ensure records uuid as the DB's permanent identity on first run and verifies
-// it on every subsequent run. The table is storage-only (not a wire record), so
-// it is invisible to the proto/DDL drift lint, which checks only grids/tiles.
+const (
+	keyMarker = "gridwell"
+	keyID     = "id"
+	keyKind   = "kind"
+	// keyLegacyUUID is the pre-id-and-kind key. A DB created before this change
+	// stored its id under "uuid"; we read it as a fallback so an existing DB's
+	// identity is preserved (and upgraded to "id"), never re-minted.
+	keyLegacyUUID = "uuid"
+	// markerValue is the marker payload. Its value is unimportant — presence is
+	// what identifies the file as a Gridwell DB.
+	markerValue = "1"
+)
+
+// Meta is the durable identity recorded in a plugin's DB.
+type Meta struct {
+	ID   string
+	Kind string
+}
+
+// Ensure records (id, kind) as the DB's permanent identity on first run and
+// strictly verifies it on every subsequent run. A gridwell marker is written
+// alongside so the file is recognizable as a Gridwell DB.
 //
-//   - empty stored, non-empty uuid  → store it (first run)
-//   - stored == uuid                → ok
-//   - stored != uuid (both set)     → ErrUUIDMismatch
-//   - empty uuid                     → return whatever is stored (read-only)
-func Ensure(dbPath, uuid string) (string, error) {
+//   - id == "" && kind == ""  → read-only: return whatever is stored
+//   - nothing stored yet       → write marker + id + kind (first run)
+//   - stored matches           → ok
+//   - stored id differs        → ErrIDMismatch
+//   - stored kind differs       → ErrKindMismatch
+func Ensure(dbPath, id, kind string) (Meta, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return "", fmt.Errorf("pluginmeta open %s: %w", dbPath, err)
+		return Meta{}, fmt.Errorf("pluginmeta open %s: %w", dbPath, err)
 	}
 	defer db.Close()
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _gridwell_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
-		return "", fmt.Errorf("pluginmeta schema: %w", err)
+		return Meta{}, fmt.Errorf("pluginmeta schema: %w", err)
 	}
 
-	var stored string
-	switch err := db.QueryRow(`SELECT v FROM _gridwell_meta WHERE k = 'uuid'`).Scan(&stored); {
+	stored, err := read(db)
+	if err != nil {
+		return Meta{}, err
+	}
+
+	// Read-only probe: report what is stored without asserting anything.
+	if id == "" && kind == "" {
+		return stored, nil
+	}
+
+	// First run: record the full identity.
+	if stored.ID == "" {
+		for _, kv := range []struct{ k, v string }{
+			{keyMarker, markerValue},
+			{keyID, id},
+			{keyKind, kind},
+		} {
+			if _, err := db.Exec(
+				`INSERT INTO _gridwell_meta (k, v) VALUES (?, ?)
+				 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
+				kv.k, kv.v); err != nil {
+				return Meta{}, fmt.Errorf("pluginmeta write %s: %w", kv.k, err)
+			}
+		}
+		return Meta{ID: id, Kind: kind}, nil
+	}
+
+	// Subsequent run: strict bidirectional verification. A legacy DB may carry
+	// an id (under the old uuid key) but no kind yet — an empty stored kind is
+	// "not recorded", so it is adopted rather than treated as a mismatch.
+	if stored.ID != id {
+		return Meta{}, fmt.Errorf("%w (stored %q, configured %q)", ErrIDMismatch, stored.ID, id)
+	}
+	if stored.Kind != "" && stored.Kind != kind {
+		return Meta{}, fmt.Errorf("%w (stored %q, configured %q)", ErrKindMismatch, stored.Kind, kind)
+	}
+	// Upgrade a legacy DB in place: write the marker and the canonical id/kind
+	// keys (the id may have been readable only via the legacy uuid key, and the
+	// kind may not have been recorded at all).
+	for _, kv := range []struct{ k, v string }{
+		{keyMarker, markerValue},
+		{keyID, id},
+		{keyKind, kind},
+	} {
+		if _, err := db.Exec(
+			`INSERT INTO _gridwell_meta (k, v) VALUES (?, ?)
+			 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
+			kv.k, kv.v); err != nil {
+			return Meta{}, fmt.Errorf("pluginmeta upgrade %s: %w", kv.k, err)
+		}
+	}
+	return Meta{ID: id, Kind: kind}, nil
+}
+
+// read returns the stored identity, falling back to the legacy uuid key when
+// the canonical id key is absent (a DB created before id+kind were split out).
+func read(db *sql.DB) (Meta, error) {
+	id, err := readKey(db, keyID)
+	if err != nil {
+		return Meta{}, err
+	}
+	if id == "" {
+		if id, err = readKey(db, keyLegacyUUID); err != nil {
+			return Meta{}, err
+		}
+	}
+	kind, err := readKey(db, keyKind)
+	if err != nil {
+		return Meta{}, err
+	}
+	return Meta{ID: id, Kind: kind}, nil
+}
+
+func readKey(db *sql.DB, k string) (string, error) {
+	var v string
+	switch err := db.QueryRow(`SELECT v FROM _gridwell_meta WHERE k = ?`, k).Scan(&v); {
 	case errors.Is(err, sql.ErrNoRows):
-		stored = ""
+		return "", nil
 	case err != nil:
-		return "", fmt.Errorf("pluginmeta read uuid: %w", err)
+		return "", fmt.Errorf("pluginmeta read %s: %w", k, err)
 	}
-
-	if stored == "" {
-		if uuid == "" {
-			return "", nil
-		}
-		if _, err := db.Exec(`INSERT INTO _gridwell_meta (k, v) VALUES ('uuid', ?)`, uuid); err != nil {
-			return "", fmt.Errorf("pluginmeta write uuid: %w", err)
-		}
-		return uuid, nil
-	}
-	if uuid != "" && uuid != stored {
-		return "", fmt.Errorf("%w (stored %q, configured %q)", ErrUUIDMismatch, stored, uuid)
-	}
-	return stored, nil
+	return v, nil
 }

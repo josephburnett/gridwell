@@ -14,3 +14,8 @@ func newUUID() string {
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
+
+// NewUUID returns a fresh random 128-bit id as a 32-character hex string. It is
+// the exported entry point for callers outside the store (e.g. `gridwell init`
+// minting a plugin id) so the id format stays defined in exactly one place.
+func NewUUID() string { return newUUID() }

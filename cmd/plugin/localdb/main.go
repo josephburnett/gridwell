@@ -30,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 	uuid := cfg["uuid"]
-	if _, err := pluginmeta.Ensure(dbPath, uuid); err != nil {
+	if _, err := pluginmeta.Ensure(dbPath, uuid, cfg["kind"]); err != nil {
 		fmt.Fprintf(os.Stderr, "gridwell-localdb: %v\n", err)
 		os.Exit(1)
 	}
