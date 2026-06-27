@@ -649,7 +649,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 			if a.hiddenPaneID == a.previewPaneID {
 				hide = a.hiddenTileID
 			}
-			drawChildPreview(a.cctx, child, viewCenterX, viewCenterY,
+			a.drawChildPreview(child, viewCenterX, viewCenterY,
 				wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
 		}
 		a.cctx.Call("restore")
@@ -887,11 +887,12 @@ func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {
 // disappears from its original spot while the ghost flies. Matches
 // by row id (not ObjectID) so cloned siblings stay visible during
 // the drag.
-func drawChildPreview(c js.Value, child *cache.Grid,
+func (a *App) drawChildPreview(child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
 	hiddenTileID string,
 ) {
+	c := a.cctx
 	childInSource := child != nil && (child.Meta.SourceKind == rpc.GridSourceFS || child.Meta.SourceKind == rpc.GridSourceProc)
 	// Scale the inner-tile border so a child grid viewed from a distance
 	// keeps its borders proportionate to the cells. Full-size live tiles
@@ -912,7 +913,48 @@ func drawChildPreview(c js.Value, child *cache.Grid,
 		}
 		nn := n
 		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource), borderPx)
+		// A url/shell tile shown inside a well preview must carry the same
+		// cached frame the parent-grid renderer paints — otherwise a tile that
+		// is live in another pane stays a flat colored box here while its live
+		// twin updates (breaks "the preview is what you were looking at",
+		// mirror edition). drawNode is the flat fill; overlay the JPEG on top.
+		a.overlayChildPreview(&nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, borderPx)
 	}
+}
+
+// overlayChildPreview paints the cached preview JPEG for a url/shell tile over
+// the flat fill drawNode already laid down, clipped to the tile rect, then
+// re-strokes the border so the image doesn't bleed across it. Non-url/shell
+// tiles (and tiles with no cached frame yet) are left as drawNode drew them; a
+// missing-but-expected preview kicks off the same fetch the parent-grid
+// renderer uses, so the cache fills in and the next frame shows it.
+func (a *App) overlayChildPreview(n *rpc.Tile, x, y, w, h, borderPx float64) {
+	if n.Kind != rpc.KindURL && n.Kind != rpc.KindShell {
+		return
+	}
+	cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID)
+	if !ok {
+		if n.PreviewBlobID != 0 {
+			a.fetchURLPreview(n.ID, n.PreviewBlobID)
+		}
+		return
+	}
+	img, ok := previewImage(cached)
+	if !ok {
+		return
+	}
+	c := a.cctx
+	c.Call("save")
+	c.Call("beginPath")
+	c.Call("rect", x, y, w, h)
+	c.Call("clip")
+	drawImageCoverCentered(c, img, x, y, w, h)
+	c.Call("restore")
+	line := colorURLLine
+	if n.Kind == rpc.KindShell {
+		line = colorShellBorder
+	}
+	strokeTileBorder(c, x, y, w, h, line, borderPx)
 }
 
 // drawNode renders one tile into the canvas at the given screen rectangle.

@@ -16,8 +16,8 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/gridpath"
-	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -456,6 +456,7 @@ func main() {
 
 	app.installCanvasInput()
 	app.installWebviewListeners()
+	app.installShellMirror()
 
 	go app.bootstrap()
 

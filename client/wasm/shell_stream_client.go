@@ -425,6 +425,47 @@ func (c *shellStreamConn) sendText(s string) {
 	}
 }
 
+// shellMirrorIntervalMs is how often a live shell terminal is snapshotted and
+// pushed to the shared preview cache so OTHER panes (and well child-previews)
+// showing the same shell tile mirror it live. It's the shell analogue of the
+// URL MirrorPump, which lives in the Electron main process and so can't see the
+// renderer-side xterm canvas. Modest by design (toDataURL isn't free and a
+// mirrored preview doesn't need 60fps); matches MIRROR_INTERVAL_MS.
+const shellMirrorIntervalMs = 250
+
+// installShellMirror starts the periodic shell-preview mirror. One interval for
+// the whole app, alive for its lifetime. Ticks are nearly free when no shell is
+// live (mirrorLiveShells returns immediately).
+func (a *App) installShellMirror() {
+	cb := js.FuncOf(func(js.Value, []js.Value) any {
+		a.mirrorLiveShells()
+		return nil
+	})
+	js.Global().Call("setInterval", cb, shellMirrorIntervalMs)
+}
+
+// mirrorLiveShells snapshots every live shell terminal into the preview cache
+// (keyed by tile id), so a shell tile shown in another pane or as a well
+// child-preview tracks the live terminal instead of its last freeze — the same
+// "live mirror" the URL MirrorPump gives url tiles. Skipped while overlays are
+// parked for a gesture: the containers are hidden then and the redraw a frame
+// would schedule fights the in-flight drag.
+func (a *App) mirrorLiveShells() {
+	if len(a.shellStreams) == 0 || a.liveOverlaysHidden() {
+		return
+	}
+	for _, conn := range a.shellStreams {
+		if conn.closed {
+			continue
+		}
+		jpeg := snapshotShellCanvas(conn.container)
+		if jpeg == nil {
+			continue
+		}
+		a.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
+	}
+}
+
 // closeShellStream is the freeze path: capture a JPEG of the
 // terminal (so the next descent shows it as the frozen preview),
 // POST it via SetShellPreview, then close the WebSocket. The
