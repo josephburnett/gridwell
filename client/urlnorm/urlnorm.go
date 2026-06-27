@@ -34,6 +34,59 @@ func Normalize(raw string) (string, error) {
 	return "https://" + s, nil
 }
 
+// Suggest ranks candidate URLs against the user's partial input for the
+// new-url modal's autocomplete. Matching is case-insensitive and ignores a
+// leading scheme ("http(s)://") and "www." on both sides, so typing "git"
+// matches "https://github.com". A candidate whose comparable form STARTS with
+// the input ranks before one that merely contains it; within a rank the input
+// candidate order is preserved (the caller passes most-relevant-first).
+// Exact-string duplicates are dropped. Empty input returns the first `limit`
+// distinct candidates. Returns at most `limit` results (nil when limit <= 0).
+func Suggest(input string, candidates []string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	q := comparableURL(input)
+	seen := make(map[string]bool, len(candidates))
+	var prefix, substr []string
+	for _, c := range candidates {
+		c = strings.TrimSpace(c)
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		if q == "" {
+			prefix = append(prefix, c)
+			continue
+		}
+		switch idx := strings.Index(comparableURL(c), q); {
+		case idx == 0:
+			prefix = append(prefix, c)
+		case idx > 0:
+			substr = append(substr, c)
+		}
+	}
+	out := append(prefix, substr...)
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// comparableURL lowercases s and strips a leading http(s):// scheme and a
+// "www." host prefix, so autocomplete matches on the meaningful part of the
+// address rather than boilerplate the user rarely types.
+func comparableURL(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for _, p := range []string{"https://", "http://"} {
+		if strings.HasPrefix(s, p) {
+			s = s[len(p):]
+			break
+		}
+	}
+	return strings.TrimPrefix(s, "www.")
+}
+
 // hostPart returns the host portion of `host[:port][/path...]`, i.e.
 // everything up to the first `/`, `?`, or `#`. Used by looksLikeHost
 // so trailing path/query characters don't confuse the dot check.

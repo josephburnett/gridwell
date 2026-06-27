@@ -1863,7 +1863,9 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.draw()
 		dp := destPane
 		dx, dy := dropX, dropY
+		candidates := a.urlSuggestCandidates(uuidOf(a.gridIDForPane(destPane)))
 		a.openURLModal(
+			candidates,
 			func(url string) {
 				a.createURLAtCell(dp, url, dx, dy)
 				a.menuOpen = false

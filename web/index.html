@@ -62,6 +62,19 @@
     .gw-modal button:hover { background: #232634; }
     .gw-modal button.primary { background: #4a6fff; border-color: #4a6fff; color: white; }
     .gw-modal button.primary:hover { background: #5b7eff; }
+    .gw-modal .gw-suggest {
+      list-style: none; margin: 6px 0 0 0; padding: 0;
+      max-height: 200px; overflow-y: auto;
+      border-radius: 4px;
+    }
+    .gw-modal .gw-suggest:empty { display: none; }
+    .gw-modal .gw-suggest li {
+      padding: 6px 10px; font-size: 12px; color: #b6b8c0;
+      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border: 1px solid transparent; border-radius: 4px;
+    }
+    .gw-modal .gw-suggest li:hover,
+    .gw-modal .gw-suggest li.active { background: #1c1f29; color: #e8e9ee; border-color: #292c36; }
   </style>
 </head>
 <body>
@@ -72,6 +85,7 @@
       <h2>new url tile</h2>
       <label for="gw-url-input">url</label>
       <input id="gw-url-input" type="text" placeholder="example.com" spellcheck="false">
+      <ul id="gw-url-suggest" class="gw-suggest"></ul>
       <div class="err" id="gw-url-error"></div>
       <div class="actions">
         <button type="button" id="gw-url-cancel">cancel</button>

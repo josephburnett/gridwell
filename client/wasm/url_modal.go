@@ -6,18 +6,52 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/urlnorm"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
+
+// maxURLSuggestions caps the autocomplete dropdown — enough to be useful,
+// short enough to stay a glanceable list rather than a scroll.
+const maxURLSuggestions = 8
+
+// urlSuggestCandidates collects the addresses of every url tile in the given
+// plugin that is currently cached, for the new-url modal's autocomplete.
+// Scoped to one plugin (the session boundary, CLAUDE.md): you autocomplete only
+// from url tiles in the space you're creating the tile in. Cache-bound — grids
+// not opened this session don't contribute (a server query could broaden it;
+// the cache is the set you've actually browsed).
+func (a *App) urlSuggestCandidates(pluginUUID string) []string {
+	var out []string
+	for _, gid := range a.c.KnownGridIDs() {
+		if uuidOf(gid) != pluginUUID {
+			continue
+		}
+		g, ok := a.c.Grid(gid)
+		if !ok {
+			continue
+		}
+		for _, t := range g.Tiles {
+			if t.Kind == rpc.KindURL && t.URLString != "" {
+				out = append(out, t.URLString)
+			}
+		}
+	}
+	return out
+}
 
 // openURLModal shows the URL-entry overlay and invokes onSubmit with the
 // normalized URL once the user submits a valid value. onCancel fires if
 // the user dismisses (Escape, cancel button, click-on-backdrop).
+//
+// candidates are url-tile addresses (from urlSuggestCandidates) offered as
+// autocomplete: the input filters them via urlnorm.Suggest, the arrow keys move
+// a highlight, and Enter / click fills and submits the highlighted one.
 //
 // Validation runs in-modal: invalid input shows an inline error and keeps
 // the modal open. URLs without a scheme get `https://` prepended.
 //
 // Listeners are installed fresh on every open and released on close, so
 // repeat opens don't leak js.FuncOf handles.
-func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
+func (a *App) openURLModal(candidates []string, onSubmit func(url string), onCancel func()) {
 	if a.urlModalOpen {
 		return
 	}
@@ -29,29 +63,56 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 	input := doc.Call("getElementById", "gw-url-input")
 	errEl := doc.Call("getElementById", "gw-url-error")
 	cancelBtn := doc.Call("getElementById", "gw-url-cancel")
+	suggestEl := doc.Call("getElementById", "gw-url-suggest")
+
+	// Suggestion state shared by the input, keydown, and click handlers.
+	var suggestions []string
+	activeIdx := -1 // -1 = the typed input itself (no highlight)
+
+	renderSuggest := func() {
+		suggestEl.Set("innerHTML", "")
+		for i, s := range suggestions {
+			li := doc.Call("createElement", "li")
+			li.Set("textContent", s)
+			li.Get("dataset").Set("url", s)
+			if i == activeIdx {
+				li.Get("classList").Call("add", "active")
+			}
+			suggestEl.Call("appendChild", li)
+		}
+	}
+	refreshSuggest := func() {
+		suggestions = urlnorm.Suggest(input.Get("value").String(), candidates, maxURLSuggestions)
+		activeIdx = -1
+		renderSuggest()
+	}
 
 	input.Set("value", "")
 	errEl.Set("textContent", "")
 	modal.Get("classList").Call("add", "open")
 	input.Call("focus")
+	refreshSuggest() // empty input → most-recent few, so a pick is one key away
 
 	var (
-		submitCb, cancelCb, keydownCb, backdropCb, inputCb js.Func
+		submitCb, cancelCb, keydownCb, backdropCb, inputCb, suggestCb js.Func
 	)
 
 	close := func() {
 		a.urlModalOpen = false
 		modal.Get("classList").Call("remove", "open")
+		suggestEl.Set("innerHTML", "")
 		form.Call("removeEventListener", "submit", submitCb)
 		cancelBtn.Call("removeEventListener", "click", cancelCb)
 		modal.Call("removeEventListener", "keydown", keydownCb)
 		modal.Call("removeEventListener", "mousedown", backdropCb)
 		input.Call("removeEventListener", "input", inputCb)
+		suggestEl.Call("removeEventListener", "mousedown", suggestCb)
 		submitCb.Release()
 		cancelCb.Release()
 		keydownCb.Release()
 		backdropCb.Release()
 		inputCb.Release()
+		suggestCb.Release()
 		a.canvas.Call("focus")
 	}
 
@@ -94,9 +155,32 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 		// Swallow every key so the canvas's window-level keydown handler
 		// (which forwards to descended URL tiles) does not also see it.
 		ev.Call("stopPropagation")
-		if ev.Get("key").String() == "Escape" {
+		switch ev.Get("key").String() {
+		case "Escape":
 			ev.Call("preventDefault")
 			cancel()
+		case "ArrowDown":
+			if len(suggestions) > 0 {
+				ev.Call("preventDefault")
+				if activeIdx < len(suggestions)-1 {
+					activeIdx++
+				}
+				renderSuggest()
+			}
+		case "ArrowUp":
+			if len(suggestions) > 0 {
+				ev.Call("preventDefault")
+				if activeIdx > -1 {
+					activeIdx--
+				}
+				renderSuggest()
+			}
+		case "Enter":
+			// Fill the highlighted suggestion, then let the form's submit
+			// fire and commit the chosen value (no preventDefault here).
+			if activeIdx >= 0 && activeIdx < len(suggestions) {
+				input.Set("value", suggestions[activeIdx])
+			}
 		}
 		return nil
 	})
@@ -111,8 +195,26 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 		return nil
 	})
 	inputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Clear stale errors as soon as the user starts editing.
+		// Clear stale errors as soon as the user starts editing, and refresh
+		// the autocomplete list for the new input.
 		errEl.Set("textContent", "")
+		refreshSuggest()
+		return nil
+	})
+	suggestCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) == 0 {
+			return nil
+		}
+		ev := args[0]
+		// mousedown (not click) so we win before the input blurs; preventDefault
+		// keeps focus in the input. The li carries its url in data-url.
+		url := ev.Get("target").Get("dataset").Get("url")
+		if url.Type() != js.TypeString || url.String() == "" {
+			return nil
+		}
+		ev.Call("preventDefault")
+		input.Set("value", url.String())
+		commit()
 		return nil
 	})
 
@@ -123,4 +225,5 @@ func (a *App) openURLModal(onSubmit func(url string), onCancel func()) {
 	modal.Call("addEventListener", "keydown", keydownCb)
 	modal.Call("addEventListener", "mousedown", backdropCb)
 	input.Call("addEventListener", "input", inputCb)
+	suggestEl.Call("addEventListener", "mousedown", suggestCb)
 }
