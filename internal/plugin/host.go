@@ -46,6 +46,10 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (gridwellv1.GridwellCl
 			plugin.ProtocolGRPC,
 		},
 		Logger: logger,
+		// Copy the plugin's stderr to ours so a fatal startup message (an id/kind
+		// mismatch against its DB, a failed open, schema divergence) reaches the
+		// user verbatim instead of being swallowed as an opaque handshake error.
+		Stderr: os.Stderr,
 	})
 
 	rpcClient, err := client.Client()
