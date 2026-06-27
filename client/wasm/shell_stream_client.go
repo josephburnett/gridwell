@@ -575,10 +575,7 @@ func (a *App) syncShellOverlayPosition() {
 		}
 		style := conn.container.Get("style")
 		style.Set("display", "block")
-		style.Set("left", strconv.FormatFloat(ix, 'f', 1, 64)+"px")
-		style.Set("top", strconv.FormatFloat(iy, 'f', 1, 64)+"px")
-		style.Set("width", strconv.FormatFloat(iw, 'f', 1, 64)+"px")
-		style.Set("height", strconv.FormatFloat(ih, 'f', 1, 64)+"px")
+		setBoundsPx(style, ix, iy, iw, ih)
 		// The ascend handle belongs to the focused pane only — same rule the
 		// canvas applies to every other per-pane control (render.go drawPane)
 		// and the live-URL corner control (controlVisible).

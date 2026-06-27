@@ -19,6 +19,20 @@ import (
 // this resolves with one final save shortly after the user stops.
 const fileSaveDebounceMs = 600
 
+// pxf formats a logical pixel value as a CSS "<n>px" string (1 decimal) — the
+// one place the overlay code turns a float coordinate into a style value.
+func pxf(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "px" }
+
+// setBoundsPx writes an absolutely-positioned element's left/top/width/height
+// from logical pixels. Used wherever a DOM overlay (textarea, shell container)
+// is positioned over a pane rect.
+func setBoundsPx(style js.Value, left, top, width, height float64) {
+	style.Set("left", pxf(left))
+	style.Set("top", pxf(top))
+	style.Set("width", pxf(width))
+	style.Set("height", pxf(height))
+}
+
 // scheduleFileSave queues a debounced save of the focused pane's
 // textarea contents. Cheap to call from every keystroke — no-op if a
 // save is already pending.
@@ -114,7 +128,7 @@ func (a *App) ensureFileTextarea() {
 	style.Set("margin", "0")
 	style.Set("resize", "none")
 	style.Set("fontFamily", mst.monospace)
-	style.Set("fontSize", strconv.FormatFloat(mst.codePx, 'f', 1, 64)+"px")
+	style.Set("fontSize", pxf(mst.codePx))
 	style.Set("lineHeight", strconv.FormatFloat(rawTextLineHeight, 'f', 2, 64))
 	style.Set("zIndex", "5")
 	style.Set("caretColor", "#d8d9de")
@@ -382,8 +396,8 @@ func (a *App) refreshFileToggle() {
 		return
 	}
 	cx, cy := plusButtonCenter(p, r)
-	style.Set("left", strconv.FormatFloat(cx-plusButtonRadius, 'f', 1, 64)+"px")
-	style.Set("top", strconv.FormatFloat(cy-plusButtonRadius, 'f', 1, 64)+"px")
+	style.Set("left", pxf(cx-plusButtonRadius))
+	style.Set("top", pxf(cy-plusButtonRadius))
 	// Glyph hints at the TARGET mode: an italic serif "a" means clicking
 	// renders; a monospace "a" means clicking edits the source.
 	if p.TextMode == rpc.TextModeRendered {
@@ -431,12 +445,9 @@ func (a *App) refreshFileOverlay() {
 	style := ta.Get("style")
 	left, top, width, height, fontPx := fileTextareaBox(p, r)
 
-	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
-	style.Set("top", strconv.FormatFloat(top, 'f', 1, 64)+"px")
-	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
-	style.Set("height", strconv.FormatFloat(height, 'f', 1, 64)+"px")
+	setBoundsPx(style, left, top, width, height)
 	style.Set("clipPath", "none")
-	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
+	style.Set("fontSize", pxf(fontPx))
 	style.Set("display", "block")
 
 	// Sync the textarea singleton to the focused tile. The decision
@@ -498,11 +509,8 @@ func (a *App) syncFileOverlayPosition() {
 	}
 	left, top, width, height, fontPx := fileTextareaBox(p, r)
 	style := a.fileTextarea.Get("style")
-	style.Set("left", strconv.FormatFloat(left, 'f', 1, 64)+"px")
-	style.Set("top", strconv.FormatFloat(top, 'f', 1, 64)+"px")
-	style.Set("width", strconv.FormatFloat(width, 'f', 1, 64)+"px")
-	style.Set("height", strconv.FormatFloat(height, 'f', 1, 64)+"px")
-	style.Set("fontSize", strconv.FormatFloat(fontPx, 'f', 1, 64)+"px")
+	setBoundsPx(style, left, top, width, height)
+	style.Set("fontSize", pxf(fontPx))
 	style.Set("clipPath", "none")
 }
 
