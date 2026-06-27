@@ -3,6 +3,7 @@ package embed
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestClassifyDocTarget(t *testing.T) {
@@ -543,5 +544,26 @@ func TestResolveEmbedTileID(t *testing.T) {
 			t.Errorf("%s: ResolveEmbedTileID(%q, %q) = %q, want %q",
 				c.name, c.anchor, c.href, got, c.want)
 		}
+	}
+}
+
+// TestInsertMultibyteRuneBoundary: a byte offset that lands in the middle of a
+// multibyte rune must not corrupt it. Before snapping, the splice split "é"
+// (0xC3 0xA9) and the padding check read the continuation byte as non-space.
+func TestInsertMultibyteRuneBoundary(t *testing.T) {
+	src := "héllo" // h, é(2 bytes at [1,3)), l, l, o
+	got := Insert(src, "[x]", 2)
+	if !utf8.ValidString(got) {
+		t.Fatalf("Insert at mid-rune produced invalid UTF-8: %q", got)
+	}
+	if !strings.Contains(got, "é") {
+		t.Errorf("é was corrupted: %q", got)
+	}
+	if !strings.Contains(got, "[x]") {
+		t.Errorf("link missing: %q", got)
+	}
+	// A boundary offset still inserts exactly where asked.
+	if Insert("ab", "[x]", 1) != "a [x] b" {
+		t.Errorf("ascii boundary insert wrong: %q", Insert("ab", "[x]", 1))
 	}
 }

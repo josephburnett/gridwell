@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // TextMode mirrors rpc.TextModeText / rpc.TextModeRendered. The embed
@@ -285,13 +286,18 @@ func DefaultAlt(kind string, tileID string) string {
 // already whitespace. This keeps the markdown parser seeing the link
 // as its own token even when the drop landed mid-word.
 //
-// off is clamped to [0, len(src)]; out-of-range values don't panic.
+// off is clamped to [0, len(src)] and snapped back to a rune boundary, so an
+// offset that lands mid-character neither splits a multibyte rune nor misreads
+// a UTF-8 continuation byte as a non-space (which would add stray padding).
 func Insert(src, link string, off int) string {
 	if off < 0 {
 		off = 0
 	}
 	if off > len(src) {
 		off = len(src)
+	}
+	for off > 0 && off < len(src) && !utf8.RuneStart(src[off]) {
+		off--
 	}
 	pre := ""
 	if off > 0 && !isWS(src[off-1]) {
