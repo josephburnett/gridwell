@@ -1,19 +1,90 @@
 package config
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
+// TestLoad_missing pins the mandatory-config contract: a missing server.yaml is
+// an error (wrapping fs.ErrNotExist), not a silent defaults fallback. This is
+// what forces a node to declare its plugins via `gridwell init` before it runs.
 func TestLoad_missing(t *testing.T) {
-	cfg, err := Load("/nonexistent/path/server.yaml")
-	if err != nil {
-		t.Fatalf("missing file should not error: %v", err)
+	_, err := Load("/nonexistent/path/server.yaml")
+	if err == nil {
+		t.Fatal("missing file must error")
 	}
-	if cfg.Bind != Defaults.Bind {
-		t.Errorf("bind: got %q, want %q", cfg.Bind, Defaults.Bind)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("error should wrap fs.ErrNotExist; got: %v", err)
+	}
+}
+
+func TestHome(t *testing.T) {
+	t.Setenv("GRIDWELL_HOME", "/tmp/gw-home")
+	h, err := Home()
+	if err != nil {
+		t.Fatalf("Home: %v", err)
+	}
+	if h != "/tmp/gw-home" {
+		t.Errorf("GRIDWELL_HOME not honored: got %q", h)
+	}
+
+	os.Unsetenv("GRIDWELL_HOME")
+	h, err = Home()
+	if err != nil {
+		t.Fatalf("Home fallback: %v", err)
+	}
+	if !strings.HasSuffix(h, "/.gridwell") {
+		t.Errorf("fallback should be ~/.gridwell; got %q", h)
+	}
+}
+
+func TestDBPaths(t *testing.T) {
+	if got, want := DBDir("/home/x/.gridwell", "abc"), "/home/x/.gridwell/db/abc"; got != want {
+		t.Errorf("DBDir: got %q, want %q", got, want)
+	}
+	if got, want := DBFile("/home/x/.gridwell", "abc"), "/home/x/.gridwell/db/abc/store.db"; got != want {
+		t.Errorf("DBFile: got %q, want %q", got, want)
+	}
+}
+
+func TestAppendPlugin(t *testing.T) {
+	home := t.TempDir()
+	a := PluginConfig{ID: "id-a", Name: "home", Kind: "localdb"}
+	b := PluginConfig{ID: "id-b", Name: "files", Kind: "fs", Config: map[string]string{"root": "/srv"}}
+
+	// First plugin bootstraps the file; second appends.
+	if err := AppendPlugin(home, a); err != nil {
+		t.Fatalf("append a: %v", err)
+	}
+	if err := AppendPlugin(home, b); err != nil {
+		t.Fatalf("append b: %v", err)
+	}
+
+	cfg, err := Load(filepath.Join(home, "server.yaml"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.Plugins) != 2 {
+		t.Fatalf("plugins: got %d, want 2", len(cfg.Plugins))
+	}
+	// StaticDir must NOT be forced empty by the round-trip (would mean headless).
+	if cfg.StaticDir != Defaults.StaticDir {
+		t.Errorf("static dir clobbered: got %q, want %q", cfg.StaticDir, Defaults.StaticDir)
+	}
+	if cfg.Plugins[1].Config["root"] != "/srv" {
+		t.Errorf("config map not persisted: %+v", cfg.Plugins[1])
+	}
+
+	// Duplicate id and duplicate name are both rejected.
+	if err := AppendPlugin(home, PluginConfig{ID: "id-a", Name: "other", Kind: "localdb"}); !errors.Is(err, ErrDuplicatePlugin) {
+		t.Errorf("dup id should be rejected: %v", err)
+	}
+	if err := AppendPlugin(home, PluginConfig{ID: "id-c", Name: "home", Kind: "localdb"}); !errors.Is(err, ErrDuplicatePlugin) {
+		t.Errorf("dup name should be rejected: %v", err)
 	}
 }
 
@@ -21,14 +92,11 @@ func TestLoad_full(t *testing.T) {
 	dir := t.TempDir()
 	yml := `
 bind: "127.0.0.1:9090"
-root: "abc123"
 static: "/var/www"
 plugins:
   - id: "abc123"
     name: "home"
     kind: "localdb"
-    config:
-      db_file: "/tmp/home.db"
   - id: "def456"
     name: "files"
     kind: "fs"
@@ -54,7 +122,7 @@ plugins:
 		t.Fatalf("plugins: got %d, want 2", len(cfg.Plugins))
 	}
 	p := cfg.Plugins[0]
-	if p.ID != "abc123" || p.Kind != "localdb" || p.Config["db_file"] != "/tmp/home.db" {
+	if p.ID != "abc123" || p.Name != "home" || p.Kind != "localdb" {
 		t.Errorf("plugin[0]: %+v", p)
 	}
 }

@@ -2,8 +2,12 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/josephburnett/gridwell/internal/config"
 )
 
 func TestReorderFlagsFirst(t *testing.T) {
@@ -35,99 +39,81 @@ func TestReorderFlagsFirst(t *testing.T) {
 	}
 }
 
-// noConfig is a sentinel that disables config file loading in tests.
-const noConfig = ""
-
 func TestParseServeFlagsDefaults(t *testing.T) {
-	f, err := parseServeFlags(nil, noConfig)
+	f, err := parseServeFlags(nil, "127.0.0.1:8080", "./web")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if f.DB != "./gridwell.db" {
-		t.Errorf("DB = %q, want default ./gridwell.db", f.DB)
-	}
 	if f.Bind != "127.0.0.1:8080" {
-		t.Errorf("Bind = %q, want default 127.0.0.1:8080", f.Bind)
+		t.Errorf("Bind = %q, want default", f.Bind)
 	}
 	if f.StaticDir != "./web" {
-		t.Errorf("StaticDir = %q, want default ./web", f.StaticDir)
+		t.Errorf("StaticDir = %q, want default", f.StaticDir)
 	}
 }
 
 func TestParseServeFlagsOverrides(t *testing.T) {
-	f, err := parseServeFlags([]string{
-		"--db", "/tmp/x.db",
-		"--bind", ":9000",
-		"--static", "/srv/web",
-	}, noConfig)
+	f, err := parseServeFlags([]string{"--bind", ":9000", "--static", "/srv/web"}, "127.0.0.1:8080", "./web")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	want := serveFlags{
-		DB:        "/tmp/x.db",
-		Bind:      ":9000",
-		StaticDir: "/srv/web",
-		cfgPath:   noConfig,
-	}
-	if f != want {
-		t.Errorf("got %+v, want %+v", f, want)
+	if f.Bind != ":9000" || f.StaticDir != "/srv/web" {
+		t.Errorf("got %+v, want bind=:9000 static=/srv/web", f)
 	}
 }
 
 func TestParseServeFlagsPositionalsReordered(t *testing.T) {
-	// reorderFlagsFirst must shuffle a positional in front of a
-	// `--db` so flag.Parse() sees the flag first.
-	f, err := parseServeFlags([]string{"extra", "--db", "/tmp/x.db"}, noConfig)
+	// A positional ahead of --bind must be shuffled so flag.Parse sees the flag.
+	f, err := parseServeFlags([]string{"extra", "--bind", ":9000"}, "127.0.0.1:8080", "./web")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if f.DB != "/tmp/x.db" {
-		t.Errorf("DB = %q, want /tmp/x.db (positional should have been reordered)", f.DB)
+	if f.Bind != ":9000" {
+		t.Errorf("Bind = %q, want :9000 (positional should have been reordered)", f.Bind)
 	}
 }
 
 func TestParseServeFlagsRejectsUnknown(t *testing.T) {
-	_, err := parseServeFlags([]string{"--no-such-flag"}, noConfig)
-	if err == nil {
+	if _, err := parseServeFlags([]string{"--no-such-flag"}, "127.0.0.1:8080", "./web"); err == nil {
 		t.Error("parse should reject unknown flags")
 	}
 }
 
-func TestParseServeFlagsFromConfigFile(t *testing.T) {
-	// server.yaml supplies non-db defaults (bind). The root DB is designated by
-	// a root plugin entry, not a top-level db: field, so --db is flag-only.
-	dir := t.TempDir()
-	cfgFile := dir + "/server.yaml"
-	if err := os.WriteFile(cfgFile, []byte("bind: \"0.0.0.0:9090\"\n"), 0o644); err != nil {
-		t.Fatal(err)
+func TestBuildServeConfigMissingFile(t *testing.T) {
+	home := t.TempDir()
+	_, err := buildServeConfig(home, filepath.Join(home, "server.yaml"))
+	if err == nil {
+		t.Fatal("a missing config must be an error (no synthesized fallback)")
 	}
-	f, err := parseServeFlags(nil, cfgFile)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if f.Bind != "0.0.0.0:9090" {
-		t.Errorf("Bind = %q, want 0.0.0.0:9090 from config", f.Bind)
-	}
-	if f.DB != cliDefaultDB {
-		t.Errorf("DB = %q, want flag default %q", f.DB, cliDefaultDB)
+	if !strings.Contains(err.Error(), "gridwell init") {
+		t.Errorf("error should guide the user to `gridwell init`; got: %v", err)
 	}
 }
 
-func TestParseServeFlagsCliOverridesConfig(t *testing.T) {
-	// CLI flags override config; --db sets the synthesized root DB path.
-	dir := t.TempDir()
-	cfgFile := dir + "/server.yaml"
-	if err := os.WriteFile(cfgFile, []byte("bind: \"0.0.0.0:9090\"\n"), 0o644); err != nil {
+func TestBuildServeConfigNoPlugins(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "server.yaml")
+	if err := os.WriteFile(path, []byte("bind: \"127.0.0.1:9090\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	f, err := parseServeFlags([]string{"--bind", ":8888", "--db", "/tmp/override.db"}, cfgFile)
+	if _, err := buildServeConfig(home, path); err == nil {
+		t.Fatal("a config with no plugins must be an error")
+	}
+}
+
+func TestBuildServeConfigInjectsDBFile(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "server.yaml")
+	yml := "plugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"localdb\"\n"
+	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := buildServeConfig(home, path)
 	if err != nil {
-		t.Fatalf("parse: %v", err)
+		t.Fatalf("buildServeConfig: %v", err)
 	}
-	if f.Bind != ":8888" {
-		t.Errorf("Bind = %q, want :8888 (CLI should override config)", f.Bind)
-	}
-	if f.DB != "/tmp/override.db" {
-		t.Errorf("DB = %q, want /tmp/override.db from --db", f.DB)
+	want := config.DBFile(home, "abc")
+	if got := cfg.Plugins[0].Config["db_file"]; got != want {
+		t.Errorf("db_file = %q, want derived %q", got, want)
 	}
 }

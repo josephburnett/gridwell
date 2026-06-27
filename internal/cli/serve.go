@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -20,56 +21,24 @@ import (
 )
 
 // serveFlags holds the parsed `serve` subcommand options. Split out from
-// RunServe so the flag-parsing path is unit-testable.
+// RunServe so the flag-parsing path is unit-testable. The DB path is no longer
+// a flag — it is derived from each plugin's id under the Gridwell home.
 type serveFlags struct {
-	DB        string
 	Bind      string
 	StaticDir string
-	// cfgPath is the resolved server.yaml path used to load plugin config.
-	cfgPath string
 }
 
-// cliDefaults are the flag-level defaults: what you get with no config file
-// and no flags. Distinct from config.Defaults (which describe server.yaml
-// defaults).
-var cliDefaults = config.ServerConfig{
-	Bind:      "127.0.0.1:8080",
-	StaticDir: "./web",
-}
-
-// cliDefaultDB is the --db default: the db_file for the synthesized root
-// localdb plugin when no server.yaml designates one. Local for dev
-// convenience; production users supply --db or a server.yaml root plugin.
-const cliDefaultDB = "./gridwell.db"
-
-// defaultRootID is the plugin id assigned to the synthesized root localdb when
-// no server.yaml is present. Stable so ids stored against it keep resolving.
-const defaultRootID = "gridwell-root"
-
-// parseServeFlags parses the `serve` flag set. Returns the populated
-// struct, or an error if flag parsing fails (so the caller can decide
-// the exit code).
-//
-// Precedence: CLI flags > server.yaml at cfgPath > cliDefaults.
-// cfgPath="" disables config file loading (used by tests).
-func parseServeFlags(args []string, cfgPath string) (serveFlags, error) {
-	// Load config file for defaults (missing file is fine).
-	fileCfg := cliDefaults
-	if cfgPath != "" {
-		if fc, err := config.Load(cfgPath); err == nil {
-			fileCfg = *fc
-		}
-	}
-
+// parseServeFlags parses the `serve` flag set, using defBind/defStatic (the
+// server.yaml values, already default-filled by config.Load) as the flag
+// defaults so CLI flags override the config which overrides the built-ins.
+func parseServeFlags(args []string, defBind, defStatic string) (serveFlags, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var f serveFlags
-	f.cfgPath = cfgPath
-	db := resolveDB(fs, cliDefaultDB)
-	fs.StringVar(&f.Bind, "bind", fileCfg.Bind, "HTTP listen address")
-	fs.StringVar(&f.StaticDir, "static", fileCfg.StaticDir, "directory of static files served at / (empty = headless)")
+	fs.StringVar(&f.Bind, "bind", defBind, "HTTP listen address")
+	fs.StringVar(&f.StaticDir, "static", defStatic, "directory of static files served at / (empty = headless)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
-		case "db", "bind", "static":
+		case "bind", "static":
 			return true
 		}
 		return false
@@ -77,8 +46,33 @@ func parseServeFlags(args []string, cfgPath string) (serveFlags, error) {
 	if err := fs.Parse(args); err != nil {
 		return serveFlags{}, err
 	}
-	f.DB = *db
 	return f, nil
+}
+
+// buildServeConfig loads the mandatory server.yaml at cfgPath and prepares it
+// for launch: the file must exist and list at least one plugin (no synthesized
+// fallback), and every plugin gets its derived db_file injected (the path is
+// never stored in the config — it is fixed at <home>/db/<id>/store.db). Split
+// out from RunServe so the load/validate/inject path is unit-testable.
+func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("no config at %s; run `gridwell init --kind localdb --name <name>` to create one", cfgPath)
+		}
+		return nil, err
+	}
+	if len(cfg.Plugins) == 0 {
+		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind localdb --name <name>`", cfgPath)
+	}
+	for i := range cfg.Plugins {
+		pc := &cfg.Plugins[i]
+		if pc.Config == nil {
+			pc.Config = map[string]string{}
+		}
+		pc.Config["db_file"] = config.DBFile(home, pc.ID)
+	}
+	return cfg, nil
 }
 
 // resolvePluginBinary finds the go-plugin binary for a built-in kind:
@@ -136,31 +130,38 @@ func resolvePluginBinaries(cfg *config.ServerConfig) error {
 // so there is no browser driver here. SIGINT/SIGTERM trigger graceful
 // shutdown.
 func RunServe(args []string) int {
+	home, err := config.Home()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
 	cfgPath, err := config.DefaultPath()
 	if err != nil {
-		cfgPath = ""
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
 	}
-	f, err := parseServeFlags(args, cfgPath)
+
+	// The config is mandatory and authoritative: it lists every plugin and the
+	// id+kind the server verifies against each DB. No synthesized fallback.
+	cfg, err := buildServeConfig(home, cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
+
+	f, err := parseServeFlags(args, cfg.Bind, cfg.StaticDir)
 	if err != nil {
 		return 2
 	}
+	cfg.Bind, cfg.StaticDir = f.Bind, f.StaticDir
 
-	// Build the effective config: server.yaml lists every plugin. With no
-	// config we synthesize a single localdb plugin backed by --db — a plugin
-	// like any other (the client enters it from the launcher), not a root.
-	cfg := &config.ServerConfig{Bind: f.Bind, StaticDir: f.StaticDir}
-	if f.cfgPath != "" {
-		if loaded, cfgErr := config.Load(f.cfgPath); cfgErr == nil {
-			cfg = loaded
+	// Each plugin's DB lives at <home>/db/<id>/store.db; ensure the directory
+	// exists before the plugin opens (the plugin creates the file, not the dir).
+	for i := range cfg.Plugins {
+		if err := os.MkdirAll(config.DBDir(home, cfg.Plugins[i].ID), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+			return 1
 		}
-	}
-	if len(cfg.Plugins) == 0 {
-		cfg.Plugins = []config.PluginConfig{{
-			ID:     defaultRootID,
-			Name:   "local",
-			Kind:   "localdb",
-			Config: map[string]string{"db_file": f.DB},
-		}}
 	}
 
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
@@ -197,7 +198,7 @@ func RunServe(args []string) int {
 
 	errCh := make(chan error, 1)
 	go func() {
-		fmt.Printf("gridwell: serving on %s (db=%s static=%s)\n", f.Bind, f.DB, f.StaticDir)
+		fmt.Printf("gridwell: serving on %s (static=%s plugins=%d)\n", cfg.Bind, cfg.StaticDir, len(cfg.Plugins))
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

@@ -6,15 +6,8 @@
 package cli
 
 import (
-	"flag"
 	"strings"
 )
-
-// resolveDB returns the database path. Default is "./gridwell.db" — convenient
-// for development; production users override via --db.
-func resolveDB(fs *flag.FlagSet, defaultPath string) *string {
-	return fs.String("db", defaultPath, "path to the SQLite database file")
-}
 
 // reorderFlagsFirst groups all flag tokens to the front of args so that Go's
 // stdlib flag package (which stops at the first non-flag) sees them. This

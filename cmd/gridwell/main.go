@@ -33,9 +33,14 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `gridwell — a spatial information system
 
 Usage:
-    gridwell init   [--db PATH]                       create the database
-    gridwell serve  [--db PATH] [--bind ADDR] [--static DIR]
-                                                      run the backend server
+    gridwell init  --kind KIND --name NAME [--config k=v ...]
+                                              create + register a plugin
+    gridwell serve [--bind ADDR] [--static DIR]
+                                              run the backend server
+
+init mints a plugin id, creates its DB (at ~/.gridwell/db/<id>/) with identity
+metadata, and appends the entry to ~/.gridwell/server.yaml. serve requires that
+config file — every plugin's DB path is derived from its id, not configured.
 
 The server is the loopback backend for the Gridwell desktop app (see
 apps/desktop). It serves the RPC/SSE data plane, the wasm client, and shell

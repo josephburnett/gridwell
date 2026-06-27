@@ -6,11 +6,12 @@
 // plugin. "Remote" is just a transport: the proxy does the work.
 //
 // Config keys:
-//   host: SSH endpoint "host:port" (e.g. "example.com:22")
-//   user: SSH user
-//   key:  path to the private key file
-//   addr: the remote node's gRPC listen address, as seen on the remote host
-//         (e.g. "127.0.0.1:9090") — dialed through the tunnel
+//
+//	host: SSH endpoint "host:port" (e.g. "example.com:22")
+//	user: SSH user
+//	key:  path to the private key file
+//	addr: the remote node's gRPC listen address, as seen on the remote host
+//	      (e.g. "127.0.0.1:9090") — dialed through the tunnel
 package main
 
 import (
@@ -26,11 +27,21 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin/guest"
+	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 )
 
 func main() {
 	cfg := guest.Config()
+	// The ssh plugin is a transparent proxy, but it still owns a local DB like
+	// every plugin — it records its durable identity (and may later stash keys
+	// etc.) there. Verify id+kind against that DB before dialing out.
+	if dbPath := cfg["db_file"]; dbPath != "" {
+		if _, err := pluginmeta.Ensure(dbPath, cfg["uuid"], cfg["kind"]); err != nil {
+			fmt.Fprintf(os.Stderr, "gridwell-ssh: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	client, closer, err := dialRemote(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gridwell-ssh: %v\n", err)
