@@ -152,15 +152,22 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 		case *ast.Text:
 			text := string(t.Segment.Value(src))
 			if text != "" {
-				*out = append(*out, Span{Text: text, Style: style, Href: href})
+				// The segment IS this run's source slice, so SrcLen == len(text):
+				// a verbatim run the caret maps into linearly. This holds inside
+				// bold/italic/links too — goldmark consumes the markers, and the
+				// child Text node's segment covers only the visible text.
+				*out = append(*out, Span{Text: text, Style: style, Href: href,
+					SrcStart: t.Segment.Start, SrcLen: t.Segment.Stop - t.Segment.Start})
 			}
 			// A hard line break (two trailing spaces / backslash) forces a new
 			// line — carried as a "\n" sentinel span the layout turns into a
-			// break. A soft break is just a space.
+			// break. A soft break is just a space. Both are synthetic (SrcLen 0,
+			// opaque to the caret); anchor them at the source position just past
+			// the preceding text so a caret there lands sensibly.
 			if t.HardLineBreak() {
-				*out = append(*out, Span{Text: "\n", Style: style, Href: href})
+				*out = append(*out, Span{Text: "\n", Style: style, Href: href, SrcStart: t.Segment.Stop})
 			} else if t.SoftLineBreak() {
-				*out = append(*out, Span{Text: " ", Style: style, Href: href})
+				*out = append(*out, Span{Text: " ", Style: style, Href: href, SrcStart: t.Segment.Stop})
 			}
 		case *ast.String:
 			*out = append(*out, Span{Text: string(t.Value), Style: style, Href: href})

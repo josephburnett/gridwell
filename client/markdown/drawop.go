@@ -72,6 +72,13 @@ type DrawOp struct {
 	Href string // OpText link target / OpEmbed descent href
 	Src  string // OpImage source URL
 	Alt  string // OpImage / OpEmbed alt text
+
+	// OpText source mapping for the rendered-mode caret: SrcStart is the source
+	// byte offset of this run's first character, SrcLen the source length it
+	// spans. SrcLen == len(Text) for a verbatim run (the caret maps linearly,
+	// byte i of Text ↔ SrcStart+i); SrcLen == 0 for an opaque run (inline code,
+	// list marker, code block, break) the caret skips. Zero on non-OpText ops.
+	SrcStart, SrcLen int
 }
 
 // LayoutResult is the full output of the layout pass for one document at one

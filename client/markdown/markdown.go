@@ -34,6 +34,16 @@ type Span struct {
 	Src   string
 	Alt   string
 	W, H  int
+
+	// SrcStart is the byte offset in the document source where this span's
+	// rendered Text begins; SrcLen is the source length it covers. When SrcLen
+	// == len(Text) the rendered text is a verbatim source slice (plain text,
+	// including the text inside bold/italic/links, whose markers goldmark
+	// consumes), so a rendered-mode caret maps into it linearly. SrcLen == 0
+	// marks a span with no usable source mapping — a soft/hard-break sentinel,
+	// inline code, an autolink — which the caret treats as opaque. Only
+	// rendered-mode editing reads these; rendering ignores them.
+	SrcStart, SrcLen int
 }
 
 // AltFromSource derives a short, one-line alt-text from a markdown document:

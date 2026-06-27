@@ -453,7 +453,8 @@ func (w *layoutWriter) emitLine(line []inlineToken, x, y, h, fontPx float64, col
 		}
 		w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: y, Text: tk.span.Text,
 			FontPx: fontPx, Style: tk.span.Style, Mono: mono || tk.span.Style&StyleCode != 0,
-			Color: col, Href: tk.span.Href})
+			Color: col, Href: tk.span.Href,
+			SrcStart: tk.span.SrcStart, SrcLen: tk.span.SrcLen})
 		cx += tk.width
 	}
 }
@@ -512,6 +513,16 @@ func (w *layoutWriter) tokenize(spans []Span, fontPx float64, mono bool) []inlin
 			}
 			tok := sp
 			tok.Text = sp.Text[i:j]
+			// Carry the source range for the caret. A verbatim span (SrcLen ==
+			// len(Text)) maps byte-for-byte, so this sub-run starts at SrcStart+i
+			// and spans j-i source bytes. A non-verbatim span (inline code, an
+			// autolink) is opaque: SrcLen 0 so the caret skips it.
+			if sp.SrcLen == len(sp.Text) {
+				tok.SrcStart = sp.SrcStart + i
+				tok.SrcLen = j - i
+			} else {
+				tok.SrcLen = 0
+			}
 			toks = append(toks, inlineToken{
 				span:    tok,
 				width:   w.m(tok.Text, fontPx, sp.Style, mono || sp.Style&StyleCode != 0),
