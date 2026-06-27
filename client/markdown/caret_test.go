@@ -126,7 +126,8 @@ func TestCaretBarCentersOnGlyphBox(t *testing.T) {
 }
 
 func TestCaretFromPointFindsOffset(t *testing.T) {
-	r := layoutOf(t, "hello world\n", 1000)
+	src := "hello world\n"
+	r := layoutOf(t, src, 1000)
 	hello, _ := opByText(r, "hello")
 	y := hello.Y + 1 // a hair below the run's top, inside the band
 	cases := []struct {
@@ -138,10 +139,10 @@ func TestCaretFromPointFindsOffset(t *testing.T) {
 		{hello.X + 5*8, 5},   // end of "hello" / start of space
 		{hello.X + 6*8, 6},   // start of "world"
 		{hello.X + 11*8, 11}, // end of "world"
-		{hello.X + 1000, 11}, // far right → clamps to last boundary on the line
+		{hello.X + 1000, 11}, // far right, no trailing space → last boundary (11)
 	}
 	for _, c := range cases {
-		got, ok := CaretFromPoint(r.Ops, c.px, y, monoMeasure)
+		got, ok := CaretFromPoint(r.Ops, src, c.px, y, monoMeasure)
 		if !ok {
 			t.Errorf("px %v: not ok", c.px)
 			continue
@@ -149,6 +150,33 @@ func TestCaretFromPointFindsOffset(t *testing.T) {
 		if got != c.want {
 			t.Errorf("px %v: offset = %d, want %d", c.px, got, c.want)
 		}
+	}
+}
+
+// TestCaretFromPointTrailingWhitespace: a click past the last glyph on a line
+// whose source has trailing whitespace the renderer dropped lands at the line's
+// end (so click-past-text then type extends the line) — the inverse of
+// PointFromCaret following that same dropped whitespace.
+func TestCaretFromPointTrailingWhitespace(t *testing.T) {
+	src := "hello   \nx" // 3 trailing spaces goldmark drops; then a 2nd line
+	r := layoutOf(t, src, 1000)
+	hello, ok := opByText(r, "hello")
+	if !ok {
+		t.Fatal("no hello op")
+	}
+	// Click far to the right on hello's line → end of "hello   " (offset 8),
+	// not clamped back to the end of the glyph "hello" (offset 5).
+	got, ok := CaretFromPoint(r.Ops, src, hello.X+1000, hello.Y+1, monoMeasure)
+	if !ok {
+		t.Fatal("not ok")
+	}
+	if got != 8 {
+		t.Errorf("trailing-space click: offset = %d, want 8 (end of line)", got)
+	}
+	// And it round-trips: PointFromCaret(8) sits to the right of "hello".
+	x, _, _, _ := PointFromCaret(r.Ops, src, 8, DefaultLayoutStyle().LineSpacing, monoMeasure)
+	if x <= hello.X+5*8 {
+		t.Errorf("PointFromCaret(8) x = %v, want right of hello (%v)", x, hello.X+5*8)
 	}
 }
 
@@ -168,7 +196,7 @@ func TestCaretRoundTrips(t *testing.T) {
 			if !ok {
 				t.Fatalf("offset %d (run %q): PointFromCaret not ok", offset, op.Text)
 			}
-			got, ok := CaretFromPoint(r.Ops, x, y+fp/2, monoMeasure)
+			got, ok := CaretFromPoint(r.Ops, src, x, y+fp/2, monoMeasure)
 			if !ok {
 				t.Fatalf("offset %d: CaretFromPoint not ok", offset)
 			}
@@ -188,7 +216,7 @@ func TestPointFromCaretEmptyOps(t *testing.T) {
 	if _, _, _, ok := PointFromCaret(nil, "", 0, 1.4, monoMeasure); ok {
 		t.Error("empty ops should report ok=false")
 	}
-	if _, ok := CaretFromPoint(nil, 0, 0, monoMeasure); ok {
+	if _, ok := CaretFromPoint(nil, "", 0, 0, monoMeasure); ok {
 		t.Error("empty ops should report ok=false")
 	}
 }

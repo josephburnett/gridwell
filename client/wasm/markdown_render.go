@@ -338,7 +338,7 @@ func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy flo
 	measure := a.markdownMeasure(st, fileFixedScale)
 	res := a.layoutMarkdown(string(body), fileNaturalContentPx, measure, markdownLayoutStyle(st))
 	originX, originY, scale := a.markdownOrigin(p, r)
-	return markdown.CaretFromPoint(res.Ops, (sx-originX)/scale, (sy-originY)/scale, measure)
+	return markdown.CaretFromPoint(res.Ops, string(body), (sx-originX)/scale, (sy-originY)/scale, measure)
 }
 
 // editRenderedKey applies one keystroke to the focused rendered-mode text tile
@@ -446,7 +446,7 @@ func (a *App) caretVertical(src string, off int, down bool) int {
 	} else {
 		targetY -= lh
 	}
-	if n, ok := markdown.CaretFromPoint(res.Ops, cx, targetY, measure); ok {
+	if n, ok := markdown.CaretFromPoint(res.Ops, src, cx, targetY, measure); ok {
 		return n
 	}
 	return off

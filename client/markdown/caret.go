@@ -96,7 +96,15 @@ func CaretBar(y, fontPx float64) (top, height float64) {
 // text run nearest the point (vertical line first, then horizontal), then the
 // rune boundary within it whose x is closest to px. ok is false when there is no
 // text run to land on.
-func CaretFromPoint(ops []DrawOp, px, py float64, m Measure) (offset int, ok bool) {
+//
+// A click to the right of the last glyph on a line lands in whitespace the
+// renderer dropped (the trailing spaces of a source line), which carries no run.
+// To stay the inverse of PointFromCaret there, when the click is past a run's
+// right edge and the source after it is whitespace up to a newline (or EOF), the
+// caret goes to the end of that line — so clicking past the text then typing
+// extends the line, rather than snapping back to the last glyph. src is the doc
+// the ops were laid out from.
+func CaretFromPoint(ops []DrawOp, src string, px, py float64, m Measure) (offset int, ok bool) {
 	best := -1
 	var bestScore float64
 	for i, op := range ops {
@@ -117,6 +125,18 @@ func CaretFromPoint(ops []DrawOp, px, py float64, m Measure) (offset int, ok boo
 		return 0, false
 	}
 	op := ops[best]
+	// Past the run's right edge: if the source that follows is dropped trailing
+	// whitespace ending the line, land at the line's end (its last typed column).
+	if right := op.X + m(op.Text, op.FontPx, op.Style, op.Mono); px > right {
+		end := op.SrcStart + op.SrcLen
+		i := end
+		for i < len(src) && (src[i] == ' ' || src[i] == '\t') {
+			i++
+		}
+		if i > end && (i == len(src) || src[i] == '\n') {
+			return i, true
+		}
+	}
 	bestK, bestDx := 0, math.Inf(1)
 	for _, b := range runeBoundaries(op.Text) {
 		x := op.X + m(op.Text[:b], op.FontPx, op.Style, op.Mono)
