@@ -355,10 +355,6 @@ func (a *App) editRenderedKey(ev js.Value) {
 	if ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool() || ev.Get("altKey").Bool() {
 		return // copy/paste/shortcuts stay with the browser
 	}
-	caret, hasCaret := a.mdCaret[p.ID]
-	if !hasCaret {
-		return // click to place a caret before typing
-	}
 	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
@@ -373,6 +369,17 @@ func (a *App) editRenderedKey(ev js.Value) {
 		return
 	}
 	src := string(body)
+	// No caret yet: an empty rendered doc has no text to click, so requiring a
+	// prior click would make it impossible to type into. Default the caret to
+	// the end of the source so the first keystroke just works.
+	caret, hasCaret := a.mdCaret[p.ID]
+	if !hasCaret {
+		caret = len(src)
+		if a.mdCaret == nil {
+			a.mdCaret = map[string]int{}
+		}
+		a.mdCaret[p.ID] = caret
+	}
 	newSrc, newCaret, changed := src, caret, false
 	switch key := ev.Get("key").String(); key {
 	case "Backspace":
