@@ -430,7 +430,7 @@ func (a *App) caretVertical(src string, off int, down bool) int {
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, fileFixedScale)
 	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, lstyle)
-	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, off, measure)
+	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle.LineSpacing, measure)
 	if !ok {
 		return off
 	}
@@ -514,16 +514,19 @@ func (a *App) drawMarkdownCaret(p *pane.Pane, src string, originX, originY, scal
 		return
 	}
 	st := defaultMarkdownStyle()
+	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, scale)
-	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, markdownLayoutStyle(st))
-	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, off, measure)
+	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, lstyle)
+	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle.LineSpacing, measure)
 	if !ok {
 		return
 	}
 	c := a.cctx
 	c.Set("fillStyle", st.textColor)
-	// A 2px bar a touch taller than the glyph, anchored at the run's top.
-	c.Call("fillRect", originX+cx*scale, originY+cy*scale, 2.0, fontPx*scale*1.25)
+	// A 2px bar centered on the glyph box (CaretBar grows the em box a touch so
+	// it doesn't hang below the text).
+	top, ht := markdown.CaretBar(cy, fontPx)
+	c.Call("fillRect", originX+cx*scale, originY+top*scale, 2.0, ht*scale)
 }
 
 // mdCacheKey identifies a memoized layout: a content hash plus the rounded
