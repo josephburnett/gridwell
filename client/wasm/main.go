@@ -488,6 +488,7 @@ func main() {
 	app.installCanvasInput()
 	app.installWebviewListeners()
 	app.installShellMirror()
+	app.installTestHook() // read-only window.__gridwellTest, only under ?e2e=1
 
 	go app.bootstrap()
 
