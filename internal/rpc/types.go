@@ -186,13 +186,6 @@ type GetGridResponse struct {
 	Tiles []Tile `json:"tiles"`
 }
 
-type GetBlobRequest struct {
-	BlobID int64 `json:"blob_id"`
-}
-type GetBlobResponse struct {
-	Data []byte `json:"data"`
-}
-
 type GetTilePreviewRequest struct {
 	TileID string `json:"tile_id"`
 }
