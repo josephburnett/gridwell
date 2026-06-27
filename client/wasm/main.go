@@ -90,6 +90,13 @@ type App struct {
 	// response lands.
 	gridInflight map[string]bool
 
+	// tileInflight tracks qualified tile ids with a pending GetTile request.
+	// An embed names a globally-routable tile id whose grid may never have been
+	// visited (so it isn't cached); resolving it locates the tile's grid and
+	// fetches it. Deduped like gridInflight: the embed drawer fires this on
+	// every cache miss every frame.
+	tileInflight map[string]bool
+
 	// ghost is the in-flight visual representation of a node being dragged
 	// or animated to/from somewhere. The dragged node renders here at
 	// sub-cell screen precision instead of at its stored cell position.
@@ -438,6 +445,7 @@ func main() {
 		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
+		tileInflight:      map[string]bool{},
 		paneStateStack:    map[string][]paneState{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		urlStreams:        map[string]*urlView{},
@@ -558,6 +566,27 @@ func (a *App) fetchGrid(id string) {
 		delete(a.gridLoadFailed, id)
 		a.c.PutGrid(resp.Grid, resp.Tiles)
 		a.draw()
+	}()
+}
+
+// fetchTileByID resolves an embed's globally-routable target whose grid isn't
+// cached: GetTile locates the tile (the server resolves a qualified id directly,
+// no descent path needed), then fetchGrid pulls in its grid so findTileByID then
+// hits and the embed both previews and descends. Deduped per tile id; a no-op
+// once the tile's grid is cached. Background, like fetchGrid — the embed paints
+// the missing placeholder until the grid lands, then resolves on the next frame.
+func (a *App) fetchTileByID(tileID string) {
+	if tileID == "" || a.tileInflight[tileID] {
+		return
+	}
+	a.tileInflight[tileID] = true
+	go func() {
+		defer delete(a.tileInflight, tileID)
+		tile, err := a.cl.GetTile(context.Background(), tileID)
+		if err != nil || tile == nil {
+			return
+		}
+		a.fetchGrid(tile.GridID)
 	}()
 }
 

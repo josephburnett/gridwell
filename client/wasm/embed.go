@@ -165,8 +165,10 @@ func drawEmbedLabel(c js.Value, text string, x, y, w, h float64) {
 	c.Set("textBaseline", "top")
 }
 
-// findTileByID walks the client tile cache for any cached row with the
-// given id. Used to resolve embed hrefs.
+// findTileByID walks the client tile cache for any cached row with the given
+// id. Used to resolve embed hrefs. On a miss it kicks a background fetch
+// (fetchTileByID) to pull in the target's grid — an embed names a tile whose
+// grid may never have been visited — so a later frame resolves it.
 func (a *App) findTileByID(id string) *rpc.Tile {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
@@ -177,6 +179,7 @@ func (a *App) findTileByID(id string) *rpc.Tile {
 			return &t
 		}
 	}
+	a.fetchTileByID(id)
 	return nil
 }
 
