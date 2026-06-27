@@ -15,17 +15,10 @@ import (
 // to a fresh one. The Test* functions that use it live in migrations_test.go.
 
 // ── schema fingerprint (order-insensitive) ───────────────────────────────────
-
-// colFP is a column's identity for equivalence: name is the map key, so only
-// type/notnull/default/pk matter. Crucially NOT cid — ALTER TABLE ADD COLUMN
-// always appends (higher cid) while inline DDL places columns mid-table, so a
-// migrated schema and a fresh one are equivalent with different column orders.
-type colFP struct {
-	typ     string
-	notNull bool
-	dflt    string
-	pk      int
-}
+//
+// colFP and the column/table readers are the production guard's (schema_check.go)
+// — shared so the equivalence tests and the startup check fingerprint columns the
+// same way.
 
 // idxFP is an index's identity: uniqueness + its ordered column list.
 type idxFP struct {
@@ -57,70 +50,25 @@ func schemaFingerprint(t *testing.T, db *sql.DB) map[string]tableFP {
 	return out
 }
 
+// userTables / tableColumnsFP are t.Fatal-on-error wrappers over the production
+// readers in schema_check.go, so the fingerprint tests share one column-reading
+// path with the startup guard.
 func userTables(t *testing.T, db *sql.DB) []string {
 	t.Helper()
-	rows, err := db.Query(
-		`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	names, err := userTableNames(context.Background(), db)
 	if err != nil {
 		t.Fatalf("list tables: %v", err)
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var n string
-		if err := rows.Scan(&n); err != nil {
-			t.Fatalf("scan table name: %v", err)
-		}
-		out = append(out, n)
-	}
-	return out
+	return names
 }
 
 func tableColumnsFP(t *testing.T, db *sql.DB, table string) map[string]colFP {
 	t.Helper()
-	// PRAGMA can't bind params; table comes from sqlite_master, never user input.
-	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	cols, err := tableColumnFPs(context.Background(), db, table)
 	if err != nil {
 		t.Fatalf("table_info %s: %v", table, err)
 	}
-	defer rows.Close()
-	out := map[string]colFP{}
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			typ     string
-			notnull int
-			dflt    sql.NullString
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
-			t.Fatalf("scan table_info: %v", err)
-		}
-		out[name] = colFP{
-			typ:     strings.ToUpper(strings.TrimSpace(typ)),
-			notNull: notnull != 0,
-			dflt:    normalizeDefault(dflt),
-			pk:      pk,
-		}
-	}
-	return out
-}
-
-// normalizeDefault canonicalizes a column default so an inline default and the
-// identical ADD COLUMN default compare equal: NULL → "", trim spaces, strip one
-// layer of surrounding matching quotes.
-func normalizeDefault(d sql.NullString) string {
-	if !d.Valid {
-		return ""
-	}
-	v := strings.TrimSpace(d.String)
-	if len(v) >= 2 {
-		if (v[0] == '\'' && v[len(v)-1] == '\'') || (v[0] == '"' && v[len(v)-1] == '"') {
-			v = v[1 : len(v)-1]
-		}
-	}
-	return v
+	return cols
 }
 
 func tableIndexesFP(t *testing.T, db *sql.DB, table string) map[string]idxFP {
