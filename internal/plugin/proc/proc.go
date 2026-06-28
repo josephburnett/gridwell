@@ -376,20 +376,7 @@ func (p *Plugin) reconcileTiles(gridID, rootPID int64) error {
 	for _, e := range existingByKey {
 		occupied[[2]int64{e.x, e.y}] = true
 	}
-	nextCell := func() (int64, int64) {
-		var cx, cy int64
-		for {
-			if !occupied[[2]int64{cx, cy}] {
-				occupied[[2]int64{cx, cy}] = true
-				return cx, cy
-			}
-			cx++
-			if cx >= autoGridWidth {
-				cx = 0
-				cy++
-			}
-		}
-	}
+	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth) }
 
 	// @info tile for the root process's own metadata.
 	if _, exists := existingByKey[infoKey]; !exists {

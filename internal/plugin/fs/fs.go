@@ -373,20 +373,7 @@ func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource
 	for _, e := range existingByName {
 		occupied[[2]int64{e.x, e.y}] = true
 	}
-	nextCell := func() (int64, int64) {
-		var cx, cy int64
-		for {
-			if !occupied[[2]int64{cx, cy}] {
-				occupied[[2]int64{cx, cy}] = true
-				return cx, cy
-			}
-			cx++
-			if cx >= autoGridWidth {
-				cx = 0
-				cy++
-			}
-		}
-	}
+	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth) }
 
 	// Upsert entries.
 	presentNames := map[string]bool{}
