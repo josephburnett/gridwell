@@ -47,6 +47,20 @@ export async function getGrid(origin: string, gridId: string): Promise<GridSnaps
   return (await res.json()) as GridSnapshot;
 }
 
+// getTileContent fetches a tile's body bytes (text markdown / url) from the
+// server, decoded from the proto-JSON base64 `data` field. Returns '' when the
+// tile has no body.
+export async function getTileContent(origin: string, tileId: string): Promise<string> {
+  const res = await fetch(`${origin}/${SERVICE}/GetTileContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ tileId }),
+  });
+  if (!res.ok) throw new Error(`GetTileContent(${tileId}) failed: ${res.status} ${await res.text()}`);
+  const body = (await res.json()) as { data?: string };
+  return body.data ? Buffer.from(body.data, 'base64').toString('utf8') : '';
+}
+
 // tileAt returns the tile of the given kind at cell (x, y), or undefined.
 // proto-JSON encodes int64 fields as either numbers or strings, so coordinates
 // are compared numerically.
