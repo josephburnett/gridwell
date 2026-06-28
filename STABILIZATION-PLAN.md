@@ -44,9 +44,12 @@ touched the native/live path).
   drift-lints the 3-copy threshold against the canvas owner. The controls rule
   is already single-sourced (focus owned by the wasm, fed to `controlVisible`);
   its caller-correctness is a Phase 3 focus e2e.
-- **Phase 2 — STARTED.** `webviews.ts` bounds/park/zoom math extracted to tested
-  `viewutil` pure fns. *Remaining: the `App` god-object map-sprawl and more
-  `client/wasm` orchestration extraction — large, deferred.*
+- **Phase 2 — webviews + the App god-object DONE.** `webviews.ts` bounds/park/
+  zoom math extracted to tested `viewutil` pure fns. The `App` god-object's 8
+  per-pane maps are consolidated (full scope) into one `App.locals`/`paneLocal`
+  owner over the tested `client/panestate.State`, with an atomic `forgetPane`
+  lifecycle. *Remaining: more `client/wasm` orchestration extraction (input.go/
+  render.go decision logic) and the render-context-as-mutable-App-fields wart.*
 - **Phase 3 — STARTED.** Framing round-trip (I7), menu-focus (I10), and the
   create→render seam (`render-seam.spec.ts` — the "it disappeared" class, via a
   new `tileIds` render hook) are locked. *Remaining: SSE-mid-animation (I11),
@@ -55,10 +58,11 @@ touched the native/live path).
   a tested pure `buildPluginInfo`. *Remaining: localStorage in the session blob;
   federation productionization.*
 
-**Largest deferred item, by design:** the `App` god-object extraction (Phase 2).
-It is the deepest, highest-risk change in the most fragile layer, and the charter
-says establish the test net first (now partly done) and don't rush the fragile
-layer. It deserves its own focused pass on the safety net these tests begin.
+**Next largest item:** the deferred invariant work — I8 (markdown text-preview
+re-wrap) and I11 (SSE event during a transition animation). Both are real
+"previews go wonky" vectors but neither is observable in an e2e yet; each needs a
+new introspection hook (render layout width for I8; deterministic mid-transition
+event injection for I11) as step one. See the Parking lot.
 
 ---
 
@@ -253,9 +257,16 @@ this is the durable record (mirrored in agent memory `project_deferred_*`).
 - **I11 — SSE event during a transition animation.** An inbound `Subscribe` event
   landing mid-animation can appear to mutate what you're looking at. No repro yet;
   needs a deterministic way to inject an event mid-transition.
-- **App god-object — live-stream maps.** If the per-pane extraction lands as the
-  safe-subset (non-resource) version, `urlStreams` + `shellStreams` remain as a
-  follow-up (they hold native handles with teardown — riskier, native-coupled).
+- **App god-object per-pane maps — DONE.** All 8 per-pane maps (selection,
+  ascent stack, caret, dirty, frozen-URL pan, urlStreams, shellStreams) are
+  consolidated into one `App.locals map[paneID]*paneLocal` (embedding the tested
+  `client/panestate.State` + the native url/shell handles), with one explicit
+  lifecycle: `a.local` creates, `a.forgetPane` tears down on drop. Full scope.
+- **Collapse path has no e2e (new gap, follow-up).** The pane collapse/close
+  gesture isn't exercised by any e2e spec, so `forgetPane`'s cleanup-on-drop (and
+  the collapse path generally) is verified only by `make check` + reasoning. Add a
+  driver `collapsePane` gesture + a `localsCount` testhook + a spec asserting the
+  per-pane state count drops when a pane is collapsed.
 - **localStorage in the session blob** (cookies sync today; DOM storage doesn't).
 - **Federation productionization** (transparent multi-hop + SOCKS). Last, only on
   a stable client/native split.
