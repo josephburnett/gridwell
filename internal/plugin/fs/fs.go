@@ -54,12 +54,13 @@ type Plugin struct {
 	gridwellv1.UnimplementedGridwellServer
 	db   *sql.DB
 	host Host
-	// root is the plugin's configured default directory. Attach uses it when
-	// no explicit path is given (e.g. mounting "files" from the launcher).
+	// root is the plugin's configured default directory. Info reports it as the
+	// default root grid (there is no Attach — the gRPC connection is the whole
+	// lifecycle); it anchors path→grid-id resolution when no explicit path is given.
 	root string
 }
 
-// SetRoot sets the configured default directory used by Attach when no path is
+// SetRoot sets the configured default directory Info reports as the root when no path is
 // supplied. Wired by NewFactory from config["root"].
 func (p *Plugin) SetRoot(root string) { p.root = root }
 

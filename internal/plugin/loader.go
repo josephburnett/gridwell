@@ -1,6 +1,8 @@
 // Package plugin — loader builds the plugin registry from server config.
-// Built-in plugins (kind "fs", "proc") are launched in-process using a
-// loopback TCP gRPC connection; external plugins (binary != "") use go-plugin.
+// In production every plugin (localdb, fs, proc, ssh) is a separately-compiled
+// go-plugin binary, spawned because its config sets binary != "". The
+// in-process factory path (loopback TCP gRPC, no subprocess) is a TEST-ONLY
+// fallback used when no binary is configured — see loadOne.
 package plugin
 
 import (
@@ -15,12 +17,13 @@ import (
 )
 
 // LoadAll constructs a Registry from the server config. Each PluginConfig
-// entry becomes one Registry entry keyed by its ID (UUID). Built-in plugins
-// are served in-process over a loopback gRPC listener; external plugins are
-// spawned as subprocesses via go-plugin.
+// entry becomes one Registry entry keyed by its ID (UUID). A plugin with a
+// binary path is spawned as a subprocess via go-plugin (the production path);
+// the in-process factory path is the test-only fallback.
 //
-// factories maps plugin kind strings to constructors. For kinds not in
-// factories, a binary path must be provided in PluginConfig.Binary.
+// factories maps plugin kind strings to constructors used ONLY on the in-process
+// (test) path. For kinds not in factories, a binary path must be provided in
+// PluginConfig.Binary.
 func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Registry, error) {
 	reg := NewRegistry()
 	for i := range cfg.Plugins {
@@ -71,7 +74,7 @@ func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridw
 
 // ServeInProcess starts a gRPC server in a goroutine on a loopback TCP port
 // and returns a client connected to it. closer stops the server and closes
-// the connection. Used for built-in plugins that run in the same process.
+// the connection. Test-only: production plugins are subprocesses (see loadOne).
 func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, func(), error) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

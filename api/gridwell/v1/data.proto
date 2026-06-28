@@ -17,9 +17,11 @@ package gridwell.v1;
 option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridwellv1";
 
 // Path is the sequence of well-tile IDs walked from the root grid down
-// to the pane the request originates from. Mutations carry it so the
-// store can fork the COW spine of shared grids up to the highest one
-// still uniquely owned.
+// to the pane the request originates from. Mutations carry it so the store
+// can validate that the request comes from a real descent and locate the
+// leaf grid the edit targets (buildGridSequence / checkPathLeaf). It is NOT a
+// copy-on-write spine: clone is an eager deep copy and nothing is ever shared,
+// so an in-place edit never forks — the path only says "where the pane is".
 message Path {
   repeated string well_ids = 1;
 }

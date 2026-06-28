@@ -19,7 +19,7 @@ func TestOpenRejectsLegacyBlobShape(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 
 	// The pre-cebea98 blobs shape: size + created_at, which the current writer
-	// (cow.go putBlob) no longer populates.
+	// (clone.go putBlob) no longer populates.
 	const legacyBlobs = `
 CREATE TABLE blobs (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
