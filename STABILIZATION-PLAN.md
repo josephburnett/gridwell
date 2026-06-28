@@ -85,6 +85,33 @@ pane close and on SSE-during-animation ⇒ "preview goes wonky."
 event mid-animation does not change a non-edited pane; pane close→reopen restores
 the exact `Frame` (the orphaning bug).
 
+**FINDING (after verifying against the code).** The premises above were partly
+overstated by the architecture report; checking them against the source changed
+the recommendation:
+- The "5 copies" are not one value duplicated five times — they are framing at
+  five *distinct roles* with different lifetimes: the live pane viewport, the
+  saved well-descent parent stack (`paneStateStack`, session-local), the
+  server-persisted child `view_*` (authoritative storage), the portal-ascent
+  stack (`pane.Up`, persisted), and the URL serialization. You genuinely need a
+  live copy, a persisted copy, and a serialized copy. Collapsing them into one
+  store would *break* legitimate role separation, not fix a bug.
+- The descend→reframe→ascend round trip **provably works today**: the new
+  `framing-roundtrip.spec.ts` (re-descend returns to what you left; ascent
+  restores the parent) passes on unmodified code.
+- The "orphaning on pane close" is a **bounded memory leak, not corruption**:
+  `Tree.nextID` is monotonic (`t.nextID++`, never decremented), so pane ids are
+  never reused and a new pane can never inherit a dead id's stale map entry.
+- The important per-pane teardown (live URL/shell streams, text-save) already
+  happens atomically in `flushPaneBeforeDrop`.
+
+**Revised 1b outcome.** The right, charter-aligned action was to *lock the
+invariant with the test that never existed* (done — `framing-roundtrip.spec.ts`,
+I7) rather than restructure a working subsystem. A risky five-into-one merge is
+**not warranted**. The real remaining framing risks are specific edge cases the
+report named but that are not yet reproduced — SSE-during-animation (I11) and the
+markdown text-preview re-wrap at a different pane width (I8) — which belong in
+Phase 3 as targeted characterization tests, not a structural rewrite.
+
 ### 1c. Shared rule, shared constant  *(low effort, removes drift)*
 **Disease:** "controls show only on the focused pane" is encoded on the canvas
 (Go) *and* as `controlVisible` (TS); the drag threshold is `dragThreshold` (Go)
