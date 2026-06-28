@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -301,21 +302,10 @@ type scheduler struct {
 // (e.g. clicking a tile-embed); on ascent the saved TextMode and scroll
 // are reinstalled so a single ascent lands back in the doc rather than
 // in the grid behind it.
-type paneState struct {
-	Cx          float64 `json:"cx"`
-	Cy          float64 `json:"cy"`
-	Zoom        float64 `json:"zoom"`
-	TextFocus   string  `json:"text_focus,omitempty"`
-	TextMode    string  `json:"text_mode,omitempty"`
-	TextScrollX float64 `json:"text_scroll_x,omitempty"`
-	TextScrollY float64 `json:"text_scroll_y,omitempty"`
-	// Anchor / Path are set only for an embed descent that re-anchored the pane
-	// onto another grid (a cross-grid / cross-plugin follow). On ascent they
-	// restore the doc's grid in one step, alongside TextFocus. Empty Anchor
-	// means "no re-anchor" — the within-grid ascent leaves Anchor/Path alone.
-	Anchor string   `json:"anchor,omitempty"`
-	Path   []string `json:"path,omitempty"`
-}
+// paneState is the saved-ascent stack entry, now owned by client/panestate
+// (panestate.Saved) so the per-pane state lives in one tested place. Aliased here
+// to keep the many `paneState{...}` construction sites unchanged.
+type paneState = panestate.Saved
 
 // paneTransition is the active per-pane zoom animation. It is a series of
 // segments; each segment carries the path that should be installed when it
