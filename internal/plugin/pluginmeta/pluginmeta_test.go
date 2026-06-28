@@ -14,14 +14,10 @@ func dbpath(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "meta.db")
 }
 
-func TestEnsureFirstRunRecordsIdentity(t *testing.T) {
+func TestCreateRecordsIdentity(t *testing.T) {
 	p := dbpath(t)
-	m, err := Ensure(p, "id-1", "localdb")
-	if err != nil {
-		t.Fatalf("first run: %v", err)
-	}
-	if m.ID != "id-1" || m.Kind != "localdb" {
-		t.Fatalf("returned meta: %+v", m)
+	if err := Create(p, "id-1", "localdb"); err != nil {
+		t.Fatalf("create: %v", err)
 	}
 	// The gridwell marker must be present so the file is identifiable.
 	db, _ := sql.Open("sqlite", p)
@@ -30,45 +26,53 @@ func TestEnsureFirstRunRecordsIdentity(t *testing.T) {
 	if err := db.QueryRow(`SELECT v FROM _gridwell_meta WHERE k = 'gridwell'`).Scan(&marker); err != nil {
 		t.Fatalf("marker missing: %v", err)
 	}
-}
-
-func TestEnsureMatchingReRunOK(t *testing.T) {
-	p := dbpath(t)
-	if _, err := Ensure(p, "id-1", "localdb"); err != nil {
-		t.Fatalf("first: %v", err)
+	// And Verify reads the identity back.
+	m, err := Verify(p, "", "")
+	if err != nil {
+		t.Fatalf("probe: %v", err)
 	}
-	if _, err := Ensure(p, "id-1", "localdb"); err != nil {
-		t.Fatalf("matching re-run must succeed: %v", err)
+	if m.ID != "id-1" || m.Kind != "localdb" {
+		t.Fatalf("stored identity: %+v", m)
 	}
 }
 
-func TestEnsureIDMismatch(t *testing.T) {
+func TestVerifyMatchingOK(t *testing.T) {
 	p := dbpath(t)
-	if _, err := Ensure(p, "id-1", "localdb"); err != nil {
-		t.Fatalf("first: %v", err)
+	if err := Create(p, "id-1", "localdb"); err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	if _, err := Ensure(p, "id-2", "localdb"); !errors.Is(err, ErrIDMismatch) {
+	if _, err := Verify(p, "id-1", "localdb"); err != nil {
+		t.Fatalf("matching verify must succeed: %v", err)
+	}
+}
+
+func TestVerifyIDMismatch(t *testing.T) {
+	p := dbpath(t)
+	if err := Create(p, "id-1", "localdb"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := Verify(p, "id-2", "localdb"); !errors.Is(err, ErrIDMismatch) {
 		t.Fatalf("id change must be rejected, got: %v", err)
 	}
 }
 
-func TestEnsureKindMismatch(t *testing.T) {
+func TestVerifyKindMismatch(t *testing.T) {
 	p := dbpath(t)
-	if _, err := Ensure(p, "id-1", "localdb"); err != nil {
-		t.Fatalf("first: %v", err)
+	if err := Create(p, "id-1", "localdb"); err != nil {
+		t.Fatalf("create: %v", err)
 	}
 	// Same id, different kind — the schema would be wrong; refuse.
-	if _, err := Ensure(p, "id-1", "fs"); !errors.Is(err, ErrKindMismatch) {
+	if _, err := Verify(p, "id-1", "fs"); !errors.Is(err, ErrKindMismatch) {
 		t.Fatalf("kind change must be rejected, got: %v", err)
 	}
 }
 
-func TestEnsureReadOnlyProbe(t *testing.T) {
+func TestVerifyReadOnlyProbe(t *testing.T) {
 	p := dbpath(t)
-	if _, err := Ensure(p, "id-1", "proc"); err != nil {
-		t.Fatalf("first: %v", err)
+	if err := Create(p, "id-1", "proc"); err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	m, err := Ensure(p, "", "")
+	m, err := Verify(p, "", "")
 	if err != nil {
 		t.Fatalf("read-only probe: %v", err)
 	}
@@ -77,10 +81,31 @@ func TestEnsureReadOnlyProbe(t *testing.T) {
 	}
 }
 
-// TestEnsureLegacyUUIDPreserved proves a DB created before the id/kind split
+// TestVerifyUninitialized pins the core fix: Verify never creates identity. A
+// missing file and a DB with no stored identity both fail with
+// ErrNotInitialized, so a config entry whose DB was never `gridwell init`-ed
+// cannot silently spawn a fresh store.
+func TestVerifyUninitialized(t *testing.T) {
+	// Missing file.
+	if _, err := Verify(dbpath(t), "id-1", "localdb"); !errors.Is(err, ErrNotInitialized) {
+		t.Errorf("missing DB must be ErrNotInitialized, got: %v", err)
+	}
+	// Existing but empty DB (no _gridwell_meta identity).
+	p := dbpath(t)
+	db, _ := sql.Open("sqlite", p)
+	if _, err := db.Exec(`CREATE TABLE t (x)`); err != nil { // make the file exist
+		t.Fatal(err)
+	}
+	db.Close()
+	if _, err := Verify(p, "id-1", "localdb"); !errors.Is(err, ErrNotInitialized) {
+		t.Errorf("uninitialized DB must be ErrNotInitialized, got: %v", err)
+	}
+}
+
+// TestVerifyLegacyUUIDPreserved proves a DB created before the id/kind split
 // (identity under the legacy "uuid" key) keeps its identity: the same id is
 // accepted (not re-minted) and a different id is rejected.
-func TestEnsureLegacyUUIDPreserved(t *testing.T) {
+func TestVerifyLegacyUUIDPreserved(t *testing.T) {
 	p := dbpath(t)
 	db, _ := sql.Open("sqlite", p)
 	if _, err := db.Exec(`CREATE TABLE _gridwell_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
@@ -91,10 +116,10 @@ func TestEnsureLegacyUUIDPreserved(t *testing.T) {
 	}
 	db.Close()
 
-	if _, err := Ensure(p, "legacy-id", "localdb"); err != nil {
+	if _, err := Verify(p, "legacy-id", "localdb"); err != nil {
 		t.Fatalf("legacy id must be accepted: %v", err)
 	}
-	if _, err := Ensure(p, "different", "localdb"); !errors.Is(err, ErrIDMismatch) {
+	if _, err := Verify(p, "different", "localdb"); !errors.Is(err, ErrIDMismatch) {
 		t.Fatalf("a different id against a legacy DB must be rejected, got: %v", err)
 	}
 }

@@ -19,7 +19,7 @@ import (
 func main() {
 	cfg := guest.Config()
 	if dbPath := cfg["db_file"]; dbPath != "" {
-		if _, err := pluginmeta.Ensure(dbPath, cfg["uuid"], cfg["kind"]); err != nil {
+		if _, err := pluginmeta.Verify(dbPath, cfg["uuid"], cfg["kind"]); err != nil {
 			fmt.Fprintf(os.Stderr, "gridwell-proc: %v\n", err)
 			os.Exit(1)
 		}

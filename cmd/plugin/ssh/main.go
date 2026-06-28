@@ -37,7 +37,7 @@ func main() {
 	// every plugin — it records its durable identity (and may later stash keys
 	// etc.) there. Verify id+kind against that DB before dialing out.
 	if dbPath := cfg["db_file"]; dbPath != "" {
-		if _, err := pluginmeta.Ensure(dbPath, cfg["uuid"], cfg["kind"]); err != nil {
+		if _, err := pluginmeta.Verify(dbPath, cfg["uuid"], cfg["kind"]); err != nil {
 			fmt.Fprintf(os.Stderr, "gridwell-ssh: %v\n", err)
 			os.Exit(1)
 		}

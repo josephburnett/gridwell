@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 )
 
 // Sentinel errors. Callers should use errors.Is to test for them.
@@ -30,6 +31,11 @@ var (
 	// ErrKindMismatch is returned when a DB already carries a different kind —
 	// the kind selects the schema, so opening a DB as the wrong kind is refused.
 	ErrKindMismatch = errors.New("pluginmeta: configured kind does not match the one stored in the plugin DB")
+	// ErrNotInitialized is returned by Verify when the DB is missing or carries
+	// no stored identity. Verify never creates identity — only `gridwell init`
+	// (Create) does — so an entry whose DB was never initialized fails loudly
+	// instead of silently materializing a fresh, empty store.
+	ErrNotInitialized = errors.New("pluginmeta: plugin DB is missing or uninitialized")
 )
 
 const (
@@ -51,25 +57,47 @@ type Meta struct {
 	Kind string
 }
 
-// Ensure records (id, kind) as the DB's permanent identity on first run and
-// strictly verifies it on every subsequent run. A gridwell marker is written
-// alongside so the file is recognizable as a Gridwell DB.
-//
-//   - id == "" && kind == ""  → read-only: return whatever is stored
-//   - nothing stored yet       → write marker + id + kind (first run)
-//   - stored matches           → ok
-//   - stored id differs        → ErrIDMismatch
-//   - stored kind differs       → ErrKindMismatch
-func Ensure(dbPath, id, kind string) (Meta, error) {
-	db, err := sql.Open("sqlite", dbPath)
+// Create records (id, kind) as the DB's permanent identity, creating the DB
+// file and the marker on first run. This is the ONLY place a plugin DB and its
+// identity are born — `gridwell init` calls it. It is idempotent for the same
+// id but refuses to overwrite a different stored id (a safety net; init always
+// mints a fresh id, so the path is empty).
+func Create(dbPath, id, kind string) error {
+	db, err := open(dbPath)
 	if err != nil {
-		return Meta{}, fmt.Errorf("pluginmeta open %s: %w", dbPath, err)
+		return err
 	}
 	defer db.Close()
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _gridwell_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
-		return Meta{}, fmt.Errorf("pluginmeta schema: %w", err)
+	stored, err := read(db)
+	if err != nil {
+		return err
 	}
+	if stored.ID != "" && stored.ID != id {
+		return fmt.Errorf("%w (stored %q, configured %q)", ErrIDMismatch, stored.ID, id)
+	}
+	return writeIdentity(db, id, kind)
+}
 
+// Verify strictly checks an existing DB's identity against (id, kind). It NEVER
+// creates a DB or first-run identity: a missing file or a DB with no stored id
+// is ErrNotInitialized (the entry's DB was never `gridwell init`-ed). This is
+// what makes a changed config id fail loudly — serve points at <home>/db/<id>,
+// which for a new id does not exist — instead of silently spawning a fresh store.
+//
+//   - id == "" && kind == ""  → read-only probe: return whatever is stored
+//   - file missing / no id     → ErrNotInitialized
+//   - stored id differs        → ErrIDMismatch
+//   - stored kind differs       → ErrKindMismatch
+//   - match (legacy kind/id keys upgraded in place) → ok
+func Verify(dbPath, id, kind string) (Meta, error) {
+	if _, err := os.Stat(dbPath); err != nil {
+		return Meta{}, fmt.Errorf("%w (%s)", ErrNotInitialized, dbPath)
+	}
+	db, err := open(dbPath)
+	if err != nil {
+		return Meta{}, err
+	}
+	defer db.Close()
 	stored, err := read(db)
 	if err != nil {
 		return Meta{}, err
@@ -79,36 +107,41 @@ func Ensure(dbPath, id, kind string) (Meta, error) {
 	if id == "" && kind == "" {
 		return stored, nil
 	}
-
-	// First run: record the full identity.
 	if stored.ID == "" {
-		for _, kv := range []struct{ k, v string }{
-			{keyMarker, markerValue},
-			{keyID, id},
-			{keyKind, kind},
-		} {
-			if _, err := db.Exec(
-				`INSERT INTO _gridwell_meta (k, v) VALUES (?, ?)
-				 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
-				kv.k, kv.v); err != nil {
-				return Meta{}, fmt.Errorf("pluginmeta write %s: %w", kv.k, err)
-			}
-		}
-		return Meta{ID: id, Kind: kind}, nil
+		return Meta{}, fmt.Errorf("%w (%s)", ErrNotInitialized, dbPath)
 	}
 
-	// Subsequent run: strict bidirectional verification. A legacy DB may carry
-	// an id (under the old uuid key) but no kind yet — an empty stored kind is
-	// "not recorded", so it is adopted rather than treated as a mismatch.
+	// A legacy DB may carry an id (under the old uuid key) but no kind yet — an
+	// empty stored kind is "not recorded", so it is adopted, not a mismatch.
 	if stored.ID != id {
 		return Meta{}, fmt.Errorf("%w (stored %q, configured %q)", ErrIDMismatch, stored.ID, id)
 	}
 	if stored.Kind != "" && stored.Kind != kind {
 		return Meta{}, fmt.Errorf("%w (stored %q, configured %q)", ErrKindMismatch, stored.Kind, kind)
 	}
-	// Upgrade a legacy DB in place: write the marker and the canonical id/kind
-	// keys (the id may have been readable only via the legacy uuid key, and the
-	// kind may not have been recorded at all).
+	// Upgrade a legacy DB in place (the id may have been readable only via the
+	// old uuid key, and the kind may not have been recorded at all).
+	if err := writeIdentity(db, id, kind); err != nil {
+		return Meta{}, err
+	}
+	return Meta{ID: id, Kind: kind}, nil
+}
+
+// open opens the DB and ensures the storage-only identity table exists.
+func open(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("pluginmeta open %s: %w", dbPath, err)
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _gridwell_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("pluginmeta schema: %w", err)
+	}
+	return db, nil
+}
+
+// writeIdentity upserts the marker + id + kind.
+func writeIdentity(db *sql.DB, id, kind string) error {
 	for _, kv := range []struct{ k, v string }{
 		{keyMarker, markerValue},
 		{keyID, id},
@@ -118,10 +151,10 @@ func Ensure(dbPath, id, kind string) (Meta, error) {
 			`INSERT INTO _gridwell_meta (k, v) VALUES (?, ?)
 			 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
 			kv.k, kv.v); err != nil {
-			return Meta{}, fmt.Errorf("pluginmeta upgrade %s: %w", kv.k, err)
+			return fmt.Errorf("pluginmeta write %s: %w", kv.k, err)
 		}
 	}
-	return Meta{ID: id, Kind: kind}, nil
+	return nil
 }
 
 // read returns the stored identity, falling back to the legacy uuid key when

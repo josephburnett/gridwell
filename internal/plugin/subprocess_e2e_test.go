@@ -37,6 +37,12 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 	bin := buildPluginBinary(t, "localdb")
 	dbPath := filepath.Join(t.TempDir(), "test.gwdb")
 
+	// The plugin verifies (never creates) its identity, so the DB must be
+	// initialized first — exactly what `gridwell init` does.
+	if err := pluginmeta.Create(dbPath, "sub-uuid-1", "localdb"); err != nil {
+		t.Fatalf("seed identity: %v", err)
+	}
+
 	client, closer, err := plugin.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "sub-uuid-1",
@@ -72,10 +78,10 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 		t.Errorf("content = %q, want %q", body.Data, "# over the wire")
 	}
 
-	// The plugin persisted its durable identity (id + kind) into its own DB.
-	stored, err := pluginmeta.Ensure(dbPath, "", "")
+	// The plugin's durable identity (id + kind) is intact in its own DB.
+	stored, err := pluginmeta.Verify(dbPath, "", "")
 	if err != nil {
-		t.Fatalf("pluginmeta.Ensure(read): %v", err)
+		t.Fatalf("pluginmeta.Verify(read): %v", err)
 	}
 	if stored.ID != "sub-uuid-1" || stored.Kind != "localdb" {
 		t.Errorf("persisted identity = %+v, want {sub-uuid-1 localdb}", stored)
@@ -94,7 +100,7 @@ func TestSubprocessPlugin_IDMismatchRejected(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.gwdb")
 
 	// Seed the DB's durable identity directly.
-	if _, err := pluginmeta.Ensure(dbPath, "id-A", "localdb"); err != nil {
+	if err := pluginmeta.Create(dbPath, "id-A", "localdb"); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
 

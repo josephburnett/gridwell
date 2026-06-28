@@ -69,7 +69,7 @@ func RunInit(args []string) int {
 		return 1
 	}
 	dbFile := config.DBFile(home, id)
-	if _, err := pluginmeta.Ensure(dbFile, id, *kind); err != nil {
+	if err := pluginmeta.Create(dbFile, id, *kind); err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
 		return 1
 	}

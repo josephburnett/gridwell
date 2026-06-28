@@ -37,7 +37,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 	if st, err := os.Stat(dbFile); err != nil || st.Size() == 0 {
 		t.Fatalf("db missing/empty at %s: %v", dbFile, err)
 	}
-	m, err := pluginmeta.Ensure(dbFile, "", "")
+	m, err := pluginmeta.Verify(dbFile, "", "")
 	if err != nil {
 		t.Fatalf("read meta: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestRunInitSSHCarriesConfig(t *testing.T) {
 	if p.Kind != "ssh" || p.Config["host"] != "example.com:22" || p.Config["user"] != "joe" {
 		t.Fatalf("ssh entry: %+v", p)
 	}
-	m, _ := pluginmeta.Ensure(config.DBFile(home, p.ID), "", "")
+	m, _ := pluginmeta.Verify(config.DBFile(home, p.ID), "", "")
 	if m.Kind != "ssh" {
 		t.Errorf("DB kind = %q, want ssh", m.Kind)
 	}

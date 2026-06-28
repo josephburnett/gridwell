@@ -108,12 +108,35 @@ func TestBuildServeConfigInjectsDBFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The DB must already exist (created by `gridwell init`); fake one.
+	want := config.DBFile(home, "abc")
+	if err := os.MkdirAll(config.DBDir(home, "abc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(want, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	cfg, err := buildServeConfig(home, path)
 	if err != nil {
 		t.Fatalf("buildServeConfig: %v", err)
 	}
-	want := config.DBFile(home, "abc")
 	if got := cfg.Plugins[0].Config["db_file"]; got != want {
 		t.Errorf("db_file = %q, want derived %q", got, want)
+	}
+}
+
+// TestBuildServeConfigMissingDB is the regression guard for the silent-new-DB
+// hole: a config entry whose DB does not exist (e.g. its id was changed) must
+// be a hard error, not a fresh empty store.
+func TestBuildServeConfigMissingDB(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "server.yaml")
+	yml := "plugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"localdb\"\n"
+	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildServeConfig(home, path); err == nil {
+		t.Fatal("a plugin whose DB does not exist must be rejected")
 	}
 }

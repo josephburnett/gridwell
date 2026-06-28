@@ -70,7 +70,14 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 		if pc.Config == nil {
 			pc.Config = map[string]string{}
 		}
-		pc.Config["db_file"] = config.DBFile(home, pc.ID)
+		dbFile := config.DBFile(home, pc.ID)
+		pc.Config["db_file"] = dbFile
+		// The DB must already exist: it is created once by `gridwell init`. serve
+		// never creates one — otherwise a changed id (whose derived path doesn't
+		// exist) would silently spawn a fresh, empty store instead of failing.
+		if _, err := os.Stat(dbFile); err != nil {
+			return nil, fmt.Errorf("plugin %q (%s): no database at %s; run `gridwell init` to create it", pc.Name, pc.ID, dbFile)
+		}
 	}
 	return cfg, nil
 }
@@ -154,15 +161,6 @@ func RunServe(args []string) int {
 		return 2
 	}
 	cfg.Bind, cfg.StaticDir = f.Bind, f.StaticDir
-
-	// Each plugin's DB lives at <home>/db/<id>/store.db; ensure the directory
-	// exists before the plugin opens (the plugin creates the file, not the dir).
-	for i := range cfg.Plugins {
-		if err := os.MkdirAll(config.DBDir(home, cfg.Plugins[i].ID), 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-			return 1
-		}
-	}
 
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
 	// each kind's binary (server.yaml may pin an explicit path instead).
