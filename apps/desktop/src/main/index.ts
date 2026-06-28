@@ -37,6 +37,16 @@ async function boot(): Promise<void> {
   registry = reg;
   registerWebviewIpc(reg, rootWC, win);
 
+  // Under the e2e harness only (GRIDWELL_E2E=1), expose the registry so a
+  // Playwright spec running in the main process can place a real live URL view
+  // and drive the native context-menu path. The canvas-only harness can't reach
+  // a WebContentsView (it's a separate webContents off the main page), so this
+  // is the seam that lets the right-click-menu fix be tested end to end. Inert
+  // in every normal launch — mirrors the renderer's ?e2e=1 hook gate.
+  if (process.env.GRIDWELL_E2E === '1') {
+    (globalThis as { __gwRegistry?: WebviewRegistry }).__gwRegistry = reg;
+  }
+
   // Mirror live views to other panes: capture each live view on a modest
   // cadence and push the frame to the renderer, which updates the tile's
   // preview cache (and thus every frozen pane showing it).
