@@ -719,6 +719,24 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
+	// A url swatch clicked without dragging (no movement past the threshold) is
+	// an EPHEMERAL visit: open the url modal and, on submit, descend into a live
+	// url tile created in the off-grid scratch grid — visit a page without
+	// placing a tile. A drag instead places a real url tile (commitTemplateDrop).
+	if d.isTemplate && !d.item.isPlugin && d.item.primitive == tplURL && !d.started {
+		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
+			paneID := fp.ID
+			a.menuOpen = false
+			a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(fp))),
+				func(url string) {
+					if vp := a.tree.FindPane(paneID); vp != nil {
+						a.visitEphemeralURL(vp, url)
+					}
+				}, nil)
+		}
+		return nil
+	}
+
 	// Snapshot every world-read the drop decision needs, ONCE, using the
 	// local d (a.dragging is already nil above). DecideDrop then picks the
 	// action and the switch executes side effects. onMouseMove builds the
@@ -1521,14 +1539,9 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	if p.TextFocus == "" {
 		return
 	}
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		// Parent grid not cached — give up gracefully.
-		a.exitFileFocusInstant(p)
-		return
-	}
-	file, ok := g.Tiles[p.TextFocus]
+	// descendedTile resolves an ephemeral url visit (focused off the pane's grid),
+	// so its ascent animates like any other rather than snapping instantly.
+	file, ok := a.descendedTile(p)
 	if !ok {
 		a.exitFileFocusInstant(p)
 		return
@@ -1967,6 +1980,58 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 		}
 		a.startFileDescent(fp, &tile, func() {
 			// afterDescend: open the URL stream so the pane goes live.
+			ffp := a.tree.FindPane(paneID)
+			if ffp == nil || ffp.TextFocus == "" {
+				return
+			}
+			a.openURLStream(ffp, tile.ID)
+		})
+	})
+}
+
+// scratchGridForPane returns the qualified scratch grid id of the plugin the
+// pane is currently in — where ephemeral url visits land — or "" if that plugin
+// has none (fs/proc don't support ephemeral visits).
+func (a *App) scratchGridForPane(p *pane.Pane) string {
+	want := uuidOf(a.gridIDForPane(p))
+	for _, pl := range a.plugins {
+		if pl.UUID == want {
+			return pl.ScratchGridID
+		}
+	}
+	return ""
+}
+
+// visitEphemeralURL creates an ephemeral url tile in the current plugin's
+// scratch grid (off any visible grid) and descends into it, going live —
+// "descend into a url" from the menu's url swatch (clicked, not dragged). The
+// tile lives only in the scratch grid (visited-url history that feeds
+// autocomplete; a resolvable deep-link), so ascent returns to where you were
+// and leaves nothing on the grid. Mirrors createURLAtCell's auto-go-live, but
+// descends WITHOUT re-anchoring — the pane keeps its grid and just focuses the
+// off-grid tile, which render / url stream / ascent resolve by id (descendedTile).
+func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
+	scratch := a.scratchGridForPane(p)
+	if scratch == "" {
+		return // plugin has no scratch grid — nothing to visit into
+	}
+	paneID := p.ID
+	req := &rpc.CreateURLRequest{
+		Path: rpc.Path{}, GridID: scratch, X: 0, Y: 0, W: 1, H: 1, URL: url,
+	}
+	a.postTileMutate("CreateURL", scratch, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateURL(ctx, req)
+	}, func(tile rpc.Tile) {
+		fp := a.tree.FindPane(paneID)
+		if fp == nil || fp.TextFocus != "" {
+			return // pane gone or already descended
+		}
+		// Descend WITHOUT re-anchoring: the pane stays on its current grid and
+		// just focuses the off-grid tile, which the renderer / url stream / ascent
+		// resolve by id (descendedTile). So one ordinary ascent lands right back
+		// here and the visit, living only in the scratch grid, leaves nothing
+		// behind — exactly "it's gone when you ascend".
+		a.startFileDescent(fp, &tile, func() {
 			ffp := a.tree.FindPane(paneID)
 			if ffp == nil || ffp.TextFocus == "" {
 				return

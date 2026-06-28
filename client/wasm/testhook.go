@@ -106,10 +106,11 @@ func (a *App) thLauncher(js.Value, []js.Value) any {
 			"index":      i,
 			"kind":       pl.Kind,
 			"label":      pl.Label,
-			"uuid":       pl.UUID,
-			"rootGridID": pl.RootGridID,
-			"x":          sx,
-			"y":          sy,
+			"uuid":          pl.UUID,
+			"rootGridID":    pl.RootGridID,
+			"scratchGridID": pl.ScratchGridID,
+			"x":             sx,
+			"y":             sy,
 		})
 	}
 	return out

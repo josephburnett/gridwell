@@ -340,7 +340,9 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// exactly so the user's "outside textarea = grid rules"
 		// mental model is consistent.
 		if p.TextFocus != "" {
-			if file, ok := g.Tiles[p.TextFocus]; ok {
+			// descendedTile (not g.Tiles[...]) so an ephemeral url visit — focused
+			// off the pane's grid, in the scratch grid — still renders.
+			if file, ok := a.descendedTile(p); ok {
 				switch file.Kind {
 				case rpc.KindText:
 					ix, iy, iw, ih := fileInnerBox(p, r)

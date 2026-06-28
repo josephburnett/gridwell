@@ -52,6 +52,7 @@ export interface LauncherTile {
   label: string;
   uuid: string;
   rootGridID: string;
+  scratchGridID: string;
   x: number;
   y: number;
 }
@@ -144,6 +145,18 @@ export class GridwellDriver {
     await m.move(target.x, target.y, { steps: 8 });
     await m.up();
     await this.waitIdle();
+  }
+
+  // clickPaletteSwatch opens the palette and single-clicks (no drag) the
+  // primitive swatch of the given kind. A click is distinct from dragCreate's
+  // drag: for the url swatch it opens the ephemeral-visit modal rather than
+  // placing a tile.
+  async clickPaletteSwatch(kind: string): Promise<void> {
+    await this.openPalette();
+    const pal = await this.palette();
+    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
+    if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
+    await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
   }
 
   // descendCell single-clicks the center of cell (cx, cy) in the focused pane to

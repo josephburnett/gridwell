@@ -49,16 +49,17 @@ func contentViewBounds(r pane.Rect) viewBounds {
 
 // urlTileForPane resolves the URL tile a pane is descended into.
 func (a *App) urlTileForPane(p *pane.Pane, tileID string) (rpc.Tile, bool) {
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		return rpc.Tile{}, false
+	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+		if t, ok := g.Tiles[tileID]; ok && t.Kind == rpc.KindURL {
+			return t, true
+		}
 	}
-	t, ok := g.Tiles[tileID]
-	if !ok || t.Kind != rpc.KindURL {
-		return rpc.Tile{}, false
+	// Off-grid (ephemeral) tile — focused in the scratch grid without
+	// re-anchoring the pane onto it: resolve by id from any cached grid.
+	if t := a.findTileByID(tileID); t != nil && t.Kind == rpc.KindURL {
+		return *t, true
 	}
-	return t, true
+	return rpc.Tile{}, false
 }
 
 // urlTileVersion returns the cached version of the URL tile at (path,
@@ -195,15 +196,12 @@ func (a *App) liveOverlaysHidden() bool {
 // tile. Drives the input handlers' branch between gridwell-native gestures
 // and (now-native) URL interaction.
 func (a *App) isURLDescent(p *pane.Pane) bool {
-	if p == nil || p.TextFocus == "" {
+	if p == nil {
 		return false
 	}
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		return false
-	}
-	t, ok := g.Tiles[p.TextFocus]
+	// descendedTile resolves an ephemeral url visit too (focused off the pane's
+	// grid, in the scratch grid), so live-url input handling works for it.
+	t, ok := a.descendedTile(p)
 	if !ok {
 		return false
 	}
