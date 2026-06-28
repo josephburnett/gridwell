@@ -26,6 +26,42 @@ seam has a test that crosses it.
 
 ---
 
+## Status (first execution pass)
+
+A first pass landed at least one verified, green commit in every phase. Each
+item below is committed with `make check` green (and `make check-e2e` where it
+touched the native/live path).
+
+- **Phase 0 — DONE.** `cow.go`→`clone.go`; stale `in-process`/`Attach`/COW-spine
+  comments fixed.
+- **Phase 1a — DONE.** `client/menu` single owner (replaced 14 scattered
+  `menuOpen` writes), headless unit tests, and a `menu-focus.spec.ts` e2e.
+- **Phase 1b — RESCOPED + DONE.** Verification downgraded the premises (5
+  *roles* not 5 copies; round trip provably works; ids monotonic so "orphaning"
+  is a bounded leak). Delivered the missing net — `framing-roundtrip.spec.ts`
+  (I7) — instead of an unwarranted structural merge. See the FINDING under 1b.
+- **Phase 1c — DONE (threshold) / N/A (controls).** `gesture-threshold.test.ts`
+  drift-lints the 3-copy threshold against the canvas owner. The controls rule
+  is already single-sourced (focus owned by the wasm, fed to `controlVisible`);
+  its caller-correctness is a Phase 3 focus e2e.
+- **Phase 2 — STARTED.** `webviews.ts` bounds/park/zoom math extracted to tested
+  `viewutil` pure fns. *Remaining: the `App` god-object map-sprawl and more
+  `client/wasm` orchestration extraction — large, deferred.*
+- **Phase 3 — STARTED.** Framing round-trip (I7), menu-focus (I10), and the
+  create→render seam (`render-seam.spec.ts` — the "it disappeared" class, via a
+  new `tileIds` render hook) are locked. *Remaining: SSE-mid-animation (I11),
+  markdown re-wrap (I8), native control-on-focus.*
+- **Phase 4 — STARTED.** `ListPlugins` Info handshake is now timeout-bounded with
+  a tested pure `buildPluginInfo`. *Remaining: localStorage in the session blob;
+  federation productionization.*
+
+**Largest deferred item, by design:** the `App` god-object extraction (Phase 2).
+It is the deepest, highest-risk change in the most fragile layer, and the charter
+says establish the test net first (now partly done) and don't rush the fragile
+layer. It deserves its own focused pass on the safety net these tests begin.
+
+---
+
 ## Phase 0 — Guardrails (this session; ~done)
 
 The documentation that should have existed. Low effort, prevents the next agent
