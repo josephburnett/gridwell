@@ -74,3 +74,48 @@ test('cloning a tile leaves both the original and the copy rendered', async ({ g
   expect(rendered, 'the original is still rendered after the clone').toContain(orig!.id);
   expect(rendered, 'the clone is rendered').toContain(copy!.id);
 });
+
+// Moving a tile must not lose it from the render (the owner's "I pick it up and
+// it disappears"): after a move it is still drawn, now at the destination cell.
+test('a moved tile stays rendered at its destination', async ({ gw }) => {
+  await gw.enterPlugin('localdb');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const grid = f.gridID;
+
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  const before = tileAt(await gw.getGrid(grid), 'well', cx, cy)!;
+
+  await gw.dragTileCell(cx, cy, cx + 1, cy);
+
+  // Server: same tile id, new cell (a move is in-place — the id never changes).
+  const moved = tileAt(await gw.getGrid(grid), 'well', cx + 1, cy);
+  expect(moved, 'tile is at the destination cell on the server').toBeTruthy();
+  expect(moved!.id, 'a move keeps the same tile id').toBe(before.id);
+
+  // Render: the tile is still drawn (it didn't vanish during the move).
+  expect((await gw.focused()).tileIds, 'the moved tile is still rendered').toContain(before.id);
+});
+
+// Deleting a tile must remove it from the render too — the delete reflects, it
+// doesn't leave a ghost the cache still draws.
+test('a deleted tile is removed from the render', async ({ gw }) => {
+  await gw.enterPlugin('localdb');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const grid = f.gridID;
+
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  const created = tileAt(await gw.getGrid(grid), 'well', cx, cy)!;
+  expect((await gw.focused()).tileIds, 'created tile is rendered').toContain(created.id);
+
+  await gw.deleteTileCell(cx, cy);
+
+  // Gone from the server AND from the render.
+  expect(tileAt(await gw.getGrid(grid), 'well', cx, cy), 'tile removed on the server').toBeFalsy();
+  expect((await gw.focused()).tileIds, 'the deleted tile is gone from the render').not.toContain(created.id);
+});
