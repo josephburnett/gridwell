@@ -28,6 +28,14 @@ func CoverScale(w, h, boxW, boxH float64) float64 {
 type PreviewFrame struct {
 	Scale            float64
 	ScrollX, ScrollY float64
+	// ContentW is the LOGICAL width the markdown must be laid out at for this
+	// frame. It is the same box Scale was derived against — the focused pane's
+	// inner width, the stored framing width, or the natural fallback — so the
+	// painter lays out at ContentW and merely SCALES by Scale. That makes a
+	// preview a true scaled copy of the live/ascent view (a cover-crop), never
+	// a re-wrap at the tile's own width: an unfocused pane shows exactly what
+	// the focused pane showed, only smaller.
+	ContentW float64
 }
 
 // PreviewScaleScroll picks how a markdown tile preview is scaled and scrolled
@@ -48,22 +56,25 @@ func PreviewScaleScroll(w, h float64,
 	if focused {
 		s := CoverScale(w, h, innerW, innerH)
 		if s == 0 {
-			s = fixedScale
+			// Degenerate inner box (a collapsed pane): fall back to a fixed
+			// scale and the natural layout width — there's no real box to copy.
+			return PreviewFrame{Scale: fixedScale, ScrollX: focusScrollX, ScrollY: focusScrollY, ContentW: naturalPx}
 		}
-		return PreviewFrame{Scale: s, ScrollX: focusScrollX, ScrollY: focusScrollY}
+		return PreviewFrame{Scale: s, ScrollX: focusScrollX, ScrollY: focusScrollY, ContentW: innerW}
 	}
 	if storedW > 0 && storedH > 0 {
 		return PreviewFrame{
-			Scale:   CoverScale(w, h, float64(storedW), float64(storedH)),
-			ScrollX: float64(storedX),
-			ScrollY: float64(storedY),
+			Scale:    CoverScale(w, h, float64(storedW), float64(storedH)),
+			ScrollX:  float64(storedX),
+			ScrollY:  float64(storedY),
+			ContentW: float64(storedW),
 		}
 	}
 	s := w / naturalPx
 	if s < minScale {
 		s = minScale
 	}
-	return PreviewFrame{Scale: s}
+	return PreviewFrame{Scale: s, ContentW: naturalPx}
 }
 
 // RawTextSlot holds the per-line placement for monospace raw-text rendering,

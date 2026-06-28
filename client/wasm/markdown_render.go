@@ -21,6 +21,21 @@ import (
 // All layout lives in client/markdown; this file only paints + scales the ops
 // and dispatches embeds.
 
+// fileContentWidth is the logical width rendered markdown wraps at for pane p:
+// the pane's inner reading-box width. Using the pane's own width (not a fixed
+// 800px constant) is what reflows the doc to the pane — a split pane is narrower
+// than 800px, so the old fixed width laid the doc out at 800 and the pane clip
+// chopped the right edge ("cut off"). The painter, both caret hit-tests, and
+// caret movement all read this one width so they stay in agreement; the preview
+// lays out at the framing width it cover-crops (PreviewFrame.ContentW), which
+// for a focused tile is this same value — so an unfocused pane is a true scaled
+// copy of the focused one, not a re-wrap. (Scale is fixed at 1.0 in a descended
+// file pane, so screen px and logical px coincide here.)
+func (a *App) fileContentWidth(p *pane.Pane) float64 {
+	_, _, w, _ := fileInnerBox(p, paneRectFor(a, p))
+	return w
+}
+
 // drawMarkdownInPane renders a markdown file as the contents of the pane
 // currently descended into it, using that pane's live TextMode/TextScroll so
 // split panes scroll independently. In text mode the focused pane is skipped
@@ -46,10 +61,10 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 		if body, ok := a.tileBody(n); ok {
 			a.drawMarkdownInRect(string(body),
 				originX, originY,
-				fileNaturalContentPx*scale, h+p.TextScrollY*scale,
+				a.fileContentWidth(p), h+p.TextScrollY*scale,
 				scale, mode, a.makeEmbedDrawer(p.ID))
 			// The editing caret rides on the focused, rendered pane only — same
-			// origin/scale the markdown was painted with.
+			// origin/scale (and width) the markdown was painted with.
 			if mode == rpc.TextModeRendered && p.ID == a.tree.Focus {
 				a.drawMarkdownCaret(p, string(body), originX, originY, scale)
 			}
@@ -100,9 +115,14 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	hideForTextarea := fp != nil && fp.TextMode == rpc.TextModeText && fp.ID == a.tree.Focus
 	if !hideForTextarea {
 		if body, ok := a.tileBody(n); ok {
+			// Lay out at the framing width the cover-crop was computed against
+			// (frame.ContentW = the focused pane's inner width / the stored
+			// window / the natural fallback) and merely SCALE by frame.Scale, so
+			// the preview is a true scaled copy of what the focused pane shows —
+			// reflowed identically, never re-wrapped to this tile's own width.
 			a.drawMarkdownInRect(string(body),
 				x-scrollX*scale, y-scrollY*scale,
-				fileNaturalContentPx*scale, h+scrollY*scale,
+				frame.ContentW*scale, h+scrollY*scale,
 				scale, mode, a.makePreviewEmbedDrawer(uuidOf(n.GridID)))
 		}
 	} else {
@@ -336,7 +356,7 @@ func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy flo
 	}
 	st := defaultMarkdownStyle()
 	measure := a.markdownMeasure(st, fileFixedScale)
-	res := a.layoutMarkdown(string(body), fileNaturalContentPx, measure, markdownLayoutStyle(st))
+	res := a.layoutMarkdown(string(body), a.fileContentWidth(p), measure, markdownLayoutStyle(st))
 	originX, originY, scale := a.markdownOrigin(p, r)
 	return markdown.CaretFromPoint(res.Ops, string(body), (sx-originX)/scale, (sy-originY)/scale, measure)
 }
@@ -399,9 +419,9 @@ func (a *App) editRenderedKey(ev js.Value) {
 	case "ArrowRight":
 		newCaret = textedit.MoveRight(src, caret)
 	case "ArrowUp":
-		newCaret = a.caretVertical(src, caret, false)
+		newCaret = a.caretVertical(p, src, caret, false)
 	case "ArrowDown":
-		newCaret = a.caretVertical(src, caret, true)
+		newCaret = a.caretVertical(p, src, caret, true)
 	case "Home", "End", "Escape", "PageUp", "PageDown":
 		return // not ours
 	default:
@@ -432,11 +452,11 @@ func (a *App) editRenderedKey(ev js.Value) {
 // coordinates: map the offset to a point, shift y by a line height into the
 // adjacent line, and map back. Returns off unchanged when there's no adjacent
 // line. No screen transform needed — the layout coords suffice.
-func (a *App) caretVertical(src string, off int, down bool) int {
+func (a *App) caretVertical(p *pane.Pane, src string, off int, down bool) int {
 	st := defaultMarkdownStyle()
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, fileFixedScale)
-	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, lstyle)
+	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
 	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle.LineSpacing, measure)
 	if !ok {
 		return off
@@ -523,7 +543,7 @@ func (a *App) drawMarkdownCaret(p *pane.Pane, src string, originX, originY, scal
 	st := defaultMarkdownStyle()
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, scale)
-	res := a.layoutMarkdown(src, fileNaturalContentPx, measure, lstyle)
+	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
 	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle.LineSpacing, measure)
 	if !ok {
 		return

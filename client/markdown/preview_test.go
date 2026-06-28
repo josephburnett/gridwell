@@ -30,35 +30,38 @@ func TestCoverScale(t *testing.T) {
 func TestPreviewScaleScroll(t *testing.T) {
 	const natural, fixed, minS = 400.0, 1.0, 0.02
 
-	// Focused: cover-crop the inner box, scroll from the live pane.
+	// Focused: cover-crop the inner box, scroll from the live pane. ContentW is
+	// the inner width — the preview lays out at the SAME width the live pane did,
+	// so it's a scaled copy, not a re-wrap.
 	f := PreviewScaleScroll(200, 100, true, 100, 100, 7, 9, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, 2) || f.ScrollX != 7 || f.ScrollY != 9 {
-		t.Errorf("focused = %+v, want scale 2 scroll (7,9)", f)
+	if !almost(f.Scale, 2) || f.ScrollX != 7 || f.ScrollY != 9 || !almost(f.ContentW, 100) {
+		t.Errorf("focused = %+v, want scale 2 scroll (7,9) contentW 100", f)
 	}
-	// Focused but degenerate inner box -> fixed scale, scroll still honored.
+	// Focused but degenerate inner box -> fixed scale, natural width, scroll honored.
 	f = PreviewScaleScroll(200, 100, true, 0, 0, 7, 9, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, fixed) || f.ScrollX != 7 || f.ScrollY != 9 {
-		t.Errorf("focused degenerate = %+v, want scale %v scroll (7,9)", f, fixed)
+	if !almost(f.Scale, fixed) || f.ScrollX != 7 || f.ScrollY != 9 || !almost(f.ContentW, natural) {
+		t.Errorf("focused degenerate = %+v, want scale %v scroll (7,9) contentW %v", f, fixed, natural)
 	}
-	// Stored framing (not focused): cover-crop the saved window + saved scroll.
+	// Stored framing (not focused): cover-crop the saved window; ContentW is the
+	// saved width, so the preview reflows exactly as it did at ascent.
 	f = PreviewScaleScroll(200, 100, false, 0, 0, 0, 0, 100, 50, 3, 4, natural, fixed, minS)
-	if !almost(f.Scale, 2) || f.ScrollX != 3 || f.ScrollY != 4 {
-		t.Errorf("stored = %+v, want scale 2 scroll (3,4)", f)
+	if !almost(f.Scale, 2) || f.ScrollX != 3 || f.ScrollY != 4 || !almost(f.ContentW, 100) {
+		t.Errorf("stored = %+v, want scale 2 scroll (3,4) contentW 100", f)
 	}
 	// Stored takes the larger of the two ratios (cover).
 	f = PreviewScaleScroll(100, 300, false, 0, 0, 0, 0, 100, 100, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, 3) {
-		t.Errorf("stored cover = %+v, want scale 3", f)
+	if !almost(f.Scale, 3) || !almost(f.ContentW, 100) {
+		t.Errorf("stored cover = %+v, want scale 3 contentW 100", f)
 	}
-	// Neither: natural-width fit.
+	// Neither: natural-width fit, laid out at the natural width.
 	f = PreviewScaleScroll(200, 100, false, 0, 0, 0, 0, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, 0.5) || f.ScrollX != 0 || f.ScrollY != 0 {
-		t.Errorf("natural = %+v, want scale 0.5 scroll (0,0)", f)
+	if !almost(f.Scale, 0.5) || f.ScrollX != 0 || f.ScrollY != 0 || !almost(f.ContentW, natural) {
+		t.Errorf("natural = %+v, want scale 0.5 scroll (0,0) contentW %v", f, natural)
 	}
 	// Neither, huge document: clamped to minScale (shows its "shape").
 	f = PreviewScaleScroll(4, 100, false, 0, 0, 0, 0, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, minS) {
-		t.Errorf("clamped = %+v, want scale %v", f, minS)
+	if !almost(f.Scale, minS) || !almost(f.ContentW, natural) {
+		t.Errorf("clamped = %+v, want scale %v contentW %v", f, minS, natural)
 	}
 }
 

@@ -35,9 +35,11 @@ const (
 	// last-framed window into the tile footprint.
 	fileFixedScale = 1.0
 
-	// fileNaturalContentPx is the logical width of the rendered markdown
-	// canvas at fileFixedScale. Lines wrap at this width in both the
-	// descended window and the preview so they match.
+	// fileNaturalContentPx is the FALLBACK logical wrap width for a markdown
+	// preview that has no framing yet (a tile never descended into / ascended
+	// from). A live or previously-framed doc instead wraps at its own width —
+	// the pane's inner box (fileContentWidth) or the stored framing width — so
+	// it reflows to the pane and the preview stays a scaled copy of it.
 	fileNaturalContentPx = 800.0
 )
 
