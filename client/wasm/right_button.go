@@ -699,8 +699,10 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 			}
 		}
 	}
-	a.closeURLStream(p.ID)
-	a.closeShellStream(p.ID)
+	// The pane is vanishing: freeze + close its live sessions and drop all its
+	// per-pane state atomically (forgetPane closes the streams), so nothing is
+	// left orphaned behind a now-dead pane id.
+	a.forgetPane(p.ID)
 }
 
 // leftResizeState carries the in-flight left-button pane-boundary resize.

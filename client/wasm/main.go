@@ -325,6 +325,18 @@ func (a *App) localIf(paneID string) (*paneLocal, bool) {
 	return pl, ok
 }
 
+// forgetPane tears down and removes all per-pane state for a pane that is going
+// away (a collapsed / closed pane): it freezes and closes any live URL or shell
+// session, then deletes the pane's entry from a.locals so no per-pane state
+// outlives its pane. The single, atomic cleanup point on pane drop — before this
+// the per-pane maps leaked their entries (a bounded leak, since pane ids are
+// never reused, but now the lifecycle is explicit and complete).
+func (a *App) forgetPane(paneID string) {
+	a.closeURLStream(paneID)
+	a.closeShellStream(paneID)
+	delete(a.locals, paneID)
+}
+
 // selectedFor returns the selected tile id in paneID, or "" if nothing is
 // selected (or the pane has no state yet) — a read that never materializes state.
 func (a *App) selectedFor(paneID string) string {
