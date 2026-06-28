@@ -189,7 +189,7 @@ func (a *App) syncURLViews() {
 // previews on the canvas — or drags a boundary across an overlay — must hide
 // them first, else the overlay eats the move/up events and the gesture stalls.
 func (a *App) liveOverlaysHidden() bool {
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menuOpen
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen()
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL

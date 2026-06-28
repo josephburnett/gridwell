@@ -70,7 +70,7 @@ func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
 	switch {
 	case hot:
 		bg = colorPlusBgDelete
-	case a.menuOpen && a.menuPaneID == p.ID:
+	case a.menu.OpenOn(p.ID):
 		bg = colorPlusBgHi
 	}
 	a.cctx.Set("fillStyle", bg)
@@ -124,7 +124,7 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
 	for i, item := range a.paletteItems(p) {
 		tx, ty, tw, th := a.paletteTileRect(p, r, i)
-		hovered := a.menuHover == i
+		hovered := a.menu.Hover() == i
 		a.drawPaletteItem(item, tx, ty, tw, th, hovered)
 	}
 }

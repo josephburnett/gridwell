@@ -273,7 +273,7 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 	if !ok {
 		return
 	}
-	a.menuOpen = false
+	a.menu.Close()
 	a.ascendPane(p)
 }
 

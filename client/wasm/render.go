@@ -250,8 +250,8 @@ func (a *App) draw() {
 
 	// The creation palette floats above every pane: draw it last, after all
 	// panes, so it isn't painted over by a neighbour it overflows into.
-	if a.menuOpen {
-		if mp := a.tree.FindPane(a.menuPaneID); mp != nil {
+	if a.menu.IsOpen() {
+		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
 			if mr, ok := rects[mp.ID]; ok {
 				a.drawPalette(mp, mr)
 			}

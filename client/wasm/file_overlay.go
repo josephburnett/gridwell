@@ -240,7 +240,7 @@ func (a *App) ensureFileTextarea() {
 				return nil
 			}
 			if p := a.tree.FocusedPane(); p != nil {
-				a.menuOpen = false
+				a.menu.Close()
 				a.ascendPane(p)
 			}
 			return nil

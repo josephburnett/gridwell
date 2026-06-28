@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -71,10 +72,11 @@ type App struct {
 	// Per-pane selection: paneID → node id ("" means nothing selected).
 	selectedTileID map[string]string
 
-	// Plus-button popover state.
-	menuOpen   bool
-	menuPaneID string
-	menuHover  int // index of hovered menu item, or -1
+	// Plus-button (+) creation-menu state. menu is the single owner: open/closed,
+	// which pane, hovered item. Never assign menu fields directly — go through
+	// its methods (see client/menu). Persistence across a portal descent rides in
+	// pane.Frame.MenuOpen.
+	menu menu.State
 
 	// launcherHover is the index of the launcher plugin tile under the cursor
 	// (the focused launcher pane), or -1. Drives the hover outline on the
@@ -448,7 +450,7 @@ func main() {
 		cl:                rpc.NewDefaultClient(origin),
 		c:                 cache.New(),
 		selectedTileID:    map[string]string{},
-		menuHover:         -1,
+		menu:              menu.New(),
 		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},

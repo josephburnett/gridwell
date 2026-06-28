@@ -204,7 +204,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// the textarea stranded. An open + menu belongs to the pane that
 		// was focused; close it so it doesn't outlive its (now hidden) +
 		// button on the de-focused pane.
-		a.menuOpen = false
+		a.menu.SyncFocus(p.ID)
 		a.refreshFileOverlay()
 		a.draw()
 	}
@@ -220,7 +220,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// gestures (the other is right-click on the corner circle).
 		// preventDefault suppresses the browser's middle-click autoscroll.
 		args[0].Call("preventDefault")
-		a.menuOpen = false
+		a.menu.Close()
 		a.ascendPane(p)
 		return nil
 	}
@@ -233,8 +233,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// would otherwise pan/grab). Resolve against the MENU pane, not the
 	// pane under the cursor, so grabbing a swatch from the overflow region
 	// starts a template drag instead of scrolling the pane beneath.
-	if a.menuOpen {
-		if mp := a.tree.FindPane(a.menuPaneID); mp != nil {
+	if a.menu.IsOpen() {
+		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
 			mr := paneRectFor(a, mp)
 			if a.pointInPalette(mp, mr, sx, sy) {
 				if idx := a.paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
@@ -393,13 +393,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// already focused before this click; a click that merely focuses the
 	// pane falls through to normal grid interaction (pan / palette).
 	if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
-		if a.menuOpen && a.menuPaneID == p.ID {
-			a.menuOpen = false
-		} else {
-			a.menuOpen = true
-			a.menuPaneID = p.ID
-			a.menuHover = -1
-		}
+		a.menu.Toggle(p.ID)
 		a.draw()
 		return nil
 	}
@@ -407,7 +401,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// landed on a tile, or swallowing the click (keeps the popover
 	// open) if it landed in the gutter. Click outside the popover
 	// dismisses it and falls through to normal interaction.
-	if a.menuOpen && a.menuPaneID == p.ID {
+	if a.menu.OpenOn(p.ID) {
 		if a.pointInPalette(p, r, sx, sy) {
 			idx := a.paletteTileIndexAt(p, r, sx, sy)
 			if idx >= 0 {
@@ -416,7 +410,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			}
 			return nil
 		}
-		a.menuOpen = false
+		a.menu.Close()
 		a.draw()
 		// fall through so the click also pans / selects
 	}
@@ -536,14 +530,13 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		return nil
 	}
 	// Track palette hover regardless of drag state.
-	if a.menuOpen {
+	if a.menu.IsOpen() {
 		p, r, ok := a.paneAtScreen(sx, sy)
 		hover := -1
-		if ok && p.ID == a.menuPaneID {
+		if ok && a.menu.OpenOn(p.ID) {
 			hover = a.paletteTileIndexAt(p, r, sx, sy)
 		}
-		if hover != a.menuHover {
-			a.menuHover = hover
+		if a.menu.SetHover(hover) {
 			a.draw()
 		}
 	}
@@ -726,7 +719,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	if d.isTemplate && !d.item.isPlugin && d.item.primitive == tplURL && !d.started {
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
 			paneID := fp.ID
-			a.menuOpen = false
+			a.menu.Close()
 			a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(fp))),
 				func(url string) {
 					if vp := a.tree.FindPane(paneID); vp != nil {
@@ -1069,8 +1062,8 @@ func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo, cell palette.Rect) {
 	}
 	// Remember whether the menu was open on this pane, then close it; the
 	// ascent reopens it so you come back exactly as you left.
-	wasMenu := a.menuOpen && a.menuPaneID == p.ID
-	a.menuOpen = false
+	wasMenu := a.menu.OpenOn(p.ID)
+	a.menu.Close()
 	p.PushFrame(wasMenu)
 
 	r := paneRectFor(a, p)
@@ -1106,9 +1099,7 @@ func (a *App) ascendPortal(p *pane.Pane) {
 		return
 	}
 	if f.MenuOpen {
-		a.menuOpen = true
-		a.menuPaneID = p.ID
-		a.menuHover = -1
+		a.menu.Open(p.ID)
 	}
 	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
@@ -1176,9 +1167,7 @@ func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, idx int) {
 			if !menuOpen {
 				return
 			}
-			a.menuOpen = true
-			a.menuPaneID = p.ID
-			a.menuHover = -1
+			a.menu.Open(p.ID)
 			a.draw()
 		},
 	})
@@ -1876,7 +1865,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		}
 		a.startSnap(targetX, targetY, snapMs)
 		a.mountPluginAtCell(destPane, d.item.plugin, dropX, dropY)
-		a.menuOpen = false
+		a.menu.Close()
 		return
 	}
 
@@ -1893,7 +1882,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 			candidates,
 			func(url string) {
 				a.createURLAtCell(dp, url, dx, dy)
-				a.menuOpen = false
+				a.menu.Close()
 				a.draw()
 			},
 			func() {
@@ -1920,7 +1909,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	case tplShell:
 		a.createShellAtCell(destPane, dropX, dropY)
 	}
-	a.menuOpen = false
+	a.menu.Close()
 }
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.

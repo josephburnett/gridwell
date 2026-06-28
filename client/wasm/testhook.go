@@ -165,7 +165,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		entries = append(entries, e)
 	}
 	return map[string]any{
-		"open":  a.menuOpen && a.menuPaneID == p.ID,
+		"open":  a.menu.OpenOn(p.ID),
 		"plusX": px,
 		"plusY": py,
 		"items": entries,
