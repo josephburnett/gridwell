@@ -399,4 +399,10 @@ func TestMountRPC(t *testing.T) {
 	if !strings.HasPrefix(tile.ChildGridID, procPluginUUID+"/") {
 		t.Errorf("child_grid_id = %q, want %q prefix", tile.ChildGridID, procPluginUUID)
 	}
+	// A mount is a LINK: the server must stamp reference=true on the way back
+	// through the wire, so the client renders it dashed (and a delete unlinks
+	// only). This is the bit render reads instead of guessing from uuids.
+	if !tile.Reference {
+		t.Error("mounted well must arrive as a reference (dashed link), got reference=false")
+	}
 }

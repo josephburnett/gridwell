@@ -36,6 +36,10 @@ func TestProtoMatchesDDL(t *testing.T) {
 			table:       "tiles",
 			message:     (&pb.Tile{}).ProtoReflect().Descriptor(),
 			storageOnly: []string{"created_at", "updated_at"},
+			// reference is derived by the server (qualifyTiles) from a tile's
+			// child_grid_id shape, never persisted — wire-only, so it has no
+			// DDL column by design.
+			protoOnly: []string{"reference"},
 		},
 	}
 	for _, c := range cases {

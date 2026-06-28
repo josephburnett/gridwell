@@ -731,13 +731,19 @@ func tileOutside(n *rpc.Tile, parentInSource bool) bool {
 	return false
 }
 
-// isLinkTile reports whether n is a reference to content that lives outside
-// the current grid's plugin — an exit well whose child grid is in another
-// plugin (a host directory, the process table). In a REGULAR grid these render
-// with a dashed border, and dropping one on /dev/null only unlinks it (drops
-// the tile row); the well itself inside its own grid deletes for real.
+// isLinkTile reports whether n is a LINK, not owned content: a reference whose
+// child grid is in another plugin's id space (a host directory, the process
+// table, a mounted plugin — including the localdb mounted into its own grid).
+// These render with a dashed border, and dropping one on /dev/null only unlinks
+// it (drops the tile row); an owned interior well deletes for real.
+//
+// Reference is the authoritative signal the server stamps (qualifyTiles) from
+// the child_grid_id shape — the same fact the store's delete/clone key on, so
+// render can't disagree with them. isExitWell still covers the synthetic
+// empty-GridID launcher tile (built client-side before any server round-trip),
+// which also sets Reference, so either alone would do; both keeps it robust.
 func isLinkTile(n *rpc.Tile) bool {
-	return isExitWell(n)
+	return n.Reference || isExitWell(n)
 }
 
 // tileBorderDash is the dash pattern for link-tile borders: short on/off so

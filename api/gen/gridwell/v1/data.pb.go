@@ -249,7 +249,17 @@ type Tile struct {
 	// alt_text is the canonical display label, rendered verbatim by the
 	// client. Stamped at insert time (for plugin-owned tiles, the entry name;
 	// for an exit well, the mounted plugin's label).
-	AltText       string `protobuf:"bytes,25,opt,name=alt_text,json=altText,proto3" json:"alt_text,omitempty"`
+	AltText string `protobuf:"bytes,25,opt,name=alt_text,json=altText,proto3" json:"alt_text,omitempty"`
+	// reference reports that this well is a LINK, not owned content: its
+	// child_grid_id is a qualified cross-plugin reference (a mounted plugin,
+	// a file/process well, a cross-plugin clone) rather than a bare local
+	// child grid. It is the single authoritative "is a link" signal — the
+	// client renders a dashed border from it, and delete/clone already treat
+	// a qualified child_grid_id as unlink-only / share (never cascade). Set
+	// by the server in qualifyTiles (a child that arrived already qualified),
+	// so render and the store can never disagree on what a link is. Wire-only,
+	// derived — never a stored column.
+	Reference     bool `protobuf:"varint,26,opt,name=reference,proto3" json:"reference,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -436,6 +446,13 @@ func (x *Tile) GetAltText() string {
 		return x.AltText
 	}
 	return ""
+}
+
+func (x *Tile) GetReference() bool {
+	if x != nil {
+		return x.Reference
+	}
+	return false
 }
 
 // NetworkContext declares how url tiles in this plugin reach the network.
@@ -2808,7 +2825,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
 	"\vsource_kind\x18\x04 \x01(\tR\n" +
 	"sourceKind\x12\x1b\n" +
-	"\tsource_id\x18\x05 \x01(\tR\bsourceId\"\x95\x04\n" +
+	"\tsource_id\x18\x05 \x01(\tR\bsourceId\"\xb3\x04\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -2833,7 +2850,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"url_string\x18\x14 \x01(\tR\turlString\x12&\n" +
 	"\x0fpreview_blob_id\x18\x15 \x01(\x03R\rpreviewBlobId\x12\x19\n" +
-	"\balt_text\x18\x19 \x01(\tR\aaltText\"e\n" +
+	"\balt_text\x18\x19 \x01(\tR\aaltText\x12\x1c\n" +
+	"\treference\x18\x1a \x01(\bR\treference\"e\n" +
 	"\x0eNetworkContext\x12\x18\n" +
 	"\x06direct\x18\x01 \x01(\bH\x00R\x06direct\x122\n" +
 	"\x05proxy\x18\x02 \x01(\v2\x1a.gridwell.v1.ProxyEndpointH\x00R\x05proxyB\x05\n" +

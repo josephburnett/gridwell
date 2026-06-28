@@ -84,6 +84,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		UrlString:     t.URLString,
 		PreviewBlobId: t.PreviewBlobID,
 		AltText:       t.AltText,
+		Reference:     t.Reference,
 	}
 }
 
@@ -115,6 +116,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		URLString:     t.UrlString,
 		PreviewBlobID: t.PreviewBlobId,
 		AltText:       t.AltText,
+		Reference:     t.Reference,
 	}
 }
 

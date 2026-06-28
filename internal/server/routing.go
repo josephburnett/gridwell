@@ -34,6 +34,16 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 // plugin so they are globally qualified with the plugin's UUID. ChildGridId
 // is only qualified if it is not already a qualified cross-plugin reference
 // (i.e. it does not already contain a "/").
+//
+// A child that arrived ALREADY qualified is a cross-plugin reference — the
+// well is a LINK, not owned content (a mounted plugin, a file/process well, a
+// cross-plugin clone). That same "already qualified" fact is what the store's
+// delete/clone key on (a qualified child never cascades / is shared, never
+// duplicated), so surfacing it here as Tile.reference is the one authoritative
+// "is a link" signal both render and store read — they can't disagree. Note a
+// same-plugin mount (the localdb mounted into its own grid) is still a
+// reference even though its child uuid matches the grid uuid, which a bare
+// uuid comparison (IsExitWell) would miss; "arrived qualified" catches it.
 func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {
@@ -41,7 +51,9 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 		qt.Id = qualifyID(uuid, t.Id)
 		qt.GridId = qualifyID(uuid, t.GridId)
 		if t.ChildGridId != "" {
-			if _, _, already := splitPluginID(t.ChildGridId); !already {
+			if _, _, already := splitPluginID(t.ChildGridId); already {
+				qt.Reference = true
+			} else {
 				qt.ChildGridId = qualifyID(uuid, t.ChildGridId)
 			}
 		}

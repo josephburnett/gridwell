@@ -85,6 +85,10 @@ func PluginWellTile(pl PluginInfo) Tile {
 		H:           1,
 		AltText:     pl.Label,
 		ChildGridID: pl.RootGridID,
+		// A launcher/menu swatch is a link by nature — its child grid is the
+		// plugin's own root, never this (synthetic) tile's grid. Mark it so it
+		// renders dashed identically to a mounted plugin well.
+		Reference: true,
 	}
 }
 
@@ -174,6 +178,14 @@ type Tile struct {
 	// content (stripped of markdown markers). Other kinds and tiles
 	// with no derived alt fall back to a default at drop time.
 	AltText string `json:"alt_text,omitempty"`
+	// Reference reports that this well is a LINK, not owned content — its
+	// child grid lives in another plugin's id space (a qualified
+	// child_grid_id: a mounted plugin, file/process well, or cross-plugin
+	// clone). The single authoritative "is a link" signal: the client draws
+	// a dashed border from it, and delete/clone already treat a qualified
+	// child_grid_id as unlink-only / share (never cascade). Set by the server
+	// in qualifyTiles; wire-only, derived, never a stored column.
+	Reference bool `json:"reference,omitempty"`
 }
 
 // Reads.

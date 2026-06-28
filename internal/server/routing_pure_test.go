@@ -39,6 +39,36 @@ func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
 	}
 }
 
+// TestQualifyTilesReference: the authoritative link signal. A child that
+// arrived ALREADY qualified is a reference (a mount / exit well / cross-plugin
+// clone) — Reference must be set; render draws it dashed. A bare interior child
+// is owned content — Reference stays false (solid). This is the exact bug the
+// fix closes: a same-plugin mount (child uuid == grid uuid) is still a
+// reference, which a bare uuid comparison would call owned and render solid.
+func TestQualifyTilesReference(t *testing.T) {
+	// Cross-plugin reference: child uuid differs from the well's own.
+	cross := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidB/9"}})
+	if !cross[0].Reference {
+		t.Error("cross-plugin exit well should be a reference")
+	}
+	// Same-plugin mount: child arrived qualified with the SAME uuid as the
+	// well's grid. Still a reference (the reported bug — it used to render solid).
+	same := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidA/9"}})
+	if !same[0].Reference {
+		t.Error("same-plugin mount (qualified child) should be a reference, not owned")
+	}
+	// Interior well: bare numeric child, owned — not a reference.
+	interior := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "7"}})
+	if interior[0].Reference {
+		t.Error("interior well (bare child) must not be a reference")
+	}
+	// A childless tile is never a reference.
+	leaf := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1"}})
+	if leaf[0].Reference {
+		t.Error("a tile with no child grid must not be a reference")
+	}
+}
+
 // TestQualifyTilesEmptyChildStaysEmpty: an interior tile with no child grid
 // keeps an empty child_grid_id (not "uuidA/").
 func TestQualifyTilesEmptyChildStaysEmpty(t *testing.T) {

@@ -50,7 +50,7 @@ func (a *App) makeEmbedDrawer(paneID string) embedDrawer {
 		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
-		a.drawEmbedAt(x, y, w, h, tile, alt, a.embedDashed(paneID, tile))
+		a.drawEmbedAt(x, y, w, h, tile, alt, embedIsLink(tile))
 		a.embedHits = append(a.embedHits, embedHit{
 			paneID: paneID,
 			x:      x,
@@ -80,26 +80,18 @@ func (a *App) makePreviewEmbedDrawer(anchorUUID string) embedDrawer {
 		if tileID != "" {
 			tile = a.findTileByID(tileID)
 		}
-		a.drawEmbedAt(x, y, w, h, tile, alt, tile != nil && isLinkTile(tile))
+		a.drawEmbedAt(x, y, w, h, tile, alt, embedIsLink(tile))
 	}
 }
 
-// embedDashed reports whether an embed should render with a dashed border: a
-// cross-plugin embedding — the embedded tile lives in a different plugin than
-// the doc that embeds it — or a tile that is itself a cross-plugin link. The
-// dash is the "this is a reference you can unlink" hint.
-func (a *App) embedDashed(paneID string, tile *rpc.Tile) bool {
-	if tile == nil {
-		return false
-	}
-	if isLinkTile(tile) {
-		return true
-	}
-	p := a.tree.FindPane(paneID)
-	if p == nil {
-		return false
-	}
-	return uuidOf(tile.GridID) != uuidOf(a.gridIDForPane(p))
+// embedIsLink reports whether an embed should render with a dashed (link)
+// border. EVERY tile embedded in a markdown doc is a link, no exceptions:
+// deleting an embed from the text only unlinks it (removes the markdown), it
+// never deletes the underlying tile — so solid (delete-is-real) would lie. The
+// only non-link case is a broken/missing target (nil), which paints the
+// distinct "missing" placeholder rather than a link.
+func embedIsLink(tile *rpc.Tile) bool {
+	return tile != nil
 }
 
 // drawEmbedAt paints one embed into the canvas at the given screen rect.

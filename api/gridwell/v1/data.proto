@@ -82,6 +82,17 @@ message Tile {
   // client. Stamped at insert time (for plugin-owned tiles, the entry name;
   // for an exit well, the mounted plugin's label).
   string alt_text = 25;
+
+  // reference reports that this well is a LINK, not owned content: its
+  // child_grid_id is a qualified cross-plugin reference (a mounted plugin,
+  // a file/process well, a cross-plugin clone) rather than a bare local
+  // child grid. It is the single authoritative "is a link" signal — the
+  // client renders a dashed border from it, and delete/clone already treat
+  // a qualified child_grid_id as unlink-only / share (never cascade). Set
+  // by the server in qualifyTiles (a child that arrived already qualified),
+  // so render and the store can never disagree on what a link is. Wire-only,
+  // derived — never a stored column.
+  bool reference = 26;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
