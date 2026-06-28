@@ -158,6 +158,18 @@ export class WebviewRegistry {
     return [...this.entries.keys()];
   }
 
+  // controlStateFor is a test-only read of a pane's corner-control state: the
+  // focused/hidden flags the renderer fed in, and whether the control is
+  // therefore on screen (controlVisible). Lets an e2e prove the focused-pane rule
+  // (I9) end to end — that a live URL pane's corner control hides when its pane
+  // loses focus (the owner's "the circle is still visible on url panes when not
+  // focused" report) — by reading the actual fed state, not just the predicate.
+  controlStateFor(paneId: string): { focused: boolean; hidden: boolean; visible: boolean } | undefined {
+    const e = this.entries.get(paneId);
+    if (!e) return undefined;
+    return { focused: e.focused, hidden: e.hidden, visible: controlVisible(e.hidden, e.focused) };
+  }
+
   // tileIdFor returns the tile id hosted in paneId, or undefined.
   tileIdFor(paneId: string): number | undefined {
     return this.entries.get(paneId)?.tileId;
