@@ -14,6 +14,23 @@ export function partitionFor(pluginUuid: string): string {
   return pluginUuid ? `persist:plugin-${pluginUuid}` : SESSION_PARTITION;
 }
 
+// sanitizeUserAgent strips the two tokens that mark Chromium's default UA as a
+// non-browser embedding — `Electron/<ver>` and the app's own `<AppName>/<ver>` —
+// leaving the genuine `Chrome/<ver>` token (and everything else) intact. A live
+// url tile IS real Chromium, so the honest fix is to drop the embedding tokens
+// rather than fake a different engine: sites that gate on an unknown/outdated
+// browser (Slack's "Electron/" check) then see a plain Chrome string. Applied
+// once as app.userAgentFallback (the default for every partition and view), so
+// it covers all plugins' url tiles. Idempotent: re-running removes nothing.
+export function sanitizeUserAgent(ua: string, appName: string): string {
+  let out = ua.replace(/\sElectron\/\S+/g, '');
+  if (appName) {
+    const esc = appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`\\s${esc}\\/\\S+`, 'g'), '');
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 // roundBounds snaps a CSS-pixel rect to integer DIP for setBounds, clamping
 // width/height to a 1px floor so a collapsed pane never asks for a 0-sized
 // view (which some platforms reject).

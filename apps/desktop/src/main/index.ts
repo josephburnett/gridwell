@@ -4,6 +4,7 @@ import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
 import { registerWebviewIpc, makeNavForwarder, sendFrame } from './register';
 import { MirrorPump } from './capture';
+import { sanitizeUserAgent } from './viewutil';
 
 // MIRROR_INTERVAL_MS is how often live views are captured and their frames
 // pushed to the renderer so OTHER panes showing the same tile mirror live
@@ -24,6 +25,10 @@ let registry: WebviewRegistry | null = null;
 let pump: MirrorPump | null = null;
 
 async function boot(): Promise<void> {
+  // Drop the Electron/app tokens from the default UA before any view loads, so
+  // every url tile (all partitions) presents as plain Chrome. userAgentFallback
+  // is the UA used when none is set per-webContents, i.e. our default.
+  app.userAgentFallback = sanitizeUserAgent(app.userAgentFallback, app.getName());
   try {
     sidecar = await startSidecar();
   } catch (err) {

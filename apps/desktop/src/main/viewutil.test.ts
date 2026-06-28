@@ -6,6 +6,7 @@ import {
   boundsEqual,
   controlVisible,
   dragExceeded,
+  sanitizeUserAgent,
   RIGHT_DRAG_THRESHOLD,
 } from './viewutil';
 
@@ -48,6 +49,33 @@ test('dragExceeded tells a right-click apart from a right-drag at the threshold'
   assert.ok(dragExceeded(t + 1, 0, t));
   assert.ok(dragExceeded(0, -(t + 1), t));
   assert.ok(dragExceeded(4, 4, t)); // 5.66px > 4
+});
+
+test('sanitizeUserAgent drops the Electron and app tokens, keeps Chrome', () => {
+  const ua =
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Gridwell/0.1.0 Chrome/120.0.0.0 Electron/28.0.0 Safari/537.36';
+  const out = sanitizeUserAgent(ua, 'Gridwell');
+  // The two embedding tokens that trip browser-version gates are gone…
+  assert.ok(!/Electron\//.test(out));
+  assert.ok(!/Gridwell\//.test(out));
+  // …but the genuine engine tokens and platform group survive intact.
+  assert.ok(out.includes('Chrome/120.0.0.0'));
+  assert.ok(out.includes('Safari/537.36'));
+  assert.ok(out.includes('(X11; Linux x86_64)'));
+  assert.ok(out.includes('(KHTML, like Gecko)'));
+  // No double spaces left where tokens were removed.
+  assert.ok(!/ {2}/.test(out));
+});
+
+test('sanitizeUserAgent is idempotent and tolerates a missing app name', () => {
+  const clean =
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Chrome/120.0.0.0 Safari/537.36';
+  // Already clean → unchanged (also covers re-running on our own output).
+  assert.equal(sanitizeUserAgent(clean, 'Gridwell'), clean);
+  // An empty app name still strips Electron without throwing on the regex.
+  assert.ok(!/Electron\//.test(sanitizeUserAgent(`${clean} Electron/28.0.0`, '')));
 });
 
 test('controlVisible shows the corner circle only on the focused, unparked pane', () => {
