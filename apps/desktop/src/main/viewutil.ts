@@ -49,6 +49,42 @@ export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+// controlBounds places a corner control (the back/ascend circle) of the given
+// size at the bottom-right of a view's content box, inset by margin. Pure
+// geometry, extracted from webviews.ts so the corner placement is unit-testable
+// (it's native chrome the canvas can't draw, and a wrong rect here puts the
+// control off the pane — exactly the kind of bounds bug make check can't see).
+export function controlBounds(b: Bounds, size: number, margin: number): Bounds {
+  return {
+    x: b.x + b.width - size - margin,
+    y: b.y + b.height - size - margin,
+    width: size,
+    height: size,
+  };
+}
+
+// PARK_COORD is far enough off any display that a parked view/control is not
+// visible; the registry parks rather than destroys so the page keeps running.
+export const PARK_COORD = -100000;
+
+// parkedBounds is the off-screen rect a view or control is moved to while it is
+// "hidden" — during a drag/gesture/modal so canvas overlays can paint where the
+// native view sits, or for an unfocused pane's corner control. Width/height are
+// preserved (some platforms reject a 0-sized view) so un-parking is a pure move.
+export function parkedBounds(width: number, height: number): Bounds {
+  return { x: PARK_COORD, y: PARK_COORD, width, height };
+}
+
+// minWidthZoomFactor is the page zoom that keeps a narrow live URL view laying
+// out at minWidth instead of reflowing to a cramped mobile layout: 1 at or above
+// minWidth, else width/minWidth clamped to a 0.25 floor. A native WebContentsView
+// can't render wider than its bounds and be clipped, so scaling the page to fit
+// is the closest thing to "min width + horizontal scroll". Pure, so the clamp and
+// the threshold are pinned by a test rather than only observable in the live app.
+export function minWidthZoomFactor(width: number, minWidth: number): number {
+  return width >= minWidth ? 1 : Math.max(0.25, width / minWidth);
+}
+
 // RIGHT_DRAG_THRESHOLD is how far (CSS px) the cursor must move with the right
 // button held before a press over a live URL view becomes a Gridwell pane
 // gesture rather than a plain right-click. Mirrors the canvas dragThreshold

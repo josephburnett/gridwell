@@ -2,7 +2,16 @@ import { BaseWindow, WebContentsView, Menu, clipboard, session } from 'electron'
 import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent } from './ipc';
-import { SESSION_PARTITION, partitionFor, roundBounds, boundsEqual, controlVisible } from './viewutil';
+import {
+  SESSION_PARTITION,
+  partitionFor,
+  roundBounds,
+  boundsEqual,
+  controlVisible,
+  controlBounds,
+  parkedBounds,
+  minWidthZoomFactor,
+} from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
 import { captureJpegBase64 } from './capture';
@@ -63,18 +72,9 @@ const CONTROL_HTML =
      </script>`,
   );
 
-// controlBounds positions the corner button at the bottom-right of a view's
-// content box.
-function controlBounds(b: Bounds): Bounds {
-  return {
-    x: b.x + b.width - CONTROL_SIZE - CONTROL_MARGIN,
-    y: b.y + b.height - CONTROL_SIZE - CONTROL_MARGIN,
-    width: CONTROL_SIZE,
-    height: CONTROL_SIZE,
-  };
-}
-
-const OFFSCREEN = { x: -100000, y: -100000 };
+// The corner control's geometry and the min-layout width are view config; the
+// pure placement/park/zoom math lives in viewutil (controlBounds, parkedBounds,
+// minWidthZoomFactor) where it is unit-tested.
 
 export interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation (URL/title change),
@@ -279,9 +279,9 @@ export class WebviewRegistry {
   // state can't drift from controlVisible.
   private applyControlBounds(e: Entry): void {
     if (controlVisible(e.hidden, e.focused)) {
-      e.control.setBounds(roundBounds(controlBounds(e.bounds)));
+      e.control.setBounds(roundBounds(controlBounds(e.bounds, CONTROL_SIZE, CONTROL_MARGIN)));
     } else {
-      e.control.setBounds({ ...OFFSCREEN, width: CONTROL_SIZE, height: CONTROL_SIZE });
+      e.control.setBounds(parkedBounds(CONTROL_SIZE, CONTROL_SIZE));
     }
   }
 
@@ -302,8 +302,7 @@ export class WebviewRegistry {
   // "min width + horizontal scroll" without offscreen rendering. zoomFactor
   // resets on cross-origin navigation, so wireNav re-applies it on load.
   private applyMinWidthZoom(e: Entry): void {
-    const w = e.bounds.width;
-    const z = w >= URL_MIN_LAYOUT_WIDTH ? 1 : Math.max(0.25, w / URL_MIN_LAYOUT_WIDTH);
+    const z = minWidthZoomFactor(e.bounds.width, URL_MIN_LAYOUT_WIDTH);
     try {
       e.view.webContents.setZoomFactor(z);
     } catch {
@@ -326,7 +325,7 @@ export class WebviewRegistry {
     e.focused = focused;
     if (viewChanged) {
       if (hidden) {
-        e.view.setBounds({ ...OFFSCREEN, width: e.bounds.width, height: e.bounds.height });
+        e.view.setBounds(parkedBounds(e.bounds.width, e.bounds.height));
       } else {
         e.view.setBounds(e.bounds);
       }
