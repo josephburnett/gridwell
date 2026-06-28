@@ -235,3 +235,53 @@ Only once the seams above have owners and tests:
 3. **Phase 2 extraction for the area 1b touches**, then **Phase 1b (framing)** —
    the hardest, highest-value seam, done on testable ground.
 4. **Phase 1c**, then **Phase 3 test homes**, then **Phase 4**.
+
+---
+
+## Parking lot — deferred work & warts (don't lose these)
+
+Authoritative list of work consciously deferred and rough edges found while
+executing the plan. Forgetting deferred items is a known failure mode here, so
+this is the durable record (mirrored in agent memory `project_deferred_*`).
+
+### Deferred work (come back to these)
+- **I8 — markdown text-preview re-wrap.** A text tile's rendered preview may
+  re-flow at the *preview pane's* width rather than showing a scaled copy of what
+  was framed at descent → "preview ≠ what I left." Not characterized/fixed.
+  **Blocker:** needs a render-introspection testhook (layout width / wrap) before
+  it's even observable in e2e. That hook is step one.
+- **I11 — SSE event during a transition animation.** An inbound `Subscribe` event
+  landing mid-animation can appear to mutate what you're looking at. No repro yet;
+  needs a deterministic way to inject an event mid-transition.
+- **App god-object — live-stream maps.** If the per-pane extraction lands as the
+  safe-subset (non-resource) version, `urlStreams` + `shellStreams` remain as a
+  follow-up (they hold native handles with teardown — riskier, native-coupled).
+- **localStorage in the session blob** (cookies sync today; DOM storage doesn't).
+- **Federation productionization** (transparent multi-hop + SOCKS). Last, only on
+  a stable client/native split.
+
+### Warts / cruft / bad abstractions / test gaps
+- **Render context as mutable App fields.** `previewPaneID`, `previewPaneRect`,
+  `hiddenTileID/PaneID`, `embedHits` are render scratch set/cleared inside
+  `draw()` and threaded via struct fields instead of a passed-down render context.
+  Implicit state; a missed clear leaks across panes/frames.
+- **Two ascent stacks.** `App.paneStateStack` (well descent, session-local map)
+  vs `pane.Up` (portal ascent, persisted on the Pane). Same idea ("saved parent
+  state for ascent"), two mechanisms.
+- **`mdCaret` sentinel-by-presence.** "absent in the map = no caret" — a state
+  encoded by map membership; easy to forget the `delete`. A `-1` sentinel on an
+  owned per-pane struct is clearer.
+- **`urlStreams` misnomer.** Named "streams" for historical reasons; it now holds
+  the Electron webview-bridge handle, not a stream. Rename when touched.
+- **No gofmt gate.** `make check` doesn't run gofmt; `testhook.go` and
+  `shell_stream_client.go` are committed non-gofmt-clean. Add `gofmt -l` (fail on
+  output) to `make check`.
+- **Split-at-plugin-root lands the new pane on the launcher** (auto-ascend, by
+  design) — surprising; you split and get a launcher pane, not a second view of
+  the grid. Possibly worth a UX rethink (a split could clone the current view).
+- **Launcher focus-click ambiguity.** Clicking a launcher pane to focus it can
+  land on a plugin tile and descend (no empty space on the launcher). Made an
+  e2e fragile; a pane could reserve inert focus space.
+- **`client/wasm` orchestration still largely untested.** The menu owner and the
+  new `tileIds`/round-trip e2e hooks are a start; `input.go`/`render.go` decision
+  logic is still mostly reachable only through the running app.
