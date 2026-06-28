@@ -115,7 +115,10 @@ test('a deleted tile is removed from the render', async ({ gw }) => {
 
   await gw.deleteTileCell(cx, cy);
 
-  // Gone from the server AND from the render.
+  // Gone from the server AND from the render. The render removal arrives via the
+  // TileRemoved fan-out → cache → redraw, so poll it rather than reading once.
   expect(tileAt(await gw.getGrid(grid), 'well', cx, cy), 'tile removed on the server').toBeFalsy();
-  expect((await gw.focused()).tileIds, 'the deleted tile is gone from the render').not.toContain(created.id);
+  await expect
+    .poll(async () => (await gw.focused()).tileIds.includes(created.id), { timeout: 5_000 })
+    .toBe(false);
 });
