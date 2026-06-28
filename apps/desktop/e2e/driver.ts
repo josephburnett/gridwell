@@ -22,6 +22,7 @@ export interface PaneInfo {
   gridID: string;
   anchor: string;
   path: string[];
+  textFocus: string;
   cx: number;
   cy: number;
   zoom: number;
@@ -157,6 +158,15 @@ export class GridwellDriver {
     const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
     if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
+  }
+
+  // shellVisitURL fires the focused live shell's url-click path (the exact
+  // callback xterm's link provider runs when a url in the terminal is clicked).
+  // A terminal-cell link can't be hit-tested from the canvas, so the e2e drives
+  // it through this e2e-only hook.
+  async shellVisitURL(url: string): Promise<void> {
+    await this.win.evaluate((u) => (window as any).__gridwellTest.shellVisitURL(u), url);
+    await this.waitIdle();
   }
 
   // descendCell single-clicks the center of cell (cx, cy) in the focused pane to

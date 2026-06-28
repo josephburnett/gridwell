@@ -2022,23 +2022,60 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 	a.postTileMutate("CreateURL", scratch, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateURL(ctx, req)
 	}, func(tile rpc.Tile) {
-		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.TextFocus != "" {
-			return // pane gone or already descended
+		if fp := a.tree.FindPane(paneID); fp != nil {
+			a.descendEphemeral(fp, &tile)
 		}
-		// Descend WITHOUT re-anchoring: the pane stays on its current grid and
-		// just focuses the off-grid tile, which the renderer / url stream / ascent
-		// resolve by id (descendedTile). So one ordinary ascent lands right back
-		// here and the visit, living only in the scratch grid, leaves nothing
-		// behind — exactly "it's gone when you ascend".
-		a.startFileDescent(fp, &tile, func() {
-			ffp := a.tree.FindPane(paneID)
-			if ffp == nil || ffp.TextFocus == "" {
-				return
-			}
-			a.openURLStream(ffp, tile.ID)
-		})
 	})
+}
+
+// descendEphemeral descends fp into the off-grid ephemeral url tile and goes
+// live. The pane keeps its grid — the tile is resolved by id (render / url
+// stream / ascent all use descendedTile) — so one ordinary ascent lands right
+// back here and the visit, living only in the scratch grid, leaves nothing
+// behind ("it's gone when you ascend"). If fp is ALREADY descended (a live
+// shell, from the shell-link click) that descent is stashed so one ascent
+// returns to it — the shell goes inactive, not gone — rather than clearing
+// straight to the grid.
+func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
+	paneID := fp.ID
+	openLive := func() {
+		if ffp := a.tree.FindPane(paneID); ffp != nil && ffp.TextFocus != "" {
+			a.openURLStream(ffp, tile.ID)
+		}
+	}
+	if fp.TextFocus == "" {
+		a.startFileDescent(fp, tile, openLive)
+		return
+	}
+	// Stash the current descent (shell): restoreEmbedReturn lands back on it.
+	savedAnchor := fp.Anchor
+	savedPath := slices.Clone(fp.Path)
+	savedFocus := fp.TextFocus
+	savedMode := fp.TextMode
+	savedScrollX := fp.TextScrollX
+	savedScrollY := fp.TextScrollY
+	fp.TextFocus = ""
+	fp.TextMode = ""
+	a.refreshFileOverlay()
+	a.startFileDescent(fp, tile, openLive)
+	if stack := a.paneStateStack[fp.ID]; len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		top.Anchor = savedAnchor
+		top.Path = savedPath
+		top.TextFocus = savedFocus
+		top.TextMode = savedMode
+		top.TextScrollX = savedScrollX
+		top.TextScrollY = savedScrollY
+	}
+}
+
+// shellURLActivate handles a click on an http(s) url in a live shell (the xterm
+// link provider's activate): descend into it as an ephemeral visit. A no-op if
+// the shell is no longer the pane's active descent.
+func (a *App) shellURLActivate(paneID, url string) {
+	if p := a.tree.FindPane(paneID); p != nil && p.TextFocus != "" {
+		a.visitEphemeralURL(p, url)
+	}
 }
 
 // mountPluginAtCell fires Mount at the given cell: it attaches the plugin

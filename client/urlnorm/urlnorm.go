@@ -5,8 +5,44 @@ package urlnorm
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+// urlInText matches an http(s) URL embedded in arbitrary text (terminal
+// output). The body runs to the first whitespace or a character that can't sit
+// inside a URL; trailing sentence punctuation is trimmed by FindURLs.
+var urlInText = regexp.MustCompile(`https?://[^\s"'<>` + "`" + `]+`)
+
+// URLSpan is one URL found in a line of text: Col0/Col1 are 1-based, inclusive
+// COLUMN positions (xterm link-range convention) of its first and last byte.
+// Byte offsets equal columns for the ASCII URLs shell output carries.
+type URLSpan struct {
+	Col0, Col1 int
+	URL        string
+}
+
+// FindURLs locates every http(s) URL in a single line of text and returns each
+// with its 1-based inclusive column span — the input the xterm link provider
+// needs to make shell URLs clickable. Trailing punctuation commonly adjacent to
+// a URL in prose (.,;:!?) and a single balanced-looking ")" are excluded.
+func FindURLs(text string) []URLSpan {
+	var out []URLSpan
+	for _, loc := range urlInText.FindAllStringIndex(text, -1) {
+		trimmed := strings.TrimRight(text[loc[0]:loc[1]], ".,;:!?")
+		// Drop trailing ")" that close a paren the url never opened — the
+		// wrapping ")" in "(see https://x)" or the extra ")" in
+		// "(/wiki/Foo_(bar))" — while keeping balanced ones like "/Foo_(bar)".
+		for strings.HasSuffix(trimmed, ")") && strings.Count(trimmed, ")") > strings.Count(trimmed, "(") {
+			trimmed = strings.TrimRight(trimmed[:len(trimmed)-1], ".,;:!?")
+		}
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, URLSpan{Col0: loc[0] + 1, Col1: loc[0] + len(trimmed), URL: trimmed})
+	}
+	return out
+}
 
 // Normalize trims the input, prepends "https://" when no scheme is
 // present, and validates the result is a plausible http(s) URL. Returns

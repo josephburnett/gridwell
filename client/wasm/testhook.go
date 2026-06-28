@@ -15,13 +15,16 @@ import (
 // compiled into the normal wasm binary but installs nothing unless the page was
 // loaded with ?e2e=1, so production never sees it.
 //
-// Every accessor is a pure READ over state the app already holds, reusing the
-// same geometry helpers the input handlers hit-test against (plusButtonCenter,
-// paletteTileRect, paneToDragdrop). Nothing here mutates app state, so it cannot
-// violate the primary rule — it just lets a test learn where to click and when
-// the world has settled. The renderer's canvas is opaque to a test; this gives
-// it coordinates and a settle signal, while the server's GetGrid remains the
-// independent oracle for what was actually created.
+// Almost every accessor is a pure READ over state the app already holds,
+// reusing the same geometry helpers the input handlers hit-test against
+// (plusButtonCenter, paletteTileRect, paneToDragdrop) — it just lets a test
+// learn where to click and when the world has settled, while the server's
+// GetGrid remains the independent oracle for what was created. The lone
+// exception is shellVisitURL, an e2e-only ACTION that fires the exact callback
+// xterm's link provider invokes on a click — a terminal-cell link click can't
+// be hit-tested from the canvas, so this drives it directly, mirroring the
+// desktop's __gwRegistry e2e seam. Both are gated to ?e2e=1, so production
+// never sees them.
 
 // installTestHook wires window.__gridwellTest when the page carries ?e2e=1.
 func (a *App) installTestHook() {
@@ -34,9 +37,20 @@ func (a *App) installTestHook() {
 		"origin":     js.FuncOf(a.thOrigin),
 		"panes":      js.FuncOf(a.thPanes),
 		"launcher":   js.FuncOf(a.thLauncher),
-		"palette":    js.FuncOf(a.thPalette),
-		"cellCenter": js.FuncOf(a.thCellCenter),
+		"palette":      js.FuncOf(a.thPalette),
+		"cellCenter":   js.FuncOf(a.thCellCenter),
+		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 	}))
+}
+
+// thShellVisitURL fires the focused shell's url-click path (what xterm's link
+// provider activate callback does) so an e2e can exercise the shell→ephemeral-
+// url descent without hit-testing a terminal cell. e2e-only; mutates state.
+func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
+	if len(args) >= 1 && args[0].Type() == js.TypeString {
+		a.shellURLActivate(a.tree.Focus, args[0].String())
+	}
+	return nil
 }
 
 // thIdle reports true when no transition, drag, or fetch is in flight — i.e. the
@@ -76,6 +90,9 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"gridID":  a.gridIDForPane(p),
 			"anchor":  p.Anchor,
 			"path":    stringsToAny(p.Path),
+			// The tile this pane is descended into ("" when on a grid) — lets a
+			// test tell a shell descent from the url it descended further into.
+			"textFocus": p.TextFocus,
 			// Viewport center (grid cell coords) + zoom, so a test can drop on a
 			// cell guaranteed to be on-screen regardless of the stored framing.
 			"cx":   p.Cx,

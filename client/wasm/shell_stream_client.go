@@ -11,6 +11,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
+	"github.com/josephburnett/gridwell/client/urlnorm"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -37,6 +38,8 @@ type shellStreamConn struct {
 	onData    js.Func // term.onData(bytes string) callback
 	onResize  js.Func // term.onResize({cols, rows})
 	onMouse   js.Func // container right-button → canvas gesture pipeline
+	onLinkProvide  js.Func // xterm link provider: scans lines for http(s) urls
+	onLinkActivate js.Func // shared link click handler → ephemeral url descent
 
 	pending []any // queued sends until WS is OPEN
 	closed  bool
@@ -261,6 +264,58 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		lastCols:  uint16(cols),
 		lastRows:  uint16(rows),
 	}
+
+	// Make http(s) URLs in the terminal clickable: a click descends into the
+	// url as an ephemeral visit (the shell goes inactive; ascending returns to
+	// it). Uses xterm's built-in registerLinkProvider — no addon. One shared
+	// activate func (xterm passes the link's text as arg 1) so there are no
+	// per-link js.Func allocations to leak. Released in releaseShellStream.
+	conn.onLinkActivate = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) >= 2 && args[1].Type() == js.TypeString {
+			a.shellURLActivate(p.ID, args[1].String())
+		}
+		return nil
+	})
+	conn.onLinkProvide = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		// (bufferLineNumber 1-based, callback). Resolve the line text, find any
+		// urls, and hand xterm a link (1-based inclusive cell range) per url.
+		if len(args) < 2 {
+			return nil
+		}
+		lineNo, cb := args[0].Int(), args[1]
+		line := term.Get("buffer").Get("active").Call("getLine", lineNo-1)
+		if !line.Truthy() {
+			cb.Invoke(js.Undefined())
+			return nil
+		}
+		spans := urlnorm.FindURLs(line.Call("translateToString", true).String())
+		if len(spans) == 0 {
+			cb.Invoke(js.Undefined())
+			return nil
+		}
+		links := js.Global().Get("Array").New()
+		for _, s := range spans {
+			start := js.Global().Get("Object").New()
+			start.Set("x", s.Col0)
+			start.Set("y", lineNo)
+			end := js.Global().Get("Object").New()
+			end.Set("x", s.Col1)
+			end.Set("y", lineNo)
+			rng := js.Global().Get("Object").New()
+			rng.Set("start", start)
+			rng.Set("end", end)
+			link := js.Global().Get("Object").New()
+			link.Set("range", rng)
+			link.Set("text", s.URL)
+			link.Set("activate", conn.onLinkActivate)
+			links.Call("push", link)
+		}
+		cb.Invoke(links)
+		return nil
+	})
+	provider := js.Global().Get("Object").New()
+	provider.Set("provideLinks", conn.onLinkProvide)
+	term.Call("registerLinkProvider", provider)
 
 	conn.onMessage = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		data := args[0].Get("data")
@@ -528,6 +583,12 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	if conn.onMouse.Truthy() {
 		conn.onMouse.Release()
 	}
+	if conn.onLinkProvide.Truthy() {
+		conn.onLinkProvide.Release()
+	}
+	if conn.onLinkActivate.Truthy() {
+		conn.onLinkActivate.Release()
+	}
 	if conn.term.Truthy() {
 		conn.term.Call("dispose")
 	}
@@ -561,6 +622,17 @@ func (a *App) syncShellOverlayPosition() {
 		r, ok := rects[paneID]
 		if !ok {
 			conn.container.Get("style").Set("display", "none")
+			continue
+		}
+		// Hide the shell overlay (and its ascend handle) when the pane isn't
+		// currently descended in THIS shell — e.g. it descended further into an
+		// ephemeral url from a shell link. The stream stays alive (the session
+		// persists); only the overlay parks, reappearing when the pane returns.
+		if p := a.tree.FindPane(paneID); p == nil || p.TextFocus != conn.tileID {
+			conn.container.Get("style").Set("display", "none")
+			if conn.circle.Truthy() {
+				conn.circle.Get("style").Set("display", "none")
+			}
 			continue
 		}
 		// Inset by the pane border so the overlay sits flush inside
