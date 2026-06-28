@@ -270,11 +270,10 @@ this is the durable record (mirrored in agent memory `project_deferred_*`).
   consolidated into one `App.locals map[paneID]*paneLocal` (embedding the tested
   `client/panestate.State` + the native url/shell handles), with one explicit
   lifecycle: `a.local` creates, `a.forgetPane` tears down on drop. Full scope.
-- **Collapse path has no e2e (new gap, follow-up).** The pane collapse/close
-  gesture isn't exercised by any e2e spec, so `forgetPane`'s cleanup-on-drop (and
-  the collapse path generally) is verified only by `make check` + reasoning. Add a
-  driver `collapsePane` gesture + a `localsCount` testhook + a spec asserting the
-  per-pane state count drops when a pane is collapsed.
+- **Collapse path e2e — DONE.** `collapse.spec.ts` collapses a pane (driver
+  `collapseLeftPane` right-drags the divider past the close threshold) and asserts
+  the dropped pane's id is gone from the `localPaneIds` testhook — `forgetPane`
+  proven. First e2e to exercise the collapse gesture at all.
 - **localStorage in the session blob** (cookies sync today; DOM storage doesn't).
 - **Federation productionization** (transparent multi-hop + SOCKS). Last, only on
   a stable client/native split.
@@ -292,9 +291,9 @@ this is the durable record (mirrored in agent memory `project_deferred_*`).
   owned per-pane struct is clearer.
 - **`urlStreams` misnomer.** Named "streams" for historical reasons; it now holds
   the Electron webview-bridge handle, not a stream. Rename when touched.
-- **No gofmt gate.** `make check` doesn't run gofmt; `testhook.go` and
-  `shell_stream_client.go` are committed non-gofmt-clean. Add `gofmt -l` (fail on
-  output) to `make check`.
+- **No gofmt gate — DONE.** `make check` now runs `fmt-check` first (`gofmt -l`
+  over hand-written Go, api/gen excluded; fails on any drift), and the repo's
+  18 pre-existing non-gofmt files were formatted.
 - **Split-at-plugin-root lands the new pane on the launcher** (auto-ascend, by
   design) — surprising; you split and get a launcher pane, not a second view of
   the grid. Possibly worth a UX rethink (a split could clone the current view).
