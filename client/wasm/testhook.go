@@ -98,9 +98,31 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"cx":   p.Cx,
 			"cy":   p.Cy,
 			"zoom": p.Zoom,
+			// The ids of the tiles this pane RENDERS (its cache contents). The gap
+			// between this and the server (the GetGrid oracle) is exactly the
+			// create→cache→render / Subscribe-fanout seam where a tile "disappears":
+			// present on the server but never drawn.
+			"tileIds": a.paneTileIDs(p),
 		})
 	}
 	return out
+}
+
+// paneTileIDs returns the ids of the tiles this pane currently RENDERS — the
+// cache contents for the pane's grid, which render.go iterates to draw. An e2e
+// uses it to assert a created tile is actually drawn, not merely present on the
+// server: a tile in the GetGrid oracle but absent here is the "it disappeared"
+// bug (created, never rendered). Order is unspecified (map iteration).
+func (a *App) paneTileIDs(p *pane.Pane) []any {
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return []any{}
+	}
+	ids := make([]any, 0, len(g.Tiles))
+	for id := range g.Tiles {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // thLauncher returns the launcher plugin tiles for the focused pane (the start

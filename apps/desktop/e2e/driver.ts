@@ -26,6 +26,9 @@ export interface PaneInfo {
   cx: number;
   cy: number;
   zoom: number;
+  // The ids of the tiles this pane renders (its cache contents). A tile present
+  // on the server (the getGrid oracle) but missing here is the "disappeared" bug.
+  tileIds: string[];
 }
 
 export interface PaletteItem {
