@@ -233,6 +233,21 @@ func nullableString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
+// insertURLRow inserts one url tile row and returns its id. The single place
+// the url INSERT lives, shared by the on-grid CreateURL and the off-grid
+// CreateScratchURL so they can't drift.
+func insertURLRow(ctx context.Context, tx *sql.Tx, objID string, gridID, x, y, w, h int64, url string, now int64) (int64, error) {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+			url_string, created_at, updated_at)
+		VALUES (?, ?, 'url', ?, ?, ?, ?, ?, ?, ?)`,
+		objID, gridID, x, y, w, h, url, now, now)
+	if err != nil {
+		return 0, fmt.Errorf("insert url tile: %w", err)
+	}
+	return res.LastInsertId()
+}
+
 // CreateURL creates a URL tile pointing at the given URL.
 func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.Tile, error) {
 	urlString := strings.TrimSpace(req.URL)
@@ -241,16 +256,45 @@ func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.
 	}
 	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-					url_string, created_at, updated_at)
-				VALUES (?, ?, 'url', ?, ?, ?, ?, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, urlString, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert url tile: %w", err)
-			}
-			return res.LastInsertId()
+			return insertURLRow(ctx, tx, objID, gridID, req.X, req.Y, req.W, req.H, urlString, now)
 		})
+}
+
+// CreateScratchURL creates an ephemeral url tile in the scratch grid (off any
+// visible grid) and returns it — the store side of "descend into a url" (a
+// shell link, a menu url click) without placing a tile on a grid. Unlike
+// CreateURL it takes no descent path and runs no overlap check: the scratch
+// grid is never rendered, so a tile's position there is meaningless and two
+// visits may share a cell. The result is otherwise a normal, persistent url
+// tile (durable visited-url history; a resolvable deep-link), it just lives
+// off-grid. See ScratchGridID.
+func (s *Store) CreateScratchURL(ctx context.Context, url string) (*rpc.Tile, error) {
+	urlString := strings.TrimSpace(url)
+	if !urlSchemeAllowed(urlString) {
+		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
+	}
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	gridID, err := parseID(scratch)
+	if err != nil {
+		return nil, err
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		now := s.now().Unix()
+		tileID, err := insertURLRow(ctx, tx, s.newID(), gridID, 0, 0, 1, 1, urlString, now)
+		if err != nil {
+			return err
+		}
+		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
 }
 
 // ResizeTile changes a tile's footprint to (X, Y, W, H).

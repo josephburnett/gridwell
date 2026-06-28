@@ -639,9 +639,14 @@ type InfoResponse struct {
 	Watch         bool                   `protobuf:"varint,4,opt,name=watch,proto3" json:"watch,omitempty"` // implements Subscribe for live change events
 	// root_grid_id is the plugin's default root (fs uses its configured root,
 	// proc pid 1, localdb its singleton root). Click-enter descends here.
-	RootGridId    string          `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
-	Network       *NetworkContext `protobuf:"bytes,6,opt,name=network,proto3" json:"network,omitempty"`                          // how url tiles reach the net; unset → frozen-only
-	HasSession    bool            `protobuf:"varint,7,opt,name=has_session,json=hasSession,proto3" json:"has_session,omitempty"` // GetSession/PutSession meaningful
+	RootGridId string          `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
+	Network    *NetworkContext `protobuf:"bytes,6,opt,name=network,proto3" json:"network,omitempty"`                          // how url tiles reach the net; unset → frozen-only
+	HasSession bool            `protobuf:"varint,7,opt,name=has_session,json=hasSession,proto3" json:"has_session,omitempty"` // GetSession/PutSession meaningful
+	// scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
+	// ("descend into a url" without placing a tile). Never rendered, never
+	// mounted; persists as visited-url history. Empty for plugins that don't
+	// support ephemeral visits (fs/proc).
+	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -723,6 +728,13 @@ func (x *InfoResponse) GetHasSession() bool {
 		return x.HasSession
 	}
 	return false
+}
+
+func (x *InfoResponse) GetScratchGridId() string {
+	if x != nil {
+		return x.ScratchGridId
+	}
+	return ""
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -1668,12 +1680,14 @@ func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
 }
 
 type PluginInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "localdb", "fs", "proc", "ssh"
-	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
-	Writable      bool                   `protobuf:"varint,4,opt,name=writable,proto3" json:"writable,omitempty"`                        // accepts new tiles (primitives can be created in it)
-	RootGridId    string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Uuid       string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
+	Kind       string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "localdb", "fs", "proc", "ssh"
+	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
+	Writable   bool                   `protobuf:"varint,4,opt,name=writable,proto3" json:"writable,omitempty"`                        // accepts new tiles (primitives can be created in it)
+	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
+	// grid; click-enter descends here
+	ScratchGridId string `protobuf:"bytes,6,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's off-grid
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1739,6 +1753,13 @@ func (x *PluginInfo) GetWritable() bool {
 func (x *PluginInfo) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
+	}
+	return ""
+}
+
+func (x *PluginInfo) GetScratchGridId() string {
+	if x != nil {
+		return x.ScratchGridId
 	}
 	return ""
 }
@@ -2859,7 +2880,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rProxyEndpoint\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\"\r\n" +
-	"\vInfoRequest\"\xfc\x01\n" +
+	"\vInfoRequest\"\xa4\x02\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -2869,7 +2890,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootGridId\x125\n" +
 	"\anetwork\x18\x06 \x01(\v2\x1b.gridwell.v1.NetworkContextR\anetwork\x12\x1f\n" +
 	"\vhas_session\x18\a \x01(\bR\n" +
-	"hasSession\"'\n" +
+	"hasSession\x12&\n" +
+	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +
@@ -2926,7 +2948,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x01y\x18\x05 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x06 \x01(\x03R\x01w\x12\f\n" +
 	"\x01h\x18\a \x01(\x03R\x01h\"\x14\n" +
-	"\x12ListPluginsRequest\"\x88\x01\n" +
+	"\x12ListPluginsRequest\"\xb0\x01\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
@@ -2934,7 +2956,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
 	"\bwritable\x18\x04 \x01(\bR\bwritable\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
-	"rootGridId\"H\n" +
+	"rootGridId\x12&\n" +
+	"\x0fscratch_grid_id\x18\x06 \x01(\tR\rscratchGridId\"H\n" +
 	"\x13ListPluginsResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\"5\n" +
 	"\fTileResponse\x12%\n" +

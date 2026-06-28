@@ -128,6 +128,11 @@ message InfoResponse {
   string root_grid_id   = 5;
   NetworkContext network = 6;  // how url tiles reach the net; unset → frozen-only
   bool   has_session    = 7;   // GetSession/PutSession meaningful
+  // scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
+  // ("descend into a url" without placing a tile). Never rendered, never
+  // mounted; persists as visited-url history. Empty for plugins that don't
+  // support ephemeral visits (fs/proc).
+  string scratch_grid_id = 8;
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -231,6 +236,8 @@ message PluginInfo {
   bool   writable      = 4;   // accepts new tiles (primitives can be created in it)
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
                               // grid; click-enter descends here
+  string scratch_grid_id = 6; // qualified <uuid>/<id> of the plugin's off-grid
+                              // scratch grid for ephemeral url tiles; "" if none
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;

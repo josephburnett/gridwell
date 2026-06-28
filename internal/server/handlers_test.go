@@ -375,11 +375,63 @@ func TestListPlugins(t *testing.T) {
 	if !strings.HasPrefix(plugins[0].RootGridID, plugins[0].UUID+"/") {
 		t.Errorf("plugin[0] root_grid_id = %q, want %q prefix", plugins[0].RootGridID, plugins[0].UUID)
 	}
+	// The localdb advertises a qualified scratch grid id (the ephemeral-url
+	// target), distinct from its root. fs/proc have none.
+	if !strings.HasPrefix(plugins[0].ScratchGridID, plugins[0].UUID+"/") {
+		t.Errorf("plugin[0] scratch_grid_id = %q, want %q prefix", plugins[0].ScratchGridID, plugins[0].UUID)
+	}
+	if plugins[0].ScratchGridID == plugins[0].RootGridID {
+		t.Errorf("scratch grid id %q must differ from root", plugins[0].ScratchGridID)
+	}
+	if plugins[1].ScratchGridID != "" {
+		t.Errorf("fs plugin should have no scratch grid, got %q", plugins[1].ScratchGridID)
+	}
 	if plugins[1].Kind != "fs" || plugins[1].Writable {
 		t.Errorf("plugin[1] = %+v, want read-only fs", plugins[1])
 	}
 	if plugins[2].Kind != "proc" || plugins[2].Writable {
 		t.Errorf("plugin[2] = %+v, want read-only proc", plugins[2])
+	}
+}
+
+// TestCreateScratchURLRoutes: creating a url tile whose grid is the localdb's
+// qualified scratch grid is an ephemeral visit — it routes path-free into the
+// scratch grid (no descent path leads there) and the tile carries reference=false
+// (it's owned content, just off-grid), with the typed URL. This proves the
+// whole client→server→plugin path-free path the "descend into a url" feature uses.
+func TestCreateScratchURLRoutes(t *testing.T) {
+	cl, _, _ := newTestServerWithPlugins(t)
+	ctx := context.Background()
+	plugins, err := cl.ListPlugins(ctx)
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	scratch := plugins[0].ScratchGridID
+	if scratch == "" {
+		t.Fatal("localdb advertised no scratch grid")
+	}
+	// Empty path + scratch grid: a normal create here would fail path validation
+	// (the scratch grid is off-grid); the scratch route bypasses it.
+	tile, err := cl.CreateURL(ctx, &rpc.CreateURLRequest{
+		Path: rpc.Path{}, GridID: scratch, X: 0, Y: 0, W: 1, H: 1,
+		URL: "https://example.com/ephemeral",
+	})
+	if err != nil {
+		t.Fatalf("create ephemeral url into scratch: %v", err)
+	}
+	if tile.Kind != rpc.KindURL || tile.URLString != "https://example.com/ephemeral" {
+		t.Errorf("scratch tile = %+v, want a url tile with the typed URL", tile)
+	}
+	if tile.Reference {
+		t.Error("an ephemeral url tile is owned content (off-grid), not a reference")
+	}
+	// It must be readable back from the scratch grid (descent + autocomplete).
+	g, err := cl.GetGrid(ctx, scratch)
+	if err != nil {
+		t.Fatalf("GetGrid scratch: %v", err)
+	}
+	if len(g.Tiles) != 1 || g.Tiles[0].ID != tile.ID {
+		t.Errorf("scratch grid tiles = %+v, want the one ephemeral url", g.Tiles)
 	}
 }
 

@@ -162,7 +162,7 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		// mounted well must agree). Fall back to the plugin's own Info name,
 		// then its kind, only when no name was configured.
 		label := h.srv.pluginReg.Label(p.UUID)
-		var rootGridID string
+		var rootGridID, scratchGridID string
 		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
 			// Info is the whole handshake: it carries the plugin's default root
 			// grid id (fs its configured root, proc pid 1, localdb its root) so
@@ -170,6 +170,11 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 			if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil {
 				if info.RootGridId != "" {
 					rootGridID = qualifyID(p.UUID, info.RootGridId)
+				}
+				// Qualified scratch grid id (ephemeral-url target); empty for
+				// plugins that don't support ephemeral visits.
+				if info.ScratchGridId != "" {
+					scratchGridID = qualifyID(p.UUID, info.ScratchGridId)
 				}
 				if label == "" {
 					label = info.DisplayName
@@ -180,11 +185,12 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 			label = p.Kind
 		}
 		out = append(out, &pb.PluginInfo{
-			Uuid:       p.UUID,
-			Kind:       p.Kind,
-			Label:      label,
-			Writable:   p.Kind == "localdb",
-			RootGridId: rootGridID,
+			Uuid:          p.UUID,
+			Kind:          p.Kind,
+			Label:         label,
+			Writable:      p.Kind == "localdb",
+			RootGridId:    rootGridID,
+			ScratchGridId: scratchGridID,
 		})
 	}
 	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil

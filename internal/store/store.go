@@ -47,11 +47,12 @@ type Store struct {
 }
 
 const (
-	systemKeyRootGridID  = "root_grid_id"
-	systemKeyRootViewCx  = "root_view_cx"
-	systemKeyRootViewCy  = "root_view_cy"
-	systemKeyRootZoom    = "root_zoom"
-	systemKeyPluginUUID  = "plugin_uuid"
+	systemKeyRootGridID    = "root_grid_id"
+	systemKeyRootViewCx    = "root_view_cx"
+	systemKeyRootViewCy    = "root_view_cy"
+	systemKeyRootZoom      = "root_zoom"
+	systemKeyPluginUUID    = "plugin_uuid"
+	systemKeyScratchGridID = "scratch_grid_id"
 )
 
 // Open opens a SQLite database at the given path, applies the schema, and
@@ -160,6 +161,52 @@ func (s *Store) RootGridID(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return strconv.FormatInt(id, 10), nil
+}
+
+// ScratchGridID returns the id of this store's scratch grid, creating it on
+// first use. The scratch grid holds EPHEMERAL url tiles: pages visited by
+// "descend into a url" (a link in a shell, a click on the menu url swatch)
+// without ever placing a tile on a visible grid. It is never a plugin root and
+// is never mounted, so it never renders — yet it persists, so it doubles as the
+// durable visited-url history that feeds url autocomplete, and a deep-link to
+// one of its tiles still resolves (a real, stable tile). Idempotent: the id is
+// stored once in system metadata and returned verbatim thereafter.
+func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyScratchGridID).Scan(&v)
+	if err == nil {
+		return v, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if err := s.withTx(ctx, func(tx *sql.Tx) error {
+		// Re-check inside the tx: the single writer connection serializes
+		// transactions, so a concurrent caller that created it first is
+		// committed and visible here — we return its id rather than make a second.
+		if e := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyScratchGridID).Scan(&v); e == nil {
+			return nil
+		} else if !errors.Is(e, sql.ErrNoRows) {
+			return e
+		}
+		now := s.now().Unix()
+		res, e := tx.ExecContext(ctx,
+			`INSERT INTO grids (object_id, created_at, updated_at) VALUES (?, ?, ?)`,
+			s.newID(), now, now)
+		if e != nil {
+			return e
+		}
+		id, e := res.LastInsertId()
+		if e != nil {
+			return e
+		}
+		v = strconv.FormatInt(id, 10)
+		_, e = tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`, systemKeyScratchGridID, v)
+		return e
+	}); err != nil {
+		return "", err
+	}
+	return v, nil
 }
 
 // SchemaVersion returns the on-disk schema generation this binary materializes

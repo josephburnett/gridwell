@@ -66,11 +66,16 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	if err != nil {
 		return nil, errToStatus(err)
 	}
+	scratch, err := p.st.ScratchGridID(ctx)
+	if err != nil {
+		return nil, errToStatus(err)
+	}
 	return &gridwellv1.InfoResponse{
 		Kind:          "localdb",
 		DisplayName:   "local",
 		SchemaVersion: int64(p.st.SchemaVersion()),
 		RootGridId:    id,
+		ScratchGridId: scratch,
 		HasSession:    true,
 	}, nil
 }
@@ -163,6 +168,13 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	case rpc.KindText:
 		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Data: req.Data}))
 	case rpc.KindURL:
+		// A url create targeting this plugin's scratch grid is an EPHEMERAL
+		// visit ("descend into a url") — route it path-free (the off-grid
+		// scratch grid has no descent path). Any other grid is a normal placed
+		// url tile.
+		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
+			return tileResp(p.st.CreateScratchURL(ctx, t.UrlString))
+		}
 		return tileResp(p.st.CreateURL(ctx, &rpc.CreateURLRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, URL: t.UrlString}))
 	case rpc.KindShell:
 		return tileResp(p.st.CreateShell(ctx, &rpc.CreateShellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))

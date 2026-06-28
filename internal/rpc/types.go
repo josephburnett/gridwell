@@ -231,6 +231,9 @@ type PluginInfo struct {
 	Label      string `json:"label"`
 	Writable   bool   `json:"writable"`
 	RootGridID string `json:"root_grid_id"` // qualified; click-enter descends here
+	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral
+	// url tiles in ("descend into a url"); "" if the plugin has none.
+	ScratchGridID string `json:"scratch_grid_id,omitempty"`
 }
 
 // CreateWellRequest is a typed create. On the wire every create is a single
