@@ -249,11 +249,13 @@ executing the plan. Forgetting deferred items is a known failure mode here, so
 this is the durable record (mirrored in agent memory `project_deferred_*`).
 
 ### Deferred work (come back to these)
-- **I8 — markdown text-preview re-wrap.** A text tile's rendered preview may
-  re-flow at the *preview pane's* width rather than showing a scaled copy of what
-  was framed at descent → "preview ≠ what I left." Not characterized/fixed.
-  **Blocker:** needs a render-introspection testhook (layout width / wrap) before
-  it's even observable in e2e. That hook is step one.
+- **I8 — markdown text-preview re-wrap — VERIFIED HANDLED (not a bug).** The
+  preview lays out at the framing `ContentW` and scales (`drawMarkdownNode`);
+  `PreviewScaleScroll` returns `ContentW` = the framing width; the stored `TextW`
+  is the same `fileInnerBox` width the descent wraps at. So it's a scaled copy,
+  never a re-wrap. Locked by `TestPreviewContentWidthInvariantToFootprint`; doc
+  corrected (`ARCHITECTURE.md` §5.2/I8). Residual: the capture and painter read
+  `fileInnerBox` width by convention, not one shared accessor — optional DRY.
 - **I11 — SSE event during a transition animation.** An inbound `Subscribe` event
   landing mid-animation can appear to mutate what you're looking at. No repro yet;
   needs a deterministic way to inject an event mid-transition.

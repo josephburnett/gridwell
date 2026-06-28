@@ -212,10 +212,17 @@ consequences:
   on a stale pane → **"menus disappearing / on the wrong pane."** This is the
   "fix one path, miss another" pattern in its purest form.
 
-- **Text preview can re-wrap.** `markdown.PreviewScaleScroll` has three priority
-  sources for scale/scroll. ⚠️ If the framing pane's width ≠ the preview pane's
-  width, the markdown **re-flows** rather than showing a scaled copy of what you
-  left — a direct "preview is not what I was looking at" vector.
+- **Text preview re-wrap (I8) — verified handled, not a live bug.** The earlier
+  worry was that the markdown preview re-flows at the preview tile's own width.
+  Reading the code: `markdown.PreviewScaleScroll` returns `ContentW` = the
+  *framing* width (focused pane inner width / stored `TextW` / natural fallback),
+  the painter lays out at `ContentW` and merely **scales** (`drawMarkdownNode`),
+  and the stored `TextW` is captured from the same `fileInnerBox` width the
+  descent wraps at (`fileContentWidth`). So `storedW == descent wrap width` and
+  the preview is a true scaled copy, never a re-wrap to the footprint. Locked by
+  `TestPreviewContentWidthInvariantToFootprint`. The only residual seam is that
+  the capture and the painter both read `fileInnerBox` width by convention rather
+  than one shared accessor — low risk, but that's why it isn't ✅ construction.
 
 - **Optimistic edits race the SSE event.** `cache.Apply` upserts by id and
   **drops events for grids it hasn't cached.** A local optimistic edit and the
@@ -358,7 +365,7 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
 | I6 | Qualified-id routing (`<uuid>/<id>`) | server `route`/`localPathFor` | ✅ construction |
 | I7 | **preview = descent target = ascent return** | 5 client copies, sync by convention | ⚠️ **HIGH** |
-| I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll`, width-dependent | ⚠️ **HIGH** |
+| I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. Tested (`TestPreviewContentWidthInvariantToFootprint`) | ✅ mostly construction (one convention seam) |
 | I9 | Controls show only on the focused pane | canvas (Go) + `controlVisible` (TS) | ⚠️ HIGH (dup) |
 | I10 | Menu changes only by user action | 11 imperative sites, no owner | ⚠️ **HIGH** |
 | I11 | Reading never mutates (SSE during animation; split-pane shared text) | hoped, not enforced | ⚠️ HIGH |
