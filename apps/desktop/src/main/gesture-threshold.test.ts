@@ -1,0 +1,37 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+// Drift-lint for the drag threshold (ARCHITECTURE.md §8 seam #5). The "how far is
+// a drag, not a click" threshold is the SAME conceptual value in three places, in
+// two languages, and they MUST agree or a gesture is interpreted differently
+// depending on where it starts (canvas vs a live URL view): a right-drag over a
+// live page could arm a pane gesture on one side while the other still reads a
+// right-click, the exact seam-drift the analysis flagged.
+//
+// It can't be one shared runtime constant: a sandboxed preload may not require
+// local modules (urlview-preload.ts), and Go/TS don't share source. So the single
+// OWNER is the canvas value, client/wasm/main.go `dragThreshold`, and this lint
+// fails the build if either TS copy drifts from it — the same discipline as the
+// proto-vs-DDL drift test. Change the owner and this points at every copy to fix.
+
+const here = dirname(fileURLToPath(import.meta.url)); // apps/desktop/src/main
+const repoRoot = resolve(here, '../../../..');
+
+function literal(path: string, re: RegExp): number {
+  const src = readFileSync(resolve(repoRoot, path), 'utf8');
+  const m = src.match(re);
+  assert.ok(m, `no threshold literal found in ${path} (pattern ${re})`);
+  return parseFloat(m![1]);
+}
+
+test('the drag threshold agrees across the canvas and both native copies', () => {
+  const canvas = literal('client/wasm/main.go', /dragThreshold\s*=\s*([\d.]+)/);
+  const viewutil = literal('apps/desktop/src/main/viewutil.ts', /RIGHT_DRAG_THRESHOLD\s*=\s*([\d.]+)/);
+  const preload = literal('apps/desktop/src/preload/urlview-preload.ts', /RIGHT_DRAG_THRESHOLD\s*=\s*([\d.]+)/);
+
+  assert.equal(viewutil, canvas, 'viewutil.ts RIGHT_DRAG_THRESHOLD drifted from the canvas dragThreshold (the owner)');
+  assert.equal(preload, canvas, 'urlview-preload.ts RIGHT_DRAG_THRESHOLD drifted from the canvas dragThreshold (the owner)');
+});

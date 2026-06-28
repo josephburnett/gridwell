@@ -438,8 +438,15 @@ type dragState struct {
 	srcCellSize float64
 }
 
-// dragThreshold is the cursor-movement distance that turns a press into a
-// drag. Below this, mousedown→mouseup is treated as a click (select).
+// dragThreshold is the cursor-movement distance (CSS px) that turns a press into
+// a drag. Below this, mousedown→mouseup is treated as a click (select).
+//
+// This is the SINGLE OWNER of the drag threshold. The native layer keeps two
+// forced copies (apps/desktop/src/main/viewutil.ts RIGHT_DRAG_THRESHOLD, and an
+// inlined copy in src/preload/urlview-preload.ts — a sandboxed preload may not
+// require modules) so a live URL view interprets a right-drag-vs-right-click
+// exactly as the canvas does. gesture-threshold.test.ts fails the build if either
+// copy drifts from this value, so they cannot silently disagree.
 const dragThreshold = 4.0
 
 func main() {
