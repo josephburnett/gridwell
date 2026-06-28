@@ -62,15 +62,17 @@ test:
 test-cover:
 	go test -cover ./...
 
-# check is the per-commit verification gate: every commit must leave all four
+# check is the per-commit verification gate: every commit must leave all five
 # green. The wasm build catches GOOS=js breakage that `go build ./...` (host
-# arch) misses; the typecheck catches Electron-side TS drift. No display or
-# network needed.
+# arch) misses; the typecheck catches Electron-side TS drift; `npm test` runs
+# the desktop main-process unit tests (menu/geometry logic that never reaches
+# the heavier display-bound gates). No display or network needed.
 check:
 	go build ./...
 	go test ./...
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	cd $(DESKTOP) && npm run typecheck
+	cd $(DESKTOP) && npm test
 
 # check-electron runs the live-tile harnesses under a virtual display. Needed
 # only for phases that touch the URL/shell live path (and the final pass), since

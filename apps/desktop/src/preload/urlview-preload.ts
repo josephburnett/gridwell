@@ -1,8 +1,11 @@
 // urlview-preload.ts — injected into every live URL WebContentsView.
 //
 // It distinguishes a right-CLICK from a right-DRAG over live web content:
-//   - a plain right-click passes straight through to the page, so the web
-//     view's own context menu appears (native browsing is untouched); while
+//   - a plain right-click passes straight through, so the page's `contextmenu`
+//     event fires and Electron emits `context-menu` on the webContents, which
+//     webviews.ts handles to pop the menu (copy link, copy, back, …). Electron
+//     has no default page menu — that handler is what makes a right-click do
+//     anything at all; this preload's job is just to NOT suppress it.
 //   - a right-DRAG arms a Gridwell pane gesture (split / swap / resize /
 //     ascend), forwarded to main at the press point — the same way the shell's
 //     xterm overlay forwards its right button.
@@ -90,10 +93,12 @@ window.addEventListener(
   true,
 );
 
-// Suppress the native/page context menu only when the right press became a drag
-// (a Gridwell gesture). A plain right-click falls through so the web view shows
-// its own menu. (On Linux/Windows `contextmenu` fires on right-button-up, after
-// the drag has been detected.)
+// Suppress the context menu only when the right press became a drag (a Gridwell
+// gesture): preventing the page's `contextmenu` event stops Chromium from
+// emitting the webContents `context-menu` event, so webviews.ts pops no menu
+// mid-gesture. A plain right-click falls through, so that handler builds the
+// menu. (On Linux/Windows `contextmenu` fires on right-button-up, after the
+// drag has been detected.)
 window.addEventListener(
   'contextmenu',
   (e: Event) => {

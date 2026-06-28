@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "npm run build && electron .",
-    "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts",
+    "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts src/main/contextmenu.test.ts",
     "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js",
     "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js",
     "test:e2e": "playwright test",

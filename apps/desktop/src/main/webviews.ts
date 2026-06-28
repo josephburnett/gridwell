@@ -1,7 +1,9 @@
-import { BaseWindow, WebContentsView, session } from 'electron';
+import { BaseWindow, WebContentsView, Menu, clipboard, session } from 'electron';
+import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent } from './ipc';
 import { SESSION_PARTITION, partitionFor, roundBounds, boundsEqual, controlVisible } from './viewutil';
+import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
 import { captureJpegBase64 } from './capture';
 
@@ -109,6 +111,45 @@ export class WebviewRegistry {
     this.win.setFullScreen(!this.win.isFullScreen());
   }
 
+  // showContextMenu builds and pops the live URL view's right-click menu. The
+  // policy (which items, what each does) lives in the pure urlContextMenuTemplate
+  // (unit-tested); here we only translate Electron's params + bind the actions
+  // to the real clipboard and webContents, then pop the menu over the window.
+  private showContextMenu(view: WebContentsView, params: ContextMenuParams): void {
+    const wc = view.webContents;
+    const nav = wc.navigationHistory;
+    const template = urlContextMenuTemplate(
+      {
+        linkURL: params.linkURL,
+        selectionText: params.selectionText,
+        isEditable: params.isEditable,
+        editFlags: {
+          canCut: params.editFlags.canCut,
+          canCopy: params.editFlags.canCopy,
+          canPaste: params.editFlags.canPaste,
+        },
+        canGoBack: nav.canGoBack(),
+        canGoForward: nav.canGoForward(),
+      },
+      {
+        copyText: (t) => clipboard.writeText(t),
+        copyLink: (u) => clipboard.writeText(u),
+        openLink: (u) => void wc.loadURL(u),
+        cut: () => wc.cut(),
+        paste: () => wc.paste(),
+        back: () => {
+          if (nav.canGoBack()) nav.goBack();
+        },
+        forward: () => {
+          if (nav.canGoForward()) nav.goForward();
+        },
+        reload: () => wc.reload(),
+      },
+    );
+    const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
+    menu.popup({ window: this.win });
+  }
+
   has(paneId: string): boolean {
     return this.entries.has(paneId);
   }
@@ -183,6 +224,12 @@ export class WebviewRegistry {
           event.preventDefault();
         }
       });
+      // A plain right-click over live content must show a context menu (copy
+      // link, copy, back, …). Electron's WebContentsView has NO default menu —
+      // it only emits this event and leaves the menu to us. The injected
+      // preload already suppresses this event for a right-DRAG (a pane
+      // gesture), so reaching here means a genuine click.
+      view.webContents.on('context-menu', (_event, params) => this.showContextMenu(view, params));
       // focused starts true: a pane only goes live by an action on the focused
       // pane, so the control should appear immediately; syncURLViews corrects
       // it on the next frame if focus has already moved.
