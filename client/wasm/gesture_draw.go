@@ -366,7 +366,7 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	}
 	urlLive := false
 	if p != nil {
-		urlLive = a.urlStreams[p.ID] != nil
+		urlLive = a.urlViewFor(p.ID) != nil
 	}
 
 	color := colorSplitInactive

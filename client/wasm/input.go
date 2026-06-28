@@ -118,7 +118,7 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 // Frozen descent: "grab" at rest, "grabbing" while dragging.
 // Live descent: default (the iframe / Chromium manages its own cursor).
 func (a *App) updateURLCursor(p *pane.Pane, _ pane.Rect) {
-	if a.urlStreams[p.ID] != nil {
+	if a.urlViewFor(p.ID) != nil {
 		// Live: restore default and let the page/browser control the cursor.
 		a.canvas.Get("style").Set("cursor", "")
 		return
@@ -151,7 +151,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		// canvas so it doesn't zoom the pane underneath; otherwise fall
 		// through to the pane-wide gridwell wheel (zoom) like other files.
 		if a.isURLDescent(p) {
-			if a.urlStreams[p.ID] != nil && pointInPaneContent(r, sx, sy) {
+			if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) {
 				args[0].Call("preventDefault")
 				return nil
 			}
@@ -295,7 +295,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// pane (it's hidden otherwise); a click on a just-focused pane
 			// falls through to the pan/native-view path below.
 			if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
-				if a.urlStreams[p.ID] != nil {
+				if a.urlViewFor(p.ID) != nil {
 					bridgeGoBack(p.ID)
 				} else {
 					// Frozen: go live (place the native view), same as
@@ -315,7 +315,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				return nil
 			}
 			// Live pane: the native view owns content clicks; nothing to do.
-			if a.urlStreams[p.ID] != nil {
+			if a.urlViewFor(p.ID) != nil {
 				return nil
 			}
 			// Frozen pane: start a pan drag to navigate cover-mode overflow.
@@ -498,7 +498,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			if pointInPaneContent(r, sx, sy) {
 				// Live pane: the native view owns the cursor (the canvas
 				// won't get moves over it anyway). Frozen pane: grab cursor.
-				if a.urlStreams[p.ID] != nil {
+				if a.urlViewFor(p.ID) != nil {
 					a.canvas.Get("style").Set("cursor", "")
 					return nil
 				}
@@ -606,7 +606,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		// it pans the parent-grid view.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.TextFocus != "" && a.isURLDescent(focused) && a.urlStreams[focused.ID] == nil {
+			if focused.TextFocus != "" && a.isURLDescent(focused) && a.urlViewFor(focused.ID) == nil {
 				// Frozen URL descent: translate cover-crop pan. The delta
 				// is negated because dragging right should shift the image
 				// right (show left portion), i.e., decrease panX.
@@ -667,7 +667,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		if pointInPlus(p, r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
-		if a.urlStreams[p.ID] != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
+		if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
 	}

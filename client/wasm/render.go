@@ -420,7 +420,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// one of the same hue so you can still see at a glance which
 	// other panes are also "looking inside" something.
 	focused := p.ID == a.tree.Focus
-	urlLive := a.urlStreams[p.ID] != nil
+	urlLive := a.urlViewFor(p.ID) != nil
 	border := paneBorderColorFor(p, g, gridOK, focused, urlLive)
 	a.cctx.Set("strokeStyle", border)
 	a.cctx.Set("lineWidth", paneBorderPx)
@@ -437,7 +437,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// corner just focuses it rather than silently firing the button.
 	if p.TextFocus != "" {
 		if focused && a.isURLDescent(p) {
-			if a.urlStreams[p.ID] != nil {
+			if a.urlViewFor(p.ID) != nil {
 				a.drawURLBackButton(p, r)
 			} else {
 				a.drawURLRefreshButton(p, r)

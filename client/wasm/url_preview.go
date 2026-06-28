@@ -82,7 +82,7 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
-			live := a.urlStreams[p.ID] != nil
+			live := a.urlViewFor(p.ID) != nil
 			if live {
 				// Live: center-crop, no pan — the page renders at pane size.
 				drawImageCoverCentered(a.cctx, img, x, y, w, h)

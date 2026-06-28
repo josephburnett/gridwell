@@ -179,16 +179,10 @@ type App struct {
 	mdImages     map[string]js.Value
 	mdImageState map[string]int8
 
-	// urlStreams holds the live native WebContentsView handle for each
-	// pane descended into a live URL tile. One per pane id; multiple panes
-	// may host views concurrently. Named "streams" for historical reasons
-	// (it was the /rpc/URLStream WebSocket map); it now drives the Electron
-	// webview bridge.
-	urlStreams map[string]*urlView
-
-	// shellStreams mirrors urlStreams for live shell tile sessions —
-	// one /rpc/ShellStream WebSocket plus its xterm.js DOM overlay
-	// per pane descended into a live shell tile.
+	// shellStreams holds the live shell tile session (one /rpc/ShellStream
+	// WebSocket plus its xterm.js DOM overlay) per pane descended into a live
+	// shell tile. (The live URL handle now lives on paneLocal.urlView; this map
+	// is migrated next.)
 	shellStreams map[string]*shellStreamConn
 
 	// shellAlive caches the result of the ShellSessionAlive probe per
@@ -292,6 +286,18 @@ type paneState = panestate.Saved
 // state can outlive or be orphaned from its pane.
 type paneLocal struct {
 	panestate.State
+	// urlView is the live native WebContentsView handle when this pane is
+	// descended into a live URL tile; nil otherwise. Closed via closeURLStream.
+	urlView *urlView
+}
+
+// urlViewFor returns paneID's live URL view handle, or nil when the pane has no
+// live URL descent. The liveness check used throughout the input/render paths.
+func (a *App) urlViewFor(paneID string) *urlView {
+	if pl, ok := a.localIf(paneID); ok {
+		return pl.urlView
+	}
+	return nil
 }
 
 // local returns the per-pane state for paneID, creating an empty one on first
@@ -483,7 +489,6 @@ func main() {
 		tileInflight:      map[string]bool{},
 		tileLoadFailed:    map[string]bool{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
-		urlStreams:        map[string]*urlView{},
 		shellStreams:      map[string]*shellStreamConn{},
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},

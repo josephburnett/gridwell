@@ -16,8 +16,8 @@ import (
 // urlView is the renderer-side handle for one live URL tile — a native
 // WebContentsView hosted by the Electron main process and floated over the
 // pane's content box. It replaced the old urlStreamConn (a /rpc/URLStream
-// WebSocket streaming rod JPEGs); the map field is still named urlStreams so
-// the many liveness checks (a.urlStreams[p.ID] != nil) read unchanged.
+// WebSocket streaming rod JPEGs). The live handle lives on paneLocal.urlView,
+// reached through a.urlViewFor(paneID) (nil = no live URL descent).
 type urlView struct {
 	tileID   string
 	objectID string
@@ -92,10 +92,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	}
 	r := a.paneRectByID(p.ID)
 	b := contentViewBounds(r)
-	if a.urlStreams == nil {
-		a.urlStreams = map[string]*urlView{}
-	}
-	a.urlStreams[p.ID] = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path)}
+	a.local(p.ID).urlView = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path)}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
 	// The plugin that owns the tile is the session boundary: its uuid (the
 	// prefix of the qualified tile id) selects the Electron partition, so url
@@ -108,11 +105,12 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 // the WebContentsView, captures a final frame, and persists the frozen
 // preview + address + title via SetURLState. Idempotent.
 func (a *App) closeURLStream(paneID string) {
-	v, ok := a.urlStreams[paneID]
-	if !ok {
+	pl, ok := a.localIf(paneID)
+	if !ok || pl.urlView == nil {
 		return
 	}
-	delete(a.urlStreams, paneID)
+	v := pl.urlView
+	pl.urlView = nil
 	tileID := v.tileID
 	anchor := v.anchor
 	path := slices.Clone(v.path)
@@ -148,9 +146,11 @@ func (a *App) closeURLStream(paneID string) {
 // closeAllURLStreams tears down every live view. Used on beforeunload so the
 // freeze writes fire before the page goes away.
 func (a *App) closeAllURLStreams() {
-	ids := make([]string, 0, len(a.urlStreams))
-	for id := range a.urlStreams {
-		ids = append(ids, id)
+	ids := make([]string, 0, len(a.locals))
+	for id, pl := range a.locals {
+		if pl.urlView != nil {
+			ids = append(ids, id)
+		}
 	}
 	for _, id := range ids {
 		a.closeURLStream(id)
@@ -163,12 +163,13 @@ func (a *App) closeAllURLStreams() {
 // on top (drag ghost, palette, right-drag pane preview). Called at the end
 // of draw(), mirroring syncShellOverlayPosition.
 func (a *App) syncURLViews() {
-	if len(a.urlStreams) == 0 {
-		return
-	}
 	rects := a.layoutPanes()
 	hidden := a.liveOverlaysHidden()
-	for paneID, v := range a.urlStreams {
+	for paneID, pl := range a.locals {
+		v := pl.urlView
+		if v == nil {
+			continue
+		}
 		r, ok := rects[paneID]
 		if !ok {
 			bridgeSetHidden(paneID, true, false)
