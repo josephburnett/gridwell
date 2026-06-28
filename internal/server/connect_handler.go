@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 	gcodes "google.golang.org/grpc/codes"
@@ -151,6 +152,12 @@ func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Reques
 	return connect.NewResponse(resp), nil
 }
 
+// pluginInfoTimeout bounds each plugin's Info handshake during ListPlugins so
+// one slow or hung plugin can't stall (or block) the whole launcher. On timeout
+// the plugin is still listed from its config (kind + configured label), just
+// without a clickable root — graceful degradation beats a frozen launcher.
+const pluginInfoTimeout = 3 * time.Second
+
 // ListPlugins enumerates the configured plugins in config order so the client
 // can build the launcher / + menu. label comes from each plugin's Info;
 // writable (accepts new tiles) is derived from kind — only localdb grids can
@@ -158,42 +165,56 @@ func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Reques
 func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
 	var out []*pb.PluginInfo
 	for _, p := range h.srv.pluginReg.Ordered() {
-		// The server.yaml display name is authoritative (the menu and a
-		// mounted well must agree). Fall back to the plugin's own Info name,
-		// then its kind, only when no name was configured.
+		// The server.yaml display name is authoritative (the menu and a mounted
+		// well must agree); buildPluginInfo falls back to Info's name then kind.
 		label := h.srv.pluginReg.Label(p.UUID)
-		var rootGridID, scratchGridID string
+		var info *pb.InfoResponse
 		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
-			// Info is the whole handshake: it carries the plugin's default root
-			// grid id (fs its configured root, proc pid 1, localdb its root) so
-			// the client can click-enter straight into it, plus a fallback label.
-			if info, err := c.Info(ctx, &pb.InfoRequest{}); err == nil {
-				if info.RootGridId != "" {
-					rootGridID = qualifyID(p.UUID, info.RootGridId)
-				}
-				// Qualified scratch grid id (ephemeral-url target); empty for
-				// plugins that don't support ephemeral visits.
-				if info.ScratchGridId != "" {
-					scratchGridID = qualifyID(p.UUID, info.ScratchGridId)
-				}
-				if label == "" {
-					label = info.DisplayName
-				}
-			}
+			// Info is the whole handshake (default root grid + fallback label).
+			// Bound it so a hung plugin degrades to a config-only entry instead
+			// of hanging the launcher; a failed/timed-out Info → info stays nil.
+			ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
+			info, _ = c.Info(ictx, &pb.InfoRequest{})
+			cancel()
 		}
-		if label == "" {
-			label = p.Kind
-		}
-		out = append(out, &pb.PluginInfo{
-			Uuid:          p.UUID,
-			Kind:          p.Kind,
-			Label:         label,
-			Writable:      p.Kind == "localdb",
-			RootGridId:    rootGridID,
-			ScratchGridId: scratchGridID,
-		})
+		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info))
 	}
 	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
+}
+
+// buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
+// configured label) and the plugin's Info handshake. info is nil when Info
+// failed or timed out: the plugin is still listed (so the launcher never blanks
+// a configured plugin), but with no clickable root/scratch grid and a label that
+// falls back to the configured name, then the kind. Pure, so the fallback rules
+// are unit-tested without standing up a plugin.
+func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.PluginInfo {
+	label := configLabel
+	var rootGridID, scratchGridID string
+	if info != nil {
+		if info.RootGridId != "" {
+			rootGridID = qualifyID(uuid, info.RootGridId)
+		}
+		// Qualified scratch grid id (ephemeral-url target); empty for plugins
+		// that don't support ephemeral visits.
+		if info.ScratchGridId != "" {
+			scratchGridID = qualifyID(uuid, info.ScratchGridId)
+		}
+		if label == "" {
+			label = info.DisplayName
+		}
+	}
+	if label == "" {
+		label = kind
+	}
+	return &pb.PluginInfo{
+		Uuid:          uuid,
+		Kind:          kind,
+		Label:         label,
+		Writable:      kind == "localdb",
+		RootGridId:    rootGridID,
+		ScratchGridId: scratchGridID,
+	}
 }
 
 func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.GetTileRequest]) (*connect.Response[pb.TileResponse], error) {
@@ -312,6 +333,7 @@ func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb
 	resp, err := c.ResizeTile(ctx, m)
 	return pluginTileResp(uuid, resp, err)
 }
+
 // SetTile is the single framing/preview writeback router. The owning plugin
 // dispatches on the target tile's kind to the one operation that kind supports
 // (well/text framing → no version bump; url/shell preview → bump).
