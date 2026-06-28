@@ -65,6 +65,40 @@ func TestPreviewScaleScroll(t *testing.T) {
 	}
 }
 
+// The I8 invariant, stated precisely: for a FIXED framing, the preview's layout
+// width (ContentW) must not depend on the preview tile's footprint (w, h) — the
+// tile's size on the parent grid only changes the cover Scale. If ContentW
+// tracked the footprint, a tile shown at a different size would RE-WRAP its
+// markdown to its own width instead of showing a scaled copy of what was framed
+// — exactly the "preview ≠ what I left" / "preview goes wonky" report. The doc
+// must reflow only when re-descended into a real pane, never per preview size.
+func TestPreviewContentWidthInvariantToFootprint(t *testing.T) {
+	const natural, fixed, minS = 400.0, 1.0, 0.02
+
+	// Stored framing (the unfocused preview / ascent-return case): the saved
+	// window is 120 wide. Render it at three very different footprints.
+	const storedW = 120
+	footprints := [][2]float64{{60, 40}, {240, 160}, {37, 211}}
+	for _, fp := range footprints {
+		f := PreviewScaleScroll(fp[0], fp[1], false, 0, 0, 0, 0, storedW, 80, 0, 0, natural, fixed, minS)
+		if !almost(f.ContentW, storedW) {
+			t.Errorf("footprint %vx%v: ContentW = %v, want the framing width %v (no re-wrap)",
+				fp[0], fp[1], f.ContentW, storedW)
+		}
+	}
+
+	// Focused (a live mirror in another pane): ContentW tracks the focused pane's
+	// inner width, again independent of the mirror's own footprint.
+	const innerW = 95
+	for _, fp := range footprints {
+		f := PreviewScaleScroll(fp[0], fp[1], true, innerW, 70, 0, 0, 0, 0, 0, 0, natural, fixed, minS)
+		if !almost(f.ContentW, innerW) {
+			t.Errorf("focused footprint %vx%v: ContentW = %v, want inner width %v (no re-wrap)",
+				fp[0], fp[1], f.ContentW, innerW)
+		}
+	}
+}
+
 func TestRawTextLineSlot(t *testing.T) {
 	// fontPx 13, mul 1.35, scale 1, pad 8, scrollY 0, asc 12, desc 4.
 	// slot = 13*1.35 = 17.55; baseline = (17.55-16)/2 + 12 = 12.775; top0 = 8.
