@@ -179,12 +179,6 @@ type App struct {
 	mdImages     map[string]js.Value
 	mdImageState map[string]int8
 
-	// shellStreams holds the live shell tile session (one /rpc/ShellStream
-	// WebSocket plus its xterm.js DOM overlay) per pane descended into a live
-	// shell tile. (The live URL handle now lives on paneLocal.urlView; this map
-	// is migrated next.)
-	shellStreams map[string]*shellStreamConn
-
 	// shellAlive caches the result of the ShellSessionAlive probe per
 	// tile id. The refresh button shows iff (preview_blob_id == 0)
 	// || shellAlive[id] is true. shellAliveProbing dedups in-flight
@@ -289,6 +283,19 @@ type paneLocal struct {
 	// urlView is the live native WebContentsView handle when this pane is
 	// descended into a live URL tile; nil otherwise. Closed via closeURLStream.
 	urlView *urlView
+	// shellConn is the live shell session (WebSocket + xterm.js overlay) when
+	// this pane is descended into a live shell tile; nil otherwise. Closed via
+	// closeShellStream / releaseShellStream.
+	shellConn *shellStreamConn
+}
+
+// shellConnFor returns paneID's live shell session, or nil when the pane has no
+// live shell descent.
+func (a *App) shellConnFor(paneID string) *shellStreamConn {
+	if pl, ok := a.localIf(paneID); ok {
+		return pl.shellConn
+	}
+	return nil
 }
 
 // urlViewFor returns paneID's live URL view handle, or nil when the pane has no
@@ -489,7 +496,6 @@ func main() {
 		tileInflight:      map[string]bool{},
 		tileLoadFailed:    map[string]bool{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
-		shellStreams:      map[string]*shellStreamConn{},
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},
 	}

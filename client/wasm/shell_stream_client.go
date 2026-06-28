@@ -31,13 +31,13 @@ type shellStreamConn struct {
 	tileID string
 	paneID string
 
-	onMessage js.Func
-	onOpen    js.Func
-	onClose   js.Func
-	onError   js.Func
-	onData    js.Func // term.onData(bytes string) callback
-	onResize  js.Func // term.onResize({cols, rows})
-	onMouse   js.Func // container right-button → canvas gesture pipeline
+	onMessage      js.Func
+	onOpen         js.Func
+	onClose        js.Func
+	onError        js.Func
+	onData         js.Func // term.onData(bytes string) callback
+	onResize       js.Func // term.onResize({cols, rows})
+	onMouse        js.Func // container right-button → canvas gesture pipeline
 	onLinkProvide  js.Func // xterm link provider: scans lines for http(s) urls
 	onLinkActivate js.Func // shared link click handler → ephemeral url descent
 
@@ -76,10 +76,7 @@ func (a *App) isShellDescent(p *pane.Pane) bool {
 // hasShellStream reports whether a live shell stream is attached to
 // the given pane. Drives the "frozen vs live" UI distinction.
 func (a *App) hasShellStream(paneID string) bool {
-	if a.shellStreams == nil {
-		return false
-	}
-	return a.shellStreams[paneID] != nil
+	return a.shellConnFor(paneID) != nil
 }
 
 // shellRefreshButtonVisible decides whether the lower-right refresh
@@ -401,10 +398,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	ws.Call("addEventListener", "close", conn.onClose)
 	ws.Call("addEventListener", "error", conn.onError)
 
-	if a.shellStreams == nil {
-		a.shellStreams = map[string]*shellStreamConn{}
-	}
-	a.shellStreams[p.ID] = conn
+	a.local(p.ID).shellConn = conn
 	// First sync: position over the pane content area now that we know
 	// the rect.
 	a.syncShellOverlayPosition()
@@ -506,11 +500,12 @@ func (a *App) installShellMirror() {
 // parked for a gesture: the containers are hidden then and the redraw a frame
 // would schedule fights the in-flight drag.
 func (a *App) mirrorLiveShells() {
-	if len(a.shellStreams) == 0 || a.liveOverlaysHidden() {
+	if a.liveOverlaysHidden() {
 		return
 	}
-	for _, conn := range a.shellStreams {
-		if conn.closed {
+	for _, pl := range a.locals {
+		conn := pl.shellConn
+		if conn == nil || conn.closed {
 			continue
 		}
 		jpeg := snapshotShellCanvas(conn.container)
@@ -528,8 +523,8 @@ func (a *App) mirrorLiveShells() {
 // running inside the tmux session so a future refresh reattaches to
 // the same state. Idempotent.
 func (a *App) closeShellStream(paneID string) {
-	conn, ok := a.shellStreams[paneID]
-	if !ok {
+	conn := a.shellConnFor(paneID)
+	if conn == nil {
 		return
 	}
 	conn.closed = true
@@ -556,9 +551,11 @@ func (a *App) closeShellStream(paneID string) {
 // beforeunload so the server's freeze-and-destroy runs before the tab
 // goes away.
 func (a *App) closeAllShellStreams() {
-	ids := make([]string, 0, len(a.shellStreams))
-	for id := range a.shellStreams {
-		ids = append(ids, id)
+	ids := make([]string, 0, len(a.locals))
+	for id, pl := range a.locals {
+		if pl.shellConn != nil {
+			ids = append(ids, id)
+		}
 	}
 	for _, id := range ids {
 		a.closeShellStream(id)
@@ -568,8 +565,8 @@ func (a *App) closeAllShellStreams() {
 // releaseShellStream tears down the DOM + js.Func handlers after the
 // WebSocket fires onClose. Called from the onClose handler.
 func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
-	if cur, ok := a.shellStreams[paneID]; ok && cur == conn {
-		delete(a.shellStreams, paneID)
+	if pl, ok := a.localIf(paneID); ok && pl.shellConn == conn {
+		pl.shellConn = nil
 	}
 	// Detach handlers and dispose the terminal before removing the
 	// DOM node so xterm's internal listeners don't fire against a
@@ -604,21 +601,24 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 // transforms are cheap. fit addon is called once per resize event so
 // xterm's grid dimensions follow the container.
 func (a *App) syncShellOverlayPosition() {
-	if len(a.shellStreams) == 0 {
-		return
-	}
 	// Like native URL views, the xterm host div paints above the canvas and
 	// swallows mouse input over its rect. Park every overlay during a
 	// canvas-overlay gesture so a boundary drag (or any other gesture) can
 	// cross the shell without the div eating the move/up events.
 	if a.liveOverlaysHidden() {
-		for _, conn := range a.shellStreams {
-			conn.container.Get("style").Set("display", "none")
+		for _, pl := range a.locals {
+			if pl.shellConn != nil {
+				pl.shellConn.container.Get("style").Set("display", "none")
+			}
 		}
 		return
 	}
 	rects := a.layoutPanes()
-	for paneID, conn := range a.shellStreams {
+	for paneID, pl := range a.locals {
+		conn := pl.shellConn
+		if conn == nil {
+			continue
+		}
 		r, ok := rects[paneID]
 		if !ok {
 			conn.container.Get("style").Set("display", "none")
