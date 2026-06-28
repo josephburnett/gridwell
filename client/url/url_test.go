@@ -298,10 +298,10 @@ func TestGridStateClonesPath(t *testing.T) {
 
 func TestBootViewport(t *testing.T) {
 	cases := []struct {
-		name           string
-		ux, uy, uz     float64
-		rx, ry, rz     float64
-		want           BootView
+		name       string
+		ux, uy, uz float64
+		rx, ry, rz float64
+		want       BootView
 	}{
 		{"url viewport with zoom wins", 5, -3, 1.5, 9, 9, 2,
 			BootView{Apply: true, Cx: 5, Cy: -3, SetZoom: true, Zoom: 1.5}},

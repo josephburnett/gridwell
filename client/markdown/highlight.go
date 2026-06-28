@@ -137,8 +137,10 @@ func scanString(code string, start int, quote byte) int {
 	return len(code)
 }
 
-func isDigit(b byte) bool     { return b >= '0' && b <= '9' }
-func isNumPart(b byte) bool   { return b == '.' || b == 'x' || b == 'b' || b == 'o' || b == '_' || b == 'e' || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F') }
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+func isNumPart(b byte) bool {
+	return b == '.' || b == 'x' || b == 'b' || b == 'o' || b == '_' || b == 'e' || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
 func isIdentStart(b byte) bool { return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') }
 func isIdentPart(b byte) bool  { return isIdentStart(b) || isDigit(b) }
 

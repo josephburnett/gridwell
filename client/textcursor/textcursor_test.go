@@ -43,9 +43,9 @@ func TestOffsetFromRowCol(t *testing.T) {
 func TestRowColFromOffset(t *testing.T) {
 	const src = "ab\ncde\n\nfg"
 	cases := []struct {
-		name      string
-		src       string
-		off       int
+		name       string
+		src        string
+		off        int
 		wRow, wCol int
 	}{
 		{"start", src, 0, 0, 0},

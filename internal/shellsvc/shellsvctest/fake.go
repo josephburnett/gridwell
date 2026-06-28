@@ -17,11 +17,11 @@ import (
 // tile so a test can pick the create / attach / reject path; every OpenSession
 // is recorded with its mode and size.
 type FakeStreamer struct {
-	mu          sync.Mutex
-	alive       map[string]bool
-	sessions    []*FakeSession
-	killed      []string
-	PaneCmd     string // canned PaneCommand answer
+	mu       sync.Mutex
+	alive    map[string]bool
+	sessions []*FakeSession
+	killed   []string
+	PaneCmd  string // canned PaneCommand answer
 }
 
 func New() *FakeStreamer { return &FakeStreamer{alive: map[string]bool{}} }

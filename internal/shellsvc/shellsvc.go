@@ -71,9 +71,9 @@ func (l *liveStreamer) OpenSession(tileID string, mode tmux.Mode, cols, rows uin
 	return shelldriver.Start(shelldriver.Config{Cols: cols, Rows: rows, BashPath: argv[0], Args: argv[1:]})
 }
 
-func (l *liveStreamer) HasSession(tileID string) (bool, error)   { return l.ctrl.HasSession(tileID) }
-func (l *liveStreamer) Kill(tileID string) error                 { return l.ctrl.KillSession(tileID) }
-func (l *liveStreamer) ListLiveTileIDs() ([]string, error)       { return l.ctrl.ListSessions() }
+func (l *liveStreamer) HasSession(tileID string) (bool, error)    { return l.ctrl.HasSession(tileID) }
+func (l *liveStreamer) Kill(tileID string) error                  { return l.ctrl.KillSession(tileID) }
+func (l *liveStreamer) ListLiveTileIDs() ([]string, error)        { return l.ctrl.ListSessions() }
 func (l *liveStreamer) PaneCommand(tileID string) (string, error) { return l.ctrl.PaneCommand(tileID) }
 
 // Manager owns the single live PTY per tile and the takeover semantics: a

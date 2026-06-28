@@ -169,8 +169,8 @@ type fakeStreamer struct{ alive bool }
 func (f *fakeStreamer) OpenSession(string, tmux.Mode, uint16, uint16) (shellsvc.Session, error) {
 	return nil, nil
 }
-func (f *fakeStreamer) HasSession(string) (bool, error)   { return f.alive, nil }
-func (f *fakeStreamer) Kill(string) error                 { return nil }
+func (f *fakeStreamer) HasSession(string) (bool, error)    { return f.alive, nil }
+func (f *fakeStreamer) Kill(string) error                  { return nil }
 func (f *fakeStreamer) ListLiveTileIDs() ([]string, error) { return nil, nil }
 func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
 

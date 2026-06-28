@@ -443,4 +443,3 @@ func (p *Plugin) reconcileTiles(gridID, rootPID int64) error {
 
 	return tx.Commit()
 }
-

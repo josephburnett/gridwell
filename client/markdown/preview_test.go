@@ -115,9 +115,9 @@ func TestRawTextLineSlot(t *testing.T) {
 
 func TestRawTextLineVisible(t *testing.T) {
 	cases := []struct {
-		name           string
+		name             string
 		slotTop, slot, h float64
-		want           bool
+		want             bool
 	}{
 		{"fully visible", 10, 17, 100, true},
 		{"just above top (bottom edge >0)", -10, 17, 100, true},

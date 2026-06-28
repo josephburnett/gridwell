@@ -137,10 +137,10 @@ func TestDividersNested(t *testing.T) {
 func TestRatioFromCursor(t *testing.T) {
 	cont := Rect{X: 100, Y: 200, W: 400, H: 600}
 	cases := []struct {
-		name    string
-		dir     Direction
-		sx, sy  float64
-		want    float64
+		name   string
+		dir    Direction
+		sx, sy float64
+		want   float64
 	}{
 		{"horizontal at top edge", Horizontal, 0, 200, 0},
 		{"horizontal at bottom edge", Horizontal, 0, 800, 1},
@@ -169,9 +169,9 @@ func TestRatioFromCursorZeroContainer(t *testing.T) {
 func TestClassifyRegionLargePane(t *testing.T) {
 	r := Rect{X: 0, Y: 0, W: 100, H: 100}
 	cases := []struct {
-		name   string
-		x, y   float64
-		want   Region
+		name string
+		x, y float64
+		want Region
 	}{
 		{"top edge", 50, 5, RegionResizeTop},
 		{"bottom edge", 50, 95, RegionResizeBottom},
@@ -424,9 +424,9 @@ func TestClampRatioToMinPx(t *testing.T) {
 func TestRectContains(t *testing.T) {
 	r := Rect{X: 10, Y: 20, W: 30, H: 40}
 	cases := []struct {
-		name   string
-		x, y   float64
-		want   bool
+		name string
+		x, y float64
+		want bool
 	}{
 		{"inside", 25, 30, true},
 		{"top-left corner — inclusive", 10, 20, true},

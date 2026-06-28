@@ -11,10 +11,10 @@ func TestStripUUID(t *testing.T) {
 	cases := []struct {
 		id, uuid, want string
 	}{
-		{"fs/5", "fs", "5"},          // matching prefix stripped
-		{"fs/5", "proc", "fs/5"},     // foreign prefix untouched
-		{"5", "fs", "5"},             // bare id untouched
-		{"", "fs", ""},               // empty untouched
+		{"fs/5", "fs", "5"},               // matching prefix stripped
+		{"fs/5", "proc", "fs/5"},          // foreign prefix untouched
+		{"5", "fs", "5"},                  // bare id untouched
+		{"", "fs", ""},                    // empty untouched
 		{"fs/9/nested", "fs", "9/nested"}, // only first segment is the prefix
 	}
 	for _, c := range cases {

@@ -29,11 +29,11 @@ func TestPointInPlus(t *testing.T) {
 		x, y float64
 		want bool
 	}{
-		{cx, cy, true},                                 // dead center
-		{cx + l.Cfg.PlusRadius - 0.1, cy, true},        // just inside
-		{cx + l.Cfg.PlusRadius + 0.1, cy, false},       // just outside
-		{cx, cy + l.Cfg.PlusRadius, true},              // edge
-		{cx + 100, cy + 100, false},                    // far
+		{cx, cy, true},                           // dead center
+		{cx + l.Cfg.PlusRadius - 0.1, cy, true},  // just inside
+		{cx + l.Cfg.PlusRadius + 0.1, cy, false}, // just outside
+		{cx, cy + l.Cfg.PlusRadius, true},        // edge
+		{cx + 100, cy + 100, false},              // far
 		{cx - l.Cfg.PlusRadius/math.Sqrt2 + 0.1,
 			cy - l.Cfg.PlusRadius/math.Sqrt2 + 0.1, true}, // diagonal inside
 	}

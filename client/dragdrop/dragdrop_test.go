@@ -184,10 +184,10 @@ func TestHiddenMatchByTileIDNotObjectID(t *testing.T) {
 func TestInTileCenter(t *testing.T) {
 	// 3x3 tile at origin: center band is cell coords [1, 2] on both axes.
 	cases := []struct {
-		name           string
-		x, y, w, h     int64
-		cellX, cellY   float64
-		wantInCenter   bool
+		name         string
+		x, y, w, h   int64
+		cellX, cellY float64
+		wantInCenter bool
 	}{
 		{"dead center", 0, 0, 3, 3, 1.5, 1.5, true},
 		{"on left edge of center band", 0, 0, 3, 3, 1.0, 1.5, true},
@@ -208,10 +208,10 @@ func TestInTileCenter(t *testing.T) {
 
 func TestRangeFromAnchors(t *testing.T) {
 	cases := []struct {
-		name          string
-		pin, moving   int64
-		origRight     bool
-		wantS, wantL  int64
+		name         string
+		pin, moving  int64
+		origRight    bool
+		wantS, wantL int64
 	}{
 		{"moving > pin", 3, 8, true, 3, 5},
 		{"moving < pin", 8, 3, true, 3, 5},
@@ -416,12 +416,12 @@ func TestGhostPlanForDrop(t *testing.T) {
 		tgtSz  = 80.0
 	)
 	cases := []struct {
-		name             string
-		action           DropAction
-		docReject        bool
-		forbidden        bool
-		clone            bool
-		want             GhostPlan
+		name      string
+		action    DropAction
+		docReject bool
+		forbidden bool
+		clone     bool
+		want      GhostPlan
 	}{
 		{"delete shrinks+fragments in origin", DropDelete, false, false, false,
 			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},

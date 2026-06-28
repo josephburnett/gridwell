@@ -18,7 +18,6 @@ func blobExists(t *testing.T, s *Store, id int64) bool {
 	return n > 0
 }
 
-
 // TestCloneShellCarriesScreenshot: a PTY can't be forked, so cloning a
 // shell with a frozen preview must carry the preview blob (the screenshot)
 // to the clone and bump that blob's refcount. Regression: CloneTile had no

@@ -426,4 +426,3 @@ func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource
 
 	return tx.Commit()
 }
-

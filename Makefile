@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm test test-cover check check-electron check-e2e serve init clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-fs
@@ -62,12 +62,20 @@ test:
 test-cover:
 	go test -cover ./...
 
-# check is the per-commit verification gate: every commit must leave all five
-# green. The wasm build catches GOOS=js breakage that `go build ./...` (host
-# arch) misses; the typecheck catches Electron-side TS drift; `npm test` runs
-# the desktop main-process unit tests (menu/geometry logic that never reaches
-# the heavier display-bound gates). No display or network needed.
-check:
+# fmt-check fails if any hand-written Go file isn't gofmt-clean (generated code
+# under api/gen is excluded — it's regenerated, not hand-edited). Kept as the
+# first check step so formatting drift can't accumulate the way it had: several
+# files were committed non-gofmt because nothing enforced it. Fix with `gofmt -w`.
+fmt-check:
+	@bad=$$(gofmt -l $$(git ls-files '*.go' | grep -v '/gen/')); \
+	if [ -n "$$bad" ]; then echo "gofmt needed (run: gofmt -w <file>):"; echo "$$bad"; exit 1; fi
+
+# check is the per-commit verification gate: every commit must leave all of these
+# green. fmt-check enforces gofmt; the wasm build catches GOOS=js breakage that
+# `go build ./...` (host arch) misses; the typecheck catches Electron-side TS
+# drift; `npm test` runs the desktop main-process unit tests (menu/geometry logic
+# that never reaches the heavier display-bound gates). No display or network needed.
+check: fmt-check
 	go build ./...
 	go test ./...
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm

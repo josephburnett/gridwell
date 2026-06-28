@@ -4,8 +4,9 @@
 // used for server↔plugin — every node speaks the same wire protocol.
 //
 // Usage:
-//   Host side: plugin/host.Load(cfg) → gridwellv1.GridwellClient
-//   Guest side: plugin/guest.Serve(impl) in the plugin binary's main()
+//
+//	Host side: plugin/host.Load(cfg) → gridwellv1.GridwellClient
+//	Guest side: plugin/guest.Serve(impl) in the plugin binary's main()
 package plugin
 
 import (

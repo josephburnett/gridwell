@@ -494,4 +494,3 @@ func TestDeleteTileVersionConflict(t *testing.T) {
 		t.Errorf("got %v, want ErrVersionConflict", err)
 	}
 }
-
