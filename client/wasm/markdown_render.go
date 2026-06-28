@@ -392,13 +392,11 @@ func (a *App) editRenderedKey(ev js.Value) {
 	// No caret yet: an empty rendered doc has no text to click, so requiring a
 	// prior click would make it impossible to type into. Default the caret to
 	// the end of the source so the first keystroke just works.
-	caret, hasCaret := a.mdCaret[p.ID]
+	pl := a.local(p.ID)
+	caret, hasCaret := pl.Caret()
 	if !hasCaret {
 		caret = len(src)
-		if a.mdCaret == nil {
-			a.mdCaret = map[string]int{}
-		}
-		a.mdCaret[p.ID] = caret
+		pl.SetCaret(caret)
 	}
 	newSrc, newCaret, changed := src, caret, false
 	switch key := ev.Get("key").String(); key {
@@ -437,14 +435,11 @@ func (a *App) editRenderedKey(ev js.Value) {
 		// Write through the content store — the same accessor the renderer reads
 		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
 		a.c.PutTileContent(file.ID, []byte(newSrc))
-		if a.mdDirty == nil {
-			a.mdDirty = map[string]bool{}
-		}
-		a.mdDirty[p.ID] = true
+		pl.Dirty = true
 		a.scheduleFileSave()
 		a.scheduleURLUpdate()
 	}
-	a.mdCaret[p.ID] = newCaret
+	pl.SetCaret(newCaret)
 	a.draw()
 }
 
@@ -496,7 +491,9 @@ func (a *App) saveFileFromCache(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	delete(a.mdDirty, p.ID)
+	if pl, ok := a.localIf(p.ID); ok {
+		pl.Dirty = false
+	}
 	content := append([]byte(nil), body...)
 	go func() {
 		a.postUpdateText(gid, &rpc.UpdateTextRequest{
@@ -525,10 +522,7 @@ func (a *App) placeMarkdownCaret(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	if !ok {
 		return
 	}
-	if a.mdCaret == nil {
-		a.mdCaret = map[string]int{}
-	}
-	a.mdCaret[p.ID] = off
+	a.local(p.ID).SetCaret(off)
 }
 
 // drawMarkdownCaret paints the rendered-mode editing caret for pane p (a
@@ -536,7 +530,11 @@ func (a *App) placeMarkdownCaret(p *pane.Pane, r pane.Rect, sx, sy float64) {
 // the pane's clip after the markdown is painted. No-op when the pane has no
 // caret. originX/originY/scale must match what drawMarkdownInRect used.
 func (a *App) drawMarkdownCaret(p *pane.Pane, src string, originX, originY, scale float64) {
-	off, ok := a.mdCaret[p.ID]
+	pl, ok := a.localIf(p.ID)
+	if !ok {
+		return
+	}
+	off, ok := pl.Caret()
 	if !ok {
 		return
 	}

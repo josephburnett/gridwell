@@ -245,8 +245,7 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 		// text / url / shell
 		a.startFileDescent(p, target, nil)
 	}
-	if stack := a.paneStateStack[p.ID]; len(stack) > 0 {
-		top := &stack[len(stack)-1]
+	if top := a.local(p.ID).PeekAscent(); top != nil {
 		top.Anchor = savedAnchor
 		top.Path = savedPath
 		top.TextFocus = savedFocus

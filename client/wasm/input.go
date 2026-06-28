@@ -610,8 +610,9 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 				// Frozen URL descent: translate cover-crop pan. The delta
 				// is negated because dragging right should shift the image
 				// right (show left portion), i.e., decrease panX.
-				a.urlPanX[focused.ID] -= (sx - d.curScreenX)
-				a.urlPanY[focused.ID] -= (sy - d.curScreenY)
+				pl := a.local(focused.ID)
+				pl.PanX -= (sx - d.curScreenX)
+				pl.PanY -= (sy - d.curScreenY)
 				// Clamping is deferred to draw time (clampURLPan) because
 				// we need the image natural dimensions which may vary frame
 				// to frame as frames arrive.
@@ -774,9 +775,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		}
 		cellX, cellY := cellAtScreen(focused, r, sx, sy)
 		if n := a.tileAtCell(focused, cellX, cellY); n != nil {
-			a.selectedTileID[focused.ID] = n.ID
+			a.local(focused.ID).Selected = n.ID
 		} else {
-			delete(a.selectedTileID, focused.ID)
+			a.clearSelected(focused.ID)
 		}
 		a.draw()
 		a.scheduleURLUpdate()
@@ -1289,7 +1290,7 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
 	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
 	p.Path = parentPath
 	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
-	delete(a.selectedTileID, p.ID)
+	a.clearSelected(p.ID)
 	a.draw()
 	a.scheduleURLUpdate()
 }
@@ -1479,14 +1480,14 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextScrollY = initialScroll
 			fp.TextScrollX = initialScrollX
 			fp.TextZoom = fileFixedScale
-			// Reset URL pan state on each new descent — it's view state,
-			// not tile state, so it does not survive across descents.
-			delete(a.urlPanX, fp.ID)
-			delete(a.urlPanY, fp.ID)
-			// Drop any rendered-mode caret + dirty mark from a previous occupant
-			// of this pane; a fresh doc starts with no caret until the user clicks.
-			delete(a.mdCaret, fp.ID)
-			delete(a.mdDirty, fp.ID)
+			// Reset per-pane view state on each new descent — it's view state,
+			// not tile state, so it does not survive across descents: the frozen-
+			// URL pan, plus any rendered-mode caret + dirty mark left by a previous
+			// occupant of this pane (a fresh doc starts with no caret).
+			pl := a.local(fp.ID)
+			pl.PanX, pl.PanY = 0, 0
+			pl.ClearCaret()
+			pl.Dirty = false
 			a.refreshFileOverlay()
 			// URL / shell descent show the frozen JPEG preview by
 			// default. afterDescend fires here so an auto-go-live
@@ -1700,7 +1701,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			buf = ta.Get("value").String()
 			hasBuf = true
 		}
-	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.mdDirty[p.ID] {
+	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.paneDirty(p.ID) {
 		// Rendered-mode edits live in the content store (PutTileContent per
 		// keystroke); flush them on ascent so a quick exit within the save
 		// debounce doesn't drop them.
@@ -1709,7 +1710,9 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			hasBuf = true
 		}
 	}
-	delete(a.mdDirty, p.ID)
+	if pl, ok := a.localIf(p.ID); ok {
+		pl.Dirty = false
+	}
 	// Pre-write the parent-grid preview to the user's edits before the ascent
 	// transition. Tile-scoped (keyed by tile id) so the content lands only on
 	// this tile, not on any clone that shares its body.
@@ -2047,8 +2050,7 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 	fp.TextMode = ""
 	a.refreshFileOverlay()
 	a.startFileDescent(fp, tile, openLive)
-	if stack := a.paneStateStack[fp.ID]; len(stack) > 0 {
-		top := &stack[len(stack)-1]
+	if top := a.local(fp.ID).PeekAscent(); top != nil {
 		top.Anchor = savedAnchor
 		top.Path = savedPath
 		top.TextFocus = savedFocus

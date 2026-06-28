@@ -157,7 +157,7 @@ func (a *App) ensureFileTextarea() {
 		// user navigated to a different, unedited rendered tile must not re-post
 		// its unchanged content.
 		if p != nil && p.TextMode == rpc.TextModeRendered {
-			if a.mdDirty[p.ID] {
+			if pl, ok := a.localIf(p.ID); ok && pl.Dirty {
 				a.saveFileFromCache(p)
 			}
 			return nil

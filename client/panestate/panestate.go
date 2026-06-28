@@ -17,14 +17,14 @@ package panestate
 // ascent lands back in the doc. Anchor/Path are set only for an embed descent
 // that re-anchored the pane onto another grid (a cross-grid/plugin follow).
 type Saved struct {
-	Cx          float64 `json:"cx"`
-	Cy          float64 `json:"cy"`
-	Zoom        float64 `json:"zoom"`
-	TextFocus   string  `json:"text_focus,omitempty"`
-	TextMode    string  `json:"text_mode,omitempty"`
-	TextScrollX float64 `json:"text_scroll_x,omitempty"`
-	TextScrollY float64 `json:"text_scroll_y,omitempty"`
-	Anchor      string  `json:"anchor,omitempty"`
+	Cx          float64  `json:"cx"`
+	Cy          float64  `json:"cy"`
+	Zoom        float64  `json:"zoom"`
+	TextFocus   string   `json:"text_focus,omitempty"`
+	TextMode    string   `json:"text_mode,omitempty"`
+	TextScrollX float64  `json:"text_scroll_x,omitempty"`
+	TextScrollY float64  `json:"text_scroll_y,omitempty"`
+	Anchor      string   `json:"anchor,omitempty"`
 	Path        []string `json:"path,omitempty"`
 }
 

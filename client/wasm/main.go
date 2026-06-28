@@ -70,8 +70,12 @@ type App struct {
 
 	dragging *dragState
 
-	// Per-pane selection: paneID → node id ("" means nothing selected).
-	selectedTileID map[string]string
+	// locals is the per-pane session-local client state, one entry per live pane,
+	// keyed by pane id. It replaces the former sprawl of parallel per-pane maps
+	// (selection, ascent stack, caret, dirty, frozen-URL pan, and — later — the
+	// live URL/shell handles). Created on demand by a.local; removed atomically on
+	// pane drop by a.forgetPane. See paneLocal / client/panestate.
+	locals map[string]*paneLocal
 
 	// Plus-button (+) creation-menu state. menu is the single owner: open/closed,
 	// which pane, hovered item. Never assign menu fields directly — go through
@@ -158,16 +162,6 @@ type App struct {
 	// can shuffle / minimize pane sizes without risking a live tile.
 	leftResize *leftResizeState
 
-	// paneStateStack stores the parent viewport (Cx, Cy, Zoom) saved
-	// just before each descent. On ascent, the saved state is popped and
-	// used to animate the parent back to where it was — so the parent
-	// grid doesn't jump. This is distinct from well.ViewX/Y/Zoom, which
-	// describes the child grid's framing and drives the preview, the
-	// descent target, and the ascent return value written back to the
-	// server. paneStateStack is session-local and not persisted.
-	// Indexed by pane id; the slice's length matches len(pane.Path).
-	paneStateStack map[string][]paneState
-
 	// urlPreview caches decoded HTMLImageElement values for URL and
 	// shell tile previews. Keyed by tile id; auto-invalidates when a
 	// tile's PreviewBlobID changes server-side — see client/preview.
@@ -184,17 +178,6 @@ type App struct {
 	// 2 error). See drawMarkdownImage.
 	mdImages     map[string]js.Value
 	mdImageState map[string]int8
-
-	// mdCaret is the rendered-mode editing caret: paneID → source byte offset
-	// into the descended text tile's body. Absent means "no caret in this pane"
-	// (never clicked / not in editable rendered mode). Set by a click in
-	// rendered mode and drawn as a vertical bar; rendered-mode editing reads it.
-	mdCaret map[string]int
-
-	// mdDirty marks panes whose rendered-mode body has unsaved edits, so a
-	// quick ascent (within the save debounce) still flushes them. Set on each
-	// keystroke edit, cleared when the content is posted.
-	mdDirty map[string]bool
 
 	// urlStreams holds the live native WebContentsView handle for each
 	// pane descended into a live URL tile. One per pane id; multiple panes
@@ -239,12 +222,6 @@ type App struct {
 	// urlModalOpen tracks whether the URL-entry modal is currently open.
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
-
-	// urlPanX / urlPanY hold the per-pane pan offset for frozen URL
-	// descents (keyed by pane ID). Live URL panes don't pan — clicks
-	// forward to Chromium. Reset on each new descent. Not persisted.
-	urlPanX map[string]float64
-	urlPanY map[string]float64
 
 	// urlPanDragging is true while the user is dragging inside a frozen
 	// URL descent pane. Used to switch the canvas cursor to "grabbing"
@@ -306,6 +283,58 @@ type scheduler struct {
 // (panestate.Saved) so the per-pane state lives in one tested place. Aliased here
 // to keep the many `paneState{...}` construction sites unchanged.
 type paneState = panestate.Saved
+
+// paneLocal is the single owner of one pane's session-local client state: the
+// plain-data part (panestate.State, embedded — selection, ascent stack, caret,
+// dirty, frozen-URL pan) plus, added in later commits, the native live URL/shell
+// handles. One per live pane in App.locals, created on demand by App.local and
+// removed atomically when the pane is dropped (App.forgetPane), so none of this
+// state can outlive or be orphaned from its pane.
+type paneLocal struct {
+	panestate.State
+}
+
+// local returns the per-pane state for paneID, creating an empty one on first
+// use. Use for any access that may also write; reads that must not materialize
+// state use localIf.
+func (a *App) local(paneID string) *paneLocal {
+	pl := a.locals[paneID]
+	if pl == nil {
+		pl = &paneLocal{State: panestate.New()}
+		a.locals[paneID] = pl
+	}
+	return pl
+}
+
+// localIf returns the per-pane state for paneID only if it already exists.
+func (a *App) localIf(paneID string) (*paneLocal, bool) {
+	pl, ok := a.locals[paneID]
+	return pl, ok
+}
+
+// selectedFor returns the selected tile id in paneID, or "" if nothing is
+// selected (or the pane has no state yet) — a read that never materializes state.
+func (a *App) selectedFor(paneID string) string {
+	if pl, ok := a.localIf(paneID); ok {
+		return pl.Selected
+	}
+	return ""
+}
+
+// clearSelected drops the selection in paneID, if any (no-op when the pane has
+// no state).
+func (a *App) clearSelected(paneID string) {
+	if pl, ok := a.localIf(paneID); ok {
+		pl.Selected = ""
+	}
+}
+
+// paneDirty reports whether paneID has unsaved rendered-mode edits — a read that
+// never materializes state.
+func (a *App) paneDirty(paneID string) bool {
+	pl, ok := a.localIf(paneID)
+	return ok && pl.Dirty
+}
 
 // paneTransition is the active per-pane zoom animation. It is a series of
 // segments; each segment carries the path that should be installed when it
@@ -446,21 +475,18 @@ func main() {
 		win:               js.Global().Get("window"),
 		cl:                rpc.NewDefaultClient(origin),
 		c:                 cache.New(),
-		selectedTileID:    map[string]string{},
+		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
 		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
 		tileInflight:      map[string]bool{},
 		tileLoadFailed:    map[string]bool{},
-		paneStateStack:    map[string][]paneState{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		urlStreams:        map[string]*urlView{},
 		shellStreams:      map[string]*shellStreamConn{},
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},
-		urlPanX:           map[string]float64{},
-		urlPanY:           map[string]float64{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -708,7 +734,7 @@ func (a *App) completeTransition() {
 	if p == nil {
 		return
 	}
-	delete(a.selectedTileID, p.ID)
+	a.clearSelected(p.ID)
 	a.gridLoadFailed = map[string]bool{}
 	a.fetchGrid(a.gridIDForPane(p))
 	if tr.onComplete != nil {
@@ -732,19 +758,17 @@ func (a *App) animationDone() {
 // the start of descent so the matching ascent can animate the parent back to
 // exactly this position.
 func (a *App) pushPaneState(paneID string, s paneState) {
-	a.paneStateStack[paneID] = append(a.paneStateStack[paneID], s)
+	a.local(paneID).PushAscent(s)
 }
 
 // popPaneState removes and returns the most recent saved parent viewport for
 // paneID, or nil if the stack is empty (e.g. user reloaded mid-descent).
 func (a *App) popPaneState(paneID string) *paneState {
-	stack := a.paneStateStack[paneID]
-	if len(stack) == 0 {
+	pl, ok := a.localIf(paneID)
+	if !ok {
 		return nil
 	}
-	last := stack[len(stack)-1]
-	a.paneStateStack[paneID] = stack[:len(stack)-1]
-	return &last
+	return pl.PopAscent()
 }
 
 // startSSE opens the Connect-streaming Subscribe RPC and applies each

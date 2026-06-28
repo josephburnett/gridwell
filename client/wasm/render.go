@@ -332,7 +332,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 
 	if gridOK {
 		cellSize := pscreen.CellPx * pscreen.Zoom
-		selected := a.selectedTileID[p.ID]
+		selected := a.selectedFor(p.ID)
 		// In live file mode the pane is "inside" the file: skip the
 		// parent-grid node walk and render the focused file in the
 		// inner box (inset by the file margin so the surrounding grid

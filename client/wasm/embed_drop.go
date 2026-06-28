@@ -154,10 +154,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	// visible and typing continues after it. The inserted length (link plus any
 	// padding spaces from Insert) is the source-length delta.
 	if dt.pane.TextMode == rpc.TextModeRendered {
-		if a.mdCaret == nil {
-			a.mdCaret = map[string]int{}
-		}
-		a.mdCaret[dt.pane.ID] = dt.insertOffset + (len(newSrc) - len(bytes))
+		a.local(dt.pane.ID).SetCaret(dt.insertOffset + (len(newSrc) - len(bytes)))
 	}
 
 	path := slices.Clone(dt.pane.Path)

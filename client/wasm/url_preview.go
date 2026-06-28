@@ -88,8 +88,10 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 				drawImageCoverCentered(a.cctx, img, x, y, w, h)
 			} else {
 				// Frozen: cover + pan so the user can drag to see overflow.
-				panX := a.urlPanX[p.ID]
-				panY := a.urlPanY[p.ID]
+				var panX, panY float64
+				if pl, ok := a.localIf(p.ID); ok {
+					panX, panY = pl.PanX, pl.PanY
+				}
 				iw := img.Get("naturalWidth").Float()
 				ih := img.Get("naturalHeight").Float()
 				panX, panY = clampURLPan(panX, panY, iw, ih, w, h)
