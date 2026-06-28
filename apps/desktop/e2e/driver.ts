@@ -127,6 +127,15 @@ export class GridwellDriver {
     });
   }
 
+  // focusPane left-clicks the empty center of the given pane to move focus to
+  // it. The grid is empty after entry/split, so the press lands on no tile — a
+  // pure focus click (no descend, no pan). Used to exercise the focus-change
+  // rules (e.g. the + menu closing when focus leaves its pane).
+  async focusPane(p: PaneInfo): Promise<void> {
+    await this.win.mouse.click(p.x + p.w / 2, p.y + p.h / 2);
+    await this.waitIdle();
+  }
+
   // dragCreate drags the palette swatch of the given primitive kind ("well",
   // "markdown", "url", "shell") onto cell (cx, cy) of the focused pane: press on
   // the swatch, move past the 4px drag threshold, drag to the cell, release.
