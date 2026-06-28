@@ -33,14 +33,26 @@ func (a *App) installTestHook() {
 		return
 	}
 	js.Global().Set("__gridwellTest", js.ValueOf(map[string]any{
-		"idle":       js.FuncOf(a.thIdle),
-		"origin":     js.FuncOf(a.thOrigin),
-		"panes":      js.FuncOf(a.thPanes),
-		"launcher":   js.FuncOf(a.thLauncher),
-		"palette":      js.FuncOf(a.thPalette),
-		"cellCenter":   js.FuncOf(a.thCellCenter),
+		"idle":          js.FuncOf(a.thIdle),
+		"origin":        js.FuncOf(a.thOrigin),
+		"panes":         js.FuncOf(a.thPanes),
+		"launcher":      js.FuncOf(a.thLauncher),
+		"palette":       js.FuncOf(a.thPalette),
+		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
+		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
 	}))
+}
+
+// thLocalPaneIds returns the pane ids that currently hold per-pane state in
+// a.locals. Lets an e2e prove forgetPane: after a pane is collapsed, its id must
+// be gone here (its per-pane state was torn down, not orphaned).
+func (a *App) thLocalPaneIds(js.Value, []js.Value) any {
+	ids := make([]any, 0, len(a.locals))
+	for id := range a.locals {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // thShellVisitURL fires the focused shell's url-click path (what xterm's link
@@ -142,9 +154,9 @@ func (a *App) thLauncher(js.Value, []js.Value) any {
 		// Center of the launcher cell, in screen pixels.
 		sx, sy := ps.CellToScreen(cr.X+cr.W/2, cr.Y+cr.H/2)
 		out = append(out, map[string]any{
-			"index":      i,
-			"kind":       pl.Kind,
-			"label":      pl.Label,
+			"index":         i,
+			"kind":          pl.Kind,
+			"label":         pl.Label,
 			"uuid":          pl.UUID,
 			"rootGridID":    pl.RootGridID,
 			"scratchGridID": pl.ScratchGridID,

@@ -84,6 +84,21 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.launcher());
   }
 
+  // localPaneIds returns the pane ids that currently hold per-pane client state
+  // (a.locals). After a pane is collapsed its id must disappear here — the proof
+  // that forgetPane tore the per-pane state down rather than orphaning it.
+  localPaneIds(): Promise<string[]> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.localPaneIds());
+  }
+
+  // collapseLeftPane right-drags the divider of a two-pane split hard to the left
+  // edge, pushing the left pane below the close threshold so it collapses away.
+  async collapseLeftPane(): Promise<void> {
+    const [left] = (await this.panes()).slice().sort((a, b) => a.x - b.x);
+    const y = left.y + left.h / 2;
+    await this.rightDragScreen(left.x + left.w - 2, y, left.x + 6, y);
+  }
+
   palette(): Promise<PaletteInfo> {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
