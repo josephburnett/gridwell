@@ -25,7 +25,9 @@ If you want verification or are unsure, mark it with [~].
       (set minimizable explicitly + added Ctrl/Cmd+M to minimize; whether the WM shows a minimize button is its call)
 - [x] the app starts windowed, but bigger than my screen. i would like it to start maximized or fit within the screen
       (initial bounds = display work area, then maximize)
-- [ ] the + menu can't be opened on a split's inner pane: its corner + button overlaps the
-      adjacent divider's resize band, so armLeftResize swallows the click before the plus-toggle.
-      (found while writing the menu-focus e2e in Phase 1a; gesture-priority/geometry issue, not menu state.
-       fix: let a click inside the + circle win over the divider resize arm, and cover it in the e2e.)
+- [x] (NOT A BUG — earlier note was a wrong guess.) Investigated the claim that the + menu can't open
+      on a split's inner pane. Evidence (e2e diagnostic): the inner pane's menu opens fine, with or
+      without any +/divider guard — there is no collision. The original confusion was that a vertical
+      split at a plugin ROOT lands the NEW pane on the launcher (gridID ""), which has no + menu by
+      design (the rootless model auto-ascends the new pane one level; at root, up is the launcher).
+      So "openPalette right after a split" targets the launcher pane and correctly finds no menu.
