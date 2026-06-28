@@ -40,10 +40,11 @@ touched the native/live path).
   *roles* not 5 copies; round trip provably works; ids monotonic so "orphaning"
   is a bounded leak). Delivered the missing net — `framing-roundtrip.spec.ts`
   (I7) — instead of an unwarranted structural merge. See the FINDING under 1b.
-- **Phase 1c — DONE (threshold) / N/A (controls).** `gesture-threshold.test.ts`
-  drift-lints the 3-copy threshold against the canvas owner. The controls rule
-  is already single-sourced (focus owned by the wasm, fed to `controlVisible`);
-  its caller-correctness is a Phase 3 focus e2e.
+- **Phase 1c — DONE.** `gesture-threshold.test.ts` drift-lints the 3-copy
+  threshold against the canvas owner. The controls rule is single-sourced (focus
+  owned by the wasm, fed to `controlVisible`), and its caller-correctness is now
+  e2e-tested (`control-focus.spec.ts`, I9): a live URL pane's corner control
+  hides when it loses focus.
 - **Phase 2 — webviews + the App god-object DONE.** `webviews.ts` bounds/park/
   zoom math extracted to tested `viewutil` pure fns. The `App` god-object's 8
   per-pane maps are consolidated (full scope) into one `App.locals`/`paneLocal`

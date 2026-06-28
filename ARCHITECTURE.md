@@ -374,13 +374,14 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I6 | Qualified-id routing (`<uuid>/<id>`) | server `route`/`localPathFor` | ✅ construction |
 | I7 | **preview = descent target = ascent return** | 5 client copies synced by convention, but the round trip is now locked by `framing-roundtrip.spec.ts` | ⚠️ convention, **tested** |
 | I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. Tested (`TestPreviewContentWidthInvariantToFootprint`) | ✅ mostly construction (one convention seam) |
-| I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible`; threshold drift-linted | ⚠️ single-sourced data, predicate dup |
+| I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible` (unit-tested); the wasm→native propagation is now e2e-tested (`control-focus.spec.ts`) | ✅ data single-sourced + tested (predicate dup remains) |
 | I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
 | I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — verified separated | ✅ construction (residual: optimistic echo) |
 
-Progress this effort converted much of the bottom half toward the top: **I8/I10
-are now construction-enforced and tested; I7/I11 verified and locked/separated.**
-The remaining genuine-convention items are **I7** (five framing copies kept in
-sync by convention — round trip tested, but the copies are still parallel) and
-**I9** (the focused-pane-controls predicate exists in both Go and TS, though the
-focus *data* is single-sourced in the wasm). Those are the next targets.
+Progress this effort converted most of the bottom half toward the top: **I8/I10
+construction-enforced and tested; I7/I9/I11 verified and locked/tested.** The one
+genuine-convention item left is **I7** — the five framing copies are kept in sync
+by convention (the round trip is tested by `framing-roundtrip.spec.ts`, but the
+copies are still parallel, by design: they are five legitimate roles, see the
+Phase 1b finding). Its residual risk is low (tested round trip); a deeper
+single-owner `Frame` is possible but not warranted without a visual/render net.
