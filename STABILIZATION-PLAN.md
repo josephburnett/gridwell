@@ -256,9 +256,15 @@ this is the durable record (mirrored in agent memory `project_deferred_*`).
   never a re-wrap. Locked by `TestPreviewContentWidthInvariantToFootprint`; doc
   corrected (`ARCHITECTURE.md` §5.2/I8). Residual: the capture and painter read
   `fileInnerBox` width by convention, not one shared accessor — optional DRY.
-- **I11 — SSE event during a transition animation.** An inbound `Subscribe` event
-  landing mid-animation can appear to mutate what you're looking at. No repro yet;
-  needs a deterministic way to inject an event mid-transition.
+- **I11 — SSE during animation — VERIFIED SAFE by construction.** Every pane-
+  framing write (`Cx/Cy/Zoom/Path/Anchor`) is in `input.go` or `urlsync.go`; the
+  SSE path (`startSSE` → `cache.Apply` + `fetchGrid`) and the `cache` package
+  have none. So an event mid-transition updates tile *data* and redraws but can't
+  move the framing a transition is animating — correct fan-out, not a bug. Doc
+  corrected (`ARCHITECTURE.md` §5.2/I11). **Residual (real but narrow):** the
+  optimistic-edit echo has no version interlock — idempotent for same content,
+  last-writer-wins only under a genuine concurrent same-tile edit (rare in a
+  single-tenant app). That reconcile is the one thing left to make explicit.
 - **App god-object per-pane maps — DONE.** All 8 per-pane maps (selection,
   ascent stack, caret, dirty, frozen-URL pan, urlStreams, shellStreams) are
   consolidated into one `App.locals map[paneID]*paneLocal` (embedding the tested

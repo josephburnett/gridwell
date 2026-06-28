@@ -224,12 +224,20 @@ consequences:
   the capture and the painter both read `fileInnerBox` width by convention rather
   than one shared accessor — low risk, but that's why it isn't ✅ construction.
 
-- **Optimistic edits race the SSE event.** `cache.Apply` upserts by id and
-  **drops events for grids it hasn't cached.** A local optimistic edit and the
-  authoritative `Subscribe` event have **no per-field merge and no version
-  interlock**; the conflict refetch is async. Reading (an inbound event during
-  an animation) can therefore appear to mutate state — a violation of "reading
-  never mutates," enforced only by hope.
+- **SSE during animation (I11) — framing is safe by construction; only data
+  fans out.** Verified: every write to pane framing (`Cx/Cy/Zoom/Path/Anchor`)
+  lives in `urlsync.go` (URL/nav) or `input.go` (gestures + the transition
+  system); the SSE path (`startSSE` → `cache.Apply` + `fetchGrid`) and the
+  `cache` package contain **none**. So an event mid-transition updates tile/grid
+  *data* and redraws, but cannot move the framing a transition is animating —
+  it's correct fan-out ("mutation is local and reflected"), not a "reading
+  mutates" bug. The animation owns framing; events own data; the two never cross.
+- **Residual: the optimistic-edit echo (narrow).** A local optimistic edit, then
+  the authoritative `Subscribe` echo, both go through `cache.Apply` (upsert by
+  id) with no per-field merge or version interlock. For the same content this is
+  an idempotent re-apply (no visible change); it only matters under a genuine
+  concurrent edit to the same tile — rare in a single-tenant app, but the place a
+  reconcile *should* be explicit rather than last-writer-wins.
 
 ---
 
@@ -364,13 +372,15 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I4 | Blobs immutable, content-addressed, refcounted | store blob layer | ✅ construction |
 | I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
 | I6 | Qualified-id routing (`<uuid>/<id>`) | server `route`/`localPathFor` | ✅ construction |
-| I7 | **preview = descent target = ascent return** | 5 client copies, sync by convention | ⚠️ **HIGH** |
+| I7 | **preview = descent target = ascent return** | 5 client copies synced by convention, but the round trip is now locked by `framing-roundtrip.spec.ts` | ⚠️ convention, **tested** |
 | I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. Tested (`TestPreviewContentWidthInvariantToFootprint`) | ✅ mostly construction (one convention seam) |
-| I9 | Controls show only on the focused pane | canvas (Go) + `controlVisible` (TS) | ⚠️ HIGH (dup) |
-| I10 | Menu changes only by user action | 11 imperative sites, no owner | ⚠️ **HIGH** |
-| I11 | Reading never mutates (SSE during animation; split-pane shared text) | hoped, not enforced | ⚠️ HIGH |
+| I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible`; threshold drift-linted | ⚠️ single-sourced data, predicate dup |
+| I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
+| I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — verified separated | ✅ construction (residual: optimistic echo) |
 
-The pattern is unmistakable: **I1–I6 are enforced by construction and don't
-break. I7–I11 are enforced by convention and are precisely the owner's recurring
-bugs.** Stability means converting the bottom half of this table into the top
-half.
+Progress this effort converted much of the bottom half toward the top: **I8/I10
+are now construction-enforced and tested; I7/I11 verified and locked/separated.**
+The remaining genuine-convention items are **I7** (five framing copies kept in
+sync by convention — round trip tested, but the copies are still parallel) and
+**I9** (the focused-pane-controls predicate exists in both Go and TS, though the
+focus *data* is single-sourced in the wasm). Those are the next targets.
