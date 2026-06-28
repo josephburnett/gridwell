@@ -193,6 +193,20 @@ rule, small and trivial layers of glue code. But these must be minimized.
 I would prefer to slow down and fix test gaps over getting feature
 finished.
 
+**The verification gates, and when to run them.** `make check` is the fast
+per-commit gate (Go build/test, the `GOOS=js` wasm build, the desktop TS
+typecheck, and the desktop main-process unit tests) — it must be green on
+*every* commit. But it cannot see the native shell: live URL/shell
+`WebContentsView`s are separate webContents off the main page, so anything in
+`apps/desktop` (the Electron main process, preloads, the WebviewRegistry, the
+live-URL/shell path, IPC) can pass `make check` and still be broken in the only
+way that matters. For those changes you MUST also run `make check-e2e` (the
+Playwright harness drives the real app under xvfb) before committing — and add
+or extend an e2e spec that exercises the behavior end to end. The right-click
+context-menu regression is the cautionary tale: the canvas-only harness never
+touched a live view, so a whole interaction layer had no coverage. When a fix
+lives in the native layer, the test lives in the e2e harness.
+
 The codebase must remain DRY. A little extra time to look around and
 see if this is a pattern elsewhere will help keep entropy at bay. I
 would rather amortize this cost across each commit that have to keep
