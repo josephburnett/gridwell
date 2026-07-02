@@ -64,4 +64,12 @@ type Node struct {
 	Lang    string      // NodeCodeBlock: info-string language ("" if none)
 	Checked *bool       // NodeListItem: non-nil => task item with this state
 	Align   []Alignment // NodeTable: per-column alignment
+
+	// LineStarts (NodeCodeBlock) is the source byte offset of each line of the
+	// code body (Spans[0].Text split on "\n"). Line content is a verbatim
+	// source slice starting there, so the layout can source-map the runs it
+	// emits and the rendered-mode caret can enter code blocks. Kept per line —
+	// not one range — because an indented code block's lines are NOT contiguous
+	// in source (each line's 4-space indent is outside the segment).
+	LineStarts []int
 }

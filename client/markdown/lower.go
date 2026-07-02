@@ -43,10 +43,12 @@ func lowerBlock(n ast.Node, src []byte) (Node, bool) {
 		return Node{Kind: NodeParagraph, Spans: lowerInline(b, src)}, true
 	case *ast.FencedCodeBlock:
 		return Node{Kind: NodeCodeBlock, Lang: string(b.Language(src)),
-			Spans: []Span{{Text: linesText(b, src), Style: StyleCode}}}, true
+			Spans:      []Span{{Text: linesText(b, src), Style: StyleCode}},
+			LineStarts: lineStarts(b)}, true
 	case *ast.CodeBlock:
 		return Node{Kind: NodeCodeBlock,
-			Spans: []Span{{Text: linesText(b, src), Style: StyleCode}}}, true
+			Spans:      []Span{{Text: linesText(b, src), Style: StyleCode}},
+			LineStarts: lineStarts(b)}, true
 	case *ast.Blockquote:
 		return Node{Kind: NodeBlockQuote, Children: lowerBlocks(b, src)}, true
 	case *ast.List:
@@ -182,7 +184,17 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 		case *east.Strikethrough:
 			appendInline(out, t, src, style|StyleStrike, href)
 		case *ast.CodeSpan:
-			*out = append(*out, Span{Text: codeSpanText(t, src), Style: style | StyleCode, Href: href})
+			sp := Span{Text: codeSpanText(t, src), Style: style | StyleCode, Href: href}
+			// A code span whose text is one verbatim source slice gets the same
+			// linear caret mapping as plain text, so rendered-mode editing works
+			// inside inline code. Multi-segment spans (a newline inside the
+			// backticks) stay opaque — their text is not one source slice.
+			if first, ok := t.FirstChild().(*ast.Text); ok && t.FirstChild() == t.LastChild() {
+				if string(first.Segment.Value(src)) == sp.Text {
+					sp.SrcStart, sp.SrcLen = first.Segment.Start, first.Segment.Len()
+				}
+			}
+			*out = append(*out, sp)
 		case *ast.Link:
 			dest := string(t.Destination)
 			if img := soleImage(t); img != nil {
@@ -256,6 +268,17 @@ func inlineText(n ast.Node, src []byte) string {
 		}
 	}
 	return b.String()
+}
+
+// lineStarts returns the source byte offset of each of a code block's lines
+// (parallel to the lines of linesText). See Node.LineStarts.
+func lineStarts(n ast.Node) []int {
+	lines := n.Lines()
+	out := make([]int, 0, lines.Len())
+	for i := 0; i < lines.Len(); i++ {
+		out = append(out, lines.At(i).Start)
+	}
+	return out
 }
 
 // linesText returns the raw text of a code block's lines.

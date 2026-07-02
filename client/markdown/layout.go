@@ -144,21 +144,33 @@ func (w *layoutWriter) codeBlock(n Node, x, y, avail float64) float64 {
 	w.ops = append(w.ops, DrawOp{Kind: OpRect, X: x, Y: y, W: avail, H: height, Color: ColorCodeBg})
 
 	// Syntax-highlight into colored runs; split each run on newlines so a
-	// multi-line string/comment keeps its color across lines.
+	// multi-line string/comment keeps its color across lines. Highlighting is
+	// a partition of the body (tokens concatenate back to it), so tracking
+	// (line, col) across the parts recovers each part's position in the body —
+	// and n.LineStarts turns that into a source offset: every emitted run is a
+	// verbatim source slice, giving the rendered-mode caret entry into code.
 	cx := x + w.style.CodePadX
 	ty := y + w.style.CodePadY
+	line, col := 0, 0
 	for _, tk := range highlight(body, n.Lang) {
 		for pi, part := range strings.Split(tk.Text, "\n") {
 			if pi > 0 {
 				ty += lh
 				cx = x + w.style.CodePadX
+				line++
+				col = 0
 			}
 			if part == "" {
 				continue
 			}
-			w.ops = append(w.ops, DrawOp{Kind: OpText, X: cx, Y: ty,
-				Text: part, FontPx: fp, Style: StyleCode, Mono: true, Color: tk.Color})
+			op := DrawOp{Kind: OpText, X: cx, Y: ty,
+				Text: part, FontPx: fp, Style: StyleCode, Mono: true, Color: tk.Color}
+			if line < len(n.LineStarts) {
+				op.SrcStart, op.SrcLen = n.LineStarts[line]+col, len(part)
+			}
+			w.ops = append(w.ops, op)
 			cx += w.m(part, fp, StyleCode, true)
+			col += len(part)
 		}
 	}
 	return y + height
