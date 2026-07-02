@@ -194,8 +194,21 @@ func TestWriteAfterCloseReturnsClosedPipe(t *testing.T) {
 	if _, err := s.Write([]byte("x")); !errors.Is(err, io.ErrClosedPipe) {
 		t.Errorf("Write after Close: err = %v, want io.ErrClosedPipe", err)
 	}
-	if _, ok := <-s.Output(); ok {
-		t.Errorf("Output() channel not closed after Close()")
+	// Drain to close: chunks produced before the fd closed (bash's startup
+	// prompt) may legitimately be delivered after Close — the pump's
+	// cancellable send races this receive, and under CPU load the send can
+	// win. The contract is "Output eventually closes", not "the next
+	// receive is the close".
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case _, ok := <-s.Output():
+			if !ok {
+				return // closed — contract holds
+			}
+		case <-deadline:
+			t.Fatal("Output() not closed within 5s of Close()")
+		}
 	}
 }
 

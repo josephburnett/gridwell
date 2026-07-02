@@ -139,6 +139,13 @@ func Start(cfg Config) (*Session, error) {
 // Close has run, so a `for chunk := range s.Output() {}` loop
 // terminates naturally.
 //
+// Contract: after Close, chunks the PTY produced BEFORE the fd closed
+// (e.g. bash's startup prompt) may still be delivered before the
+// channel closes — the pump's cancellable send races the consumer's
+// receive, and dropping vs delivering an already-produced chunk are
+// both correct. Consumers must therefore drain to close, never assume
+// the next receive after Close is the close itself.
+//
 // Replaces the prior blocking Read-style API so callers can select on
 // this channel together with a context — required for cancel-safe
 // detach in the WS takeover path.
