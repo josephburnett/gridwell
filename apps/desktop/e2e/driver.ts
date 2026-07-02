@@ -388,4 +388,39 @@ export class GridwellDriver {
     await this.win.keyboard.type(s);
     await this.waitIdle();
   }
+
+  // pressKey sends one named key (e.g. 'Enter') to whatever has keyboard focus.
+  async pressKey(key: string): Promise<void> {
+    await this.win.keyboard.press(key);
+    await this.waitIdle();
+  }
+
+  // clickScreen single-left-clicks a raw screen coordinate (e.g. a point inside
+  // a descended file's inner box, from fileInnerBox()).
+  async clickScreen(x: number, y: number): Promise<void> {
+    await this.win.mouse.click(x, y);
+    await this.waitIdle();
+  }
+
+  // toggleFileMode left-clicks the corner circle of a file descent — the DOM
+  // toggle button that flips the focused pane between raw text and rendered
+  // markdown (the same spot the + button occupies on a grid pane).
+  async toggleFileMode(): Promise<void> {
+    const pal = await this.palette();
+    await this.win.mouse.click(pal.plusX, pal.plusY);
+    await this.waitIdle();
+  }
+
+  // renderedCaret reads the focused pane's rendered-mode caret: the source byte
+  // offset the next keystroke will splice at, or has=false when none is placed.
+  renderedCaret(): Promise<{ has: boolean; offset: number }> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.renderedCaret());
+  }
+
+  // fileInnerBox returns the screen rect the focused pane's file content is
+  // rendered into (null when not descended into a file) — where to click to
+  // hit the rendered text.
+  fileInnerBox(): Promise<{ x: number; y: number; w: number; h: number } | null> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.fileInnerBox());
+  }
 }
