@@ -452,7 +452,7 @@ func (a *App) caretVertical(p *pane.Pane, src string, off int, down bool) int {
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, fileFixedScale)
 	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
-	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle.LineSpacing, measure)
+	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle, measure)
 	if !ok {
 		return off
 	}
@@ -542,7 +542,7 @@ func (a *App) drawMarkdownCaret(p *pane.Pane, src string, originX, originY, scal
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, scale)
 	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
-	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle.LineSpacing, measure)
+	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle, measure)
 	if !ok {
 		return
 	}

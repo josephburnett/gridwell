@@ -163,7 +163,7 @@ func (w *layoutWriter) codeBlock(n Node, x, y, avail float64) float64 {
 			if part == "" {
 				continue
 			}
-			op := DrawOp{Kind: OpText, X: cx, Y: ty,
+			op := DrawOp{Kind: OpText, X: cx, Y: ty, CodeBlock: true,
 				Text: part, FontPx: fp, Style: StyleCode, Mono: true, Color: tk.Color}
 			if line < len(n.LineStarts) {
 				op.SrcStart, op.SrcLen = n.LineStarts[line]+col, len(part)
