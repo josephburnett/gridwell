@@ -11,7 +11,6 @@ import (
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -362,11 +361,13 @@ func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy flo
 }
 
 // editRenderedKey applies one keystroke to the focused rendered-mode text tile
-// at its caret: printable keys (and Enter/Tab) insert, Backspace/Delete remove,
-// arrows move. The edit goes through OptimisticEdit so the canvas re-renders
-// live, marks the pane dirty, and schedules the debounced save. A no-op unless
-// the focused pane is editing an editable text tile in rendered mode with a
-// caret placed; modifier combos are left to the browser.
+// at its caret. All decisions — what a key does to (source, caret), the Enter
+// paragraph contract, marker-skipping movement — live in the pure, unit-tested
+// markdown.EditKey; this shim only gathers the inputs (focused editable tile,
+// cached body, current layout), applies the result through the content store,
+// and schedules the debounced save. A no-op unless the focused pane is editing
+// an editable text tile in rendered mode; modifier combos stay with the
+// browser (copy/paste/shortcuts).
 func (a *App) editRenderedKey(ev js.Value) {
 	p := a.tree.FocusedPane()
 	if p == nil || p.TextMode != rpc.TextModeRendered || p.TextFocus == "" {
@@ -396,82 +397,26 @@ func (a *App) editRenderedKey(ev js.Value) {
 	caret, hasCaret := pl.Caret()
 	if !hasCaret {
 		caret = len(src)
-		pl.SetCaret(caret)
 	}
-	newSrc, newCaret, changed := src, caret, false
-	switch key := ev.Get("key").String(); key {
-	case "Backspace":
-		newSrc, newCaret = textedit.DeleteBefore(src, caret)
-		changed = newSrc != src
-	case "Delete":
-		newSrc = textedit.DeleteAt(src, caret)
-		changed = newSrc != src
-	case "Enter":
-		newSrc, newCaret = textedit.InsertAt(src, "\n", caret)
-		changed = true
-	case "Tab":
-		newSrc, newCaret = textedit.InsertAt(src, "\t", caret)
-		changed = true
-	case "ArrowLeft":
-		newCaret = textedit.MoveLeft(src, caret)
-	case "ArrowRight":
-		newCaret = textedit.MoveRight(src, caret)
-	case "ArrowUp":
-		newCaret = a.caretVertical(p, src, caret, false)
-	case "ArrowDown":
-		newCaret = a.caretVertical(p, src, caret, true)
-	case "Home", "End", "Escape", "PageUp", "PageDown":
-		return // not ours
-	default:
-		if r := []rune(key); len(r) == 1 {
-			newSrc, newCaret = textedit.InsertAt(src, key, caret)
-			changed = true
-		} else {
-			return // function / media / dead keys
-		}
-	}
-	ev.Call("preventDefault")
-	if changed {
-		// Write through the content store — the same accessor the renderer reads
-		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
-		a.c.PutTileContent(file.ID, []byte(newSrc))
-		pl.Dirty = true
-		a.scheduleFileSave()
-		a.scheduleURLUpdate()
-	}
-	pl.SetCaret(newCaret)
-	a.draw()
-}
-
-// caretVertical moves the caret one rendered line up or down, in logical layout
-// coordinates: map the offset to a point, shift y by a line height into the
-// adjacent line, and map back. Returns off unchanged when there's no adjacent
-// line. No screen transform needed — the layout coords suffice.
-func (a *App) caretVertical(p *pane.Pane, src string, off int, down bool) int {
 	st := defaultMarkdownStyle()
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, fileFixedScale)
 	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
-	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle, measure)
-	if !ok {
-		return off
+	out := markdown.EditKey(src, caret, ev.Get("key").String(), res.Ops, lstyle, measure)
+	if !out.Handled {
+		return // function / media / dead keys — not ours
 	}
-	lh := fontPx * lstyle.LineSpacing
-	if lh <= 0 {
-		lh = fontPx
+	ev.Call("preventDefault")
+	if out.Changed {
+		// Write through the content store — the same accessor the renderer reads
+		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
+		a.c.PutTileContent(file.ID, []byte(out.Src))
+		pl.Dirty = true
+		a.scheduleFileSave()
+		a.scheduleURLUpdate()
 	}
-	// Aim at the vertical middle of the adjacent line so the nearest-line pick
-	// lands there rather than on the current line.
-	targetY := cy + fontPx*0.5
-	if down {
-		targetY += lh
-	} else {
-		targetY -= lh
-	}
-	if n, ok := markdown.CaretFromPoint(res.Ops, src, cx, targetY, measure); ok {
-		return n
-	}
-	return off
+	pl.SetCaret(out.Caret)
+	a.draw()
 }
 
 // saveFileFromCache posts the focused rendered-mode tile's current cached body
