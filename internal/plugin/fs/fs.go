@@ -17,6 +17,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/trash"
@@ -24,6 +25,24 @@ import (
 )
 
 const autoGridWidth = 8
+
+// On-disk format identity (see internal/dbformat). fsApplicationID is the
+// bytes "GWfs" stamped into the SQLite header so an fs plugin DB is
+// recognizable and a foreign file is refused; fsSchemaVersion is the schema
+// generation this binary materializes. The fs DB holds forever-data — user
+// placement, well framing, and the path→id map saved deep links resolve
+// through — so it carries the same contract as the localdb: additive-only
+// migrations, never delete the DB to absorb a change.
+const (
+	fsApplicationID = 0x47576673 // "GWfs"
+	fsSchemaVersion = 1
+)
+
+// fsMigrations is the ordered additive chain; entry i brings a DB from
+// version i+1 to i+2. Empty until the first post-v1 change. Every change
+// bumps fsSchemaVersion by one, appends one entry here, and updates
+// schemaTemplate — TestFSSchemaEquivalence proves template == v1 + chain.
+var fsMigrations []dbformat.Migration
 
 // fsLabelCol is the tiles-table column holding a tile's display label for the
 // fs plugin (the directory entry name). Passed to the shared griddb helpers.
@@ -99,11 +118,17 @@ func Open(dbPath string, host Host) (*Plugin, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := dbformat.EnsureVersion(context.Background(), db, fsApplicationID, fsSchemaVersion, fsMigrations); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("fs plugin %s: %w", dbPath, err)
+	}
 	return &Plugin{db: db, host: host, readDir: fssource.Read}, nil
 }
 
-func createSchema(db *sql.DB) error {
-	_, err := db.Exec(`
+// schemaTemplate is the always-current schema a fresh Open materializes
+// directly — the single readable description of the present shape. Every
+// column added here after v1 must be matched by an entry in fsMigrations.
+const schemaTemplate = `
 CREATE TABLE IF NOT EXISTS grids (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     path      TEXT NOT NULL UNIQUE,
@@ -125,7 +150,40 @@ CREATE TABLE IF NOT EXISTS tiles (
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 1.0,
     UNIQUE (grid_id, name)
-);`)
+);`
+
+// schemaV1 is the FROZEN v1 schema — an immutable byte-for-byte copy of what
+// schemaTemplate was at the moment the format was stamped. NEVER edit it (and
+// never alias it to schemaTemplate — the freeze must not move when the
+// template does): tests build genuine old files from this text and migrate
+// them forward. New columns go into schemaTemplate plus a migration — never
+// here.
+const schemaV1 = `
+CREATE TABLE IF NOT EXISTS grids (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    path      TEXT NOT NULL UNIQUE,
+    view_x    INTEGER NOT NULL DEFAULT 0,
+    view_y    INTEGER NOT NULL DEFAULT 0,
+    view_zoom REAL NOT NULL DEFAULT 1.0
+);
+CREATE TABLE IF NOT EXISTS tiles (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    grid_id       INTEGER NOT NULL REFERENCES grids(id),
+    name          TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text')),
+    x             INTEGER NOT NULL DEFAULT 0,
+    y             INTEGER NOT NULL DEFAULT 0,
+    w             INTEGER NOT NULL DEFAULT 1,
+    h             INTEGER NOT NULL DEFAULT 1,
+    child_grid_id INTEGER,
+    view_x        INTEGER NOT NULL DEFAULT 0,
+    view_y        INTEGER NOT NULL DEFAULT 0,
+    view_zoom     REAL NOT NULL DEFAULT 1.0,
+    UNIQUE (grid_id, name)
+);`
+
+func createSchema(db *sql.DB) error {
+	_, err := db.Exec(schemaTemplate)
 	return err
 }
 
@@ -150,7 +208,7 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 // Info is the whole handshake: identity plus the default root grid (the
 // plugin's configured root directory, resolved to a grid id). No Attach/Detach.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: 1}
+	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: fsSchemaVersion}
 	path := filepath.Clean(p.root)
 	if path == "" || path == "." {
 		return resp, nil // no configured root → no descendable default

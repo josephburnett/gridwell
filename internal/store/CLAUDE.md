@@ -28,7 +28,10 @@ data to be thrown away.
   Tests build genuine "old files" from it and migrate them forward.
 - `migrations.go` `migrations` is the ordered, additive chain; entry _i_ takes a
   DB from version _i+1_ to _i+2_. `schemaVersion` is the current generation,
-  stamped into the SQLite header as `user_version`.
+  stamped into the SQLite header as `user_version`. The engine that applies
+  the chain (fresh-stamp / foreign-file refusal / newer-version refusal) is
+  the shared `internal/dbformat.EnsureVersion` — one implementation for every
+  plugin DB (localdb, fs, proc); `migrateUp` here is a thin adapter.
 
 `TestSchemaEquivalence` proves `tablesV1 + migrations == fresh tablesTemplate`.
 That equivalence is what lets `migrateUp` stamp a fresh DB without running the
