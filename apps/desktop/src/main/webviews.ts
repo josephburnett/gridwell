@@ -83,9 +83,10 @@ export interface RegistryCallbacks {
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
-// root window. One view per paneId; every view shares the single persistent
-// SESSION_PARTITION, so all tiles act like tabs of one browser (shared
-// cookies/logins and DOM storage). The registry is deliberately free of IPC
+// root window. One view per paneId; each view is bound to its owning plugin's
+// persistent partition (persist:plugin-<uuid>), so a plugin's url tiles act
+// like tabs of one browser (shared cookies/logins and DOM storage) isolated
+// from other plugins'. The registry is deliberately free of IPC
 // and store knowledge — ipc.ts wires Electron handlers to these methods, and
 // the renderer remains the only thing that talks to the Go backend.
 export class WebviewRegistry {

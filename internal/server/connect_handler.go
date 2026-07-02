@@ -58,9 +58,9 @@ func stripUUID(id, uuid string) string {
 
 // localPathFor returns the descent path local to the target plugin. A path can
 // cross plugin boundaries (`…/<p1>/<t>/<p2>/<u>`); only the trailing run of
-// segments owned by the target plugin form its COW spine, so segments above the
-// last boundary (owned by other plugins) are dropped and the rest are stripped
-// of the uuid prefix.
+// segments owned by the target plugin is meaningful to it, so segments above
+// the last boundary (owned by other plugins) are dropped and the rest are
+// stripped of the uuid prefix.
 func localPathFor(p *pb.Path, uuid string) *pb.Path {
 	if p == nil {
 		return nil
