@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"connectrpc.com/connect"
@@ -19,7 +20,8 @@ import (
 // forwarded to the plugin that owns the id it carries (the primary localdb,
 // a mounted localdb, fs, proc, …), with the plugin-uuid prefix stripped on the
 // way in and re-applied to the response on the way out. Subscribe fans in every
-// localdb plugin's event stream; ShellSessionAlive routes to the owning plugin.
+// watching plugin's event stream (Info.watch); ShellSessionAlive routes to the
+// owning plugin.
 type connectHandler struct {
 	gridwellv1connect.UnimplementedGridwellHandler
 	srv *Server
@@ -159,9 +161,9 @@ func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Reques
 const pluginInfoTimeout = 3 * time.Second
 
 // ListPlugins enumerates the configured plugins in config order so the client
-// can build the launcher / + menu. label comes from each plugin's Info;
-// writable (accepts new tiles) is derived from kind — only localdb grids can
-// hold created primitives.
+// can build the launcher / + menu. label comes from each plugin's Info, and so
+// does writable (accepts new tiles) — a capability the handshake declares,
+// never derived from the kind string.
 func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
 	var out []*pb.PluginInfo
 	for _, p := range h.srv.pluginReg.Ordered() {
@@ -185,12 +187,18 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 // buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
 // configured label) and the plugin's Info handshake. info is nil when Info
 // failed or timed out: the plugin is still listed (so the launcher never blanks
-// a configured plugin), but with no clickable root/scratch grid and a label that
-// falls back to the configured name, then the kind. Pure, so the fallback rules
-// are unit-tested without standing up a plugin.
+// a configured plugin), but with no clickable root/scratch grid, no writable
+// bit, and a label that falls back to the configured name, then the kind.
+// Pure, so the fallback rules are unit-tested without standing up a plugin.
+//
+// writable comes from the Info handshake, NEVER from the kind string: a remote
+// localdb reached through the ssh proxy has local kind "ssh" but is every bit
+// as writable — the proxy forwards its Info verbatim, so the capability
+// travels while a kind check would strand it read-only.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.PluginInfo {
 	label := configLabel
 	var rootGridID, scratchGridID string
+	var writable bool
 	if info != nil {
 		if info.RootGridId != "" {
 			rootGridID = qualifyID(uuid, info.RootGridId)
@@ -203,6 +211,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 		if label == "" {
 			label = info.DisplayName
 		}
+		writable = info.Writable
 	}
 	if label == "" {
 		label = kind
@@ -211,7 +220,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 		Uuid:          uuid,
 		Kind:          kind,
 		Label:         label,
-		Writable:      kind == "localdb",
+		Writable:      writable,
 		RootGridId:    rootGridID,
 		ScratchGridId: scratchGridID,
 	}
@@ -392,40 +401,40 @@ func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Req
 	return connect.NewResponse(resp), nil
 }
 
-// Subscribe fans every localdb plugin's change-event stream into the client's
-// stream, re-qualifying each event's ids with the emitting plugin's uuid.
-// (fs/proc are polled via GetGrid; only localdb plugins emit events.) With no
-// single root, a client subscribes to the whole federation at once.
+// Subscribe fans every watching plugin's change-event stream into the client's
+// stream, re-qualifying each event's ids with the emitting plugin's uuid. A
+// plugin declares that it emits events via Info.watch — a capability from the
+// handshake, never the kind string, so a remote node's events (an ssh-proxied
+// localdb) flow exactly like a local plugin's. (fs/proc report watch=false and
+// are polled via GetGrid.) With no single root, a client subscribes to the
+// whole federation at once.
+//
+// Failures surface and heal rather than silently ending a plugin's events for
+// the life of the client stream: an Info or Subscribe failure is logged with
+// the plugin uuid, and each fan-in goroutine re-dials with backoff while the
+// client stream lives — so a plugin that crashes and restarts resumes
+// delivering events without the client reconnecting.
 func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	events := make(chan *pb.Event, 64)
 	for _, p := range h.srv.pluginReg.Ordered() {
-		if p.Kind != "localdb" {
-			continue
-		}
 		c, ok := h.srv.pluginReg.Get(p.UUID)
 		if !ok {
 			continue
 		}
-		go func(uuid string, client pb.GridwellClient) {
-			ps, err := client.Subscribe(subCtx, &pb.SubscribeRequest{})
-			if err != nil {
-				return
-			}
-			for {
-				ev, err := ps.Recv()
-				if err != nil {
-					return // EOF, cancel, or transport error: this plugin's stream ends
-				}
-				select {
-				case events <- qualifyEvent(uuid, ev):
-				case <-subCtx.Done():
-					return
-				}
-			}
-		}(p.UUID, c)
+		ictx, icancel := context.WithTimeout(subCtx, pluginInfoTimeout)
+		info, err := c.Info(ictx, &pb.InfoRequest{})
+		icancel()
+		if err != nil {
+			log.Printf("gridwell: subscribe: info %s (%s): %v — no event fan-in for this plugin", p.UUID, p.Kind, err)
+			continue
+		}
+		if !info.Watch {
+			continue
+		}
+		go fanInEvents(subCtx, p.UUID, c, events)
 	}
 
 	for {
@@ -436,6 +445,49 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 			}
 		case <-ctx.Done():
 			return nil
+		}
+	}
+}
+
+// fanInEvents relays one plugin's Subscribe stream into events until ctx ends,
+// re-dialing with exponential backoff (1s..30s) after any stream failure so a
+// plugin restart resumes its events. Failures are logged, never swallowed —
+// a plugin whose events silently stop presents to the user as "tiles stopped
+// updating" with no evidence (the silent-disappearance class).
+func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, events chan<- *pb.Event) {
+	backoff := time.Second
+	for {
+		ps, err := client.Subscribe(ctx, &pb.SubscribeRequest{})
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("gridwell: subscribe: plugin %s stream open failed: %v (retrying in %v)", uuid, err, backoff)
+		} else {
+			backoff = time.Second // healthy stream: reset for the next outage
+			for {
+				ev, rerr := ps.Recv()
+				if rerr != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					log.Printf("gridwell: subscribe: plugin %s stream ended: %v (retrying in %v)", uuid, rerr, backoff)
+					break
+				}
+				select {
+				case events <- qualifyEvent(uuid, ev):
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
 		}
 	}
 }

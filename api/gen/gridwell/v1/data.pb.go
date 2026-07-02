@@ -84,9 +84,11 @@ func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
 }
 
 // Path is the sequence of well-tile IDs walked from the root grid down
-// to the pane the request originates from. Mutations carry it so the
-// store can fork the COW spine of shared grids up to the highest one
-// still uniquely owned.
+// to the pane the request originates from. Mutations carry it so the store
+// can validate that the request comes from a real descent and locate the
+// leaf grid the edit targets (buildGridSequence / checkPathLeaf). It is NOT a
+// copy-on-write spine: clone is an eager deep copy and nothing is ever shared,
+// so an in-place edit never forks — the path only says "where the pane is".
 type Path struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WellIds       []string               `protobuf:"bytes,1,rep,name=well_ids,json=wellIds,proto3" json:"well_ids,omitempty"`
@@ -647,6 +649,12 @@ type InfoResponse struct {
 	// mounted; persists as visited-url history. Empty for plugins that don't
 	// support ephemeral visits (fs/proc).
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
+	// writable reports that this plugin accepts CreateTile (new primitives can
+	// be dropped into its grids). Like watch and has_session, a capability the
+	// plugin declares once here — the server must never re-derive it from the
+	// kind string, or a remote plugin reached through a proxy (whose local kind
+	// is "ssh") is wrongly presented read-only.
+	Writable      bool `protobuf:"varint,9,opt,name=writable,proto3" json:"writable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -735,6 +743,13 @@ func (x *InfoResponse) GetScratchGridId() string {
 		return x.ScratchGridId
 	}
 	return ""
+}
+
+func (x *InfoResponse) GetWritable() bool {
+	if x != nil {
+		return x.Writable
+	}
+	return false
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -2880,7 +2895,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rProxyEndpoint\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\"\r\n" +
-	"\vInfoRequest\"\xa4\x02\n" +
+	"\vInfoRequest\"\xc0\x02\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -2891,7 +2906,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\anetwork\x18\x06 \x01(\v2\x1b.gridwell.v1.NetworkContextR\anetwork\x12\x1f\n" +
 	"\vhas_session\x18\a \x01(\bR\n" +
 	"hasSession\x12&\n" +
-	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\"'\n" +
+	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\x12\x1a\n" +
+	"\bwritable\x18\t \x01(\bR\bwritable\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +

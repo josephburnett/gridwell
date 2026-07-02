@@ -77,6 +77,10 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		RootGridId:    id,
 		ScratchGridId: scratch,
 		HasSession:    true,
+		// Capabilities the server reads from this handshake (never from the
+		// kind string): localdb emits change events and accepts creates.
+		Watch:    true,
+		Writable: true,
 	}, nil
 }
 

@@ -135,6 +135,12 @@ message InfoResponse {
   // mounted; persists as visited-url history. Empty for plugins that don't
   // support ephemeral visits (fs/proc).
   string scratch_grid_id = 8;
+  // writable reports that this plugin accepts CreateTile (new primitives can
+  // be dropped into its grids). Like watch and has_session, a capability the
+  // plugin declares once here — the server must never re-derive it from the
+  // kind string, or a remote plugin reached through a proxy (whose local kind
+  // is "ssh") is wrongly presented read-only.
+  bool writable = 9;
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
