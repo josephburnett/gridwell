@@ -17,7 +17,7 @@ explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
 > and they all share one root cause: **a single fact is stored in several
 > parallel copies with no single owner, and written from many code paths.**
 > That is why fixes don't stay fixed — a patch corrects one copy while another
-> path keeps writing the rest. The cure is already in the codebase four times
+> path keeps writing the rest. The cure is already in the codebase five times
 > over (§7). Apply it everywhere the [§8 seam catalog](#8-the-seam-catalog-one-fact-many-copies) lists.
 
 ---
@@ -34,7 +34,7 @@ explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
 ┌───────────────▼──────────────────────────────────────────────────────┐
 │ Go→wasm client               client/wasm/  +  pure client/* packages  │
 │   canvas, panes, gestures, framing, previews, menu, embeds            │
-│   THE INSTABILITY EPICENTER (10.6k LOC, 0 unit tests — see §4)         │
+│   THE INSTABILITY EPICENTER (10.7k LOC, 0 unit tests — see §5)         │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  Connect-RPC  (the Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -114,8 +114,20 @@ what a link is.** Copy this shape.
   read by both the Connect and raw-HTTP paths.
 - `Subscribe` fans in every localdb plugin's event stream into one client stream.
 
-**Known fragility.** `ListPlugins` calls `Info` on every plugin on every
-invocation, with no cache or timeout. A slow/hung plugin stalls the launcher.
+**Known fragility.**
+- `ListPlugins` calls `Info` on every plugin on every invocation. Each call is
+  now timeout-bounded (`pluginInfoTimeout`, degrading to a config-only entry),
+  but there is still no cache.
+- **The server dispatches two capabilities on the kind *string* instead of the
+  `Info` handshake**, which breaks the "remote is just a transport" story:
+  `Subscribe` fans in only plugins with `kind == "localdb"` (the proto's
+  `InfoResponse.watch` field exists for exactly this and is ignored), and
+  `buildPluginInfo` derives `writable` from `kind == "localdb"`. Consequence: a
+  remote localdb reached through the `ssh` plugin (kind "ssh") gets **no event
+  fan-in and is presented read-only**, even though the proxy forwards
+  `Subscribe` and `CreateTile` with full fidelity. The fix shape is the §7
+  cure: capabilities are facts the plugin declares once in `Info` (as `watch`
+  and `has_session` already are), never re-derived from the kind string.
 
 ---
 
@@ -129,8 +141,18 @@ Each plugin owns exactly one SQLite DB and one id space.
 - **`localdb`** owns all user content (text, urls, grids) plus shells, sessions,
   and the event stream. It is the only writable plugin.
 - **`fs` / `proc`** are read + framing only, over the shared `griddb` helper.
-  They map paths/PIDs → stable integers and **`Probe` before any sweep** — a
-  failed read must never delete a tile; only a definite `GONE` does.
+  They map paths/PIDs → stable integers. **Their sweep policies diverge — one
+  rule, two implementations (a §8-class seam):** `proc` keeps a tile whose
+  process is merely unreadable this pass and deletes only on a definite gone
+  (`procsource.Exists` consulted before every sweep). `fs` treats an unreadable
+  directory as an **empty authoritative listing** (`GetGrid` → `entries = nil`
+  → `reconcileTiles` deletes every row). For a genuinely deleted directory that
+  is right; for a *transiently* unreadable one (EACCES, an unmounted network
+  share) it destroys the user's stored positions and tile ids — when the
+  directory returns, tiles re-row with fresh ids and auto-layout positions,
+  violating the guiding rule and breaking saved deep links. This is deliberate
+  and tested for the vanished-dir case (`TestGetGridUnreadablePathIsEmptyNotError`)
+  but conflates "gone" with "can't tell"; the proc policy is the correct one.
 - **`ssh`** is a transparent `proxy` forwarding the whole service to a remote node.
 
 ### 4.1 The best-enforced invariant in the codebase: framing ≠ content
@@ -158,8 +180,11 @@ side. *This is what "enforced by construction" looks like.*
 - Clone is an **eager deep copy** (not copy-on-write): new ids for the copy,
   blobs shared by content-address + refcount, no structural sharing. An edit to
   one copy can therefore never touch another, and **no id is ever reassigned.**
-- ⚠️ `internal/store/cow.go` is **misnamed**: COW was removed; the file now holds
-  path validation (`checkLeafGrid`) and clone helpers only. See §9.
+- One layering wrinkle: `internal/store` imports `client/markdown` for
+  `AltFromSource` (deriving a text tile's label from its body). The function is
+  pure and shared, but the dependency arrow points from the persistence layer
+  into the client tree — if it grows, move the shared derivation into a neutral
+  package rather than deepening the inversion.
 
 ---
 
@@ -170,10 +195,14 @@ testable `client/*` packages (`pane`, `preview`, `markdown`, `gesture`,
 `zoomtrans`, `urlnorm`, …). Those packages are clean and well-tested.
 
 **The problem is the shim never stayed thin.** `client/wasm` is **22 files,
-10,660 LOC, and 0 test files.** The hottest files in the entire repository live
-here (`input.go` 2,141 LOC, `render.go` 1,187, `right_button.go` 846,
-`main.go` 829). `make check` *compiles* this package (the `GOOS=js` build) but
+~10,700 LOC, and 0 test files.** The hottest files in the entire repository
+live here (`input.go` ~2,100 LOC, `render.go` ~1,200, `right_button.go` ~850,
+`main.go` ~875). `make check` *compiles* this package (the `GOOS=js` build) but
 **executes none of it.** Only the e2e harness touches it — as a black box.
+Within it, `embed.go`/`embed_drop.go`, `touch.go`, and `file_overlay.go` are
+reachable by **no gate at all** (no e2e simulates an embed edit, a touch
+gesture, or an OS file drop) — and "embed reverts to link text" is a named
+recurring bug with no test home.
 
 ### 5.1 The `App` god-object
 
@@ -204,13 +233,12 @@ consequences:
   an intrinsic window-independent `ViewZoom`) is *well-designed*; the fragility
   is **purely the cross-copy sync**, not the geometry.
 
-- **The menu has no owner.** There are **14 imperative `a.menuOpen = …`
-  assignments** (11 of them `= false`) scattered across `input.go`,
-  `right_button.go`, and `file_overlay.go`, plus a `MenuOpen` bool threaded
-  through portal frames — and **no `closeMenu()`/`openMenu()` function.** Any
-  new gesture-ending path that forgets its own assignment leaves the menu open
-  on a stale pane → **"menus disappearing / on the wrong pane."** This is the
-  "fix one path, miss another" pattern in its purest form.
+- **The menu — CURED (the pattern's proof).** It used to be 14 imperative
+  `a.menuOpen = …` assignments scattered across three files with no owner —
+  the "fix one path, miss another" pattern in its purest form. It is now the
+  single-owner `client/menu` state machine (`Open`/`Close`/focus rules), unit-
+  and e2e-tested (`menu-focus.spec.ts`). Kept here as the worked example: this
+  is what applying §7 to a seam looks like, and what the remaining seams need.
 
 - **Text preview re-wrap (I8) — verified handled, not a live bug.** The earlier
   worry was that the markdown preview re-flows at the preview tile's own width.
@@ -286,6 +314,7 @@ templates:
 | `classifyStoreError` | "what HTTP status is this error" | one function | Connect + raw-HTTP paths |
 | `emitTileChanged` / `finishContentEdit` | "does this mutation bump version" | `store/tiles.go` | every store mutation |
 | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` | "the viewport transform" | one pair of pure fns | preview + descent |
+| `client/menu` | "is the menu open, and on which pane" | one state machine | every gesture path (was 14 scattered writes) |
 
 Each one makes a class of bug *unrepresentable*. The fragile areas in §5/§6
 need exactly this treatment.
@@ -297,39 +326,54 @@ need exactly this treatment.
 Every entry below is the same disease — a single truth duplicated. Each is a
 ranked target for the §7 cure. (Verified against the code, June 2026.)
 
-1. **Viewport / framing** — held in 5 copies (§5.2). *Highest impact: this is
-   the descend/ascend round-trip.*
-2. **Menu open/closed** — 11 `menuOpen = false` sites + a portal-frame bool, no
-   owner (§5.2).
+1. **Viewport / framing** — five *roles* kept consistent by convention (§5.2);
+   the round trip is locked by `framing-roundtrip.spec.ts`. *Highest impact:
+   this is the descend/ascend round-trip.*
+2. ~~**Menu open/closed**~~ — **CURED**: single owner `client/menu` (§5.2).
 3. **"Controls show only on the focused pane"** — encoded once on the canvas
-   (Go) and again as `controlVisible` in the native layer (TS). They can drift.
+   (Go) and again as `controlVisible` in the native layer (TS). Data is
+   single-sourced (wasm feeds focus) and the propagation is e2e-tested
+   (`control-focus.spec.ts`); the predicate still exists twice.
 4. **Native view bounds vs. canvas pane rect** — the per-frame reconciliation in
-   `syncURLViews`; coordinate math in two languages, timing-sensitive.
-5. **The drag threshold** — `dragThreshold` (Go, `input.go`/`right_button.go`/
-   `main.go`) *and* `RIGHT_DRAG_THRESHOLD = 4` (TS, `viewutil.ts`). Same magic
-   number, two homes, two languages.
+   `syncURLViews`; coordinate math in two languages, timing-sensitive. (The
+   pure math is extracted and tested in `viewutil.ts`.)
+5. **The drag threshold** — `dragThreshold` (Go, the declared owner in
+   `main.go`) plus two forced copies (TS `viewutil.ts`, the sandboxed
+   `urlview-preload.ts`). Drift-linted by `gesture-threshold.test.ts`.
 6. **The `SetTile` kind→operation mapping** — described in the proto comment,
    implemented in the `localdb` switch, and again in `conv.go`.
 7. **Optimistic local edit vs. authoritative SSE state** — no merge/interlock
-   (§5.2).
+   (§5.2). The one framing-class residual with **no test at any level**.
+8. **The sweep policy for source-backed tiles** — "never delete on an uncertain
+   read" implemented correctly in `proc`, violated in `fs` (§4). One rule, two
+   homes, one wrong.
+9. **Plugin capabilities** — declared in `Info` (`watch`, `has_session`) but
+   re-derived from the kind string in the server for event fan-in and
+   writability (§3). One fact, two derivations, one of them wrong for remotes.
 
 ---
 
-## 9. Known drift (do NOT trust these comments)
+## 9. Known drift (do NOT trust these names)
 
-Future changes have been mis-led by stale comments. These are wrong; the code is
-right:
+Stale comments and names have repeatedly misled changes here. The rule: **fix
+the comment/name in the same commit you touch the file.** The original COW /
+in-process / Attach comment drift is fixed (`cow.go`→`clone.go`,
+`cow_test.go`→`clone_test.go`, `config.go`/`loader.go`/`connect_handler.go`
+comments corrected). What remains is *naming* drift:
 
-- `cow.go` and the `Path` proto comment describe a **"COW spine"** that no longer
-  exists — clone is an eager copy (§4.2). `cow.go` should be renamed (e.g.
-  `clone.go`/`path.go`).
-- `loader.go` describes built-in plugins running **in-process**; in production
-  every plugin is a separate binary (the in-process path is test-only).
-- `config.go` references an **`Attach(config)`** RPC; there is no `Attach` — the
-  gRPC connection itself is the only lifecycle (`Info` is the whole handshake).
-
-These are harmless at runtime but actively dangerous to the next change. Fix the
-comment in the same commit you touch the file.
+- **"file" vs "text".** Go identifiers standardized on `Text*`
+  (`TextFocus`/`TextMode`), but the wasm layer still says `fileTextarea`,
+  `fileInnerBox`, `startFileDescent`, and `pane.Pane`'s JSON tags are the
+  legacy `file_focus`/`file_mode`. The rename is half-done; finish it when
+  touching those files.
+- **Three JSON vocabularies for one shape.** `pane.Pane` (`file_focus`),
+  `pane.Frame` (`tf`/`tm`), and `panestate.Saved` (`text_focus`) serialize the
+  same conceptual fields under three key schemes. Harmless while they never
+  cross-decode; a hazard the moment one does.
+- **`panebox.OvertakeZoom` is misnamed** — it computes `zoomtrans.Fit` (min
+  ratio), not `Overtake` (max); callers carry apology comments.
+- **`urlStreams`-era naming**: the live URL handle is a webview bridge, not a
+  stream (noted in the stabilization plan's parking lot).
 
 ---
 
@@ -350,9 +394,9 @@ comment in the same commit you touch the file.
 - **Open a live URL tile.** Canvas places a rect; IPC asks the native layer for a
   `WebContentsView` on the plugin partition; `syncURLViews` tracks its bounds
   every frame and parks it during overlays.
-- **Show the menu.** `menuOpen = true` on the focused pane; native overlays park;
-  canvas paints the menu on top. (Closing depends on every gesture-end path
-  remembering to clear `menuOpen` — the fragility.)
+- **Show the menu.** `menu.Open(paneID)` on the focused pane (the one owner —
+  `client/menu`); native overlays park; canvas paints the menu on top. Closing
+  goes through the same owner's transitions (focus change, ascent, gesture end).
 - **Render an embed.** `ResolveEmbedTileID` → `fetchTileByID` →
   `PlanEmbedDescent`, possibly re-anchoring across a plugin boundary.
 
@@ -376,12 +420,15 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. Tested (`TestPreviewContentWidthInvariantToFootprint`) | ✅ mostly construction (one convention seam) |
 | I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible` (unit-tested); the wasm→native propagation is now e2e-tested (`control-focus.spec.ts`) | ✅ data single-sourced + tested (predicate dup remains) |
 | I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
-| I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — verified separated | ✅ construction (residual: optimistic echo) |
+| I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — separation verified **by code inspection only**. No mid-transition event-injection test exists, and the optimistic-echo reconcile (last-writer-wins, no version interlock) is untested at any level. | ⚠️ inspected, **untested** |
+| I12 | A plugin's user state survives its source being unreachable | `proc`: Probe-before-sweep ✅. `fs`: **violated** — an unreadable dir sweeps rows (§4) | ⚠️ **open bug (fs)** |
 
 Progress this effort converted most of the bottom half toward the top: **I8/I10
-construction-enforced and tested; I7/I9/I11 verified and locked/tested.** The one
-genuine-convention item left is **I7** — the five framing copies are kept in sync
-by convention (the round trip is tested by `framing-roundtrip.spec.ts`, but the
-copies are still parallel, by design: they are five legitimate roles, see the
-Phase 1b finding). Its residual risk is low (tested round trip); a deeper
-single-owner `Frame` is possible but not warranted without a visual/render net.
+construction-enforced and tested; I7/I9 verified and locked/tested.** The
+genuine-convention items left: **I7** — the five framing copies are five
+legitimate *roles* kept consistent by convention (round trip tested by
+`framing-roundtrip.spec.ts`; a deeper single-owner `Frame` is possible but not
+warranted without a visual/render net) — and **I11**, whose separation is
+real in today's code but guarded by nothing; a new write into the SSE path
+would regress it silently. I12 is the newest entry: the sweep-policy rule the
+docs asserted turns out to hold in only one of the two plugins it governs.

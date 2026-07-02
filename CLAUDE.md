@@ -70,7 +70,7 @@ ask: does this fact already live somewhere?** If yes, read it from there — do
 not copy it. If a fact genuinely must be available in two layers, **one place
 *derives* it and everything else *reads* it**; there is never a second writer.
 
-The codebase already contains the cure four times. **Copy these shapes; do not
+The codebase already contains the cure five times. **Copy these shapes; do not
 invent a parallel one:**
 - `Tile.reference` — "is this well a link" derived once in `qualifyTiles`, read
   by render/delete/clone.
@@ -79,6 +79,9 @@ invent a parallel one:**
 - `classifyStoreError` — one error→status mapping.
 - `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` — the viewport transform,
   one pure pair.
+- `client/menu` — "is the menu open, and on which pane": one state machine
+  where 14 scattered boolean writes used to live. The worked proof that
+  applying this cure to a chronic symptom makes it stop recurring.
 
 Each makes a bug class *unrepresentable*. That is the goal of every change:
 prefer the design where the bug **cannot be written**, over the design where the
@@ -126,17 +129,18 @@ structural defect to fix, not an excuse.
 
 A unit test on each side of a contract **will not** catch a contract mismatch —
 and the contract mismatch is the bug. The framing-writeback story is the
-cautionary tale: the store side is tested (`framing_version_test.go`), the
-client geometry is tested (`client/preview`), and the round-trip — descend →
-reframe → ascend → assert the sibling pane is byte-identical — **is tested
-nowhere**, which is exactly where it breaks. When you fix a seam bug, the test
-must **cross the seam**. The one bug that has stayed fixed (the live-view context
-menu) is the one with both a unit test *and* a real-stack e2e — that is the
-standard.
+cautionary tale: the store side was tested (`framing_version_test.go`), the
+client geometry was tested (`client/preview`), and the round trip — descend →
+reframe → ascend — was tested *nowhere*, which is exactly where it kept
+breaking. It now has its crossing test (`framing-roundtrip.spec.ts`); that spec
+exists because the gap was found, not because the seam was designed with one.
+When you fix a seam bug, the test must **cross the seam**. The bugs that have
+stayed fixed (the live-view context menu, the menu owner) are the ones with
+both a unit test *and* a real-stack e2e — that is the standard.
 
 ### 5. The wasm orchestration and the native layer are where bugs hide. Treat them accordingly.
 
-- **`client/wasm` is 10,660 LOC with zero unit tests**, and `make check`
+- **`client/wasm` is ~10,700 LOC with zero unit tests**, and `make check`
   compiles it but runs none of it. Do not add more untested orchestration there.
   When you change behavior in `input.go`/`render.go`/`right_button.go`, **extract
   the decision logic into a `js`-free `client/*` package** (as `client/pane`,
@@ -204,15 +208,20 @@ nothing. You **must** also run `make check-electron` and/or `make check-e2e`
 right-click context-menu regression is the cautionary tale: the canvas-only
 harness never touched a live view, so a whole interaction layer had no coverage.
 
-**Invariants that currently have no test home — give them one when you touch
-them** (`ARCHITECTURE.md §11`, I7–I11):
-- **Preview round-trip** (I7): descend → reframe → ascend → the well preview and
-  a sibling pane are byte-identical to before. The e2e `testhook` does not yet
-  expose preview state; extend it.
-- **Menu persistence** (I10): the menu closes on focus change and is gone/restored
-  correctly across ascent — assert it, don't eyeball it.
-- **Pane-content stability** (I11): an unfocused pane's content/preview does not
-  change when another pane is acted on.
+**Invariants that still lack a full test home — give them one when you touch
+them** (`ARCHITECTURE.md §11`):
+- **Preview round-trip** (I7): the viewport round trip is locked
+  (`framing-roundtrip.spec.ts`), but "the well *preview* and a sibling pane are
+  byte-identical to before" is still unobservable — the e2e `testhook` does not
+  expose a preview signature; extend it.
+- **SSE during animation / optimistic echo** (I11): the code separation is
+  verified by inspection only. No test injects an event mid-transition, and the
+  optimistic-edit echo has no version interlock or test. A new write into the
+  SSE path would regress this silently.
+- **Source-sweep stability** (I12): a transiently unreadable directory must not
+  destroy fs tile rows (positions + ids). Today it does — see
+  `ARCHITECTURE.md §4`; proc has the correct Probe-before-sweep policy.
+(I10, menu persistence, graduated: single owner + unit + e2e.)
 
 ---
 

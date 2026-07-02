@@ -77,11 +77,11 @@ from re-creating the disease.
 - [x] **`CLAUDE.md` rewrite** — the engineering charter (one fact/one owner;
       root-cause before patching; test-the-seam; the three gates) plus the
       preserved domain doctrine.
-- [ ] **Fix the stale comments now** (`§9`): rename `internal/store/cow.go` →
-      `clone.go`/`path.go`; correct the `loader.go` "in-process" and `config.go`
-      "Attach" comments and the `Path` proto "COW spine" comment. Pure
-      doc/rename, no behavior change — do it in one commit so no future change is
-      misled. **Recommended first commit.**
+- [x] **Fix the stale comments** (`§9`): `cow.go` → `clone.go` and the
+      `loader.go`/proto comments landed in the first pass; the stragglers
+      (`config.go` "Attach" ×2, `connect_handler.go` "COW spine", the
+      `webviews.ts` shared-partition comment, and `cow_test.go` →
+      `clone_test.go`) landed in the state-of-the-project review.
 
 ---
 

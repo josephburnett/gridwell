@@ -1,6 +1,7 @@
 // Package config loads ~/.gridwell/server.yaml and exposes the server and
-// plugin configuration. Plugin config keys are pass-through: the server
-// routes Attach(config) to the plugin binary without interpreting the keys.
+// plugin configuration. Plugin config keys are pass-through: the server hands
+// the map to the plugin binary at spawn (GRIDWELL_PLUGIN_CONFIG) without
+// interpreting the keys.
 package config
 
 import (
@@ -26,7 +27,7 @@ type ServerConfig struct {
 // and stored permanently in the plugin's own DB — it must never change after
 // the first run. Name is a display alias only; renaming it never invalidates
 // stored links. Binary is the path to the plugin executable; "" means
-// built-in. Config is forwarded verbatim to the plugin's Attach call.
+// built-in. Config is forwarded verbatim to the plugin at spawn.
 type PluginConfig struct {
 	ID     string            `yaml:"id"`
 	Name   string            `yaml:"name"`
