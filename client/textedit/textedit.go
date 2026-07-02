@@ -15,6 +15,27 @@ func InsertAt(src, ins string, off int) (string, int) {
 	return src[:off] + ins + src[off:], off + len(ins)
 }
 
+// InsertParagraphBreak inserts a markdown paragraph break at byte offset off
+// and returns the new source plus the caret just past the break. The break is
+// normalized, not blindly spliced: the maximal run of '\n' touching the
+// insertion point collapses to exactly "\n\n". Markdown renders three blank
+// lines identically to one, so any extra newlines would be invisible source
+// the caret still walks — repeated Enter would sink the caret ever lower with
+// no rendered change. Normalizing makes Enter idempotent at a paragraph
+// boundary: it moves the caret past the break instead of accumulating.
+func InsertParagraphBreak(src string, off int) (string, int) {
+	off = clamp(off, len(src))
+	l := off
+	for l > 0 && src[l-1] == '\n' {
+		l--
+	}
+	r := off
+	for r < len(src) && src[r] == '\n' {
+		r++
+	}
+	return src[:l] + "\n\n" + src[r:], l + 2
+}
+
 // DeleteBefore removes the rune ending at byte offset off (the Backspace
 // action) and returns the new source plus the caret at the deleted rune's
 // start. A no-op (returns src, off) when off <= 0. off is clamped to [0, len].

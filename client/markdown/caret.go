@@ -3,6 +3,7 @@ package markdown
 import (
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 // caret.go maps between a source byte offset and a screen position over the
@@ -11,24 +12,42 @@ import (
 // caret-rendering can be unit-tested without a canvas. Only verbatim text runs
 // (DrawOp.SrcLen > 0) participate; opaque runs are skipped.
 //
-// The mapping must stay *total* over the source. A renderer collapses or drops
-// parts of the source — trailing spaces, the newline you just typed, the blank
-// line between paragraphs — so those bytes belong to no run. But editing puts
-// the caret on exactly those offsets all the time (type a space or hit Enter at
-// the end of a line). When an offset lands in such a gap, PointFromCaret walks
-// the literal source text of the gap instead of giving up: whitespace widens
-// the caret along the line, and each '\n' drops it to the next line. The caret
-// then follows the buffer through whitespace the render doesn't show.
+// The mapping must stay *total* over the caret's domain. A renderer collapses
+// or drops parts of the source — trailing spaces, the newline you just typed,
+// the blank line between paragraphs — so those bytes belong to no run. But
+// editing puts the caret on exactly those offsets all the time (type a space
+// or hit Enter at the end of a line). When an offset lands in such a gap,
+// PointFromCaret walks the literal source text of the gap instead of giving
+// up. Two rules keep the walk honest to what was actually painted:
+//
+//   - Only whitespace advances. Markdown markers the renderer consumed (the
+//     ** of bold, a heading's #, a link's brackets) have no glyphs, so they
+//     contribute no width — a caret next to them sits at the visible text's
+//     edge, not a phantom marker-width away.
+//   - Newlines drop at most one rendered break. In flowing text markdown
+//     collapses any run of blank lines into a single paragraph break, so two
+//     or more newlines drop the caret exactly one line height plus one block
+//     gap — where the next paragraph really renders. Inside a code block
+//     every newline is a real line, so there each one steps a full line.
+//
+// The caret's *editable domain* is the set of offsets these rules can place
+// faithfully: any offset inside a verbatim run, plus any offset separated
+// from the preceding run by whitespace only. NextCaretStop/PrevCaretStop walk
+// that domain; offsets inside consumed markers are skipped, both so the caret
+// never appears in a position the renderer can't show and so ordinary arrow
+// movement can't lead typing into the middle of a marker.
 
-// PointFromCaret returns the logical-pixel position of a caret sitting at source
-// byte `offset`. Inside a run: the run's left edge plus the measured width of
-// the text before the offset. In a gap past a run: the nearest preceding run's
-// position advanced across the gap's source text (see the package note above).
-// y is the line's top and fontPx its size (the painter turns these into a
-// vertical bar). lineSpacing scales fontPx into the line height used to step
-// down per newline. ok is false only when no run precedes the offset (an empty
-// document, or an offset before the first glyph).
-func PointFromCaret(ops []DrawOp, src string, offset int, lineSpacing float64, m Measure) (x, y, fontPx float64, ok bool) {
+// PointFromCaret returns the logical-pixel position of a caret sitting at
+// source byte `offset`. Inside a run: the run's left edge plus the measured
+// width of the text before the offset. In a gap past a run: the nearest
+// preceding run's position advanced across the gap per the package rules
+// above. Before any run (an empty document, or nothing but whitespace so
+// far): the document origin (style.PadX, 0), where the first typed glyph will
+// render. y is the line's top and fontPx its size (the painter turns these
+// into a vertical bar). ok is false only when non-whitespace source the
+// renderer consumed precedes the offset with no run in between (e.g. an
+// offset inside a leading "# " marker) — a position with no faithful point.
+func PointFromCaret(ops []DrawOp, src string, offset int, style LayoutStyle, m Measure) (x, y, fontPx float64, ok bool) {
 	if offset < 0 {
 		offset = 0
 	}
@@ -51,20 +70,50 @@ func PointFromCaret(ops []DrawOp, src string, offset int, lineSpacing float64, m
 		}
 	}
 	if aEnd < 0 {
-		return 0, 0, 0, false
+		// No run precedes the offset. If everything before it is whitespace
+		// the renderer collapses it all: the caret (and the next glyph typed)
+		// sits at the document origin, advanced only by the spaces after the
+		// last newline. Anything else (a consumed marker) has no position.
+		before := src[:offset]
+		if strings.TrimLeft(before, " \t\n") != "" {
+			return 0, 0, 0, false
+		}
+		tail := before[strings.LastIndexByte(before, '\n')+1:]
+		return style.PadX + m(tail, style.BaseFontPx, StyleNone, false), 0, style.BaseFontPx, true
 	}
-	// The offset is past aOp's end, in source the render collapsed. Advance
-	// across the literal gap text: newlines drop to a new line at the line's
-	// left margin; otherwise whitespace widens along the current line.
+	// The offset is past aOp's end, in source the render collapsed or consumed.
+	// Advance across the gap: whitespace widens / drops lines, markers don't.
 	gap := src[aEnd:offset]
 	if nl := strings.Count(gap, "\n"); nl > 0 {
-		tail := gap[strings.LastIndexByte(gap, '\n')+1:]
-		lineH := aOp.FontPx * lineSpacing
+		tail := whitespaceIn(gap[strings.LastIndexByte(gap, '\n')+1:])
+		lineH := aOp.FontPx * style.LineSpacing
+		dy := float64(nl) * lineH
+		if nl >= 2 && !aOp.CodeBlock {
+			// Flowing text renders any blank-line run as ONE paragraph break;
+			// the caret lands where the next paragraph's first glyph will.
+			dy = lineH + style.BlockGap
+		}
 		return lineLeftX(ops, aOp.Y) + m(tail, aOp.FontPx, aOp.Style, aOp.Mono),
-			aOp.Y + float64(nl)*lineH, aOp.FontPx, true
+			aOp.Y + dy, aOp.FontPx, true
 	}
 	right := aOp.X + m(aOp.Text, aOp.FontPx, aOp.Style, aOp.Mono)
-	return right + m(gap, aOp.FontPx, aOp.Style, aOp.Mono), aOp.Y, aOp.FontPx, true
+	return right + m(whitespaceIn(gap), aOp.FontPx, aOp.Style, aOp.Mono), aOp.Y, aOp.FontPx, true
+}
+
+// whitespaceIn returns only the space/tab bytes of s, in order — the part of
+// a gap that has rendered width. Consumed markdown markers are dropped so
+// they never contribute phantom advance.
+func whitespaceIn(s string) string {
+	if strings.IndexFunc(s, func(r rune) bool { return r != ' ' && r != '\t' }) < 0 {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' || s[i] == '\t' {
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }
 
 // lineLeftX is the left edge of the visual line whose top is at y: the smallest
@@ -90,6 +139,54 @@ func lineLeftX(ops []DrawOp, y float64) float64 {
 func CaretBar(y, fontPx float64) (top, height float64) {
 	const overhang = 0.1
 	return y - fontPx*overhang, fontPx * (1 + 2*overhang)
+}
+
+// IsCaretStop reports whether offset is in the rendered caret's editable
+// domain (see the package note): on a rune boundary and either inside a
+// verbatim run or separated from the preceding run (or the document start)
+// by whitespace only. Offsets inside consumed markers are not stops.
+func IsCaretStop(ops []DrawOp, src string, offset int) bool {
+	if offset < 0 || offset > len(src) {
+		return false
+	}
+	if offset < len(src) && !utf8.RuneStart(src[offset]) {
+		return false
+	}
+	aEnd := 0 // nearest preceding run end; document start when there is none
+	for _, op := range ops {
+		if op.Kind != OpText || op.SrcLen == 0 {
+			continue
+		}
+		if offset >= op.SrcStart && offset <= op.SrcStart+op.SrcLen {
+			return true
+		}
+		if e := op.SrcStart + op.SrcLen; e <= offset && e > aEnd {
+			aEnd = e
+		}
+	}
+	return strings.TrimLeft(src[aEnd:offset], " \t\n") == ""
+}
+
+// NextCaretStop returns the nearest caret stop strictly after offset, or
+// offset unchanged when none exists (end of the editable domain).
+func NextCaretStop(ops []DrawOp, src string, offset int) int {
+	for o := offset + 1; o <= len(src); o++ {
+		if IsCaretStop(ops, src, o) {
+			return o
+		}
+	}
+	return offset
+}
+
+// PrevCaretStop returns the nearest caret stop strictly before offset, or
+// offset unchanged when none exists.
+func PrevCaretStop(ops []DrawOp, src string, offset int) int {
+	for o := offset - 1; o >= 0; o-- {
+		if IsCaretStop(ops, src, o) {
+			return o
+		}
+	}
+	return offset
 }
 
 // CaretFromPoint returns the source byte offset nearest the point (px, py): the

@@ -51,6 +51,55 @@ func TestInsertAt(t *testing.T) {
 	}
 }
 
+func TestInsertParagraphBreak(t *testing.T) {
+	cases := []struct {
+		name    string
+		src     string
+		off     int
+		want    string
+		wantOff int
+	}{
+		{"end of doc", "hello", 5, "hello\n\n", 7},
+		{"mid word splits the paragraph", "hello", 2, "he\n\nllo", 4},
+		{"between paragraphs is idempotent (caret at next para)", "a\n\nb", 3, "a\n\nb", 3},
+		{"at end of para jumps past the break", "a\n\nb", 1, "a\n\nb", 3},
+		{"inside the break normalizes in place", "a\n\nb", 2, "a\n\nb", 3},
+		{"soft break upgrades to a paragraph break", "a\nb", 2, "a\n\nb", 3},
+		{"extra blank lines collapse", "a\n\n\n\nb", 3, "a\n\nb", 3},
+		{"trailing newlines collapse", "a\n\n\n", 4, "a\n\n", 3},
+		{"empty doc", "", 0, "\n\n", 2},
+		{"start of doc", "a", 0, "\n\na", 2},
+		{"hard-break spaces are left alone", "a  \nb", 4, "a  \n\nb", 5},
+		{"clamped past end", "a", 99, "a\n\n", 3},
+		{"clamped before start", "a", -1, "\n\na", 2},
+	}
+	for _, c := range cases {
+		got, off := InsertParagraphBreak(c.src, c.off)
+		if got != c.want || off != c.wantOff {
+			t.Errorf("%s: InsertParagraphBreak(%q,%d) = (%q,%d), want (%q,%d)",
+				c.name, c.src, c.off, got, off, c.want, c.wantOff)
+		}
+	}
+}
+
+// TestInsertParagraphBreakIdempotent: pressing Enter repeatedly at the same
+// boundary must converge — the source stops changing after the first press.
+// This is the fix for the invisible-blank-line accumulation class.
+func TestInsertParagraphBreakIdempotent(t *testing.T) {
+	src, off := "one two", 3
+	src, off = InsertParagraphBreak(src, off)
+	for i := 0; i < 3; i++ {
+		next, nextOff := InsertParagraphBreak(src, off)
+		if next != src {
+			t.Fatalf("press %d changed the source: %q -> %q", i+2, src, next)
+		}
+		src, off = next, nextOff
+	}
+	if src != "one\n\n two" {
+		t.Errorf("converged source = %q, want %q", src, "one\n\n two")
+	}
+}
+
 func TestDeleteBefore(t *testing.T) {
 	cases := []struct {
 		src     string

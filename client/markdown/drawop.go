@@ -65,6 +65,11 @@ type DrawOp struct {
 	FontPx float64 // logical font size
 	Style  SpanStyle
 	Mono   bool // monospace family (code/code block)
+	// CodeBlock marks a run inside a code-block panel (not inline code). The
+	// caret geometry reads it: newlines after a code run are real rendered
+	// lines (blank code lines), while newlines in flowing text collapse to at
+	// most one paragraph break. Set only by the code-block layout.
+	CodeBlock bool
 
 	Color ColorRole
 

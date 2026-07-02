@@ -18,7 +18,7 @@ func opByText(r LayoutResult, text string) (DrawOp, bool) {
 // caretX is PointFromCaret keeping only the x (the helpers below assert x).
 func caretX(t *testing.T, r LayoutResult, src string, offset int) (float64, bool) {
 	t.Helper()
-	x, _, _, ok := PointFromCaret(r.Ops, src, offset, DefaultLayoutStyle().LineSpacing, monoMeasure)
+	x, _, _, ok := PointFromCaret(r.Ops, src, offset, DefaultLayoutStyle(), monoMeasure)
 	return x, ok
 }
 
@@ -80,7 +80,7 @@ func TestCaretFollowsCollapsedWhitespace(t *testing.T) {
 		src := "hello\n"
 		r := layoutOf(t, src, 1000)
 		hello, _ := opByText(r, "hello")
-		x, y, _, ok := PointFromCaret(r.Ops, src, 6, DefaultLayoutStyle().LineSpacing, monoMeasure)
+		x, y, _, ok := PointFromCaret(r.Ops, src, 6, DefaultLayoutStyle(), monoMeasure)
 		if !ok {
 			t.Fatal("offset 6 not ok")
 		}
@@ -92,22 +92,134 @@ func TestCaretFollowsCollapsedWhitespace(t *testing.T) {
 			t.Errorf("new-line caret y = %v, want %v (one line down)", y, wantY)
 		}
 	})
-	// Several blank lines: each newline steps down one line height.
-	t.Run("multiple newlines", func(t *testing.T) {
+	// Blank-line runs in flowing text collapse to ONE paragraph break: past the
+	// first newline the caret sits where the next paragraph's glyphs will
+	// render (one line height + one block gap), no matter how many newlines
+	// the source holds. Before the fix each newline stepped another line, so
+	// repeated Enter sank the caret with no rendered change to match.
+	t.Run("multiple newlines collapse to one paragraph break", func(t *testing.T) {
 		src := "hi\n\n\n"
+		st := DefaultLayoutStyle()
 		r := layoutOf(t, src, 1000)
 		hi, _ := opByText(r, "hi")
-		lh := hi.FontPx * DefaultLayoutStyle().LineSpacing
+		lh := hi.FontPx * st.LineSpacing
+		wantY := []float64{hi.Y + lh, hi.Y + lh + st.BlockGap, hi.Y + lh + st.BlockGap}
 		for n := 1; n <= 3; n++ {
-			_, y, _, ok := PointFromCaret(r.Ops, src, 2+n, DefaultLayoutStyle().LineSpacing, monoMeasure)
+			_, y, _, ok := PointFromCaret(r.Ops, src, 2+n, st, monoMeasure)
 			if !ok {
 				t.Fatalf("offset %d not ok", 2+n)
 			}
-			if y != hi.Y+float64(n)*lh {
-				t.Errorf("offset %d: y = %v, want %v", 2+n, y, hi.Y+float64(n)*lh)
+			if y != wantY[n-1] {
+				t.Errorf("offset %d: y = %v, want %v", 2+n, y, wantY[n-1])
 			}
 		}
 	})
+	// Inside a code block every newline is a real rendered line, so the caret
+	// steps a full line height per newline — blank code lines included.
+	t.Run("code block newlines step per line", func(t *testing.T) {
+		src := "```\nab\n\n\ncd\n```\n"
+		st := DefaultLayoutStyle()
+		r := layoutOf(t, src, 1000)
+		ab, ok := opByText(r, "ab")
+		if !ok || !ab.CodeBlock {
+			t.Fatalf("no code-block run for ab (op=%+v)", ab)
+		}
+		lh := ab.FontPx * st.LineSpacing
+		// Offsets 7, 8, 9: after ab's newline, then each blank line.
+		for n := 1; n <= 3; n++ {
+			_, y, _, ok := PointFromCaret(r.Ops, src, 6+n, st, monoMeasure)
+			if !ok {
+				t.Fatalf("offset %d not ok", 6+n)
+			}
+			if y != ab.Y+float64(n)*lh {
+				t.Errorf("offset %d: y = %v, want %v", 6+n, y, ab.Y+float64(n)*lh)
+			}
+		}
+		// And "cd" really renders on that third line — the caret walk agrees
+		// with the layout.
+		cd, _ := opByText(r, "cd")
+		if cd.Y != ab.Y+3*lh {
+			t.Errorf("cd renders at y=%v, want %v", cd.Y, ab.Y+3*lh)
+		}
+	})
+}
+
+// TestCaretIgnoresConsumedMarkers: markdown markers the renderer consumed
+// (the ** of bold) have no glyphs, so a caret adjacent to them sits flush at
+// the visible text — no phantom marker-width drift.
+func TestCaretIgnoresConsumedMarkers(t *testing.T) {
+	src := "x **bold** y\n"
+	r := layoutOf(t, src, 1000)
+	bold, ok := opByText(r, "bold")
+	if !ok {
+		t.Fatal("no bold op")
+	}
+	// Offset 2 (end of "x "), 3 (inside the markers), 4 (start of "bold") are
+	// all the same visible position: the left edge of "bold".
+	for _, off := range []int{2, 3, 4} {
+		x, ok := caretX(t, r, src, off)
+		if !ok {
+			t.Fatalf("offset %d not ok", off)
+		}
+		if x != bold.X {
+			t.Errorf("offset %d: x = %v, want %v (no phantom marker width)", off, x, bold.X)
+		}
+	}
+}
+
+// TestCaretEmptyDocument: an empty (or whitespace-only) document still has a
+// caret — at the document origin, where the first typed glyph will render.
+// Before the fix ok was false, so a fresh doc showed no caret at all.
+func TestCaretEmptyDocument(t *testing.T) {
+	st := DefaultLayoutStyle()
+	x, y, fp, ok := PointFromCaret(nil, "", 0, st, monoMeasure)
+	if !ok {
+		t.Fatal("empty doc: not ok")
+	}
+	if x != st.PadX || y != 0 || fp != st.BaseFontPx {
+		t.Errorf("empty doc caret = (%v,%v,%v), want (%v,0,%v)", x, y, fp, st.PadX, st.BaseFontPx)
+	}
+	// Whitespace-only source: leading blank lines collapse entirely — typing
+	// renders at the top — so the caret stays at the origin, advanced only by
+	// spaces after the last newline.
+	src := "\n\n  "
+	x, y, _, ok = PointFromCaret(nil, src, len(src), st, monoMeasure)
+	if !ok {
+		t.Fatal("whitespace-only doc: not ok")
+	}
+	if y != 0 || x != st.PadX+monoMeasure("  ", st.BaseFontPx, StyleNone, false) {
+		t.Errorf("whitespace-only caret = (%v,%v), want origin + two spaces", x, y)
+	}
+}
+
+// TestCaretStops: arrow movement walks exactly the editable domain — through
+// text and typed whitespace, over consumed markers.
+func TestCaretStops(t *testing.T) {
+	src := "x **bold** y\n"
+	r := layoutOf(t, src, 1000)
+	// Forward from the start: every rune of "x ", then a jump over the
+	// opening marker to "bold", over the closing marker to " y".
+	want := []int{1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13}
+	off := 0
+	for i, w := range want {
+		off = NextCaretStop(r.Ops, src, off)
+		if off != w {
+			t.Fatalf("step %d: NextCaretStop = %d, want %d", i, off, w)
+		}
+	}
+	if next := NextCaretStop(r.Ops, src, off); next != off {
+		t.Errorf("NextCaretStop at end moved to %d", next)
+	}
+	// And the reverse walk visits the same stops.
+	for i := len(want) - 2; i >= 0; i-- {
+		off = PrevCaretStop(r.Ops, src, off)
+		if off != want[i] {
+			t.Fatalf("reverse: PrevCaretStop = %d, want %d", off, want[i])
+		}
+	}
+	if PrevCaretStop(r.Ops, src, off) != 0 {
+		t.Errorf("PrevCaretStop from %d should reach 0", off)
+	}
 }
 
 // TestCaretBarCentersOnGlyphBox: the bar straddles the em box [y, y+fontPx]
@@ -174,7 +286,7 @@ func TestCaretFromPointTrailingWhitespace(t *testing.T) {
 		t.Errorf("trailing-space click: offset = %d, want 8 (end of line)", got)
 	}
 	// And it round-trips: PointFromCaret(8) sits to the right of "hello".
-	x, _, _, _ := PointFromCaret(r.Ops, src, 8, DefaultLayoutStyle().LineSpacing, monoMeasure)
+	x, _, _, _ := PointFromCaret(r.Ops, src, 8, DefaultLayoutStyle(), monoMeasure)
 	if x <= hello.X+5*8 {
 		t.Errorf("PointFromCaret(8) x = %v, want right of hello (%v)", x, hello.X+5*8)
 	}
@@ -184,7 +296,7 @@ func TestCaretFromPointTrailingWhitespace(t *testing.T) {
 // point returns the same offset, for every rune boundary of a multi-line doc.
 func TestCaretRoundTrips(t *testing.T) {
 	src := "# Title\n\nfirst line\nsecond line\n"
-	ls := DefaultLayoutStyle().LineSpacing
+	ls := DefaultLayoutStyle()
 	r := layoutOf(t, src, 1000)
 	for _, op := range opsOfKind(r, OpText) {
 		if op.SrcLen == 0 {
@@ -212,11 +324,15 @@ func TestCaretRoundTrips(t *testing.T) {
 	}
 }
 
-func TestPointFromCaretEmptyOps(t *testing.T) {
-	if _, _, _, ok := PointFromCaret(nil, "", 0, 1.4, monoMeasure); ok {
-		t.Error("empty ops should report ok=false")
+func TestPointFromCaretUnmappableOffset(t *testing.T) {
+	// An offset preceded by consumed non-whitespace with no run in between
+	// (inside a leading "# " marker) has no faithful position.
+	src := "# Title\n"
+	r := layoutOf(t, src, 1000)
+	if _, _, _, ok := PointFromCaret(r.Ops, src, 1, DefaultLayoutStyle(), monoMeasure); ok {
+		t.Error("offset inside a leading marker should report ok=false")
 	}
 	if _, ok := CaretFromPoint(nil, "", 0, 0, monoMeasure); ok {
-		t.Error("empty ops should report ok=false")
+		t.Error("empty ops should report ok=false for CaretFromPoint")
 	}
 }
