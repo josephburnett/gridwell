@@ -19,6 +19,8 @@ func main() {
 		os.Exit(cli.RunInit(args))
 	case "serve":
 		os.Exit(cli.RunServe(args))
+	case "backup":
+		os.Exit(cli.RunBackup(args))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -37,6 +39,8 @@ Usage:
                                               create + register a plugin
     gridwell serve [--bind ADDR] [--static DIR]
                                               run the backend server
+    gridwell backup DEST                      snapshot every plugin DB + server.yaml
+                                              (VACUUM INTO; safe while serving)
 
 init mints a plugin id, creates its DB (at ~/.gridwell/db/<id>/) with identity
 metadata, and appends the entry to ~/.gridwell/server.yaml. serve requires that
