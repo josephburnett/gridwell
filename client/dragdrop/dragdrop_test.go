@@ -448,3 +448,23 @@ func TestGhostPlanForDrop(t *testing.T) {
 		}
 	}
 }
+
+func TestPromoteToWell(t *testing.T) {
+	cases := []struct {
+		name                               string
+		isWell                             bool
+		childGridID, tileID, draggedTileID string
+		want                               bool
+	}{
+		{"open well promotes", true, "g9", "t1", "t2", true},
+		{"non-well never promotes", false, "g9", "t1", "t2", false},
+		{"well with no child never promotes", true, "", "t1", "t2", false},
+		{"the dragged well itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
+		{"no drag in flight still promotes", true, "g9", "t1", "", true},
+	}
+	for _, c := range cases {
+		if got := PromoteToWell(c.isWell, c.childGridID, c.tileID, c.draggedTileID); got != c.want {
+			t.Errorf("%s: PromoteToWell = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
