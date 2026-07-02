@@ -1510,6 +1510,13 @@ func (x *GetTileRequest) GetTileId() string {
 
 // SetTileAlt stamps a tile's display label. Used by the shell title-capture
 // path (the foreground command becomes the tile name on detach).
+//
+// Deliberate overlap with SetTile: a URL tile's title rides SetTile (part of
+// the versioned freeze — the capture claims the version it froze), while the
+// shell detach path has no version to claim (the PTY teardown is asynchronous
+// to any edit), so it stamps the label unversioned here. Two writers, one
+// column, distinguished by whether the caller holds a version. Fold this into
+// SetTile only if shell writes ever become versioned.
 type SetTileAltRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
@@ -1564,6 +1571,11 @@ func (x *SetTileAltRequest) GetAlt() string {
 
 // Mount drops an exit well in the destination grid whose child is plugin_uuid's
 // default root (from its Info). The drag-a-plugin-onto-a-grid gesture.
+//
+// Deliberately the one composite RPC (Info + CreateTile could compose it
+// client-side): the server owns it so the mounted well's label is stamped
+// from the SAME server.yaml name the + menu shows — the menu and the dropped
+// tile can never disagree. Keep it unless label agreement moves elsewhere.
 type MountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PluginUuid    string                 `protobuf:"bytes,1,opt,name=plugin_uuid,json=pluginUuid,proto3" json:"plugin_uuid,omitempty"`
@@ -2407,6 +2419,12 @@ func (x *SetTileRequest) GetPreview() []byte {
 	return nil
 }
 
+// UpdateText is deliberately the one content mutation with its own verb
+// (url/shell content — the frozen preview — rides SetTile). The text body is
+// an unbounded user document with its own size cap and alt-derivation
+// semantics; folding it into SetTile would turn the single writeback's
+// "empty fields are skipped" rule ambiguous for an intentionally-emptied
+// document. The asymmetry is a choice, not drift.
 type UpdateTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
