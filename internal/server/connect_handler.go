@@ -170,15 +170,11 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		// The server.yaml display name is authoritative (the menu and a mounted
 		// well must agree); buildPluginInfo falls back to Info's name then kind.
 		label := h.srv.pluginReg.Label(p.UUID)
-		var info *pb.InfoResponse
-		if c, ok := h.srv.pluginReg.Get(p.UUID); ok {
-			// Info is the whole handshake (default root grid + fallback label).
-			// Bound it so a hung plugin degrades to a config-only entry instead
-			// of hanging the launcher; a failed/timed-out Info → info stays nil.
-			ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
-			info, _ = c.Info(ictx, &pb.InfoRequest{})
-			cancel()
-		}
+		// Info is the whole handshake (default root grid + fallback label +
+		// capabilities), served from the per-uuid cache after the first
+		// success. Bounded, so a hung plugin degrades to a config-only entry
+		// instead of hanging the launcher; a failed Info → info stays nil.
+		info, _ := h.srv.pluginInfo(ctx, p.UUID)
 		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info))
 	}
 	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
@@ -424,9 +420,7 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 		if !ok {
 			continue
 		}
-		ictx, icancel := context.WithTimeout(subCtx, pluginInfoTimeout)
-		info, err := c.Info(ictx, &pb.InfoRequest{})
-		icancel()
+		info, err := h.srv.pluginInfo(subCtx, p.UUID)
 		if err != nil {
 			log.Printf("gridwell: subscribe: info %s (%s): %v — no event fan-in for this plugin", p.UUID, p.Kind, err)
 			continue

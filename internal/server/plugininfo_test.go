@@ -1,9 +1,15 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 
+	"connectrpc.com/connect"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // buildPluginInfo is the pure assembly behind ListPlugins. These tests pin the
@@ -94,5 +100,81 @@ func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 	}
 	if got.ScratchGridId != "" {
 		t.Errorf("ScratchGridId = %q, want empty (no scratch grid)", got.ScratchGridId)
+	}
+}
+
+// countingInfoPlugin is a minimal plugin that counts Info calls and can fail
+// the first one — the seam for the Info cache tests.
+type countingInfoPlugin struct {
+	pb.UnimplementedGridwellServer
+	calls     atomic.Int32
+	failFirst bool
+}
+
+func (p *countingInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	n := p.calls.Add(1)
+	if p.failFirst && n == 1 {
+		return nil, errors.New("transient info failure")
+	}
+	return &pb.InfoResponse{Kind: "test", DisplayName: "T", RootGridId: "1"}, nil
+}
+
+// TestListPluginsCachesInfo: repeat ListPlugins calls serve the handshake from
+// the per-uuid cache — the plugin is asked exactly once. Before the cache,
+// every palette open re-handshook every plugin (up to pluginInfoTimeout each
+// for a slow remote).
+func TestListPluginsCachesInfo(t *testing.T) {
+	fake := &countingInfoPlugin{}
+	client, closer, err := plugin.ServeInProcess(fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closer)
+	reg := plugin.NewRegistry()
+	reg.Register("u-1", "test", client, nil)
+	srv := New(reg, Config{})
+	h := newConnectHandler(srv)
+
+	for i := 0; i < 3; i++ {
+		if _, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{})); err != nil {
+			t.Fatalf("ListPlugins #%d: %v", i+1, err)
+		}
+	}
+	if got := fake.calls.Load(); got != 1 {
+		t.Errorf("Info called %d times across 3 ListPlugins, want 1 (cached)", got)
+	}
+}
+
+// TestListPluginsRetriesFailedInfo: a failed handshake is NOT negatively
+// cached — the next call retries and the plugin recovers its listing.
+func TestListPluginsRetriesFailedInfo(t *testing.T) {
+	fake := &countingInfoPlugin{failFirst: true}
+	client, closer, err := plugin.ServeInProcess(fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closer)
+	reg := plugin.NewRegistry()
+	reg.Register("u-1", "test", client, nil)
+	srv := New(reg, Config{})
+	h := newConnectHandler(srv)
+
+	r1, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Degraded entry: listed, but no clickable root (info was nil).
+	if got := r1.Msg.Plugins[0].RootGridId; got != "" {
+		t.Errorf("failed Info should list a degraded entry, got root %q", got)
+	}
+	r2, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r2.Msg.Plugins[0].RootGridId; got != "u-1/1" {
+		t.Errorf("retry after a failed Info should recover, got root %q, want u-1/1", got)
+	}
+	if got := fake.calls.Load(); got != 2 {
+		t.Errorf("Info called %d times, want 2 (fail, then successful retry, then cache)", got)
 	}
 }

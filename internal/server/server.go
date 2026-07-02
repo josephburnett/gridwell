@@ -11,11 +11,13 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,6 +44,16 @@ type Server struct {
 	pluginReg *plugin.Registry
 
 	mux *http.ServeMux
+
+	// infoCache memoizes each plugin's first successful Info handshake, keyed
+	// by plugin uuid. Identity, roots, and capabilities are stable for a
+	// plugin's lifetime, so repeat ListPlugins / Subscribe calls must not
+	// re-handshake every plugin (a consistently slow remote made every
+	// palette open pay pluginInfoTimeout). Failures are never cached — the
+	// next call retries. Invalidated on nothing today: a uuid is never
+	// re-registered with a different backing plugin within one server run.
+	infoMu    sync.Mutex
+	infoCache map[string]*pb.InfoResponse
 }
 
 // New constructs a Server that routes everything through reg. There is no root:
@@ -52,6 +64,7 @@ func New(reg *plugin.Registry, cfg Config) *Server {
 		cfg:       cfg,
 		pluginReg: reg,
 		mux:       http.NewServeMux(),
+		infoCache: map[string]*pb.InfoResponse{},
 	}
 	srv.routes()
 	return srv
@@ -73,6 +86,33 @@ func (s *Server) clientForID(id string) (client pb.GridwellClient, local string,
 }
 
 func (s *Server) Handler() http.Handler { return s.mux }
+
+// pluginInfo returns uuid's Info handshake, serving repeat calls from the
+// per-uuid cache. The live call is bounded by pluginInfoTimeout so a hung
+// plugin degrades (error, not stall); only a successful handshake is cached.
+// Concurrent misses may both call Info — harmless, the values are identical.
+func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
+	s.infoMu.Lock()
+	info, ok := s.infoCache[uuid]
+	s.infoMu.Unlock()
+	if ok {
+		return info, nil
+	}
+	c, found := s.pluginReg.Get(uuid)
+	if !found {
+		return nil, errors.New("no plugin " + uuid)
+	}
+	ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
+	defer cancel()
+	info, err := c.Info(ictx, &pb.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
+	s.infoMu.Lock()
+	s.infoCache[uuid] = info
+	s.infoMu.Unlock()
+	return info, nil
+}
 
 func (s *Server) routes() {
 	// Connect-RPC handler covers the entire data plane. Subscribe is
