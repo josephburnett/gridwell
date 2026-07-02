@@ -2,11 +2,14 @@ package fs_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/fs"
 )
 
@@ -115,5 +118,64 @@ func TestNewFileAppearsKeepingExistingPlacement(t *testing.T) {
 	fresh := tileByName(t, r2.Tiles, "fresh.txt")
 	if fresh.X == 5 && fresh.Y == 6 {
 		t.Error("new file landed on the moved tile's cell instead of a free one")
+	}
+}
+
+// TestUnreadableDirKeepsRowsAndIdentity: a directory that EXISTS but cannot be
+// read this pass (EACCES, an unmounted network share) is NOT an authoritative
+// empty listing — the stored rows, their positions, AND their ids must survive
+// untouched (invariant I12: a failed read must never sweep a tile; only a
+// definite GONE does). Before the fix, GetGrid treated any read error as
+// empty-authoritative and reconcileTiles deleted every row, so a transient
+// hiccup re-rowed the grid with fresh ids at auto-layout positions.
+// Injected via SetReadDir because these tests often run as root, where a
+// chmod-based repro is impossible.
+func TestUnreadableDirKeepsRowsAndIdentity(t *testing.T) {
+	dir := tempTree(t) // note.txt + sub/
+	p, _ := openFilePlugin(t)
+	att, err := attachAt(p, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := tileByName(t, r.Tiles, "note.txt")
+	// The user arranges the tile; this placement is the state under test.
+	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 5, Y: 6}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The directory becomes transiently unreadable (permission error — NOT
+	// a does-not-exist).
+	p.SetReadDir(func(string) ([]fssource.Entry, error) {
+		return nil, fmt.Errorf("open %s: %w", dir, syscall.EACCES)
+	})
+	r2, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid on an unreadable dir should not error, got %v", err)
+	}
+	note2 := tileByName(t, r2.Tiles, "note.txt")
+	if note2.Id != note.Id {
+		t.Errorf("tile id changed across an unreadable pass: %s -> %s", note.Id, note2.Id)
+	}
+	if note2.X != 5 || note2.Y != 6 {
+		t.Errorf("placement lost across an unreadable pass: (%d,%d), want (5,6)", note2.X, note2.Y)
+	}
+
+	// The directory becomes readable again: same rows, same ids, same
+	// placement — as if nothing happened.
+	p.SetReadDir(nil)
+	r3, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	note3 := tileByName(t, r3.Tiles, "note.txt")
+	if note3.Id != note.Id {
+		t.Errorf("tile id changed after readability returned: %s -> %s", note.Id, note3.Id)
+	}
+	if note3.X != 5 || note3.Y != 6 {
+		t.Errorf("placement lost after readability returned: (%d,%d), want (5,6)", note3.X, note3.Y)
 	}
 }

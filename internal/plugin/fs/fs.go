@@ -8,7 +8,9 @@ package fs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -58,11 +60,25 @@ type Plugin struct {
 	// default root grid (there is no Attach — the gRPC connection is the whole
 	// lifecycle); it anchors path→grid-id resolution when no explicit path is given.
 	root string
+	// readDir lists a directory for reconcile. Defaults to fssource.Read;
+	// overridable via SetReadDir so tests can simulate a transiently
+	// unreadable directory (EACCES, an unmounted share) — tests often run as
+	// root, where a chmod-based repro is impossible.
+	readDir func(dir string) ([]fssource.Entry, error)
 }
 
 // SetRoot sets the configured default directory Info reports as the root when no path is
 // supplied. Wired by NewFactory from config["root"].
 func (p *Plugin) SetRoot(root string) { p.root = root }
+
+// SetReadDir overrides the directory reader (a test seam, like the Host
+// deletion surface). nil restores the default fssource.Read.
+func (p *Plugin) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
+	if f == nil {
+		f = fssource.Read
+	}
+	p.readDir = f
+}
 
 // Open opens (or creates) the plugin SQLite DB at dbPath. A nil host uses
 // plain os.Remove/os.RemoveAll.
@@ -83,7 +99,7 @@ func Open(dbPath string, host Host) (*Plugin, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Plugin{db: db, host: host}, nil
+	return &Plugin{db: db, host: host, readDir: fssource.Read}, nil
 }
 
 func createSchema(db *sql.DB) error {
@@ -152,7 +168,9 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 
 // GetGrid reads the directory for the given grid_id, reconciles tile rows
 // against the current directory contents, and returns the resulting tiles.
-// Missing directories return an empty grid without error.
+// A missing (definitively gone) directory returns an empty grid without
+// error; a directory that exists but cannot be read this pass returns the
+// stored rows untouched — see the sweep-policy split in the body.
 func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	gridID, err := strconv.ParseInt(req.GridId, 10, 64)
 	if err != nil {
@@ -164,10 +182,25 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		return nil, fmt.Errorf("fs GetGrid %d: %w", gridID, err)
 	}
 
-	entries, readErr := fssource.Read(path)
-	// A missing/unreadable directory is not an error — return empty authoritative.
+	entries, readErr := p.readDir(path)
 	if readErr != nil {
-		entries = nil
+		if errors.Is(readErr, iofs.ErrNotExist) {
+			// The directory is definitively GONE: an empty listing is
+			// authoritative, and the reconcile below sweeps its rows.
+			entries = nil
+		} else {
+			// Transiently unreadable (EACCES, an unmounted network share):
+			// NOT authoritative. A failed read must never sweep a tile —
+			// only a definite gone does (I12; the proc policy). Skip the
+			// reconcile and serve the stored rows exactly as they are, so
+			// positions and ids survive until the source is readable again.
+			tiles, err := griddb.LoadTiles(p.db, fsLabelCol, gridID)
+			if err != nil {
+				return nil, err
+			}
+			grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
+			return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
+		}
 	}
 
 	if err := p.reconcileTiles(gridID, path, entries); err != nil {
