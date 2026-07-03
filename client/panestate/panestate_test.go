@@ -1,6 +1,9 @@
 package panestate
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestNewHasNoCaret(t *testing.T) {
 	s := New()
@@ -69,5 +72,50 @@ func TestCaretSetClear(t *testing.T) {
 	s.ClearCaret()
 	if _, ok := s.Caret(); ok {
 		t.Fatal("ClearCaret must remove the caret")
+	}
+}
+
+// The zero value reads as a caret at offset 0 — that hazard is WHY New exists
+// (the doc says "construct with New"). Pin the difference so the sentinel
+// can't be silently refactored away.
+func TestZeroValueVsNew(t *testing.T) {
+	var zero State
+	if off, ok := zero.Caret(); !ok || off != 0 {
+		t.Fatalf("documented zero-value hazard changed: Caret() = (%d,%v); update the State docstring", off, ok)
+	}
+	fresh := New()
+	if _, ok := fresh.Caret(); ok {
+		t.Fatal("New() must start with no caret")
+	}
+}
+
+// PopAscent returns a copy: a later push reuses the popped slot in the
+// backing array, and the caller's held pointer must not see it. The ascent
+// restore path holds the popped frame across an animated transition while
+// new descents can happen — aliasing here would corrupt the restore.
+func TestPoppedEntryIsStableAcrossReuse(t *testing.T) {
+	s := New()
+	s.PushAscent(Saved{Zoom: 1, Anchor: "a"})
+	got := s.PopAscent()
+	s.PushAscent(Saved{Zoom: 99, Anchor: "b"}) // reuses the slot
+	if got.Zoom != 1 || got.Anchor != "a" {
+		t.Fatalf("popped entry mutated by a later push: %+v", got)
+	}
+}
+
+// Saved's JSON keys are a wire vocabulary (session-local today, but one of the
+// three saved-viewport encodings — see the naming-drift issue). Pin them so a
+// key change is a deliberate decision with a compat story, not a drive-by.
+func TestSavedJSONKeysArePinned(t *testing.T) {
+	b, err := json.Marshal(Saved{
+		Cx: 1, Cy: 2, Zoom: 3, TextFocus: "t", TextMode: "rendered",
+		TextScrollX: 4, TextScrollY: 5, Anchor: "a", Path: []string{"w"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"cx":1,"cy":2,"zoom":3,"text_focus":"t","text_mode":"rendered","text_scroll_x":4,"text_scroll_y":5,"anchor":"a","path":["w"]}`
+	if string(b) != want {
+		t.Fatalf("Saved JSON vocabulary changed:\n got %s\nwant %s", b, want)
 	}
 }

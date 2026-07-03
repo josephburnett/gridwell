@@ -117,15 +117,12 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	ps := paneToDragdrop(p, r)
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
-	// Look for an open well under the cursor — that promotes the
-	// target to the well's child grid. Skip the promotion when the
-	// well *is* the source being dragged; that would be a drop into
-	// self and creates a parent/child cycle on the server.
+	// Look for an open well under the cursor — that promotes the target to
+	// the well's child grid. The rule (enterable well, not the dragged tile
+	// itself) is the tested dragdrop.PromoteToWell.
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
-		rpc.IsWellKind(n.Kind) &&
-		n.ChildGridID != "" &&
-		n.ID != excludeTileID {
+		dragdrop.PromoteToWell(rpc.IsWellKind(n.Kind), n.ChildGridID, n.ID, excludeTileID) {
 		// Well preview math. Effective ratio resolves the unvisited
 		// fallback in one place so the child cell size is computed
 		// the same way here as in the renderer.

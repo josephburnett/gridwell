@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/josephburnett/gridwell/internal/dbformat"
 )
 
 // applicationID marks a database file as a Gridwell DB. It is written into
@@ -51,63 +53,22 @@ func (s *Store) applyMigrations(ctx context.Context) error {
 }
 
 // migrateUp brings the DB from its stored user_version up to target by running
-// the pending entries of migs. It is the whole on-disk format contract:
-//   - Fresh DB (application_id and user_version both 0): stamp the Gridwell
-//     application_id and target. A fresh Open already materializes the latest
-//     shape (tablesTemplate), so there is nothing to migrate — and
-//     TestSchemaEquivalence proves that shape equals tablesV1 + the full chain,
-//     which is what makes this shortcut sound.
-//   - Foreign DB (application_id set but not ours): refuse — not our file.
-//   - Newer DB (user_version > target): refuse — an older binary must not
-//     misread a newer schema.
-//   - Older DB (user_version < target): run each pending migration in order in
-//     one transaction, then stamp target.
+// the pending entries of migs. The engine itself — fresh-stamp / foreign-file
+// refusal / newer-version refusal / additive chain — lives in
+// internal/dbformat.EnsureVersion, shared by EVERY plugin DB (localdb, fs,
+// proc): one implementation of the format contract, no copies. The fresh-DB
+// stamp shortcut is sound here because a fresh Open materializes
+// tablesTemplate and TestSchemaEquivalence proves that shape equals tablesV1 +
+// the full chain.
 //
-// migs and target are parameters (not the globals directly) so the real engine
-// can be exercised by tests with a synthetic chain against a frozen-v1 DB.
+// migs and target are parameters (not the globals directly) so the engine can
+// be exercised by tests with a synthetic chain against a frozen-v1 DB.
 func (s *Store) migrateUp(ctx context.Context, migs []migration, target int) error {
-	appID, err := readPragmaInt(ctx, s.db, "application_id")
-	if err != nil {
-		return err
+	chain := make([]dbformat.Migration, 0, len(migs))
+	for _, m := range migs {
+		chain = append(chain, dbformat.Migration{To: m.to, Run: m.run})
 	}
-	userVer, err := readPragmaInt(ctx, s.db, "user_version")
-	if err != nil {
-		return err
-	}
-
-	if appID == 0 && userVer == 0 {
-		if err := s.setPragmaInt(ctx, "application_id", applicationID); err != nil {
-			return err
-		}
-		return s.setPragmaInt(ctx, "user_version", int64(target))
-	}
-	if appID != applicationID {
-		return fmt.Errorf("not a Gridwell database: application_id %#x", appID)
-	}
-	if userVer > int64(target) {
-		return fmt.Errorf("stored schema version %d is newer than this binary's %d", userVer, target)
-	}
-	if userVer == int64(target) {
-		return nil
-	}
-
-	err = s.withTx(ctx, func(tx *sql.Tx) error {
-		for _, m := range migs {
-			if m.to <= int(userVer) || m.to > target {
-				continue
-			}
-			if err := m.run(ctx, tx); err != nil {
-				return fmt.Errorf("migration to v%d: %w", m.to, err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	// user_version is a header field set outside the migration transaction;
-	// with a single connection (MaxOpenConns(1)) it lands on the same file.
-	return s.setPragmaInt(ctx, "user_version", int64(target))
+	return dbformat.EnsureVersion(ctx, s.db, applicationID, target, chain)
 }
 
 // readPragmaInt reads an integer-valued PRAGMA (e.g. application_id,

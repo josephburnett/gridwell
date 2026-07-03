@@ -418,3 +418,15 @@ func NearPx(a, b float64) bool {
 	}
 	return d < 0.5
 }
+
+// PromoteToWell reports whether the tile under the cursor promotes a drop
+// target to the tile's child grid: an enterable well (well kind with a child
+// grid) that is not the dragged tile itself — dropping a well into its own
+// subtree would create a parent/child cycle the server rejects. The rule used
+// to live inline in the wasm dropTargetAt; the geometry half
+// (ChildPreviewFor) was already here, so the policy half joins it. isWell is
+// rpc.IsWellKind(tile.Kind) — resolved by the caller to keep this package
+// rpc-free.
+func PromoteToWell(isWell bool, childGridID, tileID, draggedTileID string) bool {
+	return isWell && childGridID != "" && tileID != draggedTileID
+}

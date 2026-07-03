@@ -84,9 +84,11 @@ func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
 }
 
 // Path is the sequence of well-tile IDs walked from the root grid down
-// to the pane the request originates from. Mutations carry it so the
-// store can fork the COW spine of shared grids up to the highest one
-// still uniquely owned.
+// to the pane the request originates from. Mutations carry it so the store
+// can validate that the request comes from a real descent and locate the
+// leaf grid the edit targets (buildGridSequence / checkPathLeaf). It is NOT a
+// copy-on-write spine: clone is an eager deep copy and nothing is ever shared,
+// so an in-place edit never forks — the path only says "where the pane is".
 type Path struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WellIds       []string               `protobuf:"bytes,1,rep,name=well_ids,json=wellIds,proto3" json:"well_ids,omitempty"`
@@ -647,6 +649,12 @@ type InfoResponse struct {
 	// mounted; persists as visited-url history. Empty for plugins that don't
 	// support ephemeral visits (fs/proc).
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
+	// writable reports that this plugin accepts CreateTile (new primitives can
+	// be dropped into its grids). Like watch and has_session, a capability the
+	// plugin declares once here — the server must never re-derive it from the
+	// kind string, or a remote plugin reached through a proxy (whose local kind
+	// is "ssh") is wrongly presented read-only.
+	Writable      bool `protobuf:"varint,9,opt,name=writable,proto3" json:"writable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -735,6 +743,13 @@ func (x *InfoResponse) GetScratchGridId() string {
 		return x.ScratchGridId
 	}
 	return ""
+}
+
+func (x *InfoResponse) GetWritable() bool {
+	if x != nil {
+		return x.Writable
+	}
+	return false
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -1495,6 +1510,13 @@ func (x *GetTileRequest) GetTileId() string {
 
 // SetTileAlt stamps a tile's display label. Used by the shell title-capture
 // path (the foreground command becomes the tile name on detach).
+//
+// Deliberate overlap with SetTile: a URL tile's title rides SetTile (part of
+// the versioned freeze — the capture claims the version it froze), while the
+// shell detach path has no version to claim (the PTY teardown is asynchronous
+// to any edit), so it stamps the label unversioned here. Two writers, one
+// column, distinguished by whether the caller holds a version. Fold this into
+// SetTile only if shell writes ever become versioned.
 type SetTileAltRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
@@ -1549,6 +1571,11 @@ func (x *SetTileAltRequest) GetAlt() string {
 
 // Mount drops an exit well in the destination grid whose child is plugin_uuid's
 // default root (from its Info). The drag-a-plugin-onto-a-grid gesture.
+//
+// Deliberately the one composite RPC (Info + CreateTile could compose it
+// client-side): the server owns it so the mounted well's label is stamped
+// from the SAME server.yaml name the + menu shows — the menu and the dropped
+// tile can never disagree. Keep it unless label agreement moves elsewhere.
 type MountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PluginUuid    string                 `protobuf:"bytes,1,opt,name=plugin_uuid,json=pluginUuid,proto3" json:"plugin_uuid,omitempty"`
@@ -2392,6 +2419,12 @@ func (x *SetTileRequest) GetPreview() []byte {
 	return nil
 }
 
+// UpdateText is deliberately the one content mutation with its own verb
+// (url/shell content — the frozen preview — rides SetTile). The text body is
+// an unbounded user document with its own size cap and alt-derivation
+// semantics; folding it into SetTile would turn the single writeback's
+// "empty fields are skipped" rule ambiguous for an intentionally-emptied
+// document. The asymmetry is a choice, not drift.
 type UpdateTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
@@ -2880,7 +2913,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rProxyEndpoint\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\"\r\n" +
-	"\vInfoRequest\"\xa4\x02\n" +
+	"\vInfoRequest\"\xc0\x02\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -2891,7 +2924,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\anetwork\x18\x06 \x01(\v2\x1b.gridwell.v1.NetworkContextR\anetwork\x12\x1f\n" +
 	"\vhas_session\x18\a \x01(\bR\n" +
 	"hasSession\x12&\n" +
-	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\"'\n" +
+	"\x0fscratch_grid_id\x18\b \x01(\tR\rscratchGridId\x12\x1a\n" +
+	"\bwritable\x18\t \x01(\bR\bwritable\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
 	"\rProbeResponse\x12?\n" +

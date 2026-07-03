@@ -8,13 +8,16 @@ package fs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/trash"
@@ -22,6 +25,24 @@ import (
 )
 
 const autoGridWidth = 8
+
+// On-disk format identity (see internal/dbformat). fsApplicationID is the
+// bytes "GWfs" stamped into the SQLite header so an fs plugin DB is
+// recognizable and a foreign file is refused; fsSchemaVersion is the schema
+// generation this binary materializes. The fs DB holds forever-data — user
+// placement, well framing, and the path→id map saved deep links resolve
+// through — so it carries the same contract as the localdb: additive-only
+// migrations, never delete the DB to absorb a change.
+const (
+	fsApplicationID = 0x47576673 // "GWfs"
+	fsSchemaVersion = 1
+)
+
+// fsMigrations is the ordered additive chain; entry i brings a DB from
+// version i+1 to i+2. Empty until the first post-v1 change. Every change
+// bumps fsSchemaVersion by one, appends one entry here, and updates
+// schemaTemplate — TestFSSchemaEquivalence proves template == v1 + chain.
+var fsMigrations []dbformat.Migration
 
 // fsLabelCol is the tiles-table column holding a tile's display label for the
 // fs plugin (the directory entry name). Passed to the shared griddb helpers.
@@ -58,11 +79,25 @@ type Plugin struct {
 	// default root grid (there is no Attach — the gRPC connection is the whole
 	// lifecycle); it anchors path→grid-id resolution when no explicit path is given.
 	root string
+	// readDir lists a directory for reconcile. Defaults to fssource.Read;
+	// overridable via SetReadDir so tests can simulate a transiently
+	// unreadable directory (EACCES, an unmounted share) — tests often run as
+	// root, where a chmod-based repro is impossible.
+	readDir func(dir string) ([]fssource.Entry, error)
 }
 
 // SetRoot sets the configured default directory Info reports as the root when no path is
 // supplied. Wired by NewFactory from config["root"].
 func (p *Plugin) SetRoot(root string) { p.root = root }
+
+// SetReadDir overrides the directory reader (a test seam, like the Host
+// deletion surface). nil restores the default fssource.Read.
+func (p *Plugin) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
+	if f == nil {
+		f = fssource.Read
+	}
+	p.readDir = f
+}
 
 // Open opens (or creates) the plugin SQLite DB at dbPath. A nil host uses
 // plain os.Remove/os.RemoveAll.
@@ -83,11 +118,17 @@ func Open(dbPath string, host Host) (*Plugin, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Plugin{db: db, host: host}, nil
+	if err := dbformat.EnsureVersion(context.Background(), db, fsApplicationID, fsSchemaVersion, fsMigrations); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("fs plugin %s: %w", dbPath, err)
+	}
+	return &Plugin{db: db, host: host, readDir: fssource.Read}, nil
 }
 
-func createSchema(db *sql.DB) error {
-	_, err := db.Exec(`
+// schemaTemplate is the always-current schema a fresh Open materializes
+// directly — the single readable description of the present shape. Every
+// column added here after v1 must be matched by an entry in fsMigrations.
+const schemaTemplate = `
 CREATE TABLE IF NOT EXISTS grids (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     path      TEXT NOT NULL UNIQUE,
@@ -109,7 +150,40 @@ CREATE TABLE IF NOT EXISTS tiles (
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 1.0,
     UNIQUE (grid_id, name)
-);`)
+);`
+
+// schemaV1 is the FROZEN v1 schema — an immutable byte-for-byte copy of what
+// schemaTemplate was at the moment the format was stamped. NEVER edit it (and
+// never alias it to schemaTemplate — the freeze must not move when the
+// template does): tests build genuine old files from this text and migrate
+// them forward. New columns go into schemaTemplate plus a migration — never
+// here.
+const schemaV1 = `
+CREATE TABLE IF NOT EXISTS grids (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    path      TEXT NOT NULL UNIQUE,
+    view_x    INTEGER NOT NULL DEFAULT 0,
+    view_y    INTEGER NOT NULL DEFAULT 0,
+    view_zoom REAL NOT NULL DEFAULT 1.0
+);
+CREATE TABLE IF NOT EXISTS tiles (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    grid_id       INTEGER NOT NULL REFERENCES grids(id),
+    name          TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text')),
+    x             INTEGER NOT NULL DEFAULT 0,
+    y             INTEGER NOT NULL DEFAULT 0,
+    w             INTEGER NOT NULL DEFAULT 1,
+    h             INTEGER NOT NULL DEFAULT 1,
+    child_grid_id INTEGER,
+    view_x        INTEGER NOT NULL DEFAULT 0,
+    view_y        INTEGER NOT NULL DEFAULT 0,
+    view_zoom     REAL NOT NULL DEFAULT 1.0,
+    UNIQUE (grid_id, name)
+);`
+
+func createSchema(db *sql.DB) error {
+	_, err := db.Exec(schemaTemplate)
 	return err
 }
 
@@ -134,7 +208,7 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 // Info is the whole handshake: identity plus the default root grid (the
 // plugin's configured root directory, resolved to a grid id). No Attach/Detach.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: 1}
+	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: fsSchemaVersion}
 	path := filepath.Clean(p.root)
 	if path == "" || path == "." {
 		return resp, nil // no configured root → no descendable default
@@ -152,7 +226,9 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 
 // GetGrid reads the directory for the given grid_id, reconciles tile rows
 // against the current directory contents, and returns the resulting tiles.
-// Missing directories return an empty grid without error.
+// A missing (definitively gone) directory returns an empty grid without
+// error; a directory that exists but cannot be read this pass returns the
+// stored rows untouched — see the sweep-policy split in the body.
 func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	gridID, err := strconv.ParseInt(req.GridId, 10, 64)
 	if err != nil {
@@ -164,10 +240,25 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		return nil, fmt.Errorf("fs GetGrid %d: %w", gridID, err)
 	}
 
-	entries, readErr := fssource.Read(path)
-	// A missing/unreadable directory is not an error — return empty authoritative.
+	entries, readErr := p.readDir(path)
 	if readErr != nil {
-		entries = nil
+		if errors.Is(readErr, iofs.ErrNotExist) {
+			// The directory is definitively GONE: an empty listing is
+			// authoritative, and the reconcile below sweeps its rows.
+			entries = nil
+		} else {
+			// Transiently unreadable (EACCES, an unmounted network share):
+			// NOT authoritative. A failed read must never sweep a tile —
+			// only a definite gone does (I12; the proc policy). Skip the
+			// reconcile and serve the stored rows exactly as they are, so
+			// positions and ids survive until the source is readable again.
+			tiles, err := griddb.LoadTiles(p.db, fsLabelCol, gridID)
+			if err != nil {
+				return nil, err
+			}
+			grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
+			return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
+		}
 	}
 
 	if err := p.reconcileTiles(gridID, path, entries); err != nil {

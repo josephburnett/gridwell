@@ -60,3 +60,20 @@ func ClassifyAscent(resolvedLevel, pathLen int) AscentMode {
 		return AscentAnimate
 	}
 }
+
+// AscentWalk finds the deepest ancestor level an ascent can animate from: it
+// walks back from the leaf and returns the first (deepest) level whose parent
+// grid resolves and still contains the well row, or -1 when nothing on the
+// path resolves. resolves(parentPath, wellID) answers for one level — the
+// caller supplies the cache lookup (and any fetch side effect for a miss).
+// Feed the result to ClassifyAscent. The walk order and slicing boundaries
+// used to live inline in the wasm startAscent with no test; this is the
+// ascent mirror of ResolveLeafGrid.
+func AscentWalk(path []string, resolves func(parentPath []string, wellID string) bool) int {
+	for level := len(path) - 1; level >= 0; level-- {
+		if resolves(path[:level], path[level]) {
+			return level
+		}
+	}
+	return -1
+}

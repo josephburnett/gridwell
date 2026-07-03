@@ -150,6 +150,12 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 }
 
 // parseID converts a string tile/grid ID to int64 for SQL binding.
+//
+// Error-mapping convention at call sites: READS map a garbage id to
+// ErrNotFound (an id that can't exist behaves like one that doesn't — the
+// caller asked a question and the answer is "no such thing"), while MUTATIONS
+// map it to ErrInvalidArgument (the caller asserted an identity in a write
+// and the assertion itself is malformed). The asymmetry is deliberate.
 func parseID(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
+	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
@@ -196,5 +197,97 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("/rpc/Bogus status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestSubscribeFansInProxiedPlugin locks the capability rule for event fan-in:
+// a plugin declares watch in its Info handshake, and the server must fan in
+// its events REGARDLESS of the local kind string. This is the remote shape —
+// the ssh plugin serves a transparent proxy around a remote node, so its local
+// kind is "ssh" while the proxied Info (forwarded verbatim) says watch=true.
+// Before the fix, Subscribe skipped every plugin whose kind wasn't "localdb",
+// so a remote localdb's events never reached the client.
+func TestSubscribeFansInProxiedPlugin(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	uuid, err := st.PluginUUID(context.Background())
+	if err != nil {
+		t.Fatalf("plugin uuid: %v", err)
+	}
+
+	// The "remote node": a localdb served over gRPC.
+	inner, innerClose, err := plugin.ServeInProcess(localdb.New(st, nil))
+	if err != nil {
+		t.Fatalf("serve inner localdb: %v", err)
+	}
+	t.Cleanup(innerClose)
+	// The local ssh plugin: a transparent proxy around the remote client,
+	// registered under kind "ssh" exactly as production would.
+	proxied, proxClose, err := plugin.ServeInProcess(proxy.New(inner))
+	if err != nil {
+		t.Fatalf("serve proxy: %v", err)
+	}
+	t.Cleanup(proxClose)
+
+	reg := plugin.NewRegistry()
+	reg.Register(uuid, "ssh", proxied, nil)
+
+	srv := New(reg, Config{})
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	bareRoot, err := st.RootGridID(context.Background())
+	if err != nil {
+		t.Fatalf("root grid id: %v", err)
+	}
+	root := uuid + "/" + bareRoot
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	doneCh := make(chan rpc.Event, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		stream, err := cl.Subscribe(ctx)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer stream.Close()
+		ev, ok, err := stream.Recv()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if !ok {
+			errCh <- errors.New("stream ended without an event")
+			return
+		}
+		doneCh <- ev
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	if _, err := cl.CreateWell(context.Background(), &rpc.CreateWellRequest{
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	}); err != nil {
+		t.Fatalf("create well through the proxy: %v", err)
+	}
+
+	select {
+	case ev := <-doneCh:
+		if ev.TileChanged == nil {
+			t.Fatalf("got event kind %q, want a tile_changed", ev.Kind)
+		}
+		// The event must arrive qualified with the ssh plugin's uuid.
+		if got := ev.TileChanged.Tile.GridID; got != root {
+			t.Errorf("event grid id = %q, want the qualified %q", got, root)
+		}
+	case err := <-errCh:
+		t.Fatalf("subscribe: %v", err)
+	case <-ctx.Done():
+		t.Fatal("no event arrived from the proxied plugin (fan-in skipped it?)")
 	}
 }

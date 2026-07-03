@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -139,40 +140,38 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
-	// Inside a focused text tile the wheel rules differ by region. Outer
-	// ring (the visible grid pattern) zooms TextZoom centered on the
-	// cursor; inner area scrolls (rendered mode) or is handled by the
-	// textarea natively (text mode — those events never reach the
-	// canvas listener).
-	if p.TextFocus != "" {
-		// URL descent: a live tile is a native WebContentsView over the
-		// content box and scrolls itself (the canvas never sees those wheel
-		// events). When live, swallow any stray wheel that does reach the
-		// canvas so it doesn't zoom the pane underneath; otherwise fall
-		// through to the pane-wide gridwell wheel (zoom) like other files.
-		if a.isURLDescent(p) {
-			if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) {
-				args[0].Call("preventDefault")
-				return nil
-			}
+	// Routing is the pure gesture.ClassifyWheel: this handler only resolves
+	// the impure facts (live view attached? cursor in the content box?) and
+	// executes the verdict.
+	switch gesture.ClassifyWheel(gesture.WheelInput{
+		TextFocused:      p.TextFocus != "",
+		URLDescent:       a.isURLDescent(p),
+		LiveURLView:      a.urlViewFor(p.ID) != nil,
+		InContentBox:     pointInPaneContent(r, sx, sy),
+		TextModeRendered: p.TextMode == rpc.TextModeRendered,
+	}) {
+	case gesture.WheelSwallow:
+		// A live URL view owns the content box and scrolls itself; a stray
+		// wheel reaching the canvas must not zoom the pane underneath.
+		args[0].Call("preventDefault")
+		return nil
+	case gesture.WheelScrollDoc:
+		// Text file: fixed scale, no zoom — the wheel scrolls the rendered
+		// window vertically. (Text mode: the textarea scrolls itself and the
+		// event never reaches the canvas.)
+		p.TextScrollY += dy
+		if p.TextScrollY < 0 {
+			p.TextScrollY = 0
 		}
-		// Text file: fixed scale, no zoom. The wheel only scrolls the
-		// window vertically (rendered mode). In text mode the textarea
-		// overlay handles its own scrolling and the wheel never reaches
-		// the canvas.
-		if p.TextMode == rpc.TextModeRendered {
-			p.TextScrollY += dy
-			if p.TextScrollY < 0 {
-				p.TextScrollY = 0
-			}
-			a.draw()
-			a.scheduleURLUpdate()
-		}
+		a.draw()
+		a.scheduleURLUpdate()
+		return nil
+	case gesture.WheelIgnore:
 		return nil
 	}
-	// Smooth zoom centered on the cursor: amount scales with deltaY so a
-	// fast scroll covers more range, but capped per event. The pane's
-	// (Cx, Cy) shifts so the world point under the cursor stays under
+	// WheelZoomPane — smooth zoom centered on the cursor: amount scales with
+	// deltaY so a fast scroll covers more range, but capped per event. The
+	// pane's (Cx, Cy) shifts so the world point under the cursor stays under
 	// the cursor after the zoom — like every map app.
 	ps := paneToDragdrop(p, r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
@@ -1189,26 +1188,24 @@ func (a *App) startAscent(p *pane.Pane) {
 		return
 	}
 	// Walk back from the leaf looking for the deepest ancestor we can
-	// actually animate from. If a well row is missing or its parent
-	// grid is unreadable, skip past it and try the level above. Falls
-	// back to instant snap-to-root when nothing in the path resolves.
-	level := len(p.Path) - 1
+	// actually animate from — the tested gridpath.AscentWalk; this closure
+	// only resolves one level (cache lookup + a background fetch on a miss)
+	// and captures the resolved well row.
 	var well rpc.Tile
-	for ; level >= 0; level-- {
-		parentPath := p.Path[:level]
+	level := gridpath.AscentWalk(p.Path, func(parentPath []string, wellID string) bool {
 		parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
 		g, ok := a.c.Grid(parentGridID)
 		if !ok {
 			a.fetchGrid(parentGridID)
-			continue
+			return false
 		}
-		w, ok := g.Tiles[p.Path[level]]
+		w, ok := g.Tiles[wellID]
 		if !ok {
-			continue
+			return false
 		}
 		well = w
-		break
-	}
+		return true
+	})
 	switch gridpath.ClassifyAscent(level, len(p.Path)) {
 	case gridpath.AscentToRoot:
 		a.instantAscend(p, nil)

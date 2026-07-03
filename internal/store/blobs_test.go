@@ -125,7 +125,7 @@ func TestSubscribeEventsReceivesPublish(t *testing.T) {
 		if ev.Kind != rpc.EventTileChanged {
 			t.Errorf("kind = %v, want TileChanged", ev.Kind)
 		}
-	default:
+	case <-time.After(2 * time.Second):
 		t.Fatal("no event received")
 	}
 }

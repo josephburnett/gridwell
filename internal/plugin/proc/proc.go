@@ -18,6 +18,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/procsource"
 	_ "modernc.org/sqlite"
@@ -79,7 +80,38 @@ func Open(dbPath, procRoot string, killer Killer) (*Plugin, error) {
 		db.Close()
 		return nil, fmt.Errorf("proc plugin pragmas: %w", err)
 	}
-	if _, err := db.Exec(`
+	if _, err := db.Exec(schemaTemplate); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("proc plugin schema: %w", err)
+	}
+	if err := dbformat.EnsureVersion(context.Background(), db, procApplicationID, procSchemaVersion, procMigrations); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("proc plugin %s: %w", dbPath, err)
+	}
+	return &Plugin{db: db, procRoot: procRoot, killer: killer}, nil
+}
+
+// On-disk format identity (see internal/dbformat). procApplicationID is the
+// bytes "GWpc" stamped into the SQLite header; procSchemaVersion is the
+// schema generation this binary materializes. The proc DB holds forever-data
+// (placement, framing, the pid→id identity map), so it carries the same
+// contract as the localdb: additive-only migrations, never delete the DB to
+// absorb a change.
+const (
+	procApplicationID = 0x47577063 // "GWpc"
+	procSchemaVersion = 1
+)
+
+// procMigrations is the ordered additive chain; entry i brings a DB from
+// version i+1 to i+2. Empty until the first post-v1 change. Every change
+// bumps procSchemaVersion by one, appends one entry here, and updates
+// schemaTemplate — TestProcSchemaEquivalence proves template == v1 + chain.
+var procMigrations []dbformat.Migration
+
+// schemaTemplate is the always-current schema a fresh Open materializes
+// directly. Every column added here after v1 must be matched by an entry in
+// procMigrations.
+const schemaTemplate = `
 CREATE TABLE IF NOT EXISTS grids (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     pid       INTEGER NOT NULL UNIQUE,
@@ -102,12 +134,37 @@ CREATE TABLE IF NOT EXISTS tiles (
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 1.0,
     UNIQUE (grid_id, key)
-);`); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("proc plugin schema: %w", err)
-	}
-	return &Plugin{db: db, procRoot: procRoot, killer: killer}, nil
-}
+);`
+
+// schemaV1 is the FROZEN v1 schema — an immutable byte-for-byte copy of what
+// schemaTemplate was when the format was stamped. NEVER edit it (and never
+// alias it to schemaTemplate — the freeze must not move when the template
+// does): tests build genuine old files from this text and migrate them
+// forward.
+const schemaV1 = `
+CREATE TABLE IF NOT EXISTS grids (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    pid       INTEGER NOT NULL UNIQUE,
+    view_x    INTEGER NOT NULL DEFAULT 0,
+    view_y    INTEGER NOT NULL DEFAULT 0,
+    view_zoom REAL NOT NULL DEFAULT 1.0
+);
+CREATE TABLE IF NOT EXISTS tiles (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    grid_id       INTEGER NOT NULL REFERENCES grids(id),
+    key           TEXT NOT NULL,
+    pid           INTEGER NOT NULL DEFAULT 0,
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text')),
+    x             INTEGER NOT NULL DEFAULT 0,
+    y             INTEGER NOT NULL DEFAULT 0,
+    w             INTEGER NOT NULL DEFAULT 1,
+    h             INTEGER NOT NULL DEFAULT 1,
+    child_grid_id INTEGER,
+    view_x        INTEGER NOT NULL DEFAULT 0,
+    view_y        INTEGER NOT NULL DEFAULT 0,
+    view_zoom     REAL NOT NULL DEFAULT 1.0,
+    UNIQUE (grid_id, key)
+);`
 
 // Close closes the underlying database.
 func (p *Plugin) Close() error { return p.db.Close() }
@@ -152,7 +209,7 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 	return &gridwellv1.InfoResponse{
 		Kind:          "proc",
 		DisplayName:   label,
-		SchemaVersion: 1,
+		SchemaVersion: procSchemaVersion,
 		RootGridId:    strconv.FormatInt(gridID, 10),
 	}, nil
 }
