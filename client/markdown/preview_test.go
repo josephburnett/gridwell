@@ -99,6 +99,44 @@ func TestPreviewContentWidthInvariantToFootprint(t *testing.T) {
 	}
 }
 
+// TestPreviewNotAffectedByFocusedPaneWidth is the structural guard for
+// issue #35 Mechanism A: a text tile's preview layout width (ContentW) must
+// not depend on the width of any OTHER pane that happens to be descended into
+// the same tile. Before the fix, drawMarkdownNode called paneFocusedOnFile and
+// fed the OTHER pane's innerW as focused=true to PreviewScaleScroll, so a
+// sibling pane of different width would RE-WRAP the preview (wrong-size).
+//
+// The fix: drawMarkdownNode always passes focused=false. The test verifies that
+// with focused=false and stored framing, ContentW is always the stored width
+// regardless of what innerW is passed (which is what a sibling pane would have
+// been feeding in the old code).
+func TestPreviewNotAffectedByFocusedPaneWidth(t *testing.T) {
+	const natural, fixed, minS = 400.0, 1.0, 0.02
+	const storedW, storedH int64 = 200, 150
+
+	// focused=false (the post-fix path): ContentW is always the stored width,
+	// regardless of innerW (a sibling pane's geometry is irrelevant).
+	siblingWidths := []float64{50, 100, 200, 300, 400, 800}
+	for _, sw := range siblingWidths {
+		f := PreviewScaleScroll(100, 80, false, sw, 60, 0, 0, storedW, storedH, 0, 0, natural, fixed, minS)
+		if !almost(f.ContentW, float64(storedW)) {
+			t.Errorf("sibling width %v, focused=false: ContentW=%v, want stored %v (no cross-pane re-wrap)",
+				sw, f.ContentW, storedW)
+		}
+	}
+
+	// Document the pre-fix bug: focused=true with a sibling's innerW caused the
+	// preview to re-wrap at that width. Each sibling width produced a different
+	// ContentW — the bug: tile T1's preview in pane B would reflow to pane A's width.
+	for _, sw := range siblingWidths {
+		f := PreviewScaleScroll(100, 80, true, sw, 60, 0, 0, storedW, storedH, 0, 0, natural, fixed, minS)
+		if !almost(f.ContentW, sw) {
+			t.Errorf("focused=true (pre-fix bug path): ContentW=%v, expected %v (sibling width dominated)",
+				f.ContentW, sw)
+		}
+	}
+}
+
 func TestRawTextLineSlot(t *testing.T) {
 	// fontPx 13, mul 1.35, scale 1, pad 8, scrollY 0, asc 12, desc 4.
 	// slot = 13*1.35 = 17.55; baseline = (17.55-16)/2 + 12 = 12.775; top0 = 8.

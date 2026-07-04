@@ -2,6 +2,43 @@ package textedit
 
 import "testing"
 
+// TestCanvasHiddenByOverlay is the structural guard for issue #35 (blank pane /
+// wrong-size preview). The invariants:
+//   - A preview node (isDescended=false) is NEVER hidden — the textarea covers
+//     only the focused descended pane, so suppressing a preview blanks it.
+//   - A descended non-focused pane is NEVER hidden — the textarea is over a
+//     different pane.
+//   - Canvas paints until the textarea ACTUALLY has content (textareaReady=false
+//     keeps it visible during the pane-switch loading race).
+func TestCanvasHiddenByOverlay(t *testing.T) {
+	cases := []struct {
+		name                                              string
+		isDescended, isFocused, isTextMode, textareaReady bool
+		want                                              bool
+	}{
+		// Only true case: all four conditions hold.
+		{"all true → hidden", true, true, true, true, true},
+		// Preview path (not descended): NEVER hidden regardless of other flags.
+		{"preview: not descended → always paint", false, true, true, true, false},
+		{"preview: not descended, not focused → always paint", false, false, true, true, false},
+		// Descended but textarea is over a different pane.
+		{"descended not focused → textarea not here", true, false, true, true, false},
+		// Descended + focused but wrong mode (textarea hidden in rendered mode).
+		{"rendered mode → canvas paints", true, true, false, true, false},
+		// Loading race: textarea was cleared on pane switch, blob not yet arrived.
+		{"textarea not ready → canvas paints", true, true, true, false, false},
+		// Nothing at all.
+		{"all false", false, false, false, false, false},
+	}
+	for _, c := range cases {
+		got := CanvasHiddenByOverlay(c.isDescended, c.isFocused, c.isTextMode, c.textareaReady)
+		if got != c.want {
+			t.Errorf("%s: CanvasHiddenByOverlay(%v,%v,%v,%v) = %v, want %v",
+				c.name, c.isDescended, c.isFocused, c.isTextMode, c.textareaReady, got, c.want)
+		}
+	}
+}
+
 func TestShouldDebouncedSaveFire(t *testing.T) {
 	cases := []struct {
 		name               string
