@@ -59,11 +59,12 @@ touched the native/live path).
   a tested pure `buildPluginInfo`. *Remaining: localStorage in the session blob;
   federation productionization.*
 
-**Next largest item:** the deferred invariant work — I8 (markdown text-preview
-re-wrap) and I11 (SSE event during a transition animation). Both are real
-"previews go wonky" vectors but neither is observable in an e2e yet; each needs a
-new introspection hook (render layout width for I8; deterministic mid-transition
-event injection for I11) as step one. See the Parking lot.
+**Next largest item:** the deferred invariant work — I11 (SSE event during a
+transition animation). I8 (markdown text-preview re-wrap) is now fixed and locked
+by construction + e2e (#35 — cross-pane paneFocusedOnFile reach-through removed,
+`textedit.CanvasHiddenByOverlay` as single owner, `text-pane-split.spec.ts`).
+I11 is real but guarded by nothing; a new write into the SSE path would regress
+it silently. See the Parking lot.
 
 ---
 
@@ -250,13 +251,18 @@ executing the plan. Forgetting deferred items is a known failure mode here, so
 this is the durable record (mirrored in agent memory `project_deferred_*`).
 
 ### Deferred work (come back to these)
-- **I8 — markdown text-preview re-wrap — VERIFIED HANDLED (not a bug).** The
-  preview lays out at the framing `ContentW` and scales (`drawMarkdownNode`);
-  `PreviewScaleScroll` returns `ContentW` = the framing width; the stored `TextW`
-  is the same `fileInnerBox` width the descent wraps at. So it's a scaled copy,
-  never a re-wrap. Locked by `TestPreviewContentWidthInvariantToFootprint`; doc
-  corrected (`ARCHITECTURE.md` §5.2/I8). Residual: the capture and painter read
-  `fileInnerBox` width by convention, not one shared accessor — optional DRY.
+- **I8 — markdown text-preview re-wrap — FIXED by construction + e2e (#35).**
+  "Verified handled" was wrong. A cross-pane reach-through (`paneFocusedOnFile`)
+  in `drawMarkdownNode` was the real residual — it fed a sibling pane's live
+  `innerW` as `focused=true` to `PreviewScaleScroll`, causing two bugs in split
+  pane: (A) wrong-size preview (layout at sibling's width) and (B) blank preview
+  (hideForTextarea suppressed canvas in ALL panes showing the tile when one was
+  editing in text mode). `TestPreviewContentWidthInvariantToFootprint` varied the
+  *footprint*, never the *focused-pane width* — structurally invisible to that
+  test. Fix: `drawMarkdownNode` always passes `focused=false` (stored framing);
+  `paneFocusedOnFile` removed. `textedit.CanvasHiddenByOverlay` is the new
+  single-owner predicate for "canvas paints vs overlay covers". Locked by
+  `TestPreviewNotAffectedByFocusedPaneWidth` + `text-pane-split.spec.ts`.
 - **I11 — SSE during animation — VERIFIED SAFE by construction.** Every pane-
   framing write (`Cx/Cy/Zoom/Path/Anchor`) is in `input.go` or `urlsync.go`; the
   SSE path (`startSSE` → `cache.Apply` + `fetchGrid`) and the `cache` package

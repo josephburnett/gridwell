@@ -423,4 +423,13 @@ export class GridwellDriver {
   fileInnerBox(): Promise<{ x: number; y: number; w: number; h: number } | null> {
     return this.win.evaluate(() => (window as any).__gridwellTest.fileInnerBox());
   }
+
+  // textareaInfo returns the current textarea overlay binding: the pane it
+  // covers, the tile it's bound to, and whether it has content (textareaReady).
+  // Returns null when no pane is in raw-text mode. Used to assert the overlay
+  // covers exactly one pane (the focused descended one), not preview nodes in
+  // other panes — the issue #35 mechanism B invariant.
+  textareaInfo(): Promise<{ paneID: string; tileID: string; hasContent: boolean; x: number; y: number; w: number; h: number } | null> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.textareaInfo());
+  }
 }

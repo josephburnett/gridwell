@@ -240,17 +240,25 @@ consequences:
   and e2e-tested (`menu-focus.spec.ts`). Kept here as the worked example: this
   is what applying §7 to a seam looks like, and what the remaining seams need.
 
-- **Text preview re-wrap (I8) — verified handled, not a live bug.** The earlier
-  worry was that the markdown preview re-flows at the preview tile's own width.
-  Reading the code: `markdown.PreviewScaleScroll` returns `ContentW` = the
-  *framing* width (focused pane inner width / stored `TextW` / natural fallback),
-  the painter lays out at `ContentW` and merely **scales** (`drawMarkdownNode`),
-  and the stored `TextW` is captured from the same `fileInnerBox` width the
-  descent wraps at (`fileContentWidth`). So `storedW == descent wrap width` and
-  the preview is a true scaled copy, never a re-wrap to the footprint. Locked by
-  `TestPreviewContentWidthInvariantToFootprint`. The only residual seam is that
-  the capture and the painter both read `fileInnerBox` width by convention rather
-  than one shared accessor — low risk, but that's why it isn't ✅ construction.
+- **Text preview re-wrap (I8) — FIXED (#35, was incorrectly "verified handled").**
+  The earlier analysis missed a cross-pane reach-through: `drawMarkdownNode`
+  called `paneFocusedOnFile` to find any sibling pane descended into the same
+  tile, then fed that pane's live `innerW` as `focused=true` to
+  `PreviewScaleScroll`. In a split-pane setup this caused two bugs:
+  (A) the preview in pane B was laid out at pane A's live inner width, not the
+  stored framing — wrong size every time focus changed; and (B) `hideForTextarea`
+  in the preview path suppressed canvas paint for every preview of the tile when
+  another pane was editing it in text mode — blank preview.
+  `TestPreviewContentWidthInvariantToFootprint` only varied the *footprint*; it
+  never varied the *focused pane width* that `paneFocusedOnFile` was returning —
+  so the gap was invisible to that test.
+  Fix: `drawMarkdownNode` always passes `focused=false` (stored framing, per the
+  guiding rule: preview = descent target = ascent return); `paneFocusedOnFile` is
+  removed. `textedit.CanvasHiddenByOverlay` is the single-owner predicate for
+  "canvas paints vs overlay covers" — it is never called in the preview path and
+  requires `textareaReady=true` in the descended path (prevents the loading-race
+  blank). Locked by `TestPreviewNotAffectedByFocusedPaneWidth` and
+  `text-pane-split.spec.ts`.
 
 - **SSE during animation (I11) — framing is safe by construction; only data
   fans out.** Verified: every write to pane framing (`Cx/Cy/Zoom/Path/Anchor`)
@@ -417,18 +425,21 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I5 | "Is a link" is one derived fact | `qualifyTiles` → `Tile.reference` | ✅ construction |
 | I6 | Qualified-id routing (`<uuid>/<id>`) | server `route`/`localPathFor` | ✅ construction |
 | I7 | **preview = descent target = ascent return** | 5 client copies synced by convention, but the round trip is now locked by `framing-roundtrip.spec.ts` | ⚠️ convention, **tested** |
-| I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. Tested (`TestPreviewContentWidthInvariantToFootprint`) | ✅ mostly construction (one convention seam) |
+| I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. `drawMarkdownNode` always passes `focused=false` (stored framing only). Tested: `TestPreviewContentWidthInvariantToFootprint`, `TestPreviewNotAffectedByFocusedPaneWidth`, `text-pane-split.spec.ts` | ✅ construction + tested (fix #35) |
 | I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible` (unit-tested); the wasm→native propagation is now e2e-tested (`control-focus.spec.ts`) | ✅ data single-sourced + tested (predicate dup remains) |
 | I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
 | I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — separation verified **by code inspection only**. No mid-transition event-injection test exists, and the optimistic-echo reconcile (last-writer-wins, no version interlock) is untested at any level. | ⚠️ inspected, **untested** |
 | I12 | A plugin's user state survives its source being unreachable | `proc`: Probe-before-sweep ✅. `fs`: **violated** — an unreadable dir sweeps rows (§4) | ⚠️ **open bug (fs)** |
 
 Progress this effort converted most of the bottom half toward the top: **I8/I10
-construction-enforced and tested; I7/I9 verified and locked/tested.** The
-genuine-convention items left: **I7** — the five framing copies are five
-legitimate *roles* kept consistent by convention (round trip tested by
-`framing-roundtrip.spec.ts`; a deeper single-owner `Frame` is possible but not
-warranted without a visual/render net) — and **I11**, whose separation is
-real in today's code but guarded by nothing; a new write into the SSE path
-would regress it silently. I12 is the newest entry: the sweep-policy rule the
-docs asserted turns out to hold in only one of the two plugins it governs.
+construction-enforced and tested; I7/I9 verified and locked/tested.** I8 was
+incorrectly marked "mostly construction" before fix #35 — a cross-pane
+reach-through (`paneFocusedOnFile`) in the preview path was the real residual;
+it is now removed and locked by two new tests. The genuine-convention items
+left: **I7** — the five framing copies are five legitimate *roles* kept
+consistent by convention (round trip tested by `framing-roundtrip.spec.ts`; a
+deeper single-owner `Frame` is possible but not warranted without a visual/render
+net) — and **I11**, whose separation is real in today's code but guarded by
+nothing; a new write into the SSE path would regress it silently. I12 is the
+newest entry: the sweep-policy rule the docs asserted turns out to hold in only
+one of the two plugins it governs.
