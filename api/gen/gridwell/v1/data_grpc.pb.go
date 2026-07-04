@@ -51,6 +51,7 @@ const (
 	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
 	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
 	Gridwell_Mount_FullMethodName             = "/gridwell.v1.Gridwell/Mount"
+	Gridwell_SetRootView_FullMethodName       = "/gridwell.v1.Gridwell/SetRootView"
 	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
 )
@@ -89,6 +90,10 @@ type GridwellClient interface {
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
 	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	Mount(ctx context.Context, in *MountRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	// SetRootView persists the plugin root-grid framing (the portal-level
+	// analogue of SetTile for a well). Framing only — never bumps version.
+	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
+	SetRootView(ctx context.Context, in *SetRootViewRequest, opts ...grpc.CallOption) (*SetRootViewResponse, error)
 	// ShellSessionAlive gates the wasm refresh button on shell descent.
 	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
@@ -307,6 +312,16 @@ func (c *gridwellClient) Mount(ctx context.Context, in *MountRequest, opts ...gr
 	return out, nil
 }
 
+func (c *gridwellClient) SetRootView(ctx context.Context, in *SetRootViewRequest, opts ...grpc.CallOption) (*SetRootViewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetRootViewResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetRootView_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ShellSessionAliveResponse)
@@ -370,6 +385,10 @@ type GridwellServer interface {
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
 	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
 	Mount(context.Context, *MountRequest) (*TileResponse, error)
+	// SetRootView persists the plugin root-grid framing (the portal-level
+	// analogue of SetTile for a well). Framing only — never bumps version.
+	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
+	SetRootView(context.Context, *SetRootViewRequest) (*SetRootViewResponse, error)
 	// ShellSessionAlive gates the wasm refresh button on shell descent.
 	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
@@ -439,6 +458,9 @@ func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltReques
 }
 func (UnimplementedGridwellServer) Mount(context.Context, *MountRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Mount not implemented")
+}
+func (UnimplementedGridwellServer) SetRootView(context.Context, *SetRootViewRequest) (*SetRootViewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetRootView not implemented")
 }
 func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ShellSessionAlive not implemented")
@@ -780,6 +802,24 @@ func _Gridwell_Mount_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gridwell_SetRootView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetRootViewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).SetRootView(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_SetRootView_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).SetRootView(ctx, req.(*SetRootViewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gridwell_ShellSessionAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ShellSessionAliveRequest)
 	if err := dec(in); err != nil {
@@ -879,6 +919,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Mount",
 			Handler:    _Gridwell_Mount_Handler,
+		},
+		{
+			MethodName: "SetRootView",
+			Handler:    _Gridwell_SetRootView_Handler,
 		},
 		{
 			MethodName: "ShellSessionAlive",

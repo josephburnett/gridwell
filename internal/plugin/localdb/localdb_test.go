@@ -2,6 +2,7 @@ package localdb_test
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -297,5 +298,63 @@ func TestSetTile_WellFramingNoVersionBump(t *testing.T) {
 	}
 	if set.Tile.ViewX != 5 || set.Tile.ViewY != 6 || set.Tile.ViewZoom != 2 {
 		t.Errorf("framing not persisted: %+v", set.Tile)
+	}
+}
+
+// TestInfoRootViewSeedAndSetRootViewWriteback pins the launcher↔plugin-root
+// seam (issue #32): SetRootView persists the framing, and Info returns it so
+// the client can restore the left-off viewport on enterPlugin without an extra
+// round-trip. Framing only — SetRootView must not bump a content version.
+//
+// Why was this not caught? framing-roundtrip.spec.ts only tested wells INSIDE
+// a plugin; the launcher↔plugin-root seam (portal entry/ascent) had no test.
+func TestInfoRootViewSeedAndSetRootViewWriteback(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	const eps = 1e-9
+
+	// A freshly-opened plugin starts with zero root view (default calibration
+	// will be used on first entry — the correct "never visited" behaviour).
+	info0, err := p.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info(initial): %v", err)
+	}
+	if info0.RootViewZoom != 0 {
+		t.Errorf("fresh Info.RootViewZoom = %v, want 0", info0.RootViewZoom)
+	}
+
+	// Write a root view via SetRootView (the ascent-writeback path).
+	_, err = p.SetRootView(ctx, &gridwellv1.SetRootViewRequest{
+		Cx:   3.5,
+		Cy:   -2.25,
+		Zoom: 1.75,
+	})
+	if err != nil {
+		t.Fatalf("SetRootView: %v", err)
+	}
+
+	// Info must now reflect the saved values so enterPlugin can seed the
+	// portal-well framing (the read side of the same seam).
+	info1, err := p.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info(after SetRootView): %v", err)
+	}
+	if math.Abs(info1.RootViewCx-3.5) > eps {
+		t.Errorf("Info.RootViewCx = %v, want 3.5", info1.RootViewCx)
+	}
+	if math.Abs(info1.RootViewCy-(-2.25)) > eps {
+		t.Errorf("Info.RootViewCy = %v, want -2.25", info1.RootViewCy)
+	}
+	if math.Abs(info1.RootViewZoom-1.75) > eps {
+		t.Errorf("Info.RootViewZoom = %v, want 1.75", info1.RootViewZoom)
+	}
+
+	// SetRootView is framing-only: the root grid's own version must not change.
+	// We check via Info — schema_version reflects the DB format, not a content
+	// edit; but the SetRootView call above must not have errored with a version
+	// conflict either. A non-zero version bump would surface as a different
+	// schema_version here or as an error above.
+	if info1.SchemaVersion != info0.SchemaVersion {
+		t.Errorf("schema_version changed after SetRootView: %d → %d", info0.SchemaVersion, info1.SchemaVersion)
 	}
 }

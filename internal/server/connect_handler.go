@@ -195,6 +195,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 	label := configLabel
 	var rootGridID, scratchGridID string
 	var writable bool
+	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
 		if info.RootGridId != "" {
 			rootGridID = qualifyID(uuid, info.RootGridId)
@@ -208,6 +209,11 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 			label = info.DisplayName
 		}
 		writable = info.Writable
+		// Root-view viewport forwarded verbatim from Info (localdb fills it;
+		// fs/proc return zero). The client seeds enterPlugin framing from this.
+		rootViewCx = info.RootViewCx
+		rootViewCy = info.RootViewCy
+		rootViewZoom = info.RootViewZoom
 	}
 	if label == "" {
 		label = kind
@@ -219,6 +225,9 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 		Writable:      writable,
 		RootGridId:    rootGridID,
 		ScratchGridId: scratchGridID,
+		RootViewCx:    rootViewCx,
+		RootViewCy:    rootViewCy,
+		RootViewZoom:  rootViewZoom,
 	}
 }
 
@@ -381,6 +390,39 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
 }
 
+// SetRootView persists the plugin root-grid framing (the same fact as SetTile
+// for a well, but for the synthetic plugin root which has no tile row). Routes
+// on root_grid_id; localdb stores to the system KV table; fs/proc are no-ops
+// (the UnimplementedGridwellServer returns Unimplemented — ignored here so a
+// read-only plugin's ascent doesn't surface an error to the user).
+// After a successful write, the per-plugin Info cache is invalidated so the
+// next ListPlugins (e.g. after a page refresh) returns fresh root-view fields.
+func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[pb.SetRootViewRequest]) (*connect.Response[pb.SetRootViewResponse], error) {
+	m := req.Msg
+	c, local, uuid, err := h.route(m.RootGridId)
+	if err != nil {
+		return nil, err
+	}
+	_, err = c.SetRootView(ctx, &pb.SetRootViewRequest{
+		RootGridId: local,
+		Cx:         m.Cx,
+		Cy:         m.Cy,
+		Zoom:       m.Zoom,
+	})
+	if err != nil {
+		// Unimplemented is not an error — fs/proc don't persist a root view.
+		if isUnimplemented(err) {
+			return connect.NewResponse(&pb.SetRootViewResponse{}), nil
+		}
+		return nil, asConnectError(err)
+	}
+	// Invalidate the Info cache: root_view_* travel in the Info handshake
+	// and now differ from the cached values. The next ListPlugins (page
+	// refresh) must re-fetch Info to see the updated viewport.
+	h.srv.invalidateInfoCache(uuid)
+	return connect.NewResponse(&pb.SetRootViewResponse{}), nil
+}
+
 // ShellSessionAlive routes the wasm's per-descent probe to the owning plugin,
 // which holds the PTY and answers whether the tile's session is alive. An infra
 // error is reported as not-alive rather than a Connect error — the wasm only
@@ -484,6 +526,19 @@ func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, eve
 			backoff *= 2
 		}
 	}
+}
+
+// isUnimplemented reports whether a gRPC/Connect error carries an Unimplemented
+// code. Used to treat a plugin's "method not supported" as a silent no-op
+// (e.g. SetRootView on fs/proc which have no persistent root view).
+func isUnimplemented(err error) bool {
+	if err == nil {
+		return false
+	}
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == gcodes.Unimplemented
+	}
+	return false
 }
 
 // asConnectError maps an error returned from a plugin (or, on the borrowed

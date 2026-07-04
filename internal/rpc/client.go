@@ -75,7 +75,17 @@ func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 	}
 	out := make([]PluginInfo, len(r.Msg.Plugins))
 	for i, p := range r.Msg.Plugins {
-		out[i] = PluginInfo{UUID: p.Uuid, Kind: p.Kind, Label: p.Label, Writable: p.Writable, RootGridID: p.RootGridId, ScratchGridID: p.ScratchGridId}
+		out[i] = PluginInfo{
+			UUID:          p.Uuid,
+			Kind:          p.Kind,
+			Label:         p.Label,
+			Writable:      p.Writable,
+			RootGridID:    p.RootGridId,
+			ScratchGridID: p.ScratchGridId,
+			RootViewCx:    p.RootViewCx,
+			RootViewCy:    p.RootViewCy,
+			RootViewZoom:  p.RootViewZoom,
+		}
 	}
 	return out, nil
 }
@@ -128,6 +138,18 @@ func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewReques
 }
 func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetURLStateToProto(req))))
+}
+
+// SetRootView persists the plugin root-grid framing. The server routes on
+// root_grid_id; framing only — never bumps a content version.
+func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error {
+	_, err := c.cl.SetRootView(ctx, connect.NewRequest(&pb.SetRootViewRequest{
+		RootGridId: req.RootGridID,
+		Cx:         req.Cx,
+		Cy:         req.Cy,
+		Zoom:       req.Zoom,
+	}))
+	return err
 }
 
 // Mount drops a mount well in the destination grid pointing at the plugin's

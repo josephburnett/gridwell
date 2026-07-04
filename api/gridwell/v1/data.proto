@@ -141,6 +141,14 @@ message InfoResponse {
   // kind string, or a remote plugin reached through a proxy (whose local kind
   // is "ssh") is wrongly presented read-only.
   bool writable = 9;
+  // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport (the
+  // center in world cell coords and the live zoom). Filled by localdb from
+  // its system KV table; fs/proc return zero (no persistent root view). The
+  // client seeds the portal-well framing on enterPlugin so re-entry restores
+  // exactly the left-off view. Purely a read: the write path is SetRootView.
+  double root_view_cx   = 10;
+  double root_view_cy   = 11;
+  double root_view_zoom = 12;
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -258,6 +266,12 @@ message PluginInfo {
                               // grid; click-enter descends here
   string scratch_grid_id = 6; // qualified <uuid>/<id> of the plugin's off-grid
                               // scratch grid for ephemeral url tiles; "" if none
+  // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
+  // forwarded verbatim from InfoResponse. Zero means never visited; the
+  // client substitutes the default calibrated zoom on enterPlugin.
+  double root_view_cx   = 7;
+  double root_view_cy   = 8;
+  double root_view_zoom = 9;
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;
@@ -370,6 +384,20 @@ message DeleteTileRequest {
 }
 message DeleteTileResponse {}
 
+// SetRootViewRequest persists the plugin root grid's viewport (the same
+// fact that SetTile writes for a well tile, but for the plugin root which
+// has no tile row). root_grid_id routes the call to the owning plugin;
+// cx/cy are the viewport center in world cell coords; zoom is the live zoom.
+// Framing only — never bumps a content version. localdb stores to the
+// frozen system KV table (root_view_*); fs/proc are no-ops.
+message SetRootViewRequest {
+  string root_grid_id = 1;  // qualified "<plugin-uuid>/<id>", used for routing
+  double cx           = 2;
+  double cy           = 3;
+  double zoom         = 4;
+}
+message SetRootViewResponse {}
+
 // Event stream.
 
 message SubscribeRequest {}
@@ -432,6 +460,11 @@ service Gridwell {
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
   rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
   rpc Mount(MountRequest)           returns (TileResponse);
+
+  // SetRootView persists the plugin root-grid framing (the portal-level
+  // analogue of SetTile for a well). Framing only — never bumps version.
+  // The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
+  rpc SetRootView(SetRootViewRequest) returns (SetRootViewResponse);
 
   // ShellSessionAlive gates the wasm refresh button on shell descent.
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);

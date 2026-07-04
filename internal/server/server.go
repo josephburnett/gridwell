@@ -114,6 +114,17 @@ func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse,
 	return info, nil
 }
 
+// invalidateInfoCache drops the cached Info for uuid so the next call re-fetches
+// it from the plugin. Called by SetRootView after updating the root viewport:
+// root_view_* are part of Info but change on every portal ascent, so the
+// cache entry must be dropped to reflect the new framing on the next ListPlugins
+// (page refresh).
+func (s *Server) invalidateInfoCache(uuid string) {
+	s.infoMu.Lock()
+	delete(s.infoCache, uuid)
+	s.infoMu.Unlock()
+}
+
 func (s *Server) routes() {
 	// Connect-RPC handler covers the entire data plane. Subscribe is
 	// the one server-streaming RPC; everything else is unary.

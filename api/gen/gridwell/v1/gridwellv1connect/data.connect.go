@@ -84,6 +84,8 @@ const (
 	GridwellSetTileAltProcedure = "/gridwell.v1.Gridwell/SetTileAlt"
 	// GridwellMountProcedure is the fully-qualified name of the Gridwell's Mount RPC.
 	GridwellMountProcedure = "/gridwell.v1.Gridwell/Mount"
+	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
+	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
 	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
 	// ShellSessionAlive RPC.
 	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
@@ -120,6 +122,10 @@ type GridwellClient interface {
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
 	Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error)
+	// SetRootView persists the plugin root-grid framing (the portal-level
+	// analogue of SetTile for a well). Framing only — never bumps version.
+	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
+	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
 	// ShellSessionAlive gates the wasm refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
@@ -250,6 +256,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("Mount")),
 			connect.WithClientOptions(opts...),
 		),
+		setRootView: connect.NewClient[v1.SetRootViewRequest, v1.SetRootViewResponse](
+			httpClient,
+			baseURL+GridwellSetRootViewProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetRootView")),
+			connect.WithClientOptions(opts...),
+		),
 		shellSessionAlive: connect.NewClient[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse](
 			httpClient,
 			baseURL+GridwellShellSessionAliveProcedure,
@@ -286,6 +298,7 @@ type gridwellClient struct {
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	setTileAlt        *connect.Client[v1.SetTileAltRequest, v1.TileResponse]
 	mount             *connect.Client[v1.MountRequest, v1.TileResponse]
+	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
 }
@@ -385,6 +398,11 @@ func (c *gridwellClient) Mount(ctx context.Context, req *connect.Request[v1.Moun
 	return c.mount.CallUnary(ctx, req)
 }
 
+// SetRootView calls gridwell.v1.Gridwell.SetRootView.
+func (c *gridwellClient) SetRootView(ctx context.Context, req *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
+	return c.setRootView.CallUnary(ctx, req)
+}
+
 // ShellSessionAlive calls gridwell.v1.Gridwell.ShellSessionAlive.
 func (c *gridwellClient) ShellSessionAlive(ctx context.Context, req *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
 	return c.shellSessionAlive.CallUnary(ctx, req)
@@ -424,6 +442,10 @@ type GridwellHandler interface {
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
 	Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error)
+	// SetRootView persists the plugin root-grid framing (the portal-level
+	// analogue of SetTile for a well). Framing only — never bumps version.
+	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
+	SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error)
 	// ShellSessionAlive gates the wasm refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
@@ -550,6 +572,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("Mount")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellSetRootViewHandler := connect.NewUnaryHandler(
+		GridwellSetRootViewProcedure,
+		svc.SetRootView,
+		connect.WithSchema(gridwellMethods.ByName("SetRootView")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellShellSessionAliveHandler := connect.NewUnaryHandler(
 		GridwellShellSessionAliveProcedure,
 		svc.ShellSessionAlive,
@@ -602,6 +630,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellSetTileAltHandler.ServeHTTP(w, r)
 		case GridwellMountProcedure:
 			gridwellMountHandler.ServeHTTP(w, r)
+		case GridwellSetRootViewProcedure:
+			gridwellSetRootViewHandler.ServeHTTP(w, r)
 		case GridwellShellSessionAliveProcedure:
 			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
@@ -689,6 +719,10 @@ func (UnimplementedGridwellHandler) SetTileAlt(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Mount is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetRootView is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
