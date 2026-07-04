@@ -159,3 +159,63 @@ func TestDescendAscentRoundTripClosedStaysClosed(t *testing.T) {
 		t.Fatal("a menu closed before descent must stay closed on ascent")
 	}
 }
+
+// TransferFocus is the single-call focus-change helper used by every path that
+// moves wasm focus (canvas, forwarded right-down, forwarded left-down). These
+// tests prove the omission class is unrepresentable: calling TransferFocus from a
+// new path automatically closes the menu when focus moves away from it, without
+// any extra thought at the call site.
+
+func TestTransferFocusReturnsChangedAndClosesMenu(t *testing.T) {
+	s := New()
+	s.Open("p1")
+	// Focus moves from p1 → p2: menu must close, changed must be true.
+	if !s.TransferFocus("p1", "p2") {
+		t.Fatal("TransferFocus must report true when focus changed")
+	}
+	if s.IsOpen() {
+		t.Fatal("TransferFocus must close the menu when focus moves away from its pane")
+	}
+}
+
+func TestTransferFocusNoopWhenFocusUnchanged(t *testing.T) {
+	s := New()
+	s.Open("p1")
+	// Focus stays on p1: menu must remain open, changed must be false.
+	if s.TransferFocus("p1", "p1") {
+		t.Fatal("TransferFocus must report false when focus did not change")
+	}
+	if !s.OpenOn("p1") {
+		t.Fatal("TransferFocus must leave the menu untouched when focus did not change")
+	}
+}
+
+func TestTransferFocusMenuClosedNoChange(t *testing.T) {
+	s := New()
+	// Menu already closed — TransferFocus must still report the focus change
+	// correctly, even though there is nothing to close.
+	if !s.TransferFocus("p1", "p2") {
+		t.Fatal("TransferFocus must still report true when focus changed (menu already closed)")
+	}
+	if s.IsOpen() {
+		t.Fatal("TransferFocus on an already-closed menu must leave it closed")
+	}
+}
+
+// Regression guard for the latent twin in onForwardedRightDown: the right-button
+// press path used to duplicate the focus-transfer block but omit SyncFocus.
+// Calling TransferFocus from all paths (canvas + forwarded right + forwarded left)
+// means the menu closes whenever focus moves, regardless of which gesture triggered
+// the focus change.
+func TestTransferFocusForwardedPathClosesMenu(t *testing.T) {
+	s := New()
+	s.Open("p1") // menu open on the text pane
+	// Simulate: a forwarded press lands on the URL pane (p2), focus moves.
+	changed := s.TransferFocus("p1", "p2")
+	if !changed {
+		t.Fatal("forwarded press that changes focus must report changed=true")
+	}
+	if s.IsOpen() {
+		t.Fatal("forwarded press must close the menu on the de-focused pane")
+	}
+}

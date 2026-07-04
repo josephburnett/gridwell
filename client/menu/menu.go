@@ -102,3 +102,17 @@ func (s *State) SyncFocus(focusedPaneID string) {
 		s.Close()
 	}
 }
+
+// TransferFocus is the canonical focus-change helper: it calls SyncFocus(newID)
+// when newID ≠ prevID and reports whether focus actually changed. Callers use
+// this instead of "if new != prev { SyncFocus(new) }" to make the omission class
+// unrepresentable — every code path that moves wasm focus (canvas onMouseDown,
+// forwarded right-down, forwarded left-down) must call this, and calling it is
+// always safe even when focus has not moved.
+func (s *State) TransferFocus(prevID, newID string) bool {
+	if prevID == newID {
+		return false
+	}
+	s.SyncFocus(newID)
+	return true
+}
