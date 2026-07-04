@@ -94,10 +94,18 @@ type Fixtures = {
 // test gets a fresh temp home seeded with one localdb plugin; GRIDWELL_E2E=1
 // turns on the renderer's read-only introspection hook.
 //
-// Isolation guarantee: GRIDWELL_HOME is a per-test mkdtemp; Electron's userData
-// is redirected to <home>/electron (by index.ts → applyUserDataOverride), so
-// each test gets its own Chromium profile — no shared lock with the live app or
-// other concurrent instances.
+// Isolation guarantee: GRIDWELL_HOME is a per-test mkdtemp. Electron's userData
+// is set to <home>/electron via TWO mechanisms that work in concert:
+//
+//   1. --user-data-dir command-line flag: Chromium reads this BEFORE Node.js
+//      modules run, so Playwright's loader.js interception of app.isReady cannot
+//      delay it. This is the reliable path for e2e isolation.
+//
+//   2. applyUserDataOverride in index.ts: belt for direct (non-Playwright) app
+//      launches where GRIDWELL_HOME is set but --user-data-dir is not passed.
+//
+// With both in place, no test instance shares ~/.config/gridwell-desktop with
+// the live app or with concurrent test instances.
 //
 // Teardown: after app.close() the fixture kills stray tmux servers and asserts
 // the sidecar exited so any leak is blamed on the test that caused it, not the
@@ -105,8 +113,23 @@ type Fixtures = {
 export const test = base.extend<Fixtures>({
   electronApp: async ({}, use) => {
     const home = seedHome();
+    // The per-test Chromium profile. Created before launch so the flag is valid.
+    const electronDir = path.join(home, 'electron');
+    fs.mkdirSync(electronDir, { recursive: true });
     const app = await electron.launch({
-      args: ['.'],
+      // Pass --user-data-dir as a Chromium/Electron command-line switch so
+      // Chromium picks up the isolated profile directory BEFORE the Node.js main
+      // script (index.js) runs. This is necessary because Playwright's loader.js
+      // intercepts app.isReady(), making app.setPath() in index.ts unreliable
+      // for Chromium profile isolation (Chromium has already initialised by then).
+      //
+      // IMPORTANT: the flag must come BEFORE the app path ('.') in args.
+      // Electron treats everything after the app-path argument as app arguments
+      // rather than Electron/Chromium switches. Playwright prepends --inspect=0
+      // and --remote-debugging-port=0 at the front, so the final argv looks like:
+      //   electron --inspect=0 --remote-debugging-port=0 --user-data-dir=... .
+      // after Playwright's loader.js splice, which is the correct order.
+      args: [`--user-data-dir=${electronDir}`, '.'],
       cwd: DESKTOP_DIR,
       env: {
         ...process.env,

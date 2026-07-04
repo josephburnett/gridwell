@@ -7,17 +7,16 @@ import { MirrorPump } from './capture';
 import { sanitizeUserAgent } from './viewutil';
 import { applyUserDataOverride } from './userdata';
 
-// Redirect Electron's userData (and, for Electron ≥28, sessionData) to a
-// per-run private directory when GRIDWELL_HOME is set. This must run before
-// app.whenReady() — Electron locks the profile directory on ready.
+// Belt: redirect Electron's userData (and, for Electron ≥28, sessionData) to a
+// per-run private directory when GRIDWELL_HOME is set.
 //
-// When GRIDWELL_HOME is absent (normal user launch) Electron keeps its
-// default ~/.config/gridwell-desktop profile untouched. When it is set
-// (e2e: fixtures.ts passes a per-test mkdtemp home) each Electron instance
-// gets its own Chromium profile under <home>/electron, so:
-//  - the live app's userData lock is never contested by test runs;
-//  - concurrent test workers (if ever enabled) each get an isolated profile;
-//  - a crashing test cannot corrupt the live app's session.
+// The e2e fixture ALSO passes --user-data-dir=<home>/electron as a Chromium
+// command-line switch (fixtures.ts), which is more reliable under Playwright's
+// loader.js interception of app.isReady. This call is the fallback for any
+// non-Playwright launch where GRIDWELL_HOME is set without the CLI flag.
+//
+// When GRIDWELL_HOME is absent (normal user launch) this is a no-op and
+// Electron keeps its default ~/.config/gridwell-desktop profile.
 applyUserDataOverride((name, value) => app.setPath(name as Parameters<typeof app.setPath>[0], value), process.env);
 
 // MIRROR_INTERVAL_MS is how often live views are captured and their frames
