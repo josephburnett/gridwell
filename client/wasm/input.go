@@ -1072,6 +1072,17 @@ func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo, cell palette.Rect) {
 		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 	}
 	w := zoomtrans.PortalWell(cell.X, cell.Y, cell.W, cell.H)
+	// Seed the portal well with the last-saved root viewport so
+	// installDescent restores the user's left-off framing instead of always
+	// landing at the default calibrated zoom.  Zero RootViewZoom means
+	// "never visited" — leave ViewZoom=0 so EffectiveViewZoom falls through
+	// to DefaultWellViewZoom, preserving the legacy overview for fresh plugins.
+	if pl.RootViewZoom > 0 {
+		overtake := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
+		w.ViewX = int64(math.Round(pl.RootViewCx)) - w.W/2
+		w.ViewY = int64(math.Round(pl.RootViewCy)) - w.H/2
+		w.ViewZoom = zoomtrans.IntrinsicFromLive(pl.RootViewZoom, overtake)
+	}
 	a.installDescent(p, r, from, w, pl.RootGridID, pl.RootGridID,
 		cell.X+cell.W/2, cell.Y+cell.H/2)
 }
@@ -1089,6 +1100,10 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	if !ok {
 		return
 	}
+	// Save the plugin root-grid viewport before leaving so re-entry restores
+	// exactly what the user left — the portal analogue of saveWellViewBeforeAscent.
+	// Fire-and-forget: the transition is already starting; errors are logged.
+	a.savePluginRootViewBeforeAscent(p)
 	// Animate only the launcher return: the frame has no plugin anchor and the
 	// launcher tile we entered from is resolvable from the current anchor.
 	if idx := a.launcherIndexForAnchor(p.Anchor); f.Anchor == "" && idx >= 0 {
@@ -1104,6 +1119,45 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
 	a.scheduleURLUpdate()
+}
+
+// savePluginRootViewBeforeAscent persists the current plugin root-grid
+// viewport so re-entry restores it.  Portal analogue of saveWellViewBeforeAscent:
+// the plugin root has no tile row, so it uses SetRootView (the store's system KV
+// path) instead of SetTile.  Two writes happen:
+//  1. a.plugins is patched in-memory so the very next enterPlugin (same session,
+//     no page refresh) sees the updated viewport immediately.
+//  2. A fire-and-forget goroutine calls SetRootView for durability; the server
+//     also invalidates the Info cache so a page-refresh ListPlugins gets fresh data.
+//
+// No-op when the pane is already at the launcher (Anchor=="").
+func (a *App) savePluginRootViewBeforeAscent(p *pane.Pane) {
+	anchor := p.Anchor
+	if anchor == "" {
+		return // already at the launcher, nothing to save
+	}
+	cx, cy, zoom := p.Cx, p.Cy, p.Zoom
+	// Patch the in-memory plugin list so the next enterPlugin (same session)
+	// uses the just-left framing without waiting for the RPC round-trip.
+	for i := range a.plugins {
+		if a.plugins[i].RootGridID == anchor {
+			a.plugins[i].RootViewCx = cx
+			a.plugins[i].RootViewCy = cy
+			a.plugins[i].RootViewZoom = zoom
+			break
+		}
+	}
+	req := &rpc.SetRootViewRequest{
+		RootGridID: anchor,
+		Cx:         cx,
+		Cy:         cy,
+		Zoom:       zoom,
+	}
+	go func() {
+		if err := a.cl.SetRootView(context.Background(), req); err != nil {
+			logRPCError("SetRootView", err)
+		}
+	}()
 }
 
 // launcherIndexForAnchor returns the index in a.plugins of the plugin whose
