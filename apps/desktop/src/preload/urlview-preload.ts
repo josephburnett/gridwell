@@ -22,9 +22,10 @@
 // ../main/viewutil.ts (dragExceeded) rather than imported.
 import { ipcRenderer } from 'electron';
 
-// Keep in sync with VIEW.rightdown / VIEW.middledown in ../main/ipc.ts.
+// Keep in sync with VIEW.rightdown / VIEW.middledown / VIEW.leftdown in ../main/ipc.ts.
 const VIEW_RIGHTDOWN = 'gw:view-rightdown';
 const VIEW_MIDDLEDOWN = 'gw:view-middledown';
+const VIEW_LEFTDOWN = 'gw:view-leftdown';
 // Keep in sync with RIGHT_DRAG_THRESHOLD in ../main/viewutil.ts (and the canvas
 // dragThreshold). dragExceeded's logic is inlined below (can't import here).
 const RIGHT_DRAG_THRESHOLD = 4;
@@ -56,6 +57,11 @@ window.addEventListener(
       e.preventDefault();
       e.stopPropagation();
       ipcRenderer.send(VIEW_MIDDLEDOWN, { sx: e.screenX, sy: e.screenY });
+    } else if (e.button === 0) {
+      // Left button: forward a focus intent to main → renderer. The click
+      // is NOT suppressed (no preventDefault) — in-page interaction, selection,
+      // and links all stay with the page. The renderer only transfers pane focus.
+      ipcRenderer.send(VIEW_LEFTDOWN, { sx: e.screenX, sy: e.screenY });
     }
   },
   true,

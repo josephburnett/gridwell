@@ -11,6 +11,7 @@ import {
   PaneRef,
   FreezeResult,
   ViewRightdown,
+  ForwardedRightdown,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
 
@@ -54,6 +55,17 @@ export function registerWebviewIpc(
     if (rootWC.isDestroyed()) return;
     const cb = win.getContentBounds();
     rootWC.send(EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
+  });
+
+  // A left-button press over a live URL view is a focus-transfer intent; the
+  // native WebContentsView swallows the canvas's own mousedown, so the preload
+  // forwards a (non-suppressed) left-down here. Relay to the renderer in canvas
+  // coords so it can call focusToPane without breaking in-page interaction.
+  ipcMain.on(VIEW.leftdown, (_event, p: ViewRightdown): void => {
+    if (rootWC.isDestroyed()) return;
+    const cb = win.getContentBounds();
+    const fwd: ForwardedRightdown = { x: p.sx - cb.x, y: p.sy - cb.y };
+    rootWC.send(EV.leftForward, fwd);
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {

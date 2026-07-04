@@ -32,13 +32,13 @@ export const CTRL = {
 } as const;
 
 // Live URL view's injected preload → main (send, fire-and-forget). The view
-// swallows the renderer's own mouse events, so its preload forwards a
-// right-button press here; the renderer then begins a pane gesture over the
-// live page (mirroring the shell overlay). Left button / wheel / keys stay
-// with the page — native browsing is untouched.
+// swallows the renderer's own mouse events, so its preload forwards button
+// presses here. Left button (focus intent only — the click still reaches the
+// page, no preventDefault) transfers pane focus. Right/middle are gesture paths.
 export const VIEW = {
   rightdown: 'gw:view-rightdown',   // ViewRightdown
   middledown: 'gw:view-middledown', // ViewRightdown (same payload: screen coords)
+  leftdown: 'gw:view-leftdown',     // ViewRightdown (focus intent; no preventDefault in preload)
 } as const;
 
 // Main → renderer (send, fire-and-forget).
@@ -48,6 +48,7 @@ export const EV = {
   controlAscend: 'gw:control-ascend', // PaneRef — corner button right-clicked
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
+  leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
 } as const;
 
 // ViewRightdown carries the press in physical screen coordinates

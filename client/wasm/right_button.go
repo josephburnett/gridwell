@@ -277,6 +277,23 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 	a.ascendPane(p)
 }
 
+// onForwardedLeftDown transfers pane focus when a left-button press originated
+// over a LIVE URL view. The native WebContentsView swallows the canvas's own
+// mousedown, so the view's preload forwards the press here (via main) in canvas
+// coords — without preventing the default, so in-page interaction, selection,
+// and link clicks still reach the page. Only pane focus (and the menu's
+// focused-pane invariant) is managed here, via the shared focusToPane helper.
+func (a *App) onForwardedLeftDown(sx, sy float64) {
+	if a.transition != nil {
+		return
+	}
+	p, _, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		return
+	}
+	a.focusToPane(p)
+}
+
 // onRightMove updates the cursor position and applies live changes.
 // Pane-resize is the only gesture that mutates the tree mid-drag; the
 // rest render previews that commit on release.
