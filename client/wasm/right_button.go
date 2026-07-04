@@ -251,11 +251,11 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	if !ok {
 		return
 	}
-	prevFocus := a.tree.Focus
-	_ = a.tree.SetFocus(p.ID)
-	if a.tree.Focus != prevFocus {
-		a.refreshFileOverlay()
-	}
+	// focusToPane closes the menu on the de-focused pane (via menu.TransferFocus)
+	// and refreshes the file overlay — the same focus semantics as the canvas
+	// path. Previously this block omitted SyncFocus, leaving the menu stranded on
+	// the old pane after a right-drag over a live URL view changed focus.
+	a.focusToPane(p)
 	a.onRightDown(p, r, sx, sy)
 	a.draw()
 }

@@ -132,6 +132,27 @@ func (a *App) updateURLCursor(p *pane.Pane, _ pane.Rect) {
 	}
 }
 
+// focusToPane transfers wasm focus to pane p. If focus actually changes it
+// calls menu.TransferFocus (which closes the menu when it was on the old pane),
+// refreshes the file overlay, and draws. Returns true when focus changed.
+//
+// This is the SINGLE focus-transfer owner — call it from every press path:
+// canvas onMouseDown, onForwardedRightDown, onForwardedLeftDown. Calling it
+// is always safe even when focus has not moved (no-op on same pane).
+func (a *App) focusToPane(p *pane.Pane) bool {
+	prev := a.tree.Focus
+	_ = a.tree.SetFocus(p.ID)
+	if !a.menu.TransferFocus(prev, a.tree.Focus) {
+		return false
+	}
+	// Focus moved → file-mode chrome must follow. The textarea overlay only
+	// ever lives over the focused pane, so without this call a click on a
+	// sibling pane in text mode leaves the textarea stranded.
+	a.refreshFileOverlay()
+	a.draw()
+	return true
+}
+
 func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
@@ -194,19 +215,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if !ok {
 		return nil
 	}
+	// focusToPane transfers focus, closes the menu on the de-focused pane (via
+	// menu.TransferFocus), refreshes the file overlay, and draws — all in one
+	// call so no path can forget SyncFocus.
 	prevFocus := a.tree.Focus
-	_ = a.tree.SetFocus(p.ID)
-	if a.tree.Focus != prevFocus {
-		// Focus moved → file-mode chrome must follow. The textarea
-		// overlay only ever lives over the focused pane, so without
-		// this call a click on a sibling pane in text mode would leave
-		// the textarea stranded. An open + menu belongs to the pane that
-		// was focused; close it so it doesn't outlive its (now hidden) +
-		// button on the de-focused pane.
-		a.menu.SyncFocus(p.ID)
-		a.refreshFileOverlay()
-		a.draw()
-	}
+	a.focusToPane(p)
 	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")
