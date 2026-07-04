@@ -11,6 +11,7 @@ import (
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -55,7 +56,18 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	a.cctx.Call("rect", x, y, w, h)
 	a.cctx.Call("clip")
 
-	hideForTextarea := mode == rpc.TextModeText && p.ID == a.tree.Focus
+	// CanvasHiddenByOverlay is the single owner of the "canvas paints vs overlay
+	// covers" decision. It returns true only when all four hold: this is a
+	// descended pane (not a preview), it is the tree's focused pane (the one the
+	// textarea is over), the tile is in text mode (the textarea is only shown in
+	// text mode), AND the textarea currently has content (false during the loading
+	// race on a pane switch — canvas must paint until the overlay has actual text).
+	hideForTextarea := textedit.CanvasHiddenByOverlay(
+		true,                     // descended pane (not a preview node)
+		p.ID == a.tree.Focus,     // the pane the textarea is positioned over
+		mode == rpc.TextModeText, // textarea is only shown in text mode
+		a.textareaReady,          // textarea actually has content (not loading)
+	)
 	if !hideForTextarea {
 		if body, ok := a.tileBody(n); ok {
 			a.drawMarkdownInRect(string(body),
@@ -75,31 +87,23 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	a.cctx.Call("restore")
 }
 
-// drawMarkdownNode renders a markdown file tile at (x, y, w, h) — the preview
-// (no pane descended) or the live cover-crop while a pane is descended. The
-// scale/scroll selection is unchanged from before; only the inner paint moved
-// to the new pipeline.
+// drawMarkdownNode renders a markdown file tile at (x, y, w, h) as a preview.
+// The scale/scroll comes from the tile's own stored framing (TextW/TextH/TextX/
+// TextY) — never from another pane's live state. Per the guiding rule: preview
+// = descent target = ascent return; the stored framing IS the preview. Before
+// fix #35 this called paneFocusedOnFile and used the other pane's live inner
+// width (focused=true), causing two bugs: wrong-size preview (A) because the
+// layout width tracked the sibling pane's width, and blank preview (B) because
+// hideForTextarea suppressed canvas paint for every preview of a tile being
+// edited elsewhere.
 func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected, outside, dashed bool) {
 	mode := n.TextMode
 	if mode == "" {
 		mode = rpc.TextModeText
 	}
-	fp := a.paneFocusedOnFile(n.ID)
-	// Scale/scroll selection (focused inner-box cover-crop / stored framing /
-	// natural-width fallback) is the pure markdown.PreviewScaleScroll — the
-	// "preview cover-crops like the live pane" (preview = descent) math.
-	var iw, ih, fScrollX, fScrollY float64
-	focused := fp != nil
-	if focused {
-		if fp.TextMode != "" {
-			mode = fp.TextMode
-		}
-		fpRect := a.paneRectByID(fp.ID)
-		_, _, iw, ih = fileInnerBox(fp, fpRect)
-		fScrollX = fp.TextScrollX
-		fScrollY = fp.TextScrollY
-	}
-	frame := markdown.PreviewScaleScroll(w, h, focused, iw, ih, fScrollX, fScrollY,
+	// Always pass focused=false: the preview uses the tile's own stored framing.
+	// Never reach into another pane's live width/scroll (paneFocusedOnFile).
+	frame := markdown.PreviewScaleScroll(w, h, false, 0, 0, 0, 0,
 		n.TextW, n.TextH, n.TextX, n.TextY, fileNaturalContentPx, fileFixedScale, 0.02)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
@@ -111,21 +115,18 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	hideForTextarea := fp != nil && fp.TextMode == rpc.TextModeText && fp.ID == a.tree.Focus
-	if !hideForTextarea {
-		if body, ok := a.tileBody(n); ok {
-			// Lay out at the framing width the cover-crop was computed against
-			// (frame.ContentW = the focused pane's inner width / the stored
-			// window / the natural fallback) and merely SCALE by frame.Scale, so
-			// the preview is a true scaled copy of what the focused pane shows —
-			// reflowed identically, never re-wrapped to this tile's own width.
-			a.drawMarkdownInRect(string(body),
-				x-scrollX*scale, y-scrollY*scale,
-				frame.ContentW*scale, h+scrollY*scale,
-				scale, mode, a.makePreviewEmbedDrawer(uuidOf(n.GridID)))
-		}
-	} else {
-		a.tileBody(n) // warm the cache so the textarea has content when shown
+	// No hideForTextarea in the preview path: the single textarea overlay covers
+	// only the focused descended pane, never a preview node. Suppressing canvas
+	// here caused blank previews when another pane was editing in text mode (Bug B).
+	if body, ok := a.tileBody(n); ok {
+		// Lay out at the framing width the cover-crop was computed against
+		// (frame.ContentW = stored TextW / natural fallback) and merely SCALE by
+		// frame.Scale, so the preview is a true scaled copy of what the descended
+		// pane showed at its last ascent — never re-wrapped to the tile's footprint.
+		a.drawMarkdownInRect(string(body),
+			x-scrollX*scale, y-scrollY*scale,
+			frame.ContentW*scale, h+scrollY*scale,
+			scale, mode, a.makePreviewEmbedDrawer(uuidOf(n.GridID)))
 	}
 
 	a.cctx.Call("restore")

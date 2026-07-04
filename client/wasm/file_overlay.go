@@ -172,6 +172,9 @@ func (a *App) ensureFileTextarea() {
 		// Schedule a debounced auto-save so the canvas preview and
 		// stored blob catch up to the user's edits without waiting
 		// for ascent / toggle. URL update is debounced separately.
+		// The user has typed something → the textarea definitely has
+		// content now; mark it ready so canvas hiding stays correct.
+		a.textareaReady = true
 		a.scheduleFileSave()
 		a.draw()
 		a.scheduleURLUpdate()
@@ -480,6 +483,11 @@ func (a *App) refreshFileOverlay() {
 	dec := embedpkg.DecideTextareaSync(in)
 	if dec.SetValue {
 		ta.Set("value", dec.Value)
+		// Track whether the textarea now has content for textedit.CanvasHiddenByOverlay:
+		// true = overlay covers this pane with actual content (canvas should hide).
+		// false = textarea cleared on tile switch / blob not yet arrived (canvas must
+		// keep painting — the loading-race blank, issue #35 mechanism B).
+		a.textareaReady = dec.Value != ""
 	}
 	a.lastTextareaTileID = dec.NewLastTileID
 	// Reflect saved scroll into the textarea; on subsequent calls the
@@ -561,6 +569,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 		// so it picks up the freshest cached blob.
 		if !a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
 			a.fileTextarea.Set("value", "")
+			a.textareaReady = false // cleared; refreshFileOverlay re-seeds it
 		}
 	}
 	// The mode is persisted to the tile on ascent (saveFileBeforeAscent).
