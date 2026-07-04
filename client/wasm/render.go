@@ -171,33 +171,34 @@ const (
 )
 
 // primitiveKinds is the palette layout order of the built-in tile
-// primitives, left to right. These appear only in writable grids (a
-// read-only plugin grid and the launcher show plugins only).
+// primitives, left to right. They appear in any writable grid.
 var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell}
 
-// paletteItem is one entry in the creation palette. It is either a
-// configured plugin (click to enter, drag to mount as an exit-well link)
-// or a built-in tile primitive (drag to create). isPlugin selects which
-// of plugin / primitive carries meaning.
+// paletteItem is one entry in the creation palette: a built-in tile
+// primitive that the user drags onto the canvas to create a tile.
+// Plugins are not in this palette; they are reachable only from the
+// launcher landing page.
+//
+// isPlugin and plugin are still present because drawLauncherTiles
+// constructs a paletteItem{isPlugin:true} to synthesise the ghost node
+// for each launcher plugin tile — those two fields serve the launcher,
+// not the palette itself.
 type paletteItem struct {
 	isPlugin  bool
-	plugin    rpc.PluginInfo // when isPlugin
-	primitive templateKind   // when !isPlugin
+	plugin    rpc.PluginInfo // used by launcher (drawLauncherTiles), not the palette
+	primitive templateKind   // the primitive this swatch creates
 }
 
-// paletteItems returns the palette entries for pane p, in display order:
-// every configured plugin first (config order), then — only when the
-// pane's current grid is writable — the tile primitives. The launcher
-// (Anchor == "") and read-only plugin grids therefore show plugins only.
+// paletteItems returns the palette entries for pane p: the tile
+// primitives, but only when the pane's current grid is writable.
+// The launcher (Anchor == "") and read-only grids get an empty palette.
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
-	items := make([]paletteItem, 0, len(a.plugins)+len(primitiveKinds))
-	for _, pl := range a.plugins {
-		items = append(items, paletteItem{isPlugin: true, plugin: pl})
+	if !a.gridWritable(a.gridIDForPane(p)) {
+		return nil
 	}
-	if a.gridWritable(a.gridIDForPane(p)) {
-		for _, k := range primitiveKinds {
-			items = append(items, paletteItem{primitive: k})
-		}
+	items := make([]paletteItem, 0, len(primitiveKinds))
+	for _, k := range primitiveKinds {
+		items = append(items, paletteItem{primitive: k})
 	}
 	return items
 }

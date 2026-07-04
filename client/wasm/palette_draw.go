@@ -19,9 +19,6 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
 		PaneZoom: p.Zoom,
 		NumTiles: len(a.paletteItems(p)),
-		// Plugins fill the top row; the primitives (if any) drop to a second
-		// row below. paletteItems always lists the plugins first.
-		TopRow: len(a.plugins),
 	}
 }
 
@@ -113,8 +110,8 @@ func (a *App) paletteTileRect(p *pane.Pane, r pane.Rect, i int) (x, y, w, h floa
 }
 
 // drawPalette paints the creation popover: a background container and
-// a horizontal row of preview tiles, one per palette item (plugins, then
-// the tile primitives in writable grids).
+// a horizontal row of preview tiles, one per palette item (primitives
+// only; plugins are on the launcher, not the palette).
 func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 	mx, my, mw, mh := a.paletteRect(p, r)
 	a.cctx.Set("fillStyle", colorMenuBg)
@@ -133,34 +130,21 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 // (fill + border) is shared with the live-tile renderer so a palette swatch
 // reads identical to what the user drops — same color grammar. A
 // kind-specific glyph is overlaid so the swatch reads "what is this?" before
-// the tile has content.
+// the tile has content. Only primitive items appear in the palette; plugin
+// items are exclusive to the launcher.
 func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
 	n := paletteItemGhostNode(item)
-	if item.isPlugin {
-		// Plugin swatch == the linked well it drops into a grid: a blue,
-		// DASHED-bordered well (dashed = a cross-plugin link you can unlink),
-		// its kind glyph, and its name banner (AltText = the server.yaml
-		// label). Drawn identically here, as the drag ghost, and once dropped.
-		a.cctx.Set("fillStyle", colorBg)
-		a.cctx.Call("fillRect", x, y, w, h)
-		setTileDash(a.cctx)
-		strokeTileBorder(a.cctx, x, y, w, h, colorFocusBorder, tileBorderPx)
-		clearTileDash(a.cctx)
-		a.drawPluginGlyph(item.plugin.Kind, x, y, w, h)
-		a.drawTileBannerLabel(&n, x, y, w, h, false)
-	} else {
-		outside := tileOutside(&n, false)
-		drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
-		switch item.primitive {
-		case tplWell:
-			drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
-		case tplMarkdown:
-			drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine)
-		case tplURL:
-			drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
-		case tplShell:
-			drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
-		}
+	outside := tileOutside(&n, false)
+	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
+	switch item.primitive {
+	case tplWell:
+		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+	case tplMarkdown:
+		drawDocumentGlyph(a.cctx, x, y, w, h, colorMarkdownLine)
+	case tplURL:
+		drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
+	case tplShell:
+		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 	}
 	if hovered {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
