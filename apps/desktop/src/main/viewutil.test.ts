@@ -10,8 +10,10 @@ import {
   minWidthZoomFactor,
   PARK_COORD,
   dragExceeded,
+  classifyRightPress,
   sanitizeUserAgent,
   RIGHT_DRAG_THRESHOLD,
+  RIGHT_DRAG_TIME_MS,
 } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
@@ -121,4 +123,52 @@ test('minWidthZoomFactor scales a narrow view to fit and clamps the floor', () =
   // Below the floor the zoom clamps at 0.25 rather than shrinking to nothing.
   assert.equal(minWidthZoomFactor(64, min), 0.25);
   assert.equal(minWidthZoomFactor(1, min), 0.25);
+});
+
+// Regression guard for mechanism B of issue #33: classifyRightPress requires
+// BOTH distance and time to classify as a drag. A fast trackpad tap that drifts
+// a few pixels past the 4px threshold is still a click — the context menu must
+// fire. An intentional hold-and-drag that exceeds both thresholds is a gesture.
+test('classifyRightPress requires both distance and time to classify as drag', () => {
+  const dist = RIGHT_DRAG_THRESHOLD; // 4 px
+  const time = RIGHT_DRAG_TIME_MS; // 200 ms
+
+  // Neither condition met → click.
+  assert.ok(!classifyRightPress(0, 0, 0, dist, time), 'zero movement, zero time → click');
+
+  // Distance exceeded but button released fast (trackpad jitter) → click.
+  assert.ok(
+    !classifyRightPress(dist + 1, 0, time - 1, dist, time),
+    'distance exceeded but duration < threshold → click (jitter case)',
+  );
+  assert.ok(
+    !classifyRightPress(0, dist + 1, time - 1, dist, time),
+    'y-only distance exceeded, short hold → click',
+  );
+
+  // Time exceeded but barely any movement → click (user just held the button).
+  assert.ok(
+    !classifyRightPress(0, 0, time + 100, dist, time),
+    'long hold but no movement → click',
+  );
+
+  // Both conditions met → drag (intentional pane gesture).
+  assert.ok(
+    classifyRightPress(dist + 1, 0, time, dist, time),
+    'distance and time both at/above threshold → drag',
+  );
+  assert.ok(
+    classifyRightPress(0, dist + 1, time + 100, dist, time),
+    'y distance and time both exceeded → drag',
+  );
+  assert.ok(
+    classifyRightPress(4, 4, time + 50, dist, time),
+    'diagonal 5.66px movement with sufficient hold → drag',
+  );
+
+  // Exactly at threshold distance (dragExceeded contract: exactly equal is NOT exceeded).
+  assert.ok(
+    !classifyRightPress(dist, 0, time + 100, dist, time),
+    'exactly at distance threshold, sufficient time → click (strict >)',
+  );
 });

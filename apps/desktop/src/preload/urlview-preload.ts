@@ -28,16 +28,22 @@ const VIEW_MIDDLEDOWN = 'gw:view-middledown';
 // Keep in sync with RIGHT_DRAG_THRESHOLD in ../main/viewutil.ts (and the canvas
 // dragThreshold). dragExceeded's logic is inlined below (can't import here).
 const RIGHT_DRAG_THRESHOLD = 4;
+// Keep in sync with RIGHT_DRAG_TIME_MS in ../main/viewutil.ts.
+// A right-button press must be held for at least this many ms AND exceed the
+// distance threshold before it counts as a pane gesture. A fast trackpad tap
+// that drifts a few pixels past the threshold is still a click, not a drag.
+const RIGHT_DRAG_TIME_MS = 200;
 // MouseEvent.buttons bit for the secondary (right) button.
 const RIGHT_BUTTON_MASK = 2;
 
 // Deferred right-button state. The press point is captured at right-down; the
-// gesture is forwarded only if the cursor drags past the threshold while the
-// right button is still held.
+// gesture is forwarded only if the cursor drags past the threshold AND the
+// button has been held for at least RIGHT_DRAG_TIME_MS.
 let rightDown = false;
 let rightDragged = false;
 let rightStartX = 0;
 let rightStartY = 0;
+let rightDownTime = 0;
 
 // Capture phase at the window: fires before the page's own listeners. screenX/
 // screenY are physical screen pixels — unaffected by the page's zoomFactor —
@@ -52,6 +58,7 @@ window.addEventListener(
       rightDragged = false;
       rightStartX = e.screenX;
       rightStartY = e.screenY;
+      rightDownTime = Date.now();
     } else if (e.button === 1) {
       e.preventDefault();
       e.stopPropagation();
@@ -74,8 +81,16 @@ window.addEventListener(
     if (rightDragged) return;
     const dx = e.screenX - rightStartX;
     const dy = e.screenY - rightStartY;
-    if (dx * dx + dy * dy > RIGHT_DRAG_THRESHOLD * RIGHT_DRAG_THRESHOLD) {
-      // Crossed the threshold → a pane gesture. Forward the ORIGINAL press
+    // Both conditions must hold to count as a drag: distance past the threshold
+    // AND the button held for at least RIGHT_DRAG_TIME_MS. This gates out a fast
+    // trackpad tap that drifts a few pixels (distance exceeded but duration <
+    // threshold) so it still reaches the page's contextmenu handler and produces
+    // the native context menu, instead of being swallowed as a pane gesture.
+    if (
+      dx * dx + dy * dy > RIGHT_DRAG_THRESHOLD * RIGHT_DRAG_THRESHOLD &&
+      Date.now() - rightDownTime >= RIGHT_DRAG_TIME_MS
+    ) {
+      // Crossed both thresholds → a pane gesture. Forward the ORIGINAL press
       // point so main classifies it where the press began; main then parks the
       // view, so the rest of the drag lands on the canvas.
       rightDragged = true;
