@@ -10,6 +10,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/urlnorm"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -636,18 +637,17 @@ func (a *App) syncShellOverlayPosition() {
 			continue
 		}
 		// Inset by the pane border so the overlay sits flush inside
-		// the chrome.
-		ix := r.X + paneBorderPx
-		iy := r.Y + paneBorderPx
-		iw := r.W - 2*paneBorderPx
-		ih := r.H - 2*paneBorderPx
-		if iw < 1 || ih < 1 {
+		// the chrome. Routes through panebox.ContentBox — same path as
+		// the URL live view (url_stream_client.go contentViewBounds) so
+		// both live-tile kinds always use the same inset (LiveViewInsetPx).
+		cb := panebox.ContentBox(r, paneBorderPx)
+		if cb.W < 1 || cb.H < 1 {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
 		style := conn.container.Get("style")
 		style.Set("display", "block")
-		setBoundsPx(style, ix, iy, iw, ih)
+		setBoundsPx(style, cb.X, cb.Y, cb.W, cb.H)
 		// The ascend handle belongs to the focused pane only — same rule the
 		// canvas applies to every other per-pane control (render.go drawPane)
 		// and the live-URL corner control (controlVisible).
