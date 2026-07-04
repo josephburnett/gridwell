@@ -1,18 +1,61 @@
 import { test, expect } from './fixtures';
 
-// Real-stack regression test for the reported bug: a plain right-click on a
-// link inside a live URL tile did nothing (Electron's WebContentsView has no
-// default context menu — webviews.ts must build one). This drives the ACTUAL
-// production path: the real urlview-preload (which must let a plain right-click
-// through), the real `context-menu` handler in webviews.ts, the real template
-// builder, and the real clipboard.
+// Real-stack regression tests for right-click context menus on live URL tiles.
 //
 // The canvas-only harness can't reach a WebContentsView (it's a separate
-// webContents off the main page), so the test runs in the MAIN process via
-// electronApp.evaluate: it places a real live view through the registry that
-// index.ts exposes under GRIDWELL_E2E, sends a genuine right-click into that
-// view's webContents, intercepts Menu.popup, and asserts the menu offers
-// "Copy Link Address" which copies the link's href to the clipboard.
+// webContents off the main page), so the tests run in the MAIN process via
+// electronApp.evaluate: they place a real live view through the registry that
+// index.ts exposes under GRIDWELL_E2E, send genuine mouse events into that
+// view's webContents, intercept Menu.popup, and assert the menu items.
+
+// Shared HTML and locator for both tests: a full-bleed anchor so a click
+// anywhere in the view lands on the link.
+const LINK_MARKER = 'gwe2ectxtarget';
+const LINK_URL = `https://example.com/${LINK_MARKER}?q=1`;
+const LINK_HTML =
+  `<!doctype html><meta charset=utf8>` +
+  `<style>html,body{margin:0;height:100%}a{display:block;width:100vw;height:100vh}</style>` +
+  `<a href="${LINK_URL}">link</a>`;
+const DATA_URL = 'data:text/html,' + encodeURIComponent(LINK_HTML);
+
+// Helper: place a live URL view in the registry, wait for it to load, run fn,
+// then remove it. Runs inside electronApp.evaluate so everything touches the
+// real Electron main process.
+async function withLiveView(
+  reg: any,
+  webContents: any,
+  Menu: any,
+  clipboard: any,
+  paneId: string,
+  dataURL: string,
+  marker: string,
+  fn: (wc: any) => Promise<{ labels: string[]; clipboard: string }>,
+): Promise<{ labels: string[]; clipboard: string }> {
+  await reg.place(paneId, 1, `obj-${paneId}`, dataURL, { x: 0, y: 0, width: 800, height: 600 }, '');
+
+  let wc: any = null;
+  const deadline = Date.now() + 8_000;
+  while (!wc && Date.now() < deadline) {
+    wc = webContents.getAllWebContents().find((w: any) => w.getURL().includes(marker));
+    if (!wc) await new Promise<void>((res) => setTimeout(res, 50));
+  }
+  if (!wc) throw new Error('live view webContents not found');
+  if (wc.isLoadingMainFrame()) {
+    await new Promise<void>((res) => wc.once('did-stop-loading', () => res()));
+  }
+
+  const origPopup = (Menu.prototype as any).popup;
+  let captured: any = null;
+  (Menu.prototype as any).popup = function (this: any) { captured = this; };
+
+  try {
+    return await fn(wc);
+  } finally {
+    (Menu.prototype as any).popup = origPopup;
+    await reg.remove(paneId);
+  }
+}
+
 test('right-clicking a link in a live url view offers Copy Link Address', async ({ electronApp, window }) => {
   // `window` ensures the app finished booting (so the registry is exposed).
   await window.title();
@@ -96,5 +139,98 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
 
   expect(result.labels, 'menu should offer Copy Link Address').toContain('Copy Link Address');
   expect(result.labels, 'menu should offer Open Link').toContain('Open Link');
+  expect(result.clipboard, 'Copy Link Address must copy the link href').toBe(linkURL);
+});
+
+// Regression guard for mechanism B of issue #33: a jittery right-click that
+// moves a few pixels (exceeding the 4 px distance threshold) but is released
+// quickly must still produce the context menu. Before the fix, 5 px of movement
+// — however fast — would arm the pane-gesture path and suppress contextmenu.
+// After the fix the classification requires BOTH distance AND a hold of at least
+// RIGHT_DRAG_TIME_MS (200 ms); a rapid press+mousemove+release has near-zero
+// duration so it still reaches the context-menu handler.
+//
+// Why was this not caught? The original url-context-menu.spec.ts sends a
+// zero-movement right-click (mouseDown + mouseUp at the same coords, no
+// mouseMove) — the 4 px suppression path was never exercised by any test.
+test('a jittery right-click (5px movement, fast release) still produces the context menu', async ({
+  electronApp,
+  window,
+}) => {
+  await window.title();
+
+  const marker = 'gwe2ejitter';
+  const linkURL = `https://example.com/${marker}?q=1`;
+  const html =
+    `<!doctype html><meta charset=utf8>` +
+    `<style>html,body{margin:0;height:100%}a{display:block;width:100vw;height:100vh}</style>` +
+    `<a href="${linkURL}">link</a>`;
+  const dataURL = 'data:text/html,' + encodeURIComponent(html);
+
+  const result = await electronApp.evaluate(
+    async ({ webContents, Menu, clipboard }, args) => {
+      const reg = (globalThis as { __gwRegistry?: any }).__gwRegistry;
+      if (!reg) throw new Error('registry not exposed (GRIDWELL_E2E not set?)');
+
+      await reg.place('e2e-jitter', 1, 'e2e-obj-jitter', args.dataURL, { x: 0, y: 0, width: 800, height: 600 }, '');
+
+      let wc: any = null;
+      const findDeadline = Date.now() + 8_000;
+      while (!wc && Date.now() < findDeadline) {
+        wc = webContents.getAllWebContents().find((w: any) => w.getURL().includes(args.marker));
+        if (!wc) await new Promise<void>((res) => setTimeout(res, 50));
+      }
+      if (!wc) throw new Error('live view webContents not found');
+      if (wc.isLoadingMainFrame()) {
+        await new Promise<void>((res) => wc.once('did-stop-loading', () => res()));
+      }
+
+      const origPopup = Menu.prototype.popup;
+      let captured: any = null;
+      (Menu.prototype as any).popup = function (this: any) {
+        captured = this;
+        return undefined;
+      };
+
+      try {
+        wc.focus();
+        // Right-click WITH 5 px of jitter: exceeds the 4 px distance threshold
+        // but the button is released immediately (events fired in rapid succession
+        // → duration well under 200 ms). Before the fix this would arm the pane
+        // gesture and suppress contextmenu. After the fix the time gate blocks
+        // the drag classification so the menu fires normally.
+        wc.sendInputEvent({ type: 'mouseDown', x: 100, y: 100, button: 'right', clickCount: 1 } as any);
+        // Move 5 px — past the 4 px threshold but fast (same JS task, ~0 ms delta).
+        wc.sendInputEvent({ type: 'mouseMove', x: 105, y: 100, buttons: 2 } as any);
+        wc.sendInputEvent({ type: 'mouseUp', x: 105, y: 100, button: 'right', clickCount: 1 } as any);
+
+        const deadline = Date.now() + 8_000;
+        while (!captured && Date.now() < deadline) {
+          await new Promise<void>((res) => setTimeout(res, 50));
+        }
+        if (!captured)
+          throw new Error(
+            'context menu was not produced for jittery right-click — right-drag may have suppressed contextmenu',
+          );
+
+        const labels: string[] = captured.items.map((i: any) => i.label).filter((l: string) => l);
+
+        clipboard.writeText('');
+        const copyItem = captured.items.find((i: any) => i.label === 'Copy Link Address');
+        if (copyItem && typeof copyItem.click === 'function') copyItem.click();
+
+        return { labels, clipboard: clipboard.readText() };
+      } finally {
+        (Menu.prototype as any).popup = origPopup;
+        await reg.remove('e2e-jitter');
+      }
+    },
+    { dataURL, marker },
+  );
+
+  expect(
+    result.labels,
+    'jittery right-click must still offer Copy Link Address (not be swallowed as a drag)',
+  ).toContain('Copy Link Address');
   expect(result.clipboard, 'Copy Link Address must copy the link href').toBe(linkURL);
 });
