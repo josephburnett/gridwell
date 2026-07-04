@@ -36,7 +36,7 @@ function pluginUUIDs(home: string): string[] {
   const uuids: string[] = [];
   for (const line of src.split('\n')) {
     // YAML line: `  id: <uuid>`
-    const m = line.match(/^\s*id:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*$/i);
+    const m = line.match(/^\s*id:\s*([0-9a-f]{32})\s*$/i);
     if (m) uuids.push(m[1]);
   }
   return uuids;
@@ -132,7 +132,18 @@ export const test = base.extend<Fixtures>({
       args: [`--user-data-dir=${electronDir}`, '.'],
       cwd: DESKTOP_DIR,
       env: {
-        ...process.env,
+        // Strip live-app plugin env vars so they cannot bleed into the test
+        // sidecar's plugin subprocess. GRIDWELL_PLUGIN_CONFIG carries the live
+        // app's DB path; if it reaches the go-plugin Start() call it ends up as
+        // the LAST duplicate in the subprocess env (go-plugin re-appends
+        // os.Environ()) and overrides the fresh per-test config. GRIDWELL_PLUGIN
+        // is a companion var set by go-plugin itself in the live app's tmux
+        // session. Both are reset correctly by the sidecar for each fresh launch.
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(
+            ([k]) => k !== 'GRIDWELL_PLUGIN_CONFIG' && k !== 'GRIDWELL_PLUGIN',
+          ),
+        ),
         GRIDWELL_E2E: '1',
         GRIDWELL_HOME: home,
         GRIDWELL_SIDECAR: path.join(REPO_ROOT, 'gridwell'),
