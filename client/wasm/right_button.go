@@ -251,11 +251,11 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	if !ok {
 		return
 	}
-	prevFocus := a.tree.Focus
-	_ = a.tree.SetFocus(p.ID)
-	if a.tree.Focus != prevFocus {
-		a.refreshFileOverlay()
-	}
+	// focusToPane closes the menu on the de-focused pane (via menu.TransferFocus)
+	// and refreshes the file overlay — the same focus semantics as the canvas
+	// path. Previously this block omitted SyncFocus, leaving the menu stranded on
+	// the old pane after a right-drag over a live URL view changed focus.
+	a.focusToPane(p)
 	a.onRightDown(p, r, sx, sy)
 	a.draw()
 }
@@ -275,6 +275,23 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 	}
 	a.menu.Close()
 	a.ascendPane(p)
+}
+
+// onForwardedLeftDown transfers pane focus when a left-button press originated
+// over a LIVE URL view. The native WebContentsView swallows the canvas's own
+// mousedown, so the view's preload forwards the press here (via main) in canvas
+// coords — without preventing the default, so in-page interaction, selection,
+// and link clicks still reach the page. Only pane focus (and the menu's
+// focused-pane invariant) is managed here, via the shared focusToPane helper.
+func (a *App) onForwardedLeftDown(sx, sy float64) {
+	if a.transition != nil {
+		return
+	}
+	p, _, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		return
+	}
+	a.focusToPane(p)
 }
 
 // onRightMove updates the cursor position and applies live changes.

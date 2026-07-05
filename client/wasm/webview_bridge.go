@@ -202,11 +202,21 @@ func (a *App) installWebviewListeners() {
 		a.onForwardedMiddleDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
+	// A left-button press over a LIVE URL view is a focus-transfer intent; the
+	// native view swallows the canvas's own mousedown, so main forwards it here in
+	// canvas coords. The click was NOT prevented in the preload — in-page
+	// interaction stays with the page — so we only transfer pane focus here.
+	onLeftForward := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
+		return nil
+	})
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
 	g.Call("onControlAscend", onControlAscend)
 	g.Call("onRightForward", onRightForward)
 	g.Call("onMiddleForward", onMiddleForward)
+	g.Call("onLeftForward", onLeftForward)
 	// Listeners live for the lifetime of the app; no Release.
 }
 

@@ -73,6 +73,15 @@ const api = {
     ipcRenderer.on(EV.middleForward, h);
     return () => ipcRenderer.removeListener(EV.middleForward, h);
   },
+  // onLeftForward fires when a left-button press lands on a LIVE URL view; main
+  // relays it here in canvas coords so the renderer can transfer pane focus. The
+  // click is NOT prevented in the preload — in-page interaction stays with the
+  // page. Only the focus transfer runs in the renderer.
+  onLeftForward(cb: (ev: ForwardedRightdown) => void): () => void {
+    const h = (_e: unknown, ev: ForwardedRightdown) => cb(ev);
+    ipcRenderer.on(EV.leftForward, h);
+    return () => ipcRenderer.removeListener(EV.leftForward, h);
+  },
 };
 
 export type GridwellBridge = typeof api;
