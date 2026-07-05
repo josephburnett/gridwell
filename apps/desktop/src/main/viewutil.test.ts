@@ -14,6 +14,10 @@ import {
   sanitizeUserAgent,
   RIGHT_DRAG_THRESHOLD,
   RIGHT_DRAG_TIME_MS,
+  shouldSurfaceFailLoad,
+  failLoadMessage,
+  renderProcessGoneMessage,
+  ERR_ABORTED,
 } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
@@ -171,4 +175,44 @@ test('classifyRightPress requires both distance and time to classify as drag', (
     !classifyRightPress(dist, 0, time + 100, dist, time),
     'exactly at distance threshold, sufficient time → click (strict >)',
   );
+});
+
+// Regression guard for issue #46 point 3: did-fail-load was completely
+// unhandled, so a live URL view could go blank with zero signal. The filter
+// must ignore the two benign cases Chromium fires constantly (a cancelled/
+// superseded navigation, and any subframe failure) while surfacing a genuine
+// main-frame failure.
+test('shouldSurfaceFailLoad ignores aborted navigations and subframe failures', () => {
+  // ERR_ABORTED on the main frame: the page/user cancelled it — not a failure.
+  assert.ok(!shouldSurfaceFailLoad(ERR_ABORTED, true));
+  // A real error code but on a subframe (ad iframe, tracking pixel): benign.
+  assert.ok(!shouldSurfaceFailLoad(-105, false));
+  // ERR_ABORTED on a subframe: still benign (both conditions independently disqualify).
+  assert.ok(!shouldSurfaceFailLoad(ERR_ABORTED, false));
+  // A genuine main-frame failure (e.g. ERR_CONNECTION_REFUSED = -102, or the
+  // unreachable-port case the e2e drives) must surface.
+  assert.ok(shouldSurfaceFailLoad(-102, true));
+  assert.ok(shouldSurfaceFailLoad(-105, true));
+});
+
+test('failLoadMessage includes the failed URL and prefers the description over the raw code', () => {
+  const withDesc = failLoadMessage('http://127.0.0.1:9/', 'ERR_CONNECTION_REFUSED', -102);
+  assert.ok(withDesc.includes('http://127.0.0.1:9/'));
+  assert.ok(withDesc.includes('ERR_CONNECTION_REFUSED'));
+  // Falls back to the numeric code when Chromium gives no description.
+  const noDesc = failLoadMessage('http://x/', '', -102);
+  assert.ok(noDesc.includes('-102'));
+  assert.ok(noDesc.includes('http://x/'));
+});
+
+test('renderProcessGoneMessage includes the url when known, omits it cleanly when not', () => {
+  assert.equal(
+    renderProcessGoneMessage('https://example.com/', 'crashed'),
+    'page crashed (crashed): https://example.com/',
+  );
+  // Best-effort getURL() after a crash can come back empty — no dangling
+  // "page crashed: " with nothing after it.
+  const noURL = renderProcessGoneMessage('', 'crashed');
+  assert.equal(noURL, 'page crashed (crashed)');
+  assert.ok(!noURL.endsWith(': '));
 });

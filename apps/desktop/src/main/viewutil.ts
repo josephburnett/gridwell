@@ -133,3 +133,38 @@ export function classifyRightPress(
 export function controlVisible(hidden: boolean, focused: boolean): boolean {
   return !hidden && focused;
 }
+
+// ERR_ABORTED is Chromium's net error code for a navigation the page/user
+// itself cancelled (a redirect superseded by another navigation, window.stop(),
+// a same-document replace) — not a genuine failure. did-fail-load fires for
+// this constantly during ordinary navigation, so it must never surface.
+export const ERR_ABORTED = -3;
+
+// shouldSurfaceFailLoad decides whether a WebContents `did-fail-load` event is
+// a genuine, user-visible navigation failure (issue #46 point 3: the event was
+// unhandled entirely, so a live URL view could go blank with zero signal).
+// Two benign cases must NOT surface: ERR_ABORTED (any cancelled/superseded
+// navigation) and any subframe failure (isMainFrame false — an ad iframe or
+// tracking pixel failing is not "the page failed to load"). Pure so the filter
+// is pinned by a test rather than only observable by loading pages in the live
+// app.
+export function shouldSurfaceFailLoad(errorCode: number, isMainFrame: boolean): boolean {
+  return isMainFrame && errorCode !== ERR_ABORTED;
+}
+
+// failLoadMessage formats the notice text for a genuine main-frame load
+// failure, including the URL that failed so the user knows which tile/address
+// is affected.
+export function failLoadMessage(validatedURL: string, errorDescription: string, errorCode: number): string {
+  const reason = errorDescription || `error ${errorCode}`;
+  return `page failed to load (${reason}): ${validatedURL}`;
+}
+
+// renderProcessGoneMessage formats the notice text for a live view whose
+// renderer process crashed (`render-process-gone`), which — like did-fail-load
+// — was previously unhandled anywhere (issue #46 point 3): the view just went
+// blank. url may be unavailable post-crash (best-effort read), in which case
+// it's omitted rather than shown as an empty pair of colons.
+export function renderProcessGoneMessage(url: string, reason: string): string {
+  return url ? `page crashed (${reason}): ${url}` : `page crashed (${reason})`;
+}

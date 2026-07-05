@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session } from 'electron';
 import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent } from './ipc';
+import type { Bounds, FreezeResult, NavEvent, ErrorEvent } from './ipc';
 import {
   SESSION_PARTITION,
   partitionFor,
@@ -11,6 +11,9 @@ import {
   controlBounds,
   parkedBounds,
   minWidthZoomFactor,
+  shouldSurfaceFailLoad,
+  failLoadMessage,
+  renderProcessGoneMessage,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
@@ -80,6 +83,13 @@ export interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation (URL/title change),
   // so the renderer can update the cached tile address.
   onNav?: (ev: NavEvent) => void;
+  // onError fires for every webview/session failure the registry detects —
+  // did-fail-load, render-process-gone, a crash during remove(), a session
+  // hydrate/dehydrate failure. index.ts wires this to sendError(rootWC, ...),
+  // which is the ONE path onto EV.error (issue #46). The registry itself
+  // stays free of IPC knowledge — it only reports; index.ts decides how the
+  // report reaches the renderer.
+  onError?: (ev: ErrorEvent) => void;
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
@@ -216,7 +226,9 @@ export class WebviewRegistry {
     // for it loads, so url tiles open already logged in. Once per partition.
     if (pluginUuid && !this.hydrated.has(partition)) {
       this.hydrated.add(partition);
-      await hydratePartition(this.origin, pluginUuid);
+      await hydratePartition(this.origin, pluginUuid, (message) =>
+        this.cb.onError?.({ source: 'electron:session', message }),
+      );
     }
 
     if (!e) {
@@ -407,10 +419,24 @@ export class WebviewRegistry {
       e.view.webContents.session.flushStorageData();
       // Capture the plugin's session back to its DB (the system of record) on
       // ascent — fire-and-forget so teardown isn't blocked on the network.
-      void dehydratePartition(this.origin, e.pluginUuid);
+      void dehydratePartition(this.origin, e.pluginUuid, (message) =>
+        this.cb.onError?.({ source: 'electron:session', message }),
+      );
       jpegBase64 = await captureJpegBase64(e.view);
     } catch {
-      // Best-effort: a crashed/destroyed view yields an empty freeze.
+      // Best-effort: a crashed/destroyed view yields an empty freeze. This is
+      // audited issue #46 point 5 — VERIFIED, not assumed: the wasm-side guard
+      // (bridgeRemove in client/wasm/url_stream_client.go: `if len(jpeg)>0 ||
+      // url!="" || title!=""`) already skips SetURLState entirely when all
+      // three come back empty, so an empty freeze here does NOT overwrite a
+      // good preview with a blank one — the audit's speculative "crash blanks
+      // the preview" failure mode does not exist in this code. What DOES need
+      // to surface is the crash itself, so the user knows why the tile fell
+      // back to its last good preview instead of the page just "disappearing".
+      this.cb.onError?.({
+        source: 'electron:webview',
+        message: 'view crashed while closing — preview not updated',
+      });
     } finally {
       // Detach + free the view no matter what the capture did. This MUST
       // run even if the capture above threw or timed out: the renderer has
@@ -478,6 +504,39 @@ export class WebviewRegistry {
     // zoomFactor resets across (cross-origin) navigations — re-apply the
     // min-width zoom once the new document has loaded.
     e.view.webContents.on('did-finish-load', () => this.applyMinWidthZoom(e));
+
+    // did-fail-load was previously unhandled entirely (issue #46 point 3): a
+    // live URL view could go blank with zero signal to the user. Chromium also
+    // fires this constantly for benign reasons — shouldSurfaceFailLoad filters
+    // those out (a cancelled/superseded navigation, and any subframe failure)
+    // so only a genuine main-frame failure reaches the user.
+    e.view.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        if (!shouldSurfaceFailLoad(errorCode, isMainFrame)) return;
+        this.cb.onError?.({
+          source: 'electron:webview',
+          message: failLoadMessage(validatedURL, errorDescription, errorCode),
+        });
+      },
+    );
+
+    // render-process-gone (the renderer process crashed, e.g. an OOM or a GPU
+    // crash) was also unhandled anywhere (issue #46 point 3) — the view just
+    // sat blank. getURL() after a crash is best-effort; a throw here must not
+    // stop the notice from being reported.
+    e.view.webContents.on('render-process-gone', (_event, details) => {
+      let url = '';
+      try {
+        url = e.view.webContents.getURL();
+      } catch {
+        // best-effort; renderProcessGoneMessage handles an empty url cleanly
+      }
+      this.cb.onError?.({
+        source: 'electron:webview',
+        message: renderProcessGoneMessage(url, details.reason),
+      });
+    });
   }
 }
 
