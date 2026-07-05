@@ -463,9 +463,11 @@ func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Req
 //
 // Failures surface and heal rather than silently ending a plugin's events for
 // the life of the client stream: an Info or Subscribe failure is logged with
-// the plugin uuid, and each fan-in goroutine re-dials with backoff while the
-// client stream lives — so a plugin that crashes and restarts resumes
-// delivering events without the client reconnecting.
+// the plugin uuid, and watchPlugin re-dials (Info) / fanInEvents re-dials
+// (the event stream) with backoff while the client stream lives — so a plugin
+// that crashes and restarts resumes delivering events without the client
+// reconnecting, AND the client is told about the outage and the recovery via
+// an EventPluginHealth (issue #47) instead of tiles just quietly going stale.
 func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -476,15 +478,7 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 		if !ok {
 			continue
 		}
-		info, err := h.srv.pluginInfo(subCtx, p.UUID)
-		if err != nil {
-			log.Printf("gridwell: subscribe: info %s (%s): %v — no event fan-in for this plugin", p.UUID, p.Kind, err)
-			continue
-		}
-		if !info.Watch {
-			continue
-		}
-		go fanInEvents(subCtx, p.UUID, c, events)
+		go watchPlugin(subCtx, p.UUID, c, h.srv, events)
 	}
 
 	for {
@@ -499,13 +493,62 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 	}
 }
 
+// watchPlugin resolves whether plugin uuid supports live events (Info.watch)
+// and, if so, hands off to fanInEvents for the life of ctx. The Info fetch is
+// retried with the same backoff fanInEvents itself uses for a dead stream —
+// previously a single failed Info at Subscribe time did `continue`, which
+// PERMANENTLY excluded the plugin's fan-in for the life of the client stream
+// (a plugin that was merely slow to start on server boot, or briefly
+// unreachable, silently never got its events fanned in even after it came
+// up). Emits the down/recovery EventPluginHealth transition itself when the
+// failure is at this Info stage; once Info succeeds and Watch is true,
+// fanInEvents owns the health state for the rest of ctx's life (a plugin
+// capability doesn't flip false again — only its stream can go down).
+func watchPlugin(ctx context.Context, uuid string, client pb.GridwellClient, srv *Server, events chan<- *pb.Event) {
+	backoff := time.Second
+	healthy := true // assume healthy until the first failure
+	for {
+		info, err := srv.pluginInfo(ctx, uuid)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("gridwell: subscribe: info %s: %v — retrying fan-in in %v", uuid, err, backoff)
+			if healthy {
+				healthy = false
+				reportHealth(ctx, events, uuid, false, err.Error())
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < 30*time.Second {
+				backoff *= 2
+			}
+			continue
+		}
+		if !info.Watch {
+			return // this plugin kind doesn't emit events (fs/proc) — nothing to fan in, not a failure
+		}
+		if !healthy {
+			reportHealth(ctx, events, uuid, true, "")
+		}
+		fanInEvents(ctx, uuid, client, events) // owns health from here; returns only when ctx ends
+		return
+	}
+}
+
 // fanInEvents relays one plugin's Subscribe stream into events until ctx ends,
 // re-dialing with exponential backoff (1s..30s) after any stream failure so a
 // plugin restart resumes its events. Failures are logged, never swallowed —
 // a plugin whose events silently stop presents to the user as "tiles stopped
-// updating" with no evidence (the silent-disappearance class).
+// updating" with no evidence (the silent-disappearance class) — and reported
+// as an EventPluginHealth transition (down on first failure, up on recovery;
+// not once per retry attempt, so a flapping plugin doesn't spam the client).
 func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, events chan<- *pb.Event) {
 	backoff := time.Second
+	healthy := true // caller (watchPlugin) already reported recovery if it was ever down
 	for {
 		ps, err := client.Subscribe(ctx, &pb.SubscribeRequest{})
 		if err != nil {
@@ -513,7 +556,15 @@ func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, eve
 				return
 			}
 			log.Printf("gridwell: subscribe: plugin %s stream open failed: %v (retrying in %v)", uuid, err, backoff)
+			if healthy {
+				healthy = false
+				reportHealth(ctx, events, uuid, false, err.Error())
+			}
 		} else {
+			if !healthy {
+				healthy = true
+				reportHealth(ctx, events, uuid, true, "")
+			}
 			backoff = time.Second // healthy stream: reset for the next outage
 			for {
 				ev, rerr := ps.Recv()
@@ -522,6 +573,10 @@ func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, eve
 						return
 					}
 					log.Printf("gridwell: subscribe: plugin %s stream ended: %v (retrying in %v)", uuid, rerr, backoff)
+					if healthy {
+						healthy = false
+						reportHealth(ctx, events, uuid, false, rerr.Error())
+					}
 					break
 				}
 				select {
@@ -539,6 +594,21 @@ func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, eve
 		if backoff < 30*time.Second {
 			backoff *= 2
 		}
+	}
+}
+
+// reportHealth pushes an EventPluginHealth into the fan-in channel, the same
+// path a plugin's own re-qualified events take. Best-effort against ctx
+// ending mid-send (the client stream is closing anyway in that case).
+func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, healthy bool, detail string) {
+	ev := &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		PluginUuid: uuid,
+		Healthy:    healthy,
+		Detail:     detail,
+	}}}
+	select {
+	case events <- ev:
+	case <-ctx.Done():
 	}
 }
 
