@@ -1,11 +1,12 @@
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, makeNavForwarder, sendFrame } from './register';
+import { registerWebviewIpc, makeNavForwarder, sendFrame, sendError } from './register';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent } from './viewutil';
 import { applyUserDataOverride } from './userdata';
+import { sidecarExitMessage } from './sidecar-messages';
 
 // Belt: redirect Electron's userData (and, for Electron ≥28, sessionData) to a
 // per-run private directory when GRIDWELL_HOME is set.
@@ -36,6 +37,11 @@ const MIRROR_INTERVAL_MS = 250;
 let sidecar: Sidecar | null = null;
 let registry: WebviewRegistry | null = null;
 let pump: MirrorPump | null = null;
+// quitting guards the post-boot sidecar exit listener below: before-quit
+// stops the sidecar itself (SIGTERM), and that expected exit must not surface
+// as a "backend crashed, restart the app" notice while the window is already
+// closing.
+let quitting = false;
 
 async function boot(): Promise<void> {
   // Drop the Electron/app tokens from the default UA before any view loads, so
@@ -45,15 +51,40 @@ async function boot(): Promise<void> {
   try {
     sidecar = await startSidecar();
   } catch (err) {
+    // No renderer exists yet at this point (the window is created below, only
+    // after the sidecar is up), so there is nowhere to draw a notice-strip
+    // error into. dialog.showErrorBox is the one surface available before
+    // boot — previously this was console.error + a silent app.exit(1), so a
+    // boot failure (missing binary, bad server.yaml, port in use) made the
+    // app vanish with zero explanation (issue #46 point 2).
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[gridwell] sidecar failed to start:', err);
+    dialog.showErrorBox('Gridwell failed to start', message);
     app.exit(1);
     return;
   }
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;
-  const reg = new WebviewRegistry(win, sidecar.origin, { onNav: makeNavForwarder(rootWC) });
+  const reg = new WebviewRegistry(win, sidecar.origin, {
+    onNav: makeNavForwarder(rootWC),
+    onError: (ev) => sendError(rootWC, ev.source, ev.message),
+  });
   registry = reg;
   registerWebviewIpc(reg, rootWC, win);
+
+  // A PERSISTENT post-boot exit watch (issue #46 point 1): startSidecar's own
+  // `child.once('exit', ...)` listener only rejects the boot promise BEFORE it
+  // settles — once resolved, that listener still fires on the real exit but
+  // no-ops (its `settled` guard), so a crash after boot was completely
+  // unobserved and the app became a zombie (window open, backend gone, every
+  // RPC hanging/failing with no explanation). This listener is independent
+  // (child_process fires 'exit' to every registered listener, not just one),
+  // so it sees the same event and reports it — unless we're already quitting,
+  // in which case the exit is expected (our own SIGTERM in before-quit).
+  sidecar.child.on('exit', (code, signal) => {
+    if (quitting) return;
+    sendError(rootWC, 'electron:backend', sidecarExitMessage(code, signal));
+  });
 
   // Under the e2e harness only (GRIDWELL_E2E=1), expose the registry so a
   // Playwright spec running in the main process can place a real live URL view
@@ -92,6 +123,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  quitting = true;
   if (pump) {
     pump.stop();
     pump = null;

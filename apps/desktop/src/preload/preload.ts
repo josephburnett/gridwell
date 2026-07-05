@@ -14,6 +14,7 @@ import {
   FrameEvent,
   NavEvent,
   ForwardedRightdown,
+  ErrorEvent,
 } from '../main/ipc';
 
 const api = {
@@ -81,6 +82,14 @@ const api = {
     const h = (_e: unknown, ev: ForwardedRightdown) => cb(ev);
     ipcRenderer.on(EV.leftForward, h);
     return () => ipcRenderer.removeListener(EV.leftForward, h);
+  },
+  // onError fires for every main-process failure that must reach the user
+  // (webview lifecycle, session hydrate/dehydrate, sidecar boot/exit) — the
+  // one channel the wasm client feeds into its error surface.
+  onError(cb: (ev: ErrorEvent) => void): () => void {
+    const h = (_e: unknown, ev: ErrorEvent) => cb(ev);
+    ipcRenderer.on(EV.error, h);
+    return () => ipcRenderer.removeListener(EV.error, h);
   },
 };
 

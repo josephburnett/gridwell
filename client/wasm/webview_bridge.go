@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"syscall/js"
+
+	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
 // webview_bridge.go is the wasm-side door to the Electron main process's
@@ -211,12 +213,24 @@ func (a *App) installWebviewListeners() {
 		a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
+	// The Electron main process reports every webview/session/sidecar failure
+	// it detects (issue #46) over this one channel; feed it straight into the
+	// same error surface every other failure path uses (a.reportErr) — one
+	// owner, whether the failure originated in wasm or in the native host.
+	onError := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		source := jsString(ev.Get("source"))
+		message := jsString(ev.Get("message"))
+		a.reportErr(errsurface.Error, source, message)
+		return nil
+	})
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
 	g.Call("onControlAscend", onControlAscend)
 	g.Call("onRightForward", onRightForward)
 	g.Call("onMiddleForward", onMiddleForward)
 	g.Call("onLeftForward", onLeftForward)
+	g.Call("onError", onError)
 	// Listeners live for the lifetime of the app; no Release.
 }
 

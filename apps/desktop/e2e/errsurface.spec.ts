@@ -96,3 +96,39 @@ test('a rejected text save surfaces and reconciles instead of lingering as saved
   expect(body).toContain('saved-content');
   expect(body).not.toContain('rejected-suffix');
 });
+
+// Crosses the Electron main-process error seam (issue #46): a live URL tile's
+// did-fail-load was previously unhandled ANYWHERE — the native WebContentsView
+// just sat blank with zero signal to the user. This descends into a real
+// (unreachable) address, so the real Electron layer fires a real net error on
+// the real WebContentsView, which must reach the wasm errsurface over gw:error
+// attributed to 'electron:webview' — not an rpc: source, since no RPC is
+// involved at all.
+test('an unreachable live URL tile surfaces a did-fail-load notice from the Electron layer', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+
+  // The ephemeral-visit modal (clicking, not dragging, the url palette swatch)
+  // descends straight into a live url tile — see ephemeral-url.spec.ts. Port 9
+  // ("discard") has nothing listening on a normal machine, so Chromium's
+  // connection attempt is refused immediately (ERR_CONNECTION_REFUSED) rather
+  // than hanging on a timeout.
+  await gw.clickPaletteSwatch('url');
+  await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+  await window.fill('#gw-url-input', 'http://127.0.0.1:9/');
+  await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
+  await gw.waitIdle();
+
+  await expect
+    .poll(async () => {
+      const e = await errors(window);
+      return e.notices.find((n: any) => n.source === 'electron:webview')?.severity ?? null;
+    }, { timeout: 15_000 })
+    .toBe('error');
+
+  const e = await errors(window);
+  const notice = e.notices.find((n: any) => n.source === 'electron:webview');
+  expect(notice.message).toContain('127.0.0.1:9');
+});

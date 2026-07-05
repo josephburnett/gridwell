@@ -12,8 +12,19 @@ import {
   FreezeResult,
   ViewRightdown,
   ForwardedRightdown,
+  ErrorEvent,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
+
+// safeSend is the one guard every main→renderer push goes through: the
+// window can close mid-flight (quit, crash, boot failure racing teardown),
+// and calling .send on a destroyed WebContents throws. One owner instead of
+// each call site repeating its own isDestroyed() check (charter §8 — this
+// used to be duplicated three times across makeNavForwarder/sendFrame/the
+// control-click handler; sendError below would have made a fourth).
+function safeSend(wc: WebContents, channel: string, payload: unknown): void {
+  if (!wc.isDestroyed()) wc.send(channel, payload);
+}
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the
 // registry. Call once after the root window is created. rootWC is the
@@ -32,8 +43,8 @@ export function registerWebviewIpc(
     if (!paneId) return;
     if (button === 0) {
       registry.goBack(paneId);
-    } else if (!rootWC.isDestroyed()) {
-      rootWC.send(EV.controlAscend, { paneId });
+    } else {
+      safeSend(rootWC, EV.controlAscend, { paneId });
     }
   });
 
@@ -43,18 +54,16 @@ export function registerWebviewIpc(
   // renderer/canvas coords, then relay to the renderer (which starts the
   // gesture and parks the view so the rest of the drag lands on the canvas).
   ipcMain.on(VIEW.rightdown, (_event, p: ViewRightdown): void => {
-    if (rootWC.isDestroyed()) return;
     const cb = win.getContentBounds();
-    rootWC.send(EV.rightForward, { x: p.sx - cb.x, y: p.sy - cb.y });
+    safeSend(rootWC, EV.rightForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
   // A middle-button press over a live URL view is the ascend gesture; the
   // native view swallows it, so its preload forwards it here. Relay to the
   // renderer in canvas coords, where it resolves the pane and ascends.
   ipcMain.on(VIEW.middledown, (_event, p: ViewRightdown): void => {
-    if (rootWC.isDestroyed()) return;
     const cb = win.getContentBounds();
-    rootWC.send(EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
+    safeSend(rootWC, EV.middleForward, { x: p.sx - cb.x, y: p.sy - cb.y });
   });
 
   // A left-button press over a live URL view is a focus-transfer intent; the
@@ -62,10 +71,9 @@ export function registerWebviewIpc(
   // forwards a (non-suppressed) left-down here. Relay to the renderer in canvas
   // coords so it can call focusToPane without breaking in-page interaction.
   ipcMain.on(VIEW.leftdown, (_event, p: ViewRightdown): void => {
-    if (rootWC.isDestroyed()) return;
     const cb = win.getContentBounds();
     const fwd: ForwardedRightdown = { x: p.sx - cb.x, y: p.sy - cb.y };
-    rootWC.send(EV.leftForward, fwd);
+    safeSend(rootWC, EV.leftForward, fwd);
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
@@ -97,13 +105,20 @@ export function registerWebviewIpc(
 // to the renderer over EV.nav.
 export function makeNavForwarder(rootWC: WebContents) {
   return (ev: { paneId: string; tileId: number; url: string; title: string }) => {
-    if (!rootWC.isDestroyed()) rootWC.send(EV.nav, ev);
+    safeSend(rootWC, EV.nav, ev);
   };
 }
 
 // sendFrame ships a mirror/capture frame to the renderer.
 export function sendFrame(rootWC: WebContents, paneId: string, tileId: number, jpegBase64: string): void {
-  if (jpegBase64 && !rootWC.isDestroyed()) {
-    rootWC.send(EV.frame, { paneId, tileId, jpegBase64 });
-  }
+  if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 });
+}
+
+// sendError is the ONE main-process entry point onto EV.error (issue #46):
+// every failure site — webview lifecycle, session hydrate/dehydrate, sidecar
+// boot/exit — calls this instead of console.error-and-return, so the wasm
+// errsurface (client/errsurface) is the single place failures become visible.
+export function sendError(rootWC: WebContents, source: string, message: string): void {
+  const ev: ErrorEvent = { source, message };
+  safeSend(rootWC, EV.error, ev);
 }

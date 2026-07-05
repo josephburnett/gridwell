@@ -49,6 +49,10 @@ export const EV = {
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
+  error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
+                      // (webview, session, sidecar) that must reach the user.
+                      // Charter §1/§6: one owner, no second "silent" path for
+                      // a main-process failure.
 } as const;
 
 // ViewRightdown carries the press in physical screen coordinates
@@ -125,4 +129,15 @@ export interface NavEvent {
   tileId: number;
   url: string;
   title: string;
+}
+
+// ErrorEvent is the one payload shape for EV.error: every main-process
+// failure site (webview lifecycle, session hydrate/dehydrate, sidecar boot/
+// exit) reports through this same wire, never a bespoke one. `source` is a
+// stable key the wasm errsurface groups notices by (one row per source — see
+// client/errsurface): 'electron:webview' | 'electron:session' |
+// 'electron:backend'. `message` is the human-readable text shown verbatim.
+export interface ErrorEvent {
+  source: string;
+  message: string;
 }
