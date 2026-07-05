@@ -87,13 +87,15 @@ func TestTilesSliceProto(t *testing.T) {
 	}
 }
 
-// TestEventProtoRoundTrip covers all three event kinds through the proto oneof
+// TestEventProtoRoundTrip covers all four event kinds through the proto oneof
 // and back — the discriminator + the one populated payload must survive.
 func TestEventProtoRoundTrip(t *testing.T) {
 	cases := []Event{
 		{Kind: EventGridChanged, GridChanged: &GridChanged{GridID: "g-1"}},
 		{Kind: EventTileChanged, TileChanged: &TileChanged{Tile: *fullTile()}},
 		{Kind: EventTileRemoved, TileRemoved: &TileRemoved{GridID: "g-2", TileID: "t-3"}},
+		{Kind: EventPluginHealth, PluginHealth: &PluginHealth{PluginUUID: "u-1", Healthy: false, Detail: "dial tcp: connection refused"}},
+		{Kind: EventPluginHealth, PluginHealth: &PluginHealth{PluginUUID: "u-1", Healthy: true}},
 	}
 	for _, in := range cases {
 		got := EventFromProto(EventToProto(in))

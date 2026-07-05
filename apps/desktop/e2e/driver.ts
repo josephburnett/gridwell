@@ -54,6 +54,11 @@ export interface LauncherTile {
   uuid: string;
   rootGridID: string;
   scratchGridID: string;
+  // infoError/status are the client/pluginhealth classification (issue #47):
+  // status is "enterable" | "broken" | "rootless"; infoError is the server's
+  // Info-failure text, set only when status is "broken".
+  infoError: string;
+  status: string;
   x: number;
   y: number;
 }

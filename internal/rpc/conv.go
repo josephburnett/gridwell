@@ -156,6 +156,12 @@ func EventToProto(e Event) *pb.Event {
 		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: TileToProto(&e.TileChanged.Tile)}}}
 	case EventTileRemoved:
 		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: e.TileRemoved.GridID, TileId: e.TileRemoved.TileID}}}
+	case EventPluginHealth:
+		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+			PluginUuid: e.PluginHealth.PluginUUID,
+			Healthy:    e.PluginHealth.Healthy,
+			Detail:     e.PluginHealth.Detail,
+		}}}
 	}
 	return &pb.Event{}
 }
@@ -176,6 +182,12 @@ func EventFromProto(e *pb.Event) Event {
 		return Event{Kind: EventTileChanged, TileChanged: &TileChanged{Tile: *tile}}
 	case *pb.Event_TileRemoved:
 		return Event{Kind: EventTileRemoved, TileRemoved: &TileRemoved{GridID: p.TileRemoved.GridId, TileID: p.TileRemoved.TileId}}
+	case *pb.Event_PluginHealth:
+		return Event{Kind: EventPluginHealth, PluginHealth: &PluginHealth{
+			PluginUUID: p.PluginHealth.PluginUuid,
+			Healthy:    p.PluginHealth.Healthy,
+			Detail:     p.PluginHealth.Detail,
+		}}
 	}
 	return Event{}
 }
