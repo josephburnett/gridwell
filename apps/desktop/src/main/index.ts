@@ -5,6 +5,19 @@ import { WebviewRegistry } from './webviews';
 import { registerWebviewIpc, makeNavForwarder, sendFrame } from './register';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent } from './viewutil';
+import { applyUserDataOverride } from './userdata';
+
+// Belt: redirect Electron's userData (and, for Electron ≥28, sessionData) to a
+// per-run private directory when GRIDWELL_HOME is set.
+//
+// The e2e fixture ALSO passes --user-data-dir=<home>/electron as a Chromium
+// command-line switch (fixtures.ts), which is more reliable under Playwright's
+// loader.js interception of app.isReady. This call is the fallback for any
+// non-Playwright launch where GRIDWELL_HOME is set without the CLI flag.
+//
+// When GRIDWELL_HOME is absent (normal user launch) this is a no-op and
+// Electron keeps its default ~/.config/gridwell-desktop profile.
+applyUserDataOverride((name, value) => app.setPath(name as Parameters<typeof app.setPath>[0], value), process.env);
 
 // MIRROR_INTERVAL_MS is how often live views are captured and their frames
 // pushed to the renderer so OTHER panes showing the same tile mirror live
@@ -46,10 +59,12 @@ async function boot(): Promise<void> {
   // Playwright spec running in the main process can place a real live URL view
   // and drive the native context-menu path. The canvas-only harness can't reach
   // a WebContentsView (it's a separate webContents off the main page), so this
-  // is the seam that lets the right-click-menu fix be tested end to end. Inert
-  // in every normal launch — mirrors the renderer's ?e2e=1 hook gate.
+  // is the seam that lets the right-click-menu fix be tested end to end.
+  // __gwSidecarPid lets the fixture assert the sidecar exited after app.close().
+  // Both are inert in every normal launch — mirrors the renderer's ?e2e=1 gate.
   if (process.env.GRIDWELL_E2E === '1') {
-    (globalThis as { __gwRegistry?: WebviewRegistry }).__gwRegistry = reg;
+    (globalThis as { __gwRegistry?: WebviewRegistry; __gwSidecarPid?: number }).__gwRegistry = reg;
+    (globalThis as { __gwSidecarPid?: number }).__gwSidecarPid = sidecar.child.pid;
   }
 
   // Mirror live views to other panes: capture each live view on a modest
