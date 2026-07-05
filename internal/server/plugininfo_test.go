@@ -103,6 +103,38 @@ func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 	}
 }
 
+// TestBuildPluginInfo_RootViewForwardedFromInfo pins the launcher↔plugin-root
+// seam (issue #32): the server must forward Info.root_view_* into PluginInfo
+// so the client's ListPlugins response carries the framing needed to seed
+// enterPlugin. Zero (never visited) must pass through too — the client
+// distinguishes it from an explicit user view.
+func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
+	got := buildPluginInfo("uuid-1", "localdb", "Home", &pb.InfoResponse{
+		RootGridId:   "7",
+		RootViewCx:   3.5,
+		RootViewCy:   -2.25,
+		RootViewZoom: 1.75,
+	})
+	if got.RootViewCx != 3.5 {
+		t.Errorf("RootViewCx = %v, want 3.5", got.RootViewCx)
+	}
+	if got.RootViewCy != -2.25 {
+		t.Errorf("RootViewCy = %v, want -2.25", got.RootViewCy)
+	}
+	if got.RootViewZoom != 1.75 {
+		t.Errorf("RootViewZoom = %v, want 1.75", got.RootViewZoom)
+	}
+
+	// Zero (never visited) passes through unchanged.
+	zero := buildPluginInfo("u", "localdb", "X", &pb.InfoResponse{
+		RootGridId:   "1",
+		RootViewZoom: 0,
+	})
+	if zero.RootViewZoom != 0 {
+		t.Errorf("RootViewZoom (never visited) = %v, want 0", zero.RootViewZoom)
+	}
+}
+
 // countingInfoPlugin is a minimal plugin that counts Info calls and can fail
 // the first one — the seam for the Info cache tests.
 type countingInfoPlugin struct {

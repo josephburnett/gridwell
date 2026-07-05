@@ -135,7 +135,11 @@ func (s *Store) bootstrapRoot(ctx context.Context) error {
 			{systemKeyRootGridID, strconv.FormatInt(id, 10)},
 			{systemKeyRootViewCx, "0"},
 			{systemKeyRootViewCy, "0"},
-			{systemKeyRootZoom, "1"},
+			// zoom=0 signals "never visited": the client substitutes the default
+			// calibrated zoom (DefaultWellViewZoom) on enterPlugin, preserving the
+			// legacy overview entry for fresh plugins. A non-zero value means the
+			// user explicitly positioned the view (written by SetRootView on ascent).
+			{systemKeyRootZoom, "0"},
 			{systemKeyPluginUUID, s.newID()},
 		}
 		for _, kv := range seeds {

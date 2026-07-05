@@ -234,6 +234,13 @@ type PluginInfo struct {
 	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral
 	// url tiles in ("descend into a url"); "" if the plugin has none.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
+	// RootViewCx/Cy/Zoom is the plugin root grid's last-saved viewport from
+	// the Info handshake (center in world cell coords, live zoom). Zero means
+	// "never visited"; the client substitutes the default calibrated zoom.
+	// Filled by localdb from its system KV table; zero for fs/proc.
+	RootViewCx   float64 `json:"root_view_cx,omitempty"`
+	RootViewCy   float64 `json:"root_view_cy,omitempty"`
+	RootViewZoom float64 `json:"root_view_zoom,omitempty"`
 }
 
 // CreateWellRequest is a typed create. On the wire every create is a single
@@ -363,12 +370,15 @@ type ShellSessionAliveResponse struct {
 	Alive bool `json:"alive"`
 }
 
-// SetRootViewRequest is the localdb store's root-framing setter (not on the
-// wire — the rootless model has no app root; kept as internal store API).
+// SetRootViewRequest persists the plugin root-grid framing. RootGridID
+// (a qualified "<plugin-uuid>/<id>") routes the call on the wire; the store
+// uses only Cx/Cy/Zoom (the qualified prefix has been stripped by the time the
+// store sees it). Framing only — never bumps a content version.
 type SetRootViewRequest struct {
-	Cx   float64 `json:"cx"`
-	Cy   float64 `json:"cy"`
-	Zoom float64 `json:"zoom"`
+	RootGridID string  `json:"root_grid_id,omitempty"` // wire routing; stripped at store
+	Cx         float64 `json:"cx"`
+	Cy         float64 `json:"cy"`
+	Zoom       float64 `json:"zoom"`
 }
 
 // SetURLStateRequest freezes a live URL tile (preview JPEG + address +

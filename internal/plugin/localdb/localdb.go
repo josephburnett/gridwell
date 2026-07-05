@@ -60,13 +60,20 @@ func (p *Plugin) Close() error { return p.st.Close() }
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 // Info is the whole handshake: identity plus the default root grid (localdb's
-// singleton root). No Attach/Detach — the gRPC connection is the lifecycle.
+// singleton root) and the root viewport. No Attach/Detach — the gRPC
+// connection is the lifecycle.
 func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	id, err := p.st.RootGridID(ctx)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
 	scratch, err := p.st.ScratchGridID(ctx)
+	if err != nil {
+		return nil, errToStatus(err)
+	}
+	// Root viewport: seed the client's enterPlugin framing so re-entry
+	// restores the left-off view.  Zero on a fresh DB (never visited).
+	cx, cy, zoom, err := p.st.RootView(ctx)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
@@ -79,9 +86,26 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		HasSession:    true,
 		// Capabilities the server reads from this handshake (never from the
 		// kind string): localdb emits change events and accepts creates.
-		Watch:    true,
-		Writable: true,
+		Watch:        true,
+		Writable:     true,
+		RootViewCx:   cx,
+		RootViewCy:   cy,
+		RootViewZoom: zoom,
 	}, nil
+}
+
+// SetRootView persists the plugin root-grid framing. Framing only — never
+// bumps a content version; mirrors SetTile for a well but for the plugin root
+// which has no tile row. Routed by the server via root_grid_id.
+func (p *Plugin) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
+	if err := p.st.SetRootView(ctx, &rpc.SetRootViewRequest{
+		Cx:   req.Cx,
+		Cy:   req.Cy,
+		Zoom: req.Zoom,
+	}); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &gridwellv1.SetRootViewResponse{}, nil
 }
 
 func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {

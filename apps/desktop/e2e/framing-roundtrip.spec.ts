@@ -11,6 +11,12 @@ import { test, expect } from './fixtures';
 // Both tests drive the real app and read framing from the panes() hook (the live
 // viewport the user sees), so they catch a desync between the live pane, the
 // saved ascent state, and the server-persisted well view_*.
+//
+// The plugin-root viewport tests (I7-portal) lock invariant I7 at the
+// launcher↔plugin-root seam: enter a plugin, pan/zoom its root grid, ascend to
+// the launcher, re-enter — the viewport must be exactly as left.  This seam
+// was previously untested (framing-roundtrip only covered wells inside a
+// plugin) and was broken: every re-entry reset to the default calibrated zoom.
 
 test('re-descending a reframed well returns to exactly what you left', async ({ gw }) => {
   await gw.enterPlugin('localdb');
@@ -40,6 +46,34 @@ test('re-descending a reframed well returns to exactly what you left', async ({ 
   expect(back.zoom, 'zoom round-tripped').toBeCloseTo(left.zoom, 1);
   expect(back.cx, 'center x round-tripped').toBeCloseTo(left.cx, 1);
   expect(back.cy, 'center y round-tripped').toBeCloseTo(left.cy, 1);
+});
+
+test('plugin root-grid viewport persists across launcher ascent and re-entry', async ({ gw }) => {
+  // Invariant: enter a plugin, reframe its root grid, ascend to the launcher,
+  // re-enter — viewport must match what was left (issue #32).
+  await gw.enterPlugin('localdb');
+  const pluginGrid = (await gw.focused()).gridID;
+
+  // Reframe the plugin root: zoom in, then pan. The grid is empty so the
+  // press lands on nothing and pans.
+  await gw.wheelAtFocusedCenter(-300);
+  const zc = await gw.focused();
+  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+  const left = await gw.focused();
+  expect(left.zoom, 'reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
+
+  // Ascend back to the launcher.
+  await gw.rightClickPlus();
+  const launcher = await gw.focused();
+  expect(launcher.gridID, 'ascended to the launcher').not.toBe(pluginGrid);
+
+  // Re-enter the plugin: viewport must match what we left.
+  await gw.enterPlugin('localdb');
+  const back = await gw.focused();
+  expect(back.gridID, 're-entered the same plugin root').toBe(pluginGrid);
+  expect(back.zoom, 'zoom restored after re-entry').toBeCloseTo(left.zoom, 1);
+  expect(back.cx, 'center x restored after re-entry').toBeCloseTo(left.cx, 1);
+  expect(back.cy, 'center y restored after re-entry').toBeCloseTo(left.cy, 1);
 });
 
 test('ascending restores the parent viewport unchanged', async ({ gw }) => {
