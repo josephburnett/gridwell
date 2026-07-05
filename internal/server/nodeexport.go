@@ -26,13 +26,15 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 )
 
-// PluginHeader is the gRPC metadata key (== HTTP/2 header) that selects which
-// of this node's plugins a request addresses: the plugin's uuid or its config
-// name. Requests without it go to the client-facing handler instead.
-const PluginHeader = "gridwell-plugin"
+// PluginHeader selects which of this node's plugins a request addresses (the
+// plugin's uuid or its config name). Requests without it go to the
+// client-facing handler instead. The constant is owned by internal/plugin
+// (NodeExportHeader) because the dialing side stamps the same key.
+const PluginHeader = plugin.NodeExportHeader
 
 // NodeHandler wraps the server's HTTP mux in h2c and routes plugin-scoped
 // gRPC to the node export. One port then serves every caller:
