@@ -107,3 +107,53 @@ func TestOvertakeZoomDegenerate(t *testing.T) {
 		t.Errorf("OvertakeZoom on degenerate pane = %v, want 1", z)
 	}
 }
+
+// TestLiveViewInsetPinned pins the intended grab-gutter width. A
+// WebContentsView eats all mouse input over its bounds, so the only pixels
+// a user can click to grab a divider between two adjacent live panes are
+// the 2×LiveViewInsetPx canvas strip between them. This test catches any
+// accidental reduction below the comfortable-grab threshold (~10px total).
+func TestLiveViewInsetPinned(t *testing.T) {
+	const wantInset = 5.0
+	if LiveViewInsetPx != wantInset {
+		t.Errorf("LiveViewInsetPx = %v, want %v; reducing this makes the "+
+			"pane divider too narrow to grab over adjacent live URL/shell tiles",
+			LiveViewInsetPx, wantInset)
+	}
+}
+
+// TestLiveViewGapBetweenAdjacentPanes verifies that two horizontally adjacent
+// panes whose content boxes are computed with LiveViewInsetPx leave a gap of
+// exactly 2×LiveViewInsetPx between them — the grabbable canvas strip.
+// This is the seam test: it crosses the layout→contentbox boundary that was
+// previously untested ("no test pins the live-view gap").
+func TestLiveViewGapBetweenAdjacentPanes(t *testing.T) {
+	// Two 200×300 panes side by side, touching at x=200.
+	left := pane.Rect{X: 0, Y: 0, W: 200, H: 300}
+	right := pane.Rect{X: 200, Y: 0, W: 200, H: 300}
+
+	lb := ContentBox(left, LiveViewInsetPx)
+	rb := ContentBox(right, LiveViewInsetPx)
+
+	// The right edge of left's content box and the left edge of right's
+	// content box must be exactly 2×LiveViewInsetPx apart.
+	gap := rb.X - (lb.X + lb.W)
+	want := 2 * LiveViewInsetPx
+	if gap != want {
+		t.Errorf("gap between adjacent content boxes = %v, want %v (2×LiveViewInsetPx)",
+			gap, want)
+	}
+}
+
+// TestLiveViewContentBoxDegeneratePane verifies that a pane too narrow for
+// the inset returns a zero-size content box rather than a negative one.
+// A degenerate view must be hidden by the caller; this ensures ContentBox
+// never returns negative dimensions that would produce an invalid native view.
+func TestLiveViewContentBoxDegeneratePane(t *testing.T) {
+	// Pane narrower than 2×LiveViewInsetPx on both axes.
+	r := pane.Rect{X: 10, Y: 10, W: 3, H: 3}
+	b := ContentBox(r, LiveViewInsetPx)
+	if b.W != 0 || b.H != 0 {
+		t.Errorf("ContentBox on tiny pane = W:%v H:%v, want W:0 H:0", b.W, b.H)
+	}
+}

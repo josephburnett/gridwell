@@ -12,6 +12,19 @@ import (
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
+// LiveViewInsetPx is the inset applied on every side of a pane's live content
+// view (URL WebContentsView, shell overlay). It is the SINGLE owner of the
+// grab-gutter value.
+//
+// The gap between two horizontally adjacent live panes = 2 × LiveViewInsetPx;
+// that is the only canvas strip a user can click to grab a divider, because
+// a WebContentsView eats all mouse input over its bounds. At 5px per side the
+// gap is ~10px — approximately equal to resizeBandPx, making it comfortably
+// grabbable. Both client/wasm render.go (canvas clip + border drawing) and
+// shell_stream_client.go (shell overlay placement) read this constant via
+// ContentBox rather than defining their own copies.
+const LiveViewInsetPx = 5.0
+
 // ContentBox returns the pane's content rectangle — the pane shrunk by
 // `borderPx` on every side. URL tiles render into this and the URL
 // stream mouse handlers hit-test against it.

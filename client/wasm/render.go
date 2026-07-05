@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -97,13 +98,15 @@ const (
 )
 
 const (
-	// paneBorderPx is the visible thickness of the pane outline (the
-	// kind-colored frame). It is purely cosmetic now that ascent moved
-	// off the edge band to the middle button / corner circle, so it's a
-	// thin 1px line. Pane resize/split still works: the right- and
-	// left-button input layers use their own wider hit-band (resizeBandPx)
-	// independent of this visible thickness.
-	paneBorderPx = 1.0
+	// paneBorderPx is the inset applied on every side of a pane's live
+	// content view (URL WebContentsView, shell overlay) and the visible
+	// thickness of the kind-colored border frame. The value is
+	// load-bearing UX: the 2×paneBorderPx canvas strip between two adjacent
+	// live-tile panes is the only surface a user can click to grab the
+	// divider (a WebContentsView eats all mouse input over its rect).
+	// Single source of truth lives in panebox.LiveViewInsetPx; this is a
+	// local alias so render.go can keep its compact constant syntax.
+	paneBorderPx = panebox.LiveViewInsetPx
 	// tileBorderPx is the visible thickness of a tile outline. Sits
 	// entirely INSIDE the tile rect so the banner label (and the cell
 	// to the right / below) can't overlap it — every renderer reaches
