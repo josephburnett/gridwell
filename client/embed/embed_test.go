@@ -408,6 +408,62 @@ func TestDecideTextareaSync(t *testing.T) {
 			},
 		},
 		{
+			// The fast-pane-switch data-loss bug (issue #35): typing into
+			// tile 4 arms the debounced save; switching to another text
+			// descent within the debounce rebinds the textarea. The rebind
+			// must flush the pending buffer to tile 4 BEFORE clearing, or
+			// the edit silently vanishes.
+			name: "different tile with pending edit → flush old before clear",
+			in: TextareaSyncInput{
+				FocusedTileID: "7",
+				LastTileID:    "4",
+				CurrentValue:  "unsaved typing for 4",
+				BlobCached:    true,
+				BlobContent:   "tile 7 body",
+				PendingEdit:   true,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "tile 7 body",
+				NewLastTileID: "7",
+				FlushOldFirst: true,
+			},
+		},
+		{
+			// No previous binding → nothing to flush even if the dirty flag
+			// is somehow set.
+			name: `pending edit but no previous binding (LastTileID "") → no flush`,
+			in: TextareaSyncInput{
+				FocusedTileID: "7",
+				LastTileID:    "",
+				CurrentValue:  "",
+				PendingEdit:   true,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "",
+				NewLastTileID: "7",
+				FlushOldFirst: false,
+			},
+		},
+		{
+			// Same tile: the buffer still belongs to the focused tile; the
+			// debounced save owns persistence, not the rebind flush.
+			name: "same tile with pending edit → no flush, preserve typing",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "user just typed this",
+				BlobCached:    true,
+				BlobContent:   "stale cache content",
+				PendingEdit:   true,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: "5",
+			},
+		},
+		{
 			name: "different tile, blob cached but empty (fresh tile) → clear",
 			in: TextareaSyncInput{
 				FocusedTileID: "9",

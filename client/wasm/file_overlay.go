@@ -163,6 +163,13 @@ func (a *App) ensureFileTextarea() {
 			return nil
 		}
 		if !textedit.ShouldDebouncedSaveFire(p != nil, textFocus, textMode, a.lastTextareaTileID) {
+			// Declined (focus moved away mid-debounce). textareaDirty stays
+			// true: the rebind flush in refreshFileOverlay posts the edit.
+			return nil
+		}
+		if !a.textareaDirty {
+			// Already flushed (rebind or mode toggle) — don't re-post the
+			// buffer and bump the tile's version for nothing.
 			return nil
 		}
 		a.saveFileFromTextarea(p)
@@ -173,8 +180,10 @@ func (a *App) ensureFileTextarea() {
 		// stored blob catch up to the user's edits without waiting
 		// for ascent / toggle. URL update is debounced separately.
 		// The user has typed something → the textarea definitely has
-		// content now; mark it ready so canvas hiding stays correct.
+		// content now; mark it ready so canvas hiding stays correct, and
+		// dirty so no rebind can destroy the edit before it is posted.
 		a.textareaReady = true
+		a.textareaDirty = true
 		a.scheduleFileSave()
 		a.draw()
 		a.scheduleURLUpdate()
@@ -471,6 +480,7 @@ func (a *App) refreshFileOverlay() {
 		FocusedTileID: p.TextFocus,
 		LastTileID:    a.lastTextareaTileID,
 		CurrentValue:  ta.Get("value").String(),
+		PendingEdit:   a.textareaDirty,
 	}
 	if g, ok := a.c.Grid(gid); ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok {
@@ -481,6 +491,21 @@ func (a *App) refreshFileOverlay() {
 		}
 	}
 	dec := embedpkg.DecideTextareaSync(in)
+	if dec.FlushOldFirst {
+		// The buffer holds an unsaved edit of the OLD tile and is about to
+		// be cleared. Post it first — same shape as the mode toggle's
+		// save-before-clear (onToggleFileMode). The owning pane is the one
+		// still text-descended into the old tile.
+		if old := a.paneTextDescendedInto(a.lastTextareaTileID); old != nil {
+			a.saveFileFromTextarea(old)
+		} else {
+			// No pane owns the old descent anymore (pane closed mid-edit).
+			// The edit cannot be routed; surface instead of vanishing.
+			js.Global().Get("console").Call("error",
+				"gridwell: discarding unsaved text edit for tile "+a.lastTextareaTileID+" — owning pane is gone")
+			a.textareaDirty = false
+		}
+	}
 	if dec.SetValue {
 		ta.Set("value", dec.Value)
 		// Track whether the textarea now has content for textedit.CanvasHiddenByOverlay:
@@ -586,6 +611,23 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 // RPC then runs async; on completion the cache is also updated under
 // the new (content-hashed) BlobID, and the SSE NodeChanged event
 // repoints the cached tile at it.
+// paneTextDescendedInto returns the pane text-descended into the given tile,
+// or nil. Used only by the rebind flush to route an unsaved buffer back to its
+// owning descent — a mutation-time lookup, not a render-path read (the render
+// path must never reach across panes; see drawMarkdownNode / issue #35).
+func (a *App) paneTextDescendedInto(tileID string) *pane.Pane {
+	if tileID == "" {
+		return nil
+	}
+	var found *pane.Pane
+	a.tree.Walk(func(p *pane.Pane) {
+		if p.TextFocus == tileID && p.TextMode == rpc.TextModeText {
+			found = p
+		}
+	})
+	return found
+}
+
 func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
 		return
@@ -603,6 +645,7 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	// Optimistic local render: write the typed content through the content
 	// store (tile-scoped by tile id, so it never leaks into a clone), the same
 	// accessor the renderer and parent-grid preview read.
+	a.textareaDirty = false
 	a.c.PutTileContent(file.ID, []byte(buf))
 	go func() {
 		a.postUpdateText(gid, &rpc.UpdateTextRequest{

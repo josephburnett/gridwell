@@ -232,6 +232,15 @@ type App struct {
 	// drop target.
 	lastTextareaTileID string
 
+	// textareaDirty is the single owner of "the textarea buffer holds an
+	// edit of lastTextareaTileID that has not been posted yet". Set on the
+	// textarea input event; cleared by saveFileFromTextarea (every save
+	// path). Distinct from sched.fileSaveScheduled (timer armed): the
+	// timer can fire and decline (focus elsewhere) while the edit is
+	// still pending — the rebind flush in refreshFileOverlay rescues it
+	// via embed.DecideTextareaSync's FlushOldFirst.
+	textareaDirty bool
+
 	// textareaReady tracks whether the single textarea currently holds the
 	// focused tile's content (vs. being empty from a recent pane switch or
 	// pending blob fetch). Set true when refreshFileOverlay seeds the textarea

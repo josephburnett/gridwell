@@ -345,6 +345,11 @@ type TextareaSyncInput struct {
 	CurrentValue  string
 	BlobCached    bool
 	BlobContent   string
+	// PendingEdit reports that the textarea buffer holds an edit of
+	// LastTileID that has not been posted yet (typed within the save
+	// debounce, or the debounce fired while focus was elsewhere and its
+	// guard declined). On a rebind this edit is about to be destroyed.
+	PendingEdit bool
 }
 
 // TextareaSyncDecision is what to do to keep the textarea coherent with
@@ -358,6 +363,11 @@ type TextareaSyncDecision struct {
 	SetValue      bool
 	Value         string
 	NewLastTileID string
+	// FlushOldFirst: before applying this decision, persist CurrentValue
+	// to LastTileID. Set on a rebind away from a tile whose buffer holds
+	// a pending (unsaved) edit — clearing without flushing silently
+	// destroys the user's typing (the fast-pane-switch data-loss bug).
+	FlushOldFirst bool
 }
 
 // DecideTextareaSync drives the textarea singleton's value across focus
@@ -385,6 +395,9 @@ func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 			SetValue:      true,
 			Value:         val,
 			NewLastTileID: in.FocusedTileID,
+			// The buffer still belongs to LastTileID here; if it carries an
+			// unsaved edit it must be posted before the clear destroys it.
+			FlushOldFirst: in.PendingEdit && in.LastTileID != "",
 		}
 	}
 	if in.CurrentValue == "" && in.BlobCached {
