@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"errors"
-	"syscall/js"
 
 	"connectrpc.com/connect"
 
@@ -43,22 +42,20 @@ func isVersionConflict(err error) bool {
 	return false
 }
 
-// surfaceRPCError surfaces a non-nil RPC error: an on-canvas notice (the
-// errsurface strip — what the user actually sees) plus the JS console (the
-// devtools detail). It is only reached for real failures — the
+// surfaceRPCError surfaces a non-nil RPC error as an on-canvas notice (the
+// errsurface strip — what the user actually sees); reportErr also writes the
+// one console/log line. It is only reached for real failures — the
 // conflict-vs-surface decision is owned by clientsync.Classify (reactToErr),
 // which never routes a conflict here.
 func (a *App) surfaceRPCError(label string, err error) {
 	if err == nil {
 		return
 	}
-	js.Global().Get("console").Call("error", "gridwell: "+label+" failed: "+err.Error())
 	a.reportErr(errsurface.Error, "rpc:"+label, label+" failed: "+rpcErrText(err))
 }
 
 // rpcErrText strips the Connect wire prefix ("unknown: ", "internal: …") down
-// to readable failure text for the notice strip; the full error still goes to
-// the console verbatim.
+// to readable failure text for the notice strip and log line.
 func rpcErrText(err error) string {
 	var ce *connect.Error
 	if errors.As(err, &ce) {

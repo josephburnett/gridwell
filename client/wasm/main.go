@@ -281,6 +281,12 @@ type scheduler struct {
 	// user's root; well descents persist via SetWellView on ascent).
 	rootViewSaveScheduled bool
 	rootViewSaveCb        js.Func
+
+	// errExpireScheduled / errExpireCb arm one timer for the error surface's
+	// soonest expiry deadline, so stale one-shot notices leave the strip
+	// without polling. See scheduleErrExpiry.
+	errExpireScheduled bool
+	errExpireCb        js.Func
 }
 
 // paneState is a captured pane viewport plus, when the descent
@@ -595,6 +601,15 @@ func (a *App) afterBootstrap() {
 	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.urlUpdateScheduled = false
 		a.replaceURLNow()
+		return nil
+	})
+
+	a.sched.errExpireCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.errExpireScheduled = false
+		if a.errs.Expire(time.Now()) {
+			a.scheduleFrame() // strip shrank; panes reclaim the height on redraw
+		}
+		a.scheduleErrExpiry()
 		return nil
 	})
 
@@ -920,17 +935,47 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 // the user's optimistic change lost a race and is about to be replaced
 // on screen; that must not look like spontaneous mutation (charter §6).
 func (a *App) refetchGridOnConflict(gridID string, where string) {
-	js.Global().Get("console").Call("warn", "gridwell: version conflict on "+where+", refetching grid")
 	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
 	a.fetchGrid(gridID)
 }
 
-// reportErr is the one wasm entry into the error surface: record the notice
-// and schedule a repaint so the strip appears this frame. Safe from any
-// goroutine (wasm is single-threaded; goroutines interleave, never race).
+// reportErr is the one wasm entry into the error surface: log the failure to
+// the console (window.ts forwards renderer warnings/errors to the app's log,
+// so every notice is greppable after it leaves the strip), record the notice,
+// arm the expiry timer, and schedule a repaint so the strip appears this
+// frame. Safe from any goroutine (wasm is single-threaded; goroutines
+// interleave, never race).
 func (a *App) reportErr(sev errsurface.Severity, source, message string) {
-	a.errs.Report(sev, source, message)
+	method := "error"
+	if sev == errsurface.Info {
+		method = "warn"
+	}
+	js.Global().Get("console").Call(method, "gridwell: ["+source+"] "+message)
+	a.errs.Report(sev, source, message, time.Now())
+	a.scheduleErrExpiry()
 	a.scheduleFrame()
+}
+
+// scheduleErrExpiry arms a single setTimeout for the surface's soonest expiry
+// deadline. The callback prunes expired notices and re-arms for the next one.
+// A coalesced re-report that pushed a deadline out only makes the pending
+// timer fire early, prune nothing, and reschedule — never miss an expiry.
+func (a *App) scheduleErrExpiry() {
+	if a.sched.errExpireScheduled {
+		return
+	}
+	d, ok := a.errs.NextDeadline(time.Now())
+	if !ok {
+		return
+	}
+	// +1 rounds up so the timer lands just past the deadline instead of a
+	// truncated hair before it (which would prune nothing and re-arm).
+	ms := int(d/time.Millisecond) + 1
+	if ms < 1 {
+		ms = 1
+	}
+	a.sched.errExpireScheduled = true
+	js.Global().Call("setTimeout", a.sched.errExpireCb, ms)
 }
 
 // resolveErr clears a source's notice when its condition heals (e.g. the
