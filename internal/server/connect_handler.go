@@ -528,11 +528,17 @@ func watchPlugin(ctx context.Context, uuid string, client pb.GridwellClient, srv
 			}
 			continue
 		}
+		// Report recovery BEFORE the Watch check: a plugin that went down
+		// during a transient Info failure and comes back as Watch:false
+		// (fs/proc — no event stream at all) must still clear its down
+		// notice, or the client shows "live updates stopped" forever for a
+		// plugin that never had live updates to begin with.
+		if !healthy {
+			healthy = true
+			reportHealth(ctx, events, uuid, true, "")
+		}
 		if !info.Watch {
 			return // this plugin kind doesn't emit events (fs/proc) — nothing to fan in, not a failure
-		}
-		if !healthy {
-			reportHealth(ctx, events, uuid, true, "")
 		}
 		fanInEvents(ctx, uuid, client, events) // owns health from here; returns only when ctx ends
 		return

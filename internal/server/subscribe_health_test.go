@@ -175,3 +175,55 @@ func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) 
 		t.Errorf("Info called %d times, want at least 2 (fail, then a retried success) — the permanent-exclusion bug never retries", got)
 	}
 }
+
+// noWatchAfterInfoFailPlugin fails Info once, then succeeds with Watch: false
+// (the fs/proc shape — no event stream to fan in).
+type noWatchAfterInfoFailPlugin struct {
+	pb.UnimplementedGridwellServer
+	infoCalls atomic.Int32
+}
+
+func (p *noWatchAfterInfoFailPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	if p.infoCalls.Add(1) == 1 {
+		return nil, errors.New("simulated info failure")
+	}
+	return &pb.InfoResponse{Kind: "fs", DisplayName: "F", RootGridId: "1", Watch: false}, nil
+}
+
+// TestWatchPluginResolvesHealthBeforeNoWatchReturn: a plugin that reported
+// health-down during a transient Info failure and then recovers as a
+// Watch:false plugin (fs/proc) must still emit the recovery event. If the
+// !info.Watch early-return runs before the recovery report, the client keeps
+// a stale "live updates stopped" notice forever for a plugin that never had
+// live updates to begin with.
+func TestWatchPluginResolvesHealthBeforeNoWatchReturn(t *testing.T) {
+	fake := &noWatchAfterInfoFailPlugin{}
+	client, closer, err := plugin.ServeInProcess(fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closer)
+	reg := plugin.NewRegistry()
+	reg.Register("u-3", "fs", client, nil)
+	srv := New(reg, Config{})
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	defer stream.Close()
+
+	down := recvHealth(t, stream)
+	if down.Healthy {
+		t.Fatalf("first health event = %+v, want down (the transient Info failure)", down)
+	}
+	up := recvHealth(t, stream)
+	if !up.Healthy {
+		t.Fatalf("second health event = %+v, want recovery even though Watch=false", up)
+	}
+}
