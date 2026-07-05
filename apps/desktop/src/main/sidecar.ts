@@ -69,6 +69,19 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
     attachLineReader(child.stdout, handleLine);
     attachLineReader(child.stderr, handleLine);
 
+    // A spawn failure (e.g. the binary isn't executable, or the fs.existsSync
+    // check above raced a removal) emits 'error' on the child instead of
+    // 'exit' — before this listener existed nothing here reacted to it, so
+    // boot just hung until the 10s ready-timeout fired with a generic
+    // "did not report ready" message (issue #46 point 1). Reject immediately
+    // with the real cause instead.
+    child.once('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+
     child.once('exit', (code, signal) => {
       if (settled) return;
       settled = true;
