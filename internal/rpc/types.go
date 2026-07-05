@@ -421,16 +421,18 @@ type SubscribeRequest struct{}
 type EventKind string
 
 const (
-	EventGridChanged EventKind = "grid_changed"
-	EventTileChanged EventKind = "tile_changed"
-	EventTileRemoved EventKind = "tile_removed"
+	EventGridChanged  EventKind = "grid_changed"
+	EventTileChanged  EventKind = "tile_changed"
+	EventTileRemoved  EventKind = "tile_removed"
+	EventPluginHealth EventKind = "plugin_health"
 )
 
 type Event struct {
-	Kind        EventKind    `json:"kind"`
-	GridChanged *GridChanged `json:"grid_changed,omitempty"`
-	TileChanged *TileChanged `json:"tile_changed,omitempty"`
-	TileRemoved *TileRemoved `json:"tile_removed,omitempty"`
+	Kind         EventKind     `json:"kind"`
+	GridChanged  *GridChanged  `json:"grid_changed,omitempty"`
+	TileChanged  *TileChanged  `json:"tile_changed,omitempty"`
+	TileRemoved  *TileRemoved  `json:"tile_removed,omitempty"`
+	PluginHealth *PluginHealth `json:"plugin_health,omitempty"`
 }
 
 type GridChanged struct {
@@ -442,4 +444,14 @@ type TileChanged struct {
 type TileRemoved struct {
 	GridID string `json:"grid_id"`
 	TileID string `json:"tile_id"`
+}
+
+// PluginHealth reports a transition in a plugin's event-stream health (see
+// internal/server's fan-in): emitted once on the down transition (Healthy
+// false, Detail = the dial/recv/Info error) and once on recovery (Healthy
+// true, Detail ""). Not one per retry attempt — only on a change of state.
+type PluginHealth struct {
+	PluginUUID string `json:"plugin_uuid"`
+	Healthy    bool   `json:"healthy"`
+	Detail     string `json:"detail,omitempty"`
 }
