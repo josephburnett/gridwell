@@ -97,6 +97,13 @@ export class WebviewRegistry {
   // hydrated tracks which per-plugin partitions have had their session pulled
   // down from the plugin DB this run, so we hydrate each at most once.
   private readonly hydrated = new Set<string>();
+  // _globalHidden is the registry's single copy of "are all views currently
+  // parked for a gesture/modal" — the last value seen by setHidden. A new view
+  // placed while this is true starts parked rather than landing over an open
+  // palette or drag ghost. Convergent: setHidden always re-applies the correct
+  // state after place, but this closes the window where a briefly-visible new
+  // view could occlude a canvas overlay.
+  private _globalHidden = false;
 
   constructor(win: BaseWindow, origin: string, cb: RegistryCallbacks = {}) {
     this.win = win;
@@ -176,6 +183,18 @@ export class WebviewRegistry {
     return this.entries.get(paneId)?.tileId;
   }
 
+  // viewBoundsFor is a test-only accessor that returns the view's actual
+  // physical bounds as Electron last set them, revealing whether the view is
+  // currently parked or at its intended (visible) position. Used by e2e to
+  // assert that place-while-hidden does NOT lift the view out of its parked
+  // position. Returns undefined if the pane has no entry.
+  viewBoundsFor(paneId: string): { x: number; y: number; width: number; height: number } | undefined {
+    const e = this.entries.get(paneId);
+    if (!e) return undefined;
+    // View inherits getBounds() from Electron's View base class.
+    return (e.view as unknown as { getBounds(): { x: number; y: number; width: number; height: number } }).getBounds();
+  }
+
   // place creates (or re-targets) the view for paneId. If a view already
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
@@ -246,10 +265,15 @@ export class WebviewRegistry {
       // focused starts true: a pane only goes live by an action on the focused
       // pane, so the control should appear immediately; syncURLViews corrects
       // it on the next frame if focus has already moved.
-      e = { view, control, tileId, objectId, bounds: rounded, hidden: false, focused: true, partition, pluginUuid };
+      // hidden starts from _globalHidden so a view placed while the palette is
+      // open (or during a drag gesture) starts parked rather than landing on top
+      // of the canvas overlay. syncURLViews will call setHidden for this pane on
+      // the next draw() and reaffirm the correct state.
+      const startHidden = this._globalHidden;
+      e = { view, control, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
-      view.setBounds(rounded);
+      view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
       this.win.contentView.addChildView(control);
       control.setBackgroundColor('#00000000');
       this.applyControlBounds(e);
@@ -260,12 +284,21 @@ export class WebviewRegistry {
       return;
     }
 
-    // Reuse: update bounds and, if the URL changed, navigate.
+    // Reuse: update the stored bounds and, if visible, apply them immediately.
+    // When hidden (parked for a gesture/palette), only update e.bounds so that
+    // setHidden(false) will un-park to the NEW position — never call
+    // view.setBounds while hidden, because that would physically lift the view
+    // out of its parked position over the canvas overlay, and the next setHidden
+    // call would no-op (e.hidden is still true, nothing "changed"). This is the
+    // primary root cause of the "palette appears under a live URL view" bug:
+    // place() was re-asserting the view on top every time bounds changed.
     e.tileId = tileId;
     if (!boundsEqual(e.bounds, rounded)) {
       e.bounds = rounded;
-      e.view.setBounds(rounded);
-      this.applyControlBounds(e);
+      if (!e.hidden) {
+        e.view.setBounds(rounded);
+        this.applyControlBounds(e);
+      }
     }
     const current = e.view.webContents.getURL();
     if (current !== url && url) {
@@ -331,6 +364,11 @@ export class WebviewRegistry {
   // hides its circle, so exactly one pane shows the control at a time. Called
   // every frame from syncURLViews, so it no-ops when nothing changed.
   setHidden(paneId: string, hidden: boolean, focused: boolean): void {
+    // Track the registry-level hidden state so place() can initialize new
+    // views correctly (see _globalHidden). We update it regardless of whether
+    // the entry exists — the caller (syncURLViews) passes the same hidden value
+    // for all on-grid panes, so the last value written is authoritative.
+    this._globalHidden = hidden;
     const e = this.entries.get(paneId);
     if (!e || (e.hidden === hidden && e.focused === focused)) return;
     const viewChanged = e.hidden !== hidden;

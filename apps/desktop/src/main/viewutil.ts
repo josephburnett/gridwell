@@ -91,12 +91,36 @@ export function minWidthZoomFactor(width: number, minWidth: number): number {
 // (client/wasm/main.go) so the live-view and canvas feel identical.
 export const RIGHT_DRAG_THRESHOLD = 4;
 
+// RIGHT_DRAG_TIME_MS is the minimum duration (ms) that a right-button press must
+// be held before a distance-exceeding move counts as a pane gesture. A quick
+// trackpad tap that drifts a few pixels past the threshold in under this window
+// is still classified as a click — so the native context menu fires. Mirrored
+// verbatim in urlview-preload.ts (can't import there; gesture-threshold.test.ts
+// drift-lints both copies).
+export const RIGHT_DRAG_TIME_MS = 200;
+
 // dragExceeded reports whether a pointer that started at the press point has
 // moved far enough to count as a drag (not a click). Used to tell a right-click
 // — which must reach the page's own context menu — apart from a right-drag,
 // which arms a pane gesture. dx/dy are the cursor's displacement from the press.
 export function dragExceeded(dx: number, dy: number, threshold: number): boolean {
   return dx * dx + dy * dy > threshold * threshold;
+}
+
+// classifyRightPress returns true (= drag) only when BOTH the distance and time
+// thresholds are exceeded. Requiring both means a normal jittery trackpad tap
+// (large distance but very short hold) still classifies as a click and produces
+// the context menu, while an intentional right-drag (large distance AND the
+// button held for a moment) correctly arms the pane gesture. Pure function,
+// unit-tested; urlview-preload.ts inlines equivalent logic (can't import).
+export function classifyRightPress(
+  dx: number,
+  dy: number,
+  durationMs: number,
+  distThreshold: number,
+  timeThresholdMs: number,
+): boolean {
+  return dx * dx + dy * dy > distThreshold * distThreshold && durationMs >= timeThresholdMs;
 }
 
 // controlVisible decides whether a live URL view's corner control (the
