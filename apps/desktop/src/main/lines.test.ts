@@ -1,12 +1,53 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isReadyLine, makeLineSplitter } from './lines';
+import { parseServingLine, windowOrigin, makeLineSplitter } from './lines';
 
-test('isReadyLine matches the serve banner', () => {
-  assert.ok(isReadyLine('gridwell: serving on 127.0.0.1:8099 (db=/x static=./web)'));
-  assert.ok(!isReadyLine('gridwell: opening sqlite store at /x/gridwell.db'));
-  assert.ok(!isReadyLine('gridwell: orphan cleanup killed 1 stale shell session(s)'));
-  assert.ok(!isReadyLine(''));
+test('parseServingLine extracts the bound address from the serve banner', () => {
+  assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), {
+    host: '127.0.0.1',
+    port: 8099,
+  });
+  // A Tailscale bind from server.yaml.
+  assert.deepEqual(parseServingLine('gridwell: serving on 100.64.0.7:8080 (static=./web plugins=2)'), {
+    host: '100.64.0.7',
+    port: 8080,
+  });
+  // Go announces a wildcard bind as the dual-stack listener address.
+  assert.deepEqual(parseServingLine('gridwell: serving on [::]:8080 (static= plugins=1)'), {
+    host: '::',
+    port: 8080,
+  });
+  assert.deepEqual(parseServingLine('gridwell: serving on 0.0.0.0:8080 (static= plugins=1)'), {
+    host: '0.0.0.0',
+    port: 8080,
+  });
+  assert.deepEqual(parseServingLine('gridwell: serving on [::1]:9000 (static= plugins=1)'), {
+    host: '::1',
+    port: 9000,
+  });
+});
+
+test('parseServingLine rejects every other line', () => {
+  assert.equal(parseServingLine('gridwell: opening sqlite store at /x/gridwell.db'), null);
+  assert.equal(parseServingLine('gridwell: orphan cleanup killed 1 stale shell session(s)'), null);
+  assert.equal(parseServingLine('gridwell: WARNING: listening on 0.0.0.0:8080 — this is NOT a loopback address.'), null);
+  assert.equal(parseServingLine(''), null);
+  // A banner-shaped line with a garbage address must not resolve boot.
+  assert.equal(parseServingLine('gridwell: serving on nonsense (static= plugins=1)'), null);
+  assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:notaport (static= plugins=1)'), null);
+});
+
+test('windowOrigin maps wildcard hosts to loopback and keeps concrete hosts', () => {
+  // Wildcards are reachable locally as loopback.
+  assert.equal(windowOrigin({ host: '0.0.0.0', port: 8080 }), 'http://127.0.0.1:8080');
+  assert.equal(windowOrigin({ host: '::', port: 8080 }), 'http://127.0.0.1:8080');
+  assert.equal(windowOrigin({ host: '', port: 8080 }), 'http://127.0.0.1:8080');
+  // A concrete host (e.g. a Tailscale IP) is kept, so the window and a phone
+  // share one origin.
+  assert.equal(windowOrigin({ host: '100.64.0.7', port: 8080 }), 'http://100.64.0.7:8080');
+  assert.equal(windowOrigin({ host: '127.0.0.1', port: 41000 }), 'http://127.0.0.1:41000');
+  // IPv6 hosts get re-bracketed for the URL.
+  assert.equal(windowOrigin({ host: '::1', port: 9000 }), 'http://[::1]:9000');
 });
 
 test('makeLineSplitter emits complete lines and buffers partials', () => {
