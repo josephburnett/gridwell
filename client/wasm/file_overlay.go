@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -503,6 +504,8 @@ func (a *App) refreshFileOverlay() {
 			// The edit cannot be routed; surface instead of vanishing.
 			js.Global().Get("console").Call("error",
 				"gridwell: discarding unsaved text edit for tile "+a.lastTextareaTileID+" — owning pane is gone")
+			a.reportErr(errsurface.Error, "textedit",
+				"unsaved text edit discarded — its pane was closed before the save landed")
 			a.textareaDirty = false
 		}
 	}
@@ -636,10 +639,14 @@ func (a *App) saveFileFromTextarea(p *pane.Pane) {
 	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
+		// The save has nowhere to go — the edit would silently no-op while
+		// the textarea keeps looking saved (charter §6).
+		a.reportErr(errsurface.Error, "textedit", "text save failed — grid no longer loaded")
 		return
 	}
 	file, ok := g.Tiles[p.TextFocus]
 	if !ok {
+		a.reportErr(errsurface.Error, "textedit", "text save failed — tile no longer exists")
 		return
 	}
 	// Optimistic local render: write the typed content through the content

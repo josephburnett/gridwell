@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/palette"
@@ -209,6 +210,15 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// Block all input gestures while a viewport transition is animating
 	// — keeps the tree and viewport state atomic across the zoom.
 	if a.transition != nil {
+		return nil
+	}
+	// Notice strip: it occupies the band layoutPanes reserved below every
+	// pane, so a click there can't be meant for a pane. Clicking a row
+	// dismisses that notice (errsurface owns the hit geometry).
+	if stripH := errsurface.StripHeight(a.errs.Len()); stripH > 0 && sy >= a.height-stripH {
+		if a.errs.DismissAt(sy, a.height-stripH) {
+			a.draw()
+		}
 		return nil
 	}
 	p, r, ok := a.paneAtScreen(sx, sy)
@@ -1154,9 +1164,7 @@ func (a *App) savePluginRootViewBeforeAscent(p *pane.Pane) {
 		Zoom:       zoom,
 	}
 	go func() {
-		if err := a.cl.SetRootView(context.Background(), req); err != nil {
-			logRPCError("SetRootView", err)
-		}
+		a.surfaceRPCError("SetRootView", a.cl.SetRootView(context.Background(), req))
 	}()
 }
 

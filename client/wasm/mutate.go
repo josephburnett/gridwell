@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -42,15 +43,28 @@ func isVersionConflict(err error) bool {
 	return false
 }
 
-// logRPCError surfaces a non-nil RPC error to the JS console so the user
-// sees something concrete when a tile silently fails to land. It is only
-// reached for real failures — the conflict-vs-log decision is owned by
-// clientsync.Classify (reactToErr), which never routes a conflict here.
-func logRPCError(label string, err error) {
+// surfaceRPCError surfaces a non-nil RPC error: an on-canvas notice (the
+// errsurface strip — what the user actually sees) plus the JS console (the
+// devtools detail). It is only reached for real failures — the
+// conflict-vs-surface decision is owned by clientsync.Classify (reactToErr),
+// which never routes a conflict here.
+func (a *App) surfaceRPCError(label string, err error) {
 	if err == nil {
 		return
 	}
 	js.Global().Get("console").Call("error", "gridwell: "+label+" failed: "+err.Error())
+	a.reportErr(errsurface.Error, "rpc:"+label, label+" failed: "+rpcErrText(err))
+}
+
+// rpcErrText strips the Connect wire prefix ("unknown: ", "internal: …") down
+// to readable failure text for the notice strip; the full error still goes to
+// the console verbatim.
+func rpcErrText(err error) string {
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		return ce.Message()
+	}
+	return err.Error()
 }
 
 // reactToErr applies the clientsync resync policy to an RPC error: a
@@ -65,7 +79,7 @@ func (a *App) reactToErr(label string, gid string, err error) bool {
 		a.refetchGridOnConflict(gid, label)
 	}
 	if r.Log {
-		logRPCError(label, err)
+		a.surfaceRPCError(label, err)
 	}
 	return err == nil
 }
@@ -127,6 +141,21 @@ func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID string, call 
 func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent []byte) (rpc.Tile, bool) {
 	tile, err := a.cl.UpdateText(context.Background(), req)
 	if !a.reactToErr("UpdateText", gid, err) {
+		// Reconcile the rejected optimistic edit: callers wrote newContent
+		// into the cache before this RPC, so on any rejection the screen is
+		// showing bytes the server refused. Drop them so the next render
+		// refetches server truth (grid refetch alone never evicts content),
+		// and refetch the grid on the non-conflict path (the conflict path
+		// already refetched via reactToErr). The reactToErr notice tells the
+		// user why their text just reverted; without this the rejected edit
+		// lingers looking saved, then vanishes on some later refetch —
+		// the silent-disappearance class (charter §6).
+		a.c.DropTileContent(req.TileID)
+		if !isVersionConflict(err) {
+			a.fetchGrid(gid)
+		}
+		a.refreshFileOverlay()
+		a.scheduleFrame()
 		return rpc.Tile{}, false
 	}
 	a.c.PutTileContent(tile.ID, newContent)

@@ -6,10 +6,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -19,8 +21,16 @@ import (
 const (
 	colorBg          = "#0c0d11"
 	colorFileInnerBg = "#1c1f26"
-	colorPaneBorder  = "#1f2229"
-	colorFocusBorder = "#4a6fff"
+	// Notice-strip colors (client/errsurface). Error rows are a dark red
+	// band with legible red-tinted text; Info rows (expected reconciliation,
+	// e.g. a lost version race that was refetched) use the focus-blue family
+	// so they read as "note", not "alarm".
+	colorErrStripBg    = "#3a1216"
+	colorErrStripText  = "#ff9a9a"
+	colorInfoStripBg   = "#16203a"
+	colorInfoStripText = "#9ab0ff"
+	colorPaneBorder    = "#1f2229"
+	colorFocusBorder   = "#4a6fff"
 	// colorFocusBorderFaded is the pane outline for descended-but-not-
 	// focused panes. Same hue as the focus blue, lower saturation and
 	// value so the focused pane still pops, but the others stay
@@ -278,11 +288,49 @@ func (a *App) draw() {
 	// And any live URL tiles — native WebContentsViews follow their pane's
 	// content box and park off-screen during canvas-overlay gestures.
 	a.syncURLViews()
+
+	// The notice strip lives in the band layoutPanes reserved below every
+	// pane; drawn last so a notice is never painted over.
+	a.drawErrStrip()
 }
 
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.
+// The notice strip is *reserved layout*: panes fill (height − strip), so a
+// pending error owns pixels nothing — including a native WebContentsView,
+// which tracks pane rects — can paint over. Input hit-testing shares this
+// function, so render and input cannot disagree about where panes are.
 func (a *App) layoutPanes() map[string]pane.Rect {
-	return pane.Layout(a.tree, pane.Rect{X: 0, Y: 0, W: a.width, H: a.height})
+	h := a.height - errsurface.StripHeight(a.errs.Len())
+	return pane.Layout(a.tree, pane.Rect{X: 0, Y: 0, W: a.width, H: h})
+}
+
+// drawErrStrip paints the notice strip in the reserved band at the bottom of
+// the canvas. Geometry (rows, overflow, labels) comes from errsurface so the
+// click-to-dismiss hit test reads the identical layout.
+func (a *App) drawErrStrip() {
+	notices := a.errs.Notices()
+	stripH := errsurface.StripHeight(len(notices))
+	if stripH == 0 {
+		return
+	}
+	top := a.height - stripH
+	for _, row := range errsurface.Rows(notices, top) {
+		bg, fg := colorErrStripBg, colorErrStripText
+		if row.Notice.Severity == errsurface.Info {
+			bg, fg = colorInfoStripBg, colorInfoStripText
+		}
+		a.cctx.Set("fillStyle", bg)
+		a.cctx.Call("fillRect", 0, row.Y, a.width, errsurface.RowH)
+		a.cctx.Set("fillStyle", fg)
+		a.cctx.Set("font", "12px system-ui, sans-serif")
+		a.cctx.Set("textBaseline", "middle")
+		label := errsurface.Label(row.Notice)
+		if row.OverflowCount > 0 {
+			label += "  (+" + strconv.Itoa(row.OverflowCount) + " more)"
+		}
+		a.cctx.Call("fillText", label, 12, row.Y+errsurface.RowH/2)
+	}
+	a.cctx.Set("textBaseline", "alphabetic")
 }
 
 // drawPane draws one pane's contents.
@@ -864,6 +912,8 @@ func (a *App) fetchTileContent(tileID string) {
 	go func() {
 		data, err := a.cl.GetTileContent(context.Background(), tileID)
 		if err != nil {
+			// The tile body will simply never appear — say why (charter §6).
+			a.surfaceRPCError("GetTileContent", err)
 			return
 		}
 		a.c.PutTileContent(tileID, data)

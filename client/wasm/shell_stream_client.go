@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/shellconn"
@@ -120,6 +121,9 @@ func (a *App) probeShellSessionAlive(tileID string) {
 		delete(a.shellAliveProbing, tileID)
 		if err != nil {
 			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
+			// Without a verdict the refresh control just doesn't appear —
+			// distinguish "probe failed" from "session gone" (charter §6).
+			a.reportErr(errsurface.Error, "shell", "shell session probe failed: "+rpcErrText(err))
 			return
 		}
 		a.shellAlive[tileID] = res.Alive
@@ -365,6 +369,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	conn.onError = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		shellLog("onError pane=%s tile=%s readyState=%d", p.ID, tileID, conn.ws.Get("readyState").Int())
+		// The terminal connection just broke under the user's prompt; the
+		// onClose path handles liveness, this surfaces the why.
+		a.reportErr(errsurface.Error, "shell", "shell connection error")
 		return nil
 	})
 
@@ -719,5 +726,8 @@ func (a *App) postSetShellPreview(tileID string, jpeg []byte) {
 	_, err := a.cl.SetShellPreview(context.Background(), req)
 	if err != nil {
 		shellLog("SetShellPreview tile=%s err=%v", tileID, err)
+		// The terminal frame the user just left is not persisted — the
+		// tile's preview will show an older state (charter §6).
+		a.reportErr(errsurface.Error, "shell", "shell preview save failed: "+rpcErrText(err))
 	}
 }
