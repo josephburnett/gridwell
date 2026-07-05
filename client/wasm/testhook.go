@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file exposes a read-only introspection surface, window.__gridwellTest,
@@ -43,6 +44,7 @@ func (a *App) installTestHook() {
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
 		"renderedCaret": js.FuncOf(a.thRenderedCaret),
 		"fileInnerBox":  js.FuncOf(a.thFileInnerBox),
+		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 	}))
 }
 
@@ -61,6 +63,32 @@ func (a *App) thRenderedCaret(js.Value, []js.Value) any {
 	}
 	off, has := pl.Caret()
 	return map[string]any{"has": has, "offset": off}
+}
+
+// thTextareaInfo returns the current textarea overlay's binding: which pane it
+// covers, which tile it's bound to, and whether it currently has content
+// (textareaReady). Returns nil when no pane is in raw-text mode.
+//
+// Used by the split-pane text-tile e2e to assert the overlay covers only the
+// focused descended pane and not preview nodes in other panes — the structural
+// invariant that issue #35 mechanism B violated.
+func (a *App) thTextareaInfo(js.Value, []js.Value) any {
+	p := a.tree.FocusedPane()
+	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
+		return nil
+	}
+	r := paneRectFor(a, p)
+	return map[string]any{
+		"paneID":     p.ID,
+		"tileID":     p.TextFocus,
+		"hasContent": a.textareaReady,
+		// The focused pane's inner box — lets e2e verify the overlay is over the
+		// right pane's geometry, not a sibling.
+		"x": r.X,
+		"y": r.Y,
+		"w": r.W,
+		"h": r.H,
+	}
 }
 
 // thFileInnerBox returns the focused pane's file inner reading box (the rect

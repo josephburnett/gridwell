@@ -231,6 +231,24 @@ type App struct {
 	// push new content into the textarea when it's already bound to the
 	// drop target.
 	lastTextareaTileID string
+
+	// textareaDirty is the single owner of "the textarea buffer holds an
+	// edit of lastTextareaTileID that has not been posted yet". Set on the
+	// textarea input event; cleared by saveFileFromTextarea (every save
+	// path). Distinct from sched.fileSaveScheduled (timer armed): the
+	// timer can fire and decline (focus elsewhere) while the edit is
+	// still pending — the rebind flush in refreshFileOverlay rescues it
+	// via embed.DecideTextareaSync's FlushOldFirst.
+	textareaDirty bool
+
+	// textareaReady tracks whether the single textarea currently holds the
+	// focused tile's content (vs. being empty from a recent pane switch or
+	// pending blob fetch). Set true when refreshFileOverlay seeds the textarea
+	// with actual content or when the user types (input event). Set false when
+	// the textarea is cleared on a tile switch or mode toggle. drawMarkdownInPane
+	// reads this via textedit.CanvasHiddenByOverlay so the canvas keeps painting
+	// during the loading race (blank-pane fix, issue #35 mechanism B).
+	textareaReady bool
 }
 
 // scheduler holds the App's debounce / requestAnimationFrame bookkeeping.

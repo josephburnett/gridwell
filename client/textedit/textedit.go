@@ -90,6 +90,37 @@ func clamp(off, n int) int {
 	return off
 }
 
+// CanvasHiddenByOverlay reports whether a text pane's canvas render should be
+// suppressed because the textarea overlay is actively covering it with content.
+// All four conditions must hold:
+//
+//   - isDescended: the function is called for a DESCENDED pane (not a preview
+//     node). The textarea overlay covers only the focused descended pane; a
+//     preview node is never covered, so this returns false for all previews.
+//   - isFocused: this is the specific pane the single textarea sits over. The
+//     textarea covers exactly one pane at a time (the tree's focused pane).
+//   - isTextMode: the pane is in raw-text mode. The textarea is only shown in
+//     text mode; in rendered mode the canvas paints the markdown directly.
+//   - textareaReady: the textarea currently holds the tile's content. During a
+//     pane switch the textarea is cleared before the new tile's blob arrives;
+//     the canvas must paint until the overlay actually covers content — otherwise
+//     the user sees a blank pane while the blob loads (the loading-race blank).
+//
+// This is the single owner of the "does canvas paint or overlay covers?"
+// decision, preventing two bugs:
+//
+// A (wrong-size preview): removing this predicate from drawMarkdownNode forces
+// the preview path to always paint, regardless of sibling-pane state.
+// B (blank pane): textareaReady=false keeps the canvas painting during the
+// pane-switch loading race instead of suppressing it.
+//
+// The wasm caller invokes CanvasHiddenByOverlay(true, ...) in drawMarkdownInPane
+// (the descended path). drawMarkdownNode (the preview path) does not call it at
+// all — previews are never covered by the overlay.
+func CanvasHiddenByOverlay(isDescended, isFocused, isTextMode, textareaReady bool) bool {
+	return isDescended && isFocused && isTextMode && textareaReady
+}
+
 // ShouldDebouncedSaveFire reports whether a debounced text-save timer,
 // when it fires, should actually persist the textarea's contents.
 //

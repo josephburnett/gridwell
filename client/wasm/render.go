@@ -844,18 +844,12 @@ func bannerTextColor(n *rpc.Tile, outside bool) string {
 	return colorMuted
 }
 
-// paneFocusedOnFile returns any pane currently descended into the given
-// file tile id, or nil if none. Used by the renderer to pull the live
-// scroll/mode state instead of the saved view_y.
-func (a *App) paneFocusedOnFile(fileTileID string) *pane.Pane {
-	var found *pane.Pane
-	a.tree.Walk(func(p *pane.Pane) {
-		if p.TextFocus == fileTileID {
-			found = p
-		}
-	})
-	return found
-}
+// paneFocusedOnFile was removed in fix #35: it returned any pane descended into
+// a given file tile, so drawMarkdownNode could preview at the live pane's width.
+// That cross-pane reach-through was the root cause of two bugs: wrong-size
+// preview (A, layout width used sibling pane's inner width) and blank preview
+// (B, hideForTextarea suppressed canvas in every pane showing the tile). The
+// fix always passes focused=false to PreviewScaleScroll, using stored framing.
 
 // fetchTileContent issues GetTileContent for a plugin tile (file / proc @info)
 // and caches the body by tile id. Idempotent: a successful previous fetch
