@@ -15,6 +15,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/menu"
@@ -82,6 +83,12 @@ type App struct {
 	// its methods (see client/menu). Persistence across a portal descent rides in
 	// pane.Frame.MenuOpen.
 	menu menu.State
+
+	// errs is the single owner of user-visible failure notices (charter §6).
+	// Every failure path reports via a.reportErr / a.resolveErr; only the
+	// notice-strip render and its click handler read it. Never write error
+	// state anywhere else.
+	errs *errsurface.Surface
 
 	// launcherHover is the index of the launcher plugin tile under the cursor
 	// (the focused launcher pane), or -1. Drives the hover outline on the
@@ -520,6 +527,7 @@ func main() {
 		c:                 cache.New(),
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
+		errs:              errsurface.New(),
 		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
@@ -884,10 +892,28 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 		})
 }
 
-// refetchGridOnConflict logs a 409 version-conflict and refetches the
+// refetchGridOnConflict handles a 409 version-conflict: refetches the
 // affected grid so the cache catches up to the server's authoritative
-// version.
+// version, and posts an Info notice so the reconciliation is visible —
+// the user's optimistic change lost a race and is about to be replaced
+// on screen; that must not look like spontaneous mutation (charter §6).
 func (a *App) refetchGridOnConflict(gridID string, where string) {
 	js.Global().Get("console").Call("warn", "gridwell: version conflict on "+where+", refetching grid")
+	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
 	a.fetchGrid(gridID)
+}
+
+// reportErr is the one wasm entry into the error surface: record the notice
+// and schedule a repaint so the strip appears this frame. Safe from any
+// goroutine (wasm is single-threaded; goroutines interleave, never race).
+func (a *App) reportErr(sev errsurface.Severity, source, message string) {
+	a.errs.Report(sev, source, message)
+	a.scheduleFrame()
+}
+
+// resolveErr clears a source's notice when its condition heals (e.g. the
+// event stream reconnects), so stale bad news doesn't linger.
+func (a *App) resolveErr(source string) {
+	a.errs.Resolve(source)
+	a.scheduleFrame()
 }
