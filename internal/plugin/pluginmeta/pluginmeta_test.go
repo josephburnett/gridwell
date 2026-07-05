@@ -5,9 +5,12 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
-
-	_ "modernc.org/sqlite"
 )
+
+// NOTE deliberately NO sqlite driver import here: the production package must
+// register the driver it uses itself. A blank import in this test file once
+// masked exactly that gap — every gridwell-ssh spawn died with `unknown
+// driver "sqlite"` while this suite stayed green.
 
 func dbpath(t *testing.T) string {
 	t.Helper()
