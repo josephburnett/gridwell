@@ -57,6 +57,42 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
     .toBe(0);
 });
 
+// Crosses the expiry seam: a one-shot failure must leave the strip BY ITSELF
+// once its source goes quiet (errsurface.ExpireAfter of silence), returning
+// the reserved height to the panes with no user gesture — through the real
+// timer, the real Expire prune, and the real relayout. The sticky exemption
+// (plugin health, backend exit persist until resolved/dismissed) is pinned by
+// the errsurface unit tests; this proves the live wiring actually fires.
+test('a one-shot notice expires off the strip once its source goes quiet', async ({ gw, window }) => {
+  await gw.enterPlugin('localdb');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  expect(tileAt(await gw.getGrid(f.gridID), 'text', cx, cy), 'markdown tile created').toBeTruthy();
+
+  // One failed mutation, then the failure stops (unroute): the canonical
+  // one-shot. E.g. equivalent to a URL that failed to load once.
+  await window.route('**/gridwell.v1.Gridwell/MoveTile', (r: any) => r.abort());
+  await gw.dragTileCell(cx, cy, cx + 1, cy);
+  await expect
+    .poll(async () => (await errors(window)).notices.some((n: any) => n.source === 'rpc:MoveTile'))
+    .toBe(true);
+  await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
+
+  // No click, no dismiss: the strip must clear on its own and the panes get
+  // their height back. ExpireAfter is 10s; poll well past it.
+  await expect
+    .poll(async () => (await errors(window)).stripH, { timeout: 20_000, intervals: [1_000] })
+    .toBe(0);
+  const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
+  const height = await window.evaluate(() => window.innerHeight);
+  const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
+  expect(bottom, 'panes reclaim the reserved strip height').toBeGreaterThan(height - 24 - 0.5);
+});
+
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {
   await gw.enterPlugin('localdb');
   const f = await gw.focused();

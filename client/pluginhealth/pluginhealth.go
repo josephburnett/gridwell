@@ -48,14 +48,19 @@ func Classify(pl rpc.PluginInfo) Status {
 // human-readable message. ok is false for Enterable, telling the caller to
 // descend instead of reporting anything.
 //
+// The source namespace is "launcher:", not "plugin:" — "plugin:<uuid>" is the
+// sticky ongoing-condition namespace (errsurface.Sticky) used by health
+// events, whereas a click notice is a one-shot answer to a gesture and should
+// expire off the strip like any other.
+//
 // Severity: Broken is Error (something the user expected to work did not);
 // Rootless is Info (an expected, fixable configuration gap, not a failure).
 func ClickNotice(pl rpc.PluginInfo) (sev errsurface.Severity, source, message string, ok bool) {
 	switch Classify(pl) {
 	case Broken:
-		return errsurface.Error, "plugin:" + pl.Label, pl.Label + ": " + pl.InfoError, true
+		return errsurface.Error, "launcher:" + pl.Label, pl.Label + ": " + pl.InfoError, true
 	case Rootless:
-		return errsurface.Info, "plugin:" + pl.Label, pl.Label + " has no root configured — set config.root in server.yaml", true
+		return errsurface.Info, "launcher:" + pl.Label, pl.Label + " has no root configured — set config.root in server.yaml", true
 	default:
 		return 0, "", "", false
 	}

@@ -7,11 +7,16 @@
 // here. No other code holds or draws error state.
 //
 // The package is js-free and pure so the whole policy — coalescing, ordering,
-// capacity, strip geometry, dismiss hit-testing — is table-testable without a
-// browser. The wasm shell contributes only pixels and event plumbing.
+// capacity, expiry, strip geometry, dismiss hit-testing — is table-testable
+// without a browser. The wasm shell contributes only pixels, timers, and
+// event plumbing.
 package errsurface
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Severity classifies a notice for display. There are exactly two: Error is
 // an unexpected failure (something the user asked for did not happen), Info
@@ -40,6 +45,27 @@ type Notice struct {
 	// Count is how many times Source has reported since it was last
 	// dismissed/resolved. Rendered as a "×N" suffix when > 1.
 	Count int
+	// deadline is when this notice expires if its source stops reporting;
+	// zero for sticky sources (see Sticky), which live until Dismiss/Resolve.
+	deadline time.Time
+}
+
+// ExpireAfter is how long a non-sticky notice stays visible after its most
+// recent report. A one-shot failure (a bad URL, one refused RPC) fades once
+// it stops recurring; a failure that keeps happening keeps refreshing its
+// deadline via Report's coalescing and stays up.
+const ExpireAfter = 10 * time.Second
+
+// Sticky reports whether source names an ongoing condition rather than a
+// one-shot event. A sticky notice never expires — it stands for a state
+// ("this plugin's event stream is down", "the backend exited") that is
+// reported once on the transition and would otherwise silently vanish while
+// still true. Each sticky source has an explicit exit: plugin health resolves
+// on the recovery event; the backend notice can only be dismissed, because
+// there is no recovery short of a restart. This table is the one owner of the
+// sticky/expiring split — report sites do not choose.
+func Sticky(source string) bool {
+	return source == "electron:backend" || strings.HasPrefix(source, "plugin:")
 }
 
 // maxNotices bounds the queue so an unattended failure loop cannot grow
@@ -60,25 +86,69 @@ func New() *Surface { return &Surface{nextID: 1} }
 
 // Report adds a notice, or refreshes the existing notice for the same
 // source: latest message and severity win, Count increments, and the row
-// moves to the top (newest) position keeping its ID.
-func (s *Surface) Report(sev Severity, source, message string) {
+// moves to the top (newest) position keeping its ID. `now` (the caller's
+// clock — the package stays clock-free and testable) restarts the expiry
+// countdown, so a recurring failure stays visible for as long as it keeps
+// recurring plus ExpireAfter of silence.
+func (s *Surface) Report(sev Severity, source, message string, now time.Time) {
+	deadline := now.Add(ExpireAfter)
+	if Sticky(source) {
+		deadline = time.Time{}
+	}
 	for i := range s.notices {
 		if s.notices[i].Source == source {
 			n := s.notices[i]
 			n.Message = message
 			n.Severity = sev
 			n.Count++
+			n.deadline = deadline
 			s.notices = append(s.notices[:i], s.notices[i+1:]...)
 			s.notices = append([]Notice{n}, s.notices...)
 			return
 		}
 	}
-	n := Notice{ID: s.nextID, Source: source, Message: message, Severity: sev, Count: 1}
+	n := Notice{ID: s.nextID, Source: source, Message: message, Severity: sev, Count: 1, deadline: deadline}
 	s.nextID++
 	s.notices = append([]Notice{n}, s.notices...)
 	if len(s.notices) > maxNotices {
 		s.notices = s.notices[:maxNotices]
 	}
+}
+
+// Expire drops every non-sticky notice whose deadline has passed and reports
+// whether anything changed (so the caller knows to repaint). Expiry is an
+// explicit mutation on the caller's clock tick — reading (Notices, Rows)
+// never mutates.
+func (s *Surface) Expire(now time.Time) bool {
+	kept := s.notices[:0]
+	for _, n := range s.notices {
+		if n.deadline.IsZero() || n.deadline.After(now) {
+			kept = append(kept, n)
+		}
+	}
+	changed := len(kept) != len(s.notices)
+	s.notices = kept
+	return changed
+}
+
+// NextDeadline returns how long until the soonest pending expiry, and false
+// when nothing expires (empty or all-sticky). The wasm shell uses this to arm
+// a single timer instead of polling; the returned duration can be <= 0 if a
+// deadline has already passed.
+func (s *Surface) NextDeadline(now time.Time) (time.Duration, bool) {
+	var soonest time.Time
+	for _, n := range s.notices {
+		if n.deadline.IsZero() {
+			continue
+		}
+		if soonest.IsZero() || n.deadline.Before(soonest) {
+			soonest = n.deadline
+		}
+	}
+	if soonest.IsZero() {
+		return 0, false
+	}
+	return soonest.Sub(now), true
 }
 
 // Notices returns the queue, newest first. The slice is a copy; mutating it

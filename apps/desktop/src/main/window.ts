@@ -1,5 +1,6 @@
 import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
+import { rendererLogLine } from './viewutil';
 
 export interface RootWindow {
   win: BrowserWindow;
@@ -56,6 +57,15 @@ export function createRootWindow(origin: string): RootWindow {
   // introspection surface. Inert in every normal launch.
   const query = process.env.GRIDWELL_E2E === '1' ? '?e2e=1' : '';
   void win.loadURL(origin + '/' + query);
+
+  // Forward renderer console warnings/errors into the main process's own
+  // stdout/stderr. The wasm client logs every surfaced errsurface notice to
+  // its console (reportErr), so this line is what makes those failures
+  // greppable in the app's log after the notice expires off the strip.
+  win.webContents.on('console-message', (_e, level, message) => {
+    const line = rendererLogLine(level, message);
+    if (line) console.error(line);
+  });
 
   // When the display geometry changes (rotation, resolution / aspect change)
   // a fullscreen window can keep its old bounds and leave the canvas stretched

@@ -63,8 +63,8 @@ func TestClickNotice_Broken(t *testing.T) {
 	if sev != errsurface.Error {
 		t.Errorf("severity = %v, want errsurface.Error", sev)
 	}
-	if source != "plugin:Files" {
-		t.Errorf("source = %q, want plugin:Files", source)
+	if source != "launcher:Files" {
+		t.Errorf("source = %q, want launcher:Files", source)
 	}
 	if !strings.Contains(msg, "Files") || !strings.Contains(msg, "plugin not responding: boom") {
 		t.Errorf("message = %q, want it to name the plugin and carry InfoError", msg)
@@ -80,8 +80,8 @@ func TestClickNotice_Rootless(t *testing.T) {
 	if sev != errsurface.Info {
 		t.Errorf("severity = %v, want errsurface.Info", sev)
 	}
-	if source != "plugin:Files" {
-		t.Errorf("source = %q, want plugin:Files", source)
+	if source != "launcher:Files" {
+		t.Errorf("source = %q, want launcher:Files", source)
 	}
 	if !strings.Contains(msg, "no root configured") {
 		t.Errorf("message = %q, want it to mention the missing root config", msg)
