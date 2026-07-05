@@ -37,7 +37,7 @@ func usage() {
 Usage:
     gridwell init  --kind KIND --name NAME [--config k=v ...]
                                               create + register a plugin
-    gridwell serve [--bind ADDR] [--static DIR]
+    gridwell serve [--bind ADDR] [--bind-default ADDR] [--static DIR]
                                               run the backend server
     gridwell backup DEST                      snapshot every plugin DB + server.yaml
                                               (VACUUM INTO; safe while serving)

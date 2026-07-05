@@ -15,6 +15,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/markdown"
@@ -22,6 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -89,6 +91,20 @@ type App struct {
 	// notice-strip render and its click handler read it. Never write error
 	// state anywhere else.
 	errs *errsurface.Surface
+
+	// caps is the host capability set (client/caps), derived ONCE at boot
+	// from bridge presence. Feature gates read a.caps; nothing else asks
+	// bridgeAvailable() to make a behavior decision.
+	caps caps.Caps
+
+	// touch is the touch→mouse gesture classifier (client/touchgest);
+	// touchTimerCb is its retained long-press timer callback; taTouchActive
+	// marks a multi-finger gesture engaged from the file textarea (its
+	// single-finger touches stay native). Owned by touch.go; nothing else
+	// feeds or reads them.
+	touch         *touchgest.Machine
+	touchTimerCb  js.Func
+	taTouchActive bool
 
 	// launcherHover is the index of the launcher plugin tile under the cursor
 	// (the focused launcher pane), or -1. Drives the hover outline on the
@@ -534,6 +550,7 @@ func main() {
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
 		errs:              errsurface.New(),
+		caps:              caps.Derive(bridgeAvailable()),
 		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
@@ -555,6 +572,21 @@ func main() {
 		app.draw()
 		return nil
 	}))
+
+	// Mobile browsers resize the VISUAL viewport (on-screen keyboard,
+	// collapsing URL bar) without firing a layout resize, leaving the canvas
+	// and the text-overlay geometry stale — the textarea can end up under
+	// the keyboard. Re-run the same resize path on visualViewport changes;
+	// desktop browsers fire both events for real resizes and resize() is
+	// idempotent, so double-firing is harmless.
+	if vv := app.win.Get("visualViewport"); vv.Truthy() {
+		vvCb := js.FuncOf(func(this js.Value, args []js.Value) any {
+			app.resize()
+			app.draw()
+			return nil
+		})
+		vv.Call("addEventListener", "resize", vvCb)
+	}
 
 	// beforeunload: close every URL stream cleanly so the server's
 	// save-and-destroy path fires before the TCP connection dies.

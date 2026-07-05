@@ -314,6 +314,12 @@ func (a *App) ensureFileTextarea() {
 	})
 	ta.Call("addEventListener", "contextmenu", cmCb)
 
+	// Multi-finger touches forward into the touch gesture machine (two-finger
+	// tap = ascend, pinch = wheel) — the touch analogue of the mouse
+	// forwarding above. Single-finger touches keep native textarea behavior
+	// (caret, selection, the OS keyboard). See installTextareaTouch.
+	a.installTextareaTouch(ta)
+
 	a.doc.Get("body").Call("appendChild", ta)
 	a.fileTextarea = ta
 }

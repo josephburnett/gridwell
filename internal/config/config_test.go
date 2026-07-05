@@ -182,3 +182,40 @@ func TestLoad_invalid_yaml(t *testing.T) {
 		t.Error("expected error for invalid yaml")
 	}
 }
+
+// TestLoad_bindSet pins how "the user pinned the listen address" is detected:
+// BindSet is true only when server.yaml actually contains a non-empty `bind:`
+// key. This is what lets `serve --bind-default` (the desktop sidecar's
+// ephemeral loopback port) fill in only when the config is silent — an
+// explicit bind: equal to the built-in default must still count as set.
+func TestLoad_bindSet(t *testing.T) {
+	cases := []struct {
+		name     string
+		yml      string
+		wantBind string
+		wantSet  bool
+	}{
+		{"key absent", `static: "/var/www"`, Defaults.Bind, false},
+		{"key present", `bind: "100.64.0.7:8080"`, "100.64.0.7:8080", true},
+		{"key present, equals built-in default", `bind: "127.0.0.1:8080"`, Defaults.Bind, true},
+		{"key present but empty", `bind: ""`, Defaults.Bind, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := filepath.Join(t.TempDir(), "server.yaml")
+			if err := os.WriteFile(f, []byte(c.yml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(f)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Bind != c.wantBind {
+				t.Errorf("Bind = %q, want %q", cfg.Bind, c.wantBind)
+			}
+			if cfg.BindSet != c.wantSet {
+				t.Errorf("BindSet = %v, want %v", cfg.BindSet, c.wantSet)
+			}
+		})
+	}
+}

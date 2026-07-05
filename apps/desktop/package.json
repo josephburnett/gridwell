@@ -13,6 +13,7 @@
     "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js",
     "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js",
     "test:e2e": "playwright test",
+    "test:e2e:web": "playwright test -c playwright.web.config.ts",
     "dist": "npm run build && electron-builder",
     "dist:dir": "npm run build && electron-builder --dir"
   },

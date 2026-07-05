@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/anim"
+	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
@@ -320,6 +321,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
 				if a.urlViewFor(p.ID) != nil {
 					bridgeGoBack(p.ID)
+				} else if !a.caps.LiveURL {
+					// The slashed button: this host can't place a live view.
+					// Explain instead of a silent dead tap (charter §6).
+					a.reportErr(caps.GoLiveNotice())
 				} else {
 					// Frozen: go live (place the native view), same as
 					// right-drag-down.
@@ -737,6 +742,14 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// url tile created in the off-grid scratch grid — visit a page without
 	// placing a tile. A drag instead places a real url tile (commitTemplateDrop).
 	if d.isTemplate && d.item.primitive == tplURL && !d.started {
+		// An ephemeral visit IS a live view — on a host without one (plain
+		// browser) the modal would only produce a blank frozen tile, so say
+		// why up front instead. Drag-create still places a real url tile.
+		if !a.caps.LiveURL {
+			a.menu.Close()
+			a.reportErr(caps.GoLiveNotice())
+			return nil
+		}
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
 			paneID := fp.ID
 			a.menu.Close()

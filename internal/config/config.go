@@ -18,7 +18,13 @@ import (
 // ServerConfig is the top-level ~/.gridwell/server.yaml structure. There is no
 // root: every plugin is equal; the client enters one from the launcher.
 type ServerConfig struct {
-	Bind      string         `yaml:"bind,omitempty"`
+	Bind string `yaml:"bind,omitempty"`
+	// BindSet is derived by Load, never stored: true when the file contains a
+	// non-empty `bind:` key. It distinguishes "the user pinned the listen
+	// address in server.yaml" from "Bind holds the built-in default", which is
+	// what lets `serve --bind-default` (the desktop sidecar's ephemeral
+	// loopback port) fill in only when the config is silent.
+	BindSet   bool           `yaml:"-"`
 	StaticDir string         `yaml:"static,omitempty"` // "" → headless (no static files served)
 	Plugins   []PluginConfig `yaml:"plugins"`
 }
@@ -98,6 +104,18 @@ func Load(path string) (*ServerConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
+	// BindSet ("the file explicitly names a bind address") is derived here,
+	// once. cfg starts as Defaults, so after the unmarshal above Bind==default
+	// is ambiguous between "key absent" and "key present with the default
+	// value" — a pointer probe is the only way to see presence. An explicitly
+	// empty `bind: ""` counts as unset (and is default-filled below).
+	var probe struct {
+		Bind *string `yaml:"bind"`
+	}
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+	}
+	cfg.BindSet = probe.Bind != nil && *probe.Bind != ""
 	if cfg.Bind == "" {
 		cfg.Bind = Defaults.Bind
 	}
