@@ -35,7 +35,7 @@ type Notice struct {
 	// than scrolling the strip.
 	Source string
 	// Message is the most recent human-readable failure text for Source.
-	Message string
+	Message  string
 	Severity Severity
 	// Count is how many times Source has reported since it was last
 	// dismissed/resolved. Rendered as a "×N" suffix when > 1.

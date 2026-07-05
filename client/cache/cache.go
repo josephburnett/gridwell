@@ -55,6 +55,16 @@ func (c *Cache) PutTileContent(tileID string, data []byte) {
 	c.content[tileID] = cp
 }
 
+// DropTileContent forgets a tile's cached body so the next read refetches it
+// from the server. The reconcile hook for a rejected optimistic edit: the
+// server refused the write, so the cached bytes are client-only fiction and
+// must not keep rendering as if saved (charter §6/§7).
+func (c *Cache) DropTileContent(tileID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.content, tileID)
+}
+
 // TileContent returns the cached body for a plugin tile, or (nil, false) if
 // absent. Bytes are returned by reference; treat as read-only.
 func (c *Cache) TileContent(tileID string) ([]byte, bool) {

@@ -246,7 +246,13 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	go func() {
 		jpeg, err := a.cl.GetTilePreview(context.Background(), tileID)
 		a.urlPreview.ClearFetching(tileID)
-		if err != nil || len(jpeg) == 0 {
+		if err != nil {
+			// The thumbnail will just never appear — say why. An empty body
+			// (below) is legitimate: no preview captured yet.
+			a.surfaceRPCError("GetTilePreview", err)
+			return
+		}
+		if len(jpeg) == 0 {
 			return
 		}
 		a.urlPreview.Put(tileID, blobID, jpeg, func() { a.draw() })

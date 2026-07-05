@@ -578,6 +578,10 @@ func (a *App) bootstrap() {
 	plugins, err := a.cl.ListPlugins(context.Background())
 	if err == nil {
 		a.plugins = plugins
+	} else {
+		// The launcher will render empty — say why, or it reads as "all my
+		// plugins vanished" (charter §6).
+		a.reportErr(errsurface.Error, "rpc:ListPlugins", "plugin list failed: "+rpcErrText(err))
 	}
 	a.afterBootstrap()
 }
@@ -828,12 +832,21 @@ func (a *App) startSSE() {
 	for {
 		stream, err := a.cl.Subscribe(context.Background())
 		if err != nil {
+			// Surface the stall: until this reconnects, everything on screen
+			// is silently going stale. Coalesces (one source), and resolves
+			// itself on reconnect below.
+			a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
 			time.Sleep(time.Second)
 			continue
 		}
+		a.resolveErr("events")
 		for {
 			ev, ok, err := stream.Recv()
-			if err != nil || !ok {
+			if err != nil {
+				a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
+				break
+			}
+			if !ok {
 				break
 			}
 			if a.c.Apply(ev) {

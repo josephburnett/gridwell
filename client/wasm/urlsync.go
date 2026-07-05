@@ -257,6 +257,8 @@ func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
 		// content store — the single text-body store the overlay reads from.
 		data, err := a.cl.GetTileContent(context.Background(), fileTileID)
 		if err != nil {
+			// The file the URL pointed at stays blank — say why (charter §6).
+			a.surfaceRPCError("GetTileContent", err)
 			return
 		}
 		a.c.PutTileContent(fileTileID, data)

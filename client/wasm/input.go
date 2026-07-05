@@ -1164,9 +1164,7 @@ func (a *App) savePluginRootViewBeforeAscent(p *pane.Pane) {
 		Zoom:       zoom,
 	}
 	go func() {
-		if err := a.cl.SetRootView(context.Background(), req); err != nil {
-			logRPCError("SetRootView", err)
-		}
+		a.surfaceRPCError("SetRootView", a.cl.SetRootView(context.Background(), req))
 	}()
 }
 

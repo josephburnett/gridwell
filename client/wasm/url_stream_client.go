@@ -8,6 +8,7 @@ import (
 	"slices"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -130,6 +131,10 @@ func (a *App) closeURLStream(paneID string) {
 				})
 				if err != nil {
 					urlLog("SetURLState tile=%s err=%v", tileID, err)
+					// The freeze the user just saw is not persisted — the
+					// preview will revert on next load (charter §6).
+					a.reportErr(errsurface.Error, "urlfreeze",
+						"page preview save failed: "+rpcErrText(err))
 				}
 			}()
 		}

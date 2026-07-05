@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -427,10 +428,17 @@ func (a *App) saveFileFromCache(p *pane.Pane) {
 	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
+		// A dirty rendered-mode edit with nowhere to post — surface it, or
+		// the typing silently never persists (charter §6).
+		a.reportErr(errsurface.Error, "textedit", "text save failed — grid no longer loaded")
 		return
 	}
 	file, ok := g.Tiles[p.TextFocus]
-	if !ok || file.Kind != rpc.KindText || a.tileReadOnly(&file) {
+	if !ok {
+		a.reportErr(errsurface.Error, "textedit", "text save failed — tile no longer exists")
+		return
+	}
+	if file.Kind != rpc.KindText || a.tileReadOnly(&file) {
 		return
 	}
 	body, ok := a.tileBody(&file)

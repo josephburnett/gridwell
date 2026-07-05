@@ -29,8 +29,8 @@ const (
 	colorErrStripText  = "#ff9a9a"
 	colorInfoStripBg   = "#16203a"
 	colorInfoStripText = "#9ab0ff"
-	colorPaneBorder  = "#1f2229"
-	colorFocusBorder = "#4a6fff"
+	colorPaneBorder    = "#1f2229"
+	colorFocusBorder   = "#4a6fff"
 	// colorFocusBorderFaded is the pane outline for descended-but-not-
 	// focused panes. Same hue as the focus blue, lower saturation and
 	// value so the focused pane still pops, but the others stay
@@ -912,6 +912,8 @@ func (a *App) fetchTileContent(tileID string) {
 	go func() {
 		data, err := a.cl.GetTileContent(context.Background(), tileID)
 		if err != nil {
+			// The tile body will simply never appear — say why (charter §6).
+			a.surfaceRPCError("GetTileContent", err)
 			return
 		}
 		a.c.PutTileContent(tileID, data)

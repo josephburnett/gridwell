@@ -6,6 +6,7 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -45,6 +46,7 @@ func (a *App) installTestHook() {
 		"renderedCaret": js.FuncOf(a.thRenderedCaret),
 		"fileInnerBox":  js.FuncOf(a.thFileInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
+		"errors":        js.FuncOf(a.thErrors),
 	}))
 }
 
@@ -88,6 +90,34 @@ func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 		"y": r.Y,
 		"w": r.W,
 		"h": r.H,
+	}
+}
+
+// thErrors returns the errsurface notice queue (newest first) as
+// [{source, message, severity, count}], plus the strip's screen geometry so
+// an e2e can click a row to dismiss it. Read-only view of the one error
+// owner — this is also what makes failures assertable in specs instead of
+// invisible (charter §6): any spec can now end with "and no errors surfaced".
+func (a *App) thErrors(js.Value, []js.Value) any {
+	notices := a.errs.Notices()
+	stripH := errsurface.StripHeight(len(notices))
+	rows := make([]any, 0, len(notices))
+	for _, n := range notices {
+		sev := "error"
+		if n.Severity == errsurface.Info {
+			sev = "info"
+		}
+		rows = append(rows, map[string]any{
+			"source":   n.Source,
+			"message":  n.Message,
+			"severity": sev,
+			"count":    n.Count,
+		})
+	}
+	return map[string]any{
+		"notices":  rows,
+		"stripTop": a.height - stripH,
+		"stripH":   stripH,
 	}
 }
 

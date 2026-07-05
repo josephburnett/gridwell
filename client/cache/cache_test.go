@@ -146,6 +146,16 @@ func TestTileContentPutGet(t *testing.T) {
 	}
 }
 
+func TestDropTileContent(t *testing.T) {
+	c := New()
+	c.PutTileContent("7", []byte("rejected optimistic edit"))
+	c.DropTileContent("7")
+	if _, ok := c.TileContent("7"); ok {
+		t.Fatal("content survived DropTileContent; a rejected edit would keep rendering as saved")
+	}
+	c.DropTileContent("absent") // no-op
+}
+
 func TestKnownGridIDs(t *testing.T) {
 	c := New()
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{})
