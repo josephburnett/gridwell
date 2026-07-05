@@ -118,16 +118,11 @@ what a link is.** Copy this shape.
 - `ListPlugins` calls `Info` on every plugin on every invocation. Each call is
   now timeout-bounded (`pluginInfoTimeout`, degrading to a config-only entry),
   but there is still no cache.
-- **The server dispatches two capabilities on the kind *string* instead of the
-  `Info` handshake**, which breaks the "remote is just a transport" story:
-  `Subscribe` fans in only plugins with `kind == "localdb"` (the proto's
-  `InfoResponse.watch` field exists for exactly this and is ignored), and
-  `buildPluginInfo` derives `writable` from `kind == "localdb"`. Consequence: a
-  remote localdb reached through the `ssh` plugin (kind "ssh") gets **no event
-  fan-in and is presented read-only**, even though the proxy forwards
-  `Subscribe` and `CreateTile` with full fidelity. The fix shape is the §7
-  cure: capabilities are facts the plugin declares once in `Info` (as `watch`
-  and `has_session` already are), never re-derived from the kind string.
+- ~~The server dispatched two capabilities on the kind *string* instead of the
+  `Info` handshake~~ — **fixed** (`413df43`): `Subscribe` fan-in gates on
+  `Info.watch` and `buildPluginInfo` reads `Info.writable`, so a remote
+  localdb over ssh gets events and is writable. Capabilities are facts the
+  plugin declares once in `Info`, never re-derived from the kind string.
 
 ---
 
@@ -355,9 +350,9 @@ ranked target for the §7 cure. (Verified against the code, June 2026.)
 8. **The sweep policy for source-backed tiles** — "never delete on an uncertain
    read" implemented correctly in `proc`, violated in `fs` (§4). One rule, two
    homes, one wrong.
-9. **Plugin capabilities** — declared in `Info` (`watch`, `has_session`) but
-   re-derived from the kind string in the server for event fan-in and
-   writability (§3). One fact, two derivations, one of them wrong for remotes.
+9. **Plugin capabilities** — declared in `Info` (`watch`, `writable`,
+   `has_session`) and honored by the server (`413df43` closed the kind-string
+   re-derivation). One fact, one derivation; remotes get events + writes.
 
 ---
 

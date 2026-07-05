@@ -9,6 +9,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
+	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
@@ -53,6 +54,18 @@ func RunInit(args []string) int {
 	if *kind == "" || *name == "" {
 		fmt.Fprintln(os.Stderr, "init: --kind and --name are required")
 		return 2
+	}
+	// Kind-specific config validation, BEFORE anything is minted or written.
+	// An ssh plugin with missing keys would otherwise register fine and then
+	// die at first spawn as a cryptic subprocess exit; the required-key rule
+	// has one owner (sshdial.FromPluginConfig) — init just asks it early.
+	// (fs is deliberately not gated: no config.root is the valid Rootless
+	// state, visible on the launcher, fixable later.)
+	if *kind == "ssh" {
+		if _, err := sshdial.FromPluginConfig(conf); err != nil {
+			fmt.Fprintf(os.Stderr, "init: %v\n", err)
+			return 2
+		}
 	}
 
 	home, err := config.Home()

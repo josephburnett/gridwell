@@ -174,7 +174,13 @@ deliberate (`TestGetGridUnreadablePathIsEmptyNotError`); the conflation of
 return them as-is), mirroring proc. Recorded as invariant **I12** in
 `ARCHITECTURE.md §11`.
 
-### F2 — the server dispatches capabilities on the kind string, not the handshake  ❗ federation gap
+### F2 — RESOLVED (413df43): capabilities come from the Info handshake
+
+The kind-string dispatch below was fixed: `Subscribe` fan-in gates on
+`Info.watch` (`watchPlugin`), and `buildPluginInfo` reads `Info.writable`.
+The remote-transport gap that remained after F2 — no endpoint on a remote
+node actually spoke the plugin interface — was closed by the node export
+(`internal/server/nodeexport.go`) + `sshdial`. Original text for history:
 
 Two places in `connect_handler.go` check `kind == "localdb"`:
 

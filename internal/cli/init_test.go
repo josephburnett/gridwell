@@ -76,7 +76,11 @@ func TestRunInitSSHCarriesConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	rc := RunInit([]string{"--kind", "ssh", "--name", "remote", "--config", "host=example.com:22", "--config", "user=joe"})
+	rc := RunInit([]string{"--kind", "ssh", "--name", "remote",
+		"--config", "host=example.com:22", "--config", "user=joe",
+		"--config", "key=/home/joe/.ssh/id_ed25519",
+		"--config", "known_hosts=/home/joe/.ssh/known_hosts",
+		"--config", "addr=127.0.0.1:8080"})
 	if rc != 0 {
 		t.Fatalf("init ssh returned %d", rc)
 	}
@@ -91,5 +95,25 @@ func TestRunInitSSHCarriesConfig(t *testing.T) {
 	m, _ := pluginmeta.Verify(config.DBFile(home, p.ID), "", "")
 	if m.Kind != "ssh" {
 		t.Errorf("DB kind = %q, want ssh", m.Kind)
+	}
+}
+
+// TestRunInitSSHValidatesConfigUpFront: an ssh plugin missing required config
+// keys must fail AT INIT with every missing key named — not later, as a
+// cryptic subprocess exit when the server first spawns the plugin binary.
+// Nothing may be written: no server.yaml entry, no DB directory.
+func TestRunInitSSHValidatesConfigUpFront(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("GRIDWELL_HOME", home)
+
+	rc := RunInit([]string{"--kind", "ssh", "--name", "remote", "--config", "host=example.com:22"})
+	if rc == 0 {
+		t.Fatalf("init ssh with missing config keys succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(home, "server.yaml")); !os.IsNotExist(err) {
+		t.Errorf("server.yaml written despite invalid config")
+	}
+	if _, err := os.Stat(filepath.Join(home, "db")); !os.IsNotExist(err) {
+		t.Errorf("db dir created despite invalid config")
 	}
 }
