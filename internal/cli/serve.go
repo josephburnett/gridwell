@@ -239,8 +239,12 @@ func RunServe(args []string) int {
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
 
+	// NodeHandler = the browser mux wrapped in h2c plus the per-plugin gRPC
+	// node export, so this one port serves every caller: browsers (HTTP/1.1),
+	// gRPC front-door calls, and a remote mounter's plugin-scoped gRPC (the
+	// ssh plugin through its tunnel). See internal/server/nodeexport.go.
 	httpSrv := &http.Server{
-		Handler:           srv.Handler(),
+		Handler:           srv.NodeHandler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 	}

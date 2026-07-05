@@ -290,12 +290,18 @@ Plugin storage is the authoritative state for the plugin's tiles. The localdb
 format is **frozen and forward-compatible** — see `internal/store/CLAUDE.md` for
 the additive-only schema-evolution contract; never delete a DB to absorb a change.
 
-**Remote is just a transport.** The `ssh` plugin dials a remote host's Gridwell
-gRPC endpoint and serves a **transparent proxy** (`internal/plugin/proxy`) that
-forwards the *entire* service — unary calls, the `OpenShell` PTY stream, and the
-session blob — with full fidelity. So a remote plugin's wells, tiles, live
+**Remote is just a transport.** The `ssh` plugin tunnels to a remote node's
+one HTTP/h2c port (its `bind:`) and mounts **one remote plugin** through the
+**node export** (`internal/server/nodeexport.go`): requests carrying the
+`gridwell-plugin` selector (config `remote_plugin`, a name or uuid) are
+answered by that plugin's own service verbatim — local ids, its own `Info`.
+Both hops use the same **transparent proxy** (`internal/plugin/proxy`), which
+forwards the *entire* service — unary calls, the `OpenShell` PTY stream, and
+the session blob — with full fidelity. So a remote plugin's wells, tiles, live
 shells, and session reach the local server over the same interface as a local
-plugin; "remote" adds nothing to the vocabulary.
+plugin; "remote" adds nothing to the vocabulary. The whole dial path (key
+auth, known_hosts, tunnel, gRPC-over-h2c, resolution) is
+`internal/plugin/sshdial`, seam-tested against a real in-process ssh server.
 
 **URL and path format.** The descent path is encoded as alternating
 plugin-uuid / tile-id segments, with the plugin uuid omitted when it equals the

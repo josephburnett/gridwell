@@ -38,3 +38,34 @@ bound address can read and write every tile and open live shell PTYs on your
 machine. Only bind a VPN-only address (Tailscale is the intended transport);
 never an open network interface. `gridwell serve` prints a prominent warning
 at startup whenever the resolved bind is not loopback.
+
+## Mounting a remote Gridwell over SSH
+
+A machine already running `gridwell serve` can be mounted into another
+machine's Gridwell as an `ssh` plugin: one of the remote's plugins appears on
+your launcher like any local plugin — its grids, text tiles, live shells, and
+session all cross the tunnel transparently. The remote needs **no extra
+setup**: the same one HTTP port that serves browsers also answers the
+plugin-scoped gRPC the tunnel carries (the node export), so `bind:
+"127.0.0.1:8080"` on the remote is enough — nothing new is exposed to its
+network.
+
+On the mounting machine:
+
+```sh
+gridwell init --kind ssh --name work \
+  --config host=myserver.example:22 \
+  --config user=joe \
+  --config key=/home/joe/.ssh/id_ed25519 \
+  --config known_hosts=/home/joe/.ssh/known_hosts \
+  --config addr=127.0.0.1:8080 \
+  --config remote_plugin=personal
+```
+
+- `addr` is the remote server's `bind:` **as seen on the remote host** —
+  loopback is the normal, safest choice; the tunnel reaches it.
+- `remote_plugin` picks which of the remote's plugins to mount (its config
+  name or uuid). Optional when the remote has exactly one plugin; if it names
+  nothing, the error lists what the remote does have.
+- `known_hosts` is required — the plugin refuses to trust an unverified host.
+- Missing keys fail at `init` time with all of them named at once.

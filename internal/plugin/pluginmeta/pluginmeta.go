@@ -21,6 +21,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	// The sqlite driver: this package calls sql.Open("sqlite", ...) and so
+	// owns the driver registration. It must NOT rely on another linked
+	// package (internal/store) happening to import it — gridwell-ssh links
+	// pluginmeta without store, and every spawn died with `unknown driver`
+	// while tests (which had their own masking import) stayed green.
+	_ "modernc.org/sqlite"
 )
 
 // Sentinel errors. Callers should use errors.Is to test for them.
