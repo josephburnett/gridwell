@@ -10,16 +10,31 @@ import { GridwellDriver } from './driver';
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(DESKTOP_DIR, '..', '..');
 
+// PluginSpec is one extra plugin to register via `gridwell init` beyond the
+// default localdb (see seedHome's extra param) — e.g. an fs plugin with no
+// config.root, the rootless-launcher-tile case (issue #47).
+export interface PluginSpec {
+  kind: string;
+  name: string;
+  config?: Record<string, string>;
+}
+
 // seedHome creates a throwaway Gridwell home and registers one localdb plugin in
 // it via `gridwell init` — the same coordinated setup a real user runs. server.yaml
 // is mandatory (no fallback), so every launch points GRIDWELL_HOME at a home seeded
-// this way. Returns the home dir; callers remove it on teardown.
-export function seedHome(): string {
+// this way. `extra` registers additional plugins (in order, after the localdb) the
+// same way, for tests that need a second plugin present at boot. Returns the home
+// dir; callers remove it on teardown.
+export function seedHome(extra: PluginSpec[] = []): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
-  execFileSync(path.join(REPO_ROOT, 'gridwell'), ['init', '--kind', 'localdb', '--name', 'e2e'], {
-    env: { ...process.env, GRIDWELL_HOME: home },
-    stdio: 'ignore',
-  });
+  const bin = path.join(REPO_ROOT, 'gridwell');
+  const env = { ...process.env, GRIDWELL_HOME: home };
+  execFileSync(bin, ['init', '--kind', 'localdb', '--name', 'e2e'], { env, stdio: 'ignore' });
+  for (const p of extra) {
+    const args = ['init', '--kind', p.kind, '--name', p.name];
+    for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);
+    execFileSync(bin, args, { env, stdio: 'ignore' });
+  }
   return home;
 }
 
@@ -86,6 +101,10 @@ type Fixtures = {
   electronApp: ElectronApplication;
   window: Page;
   gw: GridwellDriver;
+  // extraPlugins is a test option (set via test.use({ extraPlugins: [...] })
+  // in a spec file, e.g. plugin-health.spec.ts): plugins seedHome registers
+  // beyond the default localdb, present from the very first launch.
+  extraPlugins: PluginSpec[];
 };
 
 // The e2e fixture launches the SAME `electron .` entry that `make launch` uses
@@ -111,8 +130,10 @@ type Fixtures = {
 // the sidecar exited so any leak is blamed on the test that caused it, not the
 // next one.
 export const test = base.extend<Fixtures>({
-  electronApp: async ({}, use) => {
-    const home = seedHome();
+  extraPlugins: [[], { option: true }],
+
+  electronApp: async ({ extraPlugins }, use) => {
+    const home = seedHome(extraPlugins);
     // The per-test Chromium profile. Created before launch so the flag is valid.
     const electronDir = path.join(home, 'electron');
     fs.mkdirSync(electronDir, { recursive: true });
