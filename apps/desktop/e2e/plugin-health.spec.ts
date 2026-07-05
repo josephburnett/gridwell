@@ -44,8 +44,8 @@ test('a rootless plugin tile is inert and reports a notice instead of descending
   // (client/pluginhealth.ClickNotice's source key), as an Info severity (a
   // fixable configuration gap, not a failure) mentioning the fix.
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  const notice = errs.notices.find((n: any) => n.source === 'plugin:rootless');
-  expect(notice, 'a notice for plugin:rootless is present').toBeTruthy();
+  const notice = errs.notices.find((n: any) => n.source === 'launcher:rootless');
+  expect(notice, 'a notice for launcher:rootless is present').toBeTruthy();
   expect(notice.severity).toBe('info');
   expect(notice.message).toContain('no root configured');
 
