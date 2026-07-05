@@ -2,17 +2,22 @@ import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import { freePort } from './freeport';
 import { sidecarBinary, staticDir } from './paths';
-import { isReadyLine, makeLineSplitter } from './lines';
+import { makeLineSplitter, parseServingLine, windowOrigin } from './lines';
 
 export interface Sidecar {
+  // The announced port and window origin, read back from the serve banner —
+  // loopback by default, but server.yaml `bind:` may pin another address
+  // (e.g. a Tailscale IP shared with a phone browser).
   port: number;
-  origin: string; // http://127.0.0.1:<port>
+  origin: string;
   child: ChildProcess;
   stop: () => void;
 }
 
 export interface StartOptions {
-  // Override the bind port (otherwise a free ephemeral port is chosen).
+  // Override the default bind port (otherwise a free ephemeral port is
+  // chosen). Passed as --bind-default: an explicit `bind:` in server.yaml
+  // still wins — the server owns the listen-address decision.
   port?: number;
   // Milliseconds to wait for the ready line before giving up.
   timeoutMs?: number;
@@ -20,9 +25,10 @@ export interface StartOptions {
   onLog?: (line: string) => void;
 }
 
-// startSidecar spawns the Go backend (loopback HTTP/SSE/WS) and resolves once
-// it reports listening. Rejects if the process exits first or the timeout
-// elapses. The returned stop() terminates the child.
+// startSidecar spawns the Go backend (HTTP/SSE/WS) and resolves once it
+// announces its actual bound address ("gridwell: serving on ..."). Rejects if
+// the process exits first or the timeout elapses. The returned stop()
+// terminates the child.
 export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const bin = sidecarBinary();
   if (!fs.existsSync(bin)) {
@@ -35,14 +41,17 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   // Gridwell home (GRIDWELL_HOME, inherited from this process's env, else
   // ~/.gridwell). It requires ~/.gridwell/server.yaml — run `gridwell init`
   // (or `make init`) once to create it; there is no fallback DB.
+  // --bind-default (not --bind): the ephemeral loopback port applies only when
+  // ~/.gridwell/server.yaml declares no bind: of its own. A declared bind:
+  // wins, so one server instance serves both this window and a phone browser
+  // on a stable origin. The actual address comes back in the serve banner.
   const args = [
     'serve',
-    '--bind', `127.0.0.1:${port}`,
+    '--bind-default', `127.0.0.1:${port}`,
     '--static', staticDir(),
   ];
   const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-  const origin = `http://127.0.0.1:${port}`;
   const stop = () => {
     if (!child.killed) child.kill('SIGTERM');
   };
@@ -59,10 +68,12 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
 
     const handleLine = (line: string) => {
       onLog(line);
-      if (!settled && isReadyLine(line)) {
+      if (settled) return;
+      const served = parseServingLine(line);
+      if (served) {
         settled = true;
         clearTimeout(timer);
-        resolve({ port, origin, child, stop });
+        resolve({ port: served.port, origin: windowOrigin(served), child, stop });
       }
     };
 
