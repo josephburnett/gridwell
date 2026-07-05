@@ -133,3 +133,47 @@ func (a *App) onTouchEnd(_ js.Value, args []js.Value) any {
 	a.dispatchTouchActions(a.touch.End(touchPoints(ev.Get("touches")), ev.Get("timeStamp").Float()))
 	return nil
 }
+
+// installTextareaTouch forwards MULTI-finger touches from the file textarea
+// into the same gesture machine the canvas feeds, so two-finger tap (ascend)
+// and pinch work over a text descent — the touch analogue of the textarea's
+// mouse forwarding in file_overlay.go. Single-finger touches are left
+// entirely native (caret placement, text selection, OS keyboard); the machine
+// accepts a two-finger Start from idle for exactly this case.
+func (a *App) installTextareaTouch(ta js.Value) {
+	opts := js.Global().Get("Object").New()
+	opts.Set("passive", false)
+	handler := func(phase string) js.Func {
+		return js.FuncOf(func(this js.Value, args []js.Value) any {
+			ev := args[0]
+			touches := ev.Get("touches")
+			n := touches.Get("length").Int()
+			// Engage only for multi-finger; once engaged, keep forwarding
+			// through the tail of the gesture (per-finger lifts) so the
+			// machine sees the whole stream.
+			if !a.taTouchActive && n < 2 {
+				return nil
+			}
+			ev.Call("preventDefault")
+			t := ev.Get("timeStamp").Float()
+			pts := touchPoints(touches)
+			switch phase {
+			case "start":
+				a.taTouchActive = true
+				a.dispatchTouchActions(a.touch.Start(pts, t))
+			case "move":
+				a.dispatchTouchActions(a.touch.Move(pts, t))
+			default: // end / cancel
+				a.dispatchTouchActions(a.touch.End(pts, t))
+				if n == 0 {
+					a.taTouchActive = false
+				}
+			}
+			return nil
+		})
+	}
+	ta.Call("addEventListener", "touchstart", handler("start"), opts)
+	ta.Call("addEventListener", "touchmove", handler("move"), opts)
+	ta.Call("addEventListener", "touchend", handler("end"), opts)
+	ta.Call("addEventListener", "touchcancel", handler("end"), opts)
+}

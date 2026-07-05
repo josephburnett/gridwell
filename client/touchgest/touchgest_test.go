@@ -112,6 +112,63 @@ func TestTwoFingerTapIsMiddleClick(t *testing.T) {
 	)
 }
 
+func TestTwoFingerTapWithStaggeredLifts(t *testing.T) {
+	// Real hardware (and CDP injection) reports one touchend PER FINGER: the
+	// machine sees End([p1]) then End([]). The tap must still classify — this
+	// is the sequence an actual two-finger tap produces.
+	m := New()
+	m.Start([]Point{pt(100, 100)}, 0)
+	m.Start([]Point{pt(100, 100), pt(140, 100)}, 30)
+	if as := m.End([]Point{pt(100, 100)}, 80); len(as) != 0 {
+		t.Fatalf("first staggered lift emitted %+v", as)
+	}
+	as := m.End(nil, 100)
+	wantActions(t, as,
+		Action{Kind: MouseDown, Pos: pt(120, 100), Button: 1},
+		Action{Kind: MouseUp, Pos: pt(120, 100), Button: 1},
+	)
+}
+
+func TestSlowStaggeredLiftIsNotATap(t *testing.T) {
+	m := New()
+	m.Start([]Point{pt(100, 100)}, 0)
+	m.Start([]Point{pt(100, 100), pt(140, 100)}, 30)
+	m.End([]Point{pt(100, 100)}, 80)
+	// The last finger dawdles past the tap window: not a tap, no click.
+	if as := m.End(nil, 30+TwoTapMs+50); len(as) != 0 {
+		t.Fatalf("slow lift emitted %+v", as)
+	}
+}
+
+func TestMovedTwoFingerStaggeredLiftIsNotATap(t *testing.T) {
+	// A pinch/scroll that lifts staggered must not fire a phantom middle
+	// click on the final lift.
+	m := New()
+	m.Start([]Point{pt(100, 100)}, 0)
+	m.Start([]Point{pt(100, 100), pt(200, 100)}, 10)
+	m.Move([]Point{pt(80, 100), pt(220, 100)}, 30) // locked pinch
+	m.End([]Point{pt(80, 100)}, 50)
+	if as := m.End(nil, 70); len(as) != 0 {
+		t.Fatalf("pinch staggered lift emitted %+v", as)
+	}
+}
+
+func TestTwoFingerStartFromIdle(t *testing.T) {
+	// Both fingers can arrive in one event — or the first finger landed on a
+	// DOM overlay (the file textarea) that only forwards MULTI-finger touches
+	// to the machine, so the machine never saw a single-finger start. A
+	// two-finger tap must still classify.
+	m := New()
+	if as := m.Start([]Point{pt(100, 100), pt(140, 100)}, 0); len(as) != 0 {
+		t.Fatalf("two-finger start emitted %+v", as)
+	}
+	as := m.End(nil, 100)
+	wantActions(t, as,
+		Action{Kind: MouseDown, Pos: pt(120, 100), Button: 1},
+		Action{Kind: MouseUp, Pos: pt(120, 100), Button: 1},
+	)
+}
+
 func TestPinchEmitsWheelZoom(t *testing.T) {
 	m := New()
 	m.Start([]Point{pt(100, 100)}, 0)

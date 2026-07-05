@@ -77,6 +77,7 @@ const (
 	dragLeft
 	dragRight
 	twoDown   // two fingers down, unclassified (tap / pinch / scroll)
+	twoLift   // one finger of an unclassified pair lifted — tap still possible
 	twoPinch  // locked: distance change → wheel zoom
 	twoScroll // locked: parallel travel → wheel scroll
 	dead      // gesture over or abandoned; swallow until all fingers lift
@@ -120,8 +121,11 @@ func (m *Machine) Start(pts []Point, t float64) []Action {
 		return nil
 	case 2:
 		switch m.st {
-		case pending1:
-			// Second finger before classification: a two-finger gesture.
+		case pending1, idle:
+			// Second finger before classification — or both fingers at once
+			// (idle: the first landed on a DOM overlay that only forwards
+			// multi-finger touches, e.g. the file textarea). Either way, a
+			// two-finger gesture.
 			m.st = twoDown
 			m.mid = midpoint(pts[0], pts[1])
 			m.dist = dist(pts[0], pts[1])
@@ -220,13 +224,19 @@ func (m *Machine) Move(pts []Point, t float64) []Action {
 // End is called on touchend/touchcancel with the REMAINING touch list.
 func (m *Machine) End(remaining []Point, t float64) []Action {
 	if len(remaining) > 0 {
-		// Fingers still down: whatever was in flight is over; swallow the
-		// survivors so they can't start a phantom pan.
+		// Fingers still down: real hardware (and CDP injection) lifts one
+		// finger per event, so this is the NORMAL end of a two-finger
+		// gesture, not an anomaly.
 		switch m.st {
 		case dragLeft, dragRight:
 			as := []Action{{Kind: MouseUp, Pos: m.last, Button: m.dragButton()}}
 			m.st = dead
 			return as
+		case twoDown:
+			// First finger of an unclassified pair lifted: the tap window is
+			// still open until the second finger lifts.
+			m.st = twoLift
+			return nil
 		case idle:
 			return nil
 		default:
@@ -250,7 +260,7 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 			btn = 2
 		}
 		return []Action{{Kind: MouseUp, Pos: m.last, Button: btn}}
-	case twoDown:
+	case twoDown, twoLift:
 		if t-m.twoT0 <= TwoTapMs && m.accDist < SlopPx && m.accTrav < SlopPx {
 			// Two-finger tap: middle click = ascend.
 			return []Action{

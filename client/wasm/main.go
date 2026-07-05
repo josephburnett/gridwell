@@ -98,10 +98,13 @@ type App struct {
 	caps caps.Caps
 
 	// touch is the touch→mouse gesture classifier (client/touchgest);
-	// touchTimerCb is its retained long-press timer callback. Owned by
-	// touch.go; nothing else feeds or reads them.
-	touch        *touchgest.Machine
-	touchTimerCb js.Func
+	// touchTimerCb is its retained long-press timer callback; taTouchActive
+	// marks a multi-finger gesture engaged from the file textarea (its
+	// single-finger touches stay native). Owned by touch.go; nothing else
+	// feeds or reads them.
+	touch         *touchgest.Machine
+	touchTimerCb  js.Func
+	taTouchActive bool
 
 	// launcherHover is the index of the launcher plugin tile under the cursor
 	// (the focused launcher pane), or -1. Drives the hover outline on the
