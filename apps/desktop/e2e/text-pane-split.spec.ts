@@ -19,6 +19,34 @@ import { tileAt } from './oracle';
 //      sibling preview pane) — asserted via textareaInfo().
 //   2. Tiles are preserved in each pane's rendered cache through focus switches.
 //   3. Typed content persists to the server through the full round trip.
+//
+// Geometry notes (learned the hard way):
+//   - splitFocusedPaneVertical creates the NEW pane at the launcher (anchor "");
+//     it must enterPlugin itself before it shows the grid.
+//   - A vertical split halves pane WIDTH, so tiles the spec descends into are
+//     offset VERTICALLY (cy±1) from the viewport center — a cx±1 offset can land
+//     outside the half-width pane and the click hits the sibling pane instead.
+//   - focusPane clicks the pane-center pixel (cell (0,0) area); the offset cells
+//     keep the center clear so a focus click never descends.
+
+// splitWithBothPanesOnGrid splits the focused (grid) pane, then enters the same
+// plugin in the new launcher pane, returning [left, right] pane infos with both
+// panes on the plugin's root grid.
+async function splitWithBothPanesOnGrid(gw: any): Promise<[any, any]> {
+  await gw.splitFocusedPaneVertical();
+  const panes = await gw.panes();
+  expect(panes.length, 'two panes after split').toBe(2);
+  const launcherPane = panes.find((p: any) => p.anchor === '');
+  expect(launcherPane, 'split creates a launcher pane').toBeTruthy();
+  // Focus the launcher pane with a CORNER click: its plugin tiles are centered,
+  // so a focusPane() center click would enter a plugin instead of just focusing.
+  await gw.clickScreen(launcherPane.x + 20, launcherPane.y + 20);
+  await gw.enterPlugin('localdb');
+  const after = await gw.panes();
+  const sorted = after.slice().sort((a: any, b: any) => a.x - b.x);
+  expect(sorted[0].gridID, 'both panes on the same grid').toBe(sorted[1].gridID);
+  return [sorted[0], sorted[1]];
+}
 
 test('split pane text tiles: overlay covers only focused pane, not preview', async ({ gw }) => {
   await gw.enterPlugin('localdb');
@@ -27,28 +55,25 @@ test('split pane text tiles: overlay covers only focused pane, not preview', asy
   const cx = Math.round(f0.cx);
   const cy = Math.round(f0.cy);
 
-  // Create a text tile on the grid.
+  // Create a text tile one cell BELOW center: visible in a half-width pane,
+  // clear of the pane-center pixel that focusPane clicks.
   await gw.openPalette();
-  await gw.dragCreate('markdown', cx, cy);
-  const tile = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
+  await gw.dragCreate('markdown', cx, cy + 1);
+  const tile = tileAt(await gw.getGrid(grid), 'text', cx, cy + 1)!;
   expect(tile, 'text tile created').toBeTruthy();
 
-  // Split into two panes. Both now show the same grid with the text tile.
-  await gw.splitFocusedPaneVertical();
-  const panes = await gw.panes();
-  expect(panes.length, 'two panes after split').toBe(2);
+  const [left, right] = await splitWithBothPanesOnGrid(gw);
 
   // Focus the LEFT pane and descend into the text tile (enters raw-text mode).
-  const left = panes.slice().sort((a, b) => a.x - b.x)[0];
   await gw.focusPane(left);
-  await gw.descendCell(cx, cy);
+  await gw.descendCell(cx, cy + 1);
 
-  // After descent the focused pane is in text mode. The textarea overlay must
-  // cover the focused pane and report that it has content (textareaReady).
-  // This may not be immediate if the blob is loading — poll.
+  // After descent the overlay must be present and bound to this pane. A freshly
+  // created tile is EMPTY, so hasContent (textareaReady) is legitimately false
+  // until the user types — only the binding is asserted here.
   await expect.poll(async () => {
     const ta = await gw.textareaInfo();
-    return ta != null && ta.hasContent;
+    return ta != null;
   }, { timeout: 10_000 }).toBe(true);
 
   const taAfterDescent = await gw.textareaInfo();
@@ -58,30 +83,33 @@ test('split pane text tiles: overlay covers only focused pane, not preview', asy
   );
   expect(taAfterDescent!.tileID, 'overlay bound to the text tile').toBe(tile.id);
 
-  // Type a marker into the focused pane.
+  // Type a marker. Typing must flip textareaReady — the canvas hide decision
+  // (textedit.CanvasHiddenByOverlay) depends on it.
   const marker = 'e2e-split-text';
   await gw.typeText(marker);
+  await expect.poll(async () => {
+    const ta = await gw.textareaInfo();
+    return ta != null && ta.hasContent;
+  }, { timeout: 10_000 }).toBe(true);
 
-  // Switch focus to the RIGHT pane (which shows the parent grid, T1 as preview).
-  const right = panes.slice().sort((a, b) => b.x - a.x)[0];
+  // Switch focus to the RIGHT pane (same grid, shows the tile as a preview).
   await gw.focusPane(right);
   await gw.waitIdle();
 
-  // After focusing the right pane (no text descent), the textarea overlay must
-  // be gone — it never covers a preview pane. This is the mechanism B assertion:
+  // With the right pane focused (no text descent there), the overlay must be
+  // gone — it never covers a preview pane. This is the mechanism B assertion:
   // the overlay not being here means canvas was free to paint the preview.
   const taOnRight = await gw.textareaInfo();
   expect(taOnRight, 'overlay gone when focused pane has no text descent').toBeNull();
 
   // The text tile must still be in the right pane's rendered cache (not blanked
-  // out of cache, just possibly hidden on canvas by the old bug — we verify
-  // the cache so we know the tile was never lost).
+  // out of cache — we verify the cache so we know the tile was never lost).
   const rightPane = (await gw.panes()).find((p) => p.id === right.id)!;
   expect(rightPane.tileIds, 'text tile still in right pane cache').toContain(tile.id);
 
-  // Switch focus back to the left pane (still descended into the text tile).
-  const leftPane = (await gw.panes()).find((p) => p.id === left.id)!;
-  await gw.focusPane(leftPane);
+  // Switch focus back to the left pane (still descended into the text tile;
+  // while unfocused it was canvas-painted, so the center click hits the canvas).
+  await gw.focusPane(left);
   await gw.waitIdle();
 
   // Overlay must be back on the left pane with content.
@@ -106,37 +134,46 @@ test('split pane: focus switch between two text descents preserves both tiles', 
   const cx = Math.round(f0.cx);
   const cy = Math.round(f0.cy);
 
-  // Create two text tiles side-by-side.
+  // Create two text tiles flanking the center vertically (visible in half-width
+  // panes; the pane-center pixel stays clear for focus clicks).
   await gw.openPalette();
-  await gw.dragCreate('markdown', cx, cy);
+  await gw.dragCreate('markdown', cx, cy - 1);
   await gw.openPalette();
-  await gw.dragCreate('markdown', cx + 1, cy);
-  const t1 = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
-  const t2 = tileAt(await gw.getGrid(grid), 'text', cx + 1, cy)!;
+  await gw.dragCreate('markdown', cx, cy + 1);
+  const t1 = tileAt(await gw.getGrid(grid), 'text', cx, cy - 1)!;
+  const t2 = tileAt(await gw.getGrid(grid), 'text', cx, cy + 1)!;
   expect(t1, 'first text tile created').toBeTruthy();
   expect(t2, 'second text tile created').toBeTruthy();
 
-  // Split and descend into each tile in its own pane.
-  await gw.splitFocusedPaneVertical();
-  const [leftPane, rightPane] = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  const [leftPane, rightPane] = await splitWithBothPanesOnGrid(gw);
 
   // Descend left pane into t1.
   await gw.focusPane(leftPane);
-  await gw.descendCell(cx, cy);
+  await gw.descendCell(cx, cy - 1);
+  await expect.poll(async () => {
+    const ta = await gw.textareaInfo();
+    return ta != null && ta.paneID === leftPane.id;
+  }, { timeout: 10_000 }).toBe(true);
 
   // Type into t1.
   const marker1 = 'left-pane-text';
   await gw.typeText(marker1);
 
-  // Switch to right pane, descend into t2.
+  // Switch to right pane and descend into t2. The left pane keeps its text
+  // descent; because it is no longer focused, the canvas (not the overlay)
+  // paints it — the exact path mechanism B used to blank.
   await gw.focusPane(rightPane);
-  await gw.descendCell(cx + 1, cy);
+  await gw.descendCell(cx, cy + 1);
+  await expect.poll(async () => {
+    const ta = await gw.textareaInfo();
+    return ta != null && ta.paneID === rightPane.id;
+  }, { timeout: 10_000 }).toBe(true);
 
   // Type into t2.
   const marker2 = 'right-pane-text';
   await gw.typeText(marker2);
 
-  // The overlay must now be on the right pane (t2), not the left (t1).
+  // The overlay must now be on the right pane with content.
   await expect.poll(async () => {
     const ta = await gw.textareaInfo();
     return ta != null && ta.paneID === rightPane.id && ta.hasContent;
