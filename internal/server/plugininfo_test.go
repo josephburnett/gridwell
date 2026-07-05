@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // buildPluginInfo is the pure assembly behind ListPlugins. These tests pin the
@@ -251,5 +253,53 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 	}
 	if got := fake.calls.Load(); got != 2 {
 		t.Errorf("Info called %d times, want 2 (fail, then successful retry, then cache)", got)
+	}
+}
+
+// alwaysFailInfoPlugin never succeeds its Info handshake — the persistently
+// broken plugin the buildPluginInfo unit tests can only simulate by hand.
+type alwaysFailInfoPlugin struct {
+	pb.UnimplementedGridwellServer
+}
+
+func (alwaysFailInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	return nil, errors.New("plugin exploded")
+}
+
+// TestListPluginsSurfacesInfoErrorOverTheWire crosses the seam a pure
+// buildPluginInfo unit test cannot reach: server -> Connect wire (proto-JSON)
+// -> rpc.Client.ListPlugins. InfoError must survive that round trip so the
+// wasm launcher — which only ever sees an internal/rpc.PluginInfo, never the
+// server's pb.PluginInfo — can classify a broken plugin (client/pluginhealth).
+func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
+	client, closer, err := plugin.ServeInProcess(alwaysFailInfoPlugin{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closer)
+	reg := plugin.NewRegistry()
+	reg.Register("u-broken", "fs", client, nil)
+	reg.SetLabel("u-broken", "Broken")
+	srv := New(reg, Config{})
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	plugins, err := cl.ListPlugins(context.Background())
+	if err != nil {
+		t.Fatalf("ListPlugins: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("got %d plugins, want 1: %+v", len(plugins), plugins)
+	}
+	p := plugins[0]
+	if p.RootGridID != "" {
+		t.Errorf("broken plugin RootGridID = %q, want empty", p.RootGridID)
+	}
+	if p.InfoError == "" {
+		t.Error("broken plugin must carry a non-empty InfoError over the wire")
+	}
+	if !strings.Contains(p.InfoError, "plugin exploded") {
+		t.Errorf("InfoError = %q, want it to mention the underlying failure", p.InfoError)
 	}
 }

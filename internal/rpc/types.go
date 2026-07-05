@@ -241,6 +241,11 @@ type PluginInfo struct {
 	RootViewCx   float64 `json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `json:"root_view_zoom,omitempty"`
+	// InfoError is set when the plugin's Info handshake failed or timed out —
+	// a crashed/hung plugin ("broken"), distinct from a healthy plugin that
+	// simply has no root configured ("rootless"), which leaves this empty even
+	// though RootGridID is also "". See client/pluginhealth.Classify.
+	InfoError string `json:"info_error,omitempty"`
 }
 
 // CreateWellRequest is a typed create. On the wire every create is a single
