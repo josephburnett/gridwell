@@ -9,6 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -244,6 +245,13 @@ func (a *App) thLauncher(js.Value, []js.Value) any {
 		cr := palette.LauncherCellRect(i, n)
 		// Center of the launcher cell, in screen pixels.
 		sx, sy := ps.CellToScreen(cr.X+cr.W/2, cr.Y+cr.H/2)
+		status := "enterable"
+		switch pluginhealth.Classify(pl) {
+		case pluginhealth.Broken:
+			status = "broken"
+		case pluginhealth.Rootless:
+			status = "rootless"
+		}
 		out = append(out, map[string]any{
 			"index":         i,
 			"kind":          pl.Kind,
@@ -251,6 +259,8 @@ func (a *App) thLauncher(js.Value, []js.Value) any {
 			"uuid":          pl.UUID,
 			"rootGridID":    pl.RootGridID,
 			"scratchGridID": pl.ScratchGridID,
+			"infoError":     pl.InfoError,
+			"status":        status,
 			"x":             sx,
 			"y":             sy,
 		})

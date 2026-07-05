@@ -105,6 +105,14 @@ const (
 	// drawing path (drawInlineLines, drawMarkdownRendered).
 	colorMarkdownBody    = "#d8d9de"
 	colorMarkdownCodeBg2 = "#3a4658"
+	// Launcher tile tints for a non-enterable plugin (client/pluginhealth):
+	// broken (Info failed/timed out) gets a red-tinted overlay — the same
+	// alarm family as the error notice strip; rootless (healthy, no root
+	// configured) gets a plain gray dimming — a configuration gap, not a
+	// failure. Drawn as a translucent overlay atop the normal tile so the
+	// plugin glyph / preview underneath still reads.
+	colorLauncherBrokenTint   = "rgba(180, 40, 40, 0.38)"
+	colorLauncherRootlessTint = "rgba(40, 40, 46, 0.55)"
 )
 
 const (

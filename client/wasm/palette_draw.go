@@ -7,6 +7,8 @@ import (
 
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file holds the creation-palette: the screen-space layout adapters
@@ -197,7 +199,27 @@ func (a *App) drawLauncherTiles(p *pane.Pane, r pane.Rect) {
 		w, h := cr.W*cell, cr.H*cell
 		a.drawNodeWithPreview(&node, sx, sy, w, h, cell,
 			pane.Rect{X: sx, Y: sy, W: w, H: h}, hovered, false, isLinkTile(&node))
+		a.drawLauncherTileTint(a.plugins[i], sx, sy, w, h)
 	}
+}
+
+// drawLauncherTileTint overlays a broken/rootless launcher tile with its
+// pluginhealth-decided tint (drawn atop the normal tile so the glyph/preview
+// underneath still reads); an enterable tile gets no overlay. The decision
+// (which status, if any) is pluginhealth.Classify — this function only maps
+// that decision to pixels, per charter §5.
+func (a *App) drawLauncherTileTint(pl rpc.PluginInfo, x, y, w, h float64) {
+	var color string
+	switch pluginhealth.Classify(pl) {
+	case pluginhealth.Broken:
+		color = colorLauncherBrokenTint
+	case pluginhealth.Rootless:
+		color = colorLauncherRootlessTint
+	default:
+		return
+	}
+	a.cctx.Set("fillStyle", color)
+	a.cctx.Call("fillRect", x, y, w, h)
 }
 
 // launcherTileIndexAt returns the index of the launcher plugin tile under

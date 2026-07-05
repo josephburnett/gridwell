@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -403,8 +404,17 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if isLauncherPane(p) {
 		if prevFocus == p.ID {
 			if idx := a.launcherTileIndexAt(p, r, sx, sy); idx >= 0 {
-				// Zoom into the clicked tile's footprint (cell space).
-				a.enterPlugin(p.ID, a.plugins[idx], palette.LauncherCellRect(idx, len(a.plugins)))
+				pl := a.plugins[idx]
+				// A broken or rootless plugin is not enterable: the decision
+				// (and its notice text) is pluginhealth's, not this file's —
+				// this used to fall straight into enterPlugin, which bailed
+				// silently at RootGridID == "" with no signal to the user.
+				if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
+					a.reportErr(sev, source, message)
+				} else {
+					// Zoom into the clicked tile's footprint (cell space).
+					a.enterPlugin(p.ID, pl, palette.LauncherCellRect(idx, len(a.plugins)))
+				}
 			}
 		}
 		return nil
