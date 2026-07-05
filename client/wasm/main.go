@@ -15,6 +15,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/markdown"
@@ -89,6 +90,11 @@ type App struct {
 	// notice-strip render and its click handler read it. Never write error
 	// state anywhere else.
 	errs *errsurface.Surface
+
+	// caps is the host capability set (client/caps), derived ONCE at boot
+	// from bridge presence. Feature gates read a.caps; nothing else asks
+	// bridgeAvailable() to make a behavior decision.
+	caps caps.Caps
 
 	// launcherHover is the index of the launcher plugin tile under the cursor
 	// (the focused launcher pane), or -1. Drives the hover outline on the
@@ -534,6 +540,7 @@ func main() {
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
 		errs:              errsurface.New(),
+		caps:              caps.Derive(bridgeAvailable()),
 		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},

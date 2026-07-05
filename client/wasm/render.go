@@ -98,9 +98,12 @@ const (
 	// confirming "release here deletes".
 	colorPlusBgDelete = "#6e2b22"
 	colorPlusFg       = "#c8c9ce"
-	colorMenuBg       = "#16181f"
-	colorMenuItemHi   = "#e8e9ee"
-	colorMuted        = "#6c6f78"
+	// colorNoLiveFg is the dimmed glyph color for the slashed go-live button
+	// on hosts that cannot place a live web view (caps.LiveURL false).
+	colorNoLiveFg   = "#787b84"
+	colorMenuBg     = "#16181f"
+	colorMenuItemHi = "#e8e9ee"
+	colorMuted      = "#6c6f78"
 	// Inline-markdown body colors used by the rendered-markdown
 	// drawing path (drawInlineLines, drawMarkdownRendered).
 	colorMarkdownBody    = "#d8d9de"
@@ -499,8 +502,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		if focused && a.isURLDescent(p) {
 			if a.urlViewFor(p.ID) != nil {
 				a.drawURLBackButton(p, r)
-			} else {
+			} else if a.caps.LiveURL {
 				a.drawURLRefreshButton(p, r)
+			} else {
+				a.drawURLNoLiveButton(p, r)
 			}
 		} else if focused && a.isShellDescent(p) && !a.hasShellStream(p.ID) {
 			// Frozen shell descent: lower-right refresh button either
@@ -576,6 +581,29 @@ func (a *App) drawURLRefreshButton(p *pane.Pane, r pane.Rect) {
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPlusFg)
+}
+
+// drawURLNoLiveButton paints the corner button on a frozen URL-tile descent
+// when this host cannot go live (caps.LiveURL false — a plain browser, no
+// Electron bridge): the refresh glyph, dimmed, with a slash through it.
+// Click → an Info notice explaining why (caps.GoLiveNotice), never a silent
+// dead tap.
+func (a *App) drawURLNoLiveButton(p *pane.Pane, r pane.Rect) {
+	cx, cy := plusButtonCenter(p, r)
+	a.drawCircleButtonChrome(cx, cy)
+
+	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorNoLiveFg)
+	// The slash: corner-to-corner over the glyph, same dim color, so the
+	// shape reads as "refresh — crossed out" at a glance.
+	a.cctx.Set("strokeStyle", colorNoLiveFg)
+	a.cctx.Set("lineWidth", 2.0)
+	a.cctx.Set("lineCap", "round")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("moveTo", cx-8, cy+8)
+	a.cctx.Call("lineTo", cx+8, cy-8)
+	a.cctx.Call("stroke")
+	a.cctx.Set("lineWidth", 1.0)
+	a.cctx.Set("lineCap", "butt")
 }
 
 // drawGridLines paints faint lines at integer cell boundaries within the

@@ -83,8 +83,8 @@ func (a *App) urlTileVersion(anchor string, path []string, tileID string) int64 
 // pane's current rect and kept in step by syncURLViews. No-op outside the
 // Electron shell.
 func (a *App) openURLStream(p *pane.Pane, tileID string) {
-	if !bridgeAvailable() {
-		urlLog("no bridge; live URL unavailable (not running in Electron shell)")
+	if !a.caps.LiveURL {
+		urlLog("live URL unavailable on this host (no Electron bridge); tile stays frozen")
 		return
 	}
 	t, ok := a.urlTileForPane(p, tileID)
