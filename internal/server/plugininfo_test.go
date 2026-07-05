@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 		ScratchGridId: "9",
 		DisplayName:   "ignored-when-config-label-set",
 		Writable:      true, // the handshake declares the capability
-	})
+	}, nil)
 	if got.RootGridId != "uuid-1/7" {
 		t.Errorf("RootGridId = %q, want qualified uuid-1/7", got.RootGridId)
 	}
@@ -46,19 +47,19 @@ func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
 	got := buildPluginInfo("u", "ssh", "Remote", &pb.InfoResponse{
 		RootGridId: "1",
 		Writable:   true,
-	})
+	}, nil)
 	if !got.Writable {
 		t.Error("an ssh-kind plugin whose Info declares writable must be writable")
 	}
 	// And the inverse: kind alone earns nothing.
-	got = buildPluginInfo("u", "localdb", "Local", &pb.InfoResponse{RootGridId: "1"})
+	got = buildPluginInfo("u", "localdb", "Local", &pb.InfoResponse{RootGridId: "1"}, nil)
 	if got.Writable {
 		t.Error("writable must come from the Info handshake, not the kind string")
 	}
 }
 
 func TestBuildPluginInfo_LabelFallsBackToDisplayName(t *testing.T) {
-	got := buildPluginInfo("u", "fs", "", &pb.InfoResponse{DisplayName: "Files"})
+	got := buildPluginInfo("u", "fs", "", &pb.InfoResponse{DisplayName: "Files"}, nil)
 	if got.Label != "Files" {
 		t.Errorf("Label = %q, want Info DisplayName Files when no config label", got.Label)
 	}
@@ -71,7 +72,7 @@ func TestBuildPluginInfo_LabelFallsBackToDisplayName(t *testing.T) {
 // listed (so the launcher never drops a configured plugin), with no clickable
 // root/scratch grid and the configured label.
 func TestBuildPluginInfo_NilInfoStillListedWithConfigLabel(t *testing.T) {
-	got := buildPluginInfo("u", "proc", "Processes", nil)
+	got := buildPluginInfo("u", "proc", "Processes", nil, errors.New("dial: connection refused"))
 	if got.Label != "Processes" {
 		t.Errorf("Label = %q, want the configured label even when Info failed", got.Label)
 	}
@@ -85,16 +86,58 @@ func TestBuildPluginInfo_NilInfoStillListedWithConfigLabel(t *testing.T) {
 }
 
 func TestBuildPluginInfo_NilInfoNoLabelFallsBackToKind(t *testing.T) {
-	got := buildPluginInfo("u", "ssh", "", nil)
+	got := buildPluginInfo("u", "ssh", "", nil, errors.New("timeout"))
 	if got.Label != "ssh" {
 		t.Errorf("Label = %q, want the kind when neither config nor Info supplies one", got.Label)
+	}
+}
+
+// TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil pins issue #47's fix: the
+// info_error field is the ONLY thing that distinguishes a broken plugin from a
+// healthy-but-rootless one — both otherwise leave RootGridId == "". It must be
+// populated whenever Info failed, and empty whenever Info succeeded (even with
+// no root).
+func TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil(t *testing.T) {
+	broken := buildPluginInfo("u", "fs", "Files", nil, errors.New("dial tcp: connection refused"))
+	if broken.InfoError == "" {
+		t.Error("a failed Info must set InfoError")
+	}
+	if !strings.Contains(broken.InfoError, "connection refused") {
+		t.Errorf("InfoError = %q, want it to carry the underlying error text", broken.InfoError)
+	}
+
+	rootless := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{DisplayName: "Files"}, nil)
+	if rootless.InfoError != "" {
+		t.Errorf("a successful Info (even with no root) must leave InfoError empty, got %q", rootless.InfoError)
+	}
+
+	// The two must be otherwise identical in the one field the launcher used to
+	// key off of (RootGridId == "") — InfoError is the only signal that tells
+	// them apart.
+	if broken.RootGridId != "" || rootless.RootGridId != "" {
+		t.Fatalf("test setup: expected both RootGridId empty, got broken=%q rootless=%q",
+			broken.RootGridId, rootless.RootGridId)
+	}
+	if broken.InfoError == rootless.InfoError {
+		t.Error("broken and rootless PluginInfo must be distinguishable by InfoError")
+	}
+}
+
+// TestBuildPluginInfo_NoInfoErrorLeakWhenInfoPresent guards against a
+// regression where a stale/non-nil infoErr is passed alongside a non-nil info
+// (should never happen from pluginInfo, but buildPluginInfo's own contract is
+// "info != nil wins" — InfoError must never be set in that case).
+func TestBuildPluginInfo_NoInfoErrorLeakWhenInfoPresent(t *testing.T) {
+	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "1"}, errors.New("stale, should be ignored"))
+	if got.InfoError != "" {
+		t.Errorf("InfoError = %q, want empty when info is non-nil regardless of a stale err", got.InfoError)
 	}
 }
 
 func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 	// A plugin whose Info omits the grids (e.g. no ephemeral support) must not
 	// emit a bare "uuid/" — empty stays empty.
-	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "3"})
+	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "3"}, nil)
 	if got.RootGridId != "u/3" {
 		t.Errorf("RootGridId = %q, want u/3", got.RootGridId)
 	}
@@ -114,7 +157,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 		RootViewCx:   3.5,
 		RootViewCy:   -2.25,
 		RootViewZoom: 1.75,
-	})
+	}, nil)
 	if got.RootViewCx != 3.5 {
 		t.Errorf("RootViewCx = %v, want 3.5", got.RootViewCx)
 	}
@@ -129,7 +172,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 	zero := buildPluginInfo("u", "localdb", "X", &pb.InfoResponse{
 		RootGridId:   "1",
 		RootViewZoom: 0,
-	})
+	}, nil)
 	if zero.RootViewZoom != 0 {
 		t.Errorf("RootViewZoom (never visited) = %v, want 0", zero.RootViewZoom)
 	}

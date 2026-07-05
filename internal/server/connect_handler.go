@@ -173,27 +173,38 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		// Info is the whole handshake (default root grid + fallback label +
 		// capabilities), served from the per-uuid cache after the first
 		// success. Bounded, so a hung plugin degrades to a config-only entry
-		// instead of hanging the launcher; a failed Info → info stays nil.
-		info, _ := h.srv.pluginInfo(ctx, p.UUID)
-		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info))
+		// instead of hanging the launcher; a failed Info → info stays nil, and
+		// the error rides along so buildPluginInfo can distinguish "broken"
+		// from "healthy but rootless" — previously dropped on the floor here,
+		// which made both cases identical on the wire (issue #47).
+		info, err := h.srv.pluginInfo(ctx, p.UUID)
+		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 	}
 	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
 }
 
 // buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
 // configured label) and the plugin's Info handshake. info is nil when Info
-// failed or timed out: the plugin is still listed (so the launcher never blanks
-// a configured plugin), but with no clickable root/scratch grid, no writable
-// bit, and a label that falls back to the configured name, then the kind.
-// Pure, so the fallback rules are unit-tested without standing up a plugin.
+// failed or timed out (infoErr is the reason): the plugin is still listed (so
+// the launcher never blanks a configured plugin), but with no clickable
+// root/scratch grid, no writable bit, and a label that falls back to the
+// configured name, then the kind. Pure, so the fallback rules are
+// unit-tested without standing up a plugin.
+//
+// info == nil (Info failed/timed out — "broken") and info != nil but
+// info.RootGridId == "" (Info succeeded, the plugin just has no root
+// configured — "rootless") both leave RootGridId == "" on the result; without
+// InfoError they are the SAME PluginInfo and the launcher tile (and a click on
+// it) cannot tell them apart. InfoError is what makes them distinguishable: set
+// only in the broken case, always empty in the rootless one.
 //
 // writable comes from the Info handshake, NEVER from the kind string: a remote
 // localdb reached through the ssh proxy has local kind "ssh" but is every bit
 // as writable — the proxy forwards its Info verbatim, so the capability
 // travels while a kind check would strand it read-only.
-func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.PluginInfo {
+func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	label := configLabel
-	var rootGridID, scratchGridID string
+	var rootGridID, scratchGridID, infoError string
 	var writable bool
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
@@ -214,6 +225,8 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 		rootViewCx = info.RootViewCx
 		rootViewCy = info.RootViewCy
 		rootViewZoom = info.RootViewZoom
+	} else if infoErr != nil {
+		infoError = "plugin not responding: " + infoErr.Error()
 	}
 	if label == "" {
 		label = kind
@@ -228,6 +241,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse) *pb.
 		RootViewCx:    rootViewCx,
 		RootViewCy:    rootViewCy,
 		RootViewZoom:  rootViewZoom,
+		InfoError:     infoError,
 	}
 }
 
