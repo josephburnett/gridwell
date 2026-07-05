@@ -862,6 +862,15 @@ func (a *App) startSSE() {
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {
 				a.fetchGrid(ev.GridChanged.GridID)
 			}
+			// PluginHealth: a plugin's OWN event stream (not this client's SSE
+			// connection to the server) went dark or recovered — see
+			// fanInEvents/watchPlugin in internal/server/connect_handler.go.
+			// Distinct source per plugin (keyed by uuid) so one plugin's outage
+			// doesn't coalesce with — or get cleared by — another's or the
+			// top-level "events" disconnect notice above.
+			if ev.Kind == rpc.EventPluginHealth && ev.PluginHealth != nil {
+				a.reportPluginHealth(*ev.PluginHealth)
+			}
 		}
 		stream.Close()
 		time.Sleep(500 * time.Millisecond)
@@ -929,4 +938,23 @@ func (a *App) reportErr(sev errsurface.Severity, source, message string) {
 func (a *App) resolveErr(source string) {
 	a.errs.Resolve(source)
 	a.scheduleFrame()
+}
+
+// reportPluginHealth maps an EventPluginHealth transition onto the error
+// surface: unhealthy reports (a plugin's event stream is down, so its tiles
+// have stopped updating with no other signal — the silent-disappearance
+// class), healthy resolves any prior notice for it. Keyed per plugin uuid so
+// it neither coalesces with nor is cleared by an unrelated plugin's outage or
+// the top-level SSE-connection notice ("events").
+func (a *App) reportPluginHealth(h rpc.PluginHealth) {
+	source := "plugin:" + h.PluginUUID
+	if h.Healthy {
+		a.resolveErr(source)
+		return
+	}
+	label := h.PluginUUID
+	if pl, ok := a.pluginByUUID(h.PluginUUID); ok && pl.Label != "" {
+		label = pl.Label
+	}
+	a.reportErr(errsurface.Error, source, label+": live updates stopped — "+h.Detail)
 }
