@@ -24,21 +24,25 @@ import (
 // RunServe so the flag-parsing path is unit-testable. The DB path is no longer
 // a flag — it is derived from each plugin's id under the Gridwell home.
 type serveFlags struct {
-	Bind      string
-	StaticDir string
+	Bind        string
+	BindDefault string
+	StaticDir   string
 }
 
-// parseServeFlags parses the `serve` flag set, using defBind/defStatic (the
-// server.yaml values, already default-filled by config.Load) as the flag
-// defaults so CLI flags override the config which overrides the built-ins.
-func parseServeFlags(args []string, defBind, defStatic string) (serveFlags, error) {
+// parseServeFlags parses the `serve` flag set. StaticDir defaults to defStatic
+// (the server.yaml value, already default-filled by config.Load). Bind and
+// BindDefault deliberately default to empty: "" means "not passed", which is
+// what resolveBind needs to apply its precedence — the bind decision is made
+// there, not by flag defaulting.
+func parseServeFlags(args []string, defStatic string) (serveFlags, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var f serveFlags
-	fs.StringVar(&f.Bind, "bind", defBind, "HTTP listen address")
+	fs.StringVar(&f.Bind, "bind", "", "HTTP listen address (hard override: beats server.yaml bind:)")
+	fs.StringVar(&f.BindDefault, "bind-default", "", "HTTP listen address used only when server.yaml has no bind: (the desktop sidecar passes its ephemeral loopback port here)")
 	fs.StringVar(&f.StaticDir, "static", defStatic, "directory of static files served at / (empty = headless)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
-		case "bind", "static":
+		case "bind", "bind-default", "static":
 			return true
 		}
 		return false
@@ -47,6 +51,54 @@ func parseServeFlags(args []string, defBind, defStatic string) (serveFlags, erro
 		return serveFlags{}, err
 	}
 	return f, nil
+}
+
+// resolveBind is the one owner of the listen-address decision:
+//
+//	--bind (a human's hard override)
+//	> server.yaml bind: (explicitly present — configBindSet, see config.Load)
+//	> --bind-default (the caller's fallback, e.g. the desktop sidecar's
+//	  ephemeral loopback port)
+//	> the built-in default (config.Defaults.Bind).
+//
+// "Unset" is the empty string at every level, so an explicit config bind equal
+// to the built-in default still pins the address. This is what lets one server
+// instance carry both the desktop window and a phone: declare bind: in
+// server.yaml and the sidecar's --bind-default no longer wins.
+func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault string) string {
+	switch {
+	case flagBind != "":
+		return flagBind
+	case configBindSet:
+		return configBind
+	case bindDefault != "":
+		return bindDefault
+	default:
+		return config.Defaults.Bind
+	}
+}
+
+// bindWarning returns a prominent startup warning when addr exposes the server
+// beyond loopback, or "" when the bind is loopback-only. Gridwell's API has no
+// authentication: anyone who can reach the port can read and write every tile,
+// open live shell PTYs on this machine, and copy plugin session blobs — so a
+// non-loopback bind should be a VPN-only address (e.g. a Tailscale IP), never
+// 0.0.0.0 on an untrusted network.
+func bindWarning(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr // no port part — judge the host as given
+	}
+	if host == "localhost" {
+		return ""
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return ""
+	}
+	return fmt.Sprintf(`gridwell: WARNING: listening on %s — this is NOT a loopback address.
+gridwell: WARNING: the API is UNAUTHENTICATED: anyone who can reach that address can read
+gridwell: WARNING: and write every tile and open live shell PTYs on this machine.
+gridwell: WARNING: bind a VPN-only address (e.g. your Tailscale IP), never an open network.`, addr)
 }
 
 // buildServeConfig loads the mandatory server.yaml at cfgPath and prepares it
@@ -131,11 +183,13 @@ func resolvePluginBinaries(cfg *config.ServerConfig) error {
 	return nil
 }
 
-// RunServe starts the backend HTTP server — the loopback data plane for the
-// Gridwell desktop app: Connect-RPC, the SSE event stream, the wasm client,
-// and shell PTYs. Live URL tiles are hosted natively by the Electron shell,
-// so there is no browser driver here. SIGINT/SIGTERM trigger graceful
-// shutdown.
+// RunServe starts the backend HTTP server — the data plane for the Gridwell
+// desktop app and any plain-browser client: Connect-RPC, the SSE event
+// stream, the wasm client, and shell PTYs. Live URL tiles are hosted natively
+// by the Electron shell, so there is no browser driver here. The listen
+// address comes from resolveBind (loopback by default; server.yaml bind: pins
+// it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM trigger
+// graceful shutdown.
 func RunServe(args []string) int {
 	home, err := config.Home()
 	if err != nil {
@@ -156,11 +210,12 @@ func RunServe(args []string) int {
 		return 1
 	}
 
-	f, err := parseServeFlags(args, cfg.Bind, cfg.StaticDir)
+	f, err := parseServeFlags(args, cfg.StaticDir)
 	if err != nil {
 		return 2
 	}
-	cfg.Bind, cfg.StaticDir = f.Bind, f.StaticDir
+	cfg.Bind = resolveBind(f.Bind, cfg.Bind, cfg.BindSet, f.BindDefault)
+	cfg.StaticDir = f.StaticDir
 
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
 	// each kind's binary (server.yaml may pin an explicit path instead).
@@ -185,7 +240,6 @@ func RunServe(args []string) int {
 	defer cancelRequests()
 
 	httpSrv := &http.Server{
-		Addr:              f.Bind,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
@@ -194,10 +248,25 @@ func RunServe(args []string) int {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
+	// Listen before announcing: the "serving on" banner is a contract — the
+	// desktop sidecar parses the address out of this exact line
+	// (apps/desktop/src/main/lines.ts) to learn the origin its window should
+	// load, so it must carry the listener's ACTUAL bound address and appear
+	// only once the listener is really up. The server, not its spawner, owns
+	// the "where am I listening" fact.
+	ln, err := net.Listen("tcp", cfg.Bind)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
+	if w := bindWarning(ln.Addr().String()); w != "" {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	fmt.Printf("gridwell: serving on %s (static=%s plugins=%d)\n", ln.Addr(), cfg.StaticDir, len(cfg.Plugins))
+
 	errCh := make(chan error, 1)
 	go func() {
-		fmt.Printf("gridwell: serving on %s (static=%s plugins=%d)\n", cfg.Bind, cfg.StaticDir, len(cfg.Plugins))
-		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
