@@ -33,10 +33,7 @@ export interface PaneInfo {
 
 export interface PaletteItem {
   index: number;
-  isPlugin: boolean;
   kind: string;
-  label?: string;
-  uuid?: string;
   x: number;
   y: number;
   w: number;
@@ -159,7 +156,7 @@ export class GridwellDriver {
   // the swatch, move past the 4px drag threshold, drag to the cell, release.
   async dragCreate(kind: string, cx: number, cy: number): Promise<void> {
     const pal = await this.palette();
-    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
+    const item = pal.items.find((i) => i.kind === kind);
     if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
     const sx = item.x + item.w / 2;
     const sy = item.y + item.h / 2;
@@ -182,7 +179,7 @@ export class GridwellDriver {
   async clickPaletteSwatch(kind: string): Promise<void> {
     await this.openPalette();
     const pal = await this.palette();
-    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
+    const item = pal.items.find((i) => i.kind === kind);
     if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
   }

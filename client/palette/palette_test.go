@@ -160,41 +160,27 @@ func TestTrackingPaneSize(t *testing.T) {
 	}
 }
 
-// TestTwoRowPopover: plugins fill the top row, primitives the bottom. The
-// popover is two tiles tall and the bottom-row tiles sit below the top.
-func TestTwoRowPopover(t *testing.T) {
+// TestPaletteIsAlwaysSingleRow: the popover is always one row tall regardless
+// of tile count. Plugins are not in the palette (they are on the launcher), so
+// the two-row layout machinery is gone; this test documents and locks that
+// invariant.
+func TestPaletteIsAlwaysSingleRow(t *testing.T) {
 	l := makeLayout()
-	l.NumTiles = 6
-	l.TopRow = 2
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
-	if got, want := l.PopoverRect().H, 2*tile+3*gap; got != want {
-		t.Errorf("popover height = %v, want %v (two rows)", got, want)
-	}
-	top := l.TileRect(0)
-	bottom := l.TileRect(2)
-	if bottom.Y <= top.Y {
-		t.Errorf("bottom-row Y %v not below top-row Y %v", bottom.Y, top.Y)
-	}
-	// Index round-trips through both rows.
-	for i := range l.NumTiles {
-		r := l.TileRect(i)
-		if got := l.TileIndexAt(r.X+r.W/2, r.Y+r.H/2); got != i {
-			t.Errorf("TileIndexAt(center of %d) = %d", i, got)
+	wantH := tile + 2*gap
+	for _, n := range []int{1, 2, 4, 6, 8} {
+		l.NumTiles = n
+		if got := l.PopoverRect().H; got != wantH {
+			t.Errorf("NumTiles=%d: PopoverRect.H = %v, want %v (single row)", n, got, wantH)
 		}
-	}
-}
-
-// TestSingleRowWhenTopRowCoversAll: when every tile is a plugin (TopRow ==
-// NumTiles, the read-only-grid case) the popover stays a single row.
-func TestSingleRowWhenTopRowCoversAll(t *testing.T) {
-	l := makeLayout()
-	l.NumTiles = 3
-	l.TopRow = 3
-	tile := l.TilePx()
-	gap := l.Cfg.GapPx
-	if got, want := l.PopoverRect().H, tile+2*gap; got != want {
-		t.Errorf("popover height = %v, want %v (single row)", got, want)
+		// All tile rects share the same Y coordinate (one row).
+		y0 := l.TileRect(0).Y
+		for i := 1; i < n; i++ {
+			if got := l.TileRect(i).Y; got != y0 {
+				t.Errorf("NumTiles=%d tile %d: Y=%v differs from tile 0 Y=%v", n, i, got, y0)
+			}
+		}
 	}
 }
 

@@ -712,24 +712,11 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	a.canvas.Get("style").Set("cursor", "")
 	sx, sy = mouseXY(args[0], a.canvas)
 
-	// A plugin swatch clicked without dragging (no movement past the
-	// threshold) enters that plugin: the launcher / + menu "click to
-	// descend" gesture. A drag instead mounts a link (DropCreateTemplate).
-	// From an in-grid menu the descent zooms from the pane centre (a unit
-	// cell at the current view centre).
-	if d.isTemplate && d.item.isPlugin && !d.started {
-		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
-			a.enterPlugin(fp.ID, d.item.plugin,
-				palette.Rect{X: fp.Cx - 0.5, Y: fp.Cy - 0.5, W: 1, H: 1})
-		}
-		return nil
-	}
-
 	// A url swatch clicked without dragging (no movement past the threshold) is
 	// an EPHEMERAL visit: open the url modal and, on submit, descend into a live
 	// url tile created in the off-grid scratch grid — visit a page without
 	// placing a tile. A drag instead places a real url tile (commitTemplateDrop).
-	if d.isTemplate && !d.item.isPlugin && d.item.primitive == tplURL && !d.started {
+	if d.isTemplate && d.item.primitive == tplURL && !d.started {
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
 			paneID := fp.ID
 			a.menu.Close()
@@ -1918,24 +1905,6 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// A plugin item mounts as an exit-well link in the destination grid
-	// (drag-a-plugin-onto-a-grid). Only writable grids accept it; a
-	// read-only grid snaps it back.
-	if d.item.isPlugin {
-		if !a.gridWritable(a.gridIDForPane(destPane)) {
-			a.cancelDragSnapBack(d)
-			return
-		}
-		targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
-		if a.ghost != nil {
-			a.ghost.paneID = destPane.ID
-		}
-		a.startSnap(targetX, targetY, snapMs)
-		a.mountPluginAtCell(destPane, d.item.plugin, dropX, dropY)
-		a.menu.Close()
-		return
-	}
-
 	// URL still needs a URL up front; without one the tile is inert.
 	// Every other template commits immediately with the snap-and-
 	// create gesture wells use.
@@ -2131,22 +2100,6 @@ func (a *App) shellURLActivate(paneID, url string) {
 	if p := a.tree.FindPane(paneID); p != nil && p.TextFocus != "" {
 		a.visitEphemeralURL(p, url)
 	}
-}
-
-// mountPluginAtCell fires Mount at the given cell: it attaches the plugin
-// (by uuid, default config) and drops an exit-well link to its root grid.
-// The drag-a-plugin-onto-a-writable-grid gesture.
-func (a *App) mountPluginAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
-	req := &rpc.MountRequest{
-		PluginUUID: pl.UUID,
-		Path:       rpc.Path{WellIDs: path},
-		GridID:     gid, X: cellX, Y: cellY, W: 1, H: 1,
-	}
-	a.postTileMutate("Mount", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.Mount(ctx, req)
-	}, nil)
 }
 
 // createShellAtCell fires CreateShell at the given cell, then
