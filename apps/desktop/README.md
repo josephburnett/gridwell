@@ -24,8 +24,12 @@ GRIDWELL_HOME=/path make launch  # against another home
 with Chromium's OS sandbox on (no `--no-sandbox`): live URL tiles load
 untrusted web content, so the sandbox is the containment that matters, and a
 modern Linux/WSL2 kernel with unprivileged user namespaces needs no setuid
-helper for it. The app spawns `<repo>/gridwell serve`, waits for it to listen
-on an ephemeral loopback port, and loads the renderer from there. `serve`
+helper for it. The app spawns `<repo>/gridwell serve` with an ephemeral
+loopback port as `--bind-default`, waits for the server to announce its actual
+bound address, and loads the renderer from that origin. An explicit `bind:` in
+`~/.gridwell/server.yaml` overrides the ephemeral default — that is how one
+server instance serves both the desktop window and a phone browser (see the
+repo README's "Browser client / phone access"). `serve`
 requires `~/.gridwell/server.yaml`; each plugin's SQLite DB lives at
 `~/.gridwell/db/<id>/store.db`, derived from its id — there is no fallback DB.
 
