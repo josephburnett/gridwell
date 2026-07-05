@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e serve init clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e check-web serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-fs
@@ -100,6 +100,16 @@ check-electron: node-modules
 # prior `make vendor` for node_modules + Playwright.
 check-e2e: build node-modules
 	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e
+
+# check-web drives the BROWSER-MODE client: `gridwell serve` + plain Chromium
+# (the system /usr/bin/chromium — no browser download, so the repo stays
+# offline-buildable). This is the only gate that sees the degraded phone/
+# tablet client: no Electron bridge, caps-gated live-URL affordances, and the
+# touch gesture layer (client/touchgest) driven by real injected TouchEvents.
+# Headless — no xvfb needed. Run for any change to client/caps,
+# client/touchgest, touch.go, or the browser-serving path.
+check-web: build node-modules
+	cd $(DESKTOP) && npm run test:e2e:web
 
 # serve runs the backend on its own (the desktop app spawns it as a sidecar;
 # this target is for poking at the RPC/SSE surface or loading the wasm client
