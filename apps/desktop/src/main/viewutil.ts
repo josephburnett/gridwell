@@ -168,3 +168,16 @@ export function failLoadMessage(validatedURL: string, errorDescription: string, 
 export function renderProcessGoneMessage(url: string, reason: string): string {
   return url ? `page crashed (${reason}): ${url}` : `page crashed (${reason})`;
 }
+
+// rendererLogLine decides whether a renderer console-message (level 0–3:
+// verbose, info, warning, error) belongs in the main process's log, and
+// formats it if so. The wasm client logs every surfaced notice to its console
+// (reportErr, client/wasm/main.go), but that console is invisible outside
+// devtools — forwarding warnings and errors makes "all errors are printed to
+// the logs" true for the whole renderer, notices included, even after they
+// expire off the strip. Info/verbose chatter stays out. Pure so the
+// level cut and the prefix are pinned by a test.
+export function rendererLogLine(level: number, message: string): string | null {
+  if (level < 2) return null;
+  return `[renderer:${level === 2 ? 'warning' : 'error'}] ${message}`;
+}

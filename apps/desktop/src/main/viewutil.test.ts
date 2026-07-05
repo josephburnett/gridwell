@@ -18,6 +18,7 @@ import {
   failLoadMessage,
   renderProcessGoneMessage,
   ERR_ABORTED,
+  rendererLogLine,
 } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
@@ -215,4 +216,16 @@ test('renderProcessGoneMessage includes the url when known, omits it cleanly whe
   const noURL = renderProcessGoneMessage('', 'crashed');
   assert.equal(noURL, 'page crashed (crashed)');
   assert.ok(!noURL.endsWith(': '));
+});
+
+// "All errors should be printed to the logs": the renderer's console (where
+// the wasm client logs every surfaced notice) is invisible in the app's own
+// stdout/stderr unless forwarded. The filter forwards only warnings (level 2)
+// and errors (level 3) — info/verbose chatter stays out of the log — with a
+// [renderer:<level>] prefix so log lines are attributable.
+test('rendererLogLine forwards warnings and errors only, with a level prefix', () => {
+  assert.equal(rendererLogLine(0, 'verbose chatter'), null);
+  assert.equal(rendererLogLine(1, 'info chatter'), null);
+  assert.equal(rendererLogLine(2, 'gridwell: [conflict:UpdateText] reloaded'), '[renderer:warning] gridwell: [conflict:UpdateText] reloaded');
+  assert.equal(rendererLogLine(3, 'gridwell: [rpc:MoveTile] MoveTile failed: x'), '[renderer:error] gridwell: [rpc:MoveTile] MoveTile failed: x');
 });

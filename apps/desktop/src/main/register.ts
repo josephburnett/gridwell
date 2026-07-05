@@ -119,6 +119,9 @@ export function sendFrame(rootWC: WebContents, paneId: string, tileId: number, j
 // boot/exit — calls this instead of console.error-and-return, so the wasm
 // errsurface (client/errsurface) is the single place failures become visible.
 export function sendError(rootWC: WebContents, source: string, message: string): void {
+  // Also the log line: a main-process failure must reach the app's log even
+  // when the renderer is gone (safeSend no-ops on a destroyed webContents).
+  console.error(`[gridwell] ${source}: ${message}`);
   const ev: ErrorEvent = { source, message };
   safeSend(rootWC, EV.error, ev);
 }
