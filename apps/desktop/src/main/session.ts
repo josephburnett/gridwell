@@ -4,14 +4,92 @@
 // via GET/PUT /session/<uuid> on the sidecar.
 //
 // On entering a plugin's space the host hydrates the partition from the DB blob
-// (pull the session down); on flush/ascent it dehydrates back (capture). This
-// is cookie-level: cookies carry "stay logged in", are portable, and move
-// through the public session API with no partition-directory surgery.
-// localStorage / IndexedDB are not yet synced (a documented limitation —
-// snapshotting the partition directory would cover them, at a portability cost).
-import { session as electronSession } from 'electron';
+// (pull the session down); on flush/ascent it dehydrates back (capture).
+//
+// The blob is a v2 envelope: cookies (portable — they inject through the
+// public API into any Chromium) PLUS a snapshot of the partition directory's
+// files (full fidelity: localStorage, IndexedDB, everything — issue #23).
+// Hydrate prefers the directory snapshot, but ONLY when this process hasn't
+// touched the partition yet (writing under a live session is undefined);
+// within a run the live directory IS current, and the cookie path covers
+// old v1 blobs and foreign-version Chromiums. The envelope is opaque bytes
+// to every other layer (the store, the wire, the chain routing).
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { app, session as electronSession } from 'electron';
 
 import { partitionFor } from './viewutil';
+
+// SessionBlob is the persisted envelope. A v1 blob was a bare cookie array;
+// readBlob accepts both.
+interface SessionBlob {
+  v: 2;
+  cookies: Electron.Cookie[];
+  // files maps partition-relative paths to base64 file bytes.
+  files: Record<string, string>;
+}
+
+// partitionDir computes where Chromium keeps a persist: partition's files —
+// needed on the hydrate side BEFORE the session exists (ses.storagePath is
+// only readable on a live session, which hydrate must not create first).
+function partitionDir(partition: string): string {
+  const name = partition.replace(/^persist:/, '');
+  return path.join(app.getPath('userData'), 'Partitions', name);
+}
+
+// snapshotDir reads every file under dir into a rel-path → base64 map.
+// Returns {} when the directory doesn't exist (a never-persisted partition).
+export function snapshotDir(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (rel: string) => {
+    const abs = path.join(dir, rel);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const childRel = rel === '' ? e.name : `${rel}/${e.name}`;
+      if (e.isDirectory()) walk(childRel);
+      else if (e.isFile()) {
+        try {
+          out[childRel] = fs.readFileSync(path.join(dir, childRel)).toString('base64');
+        } catch {
+          // A file Chromium holds exclusively this instant — skip; the
+          // cookie half of the blob still carries the logins.
+        }
+      }
+    }
+  };
+  walk('');
+  return out;
+}
+
+// restoreDir writes a snapshot back under dir (created as needed).
+export function restoreDir(dir: string, files: Record<string, string>): void {
+  for (const [rel, b64] of Object.entries(files)) {
+    if (rel.includes('..')) continue; // path traversal guard on foreign blobs
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, Buffer.from(b64, 'base64'));
+  }
+}
+
+// readBlob parses a stored blob, accepting the v2 envelope and the legacy v1
+// bare cookie array. Returns null for unparseable bytes.
+export function readBlob(buf: Buffer): { cookies: Electron.Cookie[]; files: Record<string, string> } | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(buf.toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (Array.isArray(parsed)) return { cookies: parsed as Electron.Cookie[], files: {} };
+  const env = parsed as Partial<SessionBlob>;
+  if (env && env.v === 2) return { cookies: env.cookies ?? [], files: env.files ?? {} };
+  return null;
+}
 
 // dehydratePartition captures the plugin's cookies and writes them back to the
 // plugin's DB through the sidecar (the system of record). Best-effort, but the
@@ -30,11 +108,17 @@ export async function dehydratePartition(
   onError?: (message: string) => void,
 ): Promise<void> {
   if (!pluginUuid) return;
-  const ses = electronSession.fromPartition(partitionFor(pluginUuid));
+  const partition = partitionFor(pluginUuid);
+  const ses = electronSession.fromPartition(partition);
   try {
     await ses.flushStorageData();
     const cookies = await ses.cookies.get({});
-    const blob = Buffer.from(JSON.stringify(cookies), 'utf8');
+    // Full-fidelity half: the partition directory (localStorage, IndexedDB…).
+    // ses.storagePath is authoritative for a live session; fall back to the
+    // computed location.
+    const files = snapshotDir(ses.storagePath ?? partitionDir(partition));
+    const envelope: SessionBlob = { v: 2, cookies, files };
+    const blob = Buffer.from(JSON.stringify(envelope), 'utf8');
     await fetch(`${origin}/session/${pluginUuid}`, { method: 'PUT', body: blob });
   } catch {
     // Sidecar gone / network blip / flush failure — the on-disk partition is
@@ -70,14 +154,26 @@ export async function hydratePartition(
     return;
   }
   if (buf.length === 0) return;
-  let cookies: Electron.Cookie[];
-  try {
-    cookies = JSON.parse(buf.toString('utf8')) as Electron.Cookie[];
-  } catch {
+  const parsed = readBlob(buf);
+  if (parsed === null) {
     onError?.('session restore failed — page opened logged out');
     return;
   }
-  const ses = electronSession.fromPartition(partitionFor(pluginUuid));
+  const { cookies, files } = parsed;
+  const partition = partitionFor(pluginUuid);
+  // Directory snapshot first — but ONLY onto a partition this process hasn't
+  // initialized (no on-disk dir yet): writing under a live session is
+  // undefined, and within a run the live directory is already current.
+  const dir = partitionDir(partition);
+  if (Object.keys(files).length > 0 && !fs.existsSync(dir)) {
+    try {
+      restoreDir(dir, files);
+    } catch {
+      onError?.('session restore failed — page opened logged out');
+      // Cookies below still inject; partial restore beats none.
+    }
+  }
+  const ses = electronSession.fromPartition(partition);
   for (const c of cookies) {
     try {
       await ses.cookies.set({
