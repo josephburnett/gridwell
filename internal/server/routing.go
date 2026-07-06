@@ -61,3 +61,36 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	}
 	return out
 }
+
+// qualifyTilesTransit rewrites ids from a TRANSIT plugin (a node mount — the
+// ssh plugin proxying a whole remote gridwell). A transit plugin speaks ids
+// already qualified from the REMOTE node's perspective (chains), so every id
+// gets this hop's uuid prepended — including an already-qualified child, which
+// is a reference within the remote's namespace reachable only through this
+// connection. The wire Reference bit is trusted verbatim: the remote node
+// already decided what is a link and what is owned content, and a remote
+// plugin's interior well must stay solid (owned) even though its child id
+// contains "/". Chains compose: each hop prepends exactly one segment.
+func qualifyTilesTransit(uuid string, tiles []*pb.Tile) []*pb.Tile {
+	out := make([]*pb.Tile, len(tiles))
+	for i, t := range tiles {
+		qt := *t
+		qt.Id = qualifyID(uuid, t.Id)
+		qt.GridId = qualifyID(uuid, t.GridId)
+		if t.ChildGridId != "" {
+			qt.ChildGridId = qualifyID(uuid, t.ChildGridId)
+		}
+		out[i] = &qt
+	}
+	return out
+}
+
+// qualifyTilesFor picks the per-plugin qualification rule: transit plugins
+// (node mounts) prepend onto chains and trust the wire Reference bit; leaf
+// plugins get bare-int qualification and reference derivation.
+func qualifyTilesFor(transit bool, uuid string, tiles []*pb.Tile) []*pb.Tile {
+	if transit {
+		return qualifyTilesTransit(uuid, tiles)
+	}
+	return qualifyTiles(uuid, tiles)
+}

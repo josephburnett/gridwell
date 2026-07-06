@@ -78,6 +78,45 @@ func TestQualifyTilesEmptyChildStaysEmpty(t *testing.T) {
 	}
 }
 
+// TestQualifyTilesTransit: a TRANSIT plugin (the ssh node mount) speaks ids
+// that are already qualified from the REMOTE node's perspective — chains.
+// Local qualification must prepend the transit plugin's uuid to every id
+// (id, grid, child — even an already-qualified child, which for a leaf plugin
+// would be a sibling reference but through a hop is a reference within the
+// remote's namespace, reachable only through this connection), and must trust
+// the wire Reference bit verbatim: a remote plugin's interior well is OWNED
+// content and renders solid, even though its child id contains "/".
+func TestQualifyTilesTransit(t *testing.T) {
+	// A remote localdb's interior well, as the remote front door emits it.
+	interior := qualifyTilesTransit("ssh1", []*pb.Tile{{
+		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Reference: false,
+	}})[0]
+	if interior.Id != "ssh1/rp/7" || interior.GridId != "ssh1/rp/1" || interior.ChildGridId != "ssh1/rp/5" {
+		t.Errorf("transit interior = %+v, want every id prefixed with ssh1/", interior)
+	}
+	if interior.Reference {
+		t.Error("a remote plugin's interior well is owned content, not a link — Reference must stay false through the hop")
+	}
+
+	// A remote link (exit well / mount) keeps Reference true and its target
+	// is prefixed too — the target lives on the remote node.
+	link := qualifyTilesTransit("ssh1", []*pb.Tile{{
+		Id: "rp/9", GridId: "rp/1", ChildGridId: "otherrp/3", Reference: true,
+	}})[0]
+	if link.ChildGridId != "ssh1/otherrp/3" {
+		t.Errorf("transit link child = %q, want ssh1/otherrp/3", link.ChildGridId)
+	}
+	if !link.Reference {
+		t.Error("a remote link must stay a link through the hop")
+	}
+
+	// No child → no child, and a leaf tile is untouched beyond id/grid.
+	leaf := qualifyTilesTransit("ssh1", []*pb.Tile{{Id: "rp/2", GridId: "rp/1"}})[0]
+	if leaf.ChildGridId != "" {
+		t.Errorf("empty child became %q", leaf.ChildGridId)
+	}
+}
+
 func TestQualifyGrid(t *testing.T) {
 	if got := qualifyGrid("u", &pb.Grid{Id: "3"}); got.Id != "u/3" {
 		t.Errorf("qualifyGrid id = %q, want u/3", got.Id)
@@ -89,15 +128,15 @@ func TestQualifyGrid(t *testing.T) {
 
 // TestQualifyEvent qualifies the ids carried by each of the three event kinds.
 func TestQualifyEvent(t *testing.T) {
-	grid := qualifyEvent("u", &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "1"}}})
+	grid := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "1"}}})
 	if grid.GetGridChanged().GridId != "u/1" {
 		t.Errorf("GridChanged id = %q", grid.GetGridChanged().GridId)
 	}
-	tile := qualifyEvent("u", &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "5", GridId: "1"}}}})
+	tile := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "5", GridId: "1"}}}})
 	if tile.GetTileChanged().Tile.Id != "u/5" || tile.GetTileChanged().Tile.GridId != "u/1" {
 		t.Errorf("TileChanged tile = %+v", tile.GetTileChanged().Tile)
 	}
-	rem := qualifyEvent("u", &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "1", TileId: "5"}}})
+	rem := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "1", TileId: "5"}}})
 	if rem.GetTileRemoved().GridId != "u/1" || rem.GetTileRemoved().TileId != "u/5" {
 		t.Errorf("TileRemoved = %+v", rem.GetTileRemoved())
 	}
