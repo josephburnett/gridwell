@@ -1007,8 +1007,11 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 
 // totalTransitionMs is the total wall-clock duration of a descent or
 // ascent transition. The same value is used for both so the UX is
-// symmetric in feel.
-const totalTransitionMs = 350.0
+// symmetric in feel. A var (not const) solely for the e2e-only
+// setTransitionMs testhook, which stretches it so a spec can inject an
+// SSE event DURING a transition deterministically (I11); production has
+// no writer.
+var totalTransitionMs = 350.0
 
 // zoomDistFactor scales log-zoom distance to a "perceived px" unit so we
 // can apportion animation time between pan and zoom phases. Tuned so a
