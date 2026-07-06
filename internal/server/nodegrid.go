@@ -144,7 +144,10 @@ func (n *nodeGrid) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.Get
 		tiles = append(tiles, t)
 	}
 	return &pb.GetGridResponse{
-		Grid:  &pb.Grid{Id: nodeGridID, Writable: false},
+		// source_kind "node" tells a renderer "this is a node grid" (a
+		// mount's tile shows the generic globe glyph, not a well) — the same
+		// ride-on-the-grid channel fs/proc use.
+		Grid:  &pb.Grid{Id: nodeGridID, SourceKind: "node", Writable: false},
 		Tiles: tiles,
 	}, nil
 }

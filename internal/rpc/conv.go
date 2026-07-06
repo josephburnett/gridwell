@@ -34,12 +34,13 @@ func GridToProto(g *Grid) *pb.Grid {
 		return nil
 	}
 	return &pb.Grid{
-		Id:         g.ID,
-		ObjectId:   g.ObjectID,
-		Version:    g.Version,
-		SourceKind: g.SourceKind,
-		SourceId:   g.SourceID,
-		Writable:   g.Writable,
+		Id:            g.ID,
+		ObjectId:      g.ObjectID,
+		Version:       g.Version,
+		SourceKind:    g.SourceKind,
+		SourceId:      g.SourceID,
+		Writable:      g.Writable,
+		ScratchGridId: g.ScratchGridID,
 	}
 }
 
@@ -49,12 +50,13 @@ func GridFromProto(g *pb.Grid) *Grid {
 		return nil
 	}
 	return &Grid{
-		ID:         g.Id,
-		ObjectID:   g.ObjectId,
-		Version:    g.Version,
-		SourceKind: g.SourceKind,
-		SourceID:   g.SourceId,
-		Writable:   g.Writable,
+		ID:            g.Id,
+		ObjectID:      g.ObjectId,
+		Version:       g.Version,
+		SourceKind:    g.SourceKind,
+		SourceID:      g.SourceId,
+		Writable:      g.Writable,
+		ScratchGridID: g.ScratchGridId,
 	}
 }
 

@@ -151,7 +151,11 @@ type Grid struct {
 	// local plugin (ssh) fronts many remote plugins with differing
 	// capabilities. Stamped by the serving node from the owning plugin's Info
 	// (leaf) or passed through verbatim (transit); wire-only, never persisted.
-	Writable      bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
+	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
+	// scratch_grid_id is the OWNING plugin's ephemeral-url scratch grid,
+	// qualified from the receiver's perspective (chained through mounts) —
+	// same stamping rule as writable. "" when the plugin has none. Wire-only.
+	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -226,6 +230,13 @@ func (x *Grid) GetWritable() bool {
 		return x.Writable
 	}
 	return false
+}
+
+func (x *Grid) GetScratchGridId() string {
+	if x != nil {
+		return x.ScratchGridId
+	}
+	return ""
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -3068,7 +3079,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"!\n" +
 	"\x04Path\x12\x19\n" +
-	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\xa7\x01\n" +
+	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\xcf\x01\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3076,7 +3087,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vsource_kind\x18\x04 \x01(\tR\n" +
 	"sourceKind\x12\x1b\n" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
-	"\bwritable\x18\x06 \x01(\bR\bwritable\"\xb3\x04\n" +
+	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
+	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\"\xb3\x04\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +

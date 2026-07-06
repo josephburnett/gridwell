@@ -44,6 +44,10 @@ message Grid {
   // capabilities. Stamped by the serving node from the owning plugin's Info
   // (leaf) or passed through verbatim (transit); wire-only, never persisted.
   bool writable = 6;
+  // scratch_grid_id is the OWNING plugin's ephemeral-url scratch grid,
+  // qualified from the receiver's perspective (chained through mounts) —
+  // same stamping rule as writable. "" when the plugin has none. Wire-only.
+  string scratch_grid_id = 7;
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which

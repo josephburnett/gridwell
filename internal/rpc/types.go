@@ -155,6 +155,10 @@ type Grid struct {
 	// gate reads this — per grid, because one local mount (ssh) can front
 	// many remote plugins with differing capabilities.
 	Writable bool `json:"writable,omitempty"`
+	// ScratchGridID is the owning plugin's ephemeral-url scratch grid,
+	// qualified for this receiver (chained through mounts); "" = none.
+	// Same stamping rule as Writable — the fact rides ON the grid.
+	ScratchGridID string `json:"scratch_grid_id,omitempty"`
 }
 
 // Tile is the persistent unit of content in a grid. Kind selects which subset
