@@ -2,26 +2,17 @@ package sshdial_test
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/pem"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
-
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
+	"github.com/josephburnett/gridwell/internal/plugin/sshdial/sshdialtest"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/shellsvc"
 	"github.com/josephburnett/gridwell/internal/shellsvc/shellsvctest"
@@ -69,129 +60,17 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 	return ln.Addr().String(), direct
 }
 
-// directTCPIP is the SSH direct-tcpip channel-open payload (RFC 4254 §7.2).
-type directTCPIP struct {
-	DestHost string
-	DestPort uint32
-	SrcHost  string
-	SrcPort  uint32
-}
-
-// sshServer runs a minimal real sshd: public-key auth accepting exactly
-// clientPub, and direct-tcpip channels piped to their requested destination.
-// Returns its address and the host public key (for the known_hosts file).
-func sshServer(t *testing.T, clientPub ssh.PublicKey) (string, ssh.PublicKey) {
-	t.Helper()
-	_, hostPriv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("host key: %v", err)
-	}
-	hostSigner, err := ssh.NewSignerFromKey(hostPriv)
-	if err != nil {
-		t.Fatalf("host signer: %v", err)
-	}
-	conf := &ssh.ServerConfig{
-		PublicKeyCallback: func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			if string(key.Marshal()) != string(clientPub.Marshal()) {
-				return nil, io.EOF // any error rejects
-			}
-			return &ssh.Permissions{}, nil
-		},
-	}
-	conf.AddHostKey(hostSigner)
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("sshd listen: %v", err)
-	}
-	t.Cleanup(func() { ln.Close() })
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				sc, chans, reqs, err := ssh.NewServerConn(c, conf)
-				if err != nil {
-					return
-				}
-				defer sc.Close()
-				go ssh.DiscardRequests(reqs)
-				for newChan := range chans {
-					if newChan.ChannelType() != "direct-tcpip" {
-						newChan.Reject(ssh.UnknownChannelType, "only direct-tcpip")
-						continue
-					}
-					var msg directTCPIP
-					if err := ssh.Unmarshal(newChan.ExtraData(), &msg); err != nil {
-						newChan.Reject(ssh.ConnectionFailed, "bad payload")
-						continue
-					}
-					ch, chReqs, err := newChan.Accept()
-					if err != nil {
-						continue
-					}
-					go ssh.DiscardRequests(chReqs)
-					go pipeTo(ch, net.JoinHostPort(msg.DestHost, strconv.Itoa(int(msg.DestPort))))
-				}
-			}()
-		}
-	}()
-	return ln.Addr().String(), hostSigner.PublicKey()
-}
-
-func pipeTo(ch ssh.Channel, addr string) {
-	defer ch.Close()
-	target, err := net.Dial("tcp", addr)
-	if err != nil {
-		return
-	}
-	defer target.Close()
-	done := make(chan struct{}, 2)
-	go func() { io.Copy(target, ch); done <- struct{}{} }()
-	go func() { io.Copy(ch, target); done <- struct{}{} }()
-	<-done
-}
-
 // dialThroughSSH assembles the full topology and returns the tunneled client.
 func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient, error) {
 	t.Helper()
 	nodeAddr, direct := remoteNode(t)
-
-	// Chicken-and-egg: the client pubkey is needed by the sshd, the sshd
-	// address by known_hosts. Generate the client key first with a throwaway
-	// host, then regenerate known_hosts — simpler: create sshd with a
-	// deferred pubkey check.
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("client key: %v", err)
-	}
-	clientPub, err := ssh.NewPublicKey(pub)
-	if err != nil {
-		t.Fatalf("client pub: %v", err)
-	}
-	sshAddr, hostPub := sshServer(t, clientPub)
-
-	dir := t.TempDir()
-	block, err := ssh.MarshalPrivateKey(priv, "")
-	if err != nil {
-		t.Fatalf("marshal key: %v", err)
-	}
-	keyPath := filepath.Join(dir, "id_ed25519")
-	if err := os.WriteFile(keyPath, pem.EncodeToMemory(block), 0o600); err != nil {
-		t.Fatalf("write key: %v", err)
-	}
-	khPath := filepath.Join(dir, "known_hosts")
-	if err := os.WriteFile(khPath, []byte(knownhosts.Line([]string{sshAddr}, hostPub)+"\n"), 0o600); err != nil {
-		t.Fatalf("write known_hosts: %v", err)
-	}
+	creds := sshdialtest.Server(t, t.TempDir())
 
 	client, closer, err := sshdial.Dial(sshdial.Config{
-		Host:       sshAddr,
+		Host:       creds.Addr,
 		User:       "joe",
-		KeyPath:    keyPath,
-		KnownHosts: khPath,
+		KeyPath:    creds.KeyPath,
+		KnownHosts: creds.KnownHostsPath,
 		Addr:       nodeAddr,
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e check-web serve init clean launch vendor dist node-modules
+.PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-fs
@@ -110,6 +110,16 @@ check-e2e: build node-modules
 # client/touchgest, touch.go, or the browser-serving path.
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web
+
+# check-federation is the SPAWN GATE (issue #58): the real binaries —
+# gridwell init/serve and the go-plugin subprocesses including gridwell-ssh —
+# through a real ssh tunnel, one write/read crossing every hop. The in-process
+# seam tests cannot see go-plugin spawn: the pluginmeta sqlite-driver bug kept
+# every test green while every production spawn failed. Guarded by the
+# `federation` build tag so make check stays fast. Headless, ~1s after build.
+# Run for any change to plugin spawn, sshdial, the node export, or routing.
+check-federation: build
+	go test -tags federation -count=1 ./test/federation/
 
 # serve runs the backend on its own (the desktop app spawns it as a sidecar;
 # this target is for poking at the RPC/SSE surface or loading the wasm client

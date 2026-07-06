@@ -69,7 +69,7 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	reg.Register(procPluginUUID, "proc", procClient, nil)
 	reg.SetLabel(procPluginUUID, "processes")
 
-	srv := New(reg, Config{})
+	srv := New(reg, Config{NodeID: "tnode"})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -122,16 +122,11 @@ func TestCreateURLRPC(t *testing.T) {
 
 // TestMountFsPlugin: mounting the fs plugin drops a plain well tile whose
 // child grid lives in the fs plugin — child_grid_id is the qualified
-// "<fs-uuid>/<id>" returned by the plugin's Attach. (TestMountRPC covers the
-// proc plugin; this covers fs, the other built-in source.)
+// "<fs-uuid>/<id>". (TestMountByClone covers the proc plugin; this covers fs,
+// the other built-in source.)
 func TestMountFsPlugin(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
-	tile, err := cl.Mount(context.Background(), &rpc.MountRequest{
-		PluginUUID: fsPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatalf("Mount fs: %v", err)
-	}
+	tile := mountByClone(t, cl, fsPluginUUID, root, 0, 0)
 	if tile.Kind != rpc.KindWell {
 		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindWell)
 	}
@@ -140,9 +135,25 @@ func TestMountFsPlugin(t *testing.T) {
 	}
 }
 
-// TestMenuAndMountLabelAgree: the label the + menu shows for a plugin
-// (ListPlugins) and the label stamped on the well it drops (Mount) are the
-// same server.yaml display name — never a plugin-derived string.
+// mountByClone mounts a plugin into a grid the way the UI does: right-drag =
+// CloneTile of the plugin's NODE-GRID link tile (whose local tile id is the
+// plugin uuid). The Mount RPC this replaced had no callers.
+func mountByClone(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *rpc.Tile {
+	t.Helper()
+	tile, err := cl.CloneTile(context.Background(), &rpc.CloneTileRequest{
+		TileID: "tnode/" + pluginUUID, Version: 0,
+		DestGridID: destGrid, X: x, Y: y,
+	})
+	if err != nil {
+		t.Fatalf("mount %s by clone: %v", pluginUUID, err)
+	}
+	return tile
+}
+
+// TestMenuAndMountLabelAgree: the label the launcher shows for a plugin
+// (ListPlugins / the node-grid tile) and the label carried onto a mounted
+// link (clone of that tile) are the same server.yaml display name — never a
+// plugin-derived string. One owner: the node-grid tile's alt.
 func TestMenuAndMountLabelAgree(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
 	ctx := context.Background()
@@ -161,15 +172,11 @@ func TestMenuAndMountLabelAgree(t *testing.T) {
 		t.Fatalf("menu label = %q, want the configured %q", menuLabel, "files")
 	}
 
-	tile, err := cl.Mount(ctx, &rpc.MountRequest{
-		PluginUUID: fsPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatalf("Mount fs: %v", err)
-	}
+	tile := mountByClone(t, cl, fsPluginUUID, root, 0, 0)
 	if tile.AltText != menuLabel {
 		t.Errorf("dropped well label = %q, want %q (must match the menu)", tile.AltText, menuLabel)
 	}
+	_ = ctx
 }
 
 func TestResizeAndSetWellViewRPCs(t *testing.T) {
@@ -435,16 +442,11 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	}
 }
 
-// TestMountRPC: mounting a plugin drops an exit well in the destination grid
-// whose child is the plugin's (default-config) root.
-func TestMountRPC(t *testing.T) {
+// TestMountByClone: mounting a plugin (cloning its node-grid tile) drops an
+// exit well in the destination grid whose child is the plugin's root.
+func TestMountByClone(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
-	tile, err := cl.Mount(context.Background(), &rpc.MountRequest{
-		PluginUUID: procPluginUUID, GridID: root, X: 0, Y: 0, W: 1, H: 1,
-	})
-	if err != nil {
-		t.Fatalf("Mount: %v", err)
-	}
+	tile := mountByClone(t, cl, procPluginUUID, root, 0, 0)
 	if tile.Kind != rpc.KindWell {
 		t.Errorf("kind = %q, want well", tile.Kind)
 	}

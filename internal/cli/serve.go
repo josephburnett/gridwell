@@ -244,7 +244,13 @@ func RunServe(args []string) int {
 	// Shell PTYs now live in the owning plugin (OpenShell); the server is a pure
 	// bridge. tmux, the session lifecycle, and orphan cleanup all moved behind
 	// the interface — the localdb plugin binary owns them.
-	srv := server.New(reg, server.Config{StaticDir: f.StaticDir, NodeID: nodeID})
+	srv := server.New(reg, server.Config{
+		StaticDir: f.StaticDir,
+		NodeID:    nodeID,
+		// The landing page's viewport survives restarts in a small state
+		// file beside the config ("things stay as you left them").
+		NodeStatePath: filepath.Join(home, "node-view.json"),
+	})
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()

@@ -212,14 +212,6 @@ func (n *nodeExport) SetTileAlt(ctx context.Context, r *pb.SetTileAltRequest) (*
 	return resp.Msg, nil
 }
 
-func (n *nodeExport) Mount(ctx context.Context, r *pb.MountRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.Mount(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
 func (n *nodeExport) SetRootView(ctx context.Context, r *pb.SetRootViewRequest) (*pb.SetRootViewResponse, error) {
 	resp, err := n.h.SetRootView(ctx, connect.NewRequest(r))
 	if err != nil {

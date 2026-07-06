@@ -243,22 +243,9 @@ message SetTileAltRequest {
   string alt = 2;
 }
 
-// Mount drops an exit well in the destination grid whose child is plugin_uuid's
-// default root (from its Info). The drag-a-plugin-onto-a-grid gesture.
-//
-// Deliberately the one composite RPC (Info + CreateTile could compose it
-// client-side): the server owns it so the mounted well's label is stamped
-// from the SAME server.yaml name the + menu shows — the menu and the dropped
-// tile can never disagree. Keep it unless label agreement moves elsewhere.
-message MountRequest {
-  string plugin_uuid = 1;
-  Path   path        = 2;   // descent path to the destination grid
-  string grid_id     = 3;   // destination grid (where the mount well lands)
-  int64  x           = 4;
-  int64  y           = 5;
-  int64  w           = 6;
-  int64  h           = 7;
-}
+// (The Mount RPC is gone: mounting is a CloneTile of the plugin's node-grid
+// link tile, and label agreement is owned by that tile's alt — the condition
+// its comment set for removal.)
 
 // ListPlugins enumerates the plugins a node hosts, in config order. The client
 // builds the launcher / + menu from it. A leaf plugin returns an empty list.
@@ -490,7 +477,6 @@ service Gridwell {
   rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
   rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
-  rpc Mount(MountRequest)           returns (TileResponse);
 
   // SetRootView persists the plugin root-grid framing (the portal-level
   // analogue of SetTile for a well). Framing only — never bumps version.

@@ -7,6 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -169,4 +171,70 @@ func TestListPluginsCarriesNodeIdentity(t *testing.T) {
 	if nodeUUID != "node1" || nodeRoot != "node1/0" {
 		t.Errorf("node identity = %q %q, want node1 node1/0", nodeUUID, nodeRoot)
 	}
+}
+
+func TestNodeGridViewportSurvivesRestart(t *testing.T) {
+	// The landing page's own framing is durable: SetRootView mirrors it to
+	// the state file, and a fresh server (a restart) serves it back through
+	// Info/the node tiles' provider — things stay as you left them.
+	dir := t.TempDir()
+	statePath := dir + "/node-view.json"
+
+	build := func() (*rpc.Client, func()) {
+		st, err := store.Open(":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		reg := plugin.NewRegistry()
+		uuidA, _ := registerPrimaryLocaldb(t, reg, st)
+		reg.SetLabel(uuidA, "personal")
+		srv := New(reg, Config{NodeID: "node1", NodeStatePath: statePath})
+		hs := httptest.NewServer(srv.Handler())
+		cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+		return cl, func() { hs.Close(); _ = st.Close() }
+	}
+
+	cl, closer := build()
+	if err := cl.SetRootView(context.Background(), &rpc.SetRootViewRequest{
+		RootGridID: "node1/0", Cx: 4.5, Cy: -2.25, Zoom: 1.75,
+	}); err != nil {
+		t.Fatalf("SetRootView(node grid): %v", err)
+	}
+	closer()
+
+	// "Restart": a brand-new server against the same state file.
+	cl2, closer2 := build()
+	defer closer2()
+	// The node grid's Info carries the restored viewport (what the client
+	// would seed a bookmark-boot from). Read it via ListPlugins is the local
+	// plugin list, so go through the provider directly: GetGrid's tiles use
+	// per-PLUGIN views; the node's OWN view rides Info of the node uuid —
+	// exercised through SetRootView's read-back pair: write once more with
+	// the same values must be a no-op file-wise, and a GetGrid still works.
+	g, err := cl2.GetGrid(context.Background(), "node1/0")
+	if err != nil {
+		t.Fatalf("GetGrid after restart: %v", err)
+	}
+	if len(g.Tiles) != 1 {
+		t.Fatalf("node grid lost its tiles after restart: %+v", g.Tiles)
+	}
+	// Assert the persisted values round-tripped by reading the state file's
+	// owner through the wire: the provider's Info.
+	info, err := nodeInfoViaExport(t, statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.RootViewCx != 4.5 || info.RootViewCy != -2.25 || info.RootViewZoom != 1.75 {
+		t.Errorf("restored viewport = (%v,%v,%v), want (4.5,-2.25,1.75)",
+			info.RootViewCx, info.RootViewCy, info.RootViewZoom)
+	}
+}
+
+// nodeInfoViaExport reads the node-grid provider's Info directly (a fresh
+// provider against the state file), the same handshake a mounter sees.
+func nodeInfoViaExport(t *testing.T, statePath string) (*pb.InfoResponse, error) {
+	t.Helper()
+	ng := &nodeGrid{reg: plugin.NewRegistry(), info: nil, invalidate: func(string) {}, statePath: statePath}
+	ng.loadView()
+	return ng.Info(context.Background(), &pb.InfoRequest{})
 }

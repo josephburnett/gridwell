@@ -82,8 +82,6 @@ const (
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
 	// GridwellSetTileAltProcedure is the fully-qualified name of the Gridwell's SetTileAlt RPC.
 	GridwellSetTileAltProcedure = "/gridwell.v1.Gridwell/SetTileAlt"
-	// GridwellMountProcedure is the fully-qualified name of the Gridwell's Mount RPC.
-	GridwellMountProcedure = "/gridwell.v1.Gridwell/Mount"
 	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
 	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
 	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
@@ -121,7 +119,6 @@ type GridwellClient interface {
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
-	Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error)
 	// SetRootView persists the plugin root-grid framing (the portal-level
 	// analogue of SetTile for a well). Framing only — never bumps version.
 	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
@@ -250,12 +247,6 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
 			connect.WithClientOptions(opts...),
 		),
-		mount: connect.NewClient[v1.MountRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellMountProcedure,
-			connect.WithSchema(gridwellMethods.ByName("Mount")),
-			connect.WithClientOptions(opts...),
-		),
 		setRootView: connect.NewClient[v1.SetRootViewRequest, v1.SetRootViewResponse](
 			httpClient,
 			baseURL+GridwellSetRootViewProcedure,
@@ -297,7 +288,6 @@ type gridwellClient struct {
 	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	setTileAlt        *connect.Client[v1.SetTileAltRequest, v1.TileResponse]
-	mount             *connect.Client[v1.MountRequest, v1.TileResponse]
 	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
@@ -393,11 +383,6 @@ func (c *gridwellClient) SetTileAlt(ctx context.Context, req *connect.Request[v1
 	return c.setTileAlt.CallUnary(ctx, req)
 }
 
-// Mount calls gridwell.v1.Gridwell.Mount.
-func (c *gridwellClient) Mount(ctx context.Context, req *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.mount.CallUnary(ctx, req)
-}
-
 // SetRootView calls gridwell.v1.Gridwell.SetRootView.
 func (c *gridwellClient) SetRootView(ctx context.Context, req *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
 	return c.setRootView.CallUnary(ctx, req)
@@ -441,7 +426,6 @@ type GridwellHandler interface {
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
-	Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error)
 	// SetRootView persists the plugin root-grid framing (the portal-level
 	// analogue of SetTile for a well). Framing only — never bumps version.
 	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
@@ -566,12 +550,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellMountHandler := connect.NewUnaryHandler(
-		GridwellMountProcedure,
-		svc.Mount,
-		connect.WithSchema(gridwellMethods.ByName("Mount")),
-		connect.WithHandlerOptions(opts...),
-	)
 	gridwellSetRootViewHandler := connect.NewUnaryHandler(
 		GridwellSetRootViewProcedure,
 		svc.SetRootView,
@@ -628,8 +606,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
 		case GridwellSetTileAltProcedure:
 			gridwellSetTileAltHandler.ServeHTTP(w, r)
-		case GridwellMountProcedure:
-			gridwellMountHandler.ServeHTTP(w, r)
 		case GridwellSetRootViewProcedure:
 			gridwellSetRootViewHandler.ServeHTTP(w, r)
 		case GridwellShellSessionAliveProcedure:
@@ -715,10 +691,6 @@ func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTileAlt is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) Mount(context.Context, *connect.Request[v1.MountRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Mount is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {
