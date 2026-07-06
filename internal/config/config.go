@@ -18,7 +18,13 @@ import (
 // ServerConfig is the top-level ~/.gridwell/server.yaml structure. There is no
 // root: every plugin is equal; the client enters one from the launcher.
 type ServerConfig struct {
-	Bind string `yaml:"bind,omitempty"`
+	// NodeID is this node's own durable identity — the uuid that qualifies the
+	// node grid (the launcher: one link tile per plugin). Minted once by
+	// EnsureNodeID and never changed; a stored deep link or a remote mount's
+	// reference through this node depends on it staying put, exactly like a
+	// plugin id.
+	NodeID string `yaml:"node_id,omitempty"`
+	Bind   string `yaml:"bind,omitempty"`
 	// BindSet is derived by Load, never stored: true when the file contains a
 	// non-empty `bind:` key. It distinguishes "the user pinned the listen
 	// address in server.yaml" from "Bind holds the built-in default", which is
@@ -194,6 +200,35 @@ func AppendPlugin(home string, entry PluginConfig) error {
 		return fmt.Errorf("config: write %s: %w", path, err)
 	}
 	return nil
+}
+
+// EnsureNodeID returns the node's durable identity from <home>/server.yaml,
+// minting and persisting one (via newID) if the file predates node identity.
+// A node that existed before this field keeps every plugin id untouched — the
+// node id is purely additive. The file must already exist (a node never runs
+// with an undeclared identity; `gridwell init` creates it).
+func EnsureNodeID(home string, newID func() string) (string, error) {
+	path := filepath.Join(home, "server.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("config: read %s: %w", path, err)
+	}
+	cfg := ServerConfig{}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return "", fmt.Errorf("config: parse %s: %w", path, err)
+	}
+	if cfg.NodeID != "" {
+		return cfg.NodeID, nil
+	}
+	cfg.NodeID = newID()
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return "", fmt.Errorf("config: marshal: %w", err)
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		return "", fmt.Errorf("config: write %s: %w", path, err)
+	}
+	return cfg.NodeID, nil
 }
 
 func expandHome(p string) (string, error) {

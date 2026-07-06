@@ -62,6 +62,9 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	in.DocReject = a.docRejectAt(sx, sy)
 	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
 	in.HasTarget = haveT
+	if haveT {
+		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
+	}
 	if haveT && !clone {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
 	}
@@ -192,6 +195,7 @@ func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	}
 	return dragdrop.MoveForbidden(
 		d.srcGridID == t.gridID,
+		rpc.NamespaceOf(d.srcGridID) != rpc.NamespaceOf(t.gridID),
 		a.gridSourceKind(d.srcGridID),
 		a.gridSourceKind(t.gridID),
 	)

@@ -313,25 +313,49 @@ func TestPaneCellAt(t *testing.T) {
 // from one host directory's grid into another's): the server rejects any
 // cross-grid move touching a source-backed grid, but the UI's old XOR check
 // reported it allowed, inviting a drop that then failed.
+// TestDecideDropTargetReadOnly: a drop (move OR clone) onto a read-only grid
+// (the node grid, fs/proc) is rejected up front — no doomed RPC, no
+// misleading "changed elsewhere" reconcile notice.
+func TestDecideDropTargetReadOnly(t *testing.T) {
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetReadOnly: true}
+	if got := DecideDrop(base); got != DropRejected {
+		t.Errorf("move onto read-only grid = %v, want DropRejected", got)
+	}
+	clone := base
+	clone.Clone = true
+	if got := DecideDrop(clone); got != DropRejected {
+		t.Errorf("clone onto read-only grid = %v, want DropRejected", got)
+	}
+	ok := base
+	ok.TargetReadOnly = false
+	if got := DecideDrop(ok); got != DropMove {
+		t.Errorf("move onto writable grid = %v, want DropMove", got)
+	}
+}
+
 func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name             string
 		sameGrid         bool
+		crossPlugin      bool
 		srcKind, dstKind string
 		want             bool
 	}{
-		{"same grid, both source", true, "fs", "fs", false},
-		{"same grid, regular", true, "", "", false},
-		{"cross regular->regular", false, "", "", false},
-		{"cross source->regular", false, "fs", "", true},
-		{"cross regular->source", false, "", "proc", true},
-		{"cross source->source (regression)", false, "fs", "proc", true},
-		{"cross same-kind source->source", false, "fs", "fs", true},
+		{"same grid, both source", true, false, "fs", "fs", false},
+		{"same grid, regular", true, false, "", "", false},
+		{"cross regular->regular", false, false, "", "", false},
+		{"cross source->regular", false, false, "fs", "", true},
+		{"cross regular->source", false, false, "", "proc", true},
+		{"cross source->source (regression)", false, false, "fs", "proc", true},
+		{"cross same-kind source->source", false, false, "fs", "fs", true},
+		// A move never crosses a plugin boundary: identity doesn't migrate
+		// id spaces. The cross-plugin gesture is right-drag (a link).
+		{"cross-plugin move", false, true, "", "", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := MoveForbidden(c.sameGrid, c.srcKind, c.dstKind); got != c.want {
-				t.Errorf("MoveForbidden(%v, %q, %q) = %v, want %v", c.sameGrid, c.srcKind, c.dstKind, got, c.want)
+			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind); got != c.want {
+				t.Errorf("MoveForbidden(%v, %v, %q, %q) = %v, want %v", c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind, got, c.want)
 			}
 		})
 	}

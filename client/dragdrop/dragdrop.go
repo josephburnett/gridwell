@@ -234,14 +234,15 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 // forbidden when EITHER endpoint is source-backed — a host file can't migrate
 // into Gridwell, regular tiles can't move into a host directory, and host-side
 // mv between two source dirs isn't implemented (clone/right-drag links
-// instead). A same-grid move never crosses the boundary, so it's always
-// allowed. (The UI previously used an XOR here, which wrongly invited a
-// source→source cross-grid drop that the server then rejected.)
-func MoveForbidden(sameGrid bool, srcKind, dstKind string) bool {
+// instead) — or when the endpoints live in different id NAMESPACES
+// (crossPlugin): a tile's id is its identity and never migrates between
+// plugins; the cross-plugin gesture is the right-drag, which creates a link.
+// A same-grid move never crosses any boundary, so it's always allowed.
+func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 	if sameGrid {
 		return false
 	}
-	return srcKind != "" || dstKind != ""
+	return crossPlugin || srcKind != "" || dstKind != ""
 }
 
 // DropAction is the single verdict for a drag release (and the matching
@@ -300,8 +301,12 @@ type DropInput struct {
 	DocReject  bool
 	HasTarget  bool
 	Forbidden  bool
-	SameCell   bool
-	Occupied   bool
+	// TargetReadOnly: the destination grid refuses mutations (the node grid,
+	// an fs/proc grid) — a drop there is rejected up front instead of firing
+	// an RPC the server must refuse.
+	TargetReadOnly bool
+	SameCell       bool
+	Occupied       bool
 }
 
 // DecideDrop maps a gathered DropInput to the single action both preview
@@ -343,6 +348,8 @@ func DecideDrop(in DropInput) DropAction {
 	case !in.HasTarget:
 		return DropRejected
 	case in.Forbidden:
+		return DropRejected
+	case in.TargetReadOnly:
 		return DropRejected
 	case in.SameCell:
 		return DropRejected

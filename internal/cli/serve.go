@@ -18,6 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // serveFlags holds the parsed `serve` subcommand options. Split out from
@@ -231,10 +232,19 @@ func RunServe(args []string) int {
 	}
 	defer reg.Close()
 
+	// The node's own durable identity qualifies the node grid (the plugin-list
+	// landing page). Minted once and persisted into server.yaml; a pre-node
+	// config gains the field on first serve without touching any plugin id.
+	nodeID, err := config.EnsureNodeID(home, store.NewUUID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: node id: %v\n", err)
+		return 1
+	}
+
 	// Shell PTYs now live in the owning plugin (OpenShell); the server is a pure
 	// bridge. tmux, the session lifecycle, and orphan cleanup all moved behind
 	// the interface — the localdb plugin binary owns them.
-	srv := server.New(reg, server.Config{StaticDir: f.StaticDir})
+	srv := server.New(reg, server.Config{StaticDir: f.StaticDir, NodeID: nodeID})
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()

@@ -559,6 +559,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	in.HasTarget = haveT
 	var dropX, dropY int64
 	if haveT {
+		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
 		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil

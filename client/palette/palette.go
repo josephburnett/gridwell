@@ -133,44 +133,6 @@ func (l Layout) TileRect(i int) Rect {
 	}
 }
 
-// Launcher tile geometry, in GRID-CELL coordinates centered on the origin.
-// The gridless launcher lays its plugin tiles out in cell space (not screen
-// space) so it renders through the pane's viewport transform — and therefore
-// zooms smoothly when you descend into a plugin, exactly like a well. A 1×1
-// cell per tile (so a tile reads the same size as the well it drops) in a
-// centered row with a small gap.
-const (
-	launcherTileCells = 1.0
-	launcherGapCells  = 0.3
-)
-
-// LauncherCellRect returns the cell-space rect of the i'th of n launcher
-// plugin tiles, centered on the origin so the row sits at the pane's view
-// center (Cx=Cy=0). Pure geometry — the caller maps cells to screen through
-// the pane transform.
-func LauncherCellRect(i, n int) Rect {
-	pitch := launcherTileCells + launcherGapCells
-	cx := (float64(i) - float64(n-1)/2) * pitch
-	return Rect{
-		X: cx - launcherTileCells/2,
-		Y: -launcherTileCells / 2,
-		W: launcherTileCells,
-		H: launcherTileCells,
-	}
-}
-
-// LauncherCellIndexAt returns the index of the launcher tile whose cell rect
-// contains (cx, cy), or -1. The point is in cell coordinates.
-func LauncherCellIndexAt(cx, cy float64, n int) int {
-	for i := range n {
-		r := LauncherCellRect(i, n)
-		if cx >= r.X && cx <= r.X+r.W && cy >= r.Y && cy <= r.Y+r.H {
-			return i
-		}
-	}
-	return -1
-}
-
 // TileIndexAt returns the index of the template tile under (x, y), or
 // -1 if the point is in a gutter or outside the popover.
 func (l Layout) TileIndexAt(x, y float64) int {

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
@@ -74,9 +75,12 @@ func (a *App) encodeFocusedPaneURL() url.State {
 	} else {
 		s = url.GridState(p.Path, p.Cx, p.Cy, p.Zoom)
 	}
-	// Anchor records which plugin root the pane sits inside (empty = launcher),
-	// so a reload re-enters the same plugin and walks the path within it.
-	s.Anchor = p.Anchor
+	// Anchor records which grid namespace the pane sits inside, so a reload
+	// re-enters the same place and walks the path within it. The node grid —
+	// the default landing page — encodes as empty, keeping "/" the home URL.
+	if p.Anchor != a.nodeGrid {
+		s.Anchor = p.Anchor
+	}
 	return s
 }
 
@@ -117,22 +121,32 @@ func (a *App) applyURLOnBoot() {
 		return
 	}
 
-	// No anchor → the launcher start screen (the pane is already there).
+	// No anchor → the node grid, the landing page (already the pane's boot
+	// anchor). The walk below still applies so "/" plus a viewport restores.
 	if state.Anchor == "" {
-		p.Anchor = ""
-		p.Path = nil
-		a.draw()
-		a.scheduleURLUpdate()
-		return
+		state.Anchor = a.nodeGrid
+		if state.Anchor == "" {
+			// Bootstrap couldn't learn the node identity; the error is already
+			// on the strip. Nothing to restore into.
+			a.draw()
+			a.scheduleURLUpdate()
+			return
+		}
 	}
 	p.Anchor = state.Anchor
 
-	// The URL's path segments are bare well ids within the anchor's plugin;
-	// qualify them with the anchor's plugin uuid so they match the grid's keys.
-	anchorUUID := uuidOf(state.Anchor)
+	// The URL's path segments are bare well ids within the anchor's grid
+	// namespace; qualify them with the anchor's namespace PREFIX — everything
+	// up to its last segment — so they match the grid's keys. For a plain
+	// plugin root ("uuid/1") that is the plugin uuid; for a remote grid
+	// reached through a mount ("ssh1/rp1/1") it is the whole chain prefix.
+	anchorPrefix := state.Anchor
+	if i := strings.LastIndexByte(anchorPrefix, '/'); i >= 0 {
+		anchorPrefix = anchorPrefix[:i]
+	}
 	qualified := make([]string, len(state.TileIDs))
 	for i, id := range state.TileIDs {
-		qualified[i] = anchorUUID + "/" + id
+		qualified[i] = anchorPrefix + "/" + id
 	}
 
 	// No path → sit at the anchor's root grid.

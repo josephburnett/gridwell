@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -30,30 +31,34 @@ import (
 // This is the ssh plugin's REAL transport seam, in-process: a genuine
 // x/crypto/ssh server (public-key auth, host-key verification against a
 // known_hosts file, direct-tcpip channel forwarding) in front of a genuine
-// `gridwell serve` node handler (h2c + node export + in-process localdb).
-// sshdial.Dial crosses every layer the production binary crosses except the
-// network itself. The old gap: the proxy was tested against an in-process
-// fake and the tunnel against nothing — both sides tested, seam never.
+// `gridwell serve` node handler (h2c + id-routed node export + node grid +
+// TWO in-process localdbs). sshdial.Dial crosses every layer the production
+// binary crosses except the network itself.
 
-// remoteNode stands up the "remote gridwell serve": one localdb (label
-// "personal") behind NodeHandler on a real listener. Returns its address and
-// a direct client for ground-truth assertions.
+// remoteNode stands up the "remote gridwell serve": node id "rnode" with two
+// localdb plugins ("personal", "work") behind NodeHandler on a real listener.
+// Returns its address and a direct client to the first plugin for
+// ground-truth assertions.
 func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 	t.Helper()
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	direct, closer, err := plugin.ServeInProcess(localdb.New(st, shellsvc.NewManager(shellsvctest.New())))
-	if err != nil {
-		t.Fatalf("serve localdb: %v", err)
-	}
-	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
-	reg.Register("ur1", "localdb", direct, nil)
-	reg.SetLabel("ur1", "personal")
-	srv := server.New(reg, server.Config{})
+	for i, name := range []string{"personal", "work"} {
+		st, err := store.Open(":memory:")
+		if err != nil {
+			t.Fatalf("store.Open: %v", err)
+		}
+		t.Cleanup(func() { st.Close() })
+		direct, closer, err := plugin.ServeInProcess(localdb.New(st, shellsvc.NewManager(shellsvctest.New())))
+		if err != nil {
+			t.Fatalf("serve localdb: %v", err)
+		}
+		t.Cleanup(closer)
+		uuid := fmt.Sprintf("ur%d", i+1)
+		reg.Register(uuid, "localdb", direct, nil)
+		reg.SetLabel(uuid, name)
+	}
+	direct, _ := reg.Get("ur1")
+	srv := server.New(reg, server.Config{NodeID: "rnode"})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -149,8 +154,8 @@ func pipeTo(ch ssh.Channel, addr string) {
 	<-done
 }
 
-// dialThroughSSH assembles the full topology and returns a scoped client.
-func dialThroughSSH(t *testing.T, remotePlugin string) (gridwellv1.GridwellClient, gridwellv1.GridwellClient, error) {
+// dialThroughSSH assembles the full topology and returns the tunneled client.
+func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient, error) {
 	t.Helper()
 	nodeAddr, direct := remoteNode(t)
 
@@ -183,12 +188,11 @@ func dialThroughSSH(t *testing.T, remotePlugin string) (gridwellv1.GridwellClien
 	}
 
 	client, closer, err := sshdial.Dial(sshdial.Config{
-		Host:         sshAddr,
-		User:         "joe",
-		KeyPath:      keyPath,
-		KnownHosts:   khPath,
-		Addr:         nodeAddr,
-		RemotePlugin: remotePlugin,
+		Host:       sshAddr,
+		User:       "joe",
+		KeyPath:    keyPath,
+		KnownHosts: khPath,
+		Addr:       nodeAddr,
 	})
 	if err != nil {
 		return nil, direct, err
@@ -197,60 +201,61 @@ func dialThroughSSH(t *testing.T, remotePlugin string) (gridwellv1.GridwellClien
 	return client, direct, nil
 }
 
-func TestDialMountsRemotePluginThroughRealSSH(t *testing.T) {
-	c, direct, err := dialThroughSSH(t, "personal")
+func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
+	c, direct, err := dialThroughSSH(t)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
 	ctx := context.Background()
 
-	want, err := direct.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatalf("direct Info: %v", err)
-	}
-	got, err := c.Info(ctx, &gridwellv1.InfoRequest{})
+	// The mount's root is the remote's node grid: both remote plugins appear
+	// as link tiles, labels intact.
+	info, err := c.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("tunneled Info: %v", err)
 	}
-	if got.Kind != want.Kind || got.RootGridId != want.RootGridId {
-		t.Fatalf("tunneled Info = %+v, want the remote plugin's %+v", got, want)
+	if info.RootGridId != "rnode/0" {
+		t.Fatalf("tunneled root = %q, want the remote node grid rnode/0", info.RootGridId)
+	}
+	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid(remote node grid): %v", err)
+	}
+	if len(ng.Tiles) != 2 {
+		t.Fatalf("remote node grid has %d tiles, want 2 (both remote plugins)", len(ng.Tiles))
+	}
+	if ng.Tiles[0].AltText != "personal" || ng.Tiles[1].AltText != "work" {
+		t.Errorf("labels = %q,%q — want personal,work", ng.Tiles[0].AltText, ng.Tiles[1].AltText)
+	}
+	if !ng.Tiles[0].Reference {
+		t.Error("remote plugin tiles must be links (dashed)")
 	}
 
-	// Write through the tunnel, read directly: the mount is the same plugin.
+	// Descend into the FIRST remote plugin through its link and write; read
+	// back directly on the remote: the mount is the same plugin, hop peeled.
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: got.RootGridId,
+		GridId: ng.Tiles[0].ChildGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
 		Data:   []byte("# over ssh"),
 	})
 	if err != nil {
 		t.Fatalf("CreateTile through tunnel: %v", err)
 	}
-	body, err := direct.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: created.Tile.Id})
+	if !strings.HasPrefix(created.Tile.Id, "ur1/") {
+		t.Fatalf("created id = %q, want the remote's qualified ur1/<n>", created.Tile.Id)
+	}
+	body, err := direct.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: strings.TrimPrefix(created.Tile.Id, "ur1/")})
 	if err != nil {
 		t.Fatalf("direct read: %v", err)
 	}
 	if string(body.Data) != "# over ssh" {
 		t.Errorf("content = %q, want %q", body.Data, "# over ssh")
 	}
-}
 
-func TestDialAutoSelectsTheOnlyRemotePlugin(t *testing.T) {
-	c, _, err := dialThroughSSH(t, "") // no remote_plugin: exactly one exists
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
-	if _, err := c.Info(context.Background(), &gridwellv1.InfoRequest{}); err != nil {
-		t.Fatalf("Info after auto-select: %v", err)
-	}
-}
-
-func TestDialUnknownRemotePluginEnumeratesOptions(t *testing.T) {
-	_, _, err := dialThroughSSH(t, "nope")
-	if err == nil {
-		t.Fatalf("Dial with unknown remote_plugin succeeded")
-	}
-	if !strings.Contains(err.Error(), "personal") {
-		t.Errorf("error %q should enumerate the remote's plugins", err)
+	// The SECOND remote plugin is reachable through the same mount — the
+	// whole point of the node design: no per-plugin config, no selector.
+	if _, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: ng.Tiles[1].ChildGridId}); err != nil {
+		t.Errorf("second remote plugin unreachable through the mount: %v", err)
 	}
 }
 
@@ -261,17 +266,16 @@ func TestFromPluginConfigNamesEveryMissingKey(t *testing.T) {
 	}
 	// The exact missing-key list: every absent key named, the provided one not.
 	msg := err.Error()
-	list := msg[strings.Index(msg, ": ")+2 : strings.Index(msg, " (")]
+	list := msg[strings.Index(msg, ": ")+2:]
 	if list != "user, key, known_hosts, addr" {
 		t.Errorf("missing keys = %q, want %q", list, "user, key, known_hosts, addr")
 	}
-	c, err := sshdial.FromPluginConfig(map[string]string{
+	// A complete config passes; an obsolete remote_plugin key is tolerated
+	// (warned, not fatal) so yesterday's configs keep starting.
+	if _, err := sshdial.FromPluginConfig(map[string]string{
 		"host": "h:22", "user": "u", "key": "/k", "known_hosts": "/kh", "addr": "127.0.0.1:8080",
-	})
-	if err != nil {
+		"remote_plugin": "obsolete",
+	}); err != nil {
 		t.Fatalf("complete config rejected: %v", err)
-	}
-	if c.RemotePlugin != "" {
-		t.Errorf("RemotePlugin = %q, want empty (optional)", c.RemotePlugin)
 	}
 }

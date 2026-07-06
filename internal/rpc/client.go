@@ -68,6 +68,16 @@ func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, err
 
 // ListPlugins returns the node's configured plugins in config order, for the
 // launcher / + menu.
+// NodeIdentity returns the node's own uuid and the qualified id of its node
+// grid (the plugin-list landing page) — the anchor panes boot at.
+func (c *Client) NodeIdentity(ctx context.Context) (nodeUUID, nodeRootGridID string, err error) {
+	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
+	if err != nil {
+		return "", "", err
+	}
+	return r.Msg.NodeUuid, r.Msg.NodeRootGridId, nil
+}
+
 func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
 	if err != nil {

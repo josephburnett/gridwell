@@ -99,6 +99,13 @@ func RunInit(args []string) int {
 		return 1
 	}
 
+	// The node's own identity rides in the same file; mint it with the first
+	// plugin so a fresh home is fully identified before the first serve.
+	if _, err := config.EnsureNodeID(home, store.NewUUID); err != nil {
+		fmt.Fprintf(os.Stderr, "init: node id: %v\n", err)
+		return 1
+	}
+
 	fmt.Printf("gridwell: initialized %s plugin %q (id %s)\n  db:     %s\n  config: %s\n",
 		*kind, *name, id, dbFile, filepath.Join(home, "server.yaml"))
 	return 0

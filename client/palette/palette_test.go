@@ -194,30 +194,3 @@ func TestPaletteIsAlwaysSingleRow(t *testing.T) {
 		}
 	}
 }
-
-// TestLauncherCellsCentered: launcher tiles form a single row of cells
-// centered on the origin (so the row sits at the pane's view center), and the
-// cell-space index round-trips.
-func TestLauncherCellsCentered(t *testing.T) {
-	n := 3
-	first := LauncherCellRect(0, n)
-	last := LauncherCellRect(n-1, n)
-	// Midpoint of the first and last tile centers is the origin.
-	if mid := (first.X + first.W/2 + last.X + last.W/2) / 2; mid != 0 {
-		t.Errorf("row midpoint = %v, want 0 (centered on origin)", mid)
-	}
-	// Tiles are vertically centered on row 0.
-	if first.Y+first.H/2 != 0 {
-		t.Errorf("tile Y-center = %v, want 0", first.Y+first.H/2)
-	}
-	for i := range n {
-		r := LauncherCellRect(i, n)
-		if got := LauncherCellIndexAt(r.X+r.W/2, r.Y+r.H/2, n); got != i {
-			t.Errorf("LauncherCellIndexAt(center of %d) = %d", i, got)
-		}
-	}
-	// A point well off the row resolves to nothing.
-	if got := LauncherCellIndexAt(100, 100, n); got != -1 {
-		t.Errorf("LauncherCellIndexAt(far) = %d, want -1", got)
-	}
-}

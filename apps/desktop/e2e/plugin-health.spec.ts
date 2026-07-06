@@ -29,16 +29,16 @@ test('a rootless plugin tile is inert and reports a notice instead of descending
   expect(rootless!.infoError, 'a rootless (not broken) plugin carries no InfoError').toBe('');
 
   const before = await gw.focused();
-  expect(before.anchor, 'starts at the launcher (no plugin entered)').toBe('');
+  expect(before.anchor, 'starts on the node grid (the landing page)').toMatch(/\/0$/);
 
   // Click the rootless tile.
   await window.mouse.click(rootless!.x, rootless!.y);
   await gw.waitIdle();
 
-  // It must NOT have descended: the focused pane is still at the launcher
-  // anchor, not inside the fs plugin's root.
+  // It must NOT have descended: the focused pane is still anchored at the
+  // node grid, not inside the fs plugin's root.
   const after = await gw.focused();
-  expect(after.anchor, 'click on a rootless tile must not descend').toBe('');
+  expect(after.anchor, 'click on a rootless tile must not descend').toBe(before.anchor);
 
   // Instead, a notice must have appeared, attributed to this plugin by label
   // (client/pluginhealth.ClickNotice's source key), as an Info severity (a

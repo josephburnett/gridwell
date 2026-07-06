@@ -140,12 +140,18 @@ func (x *Path) GetWellIds() []string {
 // grid whose tile list is reconciled against a host directory, "proc"
 // for the process table. source_id carries the path or PID.
 type Grid struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ObjectId      string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	SourceKind    string                 `protobuf:"bytes,4,opt,name=source_kind,json=sourceKind,proto3" json:"source_kind,omitempty"`
-	SourceId      string                 `protobuf:"bytes,5,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ObjectId   string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Version    int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	SourceKind string                 `protobuf:"bytes,4,opt,name=source_kind,json=sourceKind,proto3" json:"source_kind,omitempty"`
+	SourceId   string                 `protobuf:"bytes,5,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	// writable reports whether the grid's OWNING plugin accepts mutations —
+	// per grid, not per local plugin entry, because through a node mount one
+	// local plugin (ssh) fronts many remote plugins with differing
+	// capabilities. Stamped by the serving node from the owning plugin's Info
+	// (leaf) or passed through verbatim (transit); wire-only, never persisted.
+	Writable      bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -213,6 +219,13 @@ func (x *Grid) GetSourceId() string {
 		return x.SourceId
 	}
 	return ""
+}
+
+func (x *Grid) GetWritable() bool {
+	if x != nil {
+		return x.Writable
+	}
+	return false
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -1861,10 +1874,17 @@ func (x *PluginInfo) GetInfoError() string {
 }
 
 type ListPluginsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Plugins       []*PluginInfo          `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Plugins []*PluginInfo          `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	// node_uuid is this node's own durable identity (server.yaml node_id) and
+	// node_root_grid_id its plugin-list grid — the launcher the client anchors
+	// panes at on boot, qualified "<node_uuid>/0". Every gridwell node exposes
+	// the same shape, so a remote node reached through an ssh mount presents
+	// its launcher exactly like the local one.
+	NodeUuid       string `protobuf:"bytes,2,opt,name=node_uuid,json=nodeUuid,proto3" json:"node_uuid,omitempty"`
+	NodeRootGridId string `protobuf:"bytes,3,opt,name=node_root_grid_id,json=nodeRootGridId,proto3" json:"node_root_grid_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListPluginsResponse) Reset() {
@@ -1902,6 +1922,20 @@ func (x *ListPluginsResponse) GetPlugins() []*PluginInfo {
 		return x.Plugins
 	}
 	return nil
+}
+
+func (x *ListPluginsResponse) GetNodeUuid() string {
+	if x != nil {
+		return x.NodeUuid
+	}
+	return ""
+}
+
+func (x *ListPluginsResponse) GetNodeRootGridId() string {
+	if x != nil {
+		return x.NodeRootGridId
+	}
+	return ""
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.
@@ -3133,14 +3167,15 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"!\n" +
 	"\x04Path\x12\x19\n" +
-	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\x8b\x01\n" +
+	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\xa7\x01\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1f\n" +
 	"\vsource_kind\x18\x04 \x01(\tR\n" +
 	"sourceKind\x12\x1b\n" +
-	"\tsource_id\x18\x05 \x01(\tR\bsourceId\"\xb3\x04\n" +
+	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
+	"\bwritable\x18\x06 \x01(\bR\bwritable\"\xb3\x04\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3266,9 +3301,11 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eroot_view_zoom\x18\t \x01(\x01R\frootViewZoom\x12\x1d\n" +
 	"\n" +
 	"info_error\x18\n" +
-	" \x01(\tR\tinfoError\"H\n" +
+	" \x01(\tR\tinfoError\"\x90\x01\n" +
 	"\x13ListPluginsResponse\x121\n" +
-	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\"5\n" +
+	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12\x1b\n" +
+	"\tnode_uuid\x18\x02 \x01(\tR\bnodeUuid\x12)\n" +
+	"\x11node_root_grid_id\x18\x03 \x01(\tR\x0enodeRootGridId\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\x8e\x01\n" +
 	"\x11CreateTileRequest\x12%\n" +

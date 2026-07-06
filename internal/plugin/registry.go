@@ -102,6 +102,20 @@ func (r *Registry) Deregister(id string) {
 	}
 }
 
+// Transit reports whether the plugin's ids are CHAINS from another node — a
+// node mount, where the plugin forwards to a remote gridwell's front door and
+// its ids arrive already qualified from the remote's perspective. The server's
+// qualification layer prepends this plugin's uuid to every id it returns
+// (qualifyTilesTransit) instead of applying leaf-plugin rules. Derived from
+// the configured kind in exactly this one place: it is a property of the local
+// transport binary's id discipline (config-time fact), not a remote
+// capability, so it must be known even while the remote is unreachable.
+func (r *Registry) Transit(id string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.kinds[id] == "ssh"
+}
+
 // Get returns the client for id, or (nil, false) if not registered.
 func (r *Registry) Get(id string) (gridwellv1.GridwellClient, bool) {
 	r.mu.RLock()

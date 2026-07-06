@@ -7,7 +7,6 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -229,22 +228,29 @@ func (a *App) paneTileIDs(p *pane.Pane) []any {
 	return ids
 }
 
-// thLauncher returns the launcher plugin tiles for the focused pane (the start
-// screen has no grid and no + menu — the plugin tiles are the whole page). Each
-// entry carries the plugin identity plus the screen-space center to click to
-// enter it. Empty when the focused pane has already entered a plugin.
+// thLauncher returns the plugin tiles of the NODE GRID (the landing page)
+// for the focused pane. Each entry carries the plugin identity plus the
+// screen-space center of its tile, to click to enter it. Empty when the
+// focused pane isn't at the node grid, or the node grid hasn't loaded yet —
+// the driver polls until non-empty, which now also covers grid-fetch latency.
 func (a *App) thLauncher(js.Value, []js.Value) any {
 	p, r, ok := a.focusedPaneRect()
-	if !ok || !isLauncherPane(p) {
+	if !ok || !a.isNodeGridPane(p) {
+		return []any{}
+	}
+	g, ok := a.c.Grid(a.nodeGrid)
+	if !ok {
 		return []any{}
 	}
 	ps := paneToDragdrop(p, r)
-	n := len(a.plugins)
-	out := make([]any, 0, n)
+	out := make([]any, 0, len(a.plugins))
 	for i, pl := range a.plugins {
-		cr := palette.LauncherCellRect(i, n)
-		// Center of the launcher cell, in screen pixels.
-		sx, sy := ps.CellToScreen(cr.X+cr.W/2, cr.Y+cr.H/2)
+		t, ok := g.Tiles[a.nodeGrid[:strings.IndexByte(a.nodeGrid, '/')]+"/"+pl.UUID]
+		if !ok {
+			continue
+		}
+		// Center of the plugin's tile, in screen pixels.
+		sx, sy := ps.CellToScreen(float64(t.X)+float64(t.W)/2, float64(t.Y)+float64(t.H)/2)
 		status := "enterable"
 		switch pluginhealth.Classify(pl) {
 		case pluginhealth.Broken:

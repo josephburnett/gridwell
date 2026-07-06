@@ -38,6 +38,12 @@ message Grid {
   int64 version = 3;
   string source_kind = 4;
   string source_id = 5;
+  // writable reports whether the grid's OWNING plugin accepts mutations —
+  // per grid, not per local plugin entry, because through a node mount one
+  // local plugin (ssh) fronts many remote plugins with differing
+  // capabilities. Stamped by the serving node from the owning plugin's Info
+  // (leaf) or passed through verbatim (transit); wire-only, never persisted.
+  bool writable = 6;
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -280,6 +286,13 @@ message PluginInfo {
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;
+  // node_uuid is this node's own durable identity (server.yaml node_id) and
+  // node_root_grid_id its plugin-list grid — the launcher the client anchors
+  // panes at on boot, qualified "<node_uuid>/0". Every gridwell node exposes
+  // the same shape, so a remote node reached through an ssh mount presents
+  // its launcher exactly like the local one.
+  string node_uuid = 2;
+  string node_root_grid_id = 3;
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.

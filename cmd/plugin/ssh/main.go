@@ -1,24 +1,22 @@
-// gridwell-ssh is the remote-gateway plugin binary. It opens an SSH tunnel to
-// a remote host, dials the remote gridwell node's HTTP/h2c port through it,
-// and mounts ONE of the remote's plugins via the node export
-// (internal/server/nodeexport.go): every call carries the gridwell-plugin
-// selector, so the far end answers with that plugin's own service verbatim —
-// local ids, its wells, tiles, live shell PTYs (OpenShell), and session blob
-// all reach the local server through a transparent proxy
-// (internal/plugin/proxy), same as a local plugin. "Remote" is just a
-// transport; the whole dial/resolve path lives in internal/plugin/sshdial
-// (where it is tested against a real in-process ssh server).
+// gridwell-ssh is the remote-node mount. It opens an SSH tunnel to a remote
+// host, dials the remote gridwell node's HTTP/h2c port through it, and mounts
+// THE WHOLE NODE via its export (internal/server/nodeexport.go): the mount's
+// root is the remote's node grid (its plugin-list landing page), and every
+// remote plugin — wells, tiles, live shell PTYs (OpenShell), session blobs —
+// is reachable through it by qualified id, hop by hop. This binary is a
+// transparent proxy (internal/plugin/proxy); the local server's transit
+// qualification (Registry.Transit) prepends this plugin's uuid to every id on
+// the way back, so chains compose. The whole dial path lives in
+// internal/plugin/sshdial (tested against a real in-process ssh server).
 //
 // Config keys (validated by sshdial.FromPluginConfig):
 //
-//	host:          SSH endpoint "host:port" (e.g. "example.com:22")
-//	user:          SSH user
-//	key:           path to the private key file
-//	known_hosts:   path to a known_hosts file verifying the host key (required)
-//	addr:          the remote node's HTTP address AS SEEN ON THE REMOTE HOST —
-//	               its server.yaml `bind:`, e.g. "127.0.0.1:8080"
-//	remote_plugin: which remote plugin to mount (config name or uuid);
-//	               optional when the remote has exactly one plugin
+//	host:        SSH endpoint "host:port" (e.g. "example.com:22")
+//	user:        SSH user
+//	key:         path to the private key file
+//	known_hosts: path to a known_hosts file verifying the host key (required)
+//	addr:        the remote node's HTTP address AS SEEN ON THE REMOTE HOST —
+//	             its server.yaml `bind:`, e.g. "127.0.0.1:8080"
 package main
 
 import (

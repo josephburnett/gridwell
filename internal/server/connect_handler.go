@@ -41,7 +41,7 @@ func (h *connectHandler) route(id string) (client pb.GridwellClient, local, uuid
 	if !ok {
 		return nil, "", "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unqualified id %q", id))
 	}
-	c, found := h.srv.pluginReg.Get(uuid)
+	c, found := h.srv.routeClient(uuid)
 	if !found {
 		return nil, "", "", connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", uuid))
 	}
@@ -81,20 +81,23 @@ func localPathFor(p *pb.Path, uuid string) *pb.Path {
 	return &pb.Path{WellIds: out}
 }
 
-// pluginTileResp qualifies a plugin's TileResponse for the client.
-func pluginTileResp(uuid string, resp *pb.TileResponse, err error) (*connect.Response[pb.TileResponse], error) {
+// tileResp qualifies a plugin's TileResponse for the client, applying the
+// transit rule when the owning plugin is a node mount.
+func (h *connectHandler) tileResp(uuid string, resp *pb.TileResponse, err error) (*connect.Response[pb.TileResponse], error) {
 	if err != nil {
 		return nil, asConnectError(err)
 	}
 	t := resp.GetTile()
 	if t != nil {
-		t = qualifyTiles(uuid, []*pb.Tile{t})[0]
+		t = qualifyTilesFor(h.srv.pluginReg.Transit(uuid), uuid, []*pb.Tile{t})[0]
 	}
 	return connect.NewResponse(&pb.TileResponse{Tile: t}), nil
 }
 
 // qualifyEvent re-applies a plugin's uuid to the ids in a change event.
-func qualifyEvent(uuid string, ev *pb.Event) *pb.Event {
+// transit selects the node-mount tile rule (chain prepend, Reference trusted).
+// GridId/TileId are plain prepends either way — chains compose by concat.
+func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 	switch p := ev.Payload.(type) {
 	case *pb.Event_GridChanged:
 		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
@@ -102,7 +105,7 @@ func qualifyEvent(uuid string, ev *pb.Event) *pb.Event {
 		}}}
 	case *pb.Event_TileChanged:
 		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
-			Tile: qualifyTiles(uuid, []*pb.Tile{p.TileChanged.Tile})[0],
+			Tile: qualifyTilesFor(transit, uuid, []*pb.Tile{p.TileChanged.Tile})[0],
 		}}}
 	case *pb.Event_TileRemoved:
 		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
@@ -124,9 +127,19 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 	if err != nil {
 		return nil, asConnectError(err)
 	}
+	transit := h.srv.pluginReg.Transit(uuid)
+	g := qualifyGrid(uuid, resp.Grid)
+	// Grid.writable is a per-grid capability of the OWNING plugin. A leaf
+	// plugin doesn't stamp it (its Info declares writability once); a transit
+	// plugin's response already carries the remote node's stamp verbatim.
+	if !transit && g != nil {
+		if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
+			g.Writable = info.Writable
+		}
+	}
 	return connect.NewResponse(&pb.GetGridResponse{
-		Grid:  qualifyGrid(uuid, resp.Grid),
-		Tiles: qualifyTiles(uuid, resp.Tiles),
+		Grid:  g,
+		Tiles: qualifyTilesFor(transit, uuid, resp.Tiles),
 	}), nil
 }
 
@@ -180,7 +193,12 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
 		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 	}
-	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
+	resp := &pb.ListPluginsResponse{Plugins: out}
+	if h.srv.cfg.NodeID != "" {
+		resp.NodeUuid = h.srv.cfg.NodeID
+		resp.NodeRootGridId = h.srv.cfg.NodeID + "/" + nodeGridID
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
@@ -251,7 +269,7 @@ func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.Ge
 		return nil, err
 	}
 	resp, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
 func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb.SetTileAltRequest]) (*connect.Response[pb.TileResponse], error) {
 	c, local, uuid, err := h.route(req.Msg.TileId)
@@ -259,7 +277,7 @@ func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb
 		return nil, err
 	}
 	resp, err := c.SetTileAlt(ctx, &pb.SetTileAltRequest{TileId: local, Alt: req.Msg.Alt})
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
 
 // ── creates ──────────────────────────────────────────────────────────────────
@@ -277,7 +295,7 @@ func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb
 	m.GridId = local
 	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.CreateTile(ctx, m)
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
 
 // Mount drops an exit well in the destination grid pointing at plugin_uuid's
@@ -319,7 +337,7 @@ func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.Moun
 			ChildGridId: childGridID, AltText: label,
 		},
 	})
-	return pluginTileResp(dstUUID, resp, err)
+	return h.tileResp(dstUUID, resp, err)
 }
 
 // ── mutations ──────────────────────────────────────────────────────────────────
@@ -335,20 +353,83 @@ func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.M
 	m.Path = localPathFor(m.Path, uuid)
 	m.DestPath = localPathFor(m.DestPath, uuid)
 	resp, err := c.MoveTile(ctx, m)
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
+
+// CloneTile clones within a plugin, or — when the destination grid belongs to
+// a DIFFERENT plugin — applies the cross-plugin clone contract (CLAUDE.md
+// "Identity and clone semantics"): a well becomes a LINK in the destination
+// (an exit well pointing at the source's grid; the grid is shared, never
+// copied, so no id is ever reassigned), and a leaf copies its bytes into the
+// destination plugin. The source plugin is never asked to write into a grid
+// it doesn't own.
 func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
 	c, local, uuid, err := h.route(m.TileId)
 	if err != nil {
 		return nil, err
 	}
+	if dstUUID, _, ok := splitPluginID(m.DestGridId); ok && dstUUID != uuid {
+		return h.cloneAcrossPlugins(ctx, m, c, local, uuid)
+	}
 	m.TileId = local
 	m.DestGridId = stripUUID(m.DestGridId, uuid)
 	m.Path = localPathFor(m.Path, uuid)
 	m.DestPath = localPathFor(m.DestPath, uuid)
 	resp, err := c.CloneTile(ctx, m)
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
+}
+
+// cloneAcrossPlugins materializes a cross-plugin clone: read the source tile
+// from its plugin, then create the link (well) or byte copy (leaf) in the
+// destination plugin. src is the source plugin's client; srcLocal/srcUUID the
+// routed source tile id.
+func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest, src pb.GridwellClient, srcLocal, srcUUID string) (*connect.Response[pb.TileResponse], error) {
+	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	// Qualify to the server-global view: an interior well's child becomes
+	// "<srcUUID>/<grid>", an exit well's already-qualified target stays put —
+	// either way the link target below is exactly what the client would see.
+	st := qualifyTilesFor(h.srv.pluginReg.Transit(srcUUID), srcUUID, []*pb.Tile{resp.GetTile()})[0]
+	if m.Version != st.Version {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("version conflict: tile %s is at %d, request has %d", m.TileId, st.Version, m.Version))
+	}
+
+	create := &pb.CreateTileRequest{
+		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H, AltText: st.AltText},
+	}
+	switch st.Kind {
+	case "well":
+		// The link: same child grid, shared. Deleting it later only unlinks
+		// (the destination store's rule for qualified children).
+		create.Tile.ChildGridId = st.ChildGridId
+	case "text":
+		body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
+		if err != nil {
+			return nil, asConnectError(err)
+		}
+		create.Data = body.Data
+	case "url":
+		create.Tile.UrlString = st.UrlString
+	case "shell":
+		// A shell's PTY session is plugin-local; the copy is a fresh shell
+		// tile carrying the same label.
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("cross-plugin clone: unsupported tile kind %q", st.Kind))
+	}
+
+	dst, dstLocal, dstUUID, err := h.route(m.DestGridId)
+	if err != nil {
+		return nil, err
+	}
+	create.GridId = dstLocal
+	create.Path = localPathFor(m.DestPath, dstUUID)
+	out, err := dst.CreateTile(ctx, create)
+	return h.tileResp(dstUUID, out, err)
 }
 func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb.ResizeTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
@@ -359,7 +440,7 @@ func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.ResizeTile(ctx, m)
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
 
 // SetTile is the single framing/preview writeback router. The owning plugin
@@ -374,7 +455,7 @@ func (h *connectHandler) SetTile(ctx context.Context, req *connect.Request[pb.Se
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.SetTile(ctx, m)
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
 func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb.UpdateTextRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
@@ -385,7 +466,7 @@ func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.UpdateText(ctx, m)
-	return pluginTileResp(uuid, resp, err)
+	return h.tileResp(uuid, resp, err)
 }
 
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
@@ -469,6 +550,13 @@ func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Req
 // reconnecting, AND the client is told about the outage and the recovery via
 // an EventPluginHealth (issue #47) instead of tiles just quietly going stale.
 func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
+	return h.subscribe(ctx, stream.Send)
+}
+
+// subscribe is the transport-free fan-in body, shared by the Connect stream
+// (browsers/Electron) and the node export's gRPC stream (a remote mounter) so
+// there is exactly one implementation of "every plugin's events, qualified".
+func (h *connectHandler) subscribe(ctx context.Context, send func(*pb.Event) error) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -478,13 +566,13 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 		if !ok {
 			continue
 		}
-		go watchPlugin(subCtx, p.UUID, c, h.srv, events)
+		go watchPlugin(subCtx, p.UUID, h.srv.pluginReg.Transit(p.UUID), c, h.srv, events)
 	}
 
 	for {
 		select {
 		case ev := <-events:
-			if err := stream.Send(ev); err != nil {
+			if err := send(ev); err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -504,7 +592,7 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 // failure is at this Info stage; once Info succeeds and Watch is true,
 // fanInEvents owns the health state for the rest of ctx's life (a plugin
 // capability doesn't flip false again — only its stream can go down).
-func watchPlugin(ctx context.Context, uuid string, client pb.GridwellClient, srv *Server, events chan<- *pb.Event) {
+func watchPlugin(ctx context.Context, uuid string, transit bool, client pb.GridwellClient, srv *Server, events chan<- *pb.Event) {
 	backoff := time.Second
 	healthy := true // assume healthy until the first failure
 	for {
@@ -540,7 +628,7 @@ func watchPlugin(ctx context.Context, uuid string, client pb.GridwellClient, srv
 		if !info.Watch {
 			return // this plugin kind doesn't emit events (fs/proc) — nothing to fan in, not a failure
 		}
-		fanInEvents(ctx, uuid, client, events) // owns health from here; returns only when ctx ends
+		fanInEvents(ctx, uuid, transit, client, events) // owns health from here; returns only when ctx ends
 		return
 	}
 }
@@ -552,7 +640,7 @@ func watchPlugin(ctx context.Context, uuid string, client pb.GridwellClient, srv
 // updating" with no evidence (the silent-disappearance class) — and reported
 // as an EventPluginHealth transition (down on first failure, up on recovery;
 // not once per retry attempt, so a flapping plugin doesn't spam the client).
-func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, events chan<- *pb.Event) {
+func fanInEvents(ctx context.Context, uuid string, transit bool, client pb.GridwellClient, events chan<- *pb.Event) {
 	backoff := time.Second
 	healthy := true // caller (watchPlugin) already reported recovery if it was ever down
 	for {
@@ -586,7 +674,7 @@ func fanInEvents(ctx context.Context, uuid string, client pb.GridwellClient, eve
 					break
 				}
 				select {
-				case events <- qualifyEvent(uuid, ev):
+				case events <- qualifyEvent(uuid, transit, ev):
 				case <-ctx.Done():
 					return
 				}
