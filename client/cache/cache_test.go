@@ -90,6 +90,44 @@ func TestApplyTileChanged(t *testing.T) {
 	}
 }
 
+// TestApplyStaleEchoDropped: the optimistic-echo interlock (I11 residual,
+// issue #5). After a local mutation's response lands in the cache (version
+// N), a still-in-flight Subscribe echo of the PREVIOUS state (N-1) must be
+// dropped — applying it would visibly roll the tile back and forward, i.e.
+// mutation the user never made. Same-version events (framing — never bumps
+// version) and newer events still apply.
+func TestApplyStaleEchoDropped(t *testing.T) {
+	c := seedCache(t)
+	// The mutation response landed: version 5.
+	c.UpdateTile("1", rpc.Tile{ID: "100", GridID: "1", Kind: rpc.KindText, Version: 5, X: 1})
+
+	// A stale echo (version 4) arrives late: dropped, no visible change.
+	if c.Apply(rpc.Event{Kind: rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: "100", GridID: "1", Kind: rpc.KindText, Version: 4, X: 99}}}) {
+		t.Error("stale echo applied — the tile would roll back")
+	}
+	g, _ := c.Grid("1")
+	if g.Tiles["100"].X != 1 || g.Tiles["100"].Version != 5 {
+		t.Errorf("tile after stale echo = %+v, want the newer row untouched", g.Tiles["100"])
+	}
+
+	// A SAME-version event applies: framing writes change view_* without a
+	// version bump, and dropping them would freeze pans.
+	if !c.Apply(rpc.Event{Kind: rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: "100", GridID: "1", Kind: rpc.KindText, Version: 5, X: 2}}}) {
+		t.Error("same-version event dropped — framing echoes would freeze")
+	}
+	// And a newer one, obviously.
+	if !c.Apply(rpc.Event{Kind: rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: "100", GridID: "1", Kind: rpc.KindText, Version: 6, X: 3}}}) {
+		t.Error("newer event dropped")
+	}
+	g, _ = c.Grid("1")
+	if g.Tiles["100"].X != 3 {
+		t.Errorf("final tile = %+v, want the newest row", g.Tiles["100"])
+	}
+}
+
 func TestApplyTileRemoved(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
