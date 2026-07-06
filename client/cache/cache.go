@@ -148,6 +148,17 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if !ok {
 			return false
 		}
+		// The optimistic-echo interlock (I11 residual, issue #5): an event
+		// STRICTLY OLDER than the cached row is a stale echo — a Subscribe
+		// event that lost the race against the mutation response that already
+		// landed here (postPersist writes the response row, version N; the
+		// echo of the PREVIOUS state, N-1, may still be in flight). Applying
+		// it would visibly roll the tile back and then forward — spontaneous
+		// mutation the user never made. Same-version events still apply:
+		// framing changes never bump version but do change view_*.
+		if cur, exists := g.Tiles[n.ID]; exists && n.Version < cur.Version {
+			return false
+		}
 		g.Tiles[n.ID] = n
 		return true
 	case rpc.EventTileRemoved:
