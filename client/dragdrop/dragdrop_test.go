@@ -313,6 +313,29 @@ func TestPaneCellAt(t *testing.T) {
 // from one host directory's grid into another's): the server rejects any
 // cross-grid move touching a source-backed grid, but the UI's old XOR check
 // reported it allowed, inviting a drop that then failed.
+// TestDecideDropFocusOnly: a bare click on a pane that was NOT focused at
+// press time is focus-only — no navigation, no selection — no matter what
+// sits under the cursor. A bare click on an already-focused pane navigates.
+// Same family as the +-button rule (act only when previously focused);
+// closes the "clicking a pane to focus it descends into a tile" ambiguity
+// (issue #28).
+func TestDecideDropFocusOnly(t *testing.T) {
+	unfocused := DropInput{Started: false, OriginFocused: false, TileID: "u/1"}
+	if got := DecideDrop(unfocused); got != DropFocusOnly {
+		t.Errorf("bare click on unfocused pane = %v, want DropFocusOnly", got)
+	}
+	focused := DropInput{Started: false, OriginFocused: true, TileID: "u/1"}
+	if got := DecideDrop(focused); got != DropNavigate {
+		t.Errorf("bare click on focused pane = %v, want DropNavigate", got)
+	}
+	// A real drag acts regardless of prior focus — only the bare click is
+	// focus-gated (dragging is an unambiguous intent).
+	drag := DropInput{Started: true, OriginFocused: false, TileID: "u/1", HasTarget: true}
+	if got := DecideDrop(drag); got != DropMove {
+		t.Errorf("drag from unfocused pane = %v, want DropMove", got)
+	}
+}
+
 // TestDecideDropTargetReadOnly: a drop (move OR clone) onto a read-only grid
 // (the node grid, fs/proc) is rejected up front — no doomed RPC, no
 // misleading "changed elsewhere" reconcile notice.
@@ -378,8 +401,10 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true}, DropClone},
 
 		// --- early branches beat everything ---
-		{"bare click -> navigate (beats all)",
-			DropInput{Started: false, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropNavigate},
+		{"bare click on focused pane -> navigate (beats all)",
+			DropInput{Started: false, OriginFocused: true, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropNavigate},
+		{"bare click on unfocused pane -> focus only (beats all)",
+			DropInput{Started: false, OriginFocused: false, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropFocusOnly},
 		{"template -> create (beats pan/delete)",
 			DropInput{Started: true, IsTemplate: true, TileID: "", OverDelete: true, HasTarget: true}, DropCreateTemplate},
 		{"pan (tileID \"\") -> panEnd (beats delete)",

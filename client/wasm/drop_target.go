@@ -51,11 +51,12 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 		return
 	}
 	in := dragdrop.DropInput{
-		Started:    d.started,
-		IsTemplate: d.isTemplate,
-		Clone:      clone,
-		TileID:     d.tileID,
-		OverDelete: a.overDeleteButton(d, sx, sy),
+		Started:       d.started,
+		OriginFocused: d.originFocused,
+		IsTemplate:    d.isTemplate,
+		Clone:         clone,
+		TileID:        d.tileID,
+		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
 	docTarget, overDoc := a.docDropTargetAt(sx, sy)
 	in.OverDoc = overDoc

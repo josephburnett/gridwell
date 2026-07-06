@@ -254,9 +254,12 @@ func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 type DropAction int
 
 const (
-	// DropNavigate: a bare click (no drag started) — the wasm side runs
-	// descent/ascent/selection. Not a placement at all.
+	// DropNavigate: a bare click (no drag started) on an already-focused
+	// pane — the wasm side runs descent/ascent/selection. Not a placement.
 	DropNavigate DropAction = iota
+	// DropFocusOnly: a bare click whose only job was moving focus to the
+	// pane (it was unfocused at press time); no navigation, no selection.
+	DropFocusOnly
 	// DropCreateTemplate: a palette-swatch drag — create a fresh tile at
 	// the snapped cell.
 	DropCreateTemplate
@@ -292,15 +295,21 @@ const (
 //   - SameCell:   target grid == source grid && drop cell == source cell
 //   - Occupied:   a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
 type DropInput struct {
-	Started    bool
-	IsTemplate bool
-	Clone      bool   // right-drag armed
-	TileID     string // "" = pan / empty-space drag
-	OverDelete bool
-	OverDoc    bool
-	DocReject  bool
-	HasTarget  bool
-	Forbidden  bool
+	Started bool
+	// OriginFocused: the origin pane was already focused when the press
+	// landed. A bare click (!Started) on an unfocused pane is FOCUS-ONLY —
+	// the mousedown moved focus; the release must not also navigate or
+	// select, no matter what tile sits under the cursor. Same family as the
+	// +-button / corner-circle rule (act only when previously focused).
+	OriginFocused bool
+	IsTemplate    bool
+	Clone         bool   // right-drag armed
+	TileID        string // "" = pan / empty-space drag
+	OverDelete    bool
+	OverDoc       bool
+	DocReject     bool
+	HasTarget     bool
+	Forbidden     bool
 	// TargetReadOnly: the destination grid refuses mutations (the node grid,
 	// an fs/proc grid) — a drop there is rejected up front instead of firing
 	// an RPC the server must refuse.
@@ -333,6 +342,8 @@ type DropInput struct {
 //  11. else         → Clone ? DropClone : DropMove
 func DecideDrop(in DropInput) DropAction {
 	switch {
+	case !in.Started && !in.OriginFocused:
+		return DropFocusOnly
 	case !in.Started:
 		return DropNavigate
 	case in.IsTemplate:

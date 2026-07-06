@@ -497,6 +497,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 	cellSize := cellPx * p.Zoom
 	a.dragging = &dragState{
 		originPaneID:   p.ID,
+		originFocused:  true, // right-down focused the pane before arming
 		tileID:         n.ID,
 		clone:          true,
 		startScreenX:   sx,
@@ -546,11 +547,12 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// cross-grid Forbidden check — right-drag IS the allowed cross-boundary
 	// gesture (it clones/links), so Forbidden stays false.
 	in := dragdrop.DropInput{
-		Started:    d.started,
-		IsTemplate: d.isTemplate,
-		Clone:      true,
-		TileID:     d.tileID,
-		OverDelete: a.overDeleteButton(d, sx, sy),
+		Started:       d.started,
+		OriginFocused: d.originFocused,
+		IsTemplate:    d.isTemplate,
+		Clone:         true,
+		TileID:        d.tileID,
+		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
 	docTarget, overDoc := a.docDropTargetAt(sx, sy)
 	in.OverDoc = overDoc
@@ -829,13 +831,14 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if err != nil {
 		return
 	}
-	// A new pane is a clone of the source, so without this it would just
-	// duplicate the current view. Auto-ascend it one level: split off a
-	// URL/text descent and the new pane shows the parent grid (not a
-	// second copy of the page); split off a child grid and it shows the
-	// grid above. At root there's nowhere to ascend, so it stays put.
-	if np != nil && a.canAscend(np) {
-		a.ascendPane(np)
+	// A new pane is a clone of the source — deliberately: "split" means
+	// "another view of where I am" (issue #27), so a grid view clones
+	// verbatim (same anchor, path, framing). The ONE exception is a content
+	// descent (TextFocus): a live URL/shell view cannot be duplicated (one
+	// native view / PTY attachment per tile+pane), so the new pane ascends
+	// just the file level and shows the grid containing the tile.
+	if np != nil && np.TextFocus != "" {
+		a.startFileAscent(np)
 	}
 }
 
