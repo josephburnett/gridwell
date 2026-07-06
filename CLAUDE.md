@@ -189,7 +189,7 @@ do not quietly do something else.
 
 ## The verification gates, and when to run them
 
-There are **four** gates. `make check` is the fast per-commit gate; it **must
+There are **five** gates. `make check` is the fast per-commit gate; it **must
 be green on every commit.** But it *cannot see the native shell*, and the native
 shell is where the worst bugs live — so it is necessary, never sufficient, for
 anything touching live tiles, panes, focus, previews, or the menu.
@@ -200,6 +200,7 @@ anything touching live tiles, panes, focus, previews, or the menu.
 | `make check-electron` | `npm run test:integration` + `test:bridge` under xvfb | the real Electron `WebContentsView` / PTY bridge | any change to the URL/shell live path, the bridge, or `webviews.ts` |
 | `make check-e2e` | Playwright drives the **real app** (Electron + Go sidecar) under xvfb | the full renderer→wasm→RPC→server→SQLite composition, as a black box | any `apps/desktop` change, the native layer, or a cross-seam behavior; pre-merge |
 | `make check-web` | Playwright drives `gridwell serve` + plain system Chromium, headless | the **browser-mode client** (no Electron bridge): caps gating, the no-live URL affordance, the touch gesture layer via real injected TouchEvents | any change to `client/caps`, `client/touchgest`, `touch.go`, the serve/boot path, or other capability-gated behavior |
+| `make check-federation` | the REAL binaries — `gridwell` init/serve, go-plugin subprocess spawn incl. `gridwell-ssh` — through a real ssh tunnel, headless, ~1s after build | the **spawn seam** no in-process test can see (the pluginmeta driver bug lived exactly there) | any change to plugin spawn, `sshdial`, the node export, or id routing |
 
 **The rule:** if a change lives in or affects the native layer (the Electron
 main process, preloads, the WebviewRegistry, the live-URL/shell path, IPC, the
