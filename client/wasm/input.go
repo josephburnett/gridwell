@@ -1325,8 +1325,6 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
 		return
 	}
-	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
-
 	r := paneRectFor(a, p)
 	from := zoomtrans.Endpoints{
 		Path: slices.Clone(p.Path),
@@ -1343,6 +1341,13 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		// anchor to the link's target, so the URL and every path id stay
 		// within one anchor's namespace. Ascent pops the frame and lands
 		// back on this tile.
+		// The pane.Up FRAME is the one owner of the portal return (anchor,
+		// path, viewport, menu). Deliberately NOT pushed onto the session
+		// ascent stack: portal ascent pops the frame only, so a second copy
+		// there would be orphaned — and a boot-descended pane (whose stack
+		// starts empty) could later mis-consume the orphan as a well-ascent
+		// viewport. Two stacks, two disjoint owners: frames own namespace
+		// CROSSINGS, the session stack owns in-namespace well/file descents.
 		wasMenu := a.menu.OpenOn(p.ID)
 		a.menu.Close()
 		p.PushFrame(wasMenu)
@@ -1350,6 +1355,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 			float64(well.X)+float64(well.W)/2, float64(well.Y)+float64(well.H)/2)
 		return
 	}
+	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 	a.installDescent(p, r, from, w, well.ChildGridID, "", 0, 0)
 }
 

@@ -210,6 +210,15 @@ func (a *App) thEmbedHits(js.Value, []js.Value) any {
 	return out
 }
 
+// thAscentDepth returns the session ascent-stack depth for a pane.
+func (a *App) thAscentDepth(paneID string) int {
+	pl, ok := a.localIf(paneID)
+	if !ok {
+		return 0
+	}
+	return pl.AscentDepth()
+}
+
 // thPreviewSigs returns, for the FOCUSED pane's leaf grid, a per-tile
 // signature of everything the preview renderer reads: the tile row's content
 // identity + framing fields, and — for a well whose child grid is cached —
@@ -295,6 +304,11 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"cx":   p.Cx,
 			"cy":   p.Cy,
 			"zoom": p.Zoom,
+			// The two ascent-history depths: frames (portal crossings, on the
+			// pane) and the session stack (in-namespace descents). Disjoint
+			// owners — a spec can assert no flow leaks entries (issue #26).
+			"frameDepth":  len(p.Up),
+			"ascentDepth": a.thAscentDepth(id),
 			// The ids of the tiles this pane RENDERS (its cache contents). The gap
 			// between this and the server (the GetGrid oracle) is exactly the
 			// create→cache→render / Subscribe-fanout seam where a tile "disappears":
