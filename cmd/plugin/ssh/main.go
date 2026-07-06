@@ -45,11 +45,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "gridwell-ssh: %v\n", err)
 		os.Exit(1)
 	}
-	client, closer, err := sshdial.Dial(dial)
+	client, socksAddr, closer, err := sshdial.Dial(dial)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gridwell-ssh: %v\n", err)
 		os.Exit(1)
 	}
 	defer closer()
-	guest.Serve(proxy.New(client))
+	// NodeMount = the transparent proxy with one override: Info's network
+	// context becomes THIS hop's tunnel-SOCKS endpoint, so live url tiles in
+	// remote plugins browse with the remote's network (issue #24).
+	guest.Serve(&sshdial.NodeMount{Plugin: proxy.New(client), SocksAddr: socksAddr})
 }

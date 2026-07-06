@@ -179,8 +179,14 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("ssh mount root = %q, want a chained <ssh>/<rnode>/0 id — did gridwell-ssh spawn?", sshRoot)
 	}
 
-	// 2. The remote node grid lists both remote plugins through the tunnel.
+	// 2. The remote node grid lists both remote plugins through the tunnel —
+	//    and its grid carries the TUNNEL's SOCKS endpoint (the NodeMount
+	//    Info override → transit stamp), the network context remote live
+	//    url tiles browse with (#24).
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
+	if pe, _ := ng["grid"].(map[string]any)["proxyEndpoint"].(string); !strings.HasPrefix(pe, "socks5://127.0.0.1:") {
+		t.Fatalf("transit grid proxyEndpoint = %q, want the local tunnel SOCKS", pe)
+	}
 	tiles := ng["tiles"].([]any)
 	if len(tiles) != 2 {
 		t.Fatalf("remote node grid has %d tiles through the tunnel, want 2", len(tiles))

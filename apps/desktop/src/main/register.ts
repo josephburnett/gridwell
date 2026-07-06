@@ -77,7 +77,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid);
+    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid, a.proxyEndpoint ?? '');
   });
 
   ipcMain.handle(CH.setBounds, (_e, a: SetBoundsArgs): void => {

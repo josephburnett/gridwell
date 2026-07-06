@@ -41,6 +41,7 @@ func GridToProto(g *Grid) *pb.Grid {
 		SourceId:      g.SourceID,
 		Writable:      g.Writable,
 		ScratchGridId: g.ScratchGridID,
+		ProxyEndpoint: g.ProxyEndpoint,
 	}
 }
 
@@ -57,6 +58,7 @@ func GridFromProto(g *pb.Grid) *Grid {
 		SourceID:      g.SourceId,
 		Writable:      g.Writable,
 		ScratchGridID: g.ScratchGridId,
+		ProxyEndpoint: g.ProxyEndpoint,
 	}
 }
 

@@ -14,6 +14,7 @@ import {
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
+  proxyRulesFor,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
@@ -209,7 +210,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string): Promise<void> {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = ''): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = partitionFor(pluginUuid);
     let e = this.entries.get(paneId);
@@ -223,9 +224,17 @@ export class WebviewRegistry {
     }
 
     // Pull the plugin's session down into its partition before the first view
-    // for it loads, so url tiles open already logged in. Once per partition.
+    // for it loads, so url tiles open already logged in — and point the
+    // partition at the grid-stamped proxy (a remote plugin's tiles browse
+    // through the tunnel SOCKS, exiting on the remote's network). Once per
+    // partition; the endpoint is stable for a plugin's lifetime (the ssh
+    // process mints it at spawn).
     if (pluginUuid && !this.hydrated.has(partition)) {
       this.hydrated.add(partition);
+      const rules = proxyRulesFor(proxyEndpoint);
+      if (rules) {
+        await session.fromPartition(partition).setProxy({ proxyRules: rules });
+      }
       await hydratePartition(this.origin, pluginUuid, (message) =>
         this.cb.onError?.({ source: 'electron:session', message }),
       );

@@ -14,6 +14,14 @@ export const SESSION_PARTITION = 'persist:gridwell';
 // are flattened to dashes — Chromium partition names are plain strings, and
 // the flattening cannot collide because uuids contain no dashes. An empty
 // key falls back to the shared partition.
+// proxyRulesFor maps a grid-stamped proxy endpoint ("socks5://host:port")
+// to Chromium's proxyRules string, or "" for direct/unset/garbage — a bad
+// endpoint must degrade to the host network, never break page loads.
+export function proxyRulesFor(proxyEndpoint: string): string {
+  if (!/^socks5:\/\/[^\s/]+$/.test(proxyEndpoint)) return '';
+  return proxyEndpoint;
+}
+
 export function partitionFor(pluginUuid: string): string {
   return pluginUuid ? `persist:plugin-${pluginUuid.replaceAll('/', '-')}` : SESSION_PARTITION;
 }

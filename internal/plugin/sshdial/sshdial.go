@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 )
 
 // Config is the ssh plugin's connection settings.
@@ -66,22 +67,25 @@ func FromPluginConfig(cfg map[string]string) (Config, error) {
 	return c, nil
 }
 
-// Dial opens the tunnel and returns a client of the remote node's export plus
-// a closer. The client speaks the remote's qualified ids verbatim; the host
-// server's transit qualification prepends this plugin's uuid on the way back
-// to the local client, so chains compose one segment per hop.
-func Dial(cfg Config) (gridwellv1.GridwellClient, func(), error) {
+// Dial opens the tunnel and returns a client of the remote node's export,
+// the address of a loopback SOCKS5 proxy whose upstream is the SAME tunnel
+// (a browser pointed at it exits on the remote's network — the
+// NetworkContext for remote live url tiles), and a closer. The client speaks
+// the remote's qualified ids verbatim; the host server's transit
+// qualification prepends this plugin's uuid on the way back to the local
+// client, so chains compose one segment per hop.
+func Dial(cfg Config) (client gridwellv1.GridwellClient, socksAddr string, closer func(), err error) {
 	keyBytes, err := os.ReadFile(cfg.KeyPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read key %q: %w", cfg.KeyPath, err)
+		return nil, "", nil, fmt.Errorf("read key %q: %w", cfg.KeyPath, err)
 	}
 	signer, err := ssh.ParsePrivateKey(keyBytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse key: %w", err)
+		return nil, "", nil, fmt.Errorf("parse key: %w", err)
 	}
 	hostKey, err := knownhosts.New(cfg.KnownHosts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load known_hosts %q: %w", cfg.KnownHosts, err)
+		return nil, "", nil, fmt.Errorf("load known_hosts %q: %w", cfg.KnownHosts, err)
 	}
 	sshClient, err := ssh.Dial("tcp", cfg.Host, &ssh.ClientConfig{
 		User:            cfg.User,
@@ -89,7 +93,7 @@ func Dial(cfg Config) (gridwellv1.GridwellClient, func(), error) {
 		HostKeyCallback: hostKey,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("ssh dial %q: %w", cfg.Host, err)
+		return nil, "", nil, fmt.Errorf("ssh dial %q: %w", cfg.Host, err)
 	}
 
 	conn, err := grpc.NewClient(cfg.Addr,
@@ -102,11 +106,44 @@ func Dial(cfg Config) (gridwellv1.GridwellClient, func(), error) {
 	)
 	if err != nil {
 		sshClient.Close()
-		return nil, nil, fmt.Errorf("grpc over tunnel: %w", err)
+		return nil, "", nil, fmt.Errorf("grpc over tunnel: %w", err)
 	}
-	closer := func() {
+
+	// The SOCKS proxy shares the tunnel: loopback listener, remote exits.
+	socksLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		_ = conn.Close()
+		sshClient.Close()
+		return nil, "", nil, fmt.Errorf("socks listen: %w", err)
+	}
+	go serveSOCKS5(socksLn, sshClient.Dial)
+
+	closer = func() {
+		_ = socksLn.Close()
 		_ = conn.Close()
 		_ = sshClient.Close()
 	}
-	return gridwellv1.NewGridwellClient(conn), closer, nil
+	return gridwellv1.NewGridwellClient(conn), socksLn.Addr().String(), closer, nil
+}
+
+// NodeMount wraps the transparent proxy for a mounted remote node, overriding
+// Info's NetworkContext with THIS hop's SOCKS endpoint: page traffic must
+// enter the tunnel where the USER is, so the outermost hop's proxy wins over
+// whatever the remote reported.
+type NodeMount struct {
+	*proxy.Plugin
+	SocksAddr string
+}
+
+// Info forwards the remote node's handshake with the network context
+// replaced by the local tunnel proxy.
+func (m *NodeMount) Info(ctx context.Context, r *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+	info, err := m.Plugin.Info(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	info.Network = &gridwellv1.NetworkContext{Via: &gridwellv1.NetworkContext_Proxy{
+		Proxy: &gridwellv1.ProxyEndpoint{Scheme: "socks5", Address: m.SocksAddr},
+	}}
+	return info, nil
 }

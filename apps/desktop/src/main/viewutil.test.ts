@@ -20,6 +20,7 @@ import {
   ERR_ABORTED,
   rendererLogLine,
   partitionFor,
+  proxyRulesFor,
 } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
@@ -237,4 +238,11 @@ test('partitionFor flattens a namespace chain to a distinct, stable partition', 
   assert.equal(partitionFor('ssh1/rp1'), 'persist:plugin-ssh1-rp1');
   assert.notEqual(partitionFor('ssh1/rp1'), partitionFor('ssh1/rp2'));
   assert.equal(partitionFor(''), 'persist:gridwell');
+});
+
+test('proxyRulesFor accepts a socks5 endpoint and rejects garbage', () => {
+  assert.equal(proxyRulesFor('socks5://127.0.0.1:41234'), 'socks5://127.0.0.1:41234');
+  assert.equal(proxyRulesFor(''), '');
+  assert.equal(proxyRulesFor('http://evil/ '), '');
+  assert.equal(proxyRulesFor('socks5://a b'), '');
 });
