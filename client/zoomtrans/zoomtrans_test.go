@@ -534,3 +534,26 @@ func TestPortalWellRoundsAndFloors(t *testing.T) {
 		t.Errorf("degenerate size = (%d,%d), want (1,1)", w.W, w.H)
 	}
 }
+
+// TestViewOriginFromCenterRoundTrip: the descend→ascend quantization is
+// idempotent — reconstructing the origin from the center it produces returns
+// the same origin, for every origin and tile size. The old round(center)-w/2
+// drifted +1 per round trip for odd sizes (the .5 fraction rounds away from
+// zero); caught by preview-stability.spec.ts the day it could be observed.
+func TestViewOriginFromCenterRoundTrip(t *testing.T) {
+	for _, origin := range []int64{-3, -1, 0, 1, 2, 7, 100} {
+		for _, size := range []int64{1, 2, 3, 5} {
+			center := float64(origin) + float64(size)/2
+			if got := ViewOriginFromCenter(center, size); got != origin {
+				t.Errorf("origin %d size %d: center %v → %d, want the same origin", origin, size, center, got)
+			}
+		}
+	}
+	// A genuine reframe still quantizes to the nearest window.
+	if got := ViewOriginFromCenter(4.9, 1); got != 4 {
+		t.Errorf("center 4.9 size 1 → %d, want 4", got)
+	}
+	if got := ViewOriginFromCenter(-2.7, 2); got != -4 {
+		t.Errorf("center -2.7 size 2 → %d, want -4", got)
+	}
+}
