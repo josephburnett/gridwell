@@ -10,11 +10,10 @@
 // renderer reads the rects out and paints into them.
 package palette
 
-// Rect is a screen-space rectangle. Mirrors pane.Rect / dragdrop screen
-// rectangles; kept here so the package has no cross-imports.
-type Rect struct {
-	X, Y, W, H float64
-}
+import "github.com/josephburnett/gridwell/client/pane"
+
+// Rect is pane.Rect — one screen-space rectangle type for the whole client.
+type Rect = pane.Rect
 
 // Config is the tunable layout for the + button and palette popover.
 // Defaults match the renderer's current constants; callers can change
@@ -51,7 +50,7 @@ func Default() Config {
 		TileMinPx:  48,
 		TileMaxPx:  128,
 		GapPx:      8,
-		CellPx:     64,
+		CellPx:     pane.CellPx,
 		NameFieldH: 26,
 	}
 }

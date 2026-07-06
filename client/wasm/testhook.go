@@ -57,7 +57,7 @@ func (a *App) installTestHook() {
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
 		"renderedCaret": js.FuncOf(a.thRenderedCaret),
-		"fileInnerBox":  js.FuncOf(a.thFileInnerBox),
+		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
 	}))
@@ -134,17 +134,17 @@ func (a *App) thErrors(js.Value, []js.Value) any {
 	}
 }
 
-// thFileInnerBox returns the focused pane's file inner reading box (the rect
+// thTextInnerBox returns the focused pane's file inner reading box (the rect
 // rendered markdown is laid out and clipped to) as {x, y, w, h} in screen
-// pixels — the same fileInnerBox the painter and caret hit-tests use, so an
+// pixels — the same textInnerBox the painter and caret hit-tests use, so an
 // e2e can click a known position inside the rendered text. Empty when the
 // focused pane is not descended into a file.
-func (a *App) thFileInnerBox(js.Value, []js.Value) any {
+func (a *App) thTextInnerBox(js.Value, []js.Value) any {
 	p, r, ok := a.focusedPaneRect()
 	if !ok || p.TextFocus == "" {
 		return nil
 	}
-	x, y, w, h := fileInnerBox(p, r)
+	x, y, w, h := textInnerBox(p, r)
 	return map[string]any{"x": x, "y": y, "w": w, "h": h}
 }
 

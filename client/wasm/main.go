@@ -28,24 +28,24 @@ import (
 )
 
 const (
-	cellPx     = 64.0
+	cellPx     = pane.CellPx
 	zoomMin    = 0.25
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
-	// fileFixedScale is the constant render scale for text-file content
+	// textFixedScale is the constant render scale for text-file content
 	// when descended. There is no zoom: the descended pane is a plain
 	// window onto the document at this scale, scrolled vertically. The
 	// parent-grid preview re-renders at this same scale and crops the
 	// last-framed window into the tile footprint.
-	fileFixedScale = 1.0
+	textFixedScale = 1.0
 
-	// fileNaturalContentPx is the FALLBACK logical wrap width for a markdown
+	// textNaturalContentPx is the FALLBACK logical wrap width for a markdown
 	// preview that has no framing yet (a tile never descended into / ascended
 	// from). A live or previously-framed doc instead wraps at its own width —
-	// the pane's inner box (fileContentWidth) or the stored framing width — so
+	// the pane's inner box (textContentWidth) or the stored framing width — so
 	// it reflows to the pane and the preview stays a scaled copy of it.
-	fileNaturalContentPx = 800.0
+	textNaturalContentPx = 800.0
 )
 
 // app is the running client. Held in a package-level var so JS callbacks can
@@ -197,24 +197,24 @@ type App struct {
 	shellAlive        map[string]bool
 	shellAliveProbing map[string]bool
 
-	// fileTextarea is the lazily-created <textarea> element used for
+	// textTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
 	// when pane.TextFocus != 0 and pane.TextMode == "text", and hidden
 	// otherwise. We hold it as a single shared element to avoid creating
 	// fresh DOM nodes on every descent.
-	fileTextarea js.Value
-	// fileTextareaInputCb is the input event listener that mirrors the
+	textTextarea js.Value
+	// textTextareaInputCb is the input event listener that mirrors the
 	// textarea's value into a per-frame redraw. Held so we can release
 	// it cleanly if the App is torn down (currently never).
-	fileTextareaInputCb  js.Func
-	fileTextareaScrollCb js.Func
+	textTextareaInputCb  js.Func
+	textTextareaScrollCb js.Func
 
-	// fileToggleBtn is the floating rendered/raw toggle for a markdown
+	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
 	// the textarea overlay — letting the text content fill the pane
 	// edge-to-edge instead of reserving a strip for a canvas button.
-	fileToggleBtn js.Value
-	fileToggleCb  js.Func
+	textToggleBtn js.Value
+	textToggleCb  js.Func
 
 	// urlModalOpen tracks whether the URL-entry modal is currently open.
 	// A second openURLModal call while this is true is a no-op.
@@ -243,8 +243,8 @@ type App struct {
 
 	// textareaDirty is the single owner of "the textarea buffer holds an
 	// edit of lastTextareaTileID that has not been posted yet". Set on the
-	// textarea input event; cleared by saveFileFromTextarea (every save
-	// path). Distinct from sched.fileSaveScheduled (timer armed): the
+	// textarea input event; cleared by saveTextFromTextarea (every save
+	// path). Distinct from sched.textSaveScheduled (timer armed): the
 	// timer can fire and decline (focus elsewhere) while the edit is
 	// still pending — the rebind flush in refreshFileOverlay rescues it
 	// via embed.DecideTextareaSync's FlushOldFirst.
@@ -274,9 +274,9 @@ type scheduler struct {
 	urlUpdateScheduled bool
 	urlUpdateCb        js.Func
 
-	// fileSaveScheduled / fileSaveCb debounce the text-tile content save.
-	fileSaveScheduled bool
-	fileSaveCb        js.Func
+	// textSaveScheduled / textSaveCb debounce the text-tile content save.
+	textSaveScheduled bool
+	textSaveCb        js.Func
 
 	// rootViewSaveScheduled / rootViewSaveCb debounce the root-grid
 	// default-view persistence (only fires when the focused pane is at the

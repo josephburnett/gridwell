@@ -414,16 +414,16 @@ export class GridwellDriver {
   }
 
   // clickScreen single-left-clicks a raw screen coordinate (e.g. a point inside
-  // a descended file's inner box, from fileInnerBox()).
+  // a descended text tile's inner box, from textInnerBox()).
   async clickScreen(x: number, y: number): Promise<void> {
     await this.win.mouse.click(x, y);
     await this.waitIdle();
   }
 
-  // toggleFileMode left-clicks the corner circle of a file descent — the DOM
+  // toggleTextMode left-clicks the corner circle of a file descent — the DOM
   // toggle button that flips the focused pane between raw text and rendered
   // markdown (the same spot the + button occupies on a grid pane).
-  async toggleFileMode(): Promise<void> {
+  async toggleTextMode(): Promise<void> {
     const pal = await this.palette();
     await this.win.mouse.click(pal.plusX, pal.plusY);
     await this.waitIdle();
@@ -435,11 +435,11 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.renderedCaret());
   }
 
-  // fileInnerBox returns the screen rect the focused pane's file content is
+  // textInnerBox returns the screen rect the focused pane's file content is
   // rendered into (null when not descended into a file) — where to click to
   // hit the rendered text.
-  fileInnerBox(): Promise<{ x: number; y: number; w: number; h: number } | null> {
-    return this.win.evaluate(() => (window as any).__gridwellTest.fileInnerBox());
+  textInnerBox(): Promise<{ x: number; y: number; w: number; h: number } | null> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.textInnerBox());
   }
 
   // textareaInfo returns the current textarea overlay binding: the pane it

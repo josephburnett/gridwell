@@ -1001,7 +1001,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 		a.startDescent(p, hit)
 		return true
 	case rpc.IsContentDescentKind(hit.Kind):
-		a.startFileDescent(p, hit, nil)
+		a.startTextDescent(p, hit, nil)
 		return true
 	}
 	return false
@@ -1052,7 +1052,7 @@ func (a *App) canAscend(p *pane.Pane) bool {
 func (a *App) ascendPane(p *pane.Pane) {
 	switch {
 	case p.TextFocus != "":
-		a.startFileAscent(p)
+		a.startTextAscent(p)
 	case len(p.Path) > 0:
 		a.startAscent(p)
 	case len(p.Up) > 0:
@@ -1436,7 +1436,7 @@ func nonzero(x float64) float64 {
 	return x
 }
 
-// startFileDescent zooms a pane into a text tile in a single
+// startTextDescent zooms a pane into a text tile in a single
 // concurrent pan+zoom motion, then flips to text-editing mode. Unlike
 // well descent, the path is not extended (the tile lives in the parent
 // grid as a leaf tile) and the meaningful screen area in live mode is
@@ -1451,7 +1451,7 @@ func nonzero(x float64) float64 {
 // TextFocus has been installed. Use this to chain actions that need the
 // pane to be fully descended (e.g., opening the URL stream after a new
 // URL tile is created).
-func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()) {
+func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()) {
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
 	r := paneRectFor(a, p)
@@ -1461,7 +1461,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	}
 	wellCx := float64(file.X) + float64(file.W)/2
 	wellCy := float64(file.Y) + float64(file.H)/2
-	target := fileOvertakeZoom(r, file.W, file.H)
+	target := textFitZoom(r, file.W, file.H)
 	if target < from.Zoom {
 		target = from.Zoom
 	}
@@ -1525,7 +1525,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextMode = mode
 			fp.TextScrollY = initialScroll
 			fp.TextScrollX = initialScrollX
-			fp.TextZoom = fileFixedScale
+			fp.TextZoom = textFixedScale
 			// Reset per-pane view state on each new descent — it's view state,
 			// not tile state, so it does not survive across descents: the frozen-
 			// URL pan, plus any rendered-mode caret + dirty mark left by a previous
@@ -1547,7 +1547,7 @@ func (a *App) startFileDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	})
 }
 
-// startFileAscent reverses the text tile descent: animate zoom-out from the
+// startTextAscent reverses the text tile descent: animate zoom-out from the
 // tile's footprint back to the saved viewport, then clear TextFocus and
 // save the tile's content + scroll.
 // restoreEmbedReturn applies a saved paneState's doc-return fields to fp when an
@@ -1567,11 +1567,11 @@ func (a *App) restoreEmbedReturn(fp *pane.Pane, saved *paneState) {
 	fp.TextMode = saved.TextMode
 	fp.TextScrollX = saved.TextScrollX
 	fp.TextScrollY = saved.TextScrollY
-	fp.TextZoom = fileFixedScale
+	fp.TextZoom = textFixedScale
 	a.refreshFileOverlay()
 }
 
-func (a *App) startFileAscent(p *pane.Pane) {
+func (a *App) startTextAscent(p *pane.Pane) {
 	if p.TextFocus == "" {
 		return
 	}
@@ -1585,7 +1585,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	r := paneRectFor(a, p)
 	wellCx := float64(file.X) + float64(file.W)/2
 	wellCy := float64(file.Y) + float64(file.H)/2
-	overtake := fileOvertakeZoom(r, file.W, file.H)
+	overtake := textFitZoom(r, file.W, file.H)
 	if overtake > p.Zoom {
 		overtake = p.Zoom
 	}
@@ -1599,7 +1599,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 	// active) and post UpdateText + SetTextView. The animation runs
 	// concurrently with the network round-trip; the user doesn't have
 	// to wait.
-	a.saveFileBeforeAscent(p, file)
+	a.saveTextBeforeAscent(p, file)
 
 	// If we're ascending out of a URL tile, close the live stream (if any).
 	if file.Kind == rpc.KindURL {
@@ -1611,7 +1611,7 @@ func (a *App) startFileAscent(p *pane.Pane) {
 		a.closeShellStream(p.ID)
 	}
 
-	// (Mode + framed window are persisted by saveFileBeforeAscent, which
+	// (Mode + framed window are persisted by saveTextBeforeAscent, which
 	// also patches the cache so the preview is correct immediately.)
 
 	// Reset parent-grid zoom to the overtake value so the animation
@@ -1726,11 +1726,11 @@ func (a *App) saveWellViewBeforeAscentFrom(p *pane.Pane, well *rpc.Tile, parentA
 	})
 }
 
-// saveFileBeforeAscent posts the editor buffer (if text mode is active)
+// saveTextBeforeAscent posts the editor buffer (if text mode is active)
 // and the live scroll position back to the server. Failures are silently
 // dropped; the user will see the local state on next descent and the
 // server state otherwise.
-func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
+func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// SetTextView (and the framed-window cache patch) are text-tile
 	// concerns — URL and shell tiles don't carry text_x/text_y/text_w
 	// /text_h, and the server's SetTextView rejects non-text kinds with
@@ -1753,7 +1753,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	var buf string
 	hasBuf := false
 	if !readOnly && p.TextMode == rpc.TextModeText {
-		ta := a.fileTextarea
+		ta := a.textTextarea
 		if !ta.IsNull() && !ta.IsUndefined() {
 			buf = ta.Get("value").String()
 			hasBuf = true
@@ -1780,7 +1780,7 @@ func (a *App) saveFileBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// The framed window in doc px: scroll position + the inner box size
 	// (= screen px, since scale is fixed at 1.0). The parent-grid preview
 	// crops this rectangle out of the re-rendered doc.
-	_, _, iw, ih := fileInnerBox(p, r)
+	_, _, iw, ih := textInnerBox(p, r)
 	viewW := int64(iw + 0.5)
 	viewH := int64(ih + 0.5)
 
@@ -2006,7 +2006,7 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 			// Pane is gone or already descended — skip.
 			return
 		}
-		a.startFileDescent(fp, &tile, func() {
+		a.startTextDescent(fp, &tile, func() {
 			// afterDescend: open the URL stream so the pane goes live.
 			ffp := a.tree.FindPane(paneID)
 			if ffp == nil || ffp.TextFocus == "" {
@@ -2081,7 +2081,7 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 		}
 	}
 	if fp.TextFocus == "" {
-		a.startFileDescent(fp, tile, openLive)
+		a.startTextDescent(fp, tile, openLive)
 		return
 	}
 	// Stash the current descent (shell): restoreEmbedReturn lands back on it.
@@ -2094,7 +2094,7 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 	fp.TextFocus = ""
 	fp.TextMode = ""
 	a.refreshFileOverlay()
-	a.startFileDescent(fp, tile, openLive)
+	a.startTextDescent(fp, tile, openLive)
 	if top := a.local(fp.ID).PeekAscent(); top != nil {
 		top.Anchor = savedAnchor
 		top.Path = savedPath
@@ -2140,7 +2140,7 @@ func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 		// after onComplete sets TextFocus, so the new tile is in the
 		// cache and the pane is in file-focus mode by the time
 		// openShellStream looks for it.
-		a.startFileDescent(fp, &tile, func() {
+		a.startTextDescent(fp, &tile, func() {
 			ffp := a.tree.FindPane(paneID)
 			if ffp == nil || ffp.TextFocus == "" {
 				return

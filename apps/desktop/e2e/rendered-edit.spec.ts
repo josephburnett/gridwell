@@ -34,7 +34,7 @@ test('rendered-mode Enter persists a paragraph break', async ({ gw }) => {
 
   // Seed source through the raw editor, then flip to rendered.
   await gw.typeText('para one');
-  await gw.toggleFileMode();
+  await gw.toggleTextMode();
 
   // No caret is placed yet, so the first keystroke lands at the end of the
   // source; Enter must then open a new paragraph.
@@ -57,7 +57,7 @@ test('rendered-mode Enter does not accumulate blank lines', async ({ gw }) => {
   const tileID = await createAndDescendMarkdown(gw);
 
   await gw.typeText('top');
-  await gw.toggleFileMode();
+  await gw.toggleTextMode();
   await gw.pressKey('Enter');
   await gw.pressKey('Enter');
   await gw.pressKey('Enter');
@@ -76,10 +76,10 @@ test('clicking rendered text places the caret where typing lands', async ({ gw }
 
   const seed = 'hello world';
   await gw.typeText(seed);
-  await gw.toggleFileMode();
+  await gw.toggleTextMode();
 
   // Click near the start of the first rendered line.
-  const box = await gw.fileInnerBox();
+  const box = await gw.textInnerBox();
   expect(box, 'descended file reports an inner box').toBeTruthy();
   await gw.clickScreen(box!.x + 10, box!.y + 10);
 

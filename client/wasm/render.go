@@ -287,7 +287,7 @@ func (a *App) draw() {
 
 	// Reposition the textarea overlay (if any) so it tracks the focused
 	// pane through resizes and pane-tree edits.
-	a.syncFileOverlayPosition()
+	a.syncTextOverlayPosition()
 	// Same for any live shell overlays — xterm host divs follow their
 	// pane's screen rect each frame.
 	a.syncShellOverlayPosition()
@@ -393,7 +393,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			if file, ok := a.descendedTile(p); ok {
 				switch file.Kind {
 				case rpc.KindText:
-					ix, iy, iw, ih := fileInnerBox(p, r)
+					ix, iy, iw, ih := textInnerBox(p, r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
 					a.cctx.Call("fillRect", ix, iy, iw, ih)
 					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
@@ -404,7 +404,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					ix, iy, iw, ih := paneContentBox(r)
 					a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
 				default:
-					ix, iy, iw, ih := fileInnerBox(p, r)
+					ix, iy, iw, ih := textInnerBox(p, r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
 					a.cctx.Call("fillRect", ix, iy, iw, ih)
 				}

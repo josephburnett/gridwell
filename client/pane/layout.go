@@ -1,9 +1,14 @@
 package pane
 
-// Rect is a screen-space rectangle in pixels.
+// Rect is THE screen-space rectangle in logical pixels — the one shape,
+// aliased by client/palette (formerly a structural duplicate).
 type Rect struct {
 	X, Y, W, H float64
 }
+
+// CellPx is the renderer's base cell size at zoom 1.0 — the one copy
+// (formerly duplicated as a wasm const and palette.Default's literal).
+const CellPx = 64.0
 
 // Contains reports whether (x, y) lies inside the rectangle (half-open
 // on the right and bottom edges, like a typical raster region).

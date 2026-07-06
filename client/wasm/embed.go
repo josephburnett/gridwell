@@ -243,7 +243,7 @@ func (a *App) descendIntoEmbed(p *pane.Pane, hit *embedHit) bool {
 		a.startDescent(p, target)
 	} else {
 		// text / url / shell
-		a.startFileDescent(p, target, nil)
+		a.startTextDescent(p, target, nil)
 	}
 	if top := a.local(p.ID).PeekAscent(); top != nil {
 		top.Anchor = savedAnchor

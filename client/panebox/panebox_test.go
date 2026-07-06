@@ -92,9 +92,9 @@ func TestOvertakeZoom(t *testing.T) {
 	r := pane.Rect{X: 0, Y: 0, W: 200, H: 200}
 	// Inner is 188×188 after sideInset=6. cellPx=64 → fit ratio
 	// (1×1 file should be Fit(1,1,188,188,64) which equals min(188,188)/64.
-	z := OvertakeZoom(r, 1, 1, 6, 64)
+	z := FitZoom(r, 1, 1, 6, 64)
 	if z <= 0 {
-		t.Errorf("OvertakeZoom = %v, want > 0", z)
+		t.Errorf("FitZoom = %v, want > 0", z)
 	}
 }
 
@@ -102,9 +102,9 @@ func TestOvertakeZoomDegenerate(t *testing.T) {
 	// Inner box collapses to zero: returns 1 (caller should still
 	// be able to render at the natural scale rather than div-by-zero).
 	r := pane.Rect{X: 0, Y: 0, W: 5, H: 5}
-	z := OvertakeZoom(r, 1, 1, 6, 64)
+	z := FitZoom(r, 1, 1, 6, 64)
 	if z != 1 {
-		t.Errorf("OvertakeZoom on degenerate pane = %v, want 1", z)
+		t.Errorf("FitZoom on degenerate pane = %v, want 1", z)
 	}
 }
 
