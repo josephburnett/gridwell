@@ -337,11 +337,21 @@ func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.M
 	resp, err := c.MoveTile(ctx, m)
 	return pluginTileResp(uuid, resp, err)
 }
+// CloneTile clones within a plugin, or — when the destination grid belongs to
+// a DIFFERENT plugin — applies the cross-plugin clone contract (CLAUDE.md
+// "Identity and clone semantics"): a well becomes a LINK in the destination
+// (an exit well pointing at the source's grid; the grid is shared, never
+// copied, so no id is ever reassigned), and a leaf copies its bytes into the
+// destination plugin. The source plugin is never asked to write into a grid
+// it doesn't own.
 func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
 	c, local, uuid, err := h.route(m.TileId)
 	if err != nil {
 		return nil, err
+	}
+	if dstUUID, _, ok := splitPluginID(m.DestGridId); ok && dstUUID != uuid {
+		return h.cloneAcrossPlugins(ctx, m, c, local, uuid)
 	}
 	m.TileId = local
 	m.DestGridId = stripUUID(m.DestGridId, uuid)
@@ -349,6 +359,58 @@ func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.
 	m.DestPath = localPathFor(m.DestPath, uuid)
 	resp, err := c.CloneTile(ctx, m)
 	return pluginTileResp(uuid, resp, err)
+}
+
+// cloneAcrossPlugins materializes a cross-plugin clone: read the source tile
+// from its plugin, then create the link (well) or byte copy (leaf) in the
+// destination plugin. src is the source plugin's client; srcLocal/srcUUID the
+// routed source tile id.
+func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest, src pb.GridwellClient, srcLocal, srcUUID string) (*connect.Response[pb.TileResponse], error) {
+	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	// Qualify to the server-global view: an interior well's child becomes
+	// "<srcUUID>/<grid>", an exit well's already-qualified target stays put —
+	// either way the link target below is exactly what the client would see.
+	st := qualifyTiles(srcUUID, []*pb.Tile{resp.GetTile()})[0]
+	if m.Version != st.Version {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("version conflict: tile %s is at %d, request has %d", m.TileId, st.Version, m.Version))
+	}
+
+	create := &pb.CreateTileRequest{
+		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H, AltText: st.AltText},
+	}
+	switch st.Kind {
+	case "well":
+		// The link: same child grid, shared. Deleting it later only unlinks
+		// (the destination store's rule for qualified children).
+		create.Tile.ChildGridId = st.ChildGridId
+	case "text":
+		body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
+		if err != nil {
+			return nil, asConnectError(err)
+		}
+		create.Data = body.Data
+	case "url":
+		create.Tile.UrlString = st.UrlString
+	case "shell":
+		// A shell's PTY session is plugin-local; the copy is a fresh shell
+		// tile carrying the same label.
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("cross-plugin clone: unsupported tile kind %q", st.Kind))
+	}
+
+	dst, dstLocal, dstUUID, err := h.route(m.DestGridId)
+	if err != nil {
+		return nil, err
+	}
+	create.GridId = dstLocal
+	create.Path = localPathFor(m.DestPath, dstUUID)
+	out, err := dst.CreateTile(ctx, create)
+	return pluginTileResp(dstUUID, out, err)
 }
 func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb.ResizeTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
