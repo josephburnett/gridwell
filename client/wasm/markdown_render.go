@@ -22,7 +22,7 @@ import (
 // All layout lives in client/markdown; this file only paints + scales the ops
 // and dispatches embeds.
 
-// fileContentWidth is the logical width rendered markdown wraps at for pane p:
+// textContentWidth is the logical width rendered markdown wraps at for pane p:
 // the pane's inner reading-box width. Using the pane's own width (not a fixed
 // 800px constant) is what reflows the doc to the pane — a split pane is narrower
 // than 800px, so the old fixed width laid the doc out at 800 and the pane clip
@@ -32,8 +32,8 @@ import (
 // for a focused tile is this same value — so an unfocused pane is a true scaled
 // copy of the focused one, not a re-wrap. (Scale is fixed at 1.0 in a descended
 // file pane, so screen px and logical px coincide here.)
-func (a *App) fileContentWidth(p *pane.Pane) float64 {
-	_, _, w, _ := fileInnerBox(p, paneRectFor(a, p))
+func (a *App) textContentWidth(p *pane.Pane) float64 {
+	_, _, w, _ := textInnerBox(p, paneRectFor(a, p))
 	return w
 }
 
@@ -46,9 +46,9 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	if mode == "" {
 		mode = rpc.TextModeRendered
 	}
-	// (x, y) is the inner box top-left (fileInnerBox); markdownOrigin(p, r)
+	// (x, y) is the inner box top-left (textInnerBox); markdownOrigin(p, r)
 	// rederives the same point for the caret hit-test, so they stay in sync.
-	scale := fileFixedScale
+	scale := textFixedScale
 	originX := x - p.TextScrollX*scale
 	originY := y - p.TextScrollY*scale
 
@@ -73,7 +73,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 		if body, ok := a.tileBody(n); ok {
 			a.drawMarkdownInRect(string(body),
 				originX, originY,
-				a.fileContentWidth(p), h+p.TextScrollY*scale,
+				a.textContentWidth(p), h+p.TextScrollY*scale,
 				scale, mode, a.makeEmbedDrawer(p.ID))
 			// The editing caret rides on the focused, rendered pane only — same
 			// origin/scale (and width) the markdown was painted with.
@@ -105,7 +105,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	// Always pass focused=false: the preview uses the tile's own stored framing.
 	// Never reach into another pane's live width/scroll (paneFocusedOnFile).
 	frame := markdown.PreviewScaleScroll(w, h, false, 0, 0, 0, 0,
-		n.TextW, n.TextH, n.TextX, n.TextY, fileNaturalContentPx, fileFixedScale, 0.02)
+		n.TextW, n.TextH, n.TextX, n.TextY, textNaturalContentPx, textFixedScale, 0.02)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	a.cctx.Call("save")
@@ -342,8 +342,8 @@ func (a *App) markdownMeasure(st markdownStyle, scale float64) markdown.Measure 
 // scrolled) and render scale for the markdown of a descended pane — the single
 // source of truth the painter and the caret hit-test both transform through.
 func (a *App) markdownOrigin(p *pane.Pane, r pane.Rect) (originX, originY, scale float64) {
-	x, y, _, _ := fileInnerBox(p, r)
-	scale = fileFixedScale
+	x, y, _, _ := textInnerBox(p, r)
+	scale = textFixedScale
 	return x - p.TextScrollX*scale, y - p.TextScrollY*scale, scale
 }
 
@@ -356,8 +356,8 @@ func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy flo
 		return 0, false
 	}
 	st := defaultMarkdownStyle()
-	measure := a.markdownMeasure(st, fileFixedScale)
-	res := a.layoutMarkdown(string(body), a.fileContentWidth(p), measure, markdownLayoutStyle(st))
+	measure := a.markdownMeasure(st, textFixedScale)
+	res := a.layoutMarkdown(string(body), a.textContentWidth(p), measure, markdownLayoutStyle(st))
 	originX, originY, scale := a.markdownOrigin(p, r)
 	return markdown.CaretFromPoint(res.Ops, string(body), (sx-originX)/scale, (sy-originY)/scale, measure)
 }
@@ -402,8 +402,8 @@ func (a *App) editRenderedKey(ev js.Value) {
 	}
 	st := defaultMarkdownStyle()
 	lstyle := markdownLayoutStyle(st)
-	measure := a.markdownMeasure(st, fileFixedScale)
-	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
+	measure := a.markdownMeasure(st, textFixedScale)
+	res := a.layoutMarkdown(src, a.textContentWidth(p), measure, lstyle)
 	out := markdown.EditKey(src, caret, ev.Get("key").String(), res.Ops, lstyle, measure)
 	if !out.Handled {
 		return // function / media / dead keys — not ours
@@ -421,10 +421,10 @@ func (a *App) editRenderedKey(ev js.Value) {
 	a.draw()
 }
 
-// saveFileFromCache posts the focused rendered-mode tile's current cached body
+// saveTextFromCache posts the focused rendered-mode tile's current cached body
 // (already updated optimistically by each keystroke) and clears its dirty mark.
-// The raw-text path is saveFileFromTextarea; this is its rendered-mode twin.
-func (a *App) saveFileFromCache(p *pane.Pane) {
+// The raw-text path is saveTextFromTextarea; this is its rendered-mode twin.
+func (a *App) saveTextFromCache(p *pane.Pane) {
 	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {
@@ -495,7 +495,7 @@ func (a *App) drawMarkdownCaret(p *pane.Pane, src string, originX, originY, scal
 	st := defaultMarkdownStyle()
 	lstyle := markdownLayoutStyle(st)
 	measure := a.markdownMeasure(st, scale)
-	res := a.layoutMarkdown(src, a.fileContentWidth(p), measure, lstyle)
+	res := a.layoutMarkdown(src, a.textContentWidth(p), measure, lstyle)
 	cx, cy, fontPx, ok := markdown.PointFromCaret(res.Ops, src, off, lstyle, measure)
 	if !ok {
 		return

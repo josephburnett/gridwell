@@ -14,11 +14,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// fileSaveDebounceMs is the delay between the first keystroke since
+// textSaveDebounceMs is the delay between the first keystroke since
 // the last save and the next save fire. Continuous typing therefore
 // saves at most once per this interval; a typing pause longer than
 // this resolves with one final save shortly after the user stops.
-const fileSaveDebounceMs = 600
+const textSaveDebounceMs = 600
 
 // pxf formats a logical pixel value as a CSS "<n>px" string (1 decimal) — the
 // one place the overlay code turns a float coordinate into a style value.
@@ -38,14 +38,14 @@ func setBoundsPx(style js.Value, left, top, width, height float64) {
 // textarea contents. Cheap to call from every keystroke — no-op if a
 // save is already pending.
 func (a *App) scheduleFileSave() {
-	if a.sched.fileSaveScheduled {
+	if a.sched.textSaveScheduled {
 		return
 	}
-	a.sched.fileSaveScheduled = true
-	js.Global().Call("setTimeout", a.sched.fileSaveCb, fileSaveDebounceMs)
+	a.sched.textSaveScheduled = true
+	js.Global().Call("setTimeout", a.sched.textSaveCb, textSaveDebounceMs)
 }
 
-// fileOvertakeZoom returns the parent zoom at which the file tile's
+// textFitZoom returns the parent zoom at which the file tile's
 // footprint (W × H cells) exactly fits inside the inner-box dimensions
 // (textarea region) of pane rect r — the smaller inner-box dim binds.
 //
@@ -55,13 +55,13 @@ func (a *App) scheduleFileSave() {
 // what limits user content in live mode, so calibrating ViewZoom
 // against it makes the preview text fill the file cell at the same
 // fraction as live text fills the inner-box.
-// fileOvertakeZoom is a thin adapter over panebox.OvertakeZoom that
-// bundles the wasm-renderer's constants (fileSideInset + cellPx).
-func fileOvertakeZoom(r pane.Rect, fileW, fileH int64) float64 {
-	return panebox.OvertakeZoom(r, fileW, fileH, fileSideInset, cellPx)
+// textFitZoom is a thin adapter over panebox.FitZoom that
+// bundles the wasm-renderer's constants (textSideInset + cellPx).
+func textFitZoom(r pane.Rect, fileW, fileH int64) float64 {
+	return panebox.FitZoom(r, fileW, fileH, textSideInset, cellPx)
 }
 
-// fileInnerBox returns the screen rectangle of a file-focused pane's
+// textInnerBox returns the screen rectangle of a file-focused pane's
 // inner area: the light-grey reading region that the textarea sits on
 // (text mode) or the rendered markdown fills (rendered mode). The same
 // rect is used by the canvas painter, the markdown renderer, the
@@ -71,8 +71,8 @@ func fileOvertakeZoom(r pane.Rect, fileW, fileH int64) float64 {
 // URL tiles use the full pane content area (paneContentBox) instead
 // of this narrower textarea-shaped box — see drawURLTileInPane and
 // the mouse/wheel handlers' isURLDescent branches.
-func fileInnerBox(_ *pane.Pane, r pane.Rect) (x, y, w, h float64) {
-	b := panebox.InnerBox(r, fileSideInset)
+func textInnerBox(_ *pane.Pane, r pane.Rect) (x, y, w, h float64) {
+	b := panebox.InnerBox(r, textSideInset)
 	return b.X, b.Y, b.W, b.H
 }
 
@@ -94,7 +94,7 @@ func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
 }
 
 func pointInFileInner(_ *pane.Pane, r pane.Rect, sx, sy float64) bool {
-	return panebox.PointInInner(r, fileSideInset, sx, sy)
+	return panebox.PointInInner(r, textSideInset, sx, sy)
 }
 
 // ensureFileTextarea creates (once) the shared <textarea> overlay used
@@ -102,7 +102,7 @@ func pointInFileInner(_ *pane.Pane, r pane.Rect, sx, sy float64) bool {
 // positioned absolutely over the focused pane on demand. The element is
 // hidden by default and only shown via refreshFileOverlay.
 func (a *App) ensureFileTextarea() {
-	if !a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
+	if !a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
 		return
 	}
 	ta := a.doc.Call("createElement", "textarea")
@@ -114,7 +114,7 @@ func (a *App) ensureFileTextarea() {
 	style.Set("border", "0")
 	style.Set("outline", "none")
 	// border-box so the padding fits inside the width/height
-	// fileTextareaBox returns. Without this, content-box would add the
+	// textTextareaBox returns. Without this, content-box would add the
 	// padding to each dimension and the textarea would overhang the
 	// pane's right and bottom border strokes.
 	style.Set("boxSizing", "border-box")
@@ -137,8 +137,8 @@ func (a *App) ensureFileTextarea() {
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
 
-	a.sched.fileSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.sched.fileSaveScheduled = false
+	a.sched.textSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.textSaveScheduled = false
 		p := a.tree.FocusedPane()
 		// The fire-time guard (focused text-tile pane, in raw-text mode,
 		// with the textarea singleton still bound to THIS tile) is the pure
@@ -159,7 +159,7 @@ func (a *App) ensureFileTextarea() {
 		// its unchanged content.
 		if p != nil && p.TextMode == rpc.TextModeRendered {
 			if pl, ok := a.localIf(p.ID); ok && pl.Dirty {
-				a.saveFileFromCache(p)
+				a.saveTextFromCache(p)
 			}
 			return nil
 		}
@@ -173,10 +173,10 @@ func (a *App) ensureFileTextarea() {
 			// buffer and bump the tile's version for nothing.
 			return nil
 		}
-		a.saveFileFromTextarea(p)
+		a.saveTextFromTextarea(p)
 		return nil
 	})
-	a.fileTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+	a.textTextareaInputCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Schedule a debounced auto-save so the canvas preview and
 		// stored blob catch up to the user's edits without waiting
 		// for ascent / toggle. URL update is debounced separately.
@@ -190,7 +190,7 @@ func (a *App) ensureFileTextarea() {
 		a.scheduleURLUpdate()
 		return nil
 	})
-	ta.Call("addEventListener", "input", a.fileTextareaInputCb)
+	ta.Call("addEventListener", "input", a.textTextareaInputCb)
 
 	// Cursor moves without text changes (arrow keys, click placement,
 	// page navigation) also need to refresh the URL — listen for those
@@ -203,17 +203,17 @@ func (a *App) ensureFileTextarea() {
 	ta.Call("addEventListener", "mouseup", cursorCb)
 	ta.Call("addEventListener", "select", cursorCb)
 
-	a.fileTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+	a.textTextareaScrollCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		// Mirror the browser scroll position onto the focused pane so
 		// SetTextView on ascent persists the right value.
 		p := a.tree.FocusedPane()
 		if p == nil || p.TextFocus == "" {
 			return nil
 		}
-		p.TextScrollY = a.fileTextarea.Get("scrollTop").Float()
+		p.TextScrollY = a.textTextarea.Get("scrollTop").Float()
 		return nil
 	})
-	ta.Call("addEventListener", "scroll", a.fileTextareaScrollCb)
+	ta.Call("addEventListener", "scroll", a.textTextareaScrollCb)
 
 	// No wheel listener: text mode uses the textarea's native scroll.
 	// TextZoom is fixed for the visit, so nothing in here needs the
@@ -268,7 +268,7 @@ func (a *App) ensureFileTextarea() {
 		r := paneRectFor(a, p)
 		if !pointInFileInner(p, r, sx, sy) {
 			ev.Call("preventDefault")
-			a.startFileAscent(p)
+			a.startTextAscent(p)
 		}
 		return nil
 	})
@@ -321,14 +321,14 @@ func (a *App) ensureFileTextarea() {
 	a.installTextareaTouch(ta)
 
 	a.doc.Get("body").Call("appendChild", ta)
-	a.fileTextarea = ta
+	a.textTextarea = ta
 }
 
 // ensureFileToggle creates (once) the floating rendered/raw toggle
 // button used during a markdown descent. A DOM element layered above the
 // textarea (zIndex 6 > textarea 5) so the text content can fill the pane.
 func (a *App) ensureFileToggle() {
-	if !a.fileToggleBtn.IsUndefined() && !a.fileToggleBtn.IsNull() {
+	if !a.textToggleBtn.IsUndefined() && !a.textToggleBtn.IsNull() {
 		return
 	}
 	btn := a.doc.Call("createElement", "div")
@@ -350,7 +350,7 @@ func (a *App) ensureFileToggle() {
 	style.Set("fontSize", "18px")
 	btn.Set("textContent", "a")
 
-	a.fileToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+	a.textToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) == 0 {
 			return nil
 		}
@@ -370,7 +370,7 @@ func (a *App) ensureFileToggle() {
 		a.onToggleFileMode(p)
 		return nil
 	})
-	btn.Call("addEventListener", "mousedown", a.fileToggleCb)
+	btn.Call("addEventListener", "mousedown", a.textToggleCb)
 	// Suppress the browser context menu so right-click reads purely as the
 	// ascend gesture above.
 	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -380,7 +380,7 @@ func (a *App) ensureFileToggle() {
 		return nil
 	}))
 	a.doc.Get("body").Call("appendChild", btn)
-	a.fileToggleBtn = btn
+	a.textToggleBtn = btn
 }
 
 // refreshFileToggle positions/styles the floating toggle for a markdown
@@ -388,7 +388,7 @@ func (a *App) ensureFileToggle() {
 // button instead, so they're excluded.
 func (a *App) refreshFileToggle() {
 	a.ensureFileToggle()
-	style := a.fileToggleBtn.Get("style")
+	style := a.textToggleBtn.Get("style")
 	hide := func() { style.Set("display", "none") }
 
 	p := a.tree.FocusedPane()
@@ -440,7 +440,7 @@ func (a *App) refreshFileToggle() {
 func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
 	a.ensureFileTextarea()
-	ta := a.fileTextarea
+	ta := a.textTextarea
 
 	p := a.tree.FocusedPane()
 	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
@@ -467,7 +467,7 @@ func (a *App) refreshFileOverlay() {
 		return
 	}
 	style := ta.Get("style")
-	left, top, width, height, fontPx := fileTextareaBox(p, r)
+	left, top, width, height, fontPx := textTextareaBox(p, r)
 
 	setBoundsPx(style, left, top, width, height)
 	style.Set("clipPath", "none")
@@ -504,7 +504,7 @@ func (a *App) refreshFileOverlay() {
 		// save-before-clear (onToggleFileMode). The owning pane is the one
 		// still text-descended into the old tile.
 		if old := a.paneTextDescendedInto(a.lastTextareaTileID); old != nil {
-			a.saveFileFromTextarea(old)
+			a.saveTextFromTextarea(old)
 		} else {
 			// No pane owns the old descent anymore (pane closed mid-edit).
 			// The edit cannot be routed; surface instead of vanishing.
@@ -532,51 +532,51 @@ func (a *App) refreshFileOverlay() {
 	ta.Call("focus")
 }
 
-// syncFileOverlayPosition is the lightweight version of refreshFileOverlay
+// syncTextOverlayPosition is the lightweight version of refreshFileOverlay
 // called every draw: it just repositions an already-shown textarea so it
 // continues to track the focused pane through resizes and pane-tree
 // edits. It does not refocus, mutate the value, or toggle visibility.
-func (a *App) syncFileOverlayPosition() {
+func (a *App) syncTextOverlayPosition() {
 	a.refreshFileToggle()
-	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
+	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
 		return
 	}
-	display := a.fileTextarea.Get("style").Get("display").String()
+	display := a.textTextarea.Get("style").Get("display").String()
 	if display == "none" {
 		return
 	}
 	p := a.tree.FocusedPane()
 	if p == nil || p.TextFocus == "" || p.TextMode != rpc.TextModeText {
-		a.fileTextarea.Get("style").Set("display", "none")
+		a.textTextarea.Get("style").Set("display", "none")
 		return
 	}
 	r := paneRectFor(a, p)
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	left, top, width, height, fontPx := fileTextareaBox(p, r)
-	style := a.fileTextarea.Get("style")
+	left, top, width, height, fontPx := textTextareaBox(p, r)
+	style := a.textTextarea.Get("style")
 	setBoundsPx(style, left, top, width, height)
 	style.Set("fontSize", pxf(fontPx))
 	style.Set("clipPath", "none")
 }
 
-// fileTextareaBox returns the textarea overlay's screen rectangle and
+// textTextareaBox returns the textarea overlay's screen rectangle and
 // font size for pane p with rect r. Adapter over panebox.TextareaBox
 // supplying the wasm renderer's fixed-scale constants.
-func fileTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
+func textTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
 	// Font size = the canvas painter's codePx so focused (textarea) and
 	// blurred (canvas) raw text are the same size. See drawMarkdownText.
-	b, fp := panebox.TextareaBox(r, fileSideInset, defaultMarkdownStyle().codePx, fileFixedScale)
+	b, fp := panebox.TextareaBox(r, textSideInset, defaultMarkdownStyle().codePx, textFixedScale)
 	return b.X, b.Y, b.W, b.H, fp
 }
 
-// fileSideInset is the gap between the pane edge and the text content —
+// textSideInset is the gap between the pane edge and the text content —
 // a small reading margin so glyphs don't touch the frame. Kept fixed
 // (independent of the now-1px paneBorderPx) so thinning the colored
 // border didn't cram text against the edge. The rendered/raw toggle is a
 // DOM overlay button (refreshFileToggle), so no strip is reserved for it.
-const fileSideInset = 6.0
+const textSideInset = 6.0
 
 // onToggleFileMode flips the focused pane between text and rendered
 // modes. Going text→rendered saves the current buffer first; going
@@ -595,25 +595,25 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	}
 	if p.TextMode == rpc.TextModeText {
 		// Save before switching to rendered.
-		a.saveFileFromTextarea(p)
+		a.saveTextFromTextarea(p)
 		p.TextMode = rpc.TextModeRendered
 	} else {
 		p.TextMode = rpc.TextModeText
 		// Reset textarea contents next time refreshFileOverlay is called
 		// so it picks up the freshest cached blob.
-		if !a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
-			a.fileTextarea.Set("value", "")
+		if !a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
+			a.textTextarea.Set("value", "")
 			a.textareaReady = false // cleared; refreshFileOverlay re-seeds it
 		}
 	}
-	// The mode is persisted to the tile on ascent (saveFileBeforeAscent).
+	// The mode is persisted to the tile on ascent (saveTextBeforeAscent).
 	// While descended, the focused pane's live TextMode drives the preview.
 	a.refreshFileOverlay()
 	a.draw()
 	a.scheduleURLUpdate()
 }
 
-// saveFileFromTextarea posts the textarea's value as the file's new
+// saveTextFromTextarea posts the textarea's value as the file's new
 // content. The cached blob is updated under the file's *current*
 // BlobID synchronously, so the immediate post-toggle render uses the
 // user's typed content rather than the stale (pre-edit) blob. The
@@ -637,11 +637,11 @@ func (a *App) paneTextDescendedInto(tileID string) *pane.Pane {
 	return found
 }
 
-func (a *App) saveFileFromTextarea(p *pane.Pane) {
-	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
+func (a *App) saveTextFromTextarea(p *pane.Pane) {
+	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
 		return
 	}
-	buf := a.fileTextarea.Get("value").String()
+	buf := a.textTextarea.Get("value").String()
 	gid := a.gridIDForPane(p)
 	g, ok := a.c.Grid(gid)
 	if !ok {

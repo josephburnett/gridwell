@@ -709,13 +709,13 @@ func (a *App) flushDroppedSubtree(n pane.TreeNode) {
 // flushPaneBeforeDrop persists a single pane's descended state before the
 // pane disappears: text edits + framed window for a text descent, and a
 // freeze for a live URL or shell stream. Each step is a no-op when it
-// doesn't apply (kind guard inside saveFileBeforeAscent; the close* helpers
+// doesn't apply (kind guard inside saveTextBeforeAscent; the close* helpers
 // no-op when the pane has no live stream).
 func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 	if p.TextFocus != "" {
 		if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 			if file, ok := g.Tiles[p.TextFocus]; ok {
-				a.saveFileBeforeAscent(p, file)
+				a.saveTextBeforeAscent(p, file)
 			}
 		}
 	}
@@ -838,7 +838,7 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	// native view / PTY attachment per tile+pane), so the new pane ascends
 	// just the file level and shows the grid containing the tile.
 	if np != nil && np.TextFocus != "" {
-		a.startFileAscent(np)
+		a.startTextAscent(np)
 	}
 }
 

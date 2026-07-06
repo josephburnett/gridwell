@@ -39,7 +39,7 @@ test('an embed renders as a preview, descends on click, and survives edits', asy
   // qualified id ("/uuid/id" — the single-globally-routable-id contract).
   await gw.descendCell(cx, cy);
   await gw.typeText(`intro [box](/${target.id}) outro`);
-  await gw.toggleFileMode(); // rendered mode
+  await gw.toggleTextMode(); // rendered mode
   await gw.waitIdle();
 
   // The embed drew, and its href resolved to the real target tile.

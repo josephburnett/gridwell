@@ -88,11 +88,11 @@ func (a *App) encodeFocusedPaneURL() url.State {
 // textarea as (column, row), 0-indexed. Returns (0, 0) if the
 // textarea isn't visible.
 func (a *App) textareaCursorRowCol() (int, int) {
-	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
+	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
 		return 0, 0
 	}
-	val := a.fileTextarea.Get("value").String()
-	off := a.fileTextarea.Get("selectionStart").Int()
+	val := a.textTextarea.Get("value").String()
+	off := a.textTextarea.Get("selectionStart").Int()
 	row, col := textcursor.RowColFromOffset(val, off)
 	return col, row
 }
@@ -167,7 +167,7 @@ func (a *App) applyURLOnBoot() {
 	// Walk the path from the anchor, fetching each grid as we go. The pure walk
 	// skips ids missing from the current grid, descends at well boundaries, and
 	// stops at a content leaf.
-	resolvedPath, fileTileID := urlwalk.Walk(state.Anchor, qualified,
+	resolvedPath, textTileID := urlwalk.Walk(state.Anchor, qualified,
 		func(gid string) (map[string]urlwalk.Tile, bool) {
 			if _, ok := a.c.Grid(gid); !ok {
 				if !a.fetchGridSync(gid) {
@@ -187,12 +187,12 @@ func (a *App) applyURLOnBoot() {
 		})
 
 	p.Path = resolvedPath
-	if fileTileID != "" {
-		p.TextFocus = fileTileID
+	if textTileID != "" {
+		p.TextFocus = textTileID
 		// Mode follows the tile's persisted text_mode; a URL that encodes
 		// a text cursor forces text mode. Scale is fixed; scroll restores
 		// from the tile's stored text_y.
-		if file, ok := a.cachedFile(p, fileTileID); ok {
+		if file, ok := a.cachedFile(p, textTileID); ok {
 			p.TextMode = file.TextMode
 			p.TextScrollY = float64(file.TextY)
 		}
@@ -202,8 +202,8 @@ func (a *App) applyURLOnBoot() {
 		if p.TextMode == "" {
 			p.TextMode = rpc.TextModeText
 		}
-		p.TextZoom = fileFixedScale
-		a.fetchBlobAndSetCursor(fileTileID, state)
+		p.TextZoom = textFixedScale
+		a.fetchBlobAndSetCursor(textTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()
 	} else {
@@ -256,26 +256,26 @@ func (a *App) fetchGridSync(id string) bool {
 // fetchBlobAndSetCursor pulls the file's bytes and, once they're in
 // the cache, places the cursor at (state.Col, state.Row) inside the
 // textarea. Asynchronous because GetBlob is over the wire.
-func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
+func (a *App) fetchBlobAndSetCursor(textTileID string, state url.State) {
 	gid := a.gridIDForPane(a.tree.FocusedPane())
 	g, ok := a.c.Grid(gid)
 	if !ok {
 		return
 	}
-	if _, ok := g.Tiles[fileTileID]; !ok {
+	if _, ok := g.Tiles[textTileID]; !ok {
 		return
 	}
 	go func() {
 		// Content is routable by tile id (GetTileContent); blob ids carry no
 		// plugin namespace and aren't routable on their own. Store it in the
 		// content store — the single text-body store the overlay reads from.
-		data, err := a.cl.GetTileContent(context.Background(), fileTileID)
+		data, err := a.cl.GetTileContent(context.Background(), textTileID)
 		if err != nil {
 			// The file the URL pointed at stays blank — say why (charter §6).
 			a.surfaceRPCError("GetTileContent", err)
 			return
 		}
-		a.c.PutTileContent(fileTileID, data)
+		a.c.PutTileContent(textTileID, data)
 		// Refresh the overlay (in text mode this seeds the textarea
 		// from the blob), then place the cursor.
 		a.refreshFileOverlay()
@@ -290,11 +290,11 @@ func (a *App) fetchBlobAndSetCursor(fileTileID string, state url.State) {
 // applies it to the textarea via setSelectionRange. No-op if the
 // textarea isn't ready.
 func (a *App) placeCursorAt(col, row int) {
-	if a.fileTextarea.IsUndefined() || a.fileTextarea.IsNull() {
+	if a.textTextarea.IsUndefined() || a.textTextarea.IsNull() {
 		return
 	}
-	val := a.fileTextarea.Get("value").String()
+	val := a.textTextarea.Get("value").String()
 	off := textcursor.OffsetFromRowCol(val, row, col)
-	a.fileTextarea.Call("focus")
-	a.fileTextarea.Call("setSelectionRange", off, off)
+	a.textTextarea.Call("focus")
+	a.textTextarea.Call("setSelectionRange", off, off)
 }

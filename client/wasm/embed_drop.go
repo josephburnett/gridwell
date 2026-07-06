@@ -93,8 +93,8 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 		if !ok {
 			return nil, false
 		}
-		_, iy, _, _ := fileInnerBox(p, r)
-		row := embedpkg.RowAt(iy, sy, p.TextScrollY, fileLineHeightPx)
+		_, iy, _, _ := textInnerBox(p, r)
+		row := embedpkg.RowAt(iy, sy, p.TextScrollY, textLineHeightPx)
 		offset = embedpkg.LineEndOffset(string(blob), row)
 	}
 	return &docDropTarget{
@@ -106,9 +106,9 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 	}, true
 }
 
-// fileLineHeightPx is the rendered line height in the file text-mode
+// textLineHeightPx is the rendered line height in the file text-mode
 // view. Matches the textarea (file_overlay.go: 14px font × 1.4 leading).
-const fileLineHeightPx = 14.0 * fileFixedScale * 1.4
+const textLineHeightPx = 14.0 * textFixedScale * 1.4
 
 // commitEmbedDrop inserts a markdown plain link for the dragged tile at
 // the target offset and POSTs UpdateText. The link is anchored at the
@@ -147,8 +147,8 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	//     toggle would save the stale buffer back over the drop.
 	a.c.PutTileContent(tile.ID, []byte(newSrc))
 	if a.lastTextareaTileID == dt.tileID &&
-		!a.fileTextarea.IsUndefined() && !a.fileTextarea.IsNull() {
-		a.fileTextarea.Set("value", newSrc)
+		!a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
+		a.textTextarea.Set("value", newSrc)
 	}
 	// In rendered mode, advance the caret past the just-inserted embed so it's
 	// visible and typing continues after it. The inserted length (link plus any

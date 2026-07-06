@@ -79,10 +79,11 @@ func PointInInner(r pane.Rect, sideInset, sx, sy float64) bool {
 	return InnerBox(r, sideInset).Contains(sx, sy)
 }
 
-// OvertakeZoom returns the zoom factor at which a file of footprint
-// (fileW × fileH) cells just fills the pane's inner box, given the
-// base cell size `cellPx`. Returns 1 when the inner box is degenerate.
-func OvertakeZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) float64 {
+// FitZoom returns the zoom factor at which a text tile of footprint
+// (fileW × fileH) cells just FITS the pane's inner box (zoomtrans.Fit — the
+// min dim ratio; formerly misnamed OvertakeZoom, which is the max). Returns
+// 1 when the inner box is degenerate.
+func FitZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) float64 {
 	inner := InnerBox(r, sideInset)
 	if inner.W <= 0 || inner.H <= 0 {
 		return 1

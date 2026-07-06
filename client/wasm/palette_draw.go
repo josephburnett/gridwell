@@ -123,7 +123,7 @@ func (a *App) installPaletteNameField() {
 // while the palette is open on a visible pane the input sits exactly over the
 // popover's name row; otherwise it is hidden and its draft value cleared (each
 // open starts blank). Called every draw, the same pattern as
-// syncFileOverlayPosition — reading never mutates, so a no-op sync is safe.
+// syncTextOverlayPosition — reading never mutates, so a no-op sync is safe.
 func (a *App) syncPaletteNameField(rects map[string]pane.Rect) {
 	in := a.paletteName
 	if !in.Truthy() {

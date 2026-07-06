@@ -63,8 +63,8 @@ type Pane struct {
 	Cy     float64
 	Zoom   float64
 
-	TextFocus   string  `json:"file_focus,omitempty"`
-	TextMode    string  `json:"file_mode,omitempty"`
+	TextFocus   string  `json:"text_focus,omitempty"`
+	TextMode    string  `json:"text_mode,omitempty"`
 	TextScrollX float64 `json:"file_scroll_x,omitempty"`
 	TextScrollY float64 `json:"file_scroll_y,omitempty"`
 	// TextZoom is the rendering scale for text-mode (independent of
@@ -87,11 +87,11 @@ type Frame struct {
 	Cx          float64  `json:"cx,omitempty"`
 	Cy          float64  `json:"cy,omitempty"`
 	Zoom        float64  `json:"zoom,omitempty"`
-	TextFocus   string   `json:"tf,omitempty"`
-	TextMode    string   `json:"tm,omitempty"`
-	TextScrollX float64  `json:"tsx,omitempty"`
-	TextScrollY float64  `json:"tsy,omitempty"`
-	TextZoom    float64  `json:"tz,omitempty"`
+	TextFocus   string   `json:"text_focus,omitempty"`
+	TextMode    string   `json:"text_mode,omitempty"`
+	TextScrollX float64  `json:"text_scroll_x,omitempty"`
+	TextScrollY float64  `json:"text_scroll_y,omitempty"`
+	TextZoom    float64  `json:"text_zoom,omitempty"`
 	// MenuOpen records whether the + menu was open on this pane when the user
 	// entered a plugin from it, so ascending back restores it — you come back
 	// with the menu open, just as you left it.
