@@ -170,18 +170,14 @@ Each plugin owns exactly one SQLite DB and one id space.
 - **`localdb`** owns all user content (text, urls, grids) plus shells, sessions,
   and the event stream. It is the only writable plugin.
 - **`fs` / `proc`** are read + framing only, over the shared `griddb` helper.
-  They map paths/PIDs → stable integers. **Their sweep policies diverge — one
-  rule, two implementations (a §8-class seam):** `proc` keeps a tile whose
-  process is merely unreadable this pass and deletes only on a definite gone
-  (`procsource.Exists` consulted before every sweep). `fs` treats an unreadable
-  directory as an **empty authoritative listing** (`GetGrid` → `entries = nil`
-  → `reconcileTiles` deletes every row). For a genuinely deleted directory that
-  is right; for a *transiently* unreadable one (EACCES, an unmounted network
-  share) it destroys the user's stored positions and tile ids — when the
-  directory returns, tiles re-row with fresh ids and auto-layout positions,
-  violating the guiding rule and breaking saved deep links. This is deliberate
-  and tested for the vanished-dir case (`TestGetGridUnreadablePathIsEmptyNotError`)
-  but conflates "gone" with "can't tell"; the proc policy is the correct one.
+  They map paths/PIDs → stable integers. **Both enforce the one sweep rule:**
+  a failed read never deletes a tile row — only a *definite gone* does. `proc`
+  consults `procsource.Exists` before every sweep; `fs` (fixed in `cce8614`)
+  sweeps only on `ErrNotExist` and, for any other read error (EACCES, an
+  unmounted network share), skips the reconcile and serves the stored rows
+  verbatim, so positions and ids survive until the source is readable again.
+  Tested from both sides (`fs_stability_test.go` via the `SetReadDir` seam:
+  permission error keeps rows, ENOENT sweeps).
 - **`ssh`** is a transparent `proxy` of a whole remote node: it dials the
   remote's export through the tunnel (`internal/plugin/sshdial`, seam-tested
   against a real in-process sshd) and forwards the full service verbatim. Its
@@ -385,9 +381,9 @@ ranked target for the §7 cure. (Verified against the code, June 2026.)
    implemented in the `localdb` switch, and again in `conv.go`.
 7. **Optimistic local edit vs. authoritative SSE state** — no merge/interlock
    (§5.2). The one framing-class residual with **no test at any level**.
-8. **The sweep policy for source-backed tiles** — "never delete on an uncertain
-   read" implemented correctly in `proc`, violated in `fs` (§4). One rule, two
-   homes, one wrong.
+8. ~~**The sweep policy for source-backed tiles**~~ — **CURED** (`cce8614`):
+   "never delete on an uncertain read" now holds in both `proc` and `fs`
+   (§4), each tested.
 9. **Plugin capabilities** — declared in `Info` (`watch`, `writable`,
    `has_session`) and honored by the server (`413df43` closed the kind-string
    re-derivation). One fact, one derivation; remotes get events + writes.
@@ -474,7 +470,7 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible` (unit-tested); the wasm→native propagation is now e2e-tested (`control-focus.spec.ts`) | ✅ data single-sourced + tested (predicate dup remains) |
 | I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
 | I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — separation verified **by code inspection only**. No mid-transition event-injection test exists, and the optimistic-echo reconcile (last-writer-wins, no version interlock) is untested at any level. | ⚠️ inspected, **untested** |
-| I12 | A plugin's user state survives its source being unreachable | `proc`: Probe-before-sweep ✅. `fs`: **violated** — an unreadable dir sweeps rows (§4) | ⚠️ **open bug (fs)** |
+| I12 | A plugin's user state survives its source being unreachable | `proc`: Probe-before-sweep; `fs`: ENOENT-only sweep (`cce8614`), both tested (§4) | ✅ construction + tested |
 
 Progress this effort converted most of the bottom half toward the top: **I8/I10
 construction-enforced and tested; I7/I9 verified and locked/tested.** I8 was
@@ -485,6 +481,6 @@ left: **I7** — the five framing copies are five legitimate *roles* kept
 consistent by convention (round trip tested by `framing-roundtrip.spec.ts`; a
 deeper single-owner `Frame` is possible but not warranted without a visual/render
 net) — and **I11**, whose separation is real in today's code but guarded by
-nothing; a new write into the SSE path would regress it silently. I12 is the
-newest entry: the sweep-policy rule the docs asserted turns out to hold in only
-one of the two plugins it governs.
+nothing; a new write into the SSE path would regress it silently (issue #5).
+I12 graduated (`cce8614`): the sweep rule now holds, tested, in both plugins
+it governs.

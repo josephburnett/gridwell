@@ -219,10 +219,8 @@ them** (`ARCHITECTURE.md §11`; each is a tracked GitHub issue):
   separation is verified by inspection only. No test injects an event
   mid-transition, and the optimistic-edit echo has no version interlock or
   test. A new write into the SSE path would regress this silently.
-- **Source-sweep stability** (I12, issue #62): a transiently unreadable
-  directory must not destroy fs tile rows (positions + ids). Today it does —
-  see `ARCHITECTURE.md §4`; proc has the correct Probe-before-sweep policy.
-(I10, menu persistence, graduated: single owner + unit + e2e.)
+(I10 menu persistence and I12 source-sweep stability graduated: single
+owners, unit + e2e / seam tests.)
 
 ---
 
