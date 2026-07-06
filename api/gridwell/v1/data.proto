@@ -48,6 +48,12 @@ message Grid {
   // qualified from the receiver's perspective (chained through mounts) —
   // same stamping rule as writable. "" when the plugin has none. Wire-only.
   string scratch_grid_id = 7;
+  // proxy_endpoint is the proxy this grid's live url tiles should browse
+  // through ("socks5://127.0.0.1:41234"; "" = the host's own network).
+  // Stamped from the owning plugin's Info.network for leaves; a TRANSIT hop
+  // REPLACES it with its own tunnel proxy — page traffic must enter the
+  // tunnel where the user is, so the outermost hop wins. Wire-only.
+  string proxy_endpoint = 8;
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which

@@ -156,6 +156,12 @@ type Grid struct {
 	// qualified from the receiver's perspective (chained through mounts) —
 	// same stamping rule as writable. "" when the plugin has none. Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
+	// proxy_endpoint is the proxy this grid's live url tiles should browse
+	// through ("socks5://127.0.0.1:41234"; "" = the host's own network).
+	// Stamped from the owning plugin's Info.network for leaves; a TRANSIT hop
+	// REPLACES it with its own tunnel proxy — page traffic must enter the
+	// tunnel where the user is, so the outermost hop wins. Wire-only.
+	ProxyEndpoint string `protobuf:"bytes,8,opt,name=proxy_endpoint,json=proxyEndpoint,proto3" json:"proxy_endpoint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -235,6 +241,13 @@ func (x *Grid) GetWritable() bool {
 func (x *Grid) GetScratchGridId() string {
 	if x != nil {
 		return x.ScratchGridId
+	}
+	return ""
+}
+
+func (x *Grid) GetProxyEndpoint() string {
+	if x != nil {
+		return x.ProxyEndpoint
 	}
 	return ""
 }
@@ -3079,7 +3092,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"!\n" +
 	"\x04Path\x12\x19\n" +
-	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\xcf\x01\n" +
+	"\bwell_ids\x18\x01 \x03(\tR\awellIds\"\xf6\x01\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3088,7 +3101,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"sourceKind\x12\x1b\n" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
-	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\"\xb3\x04\n" +
+	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12%\n" +
+	"\x0eproxy_endpoint\x18\b \x01(\tR\rproxyEndpoint\"\xb3\x04\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +

@@ -51,8 +51,9 @@ func (b viewBounds) toJS() js.Value {
 
 // bridgePlace asks main to create/attach a WebContentsView for paneID showing
 // url at bounds, bound to the owning plugin's session partition (pluginUUID is
-// the session boundary).
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID string) {
+// the session boundary). proxyEndpoint ("" = direct) is the grid-stamped
+// network context — a remote plugin's tiles browse through the tunnel SOCKS.
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -64,6 +65,7 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("url", url)
 	args.Set("bounds", b.toJS())
 	args.Set("pluginUuid", pluginUUID)
+	args.Set("proxyEndpoint", proxyEndpoint)
 	g.Call("placeWebview", args)
 }
 

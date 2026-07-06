@@ -95,10 +95,15 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	b := contentViewBounds(r)
 	a.local(p.ID).urlView = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path)}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
-	// The plugin that owns the tile is the session boundary: its uuid (the
-	// prefix of the qualified tile id) selects the Electron partition, so url
-	// tiles in different plugins get isolated cookie jars / web storage.
-	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID))
+	// The plugin that owns the tile is the session boundary: its namespace
+	// chain selects the Electron partition, so url tiles in different plugins
+	// get isolated cookie jars / web storage. The grid carries the network
+	// context (a remote plugin's tiles browse through the tunnel SOCKS).
+	proxyEndpoint := ""
+	if g, ok := a.c.Grid(t.GridID); ok {
+		proxyEndpoint = g.Meta.ProxyEndpoint
+	}
+	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint)
 	a.draw()
 }
 

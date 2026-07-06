@@ -3,14 +3,18 @@ package sshdial_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
 	"testing"
 
+	xproxy "golang.org/x/net/proxy"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
+	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial/sshdialtest"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -61,12 +65,12 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 }
 
 // dialThroughSSH assembles the full topology and returns the tunneled client.
-func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient, error) {
+func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, string, string, gridwellv1.GridwellClient, error) {
 	t.Helper()
 	nodeAddr, direct := remoteNode(t)
 	creds := sshdialtest.Server(t, t.TempDir())
 
-	client, closer, err := sshdial.Dial(sshdial.Config{
+	client, socksAddr, closer, err := sshdial.Dial(sshdial.Config{
 		Host:       creds.Addr,
 		User:       "joe",
 		KeyPath:    creds.KeyPath,
@@ -74,14 +78,14 @@ func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.Gridwel
 		Addr:       nodeAddr,
 	})
 	if err != nil {
-		return nil, direct, err
+		return nil, "", "", direct, err
 	}
 	t.Cleanup(closer)
-	return client, direct, nil
+	return client, socksAddr, nodeAddr, direct, nil
 }
 
 func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
-	c, direct, err := dialThroughSSH(t)
+	c, socksAddr, nodeAddr, direct, err := dialThroughSSH(t)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -129,6 +133,40 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 	if string(body.Data) != "# over ssh" {
 		t.Errorf("content = %q, want %q", body.Data, "# over ssh")
+	}
+
+	// The tunnel-SOCKS proxy (issue #24): a client dialing THROUGH the
+	// returned SOCKS endpoint exits on the remote's network — prove it by
+	// reaching the remote node's front door via the proxy and getting a
+	// real HTTP answer. This is the network context a remote plugin's live
+	// url tiles browse with.
+	socksDialer, err := xproxy.SOCKS5("tcp", socksAddr, nil, nil)
+	if err != nil {
+		t.Fatalf("socks dialer: %v", err)
+	}
+	httpc := &http.Client{Transport: &http.Transport{
+		Dial: socksDialer.Dial,
+	}}
+	resp, err := httpc.Post("http://"+nodeAddr+"/gridwell.v1.Gridwell/ListPlugins",
+		"application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("HTTP through the tunnel SOCKS proxy: %v", err)
+	}
+	socksBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(socksBody), "personal") {
+		t.Fatalf("through-SOCKS ListPlugins = %d %q, want the remote's plugin list", resp.StatusCode, socksBody)
+	}
+
+	// The mount's Info now carries this SOCKS endpoint as the network
+	// context (the NodeMount wrapper — outermost hop wins).
+	nm := &sshdial.NodeMount{Plugin: proxy.New(c), SocksAddr: socksAddr}
+	wrapped, err := nm.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("NodeMount Info: %v", err)
+	}
+	if pe := wrapped.Network.GetProxy(); pe == nil || pe.Scheme != "socks5" || pe.Address != socksAddr {
+		t.Fatalf("NodeMount network = %+v, want socks5 at %s", wrapped.Network, socksAddr)
 	}
 
 	// The SECOND remote plugin is reachable through the same mount — the
