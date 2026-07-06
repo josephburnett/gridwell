@@ -226,5 +226,36 @@ func TestFederationSpawn(t *testing.T) {
 	if string(got) != "# across the spawn gate" {
 		t.Fatalf("content through the chain = %q", got)
 	}
-	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read OK")
+
+	// 5. The session boundary chains too (#56): PUT a blob for the REMOTE
+	//    'work' plugin through the LOCAL /session/ endpoint (chain =
+	//    "<ssh>/<plugin>"), then read it back BOTH through the chain and
+	//    directly on the remote — the remote plugin's DB is the one home.
+	sshUUID := strings.SplitN(sshRoot, "/", 2)[0]
+	workUUID := strings.SplitN(strings.SplitN(workChild, "/", 2)[1], "/", 2)[0]
+	chain := sshUUID + "/" + workUUID
+	blob := []byte(`[{"name":"login","value":"sekrit","domain":"example.com","path":"/"}]`)
+	putReq, _ := http.NewRequest(http.MethodPut, localOrigin+"/session/"+chain, bytes.NewReader(blob))
+	putResp, err := http.DefaultClient.Do(putReq)
+	if err != nil || putResp.StatusCode/100 != 2 {
+		t.Fatalf("PUT /session/%s: %v %v", chain, err, putResp)
+	}
+	putResp.Body.Close()
+	readBack := func(origin, key string) string {
+		r, err := http.Get(origin + "/session/" + key)
+		if err != nil || r.StatusCode != 200 {
+			t.Fatalf("GET /session/%s: %v %v", key, err, r)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return string(b)
+	}
+	if got := readBack(localOrigin, chain); got != string(blob) {
+		t.Fatalf("session through the chain = %q, want the stored blob", got)
+	}
+	if got := readBack(remoteOrigin, workUUID); got != string(blob) {
+		t.Fatalf("session on the REMOTE (direct) = %q — the blob did not land in the remote plugin's DB", got)
+	}
+
+	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read + session OK")
 }

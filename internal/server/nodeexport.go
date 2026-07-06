@@ -236,6 +236,17 @@ func (n *nodeExport) Subscribe(_ *pb.SubscribeRequest, stream pb.Gridwell_Subscr
 	return statusErr(n.h.subscribe(stream.Context(), stream.Send))
 }
 
+// sessionRoute resolves a session's plugin chain: "<uuid>" (this node's
+// plugin, rest "") or "<uuid>/<rest>" (forward rest through the mount).
+func (n *nodeExport) sessionRoute(chain string) (pb.GridwellClient, string, bool) {
+	uuid, rest := chain, ""
+	if i := strings.IndexByte(chain, '/'); i > 0 {
+		uuid, rest = chain[:i], chain[i+1:]
+	}
+	c, ok := n.srv.routeClient(uuid)
+	return c, rest, ok
+}
+
 // OpenShell peeks the bind message for the tile id, routes to the owning
 // plugin with the id peeled one segment, and pipes both directions.
 func (n *nodeExport) OpenShell(stream pb.Gridwell_OpenShellServer) error {
@@ -289,10 +300,13 @@ func (n *nodeExport) OpenShell(stream pb.Gridwell_OpenShellServer) error {
 	return err
 }
 
-// GetSession routes by the request's root grid id (the plugin whose session
-// blob this is) and relays the chunks.
+// GetSession routes by the request's plugin chain (root_grid_id): the FIRST
+// segment picks the plugin here, the REST forwards for the next hop — and a
+// slash-less value IS the plugin ("this plugin's session", rest empty). The
+// same peel-one-segment rule as every other id, applied to the session
+// boundary.
 func (n *nodeExport) GetSession(r *pb.GetSessionRequest, stream pb.Gridwell_GetSessionServer) error {
-	c, local, ok := n.srv.clientForID(r.RootGridId)
+	c, local, ok := n.sessionRoute(r.RootGridId)
 	if !ok {
 		return status.Errorf(gcodes.NotFound, "no plugin for session %q", r.RootGridId)
 	}
@@ -314,13 +328,14 @@ func (n *nodeExport) GetSession(r *pb.GetSessionRequest, stream pb.Gridwell_GetS
 	}
 }
 
-// PutSession peeks the bind chunk for the root grid id and relays upstream.
+// PutSession peeks the bind chunk for the plugin chain and relays upstream
+// (same peel rule as GetSession).
 func (n *nodeExport) PutSession(stream pb.Gridwell_PutSessionServer) error {
 	first, err := stream.Recv()
 	if err != nil {
 		return err
 	}
-	c, local, ok := n.srv.clientForID(first.RootGridId)
+	c, local, ok := n.sessionRoute(first.RootGridId)
 	if !ok {
 		return status.Errorf(gcodes.NotFound, "no plugin for session %q", first.RootGridId)
 	}

@@ -12,19 +12,27 @@ import (
 // storage) so the Electron host can hydrate a partition on enter and dehydrate
 // it on ascent — the plugin is the session boundary.
 //
-//	GET /session/<plugin-uuid>   → the blob bytes (empty if none yet)
-//	PUT /session/<plugin-uuid>   ← the blob bytes to store
+//	GET /session/<plugin-chain>   → the blob bytes (empty if none yet)
+//	PUT /session/<plugin-chain>   ← the blob bytes to store
 //
-// The handler routes to the owning plugin's GetSession / PutSession streams, so
-// the session crosses the Gridwell interface like everything else (a remote
-// plugin proxies it to the remote node).
+// The plugin-chain is the grid NAMESPACE the session belongs to: a bare uuid
+// for a local plugin, "<ssh>/<remote-plugin>" (any depth) through a node
+// mount — the plugin is the session boundary even when it lives two hops
+// away. Routing peels one segment per hop, like every other id: this handler
+// resolves the FIRST segment and forwards the REST in the request
+// (GetSessionRequest.root_grid_id); the node export applies the same rule on
+// the far side, so a slash-less rest means "this plugin".
 func (s *Server) sessionBlob(w http.ResponseWriter, r *http.Request) {
-	uuid := strings.TrimPrefix(r.URL.Path, "/session/")
-	if uuid == "" {
-		http.Error(w, "missing plugin uuid", http.StatusBadRequest)
+	chain := strings.TrimPrefix(r.URL.Path, "/session/")
+	if chain == "" {
+		http.Error(w, "missing plugin chain", http.StatusBadRequest)
 		return
 	}
-	client, ok := s.pluginReg.Get(uuid)
+	uuid, rest := chain, ""
+	if i := strings.IndexByte(chain, '/'); i > 0 {
+		uuid, rest = chain[:i], chain[i+1:]
+	}
+	client, ok := s.routeClient(uuid)
 	if !ok {
 		http.Error(w, "no such plugin", http.StatusNotFound)
 		return
@@ -32,7 +40,7 @@ func (s *Server) sessionBlob(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		stream, err := client.GetSession(r.Context(), &pb.GetSessionRequest{})
+		stream, err := client.GetSession(r.Context(), &pb.GetSessionRequest{RootGridId: rest})
 		if err != nil {
 			writeHTTPError(w, err)
 			return
@@ -58,16 +66,18 @@ func (s *Server) sessionBlob(w http.ResponseWriter, r *http.Request) {
 			writeHTTPError(w, err)
 			return
 		}
+		// Bind the stream up front (works for an empty body too): the rest of
+		// the chain rides in root_grid_id and is peeled one segment per hop;
+		// "" means "this plugin" (advisory for localdb).
+		if err := stream.Send(&pb.PutSessionRequest{RootGridId: rest}); err != nil {
+			writeHTTPError(w, err)
+			return
+		}
 		buf := make([]byte, sessionPutChunk)
-		first := true
 		for {
 			n, rerr := r.Body.Read(buf)
 			if n > 0 {
 				msg := &pb.PutSessionRequest{Data: append([]byte(nil), buf[:n]...)}
-				if first {
-					msg.RootGridId = uuid // binds the stream; advisory for localdb
-					first = false
-				}
 				if err := stream.Send(msg); err != nil {
 					writeHTTPError(w, err)
 					return
