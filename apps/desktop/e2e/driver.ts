@@ -240,6 +240,22 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
+  // cloneDragAcrossPanes right-drags (clone/link gesture) the tile at cell
+  // (fcx,fcy) of pane fromID onto cell (tcx,tcy) of pane toID. Within one
+  // plugin this clones; across a plugin boundary it creates a LINK in the
+  // destination (a well) or a byte copy (a leaf).
+  async cloneDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
+    const from = await this.cellCenter(fromID, fcx, fcy);
+    const to = await this.cellCenter(toID, tcx, tcy);
+    const m = this.win.mouse;
+    await m.move(from.x, from.y);
+    await m.down({ button: 'right' });
+    await m.move(from.x + GridwellDriver.NUDGE, from.y + GridwellDriver.NUDGE);
+    await m.move(to.x, to.y, { steps: 10 });
+    await m.up({ button: 'right' });
+    await this.waitIdle();
+  }
+
   // resizeTileCell right-drags from NEAR THE CORNER of the 1x1 tile at (cx,cy) —
   // outside its center third, so the gesture is tile-resize not clone — out to
   // the center of (toCx,toCy). The tile's footprint (W/H) rubber-bands to the

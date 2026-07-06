@@ -31,6 +31,15 @@ func (a *App) gridWritable(gridID string) bool {
 	return g.Meta.Writable
 }
 
+// gridKnownReadOnly reports that the grid is cached AND declares itself
+// read-only. Distinct from !gridWritable: an UNCACHED grid is unknown, and a
+// drop gesture must not be rejected on ignorance — the server is the
+// authority for the race where the fetch hasn't landed yet.
+func (a *App) gridKnownReadOnly(gridID string) bool {
+	g, ok := a.c.Grid(gridID)
+	return ok && !g.Meta.Writable
+}
+
 // isNodeGridPane reports whether pane p sits at the node grid — the plugin
 // list landing page. Drives only the pane's identity border color; the node
 // grid otherwise renders and behaves as the ordinary (read-only) grid it is.

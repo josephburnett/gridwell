@@ -290,18 +290,38 @@ Plugin storage is the authoritative state for the plugin's tiles. The localdb
 format is **frozen and forward-compatible** — see `internal/store/CLAUDE.md` for
 the additive-only schema-evolution contract; never delete a DB to absorb a change.
 
-**Remote is just a transport.** The `ssh` plugin tunnels to a remote node's
-one HTTP/h2c port (its `bind:`) and mounts **one remote plugin** through the
-**node export** (`internal/server/nodeexport.go`): requests carrying the
-`gridwell-plugin` selector (config `remote_plugin`, a name or uuid) are
-answered by that plugin's own service verbatim — local ids, its own `Info`.
-Both hops use the same **transparent proxy** (`internal/plugin/proxy`), which
-forwards the *entire* service — unary calls, the `OpenShell` PTY stream, and
-the session blob — with full fidelity. So a remote plugin's wells, tiles, live
-shells, and session reach the local server over the same interface as a local
-plugin; "remote" adds nothing to the vocabulary. The whole dial path (key
-auth, known_hosts, tunnel, gRPC-over-h2c, resolution) is
-`internal/plugin/sshdial`, seam-tested against a real in-process ssh server.
+**Every node exposes a node grid; the launcher IS one.** A node's plugin list
+is a real, read-only grid — the **node grid**, `<node_id>/0` (`node_id` lives
+in server.yaml; `internal/server/nodegrid.go`) — one dashed **link tile** per
+plugin (tile id = the plugin's uuid, child = its qualified root, framing = its
+persisted root view). The local client anchors panes there on boot: the
+landing page is served, not synthesized client-side. Descending into ANY link
+tile is a **portal** (the pane's anchor swaps to the link's target and a frame
+is pushed for the return trip), so navigation has one vocabulary whether the
+link points at a local plugin, a mounted directory, or a remote node.
+
+**Remote is just a transport, and the mount is the whole node.** The `ssh`
+plugin tunnels to a remote node's one HTTP/h2c port (its `bind:`) and dials
+the **node export** (`internal/server/nodeexport.go`): the full Gridwell
+service over raw gRPC, routed by the **qualified ids** each request carries —
+the same routing implementation the browser front door uses, plus the
+plugin-grade streams (`OpenShell`, `GetSession`, `PutSession`) routed by the
+id in their first message. There is no selector and no name-based routing.
+The mount's root is the remote's node grid, so descending into the ssh plugin
+shows the remote's own launcher; every remote plugin is a link tile there.
+Ids **chain**: each hop peels one segment from requests and prepends one to
+responses (`ssh` is a *transit* plugin — `Registry.Transit`), so
+`<ssh>/<plugin>/<id>` routes through any number of hops, and the ssh binary
+itself stays a dumb pipe (`internal/plugin/proxy`). The dial path (key auth,
+mandatory known_hosts, tunnel, gRPC-over-h2c) is `internal/plugin/sshdial`,
+seam-tested against a real in-process ssh server fronting a two-plugin node.
+
+**Cross-plugin clone is a link (implemented in the CloneTile router).**
+Right-dragging a well into another plugin's grid creates an exit-well link in
+the DESTINATION sharing the source's grid; leaves (text/url) copy bytes. A
+dashed border always means link: deleting it only unlinks. Left-drag moves
+never cross an id namespace (identity doesn't migrate; the DecideDrop seam
+rejects them client-side).
 
 **URL and path format.** The descent path is encoded as alternating
 plugin-uuid / tile-id segments, with the plugin uuid omitted when it equals the

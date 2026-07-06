@@ -313,6 +313,26 @@ func TestPaneCellAt(t *testing.T) {
 // from one host directory's grid into another's): the server rejects any
 // cross-grid move touching a source-backed grid, but the UI's old XOR check
 // reported it allowed, inviting a drop that then failed.
+// TestDecideDropTargetReadOnly: a drop (move OR clone) onto a read-only grid
+// (the node grid, fs/proc) is rejected up front — no doomed RPC, no
+// misleading "changed elsewhere" reconcile notice.
+func TestDecideDropTargetReadOnly(t *testing.T) {
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetReadOnly: true}
+	if got := DecideDrop(base); got != DropRejected {
+		t.Errorf("move onto read-only grid = %v, want DropRejected", got)
+	}
+	clone := base
+	clone.Clone = true
+	if got := DecideDrop(clone); got != DropRejected {
+		t.Errorf("clone onto read-only grid = %v, want DropRejected", got)
+	}
+	ok := base
+	ok.TargetReadOnly = false
+	if got := DecideDrop(ok); got != DropMove {
+		t.Errorf("move onto writable grid = %v, want DropMove", got)
+	}
+}
+
 func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name             string

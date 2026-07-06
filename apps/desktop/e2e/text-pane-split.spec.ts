@@ -21,8 +21,9 @@ import { tileAt } from './oracle';
 //   3. Typed content persists to the server through the full round trip.
 //
 // Geometry notes (learned the hard way):
-//   - splitFocusedPaneVertical creates the NEW pane at the launcher (anchor "");
-//     it must enterPlugin itself before it shows the grid.
+//   - splitFocusedPaneVertical creates the NEW pane at the node grid (the
+//     landing page, anchor "<node>/0"); it must enterPlugin itself before it
+//     shows the plugin grid.
 //   - A vertical split halves pane WIDTH, so tiles the spec descends into are
 //     offset VERTICALLY (cy±1) from the viewport center — a cx±1 offset can land
 //     outside the half-width pane and the click hits the sibling pane instead.
@@ -30,16 +31,18 @@ import { tileAt } from './oracle';
 //     keep the center clear so a focus click never descends.
 
 // splitWithBothPanesOnGrid splits the focused (grid) pane, then enters the same
-// plugin in the new launcher pane, returning [left, right] pane infos with both
-// panes on the plugin's root grid.
+// plugin in the new landing-page pane, returning [left, right] pane infos with
+// both panes on the plugin's root grid.
 async function splitWithBothPanesOnGrid(gw: any): Promise<[any, any]> {
+  const orig = await gw.focused();
   await gw.splitFocusedPaneVertical();
   const panes = await gw.panes();
   expect(panes.length, 'two panes after split').toBe(2);
-  const launcherPane = panes.find((p: any) => p.anchor === '');
-  expect(launcherPane, 'split creates a launcher pane').toBeTruthy();
-  // Focus the launcher pane with a CORNER click: its plugin tiles are centered,
-  // so a focusPane() center click would enter a plugin instead of just focusing.
+  const launcherPane = panes.find((p: any) => p.id !== orig.id);
+  expect(launcherPane, 'split creates a second pane (at the node grid)').toBeTruthy();
+  expect(launcherPane.anchor, 'the new pane ascends to the node grid').toMatch(/\/0$/);
+  // Focus the new pane with a CORNER click: the node grid's plugin tiles are
+  // centered, so a focusPane() center click would descend instead of focusing.
   await gw.clickScreen(launcherPane.x + 20, launcherPane.y + 20);
   await gw.enterPlugin('localdb');
   const after = await gw.panes();

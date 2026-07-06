@@ -748,6 +748,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	var dropX, dropY int64
 	if haveT {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
+		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
 		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
@@ -1145,11 +1146,11 @@ func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, well *rpc.Tile) {
 				toCx: mid.Cx, toCy: mid.Cy, toZoom: mid.Zoom,
 				durationMs: durations[0],
 			},
-			// Parent: clear the anchor back to the launcher, then pan+zoom to
-			// the saved launcher viewport.
+			// Parent: swap the anchor back to the frame's namespace (and its
+			// path), then pan+zoom to the saved viewport.
 			{
-				setAnchor: true, anchor: "",
-				path:   nil,
+				setAnchor: true, anchor: f.Anchor,
+				path:   slices.Clone(f.Path),
 				fromCx: to.Cx, fromCy: to.Cy, fromZoom: to.Zoom,
 				toCx: saved.Cx, toCy: saved.Cy, toZoom: saved.Zoom,
 				durationMs: durations[1],

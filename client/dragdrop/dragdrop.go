@@ -301,8 +301,12 @@ type DropInput struct {
 	DocReject  bool
 	HasTarget  bool
 	Forbidden  bool
-	SameCell   bool
-	Occupied   bool
+	// TargetReadOnly: the destination grid refuses mutations (the node grid,
+	// an fs/proc grid) — a drop there is rejected up front instead of firing
+	// an RPC the server must refuse.
+	TargetReadOnly bool
+	SameCell       bool
+	Occupied       bool
 }
 
 // DecideDrop maps a gathered DropInput to the single action both preview
@@ -344,6 +348,8 @@ func DecideDrop(in DropInput) DropAction {
 	case !in.HasTarget:
 		return DropRejected
 	case in.Forbidden:
+		return DropRejected
+	case in.TargetReadOnly:
 		return DropRejected
 	case in.SameCell:
 		return DropRejected

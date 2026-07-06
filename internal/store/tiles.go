@@ -186,7 +186,7 @@ func (s *Store) CreateExitWell(ctx context.Context, path rpc.Path, gridID string
 					view_x, view_y, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
 				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				objID, gid, x, y, w, h, childGridID, nullableString(alt), now, now)
+				objID, gid, x, y, w, h, childGridID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert exit well: %w", err)
 			}
@@ -224,15 +224,6 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 			}
 			return tileID, nil
 		})
-}
-
-// nullableString returns sql.NullString — empty values stored as NULL
-// keep the schema honest about "no derived alt yet."
-func nullableString(s string) sql.NullString {
-	if s == "" {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: s, Valid: true}
 }
 
 // insertURLRow inserts one url tile row and returns its id. The single place

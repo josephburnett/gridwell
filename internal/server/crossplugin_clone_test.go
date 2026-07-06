@@ -126,6 +126,21 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 		t.Errorf("deleting the link destroyed the source's content: %v", err)
 	}
 	_ = uuidA
+
+	// An UNNAMED well links too: the link's alt is simply empty. (Regression:
+	// the exit-well insert turned "" into SQL NULL against a NOT NULL column,
+	// so only named wells could cross a plugin boundary.)
+	plain, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: rootA, X: 4, Y: 4, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateWell (unnamed): %v", err)
+	}
+	if _, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: plain.ID, Version: plain.Version, DestGridID: rootB, X: 5, Y: 5,
+	}); err != nil {
+		t.Errorf("cross-plugin clone of an UNNAMED well failed: %v", err)
+	}
 }
 
 func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
