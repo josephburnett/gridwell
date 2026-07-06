@@ -298,48 +298,6 @@ func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb
 	return h.tileResp(uuid, resp, err)
 }
 
-// Mount drops an exit well in the destination grid pointing at plugin_uuid's
-// default root (learned from its Info) — the drag-a-plugin gesture.
-func (h *connectHandler) Mount(ctx context.Context, req *connect.Request[pb.MountRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	srcClient, found := h.srv.pluginReg.Get(m.PluginUuid)
-	if !found {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", m.PluginUuid))
-	}
-	info, err := srcClient.Info(ctx, &pb.InfoRequest{})
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	if info.RootGridId == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("plugin %q has no root grid", m.PluginUuid))
-	}
-	childGridID := qualifyID(m.PluginUuid, info.RootGridId)
-
-	// The mounted well's label is the server.yaml display name — exactly the
-	// label the + menu showed for this plugin — so menu and dropped tile
-	// agree. Fall back to the plugin's Info name only when unconfigured.
-	label := h.srv.pluginReg.Label(m.PluginUuid)
-	if label == "" {
-		label = info.DisplayName
-	}
-
-	dstClient, dstLocal, dstUUID, err := h.route(m.GridId)
-	if err != nil {
-		return nil, err
-	}
-	// An exit well is a well tile whose child_grid_id is a cross-plugin
-	// reference; alt_text is its label.
-	resp, err := dstClient.CreateTile(ctx, &pb.CreateTileRequest{
-		Path:   localPathFor(m.Path, dstUUID),
-		GridId: dstLocal,
-		Tile: &pb.Tile{
-			Kind: "well", X: m.X, Y: m.Y, W: m.W, H: m.H,
-			ChildGridId: childGridID, AltText: label,
-		},
-	})
-	return h.tileResp(dstUUID, resp, err)
-}
-
 // ── mutations ──────────────────────────────────────────────────────────────────
 
 func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {

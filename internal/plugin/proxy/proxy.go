@@ -74,12 +74,6 @@ func (p *Plugin) DeleteTile(ctx context.Context, r *gridwellv1.DeleteTileRequest
 func (p *Plugin) SetTileAlt(ctx context.Context, r *gridwellv1.SetTileAltRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.SetTileAlt(ctx, r)
 }
-func (p *Plugin) Mount(ctx context.Context, r *gridwellv1.MountRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.Mount(ctx, r)
-}
-func (p *Plugin) ShellSessionAlive(ctx context.Context, r *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
-	return p.c.ShellSessionAlive(ctx, r)
-}
 
 // ── server-stream forwards (downstream only) ─────────────────────────────────
 

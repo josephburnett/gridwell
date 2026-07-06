@@ -75,13 +75,13 @@ func TestCreateURLEmptyString(t *testing.T) {
 }
 
 // TestMountUnknownPlugin asserts that mounting an unregistered plugin uuid is
-// rejected at the boundary with NotFound, not somewhere deeper. (File/process
-// wells are now created by Mount, so the old per-field FSPath/PID validation
-// no longer applies — Mount carries only a plugin uuid.)
+// rejected at the boundary with NotFound, not somewhere deeper. (Mounting is
+// a clone of a node-grid tile; an unknown plugin has no tile, so the source
+// id routes nowhere.)
 func TestMountUnknownPlugin(t *testing.T) {
 	_, cl, root := newTestServer(t)
-	_, err := cl.Mount(context.Background(), &rpc.MountRequest{
-		PluginUUID: "no-such-plugin", GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	_, err := cl.CloneTile(context.Background(), &rpc.CloneTileRequest{
+		TileID: "no-such-plugin/1", Version: 0, DestGridID: root, X: 0, Y: 0,
 	})
 	if got := errCode(err); got != connect.CodeNotFound {
 		t.Errorf("unknown plugin: code %v, want NotFound", got)

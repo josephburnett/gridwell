@@ -163,20 +163,6 @@ func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error
 	return err
 }
 
-// Mount drops a mount well in the destination grid pointing at the plugin's
-// default root. The drag-a-plugin-onto-a-grid gesture.
-func (c *Client) Mount(ctx context.Context, req *MountRequest) (*Tile, error) {
-	return tileResp(c.cl.Mount(ctx, connect.NewRequest(&pb.MountRequest{
-		PluginUuid: req.PluginUUID,
-		Path:       PathToProto(req.Path),
-		GridId:     req.GridID,
-		X:          req.X,
-		Y:          req.Y,
-		W:          req.W,
-		H:          req.H,
-	})))
-}
-
 func (c *Client) MoveTile(ctx context.Context, req *MoveTileRequest) (*Tile, error) {
 	return tileResp(c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req))))
 }
