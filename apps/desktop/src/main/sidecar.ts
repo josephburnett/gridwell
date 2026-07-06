@@ -23,6 +23,13 @@ export interface StartOptions {
   timeoutMs?: number;
   // Sink for sidecar stdout/stderr lines (defaults to console).
   onLog?: (line: string) => void;
+  // Test seams (sidecar.test.ts): a fake child process + fixed paths, so the
+  // spawn/ready/error/exit/timeout settle rules — the logic that decides
+  // whether the app boots or hangs — run under `node --test` with no binary
+  // and no Electron. Production callers leave these unset.
+  spawnFn?: (bin: string, args: string[]) => ChildProcess;
+  binaryPath?: string;
+  staticPath?: string;
 }
 
 // startSidecar spawns the Go backend (HTTP/SSE/WS) and resolves once it
@@ -30,8 +37,8 @@ export interface StartOptions {
 // the process exits first or the timeout elapses. The returned stop()
 // terminates the child.
 export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
-  const bin = sidecarBinary();
-  if (!fs.existsSync(bin)) {
+  const bin = opts.binaryPath ?? sidecarBinary();
+  if (!opts.spawnFn && !fs.existsSync(bin)) {
     throw new Error(`sidecar binary not found at ${bin} (set GRIDWELL_SIDECAR)`);
   }
   const port = opts.port ?? (await freePort());
@@ -48,9 +55,11 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   const args = [
     'serve',
     '--bind-default', `127.0.0.1:${port}`,
-    '--static', staticDir(),
+    '--static', opts.staticPath ?? staticDir(),
   ];
-  const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = opts.spawnFn
+    ? opts.spawnFn(bin, args)
+    : spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
   const stop = () => {
     if (!child.killed) child.kill('SIGTERM');
