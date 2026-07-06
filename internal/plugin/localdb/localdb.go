@@ -188,11 +188,12 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// child_grid_id set → an exit well pointing at a grid owned by another
 		// plugin (a mounted DB, an fs/proc grid). No interior child grid is
 		// allocated; the cross-plugin reference is stored verbatim. alt_text is
-		// the exit well's label.
+		// the exit well's label. On an interior well, alt_text is the
+		// user-given grid name (the + palette's name field); empty = unnamed.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.ChildGridId, t.AltText))
 		}
-		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
+		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
 	case rpc.KindText:
 		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Data: req.Data}))
 	case rpc.KindURL:

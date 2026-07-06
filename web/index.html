@@ -75,10 +75,27 @@
     }
     .gw-modal .gw-suggest li:hover,
     .gw-modal .gw-suggest li.active { background: #1c1f29; color: #e8e9ee; border-color: #292c36; }
+
+    /* The + palette's name field: a real input floated over the canvas-drawn
+       popover's name row. Position and visibility are driven by the wasm
+       renderer (syncPaletteNameField) from the menu state. */
+    #gw-palette-name {
+      position: fixed; display: none;
+      padding: 0 8px;
+      border-radius: 4px; border: 1px solid #292c36;
+      background: #0c0d11; color: #d8d9de;
+      font-family: inherit; font-size: 12px;
+      box-sizing: border-box;
+      outline: none;
+      z-index: 10;
+    }
+    #gw-palette-name:focus { border-color: #4a6fff; }
+    #gw-palette-name::placeholder { color: #8a8d97; }
   </style>
 </head>
 <body>
   <canvas id="canvas" tabindex="0"></canvas>
+  <input id="gw-palette-name" type="text" placeholder="name" spellcheck="false" autocomplete="off">
 
   <div id="gw-url-modal" class="gw-modal">
     <form id="gw-url-form" class="card" autocomplete="off">

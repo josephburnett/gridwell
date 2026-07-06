@@ -64,20 +64,30 @@ func TestPopoverAndTileRects(t *testing.T) {
 	if pop.W != 232 {
 		t.Errorf("PopoverRect width = %v, want 232", pop.W)
 	}
-	// Height = tile + 2*gap = 48+16 = 64.
-	if pop.H != 64 {
-		t.Errorf("PopoverRect height = %v, want 64", pop.H)
+	// Height = name field + tile + 3*gap = 26+48+24 = 98.
+	if pop.H != 98 {
+		t.Errorf("PopoverRect height = %v, want 98", pop.H)
 	}
 	// Anchor: bottom-right corner of popover aligns with PlusRadius right of plus center.
 	cx, cy := l.PlusCenter()
 	if pop.X+pop.W != cx+l.Cfg.PlusRadius {
 		t.Errorf("PopoverRect right edge: got %v, want %v", pop.X+pop.W, cx+l.Cfg.PlusRadius)
 	}
-	// Tile 0 starts at gap after popover.
+	// Name field: full-width row inset by one gap on every side.
+	nf := l.NameFieldRect()
+	if nf.X != pop.X+l.Cfg.GapPx || nf.Y != pop.Y+l.Cfg.GapPx ||
+		nf.W != pop.W-2*l.Cfg.GapPx || nf.H != l.Cfg.NameFieldH {
+		t.Errorf("NameFieldRect = %+v, want full-width row at popover top", nf)
+	}
+	// Tile 0 starts at gap after the name field row.
 	t0 := l.TileRect(0)
-	if t0.X != pop.X+l.Cfg.GapPx || t0.Y != pop.Y+l.Cfg.GapPx {
+	wantY := pop.Y + l.Cfg.GapPx + l.Cfg.NameFieldH + l.Cfg.GapPx
+	if t0.X != pop.X+l.Cfg.GapPx || t0.Y != wantY {
 		t.Errorf("TileRect(0) origin = (%v,%v), want (%v,%v)",
-			t0.X, t0.Y, pop.X+l.Cfg.GapPx, pop.Y+l.Cfg.GapPx)
+			t0.X, t0.Y, pop.X+l.Cfg.GapPx, wantY)
+	}
+	if nf.Y+nf.H > t0.Y {
+		t.Errorf("name field bottom %v overlaps tile row top %v", nf.Y+nf.H, t0.Y)
 	}
 	// Tiles are tile+gap apart.
 	t1 := l.TileRect(1)
@@ -160,15 +170,16 @@ func TestTrackingPaneSize(t *testing.T) {
 	}
 }
 
-// TestPaletteIsAlwaysSingleRow: the popover is always one row tall regardless
-// of tile count. Plugins are not in the palette (they are on the launcher), so
-// the two-row layout machinery is gone; this test documents and locks that
-// invariant.
+// TestPaletteIsAlwaysSingleRow: the swatches are always one row regardless
+// of tile count (the name field row above them is fixed-height and doesn't
+// vary with count either). Plugins are not in the palette (they are on the
+// launcher), so the two-row layout machinery is gone; this test documents and
+// locks that invariant.
 func TestPaletteIsAlwaysSingleRow(t *testing.T) {
 	l := makeLayout()
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
-	wantH := tile + 2*gap
+	wantH := l.Cfg.NameFieldH + tile + 3*gap
 	for _, n := range []int{1, 2, 4, 6, 8} {
 		l.NumTiles = n
 		if got := l.PopoverRect().H; got != wantH {

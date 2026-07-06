@@ -138,7 +138,9 @@ func (s *Store) createTile(
 
 // CreateWell creates a new well at (x,y) with footprint (w,h) inside the leaf
 // grid of req.Path. The child grid is created empty with no framing on the
-// well (view_x/y/zoom all zero).
+// well (view_x/y/zoom all zero). Label, when set, is stored as the well's
+// alt_text — the user-given name of the grid (the + palette's name field).
+// Wells have no content to derive an alt from, so this is alt's only writer.
 func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
 	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
@@ -155,10 +157,10 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 			}
 			res, err = tx.ExecContext(ctx, `
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
-					view_x, view_y, view_zoom, child_grid_id,
+					view_x, view_y, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
-				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
-				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, now, now)
+				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, req.Label, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert well: %w", err)
 			}

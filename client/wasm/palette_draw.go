@@ -3,7 +3,10 @@
 package main
 
 import (
+	"fmt"
 	"math"
+	"strings"
+	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -97,6 +100,70 @@ func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
 	a.cctx.Call("lineTo", cx, cy+8)
 	a.cctx.Call("stroke")
 	a.cctx.Set("lineWidth", 1.0)
+}
+
+// installPaletteNameField wires the palette's HTML name input once at boot.
+// Keystrokes must not leak to the canvas's window-level keydown handler;
+// Escape closes the palette (the input hides and clears via the draw sync).
+// The js.Func lives for the app's lifetime — installed once, never released.
+func (a *App) installPaletteNameField() {
+	a.paletteName = a.doc.Call("getElementById", "gw-palette-name")
+	if !a.paletteName.Truthy() {
+		return
+	}
+	a.paletteName.Call("addEventListener", "keydown", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) == 0 {
+			return nil
+		}
+		ev := args[0]
+		ev.Call("stopPropagation")
+		if ev.Get("key").String() == "Escape" {
+			ev.Call("preventDefault")
+			a.menu.Close()
+			a.canvas.Call("focus")
+			a.draw()
+		}
+		return nil
+	}))
+}
+
+// syncPaletteNameField makes the DOM input a pure view of the menu state:
+// while the palette is open on a visible pane the input sits exactly over the
+// popover's name row; otherwise it is hidden and its draft value cleared (each
+// open starts blank). Called every draw, the same pattern as
+// syncFileOverlayPosition — reading never mutates, so a no-op sync is safe.
+func (a *App) syncPaletteNameField(rects map[string]pane.Rect) {
+	in := a.paletteName
+	if !in.Truthy() {
+		return
+	}
+	st := in.Get("style")
+	if a.menu.IsOpen() {
+		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
+			if mr, ok := rects[mp.ID]; ok && len(a.paletteItems(mp)) > 0 {
+				nf := a.paletteLayoutFor(mp, mr).NameFieldRect()
+				st.Set("left", fmt.Sprintf("%.0fpx", nf.X))
+				st.Set("top", fmt.Sprintf("%.0fpx", nf.Y))
+				st.Set("width", fmt.Sprintf("%.0fpx", nf.W))
+				st.Set("height", fmt.Sprintf("%.0fpx", nf.H))
+				st.Set("display", "block")
+				return
+			}
+		}
+	}
+	if st.Get("display").String() != "none" {
+		st.Set("display", "none")
+		in.Set("value", "")
+	}
+}
+
+// paletteNameValue returns the trimmed draft in the palette's name field —
+// the label for the tile about to be created ("" = unnamed).
+func (a *App) paletteNameValue() string {
+	if !a.paletteName.Truthy() {
+		return ""
+	}
+	return strings.TrimSpace(a.paletteName.Get("value").String())
 }
 
 // paletteRect is the wasm-side adapter for palette.Layout.PopoverRect.

@@ -204,13 +204,16 @@ func TestCreateWell_InteriorVsExit(t *testing.T) {
 
 	interior, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: root,
-		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1},
+		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"},
 	})
 	if err != nil {
 		t.Fatalf("interior CreateTile: %v", err)
 	}
 	if interior.Tile.ChildGridId == "" || interior.Tile.ChildGridId == "0" {
 		t.Errorf("interior well child = %q, want a fresh local grid", interior.Tile.ChildGridId)
+	}
+	if interior.Tile.AltText != "recipes" {
+		t.Errorf("interior well label = %q, want recipes (the wire's AltText is the grid name)", interior.Tile.AltText)
 	}
 
 	exit, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
