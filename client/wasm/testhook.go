@@ -3,6 +3,8 @@
 package main
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 	"syscall/js"
 
@@ -38,6 +40,7 @@ func (a *App) installTestHook() {
 		"idle":          js.FuncOf(a.thIdle),
 		"origin":        js.FuncOf(a.thOrigin),
 		"panes":         js.FuncOf(a.thPanes),
+		"previewSigs":   js.FuncOf(a.thPreviewSigs),
 		"launcher":      js.FuncOf(a.thLauncher),
 		"palette":       js.FuncOf(a.thPalette),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
@@ -175,6 +178,65 @@ func (a *App) thOrigin(js.Value, []js.Value) any {
 
 // thPanes returns one descriptor per live pane: its screen rect, whether it is
 // focused, and the qualified grid id / anchor / path it currently frames.
+// thPreviewSigs returns, for the FOCUSED pane's leaf grid, a per-tile
+// signature of everything the preview renderer reads: the tile row's content
+// identity + framing fields, and — for a well whose child grid is cached —
+// the child grid's tile rows too (a well's preview IS its child grid drawn
+// small). Read-only over the same cache render reads, so the signature can't
+// disagree with pixels by construction. Two captures being equal means "the
+// preview is byte-identical"; the I7 spec asserts that across a sibling pane
+// while another pane descends/reframes/ascends.
+func (a *App) thPreviewSigs(js.Value, []js.Value) any {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return map[string]any{}
+	}
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	for id, t := range g.Tiles {
+		out[id] = tileSig(&t) + a.childSig(t.ChildGridID)
+	}
+	return out
+}
+
+// tileSig flattens one tile row's render-relevant fields.
+func tileSig(t *rpc.Tile) string {
+	return fmt.Sprintf("v%d k%s @%d,%d %dx%d view%d,%d,%g text%d,%d,%d,%d,%s blob%d prev%d url%q alt%q ref%v",
+		t.Version, t.Kind, t.X, t.Y, t.W, t.H,
+		t.ViewX, t.ViewY, t.ViewZoom,
+		t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode,
+		t.BlobID, t.PreviewBlobID, t.URLString, t.AltText, t.Reference)
+}
+
+// childSig digests a well's cached child grid (one level — what the preview
+// draws), sorted for stability. Empty when uncached or not a well.
+func (a *App) childSig(childGridID string) string {
+	if childGridID == "" {
+		return ""
+	}
+	g, ok := a.c.Grid(childGridID)
+	if !ok {
+		return "|child:uncached"
+	}
+	ids := make([]string, 0, len(g.Tiles))
+	for id := range g.Tiles {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	var b strings.Builder
+	for _, id := range ids {
+		t := g.Tiles[id]
+		b.WriteString("|")
+		b.WriteString(id)
+		b.WriteString(":")
+		b.WriteString(tileSig(&t))
+	}
+	return b.String()
+}
+
 func (a *App) thPanes(js.Value, []js.Value) any {
 	rects := a.layoutPanes()
 	out := make([]any, 0, len(rects))

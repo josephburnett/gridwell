@@ -1675,8 +1675,12 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 // parent anchor: a portal ascent's containing well lives under the FRAME's
 // anchor (another plugin's namespace), not the pane's current one.
 func (a *App) saveWellViewBeforeAscentFrom(p *pane.Pane, well *rpc.Tile, parentAnchor string, parentPath []string) {
-	newViewX := int64(math.Round(p.Cx)) - well.W/2
-	newViewY := int64(math.Round(p.Cy)) - well.H/2
+	// Quantize the ORIGIN, not the center: descend targets origin + size/2,
+	// and rounding that half-cell center drifted the stored window one cell
+	// per untouched round trip (zoomtrans.ViewOriginFromCenter has the
+	// arithmetic and its idempotence property test).
+	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, well.W)
+	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, well.H)
 	r := paneRectFor(a, p)
 	zw := zoomtrans.Well{X: well.X, Y: well.Y, W: well.W, H: well.H}
 	overtake := zoomtrans.OvertakeZoom(zw, r.W, r.H, cellPx)

@@ -309,3 +309,15 @@ func ZoomDist(z1, z2, cellPx, factor float64) float64 {
 	}
 	return math.Abs(math.Log(z2/z1)) * cellPx * factor
 }
+
+// ViewOriginFromCenter quantizes a live pane center back to a stored view
+// window ORIGIN (the tile's view_x/view_y): round the origin, not the center.
+// The descent target is origin + size/2 — a half-cell fraction for odd sizes —
+// so rounding the CENTER first (round(c) - size/2) rounds that .5 away from
+// zero and drifts the stored window one cell per untouched round trip
+// (view 1 → center 1.5 → round 2). Rounding the reconstructed origin makes
+// descend→ascend idempotent by construction: origin → origin + size/2 →
+// round(origin) = origin, for every origin and size.
+func ViewOriginFromCenter(center float64, size int64) int64 {
+	return int64(math.Round(center - float64(size)/2))
+}
