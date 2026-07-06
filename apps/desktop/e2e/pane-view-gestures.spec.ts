@@ -121,3 +121,33 @@ test('clicking an unfocused pane focuses without descending; the second click de
   aNow = (await gw.panes()).find((p) => p.id === a.id)!;
   expect(aNow.textFocus, 'second click descended').not.toBe('');
 });
+
+// Ascent-history hygiene (issue #26): the two stacks have DISJOINT owners —
+// pane.Up frames own portal crossings, the session stack owns in-namespace
+// well descents. A balanced excursion of BOTH kinds must return both depths
+// to zero: a portal descent that also pushed the session stack would leak an
+// orphan there, which a boot-descended pane could later mis-consume as a
+// well-ascent viewport.
+test('portal and well round trips leave both ascent stacks empty', async ({ gw }) => {
+  await gw.enterPlugin('localdb'); // portal descent (frame pushed)
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy) - 1;
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+
+  await gw.descendCell(cx, cy); // well descent (session stack pushed)
+  let cur = (await gw.panes()).find((p) => p.id === f.id)!;
+  expect(cur.frameDepth, 'one portal frame while inside the plugin').toBe(1);
+  expect(cur.ascentDepth, 'one well level saved').toBe(1);
+
+  await gw.middleClickCell(Math.round(cur.cx), Math.round(cur.cy) + 1); // well ascent
+  await gw.waitIdle();
+  await gw.middleClickCell(cx, cy + 2); // portal ascent back to the node grid
+  await gw.waitIdle();
+
+  cur = (await gw.panes()).find((p) => p.id === f.id)!;
+  expect(cur.anchor, 'back on the node grid').toMatch(/\/0$/);
+  expect(cur.frameDepth, 'no frame leaked').toBe(0);
+  expect(cur.ascentDepth, 'no session-stack entry leaked (the orphan bug)').toBe(0);
+});
