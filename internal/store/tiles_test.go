@@ -41,6 +41,45 @@ func TestCreateWellHappyPath(t *testing.T) {
 	}
 }
 
+func TestCreateWellLabelBecomesAltText(t *testing.T) {
+	// The + palette's name field: a user-provided label on an interior well
+	// create is stored as the tile's alt_text (the grid's name). Wells have
+	// no content to derive an alt from, so the label is the only writer.
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path:   rpc.Path{},
+		GridID: root, X: 1, Y: 2, W: 1, H: 1,
+		Label: "recipes",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if w.AltText != "recipes" {
+		t.Errorf("AltText = %q, want %q", w.AltText, "recipes")
+	}
+	// The label is a durable server fact: read it back off the grid.
+	g, err := s.GetGrid(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Tiles) != 1 || g.Tiles[0].AltText != "recipes" {
+		t.Errorf("grid readback tiles = %+v, want one well named recipes", g.Tiles)
+	}
+
+	// No label → no alt, exactly as before.
+	plain, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatalf("create unlabeled: %v", err)
+	}
+	if plain.AltText != "" {
+		t.Errorf("unlabeled AltText = %q, want empty", plain.AltText)
+	}
+}
+
 func TestCreateWellOverlapRefused(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
