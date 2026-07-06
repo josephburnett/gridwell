@@ -147,28 +147,6 @@ type App struct {
 	// sub-cell screen precision instead of at its stored cell position.
 	ghost *ghost
 
-	// hiddenTileID, when non-empty, suppresses rendering of the cached
-	// tile row with this primary-key id in the named pane. Set on drag
-	// start so the dragged source doesn't paint underneath its own
-	// ghost. Matches the dragged ROW, not its ObjectID — a tile and
-	// any clones of it share an ObjectID, and the old by-ObjectID
-	// match made every clone vanish whenever its sibling was picked
-	// up. See dragdrop.HiddenMatch for the predicate + test.
-	hiddenTileID string
-	hiddenPaneID string
-
-	// previewPaneID is the pane currently being painted; set by
-	// drawPane before per-node calls and cleared after. Lets the
-	// child-preview renderer scope the hidden ObjectID to the right
-	// pane (a node only hides in its source pane).
-	previewPaneID string
-
-	// previewPaneRect mirrors previewPaneID — the screen rectangle of
-	// the pane being painted. drawNodeWithPreview reads it to compute
-	// OvertakeZoom (which depends on pane dimensions) for the
-	// preview-cell-size formula.
-	previewPaneRect pane.Rect
-
 	// animation is the current ghost animation, if any (snap-to-target on
 	// drop or snap-back-to-origin on failure).
 	animation *anim.Animation
@@ -467,6 +445,16 @@ type ghost struct {
 	screenY           float64
 	displayedCellSize float64
 	targetCellSize    float64
+
+	// hiddenTileID/hiddenPaneID suppress the SOURCE tile's normal render
+	// while this ghost represents it in a move drag (clones don't hide —
+	// the source stays). They live ON the ghost because their lifetime IS
+	// the ghost's: the tile must stay hidden through the snap-back
+	// animation after a.dragging is already nil, and reappear exactly when
+	// the ghost dies — one owner, correct lifecycle by construction
+	// (formerly two App-level scratch fields cleared by hand).
+	hiddenTileID string
+	hiddenPaneID string
 
 	// fragmentation animates the "going into a black hole" effect.
 	// 0 = intact, 1 = fully fragmented (shards drifted outward,
@@ -872,9 +860,23 @@ func (a *App) completeTransition() {
 // the source of truth again.
 func (a *App) animationDone() {
 	a.animation = nil
-	a.ghost = nil
-	a.hiddenTileID = ""
-	a.hiddenPaneID = ""
+	a.ghost = nil // the render hides live on the ghost and die with it
+}
+
+// ghostHiddenTile / ghostHiddenPane read the render hide off the ghost — ""
+// when no ghost is in flight. One owner (the ghost), one lifecycle.
+func (a *App) ghostHiddenTile() string {
+	if a.ghost == nil {
+		return ""
+	}
+	return a.ghost.hiddenTileID
+}
+
+func (a *App) ghostHiddenPane() string {
+	if a.ghost == nil {
+		return ""
+	}
+	return a.ghost.hiddenPaneID
 }
 
 // pushPaneState saves the parent viewport on the stack for paneID. Called at

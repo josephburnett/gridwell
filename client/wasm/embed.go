@@ -143,7 +143,7 @@ func (a *App) drawEmbedAt(x, y, w, h float64, tile *rpc.Tile, alt string, dashed
 	}
 	parentCellSize := side / cells
 	r := pane.Rect{X: sx, Y: sy, W: side, H: side}
-	a.drawNodeWithPreview(tile, sx, sy, side, side, parentCellSize, r, false /*selected*/, false /*outside*/, dashed)
+	a.drawNodeWithPreview(tile, sx, sy, side, side, parentCellSize, r, false /*selected*/, false /*outside*/, dashed, "")
 }
 
 // drawEmbedLabel paints a short label centered in (x, y, w, h). Used by
