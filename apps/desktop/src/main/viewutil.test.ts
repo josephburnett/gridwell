@@ -19,6 +19,7 @@ import {
   renderProcessGoneMessage,
   ERR_ABORTED,
   rendererLogLine,
+  partitionFor,
 } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
@@ -228,4 +229,12 @@ test('rendererLogLine forwards warnings and errors only, with a level prefix', (
   assert.equal(rendererLogLine(1, 'info chatter'), null);
   assert.equal(rendererLogLine(2, 'gridwell: [conflict:UpdateText] reloaded'), '[renderer:warning] gridwell: [conflict:UpdateText] reloaded');
   assert.equal(rendererLogLine(3, 'gridwell: [rpc:MoveTile] MoveTile failed: x'), '[renderer:error] gridwell: [rpc:MoveTile] MoveTile failed: x');
+});
+
+test('partitionFor flattens a namespace chain to a distinct, stable partition', () => {
+  assert.equal(partitionFor('abc123'), 'persist:plugin-abc123');
+  // A remote plugin through a mount keys per REMOTE plugin, not per mount.
+  assert.equal(partitionFor('ssh1/rp1'), 'persist:plugin-ssh1-rp1');
+  assert.notEqual(partitionFor('ssh1/rp1'), partitionFor('ssh1/rp2'));
+  assert.equal(partitionFor(''), 'persist:gridwell');
 });

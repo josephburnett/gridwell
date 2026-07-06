@@ -4,7 +4,7 @@ package main
 
 import (
 	"encoding/base64"
-	"strings"
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -67,13 +67,15 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	g.Call("placeWebview", args)
 }
 
-// pluginUUIDOf returns the owning plugin's uuid for a qualified tile id
-// ("<uuid>/<local>"), or "" if the id is bare.
+// pluginUUIDOf returns the SESSION KEY for a qualified tile id: the id's
+// namespace chain (everything before the last segment — rpc.NamespaceOf).
+// The plugin is the session boundary even through a node mount, so a local
+// tile "uuid/7" keys to "uuid" and a remote tile "ssh1/rp1/7" keys to
+// "ssh1/rp1" — per REMOTE plugin, not per mount. The Electron side derives
+// the partition name from it and addresses GET/PUT /session/<chain>, which
+// routes one segment per hop.
 func pluginUUIDOf(qualifiedTileID string) string {
-	if i := strings.IndexByte(qualifiedTileID, '/'); i > 0 {
-		return qualifiedTileID[:i]
-	}
-	return ""
+	return rpc.NamespaceOf(qualifiedTileID)
 }
 
 // bridgeSetBounds repositions/resizes the view for paneID.

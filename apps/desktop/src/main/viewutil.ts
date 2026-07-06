@@ -7,11 +7,15 @@ import type { Bounds } from './ipc';
 // The `persist:` prefix makes it durable on disk across app restarts.
 export const SESSION_PARTITION = 'persist:gridwell';
 
-// partitionFor returns the durable partition for a plugin's session: each
-// plugin uuid gets its own (persist:plugin-<uuid>). The plugin is the session
-// boundary. An empty uuid falls back to the shared partition.
+// partitionFor returns the durable partition for a plugin's session key:
+// each key gets its own (persist:plugin-<key>). The plugin is the session
+// boundary; through a node mount the key is the namespace CHAIN
+// ("ssh1/rp1"), so each REMOTE plugin gets its own partition too. Slashes
+// are flattened to dashes — Chromium partition names are plain strings, and
+// the flattening cannot collide because uuids contain no dashes. An empty
+// key falls back to the shared partition.
 export function partitionFor(pluginUuid: string): string {
-  return pluginUuid ? `persist:plugin-${pluginUuid}` : SESSION_PARTITION;
+  return pluginUuid ? `persist:plugin-${pluginUuid.replaceAll('/', '-')}` : SESSION_PARTITION;
 }
 
 // sanitizeUserAgent strips the two tokens that mark Chromium's default UA as a
