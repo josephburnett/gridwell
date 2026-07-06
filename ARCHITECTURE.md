@@ -57,8 +57,17 @@ explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
 **One contract, every hop.** `api/gridwell/v1/data.proto` defines a single
 gRPC service, `Gridwell`, implemented identically by the local server, every
 plugin, and a remote node reached over SSH. "Remote" adds no vocabulary — the
-`ssh`/`proxy` plugin forwards the same service. Every byte (live PTY, the
-Chromium session blob) crosses this one interface.
+`ssh` plugin is a transparent `proxy` of a remote node's **export**
+(`nodeexport.go`: the same service over raw gRPC, routed by the qualified ids
+each request carries). Ids **chain** one segment per hop
+(`<ssh>/<plugin>/<id>`), so any depth of mounting routes generically. Every
+byte (live PTY, the Chromium session blob) crosses this one interface.
+
+**Every node exposes a node grid.** A node's plugin list is a real, read-only
+grid — `<node_id>/0`, served by `internal/server/nodegrid.go` — one dashed
+link tile per plugin. The local client anchors panes there on boot (it IS the
+launcher; there is no client-side launcher), and descending into an ssh mount
+lands on the remote's node grid: one concept, served the same way everywhere.
 
 ---
 
@@ -84,10 +93,19 @@ persisted record shapes. Every field on `Grid`/`Tile` maps 1:1 to a column in
   preview frame, the descent target, and the ascent return value."* One value,
   three readings. This is face #3 of the guiding rule, in the schema.
 - `Tile.reference` (bool, **server-derived, never stored**) — the single
-  authoritative "this well is a link, not owned content" signal. Set by the
-  server in `qualifyTiles`; render draws a dashed border from it; delete/clone
-  key on it. **This is the cure pattern in miniature: one fact, derived in one
-  place, read everywhere.** Emulate it.
+  authoritative "this well is a link, not owned content" signal. Derived once
+  per fact-owner: `qualifyTiles` derives it for a leaf plugin's tiles; for a
+  TRANSIT plugin (a node mount) the remote node already derived it, and
+  `qualifyTilesTransit` passes the wire bit through verbatim (a remote
+  plugin's interior well stays solid). Render draws a dashed border from it;
+  delete/clone key on it; descent PORTALS through it (anchor swap). **This is
+  the cure pattern in miniature: one fact, derived in one place, read
+  everywhere.** Emulate it.
+- `Grid.writable` (bool, wire-only) — the owning plugin's per-grid mutation
+  capability, stamped by the serving node (from Info for leaves, passed
+  through for transit). The client's "+ palette shows here" gate reads the
+  grid, never a local plugin-list lookup, because one ssh mount fronts many
+  remote plugins with differing capabilities.
 
 ---
 
@@ -96,12 +114,28 @@ persisted record shapes. Every field on `Grid`/`Tile` maps 1:1 to a column in
 **Responsibility.** Hold **no Gridwell state**; route every call to the owning
 plugin and translate ids at the boundary.
 
-**How routing works** (`connectHandler`):
-1. `route(id)` splits a qualified `<plugin-uuid>/<local-id>`.
+**How routing works** (`connectHandler`, and identically the gRPC node export):
+1. `route(id)` peels the FIRST segment of a qualified id; the remainder passes
+   through verbatim — so `<ssh>/<plugin>/<id>` chains resolve one hop at a
+   time, at any depth. The node's own uuid routes to the in-process node-grid
+   provider (`routeClient`).
 2. `localPathFor` strips the prefix going *in*, keeping only the trailing run
    of segments owned by the target plugin.
-3. The plugin answers in its own local id space.
-4. `qualifyTiles` / `qualifyGrid` / `qualifyEvent` re-qualify ids going *out*.
+3. The plugin answers in its own id space — bare ints for a leaf, chains
+   (the remote's qualified view) for a transit plugin.
+4. `qualifyTiles` / `qualifyGrid` / `qualifyEvent` re-qualify ids going *out*;
+   `qualifyTilesFor` picks the leaf rule (qualify + derive `reference`) or the
+   transit rule (prepend one segment everywhere, trust the wire bits) from
+   `Registry.Transit` — a config-time fact about the local transport binary,
+   deliberately not an Info capability so it holds while the remote is down.
+
+**Two wire surfaces, one implementation.** The Connect handler serves
+browsers; `NodeHandler` wraps the same mux in h2c and routes raw gRPC to the
+**node export**, whose unary methods delegate straight to the connectHandler
+(`statusErr` maps Connect codes back to gRPC) and whose plugin-grade streams
+(`OpenShell`, `GetSession`, `PutSession`) route by the id in their first
+message. `Subscribe` shares the one fan-in body (`subscribe`). A remote
+mounter and a browser literally exercise the same routing code.
 
 **The one piece of real logic — and it's exemplary.** `qualifyTiles` sets
 `Tile.reference = true` when a `child_grid_id` comes back already-qualified
@@ -115,9 +149,9 @@ what a link is.** Copy this shape.
 - `Subscribe` fans in every localdb plugin's event stream into one client stream.
 
 **Known fragility.**
-- `ListPlugins` calls `Info` on every plugin on every invocation. Each call is
-  now timeout-bounded (`pluginInfoTimeout`, degrading to a config-only entry),
-  but there is still no cache.
+- `Info` handshakes are timeout-bounded (`pluginInfoTimeout`, degrading to a
+  config-only entry) and cached per-uuid after first success (`infoCache`,
+  invalidated on `SetRootView` because root_view_* ride the handshake).
 - ~~The server dispatched two capabilities on the kind *string* instead of the
   `Info` handshake~~ — **fixed** (`413df43`): `Subscribe` fan-in gates on
   `Info.watch` and `buildPluginInfo` reads `Info.writable`, so a remote
@@ -148,7 +182,11 @@ Each plugin owns exactly one SQLite DB and one id space.
   violating the guiding rule and breaking saved deep links. This is deliberate
   and tested for the vanished-dir case (`TestGetGridUnreadablePathIsEmptyNotError`)
   but conflates "gone" with "can't tell"; the proc policy is the correct one.
-- **`ssh`** is a transparent `proxy` forwarding the whole service to a remote node.
+- **`ssh`** is a transparent `proxy` of a whole remote node: it dials the
+  remote's export through the tunnel (`internal/plugin/sshdial`, seam-tested
+  against a real in-process sshd) and forwards the full service verbatim. Its
+  Info is the remote node's (root = the remote node grid), and the host marks
+  it TRANSIT so response ids gain exactly one segment per hop.
 
 ### 4.1 The best-enforced invariant in the codebase: framing ≠ content
 
@@ -382,16 +420,28 @@ comments corrected). What remains is *naming* drift:
 
 ## 10. Map of the key journeys (for orientation)
 
+- **Boot.** `ListPlugins` returns the node identity; panes anchor at the node
+  grid (`<node>/0`) — the landing page is a fetched grid like any other, and
+  "/" is its URL.
 - **Descend into a well.** Pane reads the tile's `view_*`, pushes the current
-  frame onto `paneStateStack`/`pane.Up`, re-anchors to the child grid, restores
-  the stored viewport. *(All five framing copies must move together.)*
+  state onto `paneStateStack`, appends to `Path`, restores the stored viewport.
+  *(All five framing copies must move together.)* A **link tile**
+  (`Tile.reference` — a node-grid plugin tile, a mounted well, a cross-plugin
+  clone) descends as a **PORTAL** instead: push a `pane.Up` frame, swap the
+  Anchor to the link's target — so every path id and the URL stay within one
+  anchor's namespace at every depth.
 - **Ascend.** `saveWellViewBeforeAscent` writes the intrinsic viewport back via
   `SetWellView` (`emitTileChanged` → **no version bump**); the parent frame is
-  popped and restored. The round-trip is idempotent **iff** the five copies
-  agreed.
+  popped and restored. A portal ascent does the same through the containing
+  link tile (`portalWellForFrame`; on a node-grid tile the provider maps the
+  write onto the plugin's own `SetRootView`). The round-trip is idempotent
+  **iff** the copies agreed.
 - **Drop a tile.** Gesture → `CreateTile`/`MoveTile`/`CloneTile` with the descent
   `Path` → server routes → store mutates → `Subscribe` event → `cache.Apply`
-  upserts → redraw.
+  upserts → redraw. A right-drag across a plugin boundary becomes a LINK
+  (`cloneAcrossPlugins`: exit well sharing the source grid) or a byte copy
+  (leaves); a left-drag move never crosses an id namespace (rejected at
+  `DecideDrop`).
 - **Pan / zoom.** Framing write → `SetTile` (well/text branch) → **no version
   bump** → event fans out → other panes' previews of the same tile update.
 - **Open a live URL tile.** Canvas places a rect; IPC asks the native layer for a

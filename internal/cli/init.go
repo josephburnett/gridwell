@@ -32,7 +32,7 @@ func (m kvFlag) Set(s string) error {
 // marker + id + kind metadata that the server strictly verifies on every
 // start), then appends the matching entry to <home>/server.yaml. The DB path is
 // derived from the id (<home>/db/<id>/store.db) — it is never specified by the
-// user. Name is the launcher label; id and kind are the durable identity.
+// user. Name is the plugin's node-grid label; id and kind are the durable identity.
 //
 //	gridwell init --kind <kind> --name <name> [--config k=v ...]
 func RunInit(args []string) int {
@@ -60,7 +60,7 @@ func RunInit(args []string) int {
 	// die at first spawn as a cryptic subprocess exit; the required-key rule
 	// has one owner (sshdial.FromPluginConfig) — init just asks it early.
 	// (fs is deliberately not gated: no config.root is the valid Rootless
-	// state, visible on the launcher, fixable later.)
+	// state, visible on the node grid, fixable later.)
 	if *kind == "ssh" {
 		if _, err := sshdial.FromPluginConfig(conf); err != nil {
 			fmt.Fprintf(os.Stderr, "init: %v\n", err)

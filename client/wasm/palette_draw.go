@@ -28,9 +28,9 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 }
 
 // plusLayout builds the minimal Layout needed to place the + button for pane
-// p — just the rect plus the launcher-centering flag. The pane's zoom does
+// p — just the pane rect. The pane's zoom does
 // not influence the + button.
-// plusLayout builds the layout for a pane's lower-right + button. The launcher
+// plusLayout builds the layout for a pane's lower-right + button. The node grid
 // has no + button at all (it shows its plugin tiles directly), so the button
 // is always in the same corner home — no special-casing.
 func plusLayout(_ *pane.Pane, r pane.Rect) palette.Layout {
@@ -172,7 +172,7 @@ func (a *App) paletteTileRect(p *pane.Pane, r pane.Rect, i int) (x, y, w, h floa
 
 // drawPalette paints the creation popover: a background container and
 // a horizontal row of preview tiles, one per palette item (primitives
-// only; plugins are on the launcher, not the palette).
+// only; plugins are link tiles on the node grid, not palette swatches).
 func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 	mx, my, mw, mh := a.paletteRect(p, r)
 	a.cctx.Set("fillStyle", colorMenuBg)
@@ -192,7 +192,7 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 // reads identical to what the user drops — same color grammar. A
 // kind-specific glyph is overlaid so the swatch reads "what is this?" before
 // the tile has content. Only primitive items appear in the palette; plugin
-// items are exclusive to the launcher.
+// tiles live on the node grid, not in the palette.
 func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
 	n := paletteItemGhostNode(item)
 	outside := tileOutside(&n, false)
