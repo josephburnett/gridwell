@@ -21,31 +21,21 @@ import { tileAt } from './oracle';
 //   3. Typed content persists to the server through the full round trip.
 //
 // Geometry notes (learned the hard way):
-//   - splitFocusedPaneVertical creates the NEW pane at the node grid (the
-//     landing page, anchor "<node>/0"); it must enterPlugin itself before it
-//     shows the plugin grid.
+//   - splitFocusedPaneVertical clones the focused pane's grid view (issue
+//     #27): both panes show the same grid immediately.
 //   - A vertical split halves pane WIDTH, so tiles the spec descends into are
 //     offset VERTICALLY (cy±1) from the viewport center — a cx±1 offset can land
 //     outside the half-width pane and the click hits the sibling pane instead.
 //   - focusPane clicks the pane-center pixel (cell (0,0) area); the offset cells
 //     keep the center clear so a focus click never descends.
 
-// splitWithBothPanesOnGrid splits the focused (grid) pane, then enters the same
-// plugin in the new landing-page pane, returning [left, right] pane infos with
-// both panes on the plugin's root grid.
+// splitWithBothPanesOnGrid splits the focused (grid) pane; the new pane is a
+// clone of the same grid view (issue #27), so both panes are on the plugin's
+// root grid immediately. Returns [left, right] pane infos.
 async function splitWithBothPanesOnGrid(gw: any): Promise<[any, any]> {
-  const orig = await gw.focused();
   await gw.splitFocusedPaneVertical();
-  const panes = await gw.panes();
-  expect(panes.length, 'two panes after split').toBe(2);
-  const launcherPane = panes.find((p: any) => p.id !== orig.id);
-  expect(launcherPane, 'split creates a second pane (at the node grid)').toBeTruthy();
-  expect(launcherPane.anchor, 'the new pane ascends to the node grid').toMatch(/\/0$/);
-  // Focus the new pane with a CORNER click: the node grid's plugin tiles are
-  // centered, so a focusPane() center click would descend instead of focusing.
-  await gw.clickScreen(launcherPane.x + 20, launcherPane.y + 20);
-  await gw.enterPlugin('localdb');
   const after = await gw.panes();
+  expect(after.length, 'two panes after split').toBe(2);
   const sorted = after.slice().sort((a: any, b: any) => a.x - b.x);
   expect(sorted[0].gridID, 'both panes on the same grid').toBe(sorted[1].gridID);
   return [sorted[0], sorted[1]];

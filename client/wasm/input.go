@@ -349,12 +349,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// Frozen pane: start a pan drag to navigate cover-mode overflow.
 			a.urlPanDragging = true
 			a.dragging = &dragState{
-				originPaneID: p.ID,
-				tileID:       "",
-				startScreenX: sx,
-				startScreenY: sy,
-				curScreenX:   sx,
-				curScreenY:   sy,
+				originPaneID:  p.ID,
+				originFocused: prevFocus == p.ID,
+				tileID:        "",
+				startScreenX:  sx,
+				startScreenY:  sy,
+				curScreenX:    sx,
+				curScreenY:    sy,
 			}
 			a.updateURLCursor(p, r)
 			return nil
@@ -390,12 +391,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// A drag still pans (armed below); a bare click just places.
 			a.placeMarkdownCaret(p, r, sx, sy)
 			a.dragging = &dragState{
-				originPaneID: p.ID,
-				tileID:       "",
-				startScreenX: sx,
-				startScreenY: sy,
-				curScreenX:   sx,
-				curScreenY:   sy,
+				originPaneID:  p.ID,
+				originFocused: prevFocus == p.ID,
+				tileID:        "",
+				startScreenX:  sx,
+				startScreenY:  sy,
+				curScreenX:    sx,
+				curScreenY:    sy,
 			}
 		}
 		return nil
@@ -433,12 +435,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	parentCell := cellPx * p.Zoom
 	ps := paneToDragdrop(p, r)
 	a.dragging = &dragState{
-		originPaneID: p.ID,
-		tileID:       "",
-		startScreenX: sx,
-		startScreenY: sy,
-		curScreenX:   sx,
-		curScreenY:   sy,
+		originPaneID:  p.ID,
+		originFocused: prevFocus == p.ID,
+		tileID:        "",
+		startScreenX:  sx,
+		startScreenY:  sy,
+		curScreenX:    sx,
+		curScreenY:    sy,
 		// Default source = the focused pane's leaf grid; overridden
 		// below if we land on a child preview tile.
 		srcGridID:   a.gridIDForPane(p),
@@ -734,11 +737,12 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// same DropInput for the ghost preview, so preview and commit cannot
 	// diverge — that divergence was the trashcan-delete regression.
 	in := dragdrop.DropInput{
-		Started:    d.started,
-		IsTemplate: d.isTemplate,
-		Clone:      d.clone, // always false here — clone commits via the right path above
-		TileID:     d.tileID,
-		OverDelete: a.overDeleteButton(d, sx, sy),
+		Started:       d.started,
+		OriginFocused: d.originFocused,
+		IsTemplate:    d.isTemplate,
+		Clone:         d.clone, // always false here — clone commits via the right path above
+		TileID:        d.tileID,
+		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
 	docTarget, overDoc := a.docDropTargetAt(sx, sy)
 	in.OverDoc = overDoc
@@ -755,8 +759,13 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	}
 
 	switch dragdrop.DecideDrop(in) {
+	case dragdrop.DropFocusOnly:
+		// The click's only job was moving focus (done at mousedown).
+		a.draw()
+		return nil
+
 	case dragdrop.DropNavigate:
-		// Bare click (no movement): navigation.
+		// Bare click (no movement) on an already-focused pane: navigation.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {
 			a.draw()
@@ -1821,6 +1830,7 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 	tx, ty, tw, _ := a.paletteTileRect(p, r, idx)
 	a.dragging = &dragState{
 		originPaneID:   p.ID,
+		originFocused:  true, // the palette only opens on the focused pane
 		isTemplate:     true,
 		item:           item,
 		startScreenX:   sx,

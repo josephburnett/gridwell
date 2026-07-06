@@ -502,14 +502,20 @@ type ghost struct {
 // original position if the drop is rejected.
 type dragState struct {
 	originPaneID string
-	tileID       string
-	cellOffsetX  float64
-	cellOffsetY  float64
-	startScreenX float64
-	startScreenY float64
-	curScreenX   float64
-	curScreenY   float64
-	started      bool
+	// originFocused records whether the origin pane was ALREADY focused when
+	// the press landed. A bare click on an unfocused pane is focus-only: it
+	// must not also navigate or select — the same rule the + button and the
+	// corner circle follow (act only when prevFocus == pane). Without this, a
+	// click meant to focus a pane descends if it happens to hit a tile.
+	originFocused bool
+	tileID        string
+	cellOffsetX   float64
+	cellOffsetY   float64
+	startScreenX  float64
+	startScreenY  float64
+	curScreenX    float64
+	curScreenY    float64
+	started       bool
 	// clone marks a right-button clone drag (armed by armRightClone). Such
 	// a drag commits only through the right-button release path; the
 	// left-button move-commit must refuse it so a stray non-right release

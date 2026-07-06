@@ -38,11 +38,20 @@ test('the landing page is the node grid: a real grid of plugin link tiles', asyn
   }
 });
 
-test('right-drag links a well across plugins; deleting the link never touches the source', async ({ gw }) => {
-  // Pane A: enter "e2e", create a well OFF-center (cy-1) so later corner/center
-  // clicks never land on it.
+test('right-drag links a well across plugins; deleting the link never touches the source', async ({ gw, window }) => {
+  // Split at boot: both panes clone the node grid; focus lands on the NEW
+  // pane. Focus panes with CORNER clicks throughout: pane centers hold tiles,
+  // and a center click on a focused pane would descend.
+  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length >= 2, null, { timeout: 15_000 });
+  await gw.splitFocusedPaneVertical();
+  const bId = (await gw.focused()).id;
+  const a0 = (await gw.panes()).find((p) => p.id !== bId)!;
+
+  // Pane A: enter "e2e", create a well OFF-center (cy-1) so later clicks
+  // never land on it.
+  await gw.clickScreen(a0.x + 20, a0.y + 20);
   await gw.enterPlugin('e2e');
-  const a = await gw.focused();
+  const a = (await gw.panes()).find((p) => p.id === a0.id)!;
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
   await gw.openPalette();
@@ -50,22 +59,16 @@ test('right-drag links a well across plugins; deleting the link never touches th
   const src = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(src, 'source well created').toBeTruthy();
 
-  // Pane B: split (the new pane ascends to the node grid), enter "second".
-  // Focus panes with CORNER clicks throughout: pane centers hold tiles (the
-  // node grid's plugin tiles are centered; the well sits near pane A's
-  // center), and a center click would descend instead of focusing.
-  await gw.splitFocusedPaneVertical();
-  const panes = await gw.panes();
-  const b = panes.find((p) => p.id !== a.id)!;
+  // Pane B: enter "second".
+  const b = (await gw.panes()).find((p) => p.id === bId)!;
   await gw.clickScreen(b.x + 20, b.y + 20);
   await gw.enterPlugin('second');
-  const bNow = (await gw.panes()).find((p) => p.id === b.id)!;
+  const bNow = (await gw.panes()).find((p) => p.id === bId)!;
   const tx = Math.round(bNow.cx);
   const ty = Math.round(bNow.cy) - 1;
 
   // The link gesture: right-drag the well from pane A into pane B.
-  const aNow = (await gw.panes()).find((p) => p.id === a.id)!;
-  await gw.clickScreen(aNow.x + 20, aNow.y + 20);
+  await gw.clickScreen(a.x + 20, a.y + 20);
   await gw.cloneDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
 
   const link = tileAt(await gw.getGrid(bNow.gridID), 'well', tx, ty)!;
@@ -84,18 +87,21 @@ test('right-drag links a well across plugins; deleting the link never touches th
   expect(srcAfter.childGridId).toBe(src.childGridId);
 });
 
-test('right-drag a plugin tile off the landing page mounts it as a link', async ({ gw }) => {
-  // Pane A enters "e2e"; the split pane B lands back on the node grid.
-  await gw.enterPlugin('e2e');
-  const a = await gw.focused();
+test('right-drag a plugin tile off the landing page mounts it as a link', async ({ gw, window }) => {
+  // Split at boot (both panes clone the node grid; the new pane B keeps it),
+  // then pane A enters "e2e".
+  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length >= 2, null, { timeout: 15_000 });
   await gw.splitFocusedPaneVertical();
-  const b = (await gw.panes()).find((p) => p.id !== a.id)!;
+  const bId = (await gw.focused()).id;
+  const a0 = (await gw.panes()).find((p) => p.id !== bId)!;
+  await gw.clickScreen(a0.x + 20, a0.y + 20);
+  await gw.enterPlugin('e2e');
+  const a = (await gw.panes()).find((p) => p.id === a0.id)!;
+  const b = (await gw.panes()).find((p) => p.id === bId)!;
 
   // Locate the "second" plugin tile on pane B's node grid (cell coords from
-  // the oracle — the node grid is a real grid). Focus pane B with a corner
-  // click; its centered plugin tiles would swallow a center click as descent.
-  await gw.clickScreen(b.x + 20, b.y + 20);
-  const bNow = (await gw.panes()).find((p) => p.id === b.id)!;
+  // the oracle — the node grid is a real grid).
+  const bNow = b;
   const ng = await gw.getGrid(bNow.gridID);
   const pluginTile = (ng.tiles ?? []).find((t: Tile) => t.altText === 'second')!;
   expect(pluginTile, 'plugin tile on the node grid').toBeTruthy();
