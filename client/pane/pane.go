@@ -56,7 +56,7 @@ type Pane struct {
 	ID string
 	// Anchor is the qualified grid id of the plugin root this pane is currently
 	// inside; Path's well ids are relative to it. Anchor == "" means the pane is
-	// at the launcher start screen (no grid, no descent).
+	// still boot-blank (bootstrap sets it to the node grid).
 	Anchor string `json:"anchor,omitempty"`
 	Path   []string
 	Cx     float64

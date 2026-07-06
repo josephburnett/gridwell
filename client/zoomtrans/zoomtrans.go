@@ -277,9 +277,9 @@ func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx fl
 }
 
 // PortalWell builds the synthetic "portal" well that animates a plugin jump:
-// the launcher tile's (or + menu footprint's) float cell rect rounded to
+// a portal link tile's float cell rect rounded to
 // integer cells, ID "portal", with W/H at least 1. Shared by the descent into
-// a plugin (zoom in) and the portal ascent back to the launcher (zoom out) so
+// a link (zoom in) and the portal ascent back onto its tile (zoom out) so
 // the two motions are exact inverses of one another.
 func PortalWell(x, y, w, h float64) Well {
 	return Well{

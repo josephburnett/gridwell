@@ -32,7 +32,8 @@ import (
 // State is the parsed/about-to-be-encoded URL state.
 type State struct {
 	// Anchor is the qualified grid id of the plugin root the pane currently
-	// sits inside ("<uuid>/<id>"). Empty → the launcher start screen. TileIDs
+	// sits inside ("<uuid>/<id>", chains for remote grids). Empty → the node
+	// grid, the landing page ("/" is home). TileIDs
 	// are the well descents within that plugin, relative to Anchor.
 	Anchor string
 

@@ -9,7 +9,7 @@ package pane
 //	Focused / FocusedFaded — any grid the user is navigating, at any depth
 //	  and in any plugin (every grid is blue). Saturated when this pane has
 //	  the keyboard / cursor focus, faded otherwise.
-//	Root — the launcher home page (gridless): the brown plugin/home identity.
+//	Root — the node grid (the landing page): the brown home identity.
 //	Text / TextFaded — descent into a markdown text tile.
 //	URL / URLFaded — descent into a URL tile, frozen preview.
 //	URLLive — descent into a URL tile with a live stream open.
@@ -56,8 +56,8 @@ type BorderInput struct {
 	// read-only host text tile so it echoes the plugin well that led here.
 	// (The grid view itself is still blue — every grid is a grid.)
 	InSourceGrid bool
-	// IsLauncher is true when the pane is at the gridless launcher home
-	// (no anchor). The only place the brown Root identity shows.
+	// IsLauncher is true when the pane sits at the node grid (the landing
+	// page). The only place the brown Root identity shows.
 	IsLauncher bool
 }
 
@@ -99,7 +99,7 @@ func BorderColor(s BorderInput, c BorderColors) string {
 		}
 		return focused(s, c.Focused, c.FocusedFaded)
 	}
-	// Not descended into a content tile: the launcher home is brown, every
+	// Not descended into a content tile: the node-grid home is brown, every
 	// grid (any depth, any plugin — including source-backed fs/proc grids)
 	// is blue.
 	if s.IsLauncher {

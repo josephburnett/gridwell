@@ -210,18 +210,18 @@ right-click context-menu regression is the cautionary tale: the canvas-only
 harness never touched a live view, so a whole interaction layer had no coverage.
 
 **Invariants that still lack a full test home — give them one when you touch
-them** (`ARCHITECTURE.md §11`):
-- **Preview round-trip** (I7): the viewport round trip is locked
+them** (`ARCHITECTURE.md §11`; each is a tracked GitHub issue):
+- **Preview round-trip** (I7, issue #19): the viewport round trip is locked
   (`framing-roundtrip.spec.ts`), but "the well *preview* and a sibling pane are
   byte-identical to before" is still unobservable — the e2e `testhook` does not
   expose a preview signature; extend it.
-- **SSE during animation / optimistic echo** (I11): the code separation is
-  verified by inspection only. No test injects an event mid-transition, and the
-  optimistic-edit echo has no version interlock or test. A new write into the
-  SSE path would regress this silently.
-- **Source-sweep stability** (I12): a transiently unreadable directory must not
-  destroy fs tile rows (positions + ids). Today it does — see
-  `ARCHITECTURE.md §4`; proc has the correct Probe-before-sweep policy.
+- **SSE during animation / optimistic echo** (I11, issue #5): the code
+  separation is verified by inspection only. No test injects an event
+  mid-transition, and the optimistic-edit echo has no version interlock or
+  test. A new write into the SSE path would regress this silently.
+- **Source-sweep stability** (I12, issue #62): a transiently unreadable
+  directory must not destroy fs tile rows (positions + ids). Today it does —
+  see `ARCHITECTURE.md §4`; proc has the correct Probe-before-sweep policy.
 (I10, menu persistence, graduated: single owner + unit + e2e.)
 
 ---
@@ -323,11 +323,14 @@ dashed border always means link: deleting it only unlinks. Left-drag moves
 never cross an id namespace (identity doesn't migrate; the DecideDrop seam
 rejects them client-side).
 
-**URL and path format.** The descent path is encoded as alternating
-plugin-uuid / tile-id segments, with the plugin uuid omitted when it equals the
-previous segment: `/<p1>/<t1>/<t2>/<p2>/<t3>`. Two kinds of links:
-- **URL bar / bookmarks** — the full descent path + viewport. A *place*. Must be
-  the full path; the ascent-return target depends on it.
+**URL and path format.** A pane's URL is its ANCHOR (an `a=` query param
+naming the grid namespace the pane sits inside — absent for the node grid, so
+"/" is home) plus bare tile-id path segments within that namespace:
+`/3/4/5?a=<uuid>/1`. Crossing a plugin boundary is a PORTAL — the anchor
+swaps — so path ids never mix namespaces; a remote anchor is simply a chain
+(`a=<ssh>/<plugin>/1`). Two kinds of links:
+- **URL bar / bookmarks** — anchor + path + viewport. A *place*. The
+  ascent-return target depends on it.
 - **Markdown embed links** — a single qualified id (`<plugin_uuid>/<tile_id>`).
   A *thing*: globally routable, stable, survives restructuring of the containing
   space. The server resolves it directly without the descent path.
