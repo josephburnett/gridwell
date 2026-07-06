@@ -42,6 +42,7 @@ func (a *App) installTestHook() {
 		"panes":         js.FuncOf(a.thPanes),
 		"previewSigs":   js.FuncOf(a.thPreviewSigs),
 		"transitioning": js.FuncOf(a.thTransitioning),
+		"embedHits":     js.FuncOf(a.thEmbedHits),
 		"setTransitionMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// e2e-only ACTION (like shellVisitURL): stretch the transition
 			// clock so a spec can deterministically land an event mid-flight.
@@ -191,6 +192,22 @@ func (a *App) thOrigin(js.Value, []js.Value) any {
 // animation) is in flight — the window I11's injection spec aims for.
 func (a *App) thTransitioning(js.Value, []js.Value) any {
 	return a.transition != nil
+}
+
+// thEmbedHits exposes the embeds drawn in the last frame — the same hit
+// rects the click handler resolves against, so a spec can find WHERE an
+// embed rendered and whether its target resolved. Read-only render scratch.
+func (a *App) thEmbedHits(js.Value, []js.Value) any {
+	out := make([]any, 0, len(a.embedHits))
+	for _, h := range a.embedHits {
+		out = append(out, map[string]any{
+			"paneId": h.paneID,
+			"href":   h.href,
+			"tileId": h.tileID,
+			"x":      h.x, "y": h.y, "w": h.w, "h": h.h,
+		})
+	}
+	return out
 }
 
 // thPreviewSigs returns, for the FOCUSED pane's leaf grid, a per-tile
