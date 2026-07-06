@@ -282,6 +282,8 @@ func (a *App) draw() {
 			}
 		}
 	}
+	// The palette's HTML name input tracks the popover (or hides with it).
+	a.syncPaletteNameField(rects)
 
 	// In-flight right-button gesture preview (split line, swap arrow,
 	// red close-warning border). Drawn on top of all panes but below
