@@ -129,12 +129,20 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 	}
 	transit := h.srv.pluginReg.Transit(uuid)
 	g := qualifyGrid(uuid, resp.Grid)
-	// Grid.writable is a per-grid capability of the OWNING plugin. A leaf
-	// plugin doesn't stamp it (its Info declares writability once); a transit
-	// plugin's response already carries the remote node's stamp verbatim.
-	if !transit && g != nil {
-		if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
+	// Grid.writable / scratch_grid_id are per-grid facts of the OWNING
+	// plugin. A leaf plugin doesn't stamp them (its Info declares them once);
+	// a transit plugin's response carries the remote node's stamp — writable
+	// verbatim, the scratch id prepended one segment like every other id.
+	if g != nil {
+		if transit {
+			if g.ScratchGridId != "" {
+				g.ScratchGridId = qualifyID(uuid, g.ScratchGridId)
+			}
+		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
 			g.Writable = info.Writable
+			if info.ScratchGridId != "" {
+				g.ScratchGridId = qualifyID(uuid, info.ScratchGridId)
+			}
 		}
 	}
 	return connect.NewResponse(&pb.GetGridResponse{

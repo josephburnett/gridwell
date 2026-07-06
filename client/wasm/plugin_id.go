@@ -57,10 +57,22 @@ func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 	return rpc.PluginInfo{}, false
 }
 
-// pluginKind returns the configured kind ("fs" / "proc" / "localdb" / …) of
-// the plugin owning the given qualified grid id, or "" if unknown. Drives the
-// identity glyph on a cross-plugin well that has no preview yet.
+// pluginKind returns the glyph kind for the plugin owning the given
+// qualified grid id: the cached grid's own source_kind when available (the
+// fact rides ON the grid — it answers for remote grids a local plugin-list
+// lookup cannot), else the local plugin list, else "". A cached localdb grid
+// has source_kind "" — that maps to the well glyph, which is correct.
 func (a *App) pluginKind(gridID string) string {
+	if g, ok := a.c.Grid(gridID); ok {
+		switch g.Meta.SourceKind {
+		case rpc.GridSourceFS, rpc.GridSourceProc:
+			return g.Meta.SourceKind
+		case "node":
+			return "node" // a node grid (a mount's landing page): generic globe
+		default:
+			return "localdb"
+		}
+	}
 	if pl, ok := a.pluginByUUID(uuidOf(gridID)); ok {
 		return pl.Kind
 	}

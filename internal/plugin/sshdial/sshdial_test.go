@@ -132,9 +132,20 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 
 	// The SECOND remote plugin is reachable through the same mount — the
-	// whole point of the node design: no per-plugin config, no selector.
-	if _, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: ng.Tiles[1].ChildGridId}); err != nil {
-		t.Errorf("second remote plugin unreachable through the mount: %v", err)
+	// whole point of the node design: no per-plugin config, no selector —
+	// and its grid carries the remote plugin's capabilities: writable, and
+	// the scratch grid id qualified from the REMOTE's view (the local server
+	// prepends the transit segment; here we sit inside the tunnel, so one
+	// segment: "<remote-plugin>/<id>").
+	pg, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: ng.Tiles[1].ChildGridId})
+	if err != nil {
+		t.Fatalf("second remote plugin unreachable through the mount: %v", err)
+	}
+	if !pg.Grid.Writable {
+		t.Error("remote localdb grid must arrive writable")
+	}
+	if !strings.HasPrefix(pg.Grid.ScratchGridId, "ur2/") {
+		t.Errorf("remote scratch = %q, want the remote's qualified ur2/<id>", pg.Grid.ScratchGridId)
 	}
 }
 

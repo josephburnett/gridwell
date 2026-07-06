@@ -2010,7 +2010,16 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 // pane is currently in — where ephemeral url visits land — or "" if that plugin
 // has none (fs/proc don't support ephemeral visits).
 func (a *App) scratchGridForPane(p *pane.Pane) string {
-	want := uuidOf(a.gridIDForPane(p))
+	gid := a.gridIDForPane(p)
+	// The fact rides ON the grid (Grid.ScratchGridID, stamped by the serving
+	// node and chained through mounts) — a local plugin-list lookup cannot
+	// answer for a remote plugin behind a transit mount.
+	if g, ok := a.c.Grid(gid); ok && g.Meta.ScratchGridID != "" {
+		return g.Meta.ScratchGridID
+	}
+	// Fallback for an uncached grid: the local plugin list (local plugins
+	// only — first segment).
+	want := uuidOf(gid)
 	for _, pl := range a.plugins {
 		if pl.UUID == want {
 			return pl.ScratchGridID

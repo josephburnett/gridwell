@@ -238,24 +238,20 @@ func (a *App) drawPluginGlyph(kind string, x, y, w, h float64) {
 // grid have local health; a remote node's plugin tiles surface their state
 // through descent errors instead.
 func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
-	if n.GridID != a.nodeGrid || a.nodeGrid == "" {
-		return
+	// A LINK with no target is not enterable wherever it lives — a broken or
+	// rootless plugin tile on ANY node grid (including a remote one, whose
+	// health the local plugin list cannot know). Dim it; the descent guard
+	// explains on click.
+	if n.Reference && rpc.IsWellKind(n.Kind) && n.ChildGridID == "" {
+		color := colorLauncherRootlessTint
+		// The LOCAL node grid knows more: broken (Info failed) gets the
+		// alarm tint, rootless the softer one.
+		if pl, ok := a.pluginByUUID(lastSegment(n.ID)); ok && pluginhealth.Classify(pl) == pluginhealth.Broken {
+			color = colorLauncherBrokenTint
+		}
+		a.cctx.Set("fillStyle", color)
+		a.cctx.Call("fillRect", x, y, w, h)
 	}
-	pl, ok := a.pluginByUUID(lastSegment(n.ID))
-	if !ok {
-		return
-	}
-	var color string
-	switch pluginhealth.Classify(pl) {
-	case pluginhealth.Broken:
-		color = colorLauncherBrokenTint
-	case pluginhealth.Rootless:
-		color = colorLauncherRootlessTint
-	default:
-		return
-	}
-	a.cctx.Set("fillStyle", color)
-	a.cctx.Call("fillRect", x, y, w, h)
 }
 
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.

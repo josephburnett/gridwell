@@ -86,13 +86,21 @@ func TestNodeGridListsPluginsAsLinkTiles(t *testing.T) {
 	if g.Grid.Writable {
 		t.Error("node grid must report writable=false")
 	}
-	// A plugin's own grid IS writable — per grid, not per local plugin entry.
+	// A plugin's own grid IS writable — per grid, not per local plugin entry —
+	// and carries the plugin's scratch grid, qualified (the ephemeral-url
+	// fact rides ON the grid so it survives transit mounts, issue #59).
 	pg, err := cl.GetGrid(ctx, rootA)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !pg.Grid.Writable {
 		t.Error("a localdb root must report writable=true")
+	}
+	if pg.Grid.ScratchGridID == "" || rpc.UUIDOf(pg.Grid.ScratchGridID) != uuidA {
+		t.Errorf("scratch on the grid = %q, want the plugin's qualified scratch", pg.Grid.ScratchGridID)
+	}
+	if g.Grid.SourceKind != "node" {
+		t.Errorf("node grid source_kind = %q, want node (drives the mount glyph)", g.Grid.SourceKind)
 	}
 }
 
