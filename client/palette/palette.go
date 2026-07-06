@@ -35,6 +35,10 @@ type Config struct {
 	// tile size tracks paneZoom*CellPx so the preview matches the
 	// to-be-placed tile.
 	CellPx float64
+	// NameFieldH is the height of the name row above the swatches — the
+	// text field whose value becomes the created tile's label (a grid's
+	// name). The wasm layer floats a real HTML input over this rect.
+	NameFieldH float64
 }
 
 // Default returns the layout constants currently used by the wasm
@@ -48,6 +52,7 @@ func Default() Config {
 		TileMaxPx:  128,
 		GapPx:      8,
 		CellPx:     64,
+		NameFieldH: 26,
 	}
 }
 
@@ -63,13 +68,6 @@ type Layout struct {
 // rowWidthPx is the popover width a row of n tiles needs (tiles + gutters).
 func (l Layout) rowWidthPx(n int) float64 {
 	return float64(n)*l.TilePx() + float64(n+1)*l.Cfg.GapPx
-}
-
-func maxF(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // PlusCenter returns the screen-space center of the + button (the pane's
@@ -96,27 +94,40 @@ func (l Layout) TilePx() float64 {
 }
 
 // PopoverRect returns the screen rect of the entire palette popover,
-// anchored just above the + button. The palette is always a single
-// horizontal row of NumTiles tiles.
+// anchored just above the + button: the name field row on top, then a
+// single horizontal row of NumTiles tiles.
 func (l Layout) PopoverRect() Rect {
 	tile := l.TilePx()
 	w := l.rowWidthPx(l.NumTiles)
-	h := tile + 2*l.Cfg.GapPx
+	h := l.Cfg.NameFieldH + tile + 3*l.Cfg.GapPx
 	cx, cy := l.PlusCenter()
 	x := cx + l.Cfg.PlusRadius - w
 	y := cy - l.Cfg.PlusRadius - h - 8
 	return Rect{X: x, Y: y, W: w, H: h}
 }
 
+// NameFieldRect returns the screen rect of the name field — the full-width
+// row above the swatches.
+func (l Layout) NameFieldRect() Rect {
+	pop := l.PopoverRect()
+	gap := l.Cfg.GapPx
+	return Rect{
+		X: pop.X + gap,
+		Y: pop.Y + gap,
+		W: pop.W - 2*gap,
+		H: l.Cfg.NameFieldH,
+	}
+}
+
 // TileRect returns the screen rect of the i'th template tile inside the
-// popover. All tiles sit in a single row left-to-right.
+// popover. All tiles sit in a single row left-to-right, below the name field.
 func (l Layout) TileRect(i int) Rect {
 	pop := l.PopoverRect()
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
 	return Rect{
 		X: pop.X + gap + float64(i)*(tile+gap),
-		Y: pop.Y + gap,
+		Y: pop.Y + gap + l.Cfg.NameFieldH + gap,
 		W: tile,
 		H: tile,
 	}
