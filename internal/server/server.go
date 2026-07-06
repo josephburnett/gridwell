@@ -37,6 +37,11 @@ type Config struct {
 	// anchors at and every remote mounter descends into. Empty disables the
 	// node grid (some unit tests exercise raw plugin routing only).
 	NodeID string
+	// NodeStatePath, when set, is the file the node grid persists its own
+	// viewport to (the landing page's pan/zoom), so it survives a server
+	// restart — the landing page stays as you left it. Empty = in-memory
+	// only (tests).
+	NodeStatePath string
 }
 
 // Server is the wired-up HTTP server. It holds NO Gridwell state of its own —
@@ -78,7 +83,8 @@ func New(reg *plugin.Registry, cfg Config) *Server {
 		infoCache: map[string]*pb.InfoResponse{},
 	}
 	if cfg.NodeID != "" {
-		ng := &nodeGrid{reg: reg, info: srv.pluginInfo, invalidate: srv.invalidateInfoCache}
+		ng := &nodeGrid{reg: reg, info: srv.pluginInfo, invalidate: srv.invalidateInfoCache, statePath: cfg.NodeStatePath}
+		ng.loadView()
 		client, closer, err := plugin.ServeInProcess(ng)
 		if err != nil {
 			// In-process serving can only fail on loopback-listen exhaustion;

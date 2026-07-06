@@ -21,6 +21,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
 	"sync"
 
 	"google.golang.org/grpc/codes"
@@ -42,11 +45,45 @@ type nodeGrid struct {
 	info       func(ctx context.Context, uuid string) (*pb.InfoResponse, error)
 	invalidate func(uuid string)
 
-	// The node grid's own viewport — the landing page's framing. In-memory:
-	// the node has no DB of its own; this persists across client reloads
-	// within one server run.
-	mu   sync.Mutex
-	view struct{ cx, cy, zoom float64 }
+	// The node grid's own viewport — the landing page's framing. Held in
+	// memory and, when statePath is set, mirrored to a small JSON file so it
+	// survives a server restart (the landing page stays as you left it).
+	// The file is the durable copy; memory is the read cache — one writer
+	// (SetRootView), loaded once at construction.
+	mu        sync.Mutex
+	view      nodeView
+	statePath string
+}
+
+// nodeView is the persisted landing-page viewport.
+type nodeView struct {
+	Cx   float64 `json:"cx"`
+	Cy   float64 `json:"cy"`
+	Zoom float64 `json:"zoom"`
+}
+
+// loadView restores the persisted viewport, if any. A missing file is a
+// fresh node; any other read problem is surfaced to the log, never fatal —
+// the landing page still works, it just opens at the default framing.
+func (n *nodeGrid) loadView() {
+	if n.statePath == "" {
+		return
+	}
+	data, err := os.ReadFile(n.statePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "gridwell: node grid: read %s: %v\n", n.statePath, err)
+		}
+		return
+	}
+	var v nodeView
+	if err := json.Unmarshal(data, &v); err != nil {
+		fmt.Fprintf(os.Stderr, "gridwell: node grid: parse %s: %v\n", n.statePath, err)
+		return
+	}
+	n.mu.Lock()
+	n.view = v
+	n.mu.Unlock()
 }
 
 var errNodeGridReadOnly = status.Error(codes.FailedPrecondition,
@@ -64,9 +101,9 @@ func (n *nodeGrid) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoRespons
 		Watch:        false,
 		Writable:     false,
 		RootGridId:   nodeGridID,
-		RootViewCx:   v.cx,
-		RootViewCy:   v.cy,
-		RootViewZoom: v.zoom,
+		RootViewCx:   v.Cx,
+		RootViewCy:   v.Cy,
+		RootViewZoom: v.Zoom,
 	}, nil
 }
 
@@ -168,11 +205,25 @@ func (n *nodeGrid) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Til
 	return n.GetTile(ctx, &pb.GetTileRequest{TileId: req.TileId})
 }
 
-// SetRootView stores the node grid's OWN viewport — the landing page framing.
+// SetRootView stores the node grid's OWN viewport — the landing page
+// framing — and mirrors it to the state file so it survives a restart. A
+// failed write surfaces as an error (the client shows it) rather than
+// silently downgrading durability.
 func (n *nodeGrid) SetRootView(_ context.Context, req *pb.SetRootViewRequest) (*pb.SetRootViewResponse, error) {
 	n.mu.Lock()
-	n.view.cx, n.view.cy, n.view.zoom = req.Cx, req.Cy, req.Zoom
+	n.view = nodeView{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
+	v := n.view
+	path := n.statePath
 	n.mu.Unlock()
+	if path != "" {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			return nil, fmt.Errorf("node grid: persist viewport: %w", err)
+		}
+	}
 	return &pb.SetRootViewResponse{}, nil
 }
 
