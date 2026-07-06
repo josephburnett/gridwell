@@ -346,12 +346,6 @@ func (a *App) drawErrStrip() {
 // live and use the + button (or Home key, etc.) to recover from a stale
 // descent path.
 func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
-	a.previewPaneID = p.ID
-	a.previewPaneRect = r
-	defer func() {
-		a.previewPaneID = ""
-		a.previewPaneRect = pane.Rect{}
-	}()
 	gid := a.gridIDForPane(p)
 	g, gridOK := a.c.Grid(gid)
 
@@ -418,7 +412,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		} else {
 			inSource := g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc)
 			for _, n := range g.Tiles {
-				if dragdrop.HiddenMatch(a.hiddenTileID, a.hiddenPaneID, p.ID, n.ID) {
+				if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.ID) {
 					continue
 				}
 				left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
@@ -430,7 +424,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				nn := n
 				outside := tileOutside(&nn, inSource)
 				dashed := !inSource && isLinkTile(&nn)
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside, dashed)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside, dashed, p.ID)
 				a.drawPluginHealthTint(&nn, left, top, w, h)
 			}
 			a.drawEdgeIndicators(g.Tiles, pscreen, r)
@@ -661,7 +655,11 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 // the descent zoom never crosses a color or grid-line discontinuity:
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected, outside, dashed bool) {
+// paintPaneID names the pane whose contents are being painted, so the
+// child-preview hide scopes to the drag's SOURCE pane only ("" for contexts
+// with no pane — embeds in previews, ghosts). Formerly the previewPaneID
+// App scratch field, now passed down (issue #25).
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
 	case rpc.KindText:
 		a.drawMarkdownNode(n, x, y, w, h, r, selected, outside, dashed)
@@ -727,9 +725,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		drawGridLinesIn(a.cctx, wellGridLineColor(n), x, y, w, h, previewCell, originX, originY)
 
 		if showPreview {
+			// The hide scopes to the pane being painted: paneR is the pane
+			// rect drawNodeWithPreview received from drawPane's tile loop.
 			var hide string
-			if a.hiddenPaneID == a.previewPaneID {
-				hide = a.hiddenTileID
+			if a.ghost != nil && a.ghost.hiddenPaneID == paintPaneID {
+				hide = a.ghost.hiddenTileID
 			}
 			a.drawChildPreview(child, viewCenterX, viewCenterY,
 				wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
@@ -1097,7 +1097,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// surface (no source grid in play), so dashed == isLinkTile.
 	dashed := isLinkTile(n)
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed, "")
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
@@ -1113,7 +1113,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// Cross-fade: tile fades out as frag grows; trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed)
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed, "")
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)

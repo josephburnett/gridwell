@@ -595,9 +595,11 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 					// ObjectID with the source, so a by-lineage hide
 					// makes every clone vanish whenever its sibling
 					// is picked up. (dragdrop.HiddenMatch + its test
-					// cover the predicate.)
-					a.hiddenTileID = d.tileID
-					a.hiddenPaneID = d.originPaneID
+					// cover the predicate.) Lives on the ghost: the
+					// hide must outlive the drag (snap-back) and die
+					// with the ghost.
+					a.ghost.hiddenTileID = d.tileID
+					a.ghost.hiddenPaneID = d.originPaneID
 				}
 			}
 		} else {
