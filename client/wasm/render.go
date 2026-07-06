@@ -200,22 +200,15 @@ var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell}
 
 // paletteItem is one entry in the creation palette: a built-in tile
 // primitive that the user drags onto the canvas to create a tile.
-// Plugins are not in this palette; they are reachable only from the
-// launcher landing page.
-//
-// isPlugin and plugin are still present because drawLauncherTiles
-// constructs a paletteItem{isPlugin:true} to synthesise the ghost node
-// for each launcher plugin tile — those two fields serve the launcher,
-// not the palette itself.
+// Plugins are not in this palette; they are link tiles on the node grid
+// (the landing page), created and linked like any other tile.
 type paletteItem struct {
-	isPlugin  bool
-	plugin    rpc.PluginInfo // used by launcher (drawLauncherTiles), not the palette
-	primitive templateKind   // the primitive this swatch creates
+	primitive templateKind // the primitive this swatch creates
 }
 
 // paletteItems returns the palette entries for pane p: the tile
-// primitives, but only when the pane's current grid is writable.
-// The launcher (Anchor == "") and read-only grids get an empty palette.
+// primitives, but only when the pane's current grid is writable
+// (Grid.Writable — the node grid and fs/proc grids get an empty palette).
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	if !a.gridWritable(a.gridIDForPane(p)) {
 		return nil
@@ -376,19 +369,15 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 
 	pscreen := paneToDragdrop(p, r)
 
-	// The launcher start screen is NOT a grid — it has no coordinate system,
-	// so drawing grid lines would imply you can place tiles there. It's a
-	// plain page that just lists the configured plugins to descend into.
-	launcher := isLauncherPane(p)
-
 	// Grid lines render against background regardless of whether the grid
 	// has loaded — they communicate the coordinate system to the user.
 	// A focused file has no grid coordinates and (now) no zoom, so it
 	// gets a plain background instead of a grid pattern: the old pattern
 	// was the zoom cue, which no longer applies. The margin around the
 	// inner box is just a plain ascent zone. (URL content fills the pane
-	// and covers this anyway.) The launcher is likewise gridless.
-	if p.TextFocus != "" || launcher {
+	// and covers this anyway.) The node grid (the landing page) is a real
+	// grid and renders like one.
+	if p.TextFocus != "" {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
@@ -442,6 +431,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				outside := tileOutside(&nn, inSource)
 				dashed := !inSource && isLinkTile(&nn)
 				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside, dashed)
+				a.drawPluginHealthTint(&nn, left, top, w, h)
 			}
 			a.drawEdgeIndicators(g.Tiles, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {
@@ -456,10 +446,6 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					a.ghost.displayedFragmentation)
 			}
 		}
-	} else if launcher {
-		// The launcher page itself: the configured plugins as a centered row
-		// of tiles to descend into. No grid, no + menu.
-		a.drawLauncherTiles(p, r)
 	} else {
 		// Status line in the upper-left so the user knows what state
 		// we're in and which grid id we're trying to load.
@@ -486,7 +472,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	// other panes are also "looking inside" something.
 	focused := p.ID == a.tree.Focus
 	urlLive := a.urlViewFor(p.ID) != nil
-	border := paneBorderColorFor(p, g, gridOK, focused, urlLive)
+	border := a.paneBorderColorFor(p, g, gridOK, focused, urlLive)
 	a.cctx.Set("strokeStyle", border)
 	a.cctx.Set("lineWidth", paneBorderPx)
 	half := paneBorderPx / 2
@@ -521,7 +507,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				a.drawURLRefreshButton(p, r)
 			}
 		}
-	} else if !launcher && (focused || (a.tileDragInFlight() && a.dragging.originPaneID == p.ID)) {
+	} else if !a.isNodeGridPane(p) && (focused || (a.tileDragInFlight() && a.dragging.originPaneID == p.ID)) {
 		// + button: the focused grid's entry point for creating tiles (and a
 		// visible handle even when the grid is unreachable — you can still
 		// ascend). It also appears on a tile-drag's SOURCE pane even when that
@@ -529,8 +515,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		// delete target ("drag a tile back to the menu it came from").
 		// drawPlusButton paints a trashcan instead of a + in that state. The
 		// palette popover itself is drawn after every pane (see draw) so it
-		// floats above neighbouring panes it overflows into. The launcher has
-		// no + button — its plugin tiles are the whole page.
+		// floats above neighbouring panes it overflows into. The node grid
+		// (the landing page) has no + button — it is read-only, and hiding
+		// the button also removes the drag-delete target so a plugin tile
+		// can never be dropped on a trashcan.
 		a.drawPlusButton(p, r)
 	}
 }
@@ -1146,13 +1134,13 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 // this pane, indicating a live Chromium tab. If the grid containing
 // the descended tile isn't cached yet, we fall back to the generic
 // blue so the user still sees "descended into something".
-func paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
+func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
 	in := pane.BorderInput{
 		HasTextFocus: p.TextFocus != "",
 		DescentDepth: len(p.Path),
 		Focused:      focused,
 		URLLive:      urlLive,
-		IsLauncher:   isLauncherPane(p),
+		IsLauncher:   a.isNodeGridPane(p),
 	}
 	if p.TextFocus != "" && gridOK {
 		if tile, ok := g.Tiles[p.TextFocus]; ok {

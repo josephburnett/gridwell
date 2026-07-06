@@ -27,14 +27,6 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 	}
 }
 
-// isLauncherPane reports whether pane p is at the launcher start screen — no
-// plugin entered (empty anchor), so it has no grid. The + button centers here
-// ("a blank screen with a + menu in the center") and returns to the lower
-// right once a plugin is entered.
-func isLauncherPane(p *pane.Pane) bool {
-	return p.Anchor == ""
-}
-
 // plusLayout builds the minimal Layout needed to place the + button for pane
 // p — just the rect plus the launcher-centering flag. The pane's zoom does
 // not influence the + button.
@@ -238,44 +230,21 @@ func (a *App) drawPluginGlyph(kind string, x, y, w, h float64) {
 	}
 }
 
-// drawLauncherTiles paints the launcher start page: the configured plugins as
-// a centered row of tiles to descend into. No grid, no + menu — these tiles are
-// the whole page. Hover (focused pane only) outlines the tile under the cursor.
-//
-// Each tile renders through the same drawNodeWithPreview the grid uses for a
-// well, on the synthetic exit-well node a dropped plugin produces
-// (paletteItemGhostNode): so a plugin tile previews its real root grid — fetched
-// and cached exactly like an in-grid well — and the launcher's descent
-// (enterPlugin) reuses the same EffectiveViewZoom calibration, making the
-// zoom-in identical. Before the child grid loads it falls back to the same
-// plugin glyph the swatch shows (drawNodeWithPreview's exit-well glyph branch),
-// so there's no flash of a different placeholder.
-func (a *App) drawLauncherTiles(p *pane.Pane, r pane.Rect) {
-	n := len(a.plugins)
-	if n == 0 {
+// drawPluginHealthTint overlays a node-grid plugin tile with its
+// pluginhealth-decided tint (drawn atop the normal tile so the glyph/preview
+// underneath still reads); an enterable plugin gets no overlay. The decision
+// (which status, if any) is pluginhealth.Classify — this function only maps
+// that decision to pixels, per charter §5. Only tiles of THIS node's node
+// grid have local health; a remote node's plugin tiles surface their state
+// through descent errors instead.
+func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
+	if n.GridID != a.nodeGrid || a.nodeGrid == "" {
 		return
 	}
-	ps := paneToDragdrop(p, r)
-	cell := ps.CellPx * ps.Zoom
-	focused := p.ID == a.tree.Focus
-	for i := range a.plugins {
-		cr := palette.LauncherCellRect(i, n)
-		sx, sy := ps.CellToScreen(cr.X, cr.Y)
-		hovered := focused && a.launcherHover == i
-		node := paletteItemGhostNode(paletteItem{isPlugin: true, plugin: a.plugins[i]})
-		w, h := cr.W*cell, cr.H*cell
-		a.drawNodeWithPreview(&node, sx, sy, w, h, cell,
-			pane.Rect{X: sx, Y: sy, W: w, H: h}, hovered, false, isLinkTile(&node))
-		a.drawLauncherTileTint(a.plugins[i], sx, sy, w, h)
+	pl, ok := a.pluginByUUID(lastSegment(n.ID))
+	if !ok {
+		return
 	}
-}
-
-// drawLauncherTileTint overlays a broken/rootless launcher tile with its
-// pluginhealth-decided tint (drawn atop the normal tile so the glyph/preview
-// underneath still reads); an enterable tile gets no overlay. The decision
-// (which status, if any) is pluginhealth.Classify — this function only maps
-// that decision to pixels, per charter §5.
-func (a *App) drawLauncherTileTint(pl rpc.PluginInfo, x, y, w, h float64) {
 	var color string
 	switch pluginhealth.Classify(pl) {
 	case pluginhealth.Broken:
@@ -287,19 +256,6 @@ func (a *App) drawLauncherTileTint(pl rpc.PluginInfo, x, y, w, h float64) {
 	}
 	a.cctx.Set("fillStyle", color)
 	a.cctx.Call("fillRect", x, y, w, h)
-}
-
-// launcherTileIndexAt returns the index of the launcher plugin tile under
-// (x, y) for pane p, or -1. Used by both the click handler (descend) and the
-// hover tracker. The hit test runs in cell space so it tracks the tiles as the
-// viewport zooms during a descent transition.
-func (a *App) launcherTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
-	n := len(a.plugins)
-	if n == 0 {
-		return -1
-	}
-	cx, cy := paneToDragdrop(p, r).ScreenToCell(x, y)
-	return palette.LauncherCellIndexAt(cx, cy, n)
 }
 
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.

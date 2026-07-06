@@ -234,14 +234,15 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 // forbidden when EITHER endpoint is source-backed — a host file can't migrate
 // into Gridwell, regular tiles can't move into a host directory, and host-side
 // mv between two source dirs isn't implemented (clone/right-drag links
-// instead). A same-grid move never crosses the boundary, so it's always
-// allowed. (The UI previously used an XOR here, which wrongly invited a
-// source→source cross-grid drop that the server then rejected.)
-func MoveForbidden(sameGrid bool, srcKind, dstKind string) bool {
+// instead) — or when the endpoints live in different id NAMESPACES
+// (crossPlugin): a tile's id is its identity and never migrates between
+// plugins; the cross-plugin gesture is the right-drag, which creates a link.
+// A same-grid move never crosses any boundary, so it's always allowed.
+func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 	if sameGrid {
 		return false
 	}
-	return srcKind != "" || dstKind != ""
+	return crossPlugin || srcKind != "" || dstKind != ""
 }
 
 // DropAction is the single verdict for a drag release (and the matching

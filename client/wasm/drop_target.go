@@ -192,6 +192,7 @@ func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	}
 	return dragdrop.MoveForbidden(
 		d.srcGridID == t.gridID,
+		rpc.NamespaceOf(d.srcGridID) != rpc.NamespaceOf(t.gridID),
 		a.gridSourceKind(d.srcGridID),
 		a.gridSourceKind(t.gridID),
 	)

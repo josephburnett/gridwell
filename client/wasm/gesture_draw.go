@@ -371,7 +371,7 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 
 	color := colorSplitInactive
 	if active {
-		color = paneBorderColorFor(p, g, gridOK, true /* focused */, urlLive)
+		color = a.paneBorderColorFor(p, g, gridOK, true /* focused */, urlLive)
 	}
 	a.cctx.Call("beginPath")
 	r := rd.splitPane

@@ -72,6 +72,19 @@ func IsExitWell(t *Tile) bool {
 		UUIDOf(t.ChildGridID) != UUIDOf(t.GridID)
 }
 
+// NamespaceOf returns the id-space a qualified id belongs to: everything
+// before its LAST segment ("uuid" for "uuid/7", "ssh1/rp1" for "ssh1/rp1/7",
+// "" for a bare id). Two ids can only ever name the same store when their
+// namespaces are equal — the test for "would a move cross a plugin
+// boundary", which no single-uuid comparison answers once ids chain
+// through node mounts.
+func NamespaceOf(id string) string {
+	if i := strings.LastIndexByte(id, '/'); i >= 0 {
+		return id[:i]
+	}
+	return ""
+}
+
 // PluginWellTile builds the synthetic exit-well tile a plugin is rendered as
 // when it isn't sitting in a real grid: the drag ghost, the menu swatch, and
 // the launcher start-page tile (whose preview is the plugin's root grid). A 1×1

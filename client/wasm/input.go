@@ -6,6 +6,7 @@ import (
 	"context"
 	"math"
 	"slices"
+	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/anim"
@@ -14,7 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/gridpath"
-	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -401,30 +401,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// Launcher start page: a click on a plugin tile descends into it. The
-	// launcher is gridless and has no + button, so every click is handled
-	// (and swallowed) here — gated on prior focus, like every other in-pane
-	// action, so a click that merely focuses the launcher doesn't also
-	// descend. Empty space is inert (it's not a grid: nothing to pan).
-	if isLauncherPane(p) {
-		if prevFocus == p.ID {
-			if idx := a.launcherTileIndexAt(p, r, sx, sy); idx >= 0 {
-				pl := a.plugins[idx]
-				// A broken or rootless plugin is not enterable: the decision
-				// (and its notice text) is pluginhealth's, not this file's —
-				// this used to fall straight into enterPlugin, which bailed
-				// silently at RootGridID == "" with no signal to the user.
-				if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
-					a.reportErr(sev, source, message)
-				} else {
-					// Zoom into the clicked tile's footprint (cell space).
-					a.enterPlugin(p.ID, pl, palette.LauncherCellRect(idx, len(a.plugins)))
-				}
-			}
-		}
-		return nil
-	}
-
 	// Click on the + button toggles the menu for this pane. The button is
 	// only drawn on the focused pane, so it only acts when the pane was
 	// already focused before this click; a click that merely focuses the
@@ -574,17 +550,6 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			hover = a.paletteTileIndexAt(p, r, sx, sy)
 		}
 		if a.menu.SetHover(hover) {
-			a.draw()
-		}
-	}
-	// Track launcher-tile hover on the focused start page.
-	{
-		hover := -1
-		if p, r, ok := a.paneAtScreen(sx, sy); ok && p.ID == a.tree.Focus && isLauncherPane(p) {
-			hover = a.launcherTileIndexAt(p, r, sx, sy)
-		}
-		if hover != a.launcherHover {
-			a.launcherHover = hover
 			a.draw()
 		}
 	}
@@ -1080,45 +1045,11 @@ func (a *App) ascendPane(p *pane.Pane) {
 	}
 }
 
-// enterPlugin performs a portal jump into a plugin: it pushes the pane's
-// current level onto the ascent stack (so a later ascent returns here — STACK
-// semantics, and reopens the + menu if it was open) and animates a descent
-// into the plugin's root grid with the SAME zoom transition as descending into
-// a well. cell is the footprint to zoom from, in the pane's current cell
-// space: the clicked launcher tile, or a unit cell at the pane centre for an
-// in-grid menu click. Drives both the launcher's click-to-enter and the
-// in-grid + menu's plugin items.
-func (a *App) enterPlugin(paneID string, pl rpc.PluginInfo, cell palette.Rect) {
-	p := a.tree.FindPane(paneID)
-	if p == nil || pl.RootGridID == "" {
-		return
-	}
-	// Remember whether the menu was open on this pane, then close it; the
-	// ascent reopens it so you come back exactly as you left.
-	wasMenu := a.menu.OpenOn(p.ID)
-	a.menu.Close()
-	p.PushFrame(wasMenu)
-
-	r := paneRectFor(a, p)
-	from := zoomtrans.Endpoints{
-		Path: slices.Clone(p.Path),
-		Cx:   p.Cx, Cy: p.Cy, Zoom: p.Zoom,
-	}
-	w := zoomtrans.PortalWell(cell.X, cell.Y, cell.W, cell.H)
-	// Seed the portal well with the last-saved root viewport so
-	// installDescent restores the user's left-off framing instead of always
-	// landing at the default calibrated zoom.  Zero RootViewZoom means
-	// "never visited" — leave ViewZoom=0 so EffectiveViewZoom falls through
-	// to DefaultWellViewZoom, preserving the legacy overview for fresh plugins.
-	if pl.RootViewZoom > 0 {
-		overtake := zoomtrans.OvertakeZoom(w, r.W, r.H, cellPx)
-		w.ViewX = int64(math.Round(pl.RootViewCx)) - w.W/2
-		w.ViewY = int64(math.Round(pl.RootViewCy)) - w.H/2
-		w.ViewZoom = zoomtrans.IntrinsicFromLive(pl.RootViewZoom, overtake)
-	}
-	a.installDescent(p, r, from, w, pl.RootGridID, pl.RootGridID,
-		cell.X+cell.W/2, cell.Y+cell.H/2)
-}
+// Portal descents (anchor swaps through a link tile) live in startDescent:
+// a plugin tile on the node grid, a mounted well, and a cross-plugin clone
+// all descend through the SAME path a normal well does, with a frame pushed
+// so ascent returns exactly here. There is no separate enterPlugin anymore —
+// the launcher is a real grid.
 
 // ascendPortal returns the pane to wherever it jumped into the current plugin
 // from (another plugin, or the launcher), reopening the + menu if it was open
@@ -1133,14 +1064,16 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	if !ok {
 		return
 	}
-	// Save the plugin root-grid viewport before leaving so re-entry restores
-	// exactly what the user left — the portal analogue of saveWellViewBeforeAscent.
-	// Fire-and-forget: the transition is already starting; errors are logged.
-	a.savePluginRootViewBeforeAscent(p)
-	// Animate only the launcher return: the frame has no plugin anchor and the
-	// launcher tile we entered from is resolvable from the current anchor.
-	if idx := a.launcherIndexForAnchor(p.Anchor); f.Anchor == "" && idx >= 0 {
-		a.animatePortalAscent(p, f, idx)
+	// The portal's containing tile: the link well in the frame's leaf grid
+	// whose child is the pane's current anchor. When it resolves, the ascent
+	// writes the pane's framing back onto it (the SAME face-#3 writeback a
+	// normal well ascent does — for a node-grid tile the provider maps it
+	// onto the plugin's SetRootView) and animates onto its footprint.
+	well := a.portalWellForFrame(p, f)
+	if well != nil {
+		framePath := slices.Clone(f.Path)
+		a.saveWellViewBeforeAscentFrom(p, well, f.Anchor, framePath)
+		a.animatePortalAscent(p, f, well)
 		return
 	}
 	if !p.PopFrame() {
@@ -1154,70 +1087,44 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	a.scheduleURLUpdate()
 }
 
-// savePluginRootViewBeforeAscent persists the current plugin root-grid
-// viewport so re-entry restores it.  Portal analogue of saveWellViewBeforeAscent:
-// the plugin root has no tile row, so it uses SetRootView (the store's system KV
-// path) instead of SetTile.  Two writes happen:
-//  1. a.plugins is patched in-memory so the very next enterPlugin (same session,
-//     no page refresh) sees the updated viewport immediately.
-//  2. A fire-and-forget goroutine calls SetRootView for durability; the server
-//     also invalidates the Info cache so a page-refresh ListPlugins gets fresh data.
-//
-// No-op when the pane is already at the launcher (Anchor=="").
-func (a *App) savePluginRootViewBeforeAscent(p *pane.Pane) {
-	anchor := p.Anchor
-	if anchor == "" {
-		return // already at the launcher, nothing to save
+// portalWellForFrame finds the link tile the pane descended through: the well
+// in frame f's leaf grid whose child grid is the pane's current anchor. Nil
+// when that grid isn't cached or the tile is gone (the ascent then pops
+// instantly instead of animating).
+func (a *App) portalWellForFrame(p *pane.Pane, f pane.Frame) *rpc.Tile {
+	parentGridID := a.gridIDForPathFrom(f.Anchor, f.Path)
+	if parentGridID == "" {
+		return nil
 	}
-	cx, cy, zoom := p.Cx, p.Cy, p.Zoom
-	// Patch the in-memory plugin list so the next enterPlugin (same session)
-	// uses the just-left framing without waiting for the RPC round-trip.
-	for i := range a.plugins {
-		if a.plugins[i].RootGridID == anchor {
-			a.plugins[i].RootViewCx = cx
-			a.plugins[i].RootViewCy = cy
-			a.plugins[i].RootViewZoom = zoom
-			break
+	g, ok := a.c.Grid(parentGridID)
+	if !ok {
+		a.fetchGrid(parentGridID)
+		return nil
+	}
+	for _, t := range g.Tiles {
+		if t.ChildGridID == p.Anchor && rpc.IsWellKind(t.Kind) {
+			w := t
+			return &w
 		}
 	}
-	req := &rpc.SetRootViewRequest{
-		RootGridID: anchor,
-		Cx:         cx,
-		Cy:         cy,
-		Zoom:       zoom,
-	}
-	go func() {
-		a.surfaceRPCError("SetRootView", a.cl.SetRootView(context.Background(), req))
-	}()
+	return nil
 }
 
-// launcherIndexForAnchor returns the index in a.plugins of the plugin whose
-// root grid is the pane's current anchor (so the launcher tile it occupies can
-// be located), or -1 when the anchor isn't a plugin root.
-func (a *App) launcherIndexForAnchor(anchor string) int {
-	for i := range a.plugins {
-		if a.plugins[i].RootGridID == anchor {
-			return i
-		}
-	}
-	return -1
-}
-
-// animatePortalAscent zooms the pane out of plugin index idx's root grid back
-// onto its launcher tile — the inverse of enterPlugin. It mirrors startAscent's
-// two-segment motion (child zoom-out to the calibrated swap state, then an
-// atomic anchor swap and a parent pan+zoom to the saved viewport), with the
-// launcher as the gridless "parent" reached by clearing the anchor.
-func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, idx int) {
+// animatePortalAscent zooms the pane out of the portal's grid back onto the
+// link tile it descended through — the inverse of the portal descent. It
+// mirrors startAscent's two-segment motion (child zoom-out to the calibrated
+// swap state, then an atomic anchor swap and a parent pan+zoom to the saved
+// viewport).
+func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, well *rpc.Tile) {
 	r := paneRectFor(a, p)
-	cell := palette.LauncherCellRect(idx, len(a.plugins))
-	w := zoomtrans.PortalWell(cell.X, cell.Y, cell.W, cell.H)
+	w := zoomtrans.Well{
+		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
+		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
+	}
 
 	from := zoomtrans.Endpoints{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
 	mid, to := zoomtrans.Ascent(from, w, nil, r.W, r.H, cellPx)
-	// Land square on the exact footprint center (the integer well rounds the
-	// tile's float position), mirroring installDescent's portal recentre.
-	to.Cx, to.Cy = cell.X+cell.W/2, cell.Y+cell.H/2
+	to.Cx, to.Cy = float64(well.X)+float64(well.W)/2, float64(well.Y)+float64(well.H)/2
 	saved := zoomtrans.Endpoints{Cx: f.Cx, Cy: f.Cy, Zoom: f.Zoom}
 
 	childDist := panDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom) +
@@ -1392,6 +1299,19 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
 // Total time is split between A and C proportional to motion distance
 // so neither feels rushed. C is zero-length when ViewZoom is unset.
 func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
+	if well.ChildGridID == "" {
+		// A link tile whose target isn't available — a broken or rootless
+		// plugin on the node grid. Say why instead of silently doing nothing
+		// (charter §6); pluginhealth owns the wording when it knows the plugin.
+		if pl, ok := a.pluginByUUID(lastSegment(well.ID)); ok {
+			if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
+				a.reportErr(sev, source, message)
+				return
+			}
+		}
+		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
+		return
+	}
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 
 	r := paneRectFor(a, p)
@@ -1403,7 +1323,30 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		ID: well.ID, X: well.X, Y: well.Y, W: well.W, H: well.H,
 		ViewX: well.ViewX, ViewY: well.ViewY, ViewZoom: well.ViewZoom,
 	}
+	if isLinkTile(well) {
+		// A LINK crosses into another id space (a plugin tile on the node
+		// grid, a mounted well, a cross-plugin clone). Descend as a PORTAL:
+		// push the current level onto the ascent stack and swap the pane's
+		// anchor to the link's target, so the URL and every path id stay
+		// within one anchor's namespace. Ascent pops the frame and lands
+		// back on this tile.
+		wasMenu := a.menu.OpenOn(p.ID)
+		a.menu.Close()
+		p.PushFrame(wasMenu)
+		a.installDescent(p, r, from, w, well.ChildGridID, well.ChildGridID,
+			float64(well.X)+float64(well.W)/2, float64(well.Y)+float64(well.H)/2)
+		return
+	}
 	a.installDescent(p, r, from, w, well.ChildGridID, "", 0, 0)
+}
+
+// lastSegment returns the final segment of a qualified id — for a node-grid
+// tile that is the plugin's uuid (its local tile id).
+func lastSegment(id string) string {
+	if i := strings.LastIndexByte(id, '/'); i >= 0 {
+		return id[i+1:]
+	}
+	return id
 }
 
 // installDescent computes the standard two-segment descent transition into a
@@ -1715,6 +1658,13 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 // stored view (rounded to int cells), so casual ascents don't churn
 // the DB.
 func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []string) {
+	a.saveWellViewBeforeAscentFrom(p, well, p.Anchor, parentPath)
+}
+
+// saveWellViewBeforeAscentFrom is saveWellViewBeforeAscent with an explicit
+// parent anchor: a portal ascent's containing well lives under the FRAME's
+// anchor (another plugin's namespace), not the pane's current one.
+func (a *App) saveWellViewBeforeAscentFrom(p *pane.Pane, well *rpc.Tile, parentAnchor string, parentPath []string) {
 	newViewX := int64(math.Round(p.Cx)) - well.W/2
 	newViewY := int64(math.Round(p.Cy)) - well.H/2
 	r := paneRectFor(a, p)
@@ -1737,7 +1687,7 @@ func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath 
 		TileChanged: &rpc.TileChanged{Tile: updated},
 	})
 
-	parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
+	parentGridID := a.gridIDForPathFrom(parentAnchor, parentPath)
 	req := &rpc.SetWellViewRequest{
 		Path:     rpc.Path{WellIDs: slices.Clone(parentPath)},
 		TileID:   well.ID,
@@ -1892,16 +1842,8 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 
 // paletteItemGhostNode synthesizes a 1×1 rpc.Tile matching the palette item,
 // so the ghost renderer can paint the in-flight tile using the same drawNode
-// path that a real tile would use. A plugin item paints as an exit well
-// carrying the plugin's label (the same as the mount well it will create).
+// path that a real tile would use.
 func paletteItemGhostNode(item paletteItem) rpc.Tile {
-	if item.isPlugin {
-		// A plugin swatch is the exit-well it drops: child grid in the
-		// plugin's own id space makes isExitWell true, so it renders dashed
-		// (a cross-plugin link) and shows the plugin glyph, exactly as the
-		// menu / ghost / dropped tile / launcher preview.
-		return rpc.PluginWellTile(item.plugin)
-	}
 	switch item.primitive {
 	case tplWell:
 		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1}

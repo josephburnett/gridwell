@@ -317,21 +317,25 @@ func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name             string
 		sameGrid         bool
+		crossPlugin      bool
 		srcKind, dstKind string
 		want             bool
 	}{
-		{"same grid, both source", true, "fs", "fs", false},
-		{"same grid, regular", true, "", "", false},
-		{"cross regular->regular", false, "", "", false},
-		{"cross source->regular", false, "fs", "", true},
-		{"cross regular->source", false, "", "proc", true},
-		{"cross source->source (regression)", false, "fs", "proc", true},
-		{"cross same-kind source->source", false, "fs", "fs", true},
+		{"same grid, both source", true, false, "fs", "fs", false},
+		{"same grid, regular", true, false, "", "", false},
+		{"cross regular->regular", false, false, "", "", false},
+		{"cross source->regular", false, false, "fs", "", true},
+		{"cross regular->source", false, false, "", "proc", true},
+		{"cross source->source (regression)", false, false, "fs", "proc", true},
+		{"cross same-kind source->source", false, false, "fs", "fs", true},
+		// A move never crosses a plugin boundary: identity doesn't migrate
+		// id spaces. The cross-plugin gesture is right-drag (a link).
+		{"cross-plugin move", false, true, "", "", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := MoveForbidden(c.sameGrid, c.srcKind, c.dstKind); got != c.want {
-				t.Errorf("MoveForbidden(%v, %q, %q) = %v, want %v", c.sameGrid, c.srcKind, c.dstKind, got, c.want)
+			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind); got != c.want {
+				t.Errorf("MoveForbidden(%v, %v, %q, %q) = %v, want %v", c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind, got, c.want)
 			}
 		})
 	}

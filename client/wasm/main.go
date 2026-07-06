@@ -62,9 +62,16 @@ type App struct {
 	// served from. All server reads and mutations go through it.
 	cl *rpc.Client
 
-	// plugins is the configured plugin list from ListPlugins, used to build the
-	// launcher / + menu (rootless model). Order is config order.
+	// plugins is the configured plugin list from ListPlugins, used for the
+	// node-grid health tints, plugin glyphs, and the e2e launcher hook.
+	// Order is config order.
 	plugins []rpc.PluginInfo
+
+	// nodeGrid is the qualified id of this node's node grid — the plugin-list
+	// landing page every pane anchors at on boot ("<node-uuid>/0"). One fact,
+	// learned once from ListPlugins (NodeIdentity); "" only while bootstrap
+	// hasn't answered (or the server predates node identity).
+	nodeGrid string
 
 	tree *pane.Tree
 	c    *cache.Cache
@@ -111,11 +118,6 @@ type App struct {
 	touch         *touchgest.Machine
 	touchTimerCb  js.Func
 	taTouchActive bool
-
-	// launcherHover is the index of the launcher plugin tile under the cursor
-	// (the focused launcher pane), or -1. Drives the hover outline on the
-	// gridless start page, which has no + menu.
-	launcherHover int
 
 	// gridLoadFailed records grids whose last fetch returned non-200, so
 	// the renderer can show a meaningful message and we don't retry in
@@ -557,7 +559,6 @@ func main() {
 		menu:              menu.New(),
 		errs:              errsurface.New(),
 		caps:              caps.Derive(bridgeAvailable()),
-		launcherHover:     -1,
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
 		tileInflight:      map[string]bool{},
@@ -616,17 +617,23 @@ func main() {
 	select {}
 }
 
-// bootstrap loads the plugin list (the launcher source) and starts the rest of
-// the client. Rootless: there is no server root — panes start at the empty
-// launcher screen (Anchor == "") and the user enters a plugin from the + menu.
+// bootstrap loads the plugin list and the node's identity, then starts the
+// rest of the client. The landing page is the NODE GRID — a real server-owned
+// grid of plugin link tiles — so panes anchor there; nothing about the
+// launcher lives on the client.
 func (a *App) bootstrap() {
 	plugins, err := a.cl.ListPlugins(context.Background())
 	if err == nil {
 		a.plugins = plugins
 	} else {
-		// The launcher will render empty — say why, or it reads as "all my
-		// plugins vanished" (charter §6).
+		// The landing page will render empty — say why, or it reads as "all
+		// my plugins vanished" (charter §6).
 		a.reportErr(errsurface.Error, "rpc:ListPlugins", "plugin list failed: "+rpcErrText(err))
+	}
+	if _, nodeRoot, err := a.cl.NodeIdentity(context.Background()); err == nil && nodeRoot != "" {
+		a.nodeGrid = nodeRoot
+	} else if err != nil {
+		a.reportErr(errsurface.Error, "rpc:ListPlugins", "node identity failed: "+rpcErrText(err))
 	}
 	a.afterBootstrap()
 }
@@ -634,8 +641,11 @@ func (a *App) bootstrap() {
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
 	p := a.tree.FocusedPane()
-	p.Anchor = "" // start at the launcher; applyURLOnBoot may restore a location
+	p.Anchor = a.nodeGrid // land on the node grid; applyURLOnBoot may restore a location
 	p.Path = nil
+	if a.nodeGrid != "" {
+		a.fetchGrid(a.nodeGrid)
+	}
 
 	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.urlUpdateScheduled = false
