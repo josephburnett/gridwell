@@ -41,7 +41,7 @@ func (h *connectHandler) route(id string) (client pb.GridwellClient, local, uuid
 	if !ok {
 		return nil, "", "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unqualified id %q", id))
 	}
-	c, found := h.srv.pluginReg.Get(uuid)
+	c, found := h.srv.routeClient(uuid)
 	if !found {
 		return nil, "", "", connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", uuid))
 	}
@@ -127,9 +127,19 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 	if err != nil {
 		return nil, asConnectError(err)
 	}
+	transit := h.srv.pluginReg.Transit(uuid)
+	g := qualifyGrid(uuid, resp.Grid)
+	// Grid.writable is a per-grid capability of the OWNING plugin. A leaf
+	// plugin doesn't stamp it (its Info declares writability once); a transit
+	// plugin's response already carries the remote node's stamp verbatim.
+	if !transit && g != nil {
+		if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
+			g.Writable = info.Writable
+		}
+	}
 	return connect.NewResponse(&pb.GetGridResponse{
-		Grid:  qualifyGrid(uuid, resp.Grid),
-		Tiles: qualifyTilesFor(h.srv.pluginReg.Transit(uuid), uuid, resp.Tiles),
+		Grid:  g,
+		Tiles: qualifyTilesFor(transit, uuid, resp.Tiles),
 	}), nil
 }
 
@@ -183,7 +193,12 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
 		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 	}
-	return connect.NewResponse(&pb.ListPluginsResponse{Plugins: out}), nil
+	resp := &pb.ListPluginsResponse{Plugins: out}
+	if h.srv.cfg.NodeID != "" {
+		resp.NodeUuid = h.srv.cfg.NodeID
+		resp.NodeRootGridId = h.srv.cfg.NodeID + "/" + nodeGridID
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
@@ -535,6 +550,13 @@ func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Req
 // reconnecting, AND the client is told about the outage and the recovery via
 // an EventPluginHealth (issue #47) instead of tiles just quietly going stale.
 func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
+	return h.subscribe(ctx, stream.Send)
+}
+
+// subscribe is the transport-free fan-in body, shared by the Connect stream
+// (browsers/Electron) and the node export's gRPC stream (a remote mounter) so
+// there is exactly one implementation of "every plugin's events, qualified".
+func (h *connectHandler) subscribe(ctx context.Context, send func(*pb.Event) error) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -550,7 +572,7 @@ func (h *connectHandler) Subscribe(ctx context.Context, _ *connect.Request[pb.Su
 	for {
 		select {
 		case ev := <-events:
-			if err := stream.Send(ev); err != nil {
+			if err := send(ev); err != nil {
 				return err
 			}
 		case <-ctx.Done():

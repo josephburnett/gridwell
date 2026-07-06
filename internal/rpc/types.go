@@ -137,6 +137,11 @@ type Grid struct {
 	Version    int64  `json:"version"`
 	SourceKind string `json:"source_kind,omitempty"`
 	SourceID   string `json:"source_id,omitempty"`
+	// Writable is the owning plugin's per-grid mutation capability, stamped
+	// by the serving node (wire-only). The client's "show the + palette"
+	// gate reads this — per grid, because one local mount (ssh) can front
+	// many remote plugins with differing capabilities.
+	Writable bool `json:"writable,omitempty"`
 }
 
 // Tile is the persistent unit of content in a grid. Kind selects which subset

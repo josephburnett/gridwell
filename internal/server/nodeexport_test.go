@@ -4,14 +4,12 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -23,11 +21,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
-// nodeServer stands up a full Server (one in-process localdb registered as
-// uuid "ur1", label "personal") behind its NodeHandler on a real TCP listener,
-// and returns a raw gRPC client dialed at it — the exact wire a remote
-// ssh-plugin sees after its tunnel. Nothing here uses go-plugin or Electron:
-// this is the "remote gridwell serve" side of the federation seam.
+// nodeServer stands up a full Server (node id "node1", one in-process localdb
+// registered as uuid "ur1", label "personal") behind its NodeHandler on a real
+// TCP listener, and returns a raw gRPC client dialed at it — the exact wire a
+// remote ssh-plugin sees after its tunnel. Every request routes by the
+// QUALIFIED ids it carries; there is no scoping header and no name-based
+// selection.
 func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient) {
 	t.Helper()
 	st, err := store.Open(":memory:")
@@ -45,7 +44,7 @@ func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellCli
 	reg := plugin.NewRegistry()
 	reg.Register("ur1", "localdb", direct, nil)
 	reg.SetLabel("ur1", "personal")
-	srv := server.New(reg, server.Config{})
+	srv := server.New(reg, server.Config{NodeID: "node1"})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -64,58 +63,54 @@ func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellCli
 	return gridwellv1.NewGridwellClient(conn), direct
 }
 
-// scoped returns a context carrying the gridwell-plugin selector.
-func scoped(key string) context.Context {
-	return metadata.AppendToOutgoingContext(context.Background(), server.PluginHeader, key)
-}
-
-func TestNodeHandlerFrontDoorSpeaksGRPC(t *testing.T) {
-	// The same port a browser hits over HTTP/1.1 must answer the gRPC
-	// protocol over h2c: an UNSCOPED call reaches the client-facing Connect
-	// handler (which speaks gRPC natively once HTTP/2 is negotiable).
+func TestNodeExportInfoDescribesTheNode(t *testing.T) {
+	// A mounter's Info handshake sees the NODE: its node grid as the root
+	// (the plugin-list landing page), watchable (the fan-in), read-only.
 	c, _ := nodeServer(t)
-	resp, err := c.ListPlugins(context.Background(), &gridwellv1.ListPluginsRequest{})
+	info, err := c.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
-		t.Fatalf("front-door ListPlugins over gRPC: %v", err)
+		t.Fatalf("Info over gRPC: %v", err)
 	}
-	if len(resp.Plugins) != 1 || resp.Plugins[0].Uuid != "ur1" || resp.Plugins[0].Label != "personal" {
-		t.Fatalf("plugins = %+v, want the one registered localdb", resp.Plugins)
+	if info.RootGridId != "node1/0" {
+		t.Errorf("RootGridId = %q, want node1/0 (the node grid, qualified)", info.RootGridId)
+	}
+	if !info.Watch || info.Writable {
+		t.Errorf("capabilities = watch:%v writable:%v, want watch:true writable:false", info.Watch, info.Writable)
 	}
 }
 
-func TestNodeExportScopesToOnePluginVerbatim(t *testing.T) {
-	// A call carrying gridwell-plugin metadata must reach THAT plugin's own
-	// service verbatim — local ids, the plugin's own Info — exactly what a
-	// local plugin subprocess would answer. Transparency is the contract:
-	// compare against the plugin's direct answers byte-for-byte.
+func TestNodeExportRoutesByQualifiedID(t *testing.T) {
+	// The export speaks the node's QUALIFIED ids — the same view a browser
+	// gets — so chains compose: the next hop prepends its own uuid and
+	// forwards without translation.
 	c, direct := nodeServer(t)
+	ctx := context.Background()
 
-	want, err := direct.Info(context.Background(), &gridwellv1.InfoRequest{})
+	// The node grid lists the plugin as a link tile.
+	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
 	if err != nil {
-		t.Fatalf("direct Info: %v", err)
+		t.Fatalf("GetGrid(node grid): %v", err)
 	}
-	got, err := c.Info(scoped("ur1"), &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatalf("scoped Info: %v", err)
+	if len(ng.Tiles) != 1 || ng.Tiles[0].Id != "node1/ur1" || !ng.Tiles[0].Reference {
+		t.Fatalf("node grid tiles = %+v, want one link tile node1/ur1", ng.Tiles)
 	}
-	if got.Kind != want.Kind || got.RootGridId != want.RootGridId || got.Watch != want.Watch || got.Writable != want.Writable {
-		t.Fatalf("scoped Info = %+v, want the plugin's own %+v", got, want)
-	}
-	if strings.Contains(got.RootGridId, "/") {
-		t.Fatalf("RootGridId %q is qualified; the export must speak LOCAL ids", got.RootGridId)
-	}
+	pluginRoot := ng.Tiles[0].ChildGridId
 
-	// Create + read through the export, verify via the direct client: the
-	// export writes to the same plugin, in the plugin's own id space.
-	created, err := c.CreateTile(scoped("ur1"), &gridwellv1.CreateTileRequest{
-		GridId: got.RootGridId,
+	// Create through the export, verify via the direct plugin client: the
+	// export writes to the same plugin, ids peeled one segment per hop.
+	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: pluginRoot,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 2, H: 2},
 		Data:   []byte("# via export"),
 	})
 	if err != nil {
-		t.Fatalf("scoped CreateTile: %v", err)
+		t.Fatalf("CreateTile via export: %v", err)
 	}
-	body, err := direct.GetTileContent(context.Background(), &gridwellv1.GetTileContentRequest{TileId: created.Tile.Id})
+	if got := created.Tile.Id; got[:4] != "ur1/" {
+		t.Errorf("created id = %q, want qualified ur1/<n>", got)
+	}
+	localID := created.Tile.Id[4:]
+	body, err := direct.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: localID})
 	if err != nil {
 		t.Fatalf("direct GetTileContent: %v", err)
 	}
@@ -124,64 +119,62 @@ func TestNodeExportScopesToOnePluginVerbatim(t *testing.T) {
 	}
 }
 
-func TestNodeExportResolvesConfigName(t *testing.T) {
-	c, _ := nodeServer(t)
-	if _, err := c.Info(scoped("personal"), &gridwellv1.InfoRequest{}); err != nil {
-		t.Fatalf("Info scoped by config name: %v", err)
-	}
-}
-
 func TestNodeExportUnknownPluginIsNotFound(t *testing.T) {
 	c, _ := nodeServer(t)
-	_, err := c.Info(scoped("no-such-plugin"), &gridwellv1.InfoRequest{})
+	_, err := c.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: "no-such-plugin/1"})
 	if status.Code(err) != gcodes.NotFound {
 		t.Fatalf("err = %v, want NotFound", err)
 	}
 }
 
-func TestNodeExportSubscribeStreams(t *testing.T) {
-	// Server-stream through the export: subscribe to the plugin's own event
-	// stream, mutate through the export, and receive the event — this is how
-	// a laptop's fan-in hears a remote plugin change.
+func TestNodeExportSubscribeStreamsQualifiedEvents(t *testing.T) {
+	// Server-stream through the export: the whole node's fan-in, ids
+	// qualified — this is how a mounting laptop hears a remote plugin change.
 	c, _ := nodeServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	info, err := c.Info(scoped("ur1"), &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatalf("Info: %v", err)
-	}
-	sub, err := c.Subscribe(metadata.AppendToOutgoingContext(ctx, server.PluginHeader, "ur1"), &gridwellv1.SubscribeRequest{})
+	sub, err := c.Subscribe(ctx, &gridwellv1.SubscribeRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	if _, err := c.CreateTile(scoped("ur1"), &gridwellv1.CreateTileRequest{
-		GridId: info.RootGridId,
+	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	if _, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: ng.Tiles[0].ChildGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1},
 		Data:   []byte("x"),
 	}); err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}
-	if _, err := sub.Recv(); err != nil {
+	ev, err := sub.Recv()
+	if err != nil {
 		t.Fatalf("no event through the export after a mutation: %v", err)
+	}
+	if tc := ev.GetTileChanged(); tc != nil && tc.Tile.Id[:4] != "ur1/" {
+		t.Errorf("event tile id = %q, want qualified", tc.Tile.Id)
 	}
 }
 
 func TestNodeExportOpenShellBidi(t *testing.T) {
-	// The PTY path is full-duplex; it must survive the export + h2c hop.
+	// The PTY path is full-duplex and routed by the bind message's tile id;
+	// it must survive the export + h2c hop.
 	c, _ := nodeServer(t)
-	info, err := c.Info(scoped("ur1"), &gridwellv1.InfoRequest{})
+	ctx := context.Background()
+	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
 	if err != nil {
-		t.Fatalf("Info: %v", err)
+		t.Fatalf("GetGrid: %v", err)
 	}
-	shellTile, err := c.CreateTile(scoped("ur1"), &gridwellv1.CreateTileRequest{
-		GridId: info.RootGridId,
+	shellTile, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: ng.Tiles[0].ChildGridId,
 		Tile:   &gridwellv1.Tile{Kind: "shell", X: 3, Y: 3, W: 1, H: 1},
 	})
 	if err != nil {
 		t.Fatalf("CreateTile(shell): %v", err)
 	}
-	stream, err := c.OpenShell(scoped("ur1"))
+	stream, err := c.OpenShell(ctx)
 	if err != nil {
 		t.Fatalf("OpenShell: %v", err)
 	}

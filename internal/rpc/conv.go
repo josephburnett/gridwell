@@ -39,6 +39,7 @@ func GridToProto(g *Grid) *pb.Grid {
 		Version:    g.Version,
 		SourceKind: g.SourceKind,
 		SourceId:   g.SourceID,
+		Writable:   g.Writable,
 	}
 }
 
@@ -53,6 +54,7 @@ func GridFromProto(g *pb.Grid) *Grid {
 		Version:    g.Version,
 		SourceKind: g.SourceKind,
 		SourceID:   g.SourceId,
+		Writable:   g.Writable,
 	}
 }
 

@@ -32,6 +32,11 @@ import (
 type Config struct {
 	// StaticDir is the directory served at /. Empty disables static files.
 	StaticDir string
+	// NodeID is this node's durable identity (server.yaml node_id). It
+	// qualifies the node grid — the plugin-list landing page every client
+	// anchors at and every remote mounter descends into. Empty disables the
+	// node grid (some unit tests exercise raw plugin routing only).
+	NodeID string
 }
 
 // Server is the wired-up HTTP server. It holds NO Gridwell state of its own —
@@ -45,6 +50,11 @@ type Server struct {
 
 	mux *http.ServeMux
 
+	// nodeClient serves the node grid (the plugin-list landing page) when
+	// cfg.NodeID is set; nodeClose tears down its in-process listener.
+	nodeClient pb.GridwellClient
+	nodeClose  func()
+
 	// infoCache memoizes each plugin's first successful Info handshake, keyed
 	// by plugin uuid. Identity, roots, and capabilities are stable for a
 	// plugin's lifetime, so repeat ListPlugins / Subscribe calls must not
@@ -56,9 +66,10 @@ type Server struct {
 	infoCache map[string]*pb.InfoResponse
 }
 
-// New constructs a Server that routes everything through reg. There is no root:
-// startup is empty panes (the client builds the launcher from ListPlugins), and
-// every operation is addressed by a qualified id.
+// New constructs a Server that routes everything through reg. With a NodeID
+// configured, the server also serves the NODE GRID — the plugin-list landing
+// page — as an in-process provider addressed like any plugin
+// ("<node_id>/0"); every operation is addressed by a qualified id.
 func New(reg *plugin.Registry, cfg Config) *Server {
 	srv := &Server{
 		cfg:       cfg,
@@ -66,8 +77,31 @@ func New(reg *plugin.Registry, cfg Config) *Server {
 		mux:       http.NewServeMux(),
 		infoCache: map[string]*pb.InfoResponse{},
 	}
+	if cfg.NodeID != "" {
+		ng := &nodeGrid{reg: reg, info: srv.pluginInfo, invalidate: srv.invalidateInfoCache}
+		client, closer, err := plugin.ServeInProcess(ng)
+		if err != nil {
+			// In-process serving can only fail on loopback-listen exhaustion;
+			// a node without its landing page is not worth starting.
+			panic("gridwell: node grid: " + err.Error())
+		}
+		srv.nodeClient = client
+		srv.nodeClose = closer
+	}
 	srv.routes()
 	return srv
+}
+
+// routeClient resolves a plugin uuid to its client: the node grid provider
+// for the node's own uuid, else the registry. The ONE routing lookup — the
+// Connect handler, the shell WS bridge, the session endpoint, and the preview
+// endpoint all resolve through here so the node grid is addressable
+// everywhere a plugin is.
+func (s *Server) routeClient(uuid string) (pb.GridwellClient, bool) {
+	if s.cfg.NodeID != "" && uuid == s.cfg.NodeID {
+		return s.nodeClient, true
+	}
+	return s.pluginReg.Get(uuid)
 }
 
 // clientForID resolves the plugin that owns a qualified id, returning its
@@ -78,7 +112,7 @@ func (s *Server) clientForID(id string) (client pb.GridwellClient, local string,
 	if !split {
 		return nil, "", false
 	}
-	c, found := s.pluginReg.Get(uuid)
+	c, found := s.routeClient(uuid)
 	if !found {
 		return nil, "", false
 	}
@@ -98,7 +132,7 @@ func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse,
 	if ok {
 		return info, nil
 	}
-	c, found := s.pluginReg.Get(uuid)
+	c, found := s.routeClient(uuid)
 	if !found {
 		return nil, errors.New("no plugin " + uuid)
 	}

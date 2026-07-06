@@ -29,8 +29,10 @@ func TestProtoMatchesDDL(t *testing.T) {
 			message: (&pb.Grid{}).ProtoReflect().Descriptor(),
 			// source_kind/source_id are set by the fs/proc plugins on their
 			// own GetGrid responses; the local store never persists them.
+			// writable is stamped by the serving node from the owning
+			// plugin's Info — wire-only, per-grid capability, never persisted.
 			storageOnly: []string{"created_at", "updated_at"},
-			protoOnly:   []string{"source_kind", "source_id"},
+			protoOnly:   []string{"source_kind", "source_id", "writable"},
 		},
 		{
 			table:       "tiles",

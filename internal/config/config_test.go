@@ -219,3 +219,40 @@ func TestLoad_bindSet(t *testing.T) {
 		})
 	}
 }
+
+// TestEnsureNodeID: mints once, persists, and never re-mints — the node id is
+// durable identity, exactly like a plugin id.
+func TestEnsureNodeID(t *testing.T) {
+	home := t.TempDir()
+	if err := AppendPlugin(home, PluginConfig{ID: "p1", Name: "e2e", Kind: "localdb"}); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	mint := func() string { n++; return "node-minted" }
+	id1, err := EnsureNodeID(home, mint)
+	if err != nil {
+		t.Fatalf("EnsureNodeID: %v", err)
+	}
+	if id1 != "node-minted" || n != 1 {
+		t.Fatalf("first call = %q (mints %d), want node-minted (1)", id1, n)
+	}
+	// Persisted: a reload sees it, and a second Ensure never re-mints.
+	cfg, err := Load(home + "/server.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NodeID != "node-minted" {
+		t.Errorf("Load NodeID = %q, want node-minted", cfg.NodeID)
+	}
+	id2, err := EnsureNodeID(home, mint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id2 != "node-minted" || n != 1 {
+		t.Errorf("second call = %q (mints %d) — the id must never change", id2, n)
+	}
+	// The plugin list survived the rewrite.
+	if len(cfg.Plugins) != 1 || cfg.Plugins[0].ID != "p1" {
+		t.Errorf("plugins after node-id write = %+v", cfg.Plugins)
+	}
+}
