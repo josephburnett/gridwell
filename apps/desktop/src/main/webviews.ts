@@ -1,4 +1,4 @@
-import { BaseWindow, WebContentsView, Menu, clipboard, session } from 'electron';
+import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent } from './ipc';
@@ -20,6 +20,7 @@ import {
   failLoadMessage,
   renderProcessGoneMessage,
   proxyRulesFor,
+  cookieDomainMatches,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
@@ -199,6 +200,13 @@ export class WebviewRegistry {
         },
         canGoBack: nav.canGoBack(),
         canGoForward: nav.canGoForward(),
+        pageHost: (() => {
+          try {
+            return new URL(wc.getURL()).hostname;
+          } catch {
+            return '';
+          }
+        })(),
       },
       {
         copyText: (t) => clipboard.writeText(t),
@@ -213,6 +221,7 @@ export class WebviewRegistry {
           if (nav.canGoForward()) nav.goForward();
         },
         reload: () => wc.reload(),
+        clearSiteData: () => void this.clearSiteData(wc),
       },
     );
     const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
@@ -460,6 +469,41 @@ export class WebviewRegistry {
       if (e.namePill.webContents.id === webContentsId) return paneId;
     }
     return undefined;
+  }
+
+  // clearSiteData wipes the current site from the view's partition (issue
+  // #136): every cookie whose domain suffix-matches the page host (so a
+  // google subdomain clears .google.com), plus the page origin's storage
+  // (localStorage, IndexedDB, service workers, caches), then reloads so the
+  // site sees the cleared state. The next ascent dehydrates the cleaned
+  // partition into the plugin DB, so the reset persists.
+  async clearSiteData(wc: WebContents): Promise<void> {
+    let u: URL;
+    try {
+      u = new URL(wc.getURL());
+    } catch {
+      return;
+    }
+    const ses = wc.session;
+    const cookies = await ses.cookies.get({});
+    await Promise.all(
+      cookies
+        .filter((c) => cookieDomainMatches(u.hostname, c.domain ?? ''))
+        .map((c) => {
+          const proto = c.secure ? 'https' : 'http';
+          const host = (c.domain ?? '').replace(/^\./, '');
+          return ses.cookies.remove(`${proto}://${host}${c.path ?? '/'}`, c.name).catch(() => {});
+        }),
+    );
+    await ses.clearStorageData({ origin: u.origin }).catch(() => {});
+    wc.reload();
+  }
+
+  // clearSiteDataFor is the pane-addressed variant (the e2e drives it —
+  // Playwright cannot click a native menu).
+  async clearSiteDataFor(paneId: string): Promise<void> {
+    const e = this.entries.get(paneId);
+    if (e) await this.clearSiteData(e.view.webContents);
   }
 
   // controlPaneFor resolves a control view's webContents id back to its pane,
