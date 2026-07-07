@@ -7,6 +7,9 @@ import { defineConfig } from '@playwright/test';
 // the DB pristine. Invoked under xvfb by `make check-e2e`.
 export default defineConfig({
   testDir: './e2e',
+  // Sweep the leftovers of previous ABORTED runs (hard-killed workers skip
+  // the per-test teardown) before this run starts — issue #108.
+  globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
