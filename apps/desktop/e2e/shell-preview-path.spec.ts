@@ -14,7 +14,7 @@ async function errors(window: any) {
   return window.evaluate(() => (window as any).__gridwellTest.errors());
 }
 
-test('ascending a shell inside a well persists its preview', async ({ gw, window }) => {
+test('ascending a shell inside a well persists its preview', async ({ gw, window, electronApp }) => {
   await gw.enterPlugin('localdb');
   const home = await gw.focused();
   const wx = Math.round(home.cx);
@@ -40,6 +40,12 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   expect(shell, 'shell created in the sub-grid').toBeTruthy();
   expect(Number(shell.previewBlobId ?? 0), 'fresh shell has no preview yet').toBe(0);
 
+  // Put visible content on the terminal so the frozen preview has glyphs to
+  // show — the content assertion below depends on it.
+  await window.keyboard.type('echo FREEZE-MARKER-LINE');
+  await window.keyboard.press('Enter');
+  await window.waitForTimeout(500);
+
   // Ascend from the live shell (corner circle — its overlay forwards only the
   // right button). The freeze capture + SetShellPreview run on this path.
   await gw.rightClickPlus();
@@ -59,6 +65,30 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
     e.notices.filter((n: any) => n.source === 'shell'),
     'no shell error notice after ascent',
   ).toHaveLength(0);
+
+  // The preview must show the TERMINAL, not a blank layer: a blob id alone
+  // proved nothing when the capture grabbed the transparent link-layer canvas
+  // (the WebGL renderer's first-in-DOM canvas — issue #84). Decode the stored
+  // JPEG in the main process and require bright glyph pixels.
+  const jpegB64 = await window.evaluate(async ([org, tileId]: string[]) => {
+    const r = await fetch(`${org}/gridwell.v1.Gridwell/GetTilePreview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+      body: JSON.stringify({ tileId }),
+    });
+    return ((await r.json()) as { jpeg?: string }).jpeg ?? '';
+  }, [gw.origin, shell.id]);
+  expect(jpegB64.length, 'preview jpeg has bytes').toBeGreaterThan(0);
+  const bright = await electronApp.evaluate(({ nativeImage }, b64: string) => {
+    const img = nativeImage.createFromBuffer(Buffer.from(b64, 'base64'));
+    const bmp = img.toBitmap(); // BGRA
+    let n = 0;
+    for (let i = 0; i < bmp.length; i += 4) {
+      if (bmp[i + 1] > 0x90 && bmp[i + 2] > 0x90) n++;
+    }
+    return n;
+  }, jpegB64);
+  expect(bright, 'frozen preview contains rendered glyph pixels').toBeGreaterThan(50);
 
   // Leave clean: delete the shell tile so its tmux session is killed and
   // teardown doesn't hang on a live PTY.
