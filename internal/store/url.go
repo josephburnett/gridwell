@@ -52,6 +52,16 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 				return err
 			}
 		}
+		if req.History != "" {
+			// The navigation back-stack captured at freeze (issue #113). Empty
+			// is skipped like the JPEG — a partial capture must not clobber a
+			// good stored history.
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE tiles SET url_history = ?, updated_at = ? WHERE id = ?`,
+				req.History, s.now().Unix(), tileID); err != nil {
+				return err
+			}
+		}
 
 		var err error
 		out, err = s.finishContentEdit(ctx, tx, tileID, events)

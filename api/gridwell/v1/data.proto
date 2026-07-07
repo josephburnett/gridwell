@@ -117,6 +117,13 @@ message Tile {
   // not content: persisted per tile, never bumps version. 0 means unset
   // (renders at 1.0). Written by SetContentZoom only.
   double content_zoom = 27;
+
+  // url_history is a url tile's persisted navigation back-stack (JSON
+  // {index, entries:[{url,title}]}, capped) captured at freeze so a revived
+  // tile can still go "back" (issue #113). Rides the url SetTile writeback;
+  // an empty value on a write leaves the stored history untouched (a partial
+  // capture must not clobber it, mirroring the preview-JPEG rule).
+  string url_history = 28;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

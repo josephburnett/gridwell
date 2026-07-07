@@ -215,6 +215,10 @@ type Tile struct {
 	// ContentZoom scales the content rendered inside a text/shell/url tile
 	// (issue #82). Framing: persisted, never bumps version; 0 = unset (1.0).
 	ContentZoom float64 `json:"content_zoom,omitempty"`
+	// URLHistory is a url tile's persisted navigation back-stack (JSON
+	// {index, entries:[{url,title}]}, capped) captured at freeze so a
+	// revived tile can still go back (issue #113). "" = none.
+	URLHistory string `json:"url_history,omitempty"`
 }
 
 // Reads.
@@ -415,6 +419,9 @@ type SetURLStateRequest struct {
 	JPEG    []byte `json:"jpeg"`
 	URL     string `json:"url"`
 	Title   string `json:"title"`
+	// History is the JSON back-stack captured at freeze ("" = leave the
+	// stored history untouched — a partial capture must not clobber it).
+	History string `json:"history,omitempty"`
 }
 
 type UpdateTextRequest struct {

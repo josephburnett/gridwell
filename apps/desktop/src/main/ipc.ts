@@ -95,6 +95,9 @@ export interface PlaceArgs {
   // contentZoom is the tile's persisted USER content zoom (issue #82),
   // composed with the min-width layout zoom. 0/absent = 1.0.
   contentZoom?: number;
+  // history is the tile's persisted navigation back-stack; when valid the
+  // view restores it instead of a bare loadURL (issue #113).
+  history?: string;
 }
 
 export interface SetZoomArgs {
@@ -128,6 +131,9 @@ export interface FreezeResult {
   jpegBase64: string;
   url: string;
   title: string;
+  // history is the serialized navigation back-stack (viewutil.serializeHistory)
+  // so a revived tile can still go back (issue #113). '' when not captured.
+  history: string;
 }
 
 export interface FrameEvent {

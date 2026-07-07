@@ -155,6 +155,11 @@ CREATE TABLE IF NOT EXISTS tiles (
     -- Framing, never bumps version; 0 = unset (renders at 1.0). Added
     -- post-v1 (schema v3, additive).
     content_zoom  REAL NOT NULL DEFAULT 0,
+    -- url_history is a url tile's persisted navigation back-stack (JSON
+    -- {index, entries:[{url,title}]}, capped) captured at freeze so a
+    -- revived tile can still go "back" (issue #113). Content, rides the
+    -- versioned freeze writeback. Added post-v1 (schema v4, additive).
+    url_history   TEXT,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (

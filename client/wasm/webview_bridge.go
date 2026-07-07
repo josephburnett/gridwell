@@ -53,7 +53,7 @@ func (b viewBounds) toJS() js.Value {
 // url at bounds, bound to the owning plugin's session partition (pluginUUID is
 // the session boundary). proxyEndpoint ("" = direct) is the grid-stamped
 // network context — a remote plugin's tiles browse through the tunnel SOCKS.
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string, contentZoom float64) {
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string, contentZoom float64, history string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -67,6 +67,7 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("pluginUuid", pluginUUID)
 	args.Set("proxyEndpoint", proxyEndpoint)
 	args.Set("contentZoom", contentZoom)
+	args.Set("history", history)
 	g.Call("placeWebview", args)
 }
 
@@ -129,10 +130,10 @@ func bridgeSetZoom(paneID string, zoom float64) {
 // frame (decoded JPEG bytes), url, and title so the caller can persist the
 // frozen preview. onFreeze runs asynchronously when the JS promise settles;
 // a missing bridge or failed capture yields empty values.
-func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title string)) {
+func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history string)) {
 	g := bridge()
 	if !g.Truthy() {
-		onFreeze(nil, "", "")
+		onFreeze(nil, "", "", "")
 		return
 	}
 	args := js.Global().Get("Object").New()
@@ -146,13 +147,14 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title string)) 
 		jpeg := decodeBase64(res.Get("jpegBase64"))
 		url := jsString(res.Get("url"))
 		title := jsString(res.Get("title"))
-		onFreeze(jpeg, url, title)
+		history := jsString(res.Get("history"))
+		onFreeze(jpeg, url, title, history)
 		return nil
 	})
 	var catch js.Func
 	catch = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		defer catch.Release()
-		onFreeze(nil, "", "")
+		onFreeze(nil, "", "", "")
 		return nil
 	})
 	promise.Call("then", then).Call("catch", catch)

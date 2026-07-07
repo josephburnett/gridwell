@@ -287,3 +287,36 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	}
 	verifyRefcounts(t, s)
 }
+
+// TestURLHistoryRoundTrip (issue #113): the freeze writeback persists the
+// navigation back-stack; an empty capture leaves the stored one untouched
+// (the JPEG rule); the tile reads it back for revive.
+func TestURLHistoryRoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+	tile, err := s.CreateURL(ctx, &rpc.CreateURLRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "https://a"})
+	if err != nil {
+		t.Fatalf("CreateURL: %v", err)
+	}
+	hist := `{"index":1,"entries":[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"}]}`
+	out, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		TileID: tile.ID, Version: tile.Version, URL: "https://b", History: hist,
+	})
+	if err != nil {
+		t.Fatalf("SetURLState: %v", err)
+	}
+	if out.URLHistory != hist {
+		t.Errorf("url_history = %q, want the captured stack", out.URLHistory)
+	}
+	// A later freeze with NO history (partial capture) keeps the stored one.
+	out2, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		TileID: tile.ID, Version: out.Version, URL: "https://b",
+	})
+	if err != nil {
+		t.Fatalf("second SetURLState: %v", err)
+	}
+	if out2.URLHistory != hist {
+		t.Errorf("empty capture clobbered the stored history: %q", out2.URLHistory)
+	}
+}
