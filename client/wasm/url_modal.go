@@ -56,6 +56,9 @@ func (a *App) openURLModal(candidates []string, onSubmit func(url string), onCan
 		return
 	}
 	a.urlModalOpen = true
+	// Park live views NOW (liveOverlaysHidden) so none paints over the
+	// dialog (issue #131).
+	a.draw()
 
 	doc := a.doc
 	modal := doc.Call("getElementById", "gw-url-modal")
@@ -99,6 +102,7 @@ func (a *App) openURLModal(candidates []string, onSubmit func(url string), onCan
 
 	close := func() {
 		a.urlModalOpen = false
+		defer a.draw() // un-park the live views (issue #131)
 		modal.Get("classList").Call("remove", "open")
 		suggestEl.Set("innerHTML", "")
 		form.Call("removeEventListener", "submit", submitCb)
