@@ -193,6 +193,13 @@ func (a *App) renamePillEl() js.Value {
 		ev.Call("stopPropagation")
 		switch ev.Get("button").Int() {
 		case 0:
+			// preventDefault, or the mousedown's default focus action (the
+			// pill div is not focusable → focus moves to body) fires right
+			// after openRenameInput focuses the input — blurring it, which
+			// cancels: to a real mouse the rename "did nothing" (issue #130;
+			// synthetic dispatchEvent has no default actions, which is why
+			// the spec never saw it).
+			ev.Call("preventDefault")
 			a.openRenameInput()
 		case 2:
 			// The bubble is the pane's universal handle: right-click toggles

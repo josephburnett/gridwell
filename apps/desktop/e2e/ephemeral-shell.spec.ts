@@ -40,7 +40,7 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   // "ephemeral" — and left-click must NOT open the rename input.
   const pill = window.locator('#gw-rename-pill');
   await expect(pill).toHaveText('ephemeral');
-  await pill.dispatchEvent('mousedown', { button: 0 });
+  await pill.click();
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);
 
   // The terminal runs on the WEBGL renderer — never the canvas fallback,
