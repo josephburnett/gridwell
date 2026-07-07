@@ -277,21 +277,28 @@ func (a *App) onForwardedMiddleDown(sx, sy float64) {
 	a.ascendPane(p)
 }
 
-// onForwardedLeftDown transfers pane focus when a left-button press originated
-// over a LIVE URL view. The native WebContentsView swallows the canvas's own
-// mousedown, so the view's preload forwards the press here (via main) in canvas
-// coords — without preventing the default, so in-page interaction, selection,
-// and link clicks still reach the page. Only pane focus (and the menu's
-// focused-pane invariant) is managed here, via the shared focusToPane helper.
+// onForwardedLeftDown handles a left-button press that originated over a LIVE
+// URL view. The native WebContentsView swallows the canvas's own mousedown, so
+// the view's preload forwards the press here (via main) in canvas coords —
+// without preventing the default, so in-page interaction, selection, and link
+// clicks still reach the page. Two intents are managed here:
+//   - pane focus (and the menu's focused-pane invariant), via focusToPane;
+//   - a boundary resize, when the press lands in a divider's grab band — the
+//     band straddles the divider, so its lower/inner half sits ON the live
+//     view. Mirroring the right-button twin (onForwardedRightDown), arming
+//     parks the view (armLeftResize draws), so the rest of the drag lands on
+//     the canvas. Without this, a left border-drag that grabbed the live-view
+//     half of the band could never start (issue #81).
 func (a *App) onForwardedLeftDown(sx, sy float64) {
 	if a.transition != nil {
 		return
 	}
-	p, _, ok := a.paneAtScreen(sx, sy)
+	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return
 	}
 	a.focusToPane(p)
+	a.armLeftResize(p, r, sx, sy)
 }
 
 // onRightMove updates the cursor position and applies live changes.
@@ -756,6 +763,11 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 		splitDir:    d.Dir,
 		container:   pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
 	}
+	// Park live overlays NOW (liveOverlaysHidden consults leftResize): the
+	// grab band straddles the divider, so half of it can sit over a live
+	// WebContentsView that would otherwise eat the very next mousemove and
+	// kill the drag (issue #81).
+	a.draw()
 	return true
 }
 
