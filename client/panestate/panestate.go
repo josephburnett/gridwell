@@ -1,6 +1,6 @@
 // Package panestate holds the per-pane, session-local client state for one pane:
 // the current selection, the saved-ascent stack, the rendered-mode caret + dirty
-// flag, and the frozen-URL pan offset. None of it is persisted (the server owns
+// flag. None of it is persisted (the server owns
 // durable state); it is the plain-data half of a pane's client-only state.
 //
 // It exists as its own package so this data and its small amount of logic (the
@@ -40,10 +40,7 @@ type State struct {
 	Selected string
 	// Dirty marks a rendered-mode body with unsaved edits, so a quick ascent
 	// (within the save debounce) still flushes it.
-	Dirty bool
-	// PanX/PanY are the pan offset for a frozen-URL descent in this pane.
-	PanX, PanY float64
-
+	Dirty  bool
 	ascent []Saved
 	caret  int
 }
