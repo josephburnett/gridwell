@@ -73,15 +73,25 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
     })
     .toBeGreaterThan(wcBefore);
 
-  const back = await electronApp.evaluate(async ({ webContents }) => {
+  const canGoBack = await electronApp.evaluate(({ webContents }) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('h='));
-    if (!wc) return { canGoBack: false, landed: '' };
+    if (!wc) return false;
     const nav = wc.navigationHistory;
-    const canGoBack = nav.canGoBack();
-    if (canGoBack) nav.goBack();
-    await new Promise((r) => setTimeout(r, 800));
-    return { canGoBack, landed: wc.getURL() };
+    const can = nav.canGoBack();
+    if (can) nav.goBack();
+    return can;
   });
-  expect(back.canGoBack, 'restored view has a back-stack').toBe(true);
-  expect(back.landed, 'back lands on the prior page').toContain('h=2');
+  expect(canGoBack, 'restored view has a back-stack').toBe(true);
+  // POLL the landing — a fixed post-goBack sleep flaked under suite load
+  // (the navigation can take longer than any constant you pick).
+  await expect
+    .poll(
+      () =>
+        electronApp.evaluate(({ webContents }) => {
+          const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('h='));
+          return wc?.getURL() ?? '';
+        }),
+      { timeout: 15_000 },
+    )
+    .toContain('h=2');
 });
