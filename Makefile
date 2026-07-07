@@ -150,6 +150,10 @@ init: bin
 # AppImage once. After this completes, `make dist` needs no network.
 vendor: bin wasm
 	cd $(DESKTOP) && npm ci --cache $(NPM_CACHE)
+	# Electron ≥42 no longer downloads its binary in postinstall (it defers to
+	# first run) — materialize it NOW, into the repo-local cache, or the first
+	# offline `make launch`/harness run would try to hit the network.
+	cd $(DESKTOP) && node node_modules/electron/install.js
 	$(MAKE) dist
 	@echo "vendored: caches warm under $(CACHE); 'make dist' is now offline"
 
