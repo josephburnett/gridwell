@@ -733,13 +733,11 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 }
 
 // leftResizeState carries the in-flight left-button pane-boundary resize.
-// Mirrors the resize-only fields of rightDragState; the left button keeps
-// its own state so the right-button routing (which keys off button 2)
-// stays untouched.
+// The left button keeps its own state so the right-button routing (which
+// keys off button 2) stays untouched. Just the dragged split: the cascade
+// (pane.ResizeThrough) re-derives everything else from the live tree.
 type leftResizeState struct {
 	targetSplit *pane.Split
-	splitDir    pane.Direction
-	container   pane.Rect
 }
 
 // armLeftResize starts a left-button boundary resize if (sx, sy) sits in a
@@ -758,11 +756,7 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	if !arm {
 		return false
 	}
-	a.leftResize = &leftResizeState{
-		targetSplit: d.Split,
-		splitDir:    d.Dir,
-		container:   pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
-	}
+	a.leftResize = &leftResizeState{targetSplit: d.Split}
 	// Park live overlays NOW (liveOverlaysHidden consults leftResize): the
 	// grab band straddles the divider, so half of it can sit over a live
 	// WebContentsView that would otherwise eat the very next mousemove and
@@ -790,23 +784,28 @@ func (a *App) dividerResizeCursor(sx, sy float64) string {
 	return cursor
 }
 
-// onLeftResizeMove applies the live divider ratio for the in-flight
-// left-button resize, clamped so neither side shrinks past leftResizeMinPx
-// — the left button never closes a pane.
+// onLeftResizeMove applies the live divider move for the in-flight
+// left-button resize. The cascade (pane.ResizeThrough, issue #79) compresses
+// the pane adjacent to the divider to its minimum first, then the next along
+// the axis — across same-axis splits — walled by the sum of minimums, so the
+// left button still never closes a pane.
 func (a *App) onLeftResizeMove(sx, sy float64) {
 	lr := a.leftResize
 	if lr == nil {
 		return
 	}
-	ratio := pane.RatioFromCursor(lr.container, lr.splitDir, sx, sy)
-	lr.targetSplit.Ratio = pane.ClampRatioToMinPx(lr.container, lr.splitDir, ratio, leftResizeMinPx)
+	cursor := sx
+	if lr.targetSplit.Dir == pane.Horizontal {
+		cursor = sy
+	}
+	pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, cursor, leftResizeMinPx)
 	a.draw()
 }
 
 // leftResizeMinPx is the smallest a pane side may shrink to under a
 // left-drag resize. Unlike the right-button resize (which collapses a side
 // below rightCloseThreshold), the left button clamps here so a minimized
-// pane is always recoverable. Passed into pane.ClampRatioToMinPx.
+// pane is always recoverable. Passed into pane.ResizeThrough.
 const leftResizeMinPx = 32.0
 
 // commitSwap exchanges the origin pane with whatever pane the cursor

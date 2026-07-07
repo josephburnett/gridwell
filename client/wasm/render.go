@@ -333,8 +333,14 @@ func (a *App) draw() {
 // which tracks pane rects — can paint over. Input hit-testing shares this
 // function, so render and input cannot disagree about where panes are.
 func (a *App) layoutPanes() map[string]pane.Rect {
-	h := a.height - errsurface.StripHeight(a.errs.Len())
-	return pane.Layout(a.tree, pane.Rect{X: 0, Y: 0, W: a.width, H: h})
+	return pane.Layout(a.tree, a.rootLayoutRect())
+}
+
+// rootLayoutRect is the rectangle the pane tree lays out into: the canvas
+// minus the reserved notice strip. One owner — the cascading divider resize
+// (pane.ResizeThrough) must see the exact rect the layout uses.
+func (a *App) rootLayoutRect() pane.Rect {
+	return pane.Rect{X: 0, Y: 0, W: a.width, H: a.height - errsurface.StripHeight(a.errs.Len())}
 }
 
 // drawErrStrip paints the notice strip in the reserved band at the bottom of
