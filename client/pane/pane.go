@@ -188,8 +188,27 @@ func (n TreeNode) IsLeaf() bool { return n.Pane != nil }
 type Tree struct {
 	Root  TreeNode
 	Focus string
+	// Zoomed, when non-empty, names the leaf pane that temporarily owns the
+	// whole layout (tmux-style zoom, issue #80): Layout returns only it,
+	// Dividers returns none, and the split ratios underneath stay untouched
+	// so unzooming restores the exact prior arrangement. Structural edits
+	// (Split/Swap/Collapse) unzoom first. Session-local view state, like
+	// Focus.
+	Zoomed string
 	// nextID is incremented on each split to mint fresh pane ids.
 	nextID int
+}
+
+// ToggleZoom zooms paneID to the full layout, or unzooms if it is already
+// the zoomed pane. Unknown ids are ignored.
+func (t *Tree) ToggleZoom(paneID string) {
+	if t.Zoomed == paneID {
+		t.Zoomed = ""
+		return
+	}
+	if t.FindPane(paneID) != nil {
+		t.Zoomed = paneID
+	}
 }
 
 // NewTree returns a fresh tree with a single pane at root.
@@ -310,6 +329,7 @@ func findParentSplit(n *TreeNode, targetID string) *Split {
 // clone of the focused pane (same descent path, viewport, zoom). Returns
 // the new pane.
 func (t *Tree) Split(dir Direction) (*Pane, error) {
+	t.Zoomed = "" // structural edits unzoom first (issue #80)
 	focused := t.FocusedPane()
 	if focused == nil {
 		return nil, errors.New("no focused pane")
@@ -421,6 +441,7 @@ func anyLeafID(n TreeNode) string {
 // Used by the input layer when a right-drag squeezes one side of a
 // divider to zero.
 func (t *Tree) CollapseSplit(s *Split, dropA bool) error {
+	t.Zoomed = "" // structural edits unzoom first (issue #80)
 	holder := findSplitHolder(&t.Root, s)
 	if holder == nil {
 		return errors.New("split not in tree")
@@ -463,6 +484,7 @@ func (t *Tree) Swap(idA, idB string) error {
 	if idA == idB {
 		return nil
 	}
+	t.Zoomed = "" // structural edits unzoom first (issue #80)
 	holderA := findPaneNode(&t.Root, idA)
 	holderB := findPaneNode(&t.Root, idB)
 	if holderA == nil || holderB == nil {

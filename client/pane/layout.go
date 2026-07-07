@@ -25,6 +25,13 @@ func Layout(t *Tree, root Rect) map[string]Rect {
 	if t == nil {
 		return out
 	}
+	// A zoomed pane owns the whole rect; every other pane is absent from the
+	// layout (their overlays/views park via the missing-rect paths). A stale
+	// Zoomed id (the pane collapsed away) falls back to the normal layout.
+	if t.Zoomed != "" && t.FindPane(t.Zoomed) != nil {
+		out[t.Zoomed] = root
+		return out
+	}
 	layoutInto(t.Root, root, out)
 	return out
 }
@@ -83,6 +90,11 @@ func Dividers(t *Tree, root Rect, bandPx float64) []Divider {
 	}
 	var out []Divider
 	if t == nil {
+		return out
+	}
+	// A zoomed layout has no visible boundaries — offering dividers would
+	// arm resizes on invisible splits (issue #80).
+	if t.Zoomed != "" && t.FindPane(t.Zoomed) != nil {
 		return out
 	}
 	collectDividers(&t.Root, root, bandPx, &out)

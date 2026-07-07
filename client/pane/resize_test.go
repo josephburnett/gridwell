@@ -122,3 +122,77 @@ func TestResizeThroughGrowGivesAdjacent(t *testing.T) {
 		t.Errorf("perpendicular split ratio changed: %v", perp.Ratio)
 	}
 }
+
+// Issue #80: tmux-like pane zoom. Zoomed, the leaf owns the whole root rect
+// and every other pane vanishes from the layout (their live views park via
+// the missing-rect path); dividers vanish with them so no gesture can arm on
+// an invisible boundary. Structural edits unzoom first. Unzoom restores the
+// exact prior layout — the split ratios were never touched.
+func TestZoomLayout(t *testing.T) {
+	tr := NewTree()
+	p2, err := tr.Split(Vertical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := Rect{X: 0, Y: 0, W: 400, H: 200}
+	before := Layout(tr, root)
+
+	tr.ToggleZoom(p2.ID)
+	zoomed := Layout(tr, root)
+	if len(zoomed) != 1 {
+		t.Fatalf("zoomed layout has %d panes, want 1", len(zoomed))
+	}
+	if r := zoomed[p2.ID]; r != root {
+		t.Errorf("zoomed pane rect = %+v, want the whole root", r)
+	}
+	if divs := Dividers(tr, root, 10); len(divs) != 0 {
+		t.Errorf("dividers while zoomed = %d, want 0", len(divs))
+	}
+
+	tr.ToggleZoom(p2.ID) // toggle back
+	after := Layout(tr, root)
+	if len(after) != len(before) {
+		t.Fatalf("unzoom pane count = %d, want %d", len(after), len(before))
+	}
+	for id, r := range before {
+		if after[id] != r {
+			t.Errorf("pane %s rect changed across zoom round trip: %+v -> %+v", id, r, after[id])
+		}
+	}
+}
+
+func TestZoomClearedByStructuralEdits(t *testing.T) {
+	tr := NewTree()
+	p2, _ := tr.Split(Vertical)
+	tr.ToggleZoom(p2.ID)
+	if _, err := tr.Split(Horizontal); err != nil {
+		t.Fatal(err)
+	}
+	if tr.Zoomed != "" {
+		t.Error("Split must unzoom first")
+	}
+
+	tr2 := NewTree()
+	q2, _ := tr2.Split(Vertical)
+	tr2.ToggleZoom(q2.ID)
+	if err := tr2.Swap(tr2.Root.Split.A.Pane.ID, q2.ID); err != nil {
+		t.Fatal(err)
+	}
+	if tr2.Zoomed != "" {
+		t.Error("Swap must unzoom first")
+	}
+}
+
+func TestZoomUnknownPaneIsNoOp(t *testing.T) {
+	tr := NewTree()
+	tr.ToggleZoom("nope")
+	if tr.Zoomed != "" {
+		t.Errorf("Zoomed = %q, want unset for an unknown pane", tr.Zoomed)
+	}
+	// A stale Zoomed id (pane collapsed away) must not blank the layout.
+	tr.Zoomed = "gone"
+	l := Layout(tr, Rect{W: 100, H: 100})
+	if len(l) != 1 {
+		t.Errorf("layout with stale zoom = %d panes, want the normal 1", len(l))
+	}
+}
