@@ -36,6 +36,13 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
     tileCount(homeBefore),
   );
 
+  // The bubble labels the dying context read-only (issue #118's audit gap):
+  // "ephemeral" — and left-click must NOT open the rename input.
+  const pill = window.locator('#gw-rename-pill');
+  await expect(pill).toHaveText('ephemeral');
+  await pill.dispatchEvent('mousedown', { button: 0 });
+  await expect(window.locator('#gw-rename-input')).toHaveCount(0);
+
   // It is a real terminal: type into it (keys go to the PTY via xterm).
   await window.keyboard.type('echo ephemeral-shell-proof');
   await window.keyboard.press('Enter');
