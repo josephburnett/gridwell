@@ -56,6 +56,11 @@ type Controller struct {
 	// configPath is the file passed to `tmux -f <path>`. Lives under
 	// os.TempDir for the lifetime of the controller.
 	configPath string
+	// shell is the login shell spawned inside a newly-created session.
+	// Resolved once in New (plugin config -> $SHELL -> "bash"); Args uses it
+	// verbatim. Only ModeCreate consults it — existing tmux sessions keep
+	// whatever shell they were created with.
+	shell string
 }
 
 // New initializes a Controller on the given socket name. The config
@@ -66,12 +71,24 @@ type Controller struct {
 //
 // binary may be "" to default to "tmux" looked up on $PATH. Tests
 // pass a fully-qualified path or a stub.
-func New(socketName, binary string) (*Controller, func() error, error) {
+//
+// shell is the login shell for newly-created sessions (the plugin's `shell:`
+// config key). "" falls back to $SHELL, then "bash" — so a Mac whose login
+// shell is zsh gets zsh with zero config. This is the one resolution point;
+// the choice only applies to sessions created AFTER it takes effect (existing
+// tmux sessions persist with their original shell).
+func New(socketName, binary, shell string) (*Controller, func() error, error) {
 	if socketName == "" {
 		return nil, nil, errors.New("tmux: socketName must be non-empty")
 	}
 	if binary == "" {
 		binary = "tmux"
+	}
+	if shell == "" {
+		shell = os.Getenv("SHELL")
+	}
+	if shell == "" {
+		shell = "bash"
 	}
 	f, err := os.CreateTemp("", "gridwell-tmux-*.conf")
 	if err != nil {
@@ -90,6 +107,7 @@ func New(socketName, binary string) (*Controller, func() error, error) {
 		binary:     binary,
 		socketName: socketName,
 		configPath: f.Name(),
+		shell:      shell,
 	}
 	cleanup := func() error { return os.Remove(c.configPath) }
 	return c, cleanup, nil
@@ -106,9 +124,9 @@ func New(socketName, binary string) (*Controller, func() error, error) {
 // snapshotted tiles where "session gone" must surface to the wasm so
 // the refresh button can hide.
 //
-// startDir is the cwd for the bash process inside a newly-created
-// session; ignored on attach (tmux already remembers where bash is).
-// Empty defaults to $HOME inside the spawned process.
+// startDir is the cwd for the shell process inside a newly-created
+// session; ignored on attach (tmux already remembers where the shell
+// is). Empty defaults to $HOME inside the spawned process.
 //
 // cols and rows seed the tmux window size; tmux propagates SIGWINCH
 // from later client resizes through the existing PTY interface.
@@ -124,7 +142,7 @@ func (c *Controller) Args(tileID string, mode Mode, cols, rows uint16, startDir 
 		args = append(args,
 			"-x", strconv.Itoa(int(cols)),
 			"-y", strconv.Itoa(int(rows)),
-			"bash")
+			c.shell)
 	case ModeAttach:
 		args = append(args, "attach-session", "-t", name)
 	}

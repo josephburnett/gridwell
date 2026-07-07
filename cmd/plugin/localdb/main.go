@@ -48,7 +48,10 @@ func main() {
 	if uuid != "" {
 		socket = "gridwell-" + uuid
 	}
-	ctrl, tmuxCleanup, err := tmux.New(socket, "")
+	// `shell:` in the plugin's server.yaml config picks the login shell for
+	// new shell tiles; unset falls back to $SHELL then bash (resolved once
+	// inside tmux.New).
+	ctrl, tmuxCleanup, err := tmux.New(socket, "", cfg["shell"])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gridwell-localdb: tmux init: %v\n", err)
 		os.Exit(1)
