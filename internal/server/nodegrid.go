@@ -252,3 +252,7 @@ func (n *nodeGrid) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.Delet
 func (n *nodeGrid) SetTileAlt(context.Context, *pb.SetTileAltRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }
+
+func (n *nodeGrid) SetContentZoom(context.Context, *pb.SetContentZoomRequest) (*pb.TileResponse, error) {
+	return nil, errNodeGridReadOnly
+}

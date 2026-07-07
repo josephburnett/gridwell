@@ -202,7 +202,7 @@ func (a *App) applyURLOnBoot() {
 		if p.TextMode == "" {
 			p.TextMode = rpc.TextModeText
 		}
-		p.TextZoom = textFixedScale
+		p.TextZoom = a.textScaleFor(p) // base × the tile's content zoom (issue #82)
 		a.fetchBlobAndSetCursor(textTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()

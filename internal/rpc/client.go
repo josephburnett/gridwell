@@ -189,6 +189,14 @@ func (c *Client) SetTileAlt(ctx context.Context, tileID, alt string) (*Tile, err
 	return tileResp(c.cl.SetTileAlt(ctx, connect.NewRequest(&pb.SetTileAltRequest{TileId: tileID, Alt: alt})))
 }
 
+// SetContentZoom persists a tile's content scale (framing; never bumps
+// version) — the text/terminal font or page zoom (issue #82).
+func (c *Client) SetContentZoom(ctx context.Context, req *SetContentZoomRequest) (*Tile, error) {
+	return tileResp(c.cl.SetContentZoom(ctx, connect.NewRequest(&pb.SetContentZoomRequest{
+		TileId: req.TileID, Version: req.Version, ContentZoom: req.ContentZoom,
+	})))
+}
+
 func (c *Client) DeleteTile(ctx context.Context, req *DeleteTileRequest) error {
 	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(DeleteTileToProto(req)))
 	return err

@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 2
+const schemaVersion = 3
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -47,6 +47,8 @@ var migrations = []migration{
 	// v2: alt_user marks alt_text as user-owned (the rename gesture, issue
 	// #61) so automatic captures never overwrite a user-set name.
 	{to: 2, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN alt_user INTEGER NOT NULL DEFAULT 0`)},
+	// v3: content_zoom — per-tile content scale (issue #82), framing.
+	{to: 3, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN content_zoom REAL NOT NULL DEFAULT 0`)},
 }
 
 // addColumnDDL builds a migration run-func executing one additive DDL

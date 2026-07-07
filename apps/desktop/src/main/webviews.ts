@@ -11,6 +11,7 @@ import {
   controlBounds,
   parkedBounds,
   minWidthZoomFactor,
+  composeZoom,
   URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
   failLoadMessage,
@@ -48,6 +49,9 @@ interface Entry {
   // pluginUuid owns the tile (the session boundary); used to dehydrate the
   // session back to the plugin DB on ascent.
   pluginUuid: string;
+  // userZoom is the tile's persisted content zoom (issue #82); composed with
+  // the min-width layout zoom in applyMinWidthZoom. 0 = unset (1.0).
+  userZoom: number;
 }
 
 // CONTROL_SIZE / CONTROL_MARGIN place the corner button at the bottom-right
@@ -211,7 +215,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = ''): Promise<void> {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = '', contentZoom = 0): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = partitionFor(pluginUuid);
     let e = this.entries.get(paneId);
@@ -292,7 +296,7 @@ export class WebviewRegistry {
       // of the canvas overlay. syncURLViews will call setHidden for this pane on
       // the next draw() and reaffirm the correct state.
       const startHidden = this._globalHidden;
-      e = { view, control, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid };
+      e = { view, control, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid, userZoom: contentZoom };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -306,6 +310,7 @@ export class WebviewRegistry {
       return;
     }
 
+    e.userZoom = contentZoom; // the persisted zoom rides every (re)place
     // Reuse: update the stored bounds and, if visible, apply them immediately.
     // When hidden (parked for a gesture/palette), only update e.bounds so that
     // setHidden(false) will un-park to the NEW position — never call
@@ -370,12 +375,21 @@ export class WebviewRegistry {
   // "min width + horizontal scroll" without offscreen rendering. zoomFactor
   // resets on cross-origin navigation, so wireNav re-applies it on load.
   private applyMinWidthZoom(e: Entry): void {
-    const z = minWidthZoomFactor(e.bounds.width, URL_MIN_LAYOUT_WIDTH);
+    const z = composeZoom(minWidthZoomFactor(e.bounds.width, URL_MIN_LAYOUT_WIDTH), e.userZoom);
     try {
       e.view.webContents.setZoomFactor(z);
     } catch {
       // webContents not ready yet — wireNav re-applies on did-finish-load.
     }
+  }
+
+  // setZoom updates the USER content zoom for the pane's live view (the
+  // tile's content_zoom, issue #82) and re-applies the composed factor.
+  setZoom(paneId: string, zoom: number): void {
+    const e = this.entries.get(paneId);
+    if (!e) return;
+    e.userZoom = zoom;
+    this.applyMinWidthZoom(e);
   }
 
   // setHidden hides/shows the view without destroying it, and tracks whether

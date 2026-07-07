@@ -467,7 +467,7 @@ func (a *App) refreshFileOverlay() {
 		return
 	}
 	style := ta.Get("style")
-	left, top, width, height, fontPx := textTextareaBox(p, r)
+	left, top, width, height, fontPx := a.textTextareaBox(p, r)
 
 	setBoundsPx(style, left, top, width, height)
 	style.Set("clipPath", "none")
@@ -554,7 +554,7 @@ func (a *App) syncTextOverlayPosition() {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	left, top, width, height, fontPx := textTextareaBox(p, r)
+	left, top, width, height, fontPx := a.textTextareaBox(p, r)
 	style := a.textTextarea.Get("style")
 	setBoundsPx(style, left, top, width, height)
 	style.Set("fontSize", pxf(fontPx))
@@ -564,10 +564,11 @@ func (a *App) syncTextOverlayPosition() {
 // textTextareaBox returns the textarea overlay's screen rectangle and
 // font size for pane p with rect r. Adapter over panebox.TextareaBox
 // supplying the wasm renderer's fixed-scale constants.
-func textTextareaBox(_ *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
-	// Font size = the canvas painter's codePx so focused (textarea) and
+func (a *App) textTextareaBox(p *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
+	// Font size = the canvas painter's codePx at the pane's live scale
+	// (base × the tile's content zoom, issue #82), so focused (textarea) and
 	// blurred (canvas) raw text are the same size. See drawMarkdownText.
-	b, fp := panebox.TextareaBox(r, textSideInset, defaultMarkdownStyle().codePx, textFixedScale)
+	b, fp := panebox.TextareaBox(r, textSideInset, defaultMarkdownStyle().codePx, a.textScaleFor(p))
 	return b.X, b.Y, b.W, b.H, fp
 }
 

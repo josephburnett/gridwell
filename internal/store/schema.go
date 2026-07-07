@@ -150,6 +150,11 @@ CREATE TABLE IF NOT EXISTS tiles (
     -- foreground command on detach) must not overwrite a name the user set.
     -- Added post-v1 (schema v2, additive).
     alt_user      INTEGER NOT NULL DEFAULT 0,
+    -- content_zoom scales the content rendered INSIDE a text/shell/url tile
+    -- (the text font, the terminal font, the page zoom — issue #82).
+    -- Framing, never bumps version; 0 = unset (renders at 1.0). Added
+    -- post-v1 (schema v3, additive).
+    content_zoom  REAL NOT NULL DEFAULT 0,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (

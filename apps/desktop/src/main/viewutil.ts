@@ -105,6 +105,15 @@ export function minWidthZoomFactor(width: number, minWidth: number): number {
   return width >= minWidth ? 1 : Math.max(0.25, width / minWidth);
 }
 
+// composeZoom multiplies the layout min-width zoom with the USER content zoom
+// (the tile's persisted content_zoom, issue #82) — the two are independent
+// facts and neither may overwrite the other. Clamped to Chromium's
+// setZoomFactor floor.
+export function composeZoom(minWidthZoom: number, userZoom: number): number {
+  const u = userZoom > 0 ? userZoom : 1;
+  return Math.max(0.25, minWidthZoom * u);
+}
+
 // RIGHT_DRAG_THRESHOLD is how far (CSS px) the cursor must move with the right
 // button held before a press over a live URL view becomes a Gridwell pane
 // gesture rather than a plain right-click. Mirrors the canvas dragThreshold

@@ -76,6 +76,11 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
 	}
+	// Ctrl/Cmd +/-/0 zooms a descended tile's CONTENT (issue #82) — checked
+	// first so Electron's built-in page zoom never double-fires.
+	if a.handleContentZoomKey(args[0]) {
+		return nil
+	}
 	a.editRenderedKey(args[0])
 	return nil
 }
@@ -1505,7 +1510,7 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextMode = mode
 			fp.TextScrollY = initialScroll
 			fp.TextScrollX = initialScrollX
-			fp.TextZoom = textFixedScale
+			fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
 			// Reset per-pane view state on each new descent — it's view state,
 			// not tile state, so it does not survive across descents: any
 			// rendered-mode caret + dirty mark left by a previous occupant of
@@ -1546,7 +1551,7 @@ func (a *App) restoreEmbedReturn(fp *pane.Pane, saved *paneState) {
 	fp.TextMode = saved.TextMode
 	fp.TextScrollX = saved.TextScrollX
 	fp.TextScrollY = saved.TextScrollY
-	fp.TextZoom = textFixedScale
+	fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
 	a.refreshFileOverlay()
 }
 

@@ -104,7 +104,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if g, ok := a.c.Grid(t.GridID); ok {
 		proxyEndpoint = g.Meta.ProxyEndpoint
 	}
-	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint)
+	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t))
 	a.draw()
 }
 

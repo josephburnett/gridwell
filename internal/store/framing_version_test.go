@@ -107,3 +107,39 @@ func TestSetTileAltBumpsVersion(t *testing.T) {
 		t.Errorf("SetTileAlt version = %d, want %d (content edit must bump)", got, v0+1)
 	}
 }
+
+// TestContentZoomIsFraming (issue #82): SetContentZoom persists but NEVER
+// bumps the version — it is framing, like every view_* write — and a well
+// (whose view_zoom is the grid viewport) is refused.
+func TestContentZoomIsFraming(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+
+	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("CreateShell: %v", err)
+	}
+	out, err := s.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
+		TileID: tile.ID, Version: tile.Version, ContentZoom: 1.5,
+	})
+	if err != nil {
+		t.Fatalf("SetContentZoom: %v", err)
+	}
+	if out.ContentZoom != 1.5 {
+		t.Errorf("content_zoom = %v, want 1.5", out.ContentZoom)
+	}
+	if out.Version != tile.Version {
+		t.Errorf("version bumped %d -> %d; content zoom is framing", tile.Version, out.Version)
+	}
+
+	well, err := s.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 3, Y: 3, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("CreateWell: %v", err)
+	}
+	if _, err := s.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
+		TileID: well.ID, Version: well.Version, ContentZoom: 2,
+	}); err == nil {
+		t.Error("SetContentZoom on a well must be refused")
+	}
+}

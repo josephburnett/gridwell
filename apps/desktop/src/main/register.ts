@@ -7,6 +7,7 @@ import {
   PlaceArgs,
   SetBoundsArgs,
   SetHiddenArgs,
+  SetZoomArgs,
   RemoveArgs,
   PaneRef,
   FreezeResult,
@@ -77,7 +78,11 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid, a.proxyEndpoint ?? '');
+    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid, a.proxyEndpoint ?? '', a.contentZoom ?? 0);
+  });
+
+  ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {
+    registry.setZoom(a.paneId, a.zoom);
   });
 
   ipcMain.handle(CH.setBounds, (_e, a: SetBoundsArgs): void => {

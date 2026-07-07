@@ -111,6 +111,12 @@ message Tile {
   // so render and the store can never disagree on what a link is. Wire-only,
   // derived — never a stored column.
   bool reference = 26;
+
+  // content_zoom scales the CONTENT rendered inside a text/shell/url tile —
+  // the text font, the terminal font, the page zoom (issue #82). Framing,
+  // not content: persisted per tile, never bumps version. 0 means unset
+  // (renders at 1.0). Written by SetContentZoom only.
+  double content_zoom = 27;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -251,6 +257,15 @@ message GetTileRequest {
 message SetTileAltRequest {
   string tile_id = 1;
   string alt = 2;
+}
+
+// SetContentZoom persists the content scale of a text/shell/url tile.
+// Framing (no version bump); version is still claimed for the in-place-edit
+// check like every tile write.
+message SetContentZoomRequest {
+  string tile_id = 1;
+  int64  version = 2;
+  double content_zoom = 3;
 }
 
 // (The Mount RPC is gone: mounting is a CloneTile of the plugin's node-grid
@@ -487,6 +502,11 @@ service Gridwell {
   rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
   rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
+
+  // SetContentZoom persists the per-tile content scale (text font, terminal
+  // font, page zoom — issue #82). Framing: never bumps version. Refused for
+  // wells (their view_zoom is the grid viewport, a different concept).
+  rpc SetContentZoom(SetContentZoomRequest) returns (TileResponse);
 
   // SetRootView persists the plugin root-grid framing (the portal-level
   // analogue of SetTile for a well). Framing only — never bumps version.

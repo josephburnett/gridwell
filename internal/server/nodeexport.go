@@ -212,6 +212,14 @@ func (n *nodeExport) SetTileAlt(ctx context.Context, r *pb.SetTileAltRequest) (*
 	return resp.Msg, nil
 }
 
+func (n *nodeExport) SetContentZoom(ctx context.Context, r *pb.SetContentZoomRequest) (*pb.TileResponse, error) {
+	resp, err := n.h.SetContentZoom(ctx, connect.NewRequest(r))
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return resp.Msg, nil
+}
+
 func (n *nodeExport) SetRootView(ctx context.Context, r *pb.SetRootViewRequest) (*pb.SetRootViewResponse, error) {
 	resp, err := n.h.SetRootView(ctx, connect.NewRequest(r))
 	if err != nil {
