@@ -34,10 +34,6 @@ type Config struct {
 	// tile size tracks paneZoom*CellPx so the preview matches the
 	// to-be-placed tile.
 	CellPx float64
-	// NameFieldH is the height of the name row above the swatches — the
-	// text field whose value becomes the created tile's label (a grid's
-	// name). The wasm layer floats a real HTML input over this rect.
-	NameFieldH float64
 }
 
 // Default returns the layout constants currently used by the wasm
@@ -51,7 +47,6 @@ func Default() Config {
 		TileMaxPx:  128,
 		GapPx:      8,
 		CellPx:     pane.CellPx,
-		NameFieldH: 26,
 	}
 }
 
@@ -98,24 +93,11 @@ func (l Layout) TilePx() float64 {
 func (l Layout) PopoverRect() Rect {
 	tile := l.TilePx()
 	w := l.rowWidthPx(l.NumTiles)
-	h := l.Cfg.NameFieldH + tile + 3*l.Cfg.GapPx
+	h := tile + 2*l.Cfg.GapPx
 	cx, cy := l.PlusCenter()
 	x := cx + l.Cfg.PlusRadius - w
 	y := cy - l.Cfg.PlusRadius - h - 8
 	return Rect{X: x, Y: y, W: w, H: h}
-}
-
-// NameFieldRect returns the screen rect of the name field — the full-width
-// row above the swatches.
-func (l Layout) NameFieldRect() Rect {
-	pop := l.PopoverRect()
-	gap := l.Cfg.GapPx
-	return Rect{
-		X: pop.X + gap,
-		Y: pop.Y + gap,
-		W: pop.W - 2*gap,
-		H: l.Cfg.NameFieldH,
-	}
 }
 
 // TileRect returns the screen rect of the i'th template tile inside the
@@ -126,7 +108,7 @@ func (l Layout) TileRect(i int) Rect {
 	gap := l.Cfg.GapPx
 	return Rect{
 		X: pop.X + gap + float64(i)*(tile+gap),
-		Y: pop.Y + gap + l.Cfg.NameFieldH + gap,
+		Y: pop.Y + gap,
 		W: tile,
 		H: tile,
 	}

@@ -94,12 +94,6 @@ type App struct {
 	// pane.Frame.MenuOpen.
 	menu menu.State
 
-	// paletteName is the palette's HTML name input (#gw-palette-name), floated
-	// over the popover's name row. Its visibility and position are a VIEW of
-	// the menu state, synced every draw (syncPaletteNameField); its value is an
-	// ephemeral draft read once at template-drop commit and cleared on close.
-	paletteName js.Value
-
 	// errs is the single owner of user-visible failure notices (charter §6).
 	// Every failure path reports via a.reportErr / a.resolveErr; only the
 	// notice-strip render and its click handler read it. Never write error
@@ -631,7 +625,6 @@ func main() {
 	}))
 
 	app.installCanvasInput()
-	app.installPaletteNameField()
 	app.installWebviewListeners()
 	app.installShellMirror()
 	app.installTestHook() // read-only window.__gridwellTest, only under ?e2e=1

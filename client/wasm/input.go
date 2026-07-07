@@ -1941,7 +1941,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	case tplWell:
 		// The palette's name field labels the new grid; read it before
 		// menu.Close hides and clears the input.
-		a.createWellAtCell(destPane, dropX, dropY, a.paletteNameValue())
+		a.createWellAtCell(destPane, dropX, dropY)
 	case tplMarkdown:
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
 	case tplShell:
@@ -1952,13 +1952,14 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
 // label, when non-empty, names the new grid (stored as the well's alt_text).
-func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64, label string) {
+func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	path := slices.Clone(p.Path)
+	// Wells are created UNNAMED: naming happens from inside, via the name
+	// bubble (issue #118 — the + menu's name field is gone).
 	req := &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		Label: label,
 	}
 	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateWell(ctx, req)
