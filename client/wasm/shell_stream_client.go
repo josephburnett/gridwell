@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"syscall/js"
 
@@ -32,6 +33,14 @@ type shellStreamConn struct {
 
 	tileID string
 	paneID string
+	// anchor + path are the plugin-root grid id and the descent path to the
+	// grid that holds this shell tile, captured when the stream opened. The
+	// freeze (SetShellPreview) needs them to resolve this tile's leaf grid —
+	// same contract as urlView.anchor/path; without them the writeback
+	// resolves against the plugin ROOT grid and fails for any shell inside a
+	// descended sub-grid (issue #77).
+	anchor string
+	path   []string
 
 	onMessage      js.Func
 	onOpen         js.Func
@@ -262,6 +271,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		circle:    circle,
 		tileID:    tileID,
 		paneID:    p.ID,
+		anchor:    p.Anchor,
+		path:      slices.Clone(p.Path),
 		onMouse:   onMouse,
 		lastCols:  uint16(cols),
 		lastRows:  uint16(rows),
@@ -548,7 +559,7 @@ func (a *App) closeShellStream(paneID string) {
 		// will satisfy any expected blob id until a specific Put
 		// supersedes (which happens on the next GetTilePreview).
 		a.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
-		go a.postSetShellPreview(tileID, jpegBytes)
+		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
 	if conn.ws.Truthy() {
 		conn.ws.Call("close")
@@ -702,25 +713,16 @@ func snapshotShellCanvas(container js.Value) []byte {
 }
 
 // postSetShellPreview sends a SetShellPreview RPC with the captured
-// JPEG. The previous tile version is needed for optimistic
-// concurrency; we look it up from the cache to avoid a synchronous
-// GetTile round-trip in the ascent path.
-func (a *App) postSetShellPreview(tileID string, jpeg []byte) {
-	// Find the tile in any cached grid.
-	var version int64
-	for _, gid := range a.c.KnownGridIDs() {
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
-		}
-		if t, ok := g.Tiles[tileID]; ok {
-			version = t.Version
-			break
-		}
-	}
+// JPEG. The anchor+path locate the tile's leaf grid (the server
+// validates the tile against the path — a shell inside a well needs
+// the real descent path, issue #77). The previous tile version is
+// needed for optimistic concurrency; we look it up from the cache to
+// avoid a synchronous GetTile round-trip in the ascent path.
+func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
 	req := &rpc.SetShellPreviewRequest{
+		Path:    rpc.Path{WellIDs: path},
 		TileID:  tileID,
-		Version: version,
+		Version: a.tileVersionAt(anchor, path, tileID),
 		JPEG:    jpeg,
 	}
 	_, err := a.cl.SetShellPreview(context.Background(), req)
