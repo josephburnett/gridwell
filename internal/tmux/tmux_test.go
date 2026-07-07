@@ -50,7 +50,7 @@ func TestParseSessionNameRejectsNonGridwell(t *testing.T) {
 // tile" might attach to stale state from a previous test run on the
 // same socket, etc.
 func TestArgsCreate(t *testing.T) {
-	c := &Controller{binary: "/usr/bin/tmux", socketName: "test", configPath: "/tmp/cfg.conf"}
+	c := &Controller{binary: "/usr/bin/tmux", socketName: "test", configPath: "/tmp/cfg.conf", shell: "bash"}
 	got := c.Args("t/42", ModeCreate, 80, 24, "/home/joe")
 	want := []string{
 		"/usr/bin/tmux", "-L", "test", "-f", "/tmp/cfg.conf",
@@ -68,7 +68,7 @@ func TestArgsCreate(t *testing.T) {
 // catches regressions where an empty -c "" leaks into argv (tmux
 // would create the session in / rather than $HOME).
 func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
-	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c"}
+	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "bash"}
 	got := c.Args("t/1", ModeCreate, 80, 24, "")
 	for _, a := range got {
 		if a == "-c" {
@@ -143,7 +143,7 @@ func TestIsMissingSessionErrMatchesTmuxMessages(t *testing.T) {
 // off), shell tiles would gain a chrome-y bottom bar the user
 // explicitly said not to show.
 func TestConfigFileWrittenWithExpectedDirectives(t *testing.T) {
-	c, cleanup, err := New("gridwell-test-cfg", "")
+	c, cleanup, err := New("gridwell-test-cfg", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestConfigFileWrittenWithExpectedDirectives(t *testing.T) {
 // server cycles many controllers (tests, hot reload) and forgets to
 // rm its temp configs.
 func TestCleanupRemovesConfigFile(t *testing.T) {
-	c, cleanup, err := New("gridwell-test-cleanup", "")
+	c, cleanup, err := New("gridwell-test-cleanup", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func requireTmux(t *testing.T) {
 func newTestController(t *testing.T) *Controller {
 	t.Helper()
 	socket := fmt.Sprintf("gridwell-test-%d-%s", os.Getpid(), strings.ReplaceAll(t.Name(), "/", "-"))
-	c, cleanup, err := New(socket, "")
+	c, cleanup, err := New(socket, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,4 +384,47 @@ func mustExec(t *testing.T, run any, extra ...string) {
 	// has-session round-trip. tmux is usually instant; this guards
 	// against the occasional CI flake.
 	time.Sleep(20 * time.Millisecond)
+}
+
+// TestArgsCreateUsesConfiguredShell: the `shell:` plugin config key picks the
+// login shell for newly-created sessions (issue #86) — the argv's final
+// element, where the hardcoded "bash" used to live.
+func TestArgsCreateUsesConfiguredShell(t *testing.T) {
+	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "/bin/zsh"}
+	got := c.Args("t/9", ModeCreate, 80, 24, "")
+	if got[len(got)-1] != "/bin/zsh" {
+		t.Errorf("argv shell = %q, want /bin/zsh (argv %v)", got[len(got)-1], got)
+	}
+}
+
+// TestNewResolvesShell locks the one resolution point: explicit config wins,
+// then $SHELL, then the bash fallback.
+func TestNewResolvesShell(t *testing.T) {
+	newShell := func(t *testing.T, cfg string) string {
+		t.Helper()
+		c, cleanup, err := New("gridwell-test-shell", "", cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = cleanup() })
+		return c.shell
+	}
+	t.Run("config wins over env", func(t *testing.T) {
+		t.Setenv("SHELL", "/bin/zsh")
+		if got := newShell(t, "fish"); got != "fish" {
+			t.Errorf("shell = %q, want fish", got)
+		}
+	})
+	t.Run("falls back to $SHELL", func(t *testing.T) {
+		t.Setenv("SHELL", "/bin/zsh")
+		if got := newShell(t, ""); got != "/bin/zsh" {
+			t.Errorf("shell = %q, want /bin/zsh", got)
+		}
+	})
+	t.Run("falls back to bash", func(t *testing.T) {
+		t.Setenv("SHELL", "")
+		if got := newShell(t, ""); got != "bash" {
+			t.Errorf("shell = %q, want bash", got)
+		}
+	})
 }
