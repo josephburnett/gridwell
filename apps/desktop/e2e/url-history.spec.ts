@@ -73,6 +73,22 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
     })
     .toBeGreaterThan(wcBefore);
 
+  // Wait for the RESTORE's own navigation to commit before going back — a
+  // goBack issued while the restore's load is still in flight is superseded
+  // and silently no-ops (canGoBack is already true the moment the entries
+  // install, which is exactly the trap; captured from a real in-suite
+  // failure trace).
+  await expect
+    .poll(
+      () =>
+        electronApp.evaluate(({ webContents }) => {
+          const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('h='));
+          return wc ? { url: wc.getURL(), loading: wc.isLoading() } : { url: '', loading: true };
+        }),
+      { timeout: 15_000 },
+    )
+    .toMatchObject({ loading: false });
+
   const canGoBack = await electronApp.evaluate(({ webContents }) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('h='));
     if (!wc) return false;

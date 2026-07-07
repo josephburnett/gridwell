@@ -75,11 +75,24 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     })
     .not.toBe('');
   await gw.waitIdle();
-  await window.waitForTimeout(500);
+  // RETRYABLE ascent: a single click can land mid-animation under suite load
+  // (deliberately swallowed) — re-click until the descent actually clears.
   const m = window.mouse;
-  await m.move(lower.x + lower.w / 2, lower.y + lower.h / 2);
-  await m.down({ button: 'middle' });
-  await m.up({ button: 'middle' });
+  await expect
+    .poll(
+      async () => {
+        const lp = (await gw.panes()).find((p) => p.id === lower.id);
+        if (!lp) return '';
+        if (lp.textFocus !== '') {
+          await m.move(lp.x + lp.w / 2, lp.y + lp.h / 2);
+          await m.down({ button: 'middle' });
+          await m.up({ button: 'middle' });
+        }
+        return lp.textFocus;
+      },
+      { timeout: 15_000, intervals: [700, 700, 1000, 1500] },
+    )
+    .toBe('');
   await gw.waitIdle();
   await expect
     .poll(async () => {
