@@ -153,18 +153,34 @@ func IsCaretStop(ops []DrawOp, src string, offset int) bool {
 		return false
 	}
 	aEnd := 0 // nearest preceding run end; document start when there is none
+	hasRun := false
+	runAtOrAfter := false // some run starts at or after the offset
 	for _, op := range ops {
 		if op.Kind != OpText || op.SrcLen == 0 {
 			continue
 		}
+		hasRun = true
 		if offset >= op.SrcStart && offset <= op.SrcStart+op.SrcLen {
 			return true
 		}
 		if e := op.SrcStart + op.SrcLen; e <= offset && e > aEnd {
 			aEnd = e
 		}
+		if op.SrcStart >= offset {
+			runAtOrAfter = true
+		}
 	}
-	return strings.TrimLeft(src[aEnd:offset], " \t\n") == ""
+	if strings.TrimLeft(src[aEnd:offset], " \t\n") == "" {
+		return true
+	}
+	// Past the LAST run, the renderer may have consumed trailing non-whitespace
+	// markup — a link's "](url)", a closing code fence, an embed. The document
+	// must still be extendable: every offset past ALL remaining non-whitespace
+	// is a stop (the caret sits after the whole construct; typing there appends
+	// after its markup). Offsets INSIDE the markup stay excluded, and the rule
+	// needs a preceding run so PointFromCaret has an anchor to place it from
+	// (issue #91).
+	return hasRun && !runAtOrAfter && strings.TrimLeft(src[offset:], " \t\n") == ""
 }
 
 // NextCaretStop returns the nearest caret stop strictly after offset, or
@@ -233,6 +249,20 @@ func CaretFromPoint(ops []DrawOp, src string, px, py float64, m Measure) (offset
 		if i > end && (i == len(src) || src[i] == '\n') {
 			return i, true
 		}
+		// The line ends in consumed markup instead (a trailing "](url)", a
+		// fence) and no run follows in the document: land just past the markup
+		// — the first position IsCaretStop admits — so a click past the last
+		// visible glyph can still start typing at the end (issue #91). Only
+		// same-line markup qualifies (no newline between here and it).
+		if !runStartsAtOrAfter(ops, end) {
+			j := len(src)
+			for j > i && (src[j-1] == ' ' || src[j-1] == '\t' || src[j-1] == '\n') {
+				j--
+			}
+			if j > i && strings.IndexByte(src[i:j], '\n') < 0 {
+				return j, true
+			}
+		}
 	}
 	bestK, bestDx := 0, math.Inf(1)
 	for _, b := range runeBoundaries(op.Text) {
@@ -242,6 +272,17 @@ func CaretFromPoint(ops []DrawOp, src string, px, py float64, m Measure) (offset
 		}
 	}
 	return op.SrcStart + bestK, true
+}
+
+// runStartsAtOrAfter reports whether any verbatim run starts at or after the
+// given source offset.
+func runStartsAtOrAfter(ops []DrawOp, offset int) bool {
+	for _, op := range ops {
+		if op.Kind == OpText && op.SrcLen > 0 && op.SrcStart >= offset {
+			return true
+		}
+	}
+	return false
 }
 
 // axisGap is the distance from v to the [lo, hi] interval (0 when inside).

@@ -5,6 +5,7 @@ import (
 
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 // Lower parses markdown source and lowers the goldmark AST into the document
@@ -142,13 +143,22 @@ func lowerAlign(a east.Alignment) Alignment {
 // whose children are walked.
 func lowerInline(parent ast.Node, src []byte) []Span {
 	var spans []Span
-	appendInline(&spans, parent, src, StyleNone, "")
+	// cursor is a lower bound on where un-emitted source can start: it begins
+	// at the block's own first byte and advances past every verbatim span as
+	// the walk emits it. Autolink source recovery (below) searches from here,
+	// so it can never land in an EARLIER construct's consumed markup.
+	cursor := 0
+	if b, ok := parent.(interface{ Lines() *text.Segments }); ok && b.Lines().Len() > 0 {
+		cursor = b.Lines().At(0).Start
+	}
+	appendInline(&spans, parent, src, StyleNone, "", &cursor)
 	return spans
 }
 
 // appendInline walks n's inline children, accumulating spans under the given
-// inherited style and link href.
-func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href string) {
+// inherited style and link href. cursor tracks the end of the last verbatim
+// source the walk has emitted (see lowerInline).
+func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href string, cursor *int) {
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		switch t := c.(type) {
 		case *ast.Text:
@@ -160,6 +170,7 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 				// child Text node's segment covers only the visible text.
 				*out = append(*out, Span{Text: text, Style: style, Href: href,
 					SrcStart: t.Segment.Start, SrcLen: t.Segment.Stop - t.Segment.Start})
+				advanceCursor(cursor, t.Segment.Stop)
 			}
 			// A hard line break (two trailing spaces / backslash) forces a new
 			// line — carried as a "\n" sentinel span the layout turns into a
@@ -180,9 +191,9 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 			} else {
 				s |= StyleItalic
 			}
-			appendInline(out, t, src, s, href)
+			appendInline(out, t, src, s, href, cursor)
 		case *east.Strikethrough:
-			appendInline(out, t, src, style|StyleStrike, href)
+			appendInline(out, t, src, style|StyleStrike, href, cursor)
 		case *ast.CodeSpan:
 			sp := Span{Text: codeSpanText(t, src), Style: style | StyleCode, Href: href}
 			// A code span whose text is one verbatim source slice gets the same
@@ -192,6 +203,7 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 			if first, ok := t.FirstChild().(*ast.Text); ok && t.FirstChild() == t.LastChild() {
 				if string(first.Segment.Value(src)) == sp.Text {
 					sp.SrcStart, sp.SrcLen = first.Segment.Start, first.Segment.Len()
+					advanceCursor(cursor, first.Segment.Stop)
 				}
 			}
 			*out = append(*out, sp)
@@ -202,19 +214,40 @@ func appendInline(out *[]Span, n ast.Node, src []byte, style SpanStyle, href str
 				// embed span carrying both the link href and the image src.
 				*out = append(*out, imageSpan(img, src, style|StyleEmbed, dest))
 			} else {
-				appendInline(out, t, src, style|StyleLink, dest)
+				appendInline(out, t, src, style|StyleLink, dest, cursor)
 			}
 		case *ast.AutoLink:
-			url := string(t.URL(src))
-			*out = append(*out, Span{Text: url, Style: style | StyleLink, Href: url})
+			// Render the VERBATIM source text (Label) so the caret gets a linear
+			// mapping into it — URL() may differ (goldmark prepends http:// to a
+			// www autolink), and a rendered-text/source mismatch would make the
+			// run unmappable (issue #91). The href keeps the qualified URL.
+			// goldmark does not expose the autolink's segment, so recover it:
+			// the label appears verbatim at/after the cursor, and no earlier
+			// consumed markup lies in that window (autolink boundary rules
+			// forbid one directly abutting a consumed construct).
+			label := string(t.Label(src))
+			sp := Span{Text: label, Style: style | StyleLink, Href: string(t.URL(src))}
+			if idx := strings.Index(string(src[*cursor:]), label); idx >= 0 {
+				sp.SrcStart, sp.SrcLen = *cursor+idx, len(label)
+				advanceCursor(cursor, sp.SrcStart+sp.SrcLen)
+			}
+			*out = append(*out, sp)
 		case *ast.Image:
 			*out = append(*out, imageSpan(t, src, style|StyleEmbed, ""))
 		case *east.TaskCheckBox:
 			// Rendered as a marker by the list layout, not inline text — skip.
 		default:
 			// Unknown inline (raw HTML, math, ...) — fold in its text children.
-			appendInline(out, c, src, style, href)
+			appendInline(out, c, src, style, href, cursor)
 		}
+	}
+}
+
+// advanceCursor moves the verbatim-source cursor forward to end, never back
+// (nested walks can emit spans the outer level already advanced past).
+func advanceCursor(cursor *int, end int) {
+	if end > *cursor {
+		*cursor = end
 	}
 }
 
