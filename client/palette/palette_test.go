@@ -57,46 +57,6 @@ func TestTilePxFixedAcrossZoom(t *testing.T) {
 	}
 }
 
-func TestPopoverAndTileRects(t *testing.T) {
-	l := makeLayout()
-	pop := l.PopoverRect()
-	// 4 tiles, each 48 wide (fixed = CellPx*0.75), 5 gaps of 8 = 192+40 = 232.
-	if pop.W != 232 {
-		t.Errorf("PopoverRect width = %v, want 232", pop.W)
-	}
-	// Height = name field + tile + 3*gap = 26+48+24 = 98.
-	if pop.H != 98 {
-		t.Errorf("PopoverRect height = %v, want 98", pop.H)
-	}
-	// Anchor: bottom-right corner of popover aligns with PlusRadius right of plus center.
-	cx, cy := l.PlusCenter()
-	if pop.X+pop.W != cx+l.Cfg.PlusRadius {
-		t.Errorf("PopoverRect right edge: got %v, want %v", pop.X+pop.W, cx+l.Cfg.PlusRadius)
-	}
-	// Name field: full-width row inset by one gap on every side.
-	nf := l.NameFieldRect()
-	if nf.X != pop.X+l.Cfg.GapPx || nf.Y != pop.Y+l.Cfg.GapPx ||
-		nf.W != pop.W-2*l.Cfg.GapPx || nf.H != l.Cfg.NameFieldH {
-		t.Errorf("NameFieldRect = %+v, want full-width row at popover top", nf)
-	}
-	// Tile 0 starts at gap after the name field row.
-	t0 := l.TileRect(0)
-	wantY := pop.Y + l.Cfg.GapPx + l.Cfg.NameFieldH + l.Cfg.GapPx
-	if t0.X != pop.X+l.Cfg.GapPx || t0.Y != wantY {
-		t.Errorf("TileRect(0) origin = (%v,%v), want (%v,%v)",
-			t0.X, t0.Y, pop.X+l.Cfg.GapPx, wantY)
-	}
-	if nf.Y+nf.H > t0.Y {
-		t.Errorf("name field bottom %v overlaps tile row top %v", nf.Y+nf.H, t0.Y)
-	}
-	// Tiles are tile+gap apart.
-	t1 := l.TileRect(1)
-	if t1.X-t0.X != 56 {
-		t.Errorf("TileRect spacing = %v, want 56 (48+8)", t1.X-t0.X)
-	}
-	_ = cy
-}
-
 func TestTileIndexAt(t *testing.T) {
 	l := makeLayout()
 	for i := range l.NumTiles {
@@ -175,22 +135,3 @@ func TestTrackingPaneSize(t *testing.T) {
 // vary with count either). Plugins are not in the palette (they are on the
 // launcher), so the two-row layout machinery is gone; this test documents and
 // locks that invariant.
-func TestPaletteIsAlwaysSingleRow(t *testing.T) {
-	l := makeLayout()
-	tile := l.TilePx()
-	gap := l.Cfg.GapPx
-	wantH := l.Cfg.NameFieldH + tile + 3*gap
-	for _, n := range []int{1, 2, 4, 6, 8} {
-		l.NumTiles = n
-		if got := l.PopoverRect().H; got != wantH {
-			t.Errorf("NumTiles=%d: PopoverRect.H = %v, want %v (single row)", n, got, wantH)
-		}
-		// All tile rects share the same Y coordinate (one row).
-		y0 := l.TileRect(0).Y
-		for i := 1; i < n; i++ {
-			if got := l.TileRect(i).Y; got != y0 {
-				t.Errorf("NumTiles=%d tile %d: Y=%v differs from tile 0 Y=%v", n, i, got, y0)
-			}
-		}
-	}
-}

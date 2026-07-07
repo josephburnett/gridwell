@@ -17,7 +17,6 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/menu"
@@ -93,12 +92,6 @@ type App struct {
 	// its methods (see client/menu). Persistence across a portal descent rides in
 	// pane.Frame.MenuOpen.
 	menu menu.State
-
-	// paletteName is the palette's HTML name input (#gw-palette-name), floated
-	// over the popover's name row. Its visibility and position are a VIEW of
-	// the menu state, synced every draw (syncPaletteNameField); its value is an
-	// ephemeral draft read once at template-drop commit and cleared on close.
-	paletteName js.Value
 
 	// errs is the single owner of user-visible failure notices (charter §6).
 	// Every failure path reports via a.reportErr / a.resolveErr; only the
@@ -216,10 +209,6 @@ type App struct {
 	textTextareaInputCb  js.Func
 	textTextareaScrollCb js.Func
 
-	// lastBareRightClick remembers the previous no-drag right release for
-	// the double-right-click pane zoom toggle (issue #80).
-	lastBareRightClick gesture.RightClick
-
 	// renamePill / renameEditing back the rename-while-descended affordance
 	// (issue #61): one shared DOM pill at the focused pane's top-center (see
 	// rename_overlay.go). renameEditing hides the pill while its input twin
@@ -227,6 +216,9 @@ type App struct {
 	renamePill        js.Value
 	renamePillClickCb js.Func
 	renameEditing     bool
+	// lastNativePill dedupes label pushes to a live pane's native bubble
+	// twin (paneID + NUL + label) so the per-draw sync doesn't spam IPC.
+	lastNativePill string
 
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
@@ -631,7 +623,6 @@ func main() {
 	}))
 
 	app.installCanvasInput()
-	app.installPaletteNameField()
 	app.installWebviewListeners()
 	app.installShellMirror()
 	app.installTestHook() // read-only window.__gridwellTest, only under ?e2e=1

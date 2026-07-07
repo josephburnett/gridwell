@@ -53,7 +53,7 @@ func (b viewBounds) toJS() js.Value {
 // url at bounds, bound to the owning plugin's session partition (pluginUUID is
 // the session boundary). proxyEndpoint ("" = direct) is the grid-stamped
 // network context — a remote plugin's tiles browse through the tunnel SOCKS.
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string, contentZoom float64, history string) {
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string, contentZoom float64, history, nameLabel string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -68,6 +68,7 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("proxyEndpoint", proxyEndpoint)
 	args.Set("contentZoom", contentZoom)
 	args.Set("history", history)
+	args.Set("nameLabel", nameLabel)
 	g.Call("placeWebview", args)
 }
 
@@ -124,6 +125,19 @@ func bridgeSetZoom(paneID string, zoom float64) {
 	args.Set("paneId", paneID)
 	args.Set("zoom", zoom)
 	g.Call("setZoom", args)
+}
+
+// bridgeSetNameLabel pushes the focused live pane's bubble text into its
+// native pill twin (issue #118).
+func bridgeSetNameLabel(paneID, label string) {
+	g := bridge()
+	if !g.Truthy() {
+		return
+	}
+	args := js.Global().Get("Object").New()
+	args.Set("paneId", paneID)
+	args.Set("label", label)
+	g.Call("setNameLabel", args)
 }
 
 // bridgeRemove tears the view down and invokes onFreeze with the final
@@ -243,6 +257,14 @@ func (a *App) installWebviewListeners() {
 		a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
 		return nil
 	})
+	// The native name bubble over a live url pane was clicked (issue #118):
+	// left opens the rename input (renameEditing parks the view so the DOM
+	// input is usable), right toggles the pane zoom.
+	onNameClick := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.onNativeNameClick(jsString(ev.Get("paneId")), ev.Get("button").Int())
+		return nil
+	})
 	// The Electron main process reports every webview/session/sidecar failure
 	// it detects (issue #46) over this one channel; feed it straight into the
 	// same error surface every other failure path uses (a.reportErr) — one
@@ -261,6 +283,7 @@ func (a *App) installWebviewListeners() {
 	g.Call("onMiddleForward", onMiddleForward)
 	g.Call("onLeftForward", onLeftForward)
 	g.Call("onOpenBelow", onOpenBelow)
+	g.Call("onNameClick", onNameClick)
 	g.Call("onError", onError)
 	// Listeners live for the lifetime of the app; no Release.
 }

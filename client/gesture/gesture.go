@@ -183,22 +183,3 @@ func ResizeAffordance(inPlus bool, region pane.Region, hasDivider bool) (arm boo
 		return true, "ns-resize"
 	}
 }
-
-// DoubleRightClickMs is the window within which two bare right-clicks on the
-// same pane read as one double right-click — the pane zoom/unzoom toggle
-// (issue #80). Mouse-only by design: a slow double costs nothing, because a
-// single bare right-click on a pane interior is a deliberate no-op.
-const DoubleRightClickMs = 400
-
-// RightClick remembers the last bare (no-drag) right-click for the
-// double-click detector.
-type RightClick struct {
-	PaneID string
-	AtMs   float64
-}
-
-// IsDoubleRightClick reports whether a bare right-click on paneID at nowMs
-// completes a double right-click with the remembered previous one.
-func IsDoubleRightClick(prev RightClick, paneID string, nowMs float64) bool {
-	return prev.PaneID != "" && prev.PaneID == paneID && nowMs-prev.AtMs <= DoubleRightClickMs
-}

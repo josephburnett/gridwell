@@ -202,19 +202,3 @@ func TestResizeAffordance(t *testing.T) {
 		}
 	}
 }
-
-func TestIsDoubleRightClick(t *testing.T) {
-	prev := RightClick{PaneID: "p1", AtMs: 1000}
-	if !IsDoubleRightClick(prev, "p1", 1300) {
-		t.Error("two bare right-clicks on the same pane within the window must pair")
-	}
-	if IsDoubleRightClick(prev, "p1", 1000+DoubleRightClickMs+1) {
-		t.Error("too slow — must not pair")
-	}
-	if IsDoubleRightClick(prev, "p2", 1100) {
-		t.Error("different pane — must not pair")
-	}
-	if IsDoubleRightClick(RightClick{}, "p1", 100) {
-		t.Error("no previous click — must not pair")
-	}
-}
