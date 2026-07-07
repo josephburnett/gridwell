@@ -87,6 +87,14 @@ export function parkedBounds(width: number, height: number): Bounds {
   return { x: PARK_COORD, y: PARK_COORD, width, height };
 }
 
+// URL_MIN_LAYOUT_WIDTH is the narrowest layout width (CSS px) a live URL view
+// renders at; below it the page is zoomed to fit instead of reflowed to a
+// cramped semi-mobile layout. 800 keeps a proper desktop layout, only slightly
+// scaled, in the pane widths where 640 used to produce awkward reflow
+// (issue #87). Lives here (not webviews.ts) so the production value is pinned
+// by a unit test.
+export const URL_MIN_LAYOUT_WIDTH = 800;
+
 // minWidthZoomFactor is the page zoom that keeps a narrow live URL view laying
 // out at minWidth instead of reflowing to a cramped mobile layout: 1 at or above
 // minWidth, else width/minWidth clamped to a 0.25 floor. A native WebContentsView

@@ -8,6 +8,7 @@ import {
   controlBounds,
   parkedBounds,
   minWidthZoomFactor,
+  URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   dragExceeded,
   classifyRightPress,
@@ -130,6 +131,14 @@ test('minWidthZoomFactor scales a narrow view to fit and clamps the floor', () =
   // Below the floor the zoom clamps at 0.25 rather than shrinking to nothing.
   assert.equal(minWidthZoomFactor(64, min), 0.25);
   assert.equal(minWidthZoomFactor(1, min), 0.25);
+});
+
+test('URL_MIN_LAYOUT_WIDTH pins the production zoom-to-fit threshold', () => {
+  // Owner-tuned (issue #87): below 800 the page keeps an 800px desktop layout
+  // scaled to fit, instead of reflowing to a cramped semi-mobile layout.
+  assert.equal(URL_MIN_LAYOUT_WIDTH, 800);
+  assert.equal(minWidthZoomFactor(900, URL_MIN_LAYOUT_WIDTH), 1);
+  assert.equal(minWidthZoomFactor(400, URL_MIN_LAYOUT_WIDTH), 0.5);
 });
 
 // Regression guard for mechanism B of issue #33: classifyRightPress requires
