@@ -10,6 +10,7 @@ import {
   controlVisible,
   controlBounds,
   parkedBounds,
+  namePillBounds,
   minWidthZoomFactor,
   composeZoom,
   serializeHistory,
@@ -54,6 +55,14 @@ interface Entry {
   // userZoom is the tile's persisted content zoom (issue #82); composed with
   // the min-width layout zoom in applyMinWidthZoom. 0 = unset (1.0).
   userZoom: number;
+  // namePill is the native name-bubble twin at the view's top-center — DOM
+  // cannot paint above a WebContentsView, so live panes get this instead of
+  // the renderer's #gw-rename-pill (issue #118). Shows with focus, like the
+  // corner control. nameLabel is the entry's OWNED copy of the text: pushed
+  // on change and re-pushed when the pill page finishes loading, so a push
+  // that raced the load is never lost.
+  namePill: WebContentsView;
+  nameLabel: string;
 }
 
 // CONTROL_SIZE / CONTROL_MARGIN place the corner button at the bottom-right
@@ -82,6 +91,36 @@ const CONTROL_HTML =
      addEventListener('contextmenu',e=>e.preventDefault());
      </script>`,
   );
+
+// NAME_HTML is the native name-bubble twin for LIVE url panes (issue #118):
+// DOM cannot paint above a WebContentsView, so the focused pane's bubble is
+// itself a tiny native view at the top-center. window.setLabel(text) updates
+// it; mousedown forwards the button to main (left → open the rename input in
+// the renderer, right → pane zoom), mirroring the corner control's pattern.
+const NAME_HTML =
+  'data:text/html,' +
+  encodeURIComponent(
+    `<!doctype html><meta charset=utf8><style>
+     html,body{margin:0;height:100%;overflow:hidden;-webkit-user-select:none;
+       background:transparent;display:flex;align-items:flex-start;justify-content:center}
+     #p{max-width:100%;padding:1px 10px;border-radius:10px;background:#23252d;
+       border:1px solid #1f2229;color:#c8c9ce;font:12px sans-serif;cursor:pointer;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+     #p:hover{background:#2d3140}</style>
+     <div id=p></div>
+     <script>
+     const {ipcRenderer}=require('electron');
+     window.setLabel=t=>{document.getElementById('p').textContent=t};
+     addEventListener('mousedown',e=>{e.preventDefault();
+       ipcRenderer.send('gw:name-click',e.button)});
+     addEventListener('contextmenu',e=>e.preventDefault());
+     </script>`,
+  );
+
+// NAME_PILL_* size the native bubble strip centered at the view's top.
+const NAME_PILL_W = 240;
+const NAME_PILL_H = 24;
+const NAME_PILL_MARGIN = 4;
 
 // The corner control's geometry and the min-layout width are view config; the
 // pure placement/park/zoom math lives in viewutil (controlBounds, parkedBounds,
@@ -221,7 +260,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = '', contentZoom = 0, history = ''): Promise<void> {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = '', contentZoom = 0, history = '', nameLabel = ''): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = partitionFor(pluginUuid);
     let e = this.entries.get(paneId);
@@ -305,8 +344,11 @@ export class WebviewRegistry {
       // open (or during a drag gesture) starts parked rather than landing on top
       // of the canvas overlay. syncURLViews will call setHidden for this pane on
       // the next draw() and reaffirm the correct state.
+      const namePill = new WebContentsView({
+        webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
+      });
       const startHidden = this._globalHidden;
-      e = { view, control, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid, userZoom: contentZoom };
+      e = { view, control, namePill, nameLabel, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid, userZoom: contentZoom };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -314,6 +356,13 @@ export class WebviewRegistry {
       control.setBackgroundColor('#00000000');
       this.applyControlBounds(e);
       void control.webContents.loadURL(CONTROL_HTML);
+      this.win.contentView.addChildView(namePill);
+      namePill.setBackgroundColor('#00000000');
+      this.applyNamePillBounds(e);
+      // Re-push the owned label once the pill page is ready — the renderer's
+      // first setNameLabel usually races this load.
+      namePill.webContents.on('did-finish-load', () => this.pushNameLabel(e!));
+      void namePill.webContents.loadURL(NAME_HTML);
       this.wireNav(paneId, e);
       this.applyMinWidthZoom(e);
       // A persisted back-stack revives with its history (issue #113); absent
@@ -343,6 +392,7 @@ export class WebviewRegistry {
       if (!e.hidden) {
         e.view.setBounds(rounded);
         this.applyControlBounds(e);
+        this.applyNamePillBounds(e);
       }
     }
     const current = e.view.webContents.getURL();
@@ -360,6 +410,7 @@ export class WebviewRegistry {
     if (!e.hidden) {
       e.view.setBounds(rounded);
       this.applyControlBounds(e);
+      this.applyNamePillBounds(e);
     }
     this.applyMinWidthZoom(e);
   }
@@ -374,6 +425,41 @@ export class WebviewRegistry {
     } else {
       e.control.setBounds(parkedBounds(CONTROL_SIZE, CONTROL_SIZE));
     }
+  }
+
+  // applyNamePillBounds places the native bubble at the view's top-center, or
+  // parks it with everything else. Same one-source-of-truth rule as
+  // applyControlBounds.
+  private applyNamePillBounds(e: Entry): void {
+    if (controlVisible(e.hidden, e.focused)) {
+      e.namePill.setBounds(roundBounds(namePillBounds(e.bounds, NAME_PILL_W, NAME_PILL_H, NAME_PILL_MARGIN)));
+    } else {
+      e.namePill.setBounds(parkedBounds(NAME_PILL_W, NAME_PILL_H));
+    }
+  }
+
+  // setNameLabel stores and pushes the bubble's label (issue #118). The
+  // entry owns the text; did-finish-load re-pushes it, so ordering between
+  // the renderer's push and the pill page's load cannot lose it.
+  setNameLabel(paneId: string, label: string): void {
+    const e = this.entries.get(paneId);
+    if (!e) return;
+    e.nameLabel = label;
+    this.pushNameLabel(e);
+  }
+
+  private pushNameLabel(e: Entry): void {
+    void e.namePill.webContents
+      .executeJavaScript(`window.setLabel(${JSON.stringify(e.nameLabel)})`)
+      .catch(() => {}); // still loading — did-finish-load pushes again
+  }
+
+  // namePillPaneFor resolves a bubble view's webContents id back to its pane.
+  namePillPaneFor(webContentsId: number): string | undefined {
+    for (const [paneId, e] of this.entries) {
+      if (e.namePill.webContents.id === webContentsId) return paneId;
+    }
+    return undefined;
   }
 
   // controlPaneFor resolves a control view's webContents id back to its pane,
@@ -436,6 +522,7 @@ export class WebviewRegistry {
       }
     }
     this.applyControlBounds(e);
+    this.applyNamePillBounds(e);
   }
 
   // remove captures a final frame + the page's URL/title, detaches and
@@ -495,6 +582,8 @@ export class WebviewRegistry {
         e.view.webContents.close();
         this.win.contentView.removeChildView(e.control);
         e.control.webContents.close();
+        this.win.contentView.removeChildView(e.namePill);
+        e.namePill.webContents.close();
       } catch {
         // ignore
       }

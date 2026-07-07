@@ -10,6 +10,7 @@ import {
   SetHiddenArgs,
   SetZoomArgs,
   OpenBelowEvent,
+  NameClickEvent,
   RemoveArgs,
   PaneRef,
   FreezeResult,
@@ -97,6 +98,17 @@ const api = {
     const h = (_e: unknown, ev: OpenBelowEvent) => cb(ev);
     ipcRenderer.on(EV.openBelow, h);
     return () => ipcRenderer.removeListener(EV.openBelow, h);
+  },
+  // onNameClick fires when the native name bubble over a live url pane is
+  // clicked (issue #118): left → rename, right → pane zoom.
+  onNameClick(cb: (ev: NameClickEvent) => void): () => void {
+    const h = (_e: unknown, ev: NameClickEvent) => cb(ev);
+    ipcRenderer.on(EV.nameClick, h);
+    return () => ipcRenderer.removeListener(EV.nameClick, h);
+  },
+  // setNameLabel pushes the bubble label into a live pane's native pill.
+  setNameLabel(args: { paneId: string; label: string }): Promise<void> {
+    return ipcRenderer.invoke(CH.setNameLabel, args);
   },
   // onError fires for every main-process failure that must reach the user
   // (webview lifecycle, session hydrate/dehydrate, sidecar boot/exit) — the

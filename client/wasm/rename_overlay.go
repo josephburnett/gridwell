@@ -110,8 +110,19 @@ func (a *App) syncRenamePill() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	if p == nil || a.transition != nil || a.liveOverlaysHidden() || a.urlViewFor(p.ID) != nil {
+	if p == nil || a.transition != nil || a.liveOverlaysHidden() {
 		pill.Get("style").Set("display", "none")
+		return
+	}
+	if a.urlViewFor(p.ID) != nil {
+		// Live url pane: the NATIVE pill twin shows instead (DOM cannot paint
+		// above a WebContentsView). Push the label when it changes.
+		pill.Get("style").Set("display", "none")
+		label, _, _ := a.bubbleLabel(p)
+		if a.lastNativePill != p.ID+"\x00"+label {
+			a.lastNativePill = p.ID + "\x00" + label
+			bridgeSetNameLabel(p.ID, label)
+		}
 		return
 	}
 	label, editable, muted := a.bubbleLabel(p)
@@ -185,6 +196,22 @@ func (a *App) renamePillEl() js.Value {
 	doc.Get("body").Call("appendChild", pill)
 	a.renamePill = pill
 	return pill
+}
+
+// onNativeNameClick routes a click on the NATIVE bubble twin (issue #118):
+// same contract as the DOM pill's listener.
+func (a *App) onNativeNameClick(paneID string, button int) {
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return
+	}
+	a.focusToPane(p)
+	switch button {
+	case 0:
+		a.openRenameInput() // renameEditing parks the view; the DOM input shows
+	case 2:
+		a.togglePaneZoom()
+	}
 }
 
 // togglePaneZoom zooms the focused pane to the full layout, or back —

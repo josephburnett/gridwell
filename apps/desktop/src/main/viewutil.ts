@@ -75,6 +75,18 @@ export function controlBounds(b: Bounds, size: number, margin: number): Bounds {
   };
 }
 
+// namePillBounds places the native name bubble (issue #118) centered at the
+// top of a view's content box. Pure geometry, unit-tested like controlBounds.
+export function namePillBounds(b: Bounds, width: number, height: number, margin: number): Bounds {
+  const w = Math.min(width, Math.max(0, b.width - 2 * margin));
+  return {
+    x: b.x + (b.width - w) / 2,
+    y: b.y + margin,
+    width: w,
+    height,
+  };
+}
+
 // PARK_COORD is far enough off any display that a parked view/control is not
 // visible; the registry parks rather than destroys so the page keeps running.
 export const PARK_COORD = -100000;

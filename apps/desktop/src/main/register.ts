@@ -50,6 +50,14 @@ export function registerWebviewIpc(
     }
   });
 
+  // The native name bubble's mousedown: resolve the sender back to its pane
+  // and relay button+pane to the renderer (rename / pane zoom, issue #118).
+  ipcMain.on(CTRL.nameClick, (event, button: number): void => {
+    const paneId = registry.namePillPaneFor(event.sender.id);
+    if (!paneId) return;
+    safeSend(rootWC, EV.nameClick, { paneId, button });
+  });
+
   // A live URL view's preload forwards a right-button press here so the
   // renderer can begin a pane gesture over live content. The press arrives in
   // physical screen coords; subtract the window's content origin to get
@@ -79,11 +87,15 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid, a.proxyEndpoint ?? '', a.contentZoom ?? 0, a.history ?? '');
+    return registry.place(a.paneId, a.tileId, a.objectId, a.url, a.bounds, a.pluginUuid, a.proxyEndpoint ?? '', a.contentZoom ?? 0, a.history ?? '', a.nameLabel ?? '');
   });
 
   ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {
     registry.setZoom(a.paneId, a.zoom);
+  });
+
+  ipcMain.handle(CH.setNameLabel, (_e, a: { paneId: string; label: string }): void => {
+    registry.setNameLabel(a.paneId, a.label);
   });
 
   ipcMain.handle(CH.setBounds, (_e, a: SetBoundsArgs): void => {

@@ -216,6 +216,9 @@ type App struct {
 	renamePill        js.Value
 	renamePillClickCb js.Func
 	renameEditing     bool
+	// lastNativePill dedupes label pushes to a live pane's native bubble
+	// twin (paneID + NUL + label) so the per-draw sync doesn't spam IPC.
+	lastNativePill string
 
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above

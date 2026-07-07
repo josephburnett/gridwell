@@ -104,7 +104,10 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if g, ok := a.c.Grid(t.GridID); ok {
 		proxyEndpoint = g.Meta.ProxyEndpoint
 	}
-	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t), t.URLHistory)
+	// The native name bubble is born with its label — a post-place push can
+	// race entry creation and be dropped (issue #118).
+	label, _, _ := a.bubbleLabel(p)
+	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t), t.URLHistory, label)
 	a.draw()
 }
 
@@ -203,7 +206,7 @@ func (a *App) syncURLViews() {
 // previews on the canvas — or drags a boundary across an overlay — must hide
 // them first, else the overlay eats the move/up events and the gesture stalls.
 func (a *App) liveOverlaysHidden() bool {
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen()
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.renameEditing
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL
