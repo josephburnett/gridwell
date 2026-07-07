@@ -17,7 +17,6 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/menu"
@@ -209,10 +208,6 @@ type App struct {
 	// it cleanly if the App is torn down (currently never).
 	textTextareaInputCb  js.Func
 	textTextareaScrollCb js.Func
-
-	// lastBareRightClick remembers the previous no-drag right release for
-	// the double-right-click pane zoom toggle (issue #80).
-	lastBareRightClick gesture.RightClick
 
 	// renamePill / renameEditing back the rename-while-descended affordance
 	// (issue #61): one shared DOM pill at the focused pane's top-center (see

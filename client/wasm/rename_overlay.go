@@ -13,17 +13,20 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// The rename pill — "name the room you're in" (issue #61). While the focused
-// pane is descended into something renamable, a small DOM pill floats at the
-// pane's top-center showing its current name; clicking it swaps in a text
-// input, Enter commits via SetTileAlt (a USER-owned name: the server latches
-// it so automatic captures — a url's page title, a shell's foreground command
-// — never overwrite it), Escape/blur cancels.
+// The name bubble — "name the room you're in" (issues #61, #118). The
+// focused pane always carries a small pill at its top-center naming whatever
+// is in the pane at that moment. LEFT-click opens the rename input when the
+// name is user-editable (Enter commits via SetTileAlt — a USER-owned name the
+// automatic captures never overwrite; Escape/blur cancels); read-only
+// contexts (the node grid, a plugin root, an ephemeral visit, a text tile's
+// derived name) just show their label. RIGHT-click toggles the tmux-style
+// pane zoom (Tree.ToggleZoom) — the bubble is the pane's one universal
+// handle, replacing the old double-right-click gesture.
 //
 // A DOM element (not canvas chrome) so it paints above the xterm shell
 // overlay (zIndex 5) the same way the shell ascend circle does. Over a LIVE
-// url pane the native WebContentsView still occludes it — rename a url while
-// frozen (the freeze's title capture defers to the user name, so it sticks).
+// url pane the native WebContentsView occludes DOM — those panes get a
+// native twin (webviews.ts namePill) that forwards its clicks here.
 
 // renameTarget returns the tile the focused pane's rename pill edits, or
 // ok=false when nothing here is renamable:
@@ -59,10 +62,47 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 	return t, true
 }
 
-// syncRenamePill positions/hides the pill each draw, mirroring how the shell
+// bubbleLabel is what the focused pane's bubble shows and whether it is
+// user-editable: the renameTarget's name when one exists; otherwise a
+// read-only context label ("home" on the node grid, the plugin's config
+// label at its root, "ephemeral" inside a dying visit, a text tile's derived
+// first-line name).
+func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
+	if t, ok := a.renameTarget(p); ok {
+		if t.AltText == "" {
+			return "unnamed", true, true
+		}
+		return t.AltText, true, false
+	}
+	if p.TextFocus != "" {
+		if t, ok := a.descendedTile(p); ok {
+			if a.isEphemeralTile(p, &t) {
+				return "ephemeral", false, true
+			}
+			if t.AltText != "" {
+				return t.AltText, false, false // text tiles: derived, read-only
+			}
+		}
+		return "unnamed", false, true
+	}
+	if a.isNodeGridPane(p) {
+		return "home", false, true
+	}
+	// A plugin root (or an uncached parent): the plugin's config-owned label.
+	want := uuidOf(a.gridIDForPane(p))
+	for _, pl := range a.plugins {
+		if pl.UUID == want && pl.Label != "" {
+			return pl.Label, false, true
+		}
+	}
+	return "unnamed", false, true
+}
+
+// syncRenamePill positions the bubble each draw, mirroring how the shell
 // overlay and textarea track their pane. Hidden while an overlay gesture is
-// in flight (parked overlays mean the user is mid-drag) and while the editor
-// input is open (the input replaces the pill in place).
+// in flight, while the editor input is open (it replaces the pill in place),
+// and on live-url panes (the native twin shows there instead — DOM cannot
+// paint above a WebContentsView).
 func (a *App) syncRenamePill() {
 	pill := a.renamePillEl()
 	if a.renameEditing {
@@ -70,19 +110,11 @@ func (a *App) syncRenamePill() {
 		return
 	}
 	p := a.tree.FocusedPane()
-	target, ok := rpc.Tile{}, false
-	if p != nil && a.transition == nil && !a.liveOverlaysHidden() {
-		target, ok = a.renameTarget(p)
-	}
-	if !ok {
+	if p == nil || a.transition != nil || a.liveOverlaysHidden() || a.urlViewFor(p.ID) != nil {
 		pill.Get("style").Set("display", "none")
 		return
 	}
-	label := target.AltText
-	muted := false
-	if label == "" {
-		label, muted = "unnamed", true
-	}
+	label, editable, muted := a.bubbleLabel(p)
 	pill.Set("textContent", label)
 	color := colorPlusFg
 	if muted {
@@ -90,6 +122,11 @@ func (a *App) syncRenamePill() {
 	}
 	st := pill.Get("style")
 	st.Set("color", color)
+	cursor := "pointer"
+	if !editable {
+		cursor = "default"
+	}
+	st.Set("cursor", cursor)
 	st.Set("display", "block")
 	r := a.paneRectByID(p.ID)
 	st.Set("left", pxOf(r.X+r.W/2))
@@ -122,20 +159,49 @@ func (a *App) renamePillEl() js.Value {
 	st.Set("textOverflow", "ellipsis")
 	st.Set("whiteSpace", "nowrap")
 	a.renamePillClickCb = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) > 0 {
-			args[0].Call("stopPropagation")
+		if len(args) == 0 {
+			return nil
 		}
-		a.openRenameInput()
+		ev := args[0]
+		if ev.Get("type").String() == "contextmenu" {
+			ev.Call("preventDefault")
+			return nil
+		}
+		ev.Call("stopPropagation")
+		switch ev.Get("button").Int() {
+		case 0:
+			a.openRenameInput()
+		case 2:
+			// The bubble is the pane's universal handle: right-click toggles
+			// the tmux-style pane zoom (issue #118, replacing the old
+			// double-right-click gesture).
+			ev.Call("preventDefault")
+			a.togglePaneZoom()
+		}
 		return nil
 	})
 	pill.Call("addEventListener", "mousedown", a.renamePillClickCb)
+	pill.Call("addEventListener", "contextmenu", a.renamePillClickCb)
 	doc.Get("body").Call("appendChild", pill)
 	a.renamePill = pill
 	return pill
 }
 
+// togglePaneZoom zooms the focused pane to the full layout, or back —
+// right-click on the bubble (issue #118).
+func (a *App) togglePaneZoom() {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	a.menu.Close()
+	a.tree.ToggleZoom(p.ID)
+	a.draw()
+	a.scheduleURLUpdate()
+}
+
 // openRenameInput swaps the pill for a text input at the same spot. Enter
-// commits, Escape or blur cancels.
+// commits, Escape or blur cancels. A no-op on read-only contexts.
 func (a *App) openRenameInput() {
 	p := a.tree.FocusedPane()
 	if p == nil {

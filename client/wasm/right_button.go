@@ -432,34 +432,6 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	rd.curX = sx
 	rd.curY = sy
 
-	// A bare right release (no movement past the drag threshold) on the pane
-	// interior is otherwise a deliberate no-op — which is exactly why it can
-	// safely carry the double-right-click pane zoom toggle (issue #80): a
-	// missed double costs nothing. Interior arms are swap/split/tile-center;
-	// the corner circle (ascend) and resize bands keep their own meanings.
-	if dx, dy := rd.curX-rd.startX, rd.curY-rd.startY; dx*dx+dy*dy < dragThreshold*dragThreshold {
-		switch rd.kind {
-		case rightDragSwap, rightDragSplit, rightDragTileCenter:
-			paneID := rd.originPaneID
-			if rd.kind == rightDragSplit {
-				paneID = rd.splitPaneID
-			}
-			if rd.kind == rightDragTileCenter {
-				paneID = rd.tilePaneID
-			}
-			now := nowMs()
-			if gesture.IsDoubleRightClick(a.lastBareRightClick, paneID, now) {
-				a.lastBareRightClick = gesture.RightClick{}
-				a.menu.Close()
-				a.tree.ToggleZoom(paneID)
-				a.draw()
-				a.scheduleURLUpdate()
-				return
-			}
-			a.lastBareRightClick = gesture.RightClick{PaneID: paneID, AtMs: now}
-		}
-	}
-
 	switch rd.kind {
 	case rightDragResize:
 		a.commitResize(rd, sx, sy)

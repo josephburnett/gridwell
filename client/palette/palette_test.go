@@ -57,7 +57,6 @@ func TestTilePxFixedAcrossZoom(t *testing.T) {
 	}
 }
 
-
 func TestTileIndexAt(t *testing.T) {
 	l := makeLayout()
 	for i := range l.NumTiles {
