@@ -63,10 +63,11 @@ func (a *App) urlTileForPane(p *pane.Pane, tileID string) (rpc.Tile, bool) {
 	return rpc.Tile{}, false
 }
 
-// urlTileVersion returns the cached version of the URL tile at (path,
-// tileID), or 0 if it isn't cached. Read at freeze time so SetURLState can
-// claim the right version for its in-place, versioned content edit.
-func (a *App) urlTileVersion(anchor string, path []string, tileID string) int64 {
+// tileVersionAt returns the cached version of the tile at (anchor, path,
+// tileID), or 0 if it isn't cached. Read at freeze time so the url/shell
+// preview writebacks can claim the right version for their in-place,
+// versioned edits.
+func (a *App) tileVersionAt(anchor string, path []string, tileID string) int64 {
 	g, ok := a.c.Grid(a.gridIDForPathFrom(anchor, path))
 	if !ok {
 		return 0
@@ -126,7 +127,7 @@ func (a *App) closeURLStream(paneID string) {
 			// Look up the tile's current version from cache so the freeze is
 			// a versioned, in-place content edit (copy-on-clone: nothing is
 			// shared, so there is no fork — the write lands on this tile's row).
-			version := a.urlTileVersion(anchor, path, tileID)
+			version := a.tileVersionAt(anchor, path, tileID)
 			go func() {
 				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
 					Path:    rpc.Path{WellIDs: path},
