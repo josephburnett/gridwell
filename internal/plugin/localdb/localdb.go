@@ -186,13 +186,21 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	return tileResp(p.st.GetTile(ctx, req.TileId))
 }
 
-// SetTileAlt stamps a tile's display label and returns the updated tile.
+// SetTileAlt stamps a tile's display label and returns the updated tile. The
+// wire RPC is the USER rename gesture (issue #61): it latches alt_user so the
+// automatic captures (url title, shell command) defer from then on. Text
+// tiles are refused — their alt derives from the first line (UpdateText owns
+// it), so a rename would be silently clobbered on the next edit.
 func (p *Plugin) SetTileAlt(ctx context.Context, req *gridwellv1.SetTileAltRequest) (*gridwellv1.TileResponse, error) {
 	id, err := strconv.ParseInt(req.TileId, 10, 64)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid tile_id")
 	}
-	if err := p.st.SetTileAlt(ctx, id, req.Alt); err != nil {
+	if t, err := p.st.GetTile(ctx, req.TileId); err == nil && t.Kind == rpc.KindText {
+		return nil, status.Error(codes.InvalidArgument,
+			"a text tile's name derives from its first line; rename the content instead")
+	}
+	if err := p.st.SetTileAlt(ctx, id, req.Alt, true); err != nil {
 		return nil, errToStatus(err)
 	}
 	return tileResp(p.st.GetTile(ctx, req.TileId))
@@ -383,7 +391,7 @@ func (p *Plugin) captureShellTitle(tileID string) {
 	if err != nil {
 		return
 	}
-	_ = p.st.SetTileAlt(context.Background(), id, cmd)
+	_ = p.st.SetTileAlt(context.Background(), id, cmd, false)
 }
 
 // sessionChunkSize bounds each streamed session fragment.

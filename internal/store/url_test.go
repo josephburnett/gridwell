@@ -77,7 +77,7 @@ func TestSetTileAlt(t *testing.T) {
 	tile := createURLTileForTest(t, s, root, 0, "https://example.com")
 	tileIDInt, _ := parseID(tile.ID)
 
-	if err := s.SetTileAlt(ctx, tileIDInt, "Example Title"); err != nil {
+	if err := s.SetTileAlt(ctx, tileIDInt, "Example Title", false); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	got, err := s.loadTile(ctx, s.db, tileIDInt)
@@ -91,7 +91,7 @@ func TestSetTileAlt(t *testing.T) {
 		t.Errorf("version after SetTileAlt = %d, want %d", got.Version, tile.Version+1)
 	}
 	// Setting back to empty clears the column.
-	if err := s.SetTileAlt(ctx, tileIDInt, ""); err != nil {
+	if err := s.SetTileAlt(ctx, tileIDInt, "", false); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 	got, err = s.loadTile(ctx, s.db, tileIDInt)

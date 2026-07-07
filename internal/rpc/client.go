@@ -182,6 +182,13 @@ func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRe
 func (c *Client) UpdateText(ctx context.Context, req *UpdateTextRequest) (*Tile, error) {
 	return tileResp(c.cl.UpdateText(ctx, connect.NewRequest(UpdateTextToProto(req))))
 }
+
+// SetTileAlt is the rename gesture: it stamps a USER-owned display name on a
+// tile (the server latches ownership so automatic captures defer, issue #61).
+func (c *Client) SetTileAlt(ctx context.Context, tileID, alt string) (*Tile, error) {
+	return tileResp(c.cl.SetTileAlt(ctx, connect.NewRequest(&pb.SetTileAltRequest{TileId: tileID, Alt: alt})))
+}
+
 func (c *Client) DeleteTile(ctx context.Context, req *DeleteTileRequest) error {
 	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(DeleteTileToProto(req)))
 	return err

@@ -100,7 +100,7 @@ func TestSetTileAltBumpsVersion(t *testing.T) {
 	v0 := tile.Version
 	id, _ := parseID(tile.ID)
 
-	if err := s.SetTileAlt(ctx, id, "a new label"); err != nil {
+	if err := s.SetTileAlt(ctx, id, "a new label", false); err != nil {
 		t.Fatalf("SetTileAlt: %v", err)
 	}
 	if got := tileVersion(t, s, tile.ID); got != v0+1 {

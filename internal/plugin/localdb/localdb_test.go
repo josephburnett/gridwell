@@ -249,12 +249,15 @@ func TestGetTileContent_ReturnsBody(t *testing.T) {
 	}
 }
 
-// TestGetTileAndSetTileAlt: GetTile reads a tile's metadata; SetTileAlt stamps
-// its label and returns the updated tile.
+// TestGetTileAndSetTileAlt: GetTile reads a tile's metadata; SetTileAlt (the
+// wire rename gesture, issue #61) stamps a user-owned label on a shell tile
+// and returns it — and REFUSES a text tile, whose name derives from its first
+// line (a rename there would be clobbered by the next edit).
 func TestGetTileAndSetTileAlt(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
-	txt := createText(t, p, rootGrid(t, p), []byte("# hi"))
+	root := rootGrid(t, p)
+	txt := createText(t, p, root, []byte("# hi"))
 
 	got, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: txt.Id})
 	if err != nil {
@@ -264,7 +267,18 @@ func TestGetTileAndSetTileAlt(t *testing.T) {
 		t.Errorf("GetTile = %+v, want the text tile", got.Tile)
 	}
 
-	stamped, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: txt.Id, Alt: "claude"})
+	if _, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: txt.Id, Alt: "claude"}); err == nil {
+		t.Error("SetTileAlt on a text tile must be refused (its name derives from content)")
+	}
+
+	sh, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: root,
+		Tile:   &gridwellv1.Tile{Kind: "shell", X: 7, Y: 7, W: 1, H: 1},
+	})
+	if err != nil {
+		t.Fatalf("CreateTile(shell): %v", err)
+	}
+	stamped, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: sh.Tile.Id, Alt: "claude"})
 	if err != nil {
 		t.Fatalf("SetTileAlt: %v", err)
 	}

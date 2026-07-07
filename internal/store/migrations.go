@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -41,10 +41,22 @@ type migration struct {
 }
 
 // migrations is the ordered list of additive post-v1 schema migrations; entry
-// i brings a DB from version i+1 to i+2. Empty until the first post-v1 change.
-// The forward-compatibility promise is now in effect — see the schemaVersion
-// doc above and internal/store/CLAUDE.md.
-var migrations []migration
+// i brings a DB from version i+1 to i+2. The forward-compatibility promise is
+// in effect — see the schemaVersion doc above and internal/store/CLAUDE.md.
+var migrations = []migration{
+	// v2: alt_user marks alt_text as user-owned (the rename gesture, issue
+	// #61) so automatic captures never overwrite a user-set name.
+	{to: 2, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN alt_user INTEGER NOT NULL DEFAULT 0`)},
+}
+
+// addColumnDDL builds a migration run-func executing one additive DDL
+// statement (the production twin of the test harness's addColumn).
+func addColumnDDL(ddl string) func(ctx context.Context, tx *sql.Tx) error {
+	return func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, ddl)
+		return err
+	}
+}
 
 // applyMigrations enforces the on-disk format contract at Open time, bringing
 // the DB up to this binary's schemaVersion using the canonical migration list.

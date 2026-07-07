@@ -414,3 +414,32 @@ type migrationFixture struct {
 }
 
 var migrationFixtures []migrationFixture
+
+func init() {
+	// v2: alt_user (issue #61). Seed a v1 tile with a name; verify the column
+	// arrives defaulted to 0 and the old row (and its name) survived.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 2,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v2', ` + rootID + `, 'shell', 0, 0, 1, 1, 'named-before-v2', 100, 100)`); err != nil {
+				t.Fatalf("seed v1 tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var alt string
+			var altUser int
+			if err := db.QueryRow(`SELECT alt_text, alt_user FROM tiles WHERE object_id = 'fixt-v2'`).Scan(&alt, &altUser); err != nil {
+				t.Fatalf("read migrated tile: %v", err)
+			}
+			if alt != "named-before-v2" {
+				t.Errorf("alt_text = %q, want the pre-migration value", alt)
+			}
+			if altUser != 0 {
+				t.Errorf("alt_user = %d, want default 0", altUser)
+			}
+		},
+	})
+}
