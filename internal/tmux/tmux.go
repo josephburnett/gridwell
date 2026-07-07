@@ -37,10 +37,30 @@ import (
 //     match it here so $TERM is sane inside bash.
 //   - escape-time 0: kill the meta-key delay (tmux's default 500ms
 //     interferes with terminal apps reading raw escape sequences).
+//   - allow-passthrough on: the gridwell-open browser shim (issue #90)
+//     emits its OSC 5522 url sequence through tmux's DCS passthrough,
+//     which is off by default.
 const gridwellConfig = `set-option -g status off
 set-option -g history-limit 50000
 set-option -g default-terminal "xterm-256color"
 set-option -g escape-time 0
+set-option -g allow-passthrough on
+`
+
+// browserShimScript is the $BROWSER target injected into every new shell
+// session (issue #90): instead of launching a browser on the host, it hands
+// the url back to the gridwell terminal as an OSC 5522 sequence, which the
+// client turns into an ephemeral url descent. Inside tmux the sequence rides
+// the DCS passthrough wrapper (inner ESCs doubled), matching what
+// allow-passthrough unwraps for the outer terminal.
+const browserShimScript = `#!/bin/sh
+# gridwell-open: hand a url back to the gridwell terminal (issue #90).
+url="$1"
+if [ -n "$TMUX" ]; then
+	printf '\033Ptmux;\033\033]5522;%s\033\033\\\033\\' "$url"
+else
+	printf '\033]5522;%s\033\\' "$url"
+fi
 `
 
 // Controller is one gridwell-owned tmux server. Construct with New;
@@ -61,6 +81,10 @@ type Controller struct {
 	// verbatim. Only ModeCreate consults it — existing tmux sessions keep
 	// whatever shell they were created with.
 	shell string
+	// browserShim is the path of the gridwell-open script (written by New
+	// alongside the config); ModeCreate injects it as $BROWSER so terminal
+	// apps hand urls back to gridwell instead of spawning a host browser.
+	browserShim string
 }
 
 // New initializes a Controller on the given socket name. The config
@@ -103,13 +127,41 @@ func New(socketName, binary, shell string) (*Controller, func() error, error) {
 		_ = os.Remove(f.Name())
 		return nil, nil, fmt.Errorf("tmux: write config: %w", err)
 	}
-	c := &Controller{
-		binary:     binary,
-		socketName: socketName,
-		configPath: f.Name(),
-		shell:      shell,
+	shim, err := os.CreateTemp("", "gridwell-open-*.sh")
+	if err != nil {
+		_ = os.Remove(f.Name())
+		return nil, nil, fmt.Errorf("tmux: write browser shim: %w", err)
 	}
-	cleanup := func() error { return os.Remove(c.configPath) }
+	if _, err := shim.WriteString(browserShimScript); err != nil {
+		_ = shim.Close()
+		_ = os.Remove(shim.Name())
+		_ = os.Remove(f.Name())
+		return nil, nil, fmt.Errorf("tmux: write browser shim: %w", err)
+	}
+	if err := shim.Close(); err != nil {
+		_ = os.Remove(shim.Name())
+		_ = os.Remove(f.Name())
+		return nil, nil, fmt.Errorf("tmux: write browser shim: %w", err)
+	}
+	if err := os.Chmod(shim.Name(), 0o755); err != nil {
+		_ = os.Remove(shim.Name())
+		_ = os.Remove(f.Name())
+		return nil, nil, fmt.Errorf("tmux: chmod browser shim: %w", err)
+	}
+	c := &Controller{
+		binary:      binary,
+		socketName:  socketName,
+		configPath:  f.Name(),
+		shell:       shell,
+		browserShim: shim.Name(),
+	}
+	cleanup := func() error {
+		err1 := os.Remove(c.configPath)
+		if err2 := os.Remove(c.browserShim); err1 == nil {
+			err1 = err2
+		}
+		return err1
+	}
 	return c, cleanup, nil
 }
 
@@ -138,6 +190,13 @@ func (c *Controller) Args(tileID string, mode Mode, cols, rows uint16, startDir 
 		args = append(args, "new-session", "-A", "-s", name)
 		if startDir != "" {
 			args = append(args, "-c", startDir)
+		}
+		if c.browserShim != "" {
+			// Terminal apps that launch a browser (emacs browse-url,
+			// xdg-open) consult $BROWSER: point it at the gridwell-open
+			// shim so the url comes back as an OSC and descends into an
+			// ephemeral url tile instead of opening Chrome (issue #90).
+			args = append(args, "-e", "BROWSER="+c.browserShim)
 		}
 		args = append(args,
 			"-x", strconv.Itoa(int(cols)),

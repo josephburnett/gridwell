@@ -51,6 +51,7 @@ type shellStreamConn struct {
 	onMouse        js.Func // container right-button → canvas gesture pipeline
 	onLinkProvide  js.Func // xterm link provider: scans lines for http(s) urls
 	onLinkActivate js.Func // shared link click handler → ephemeral url descent
+	onOSCURL       js.Func // OSC 5522 from the gridwell-open shim → ephemeral url descent
 
 	pending []any // queued sends until WS is OPEN
 	closed  bool
@@ -339,6 +340,20 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	provider := js.Global().Get("Object").New()
 	provider.Set("provideLinks", conn.onLinkProvide)
 	term.Call("registerLinkProvider", provider)
+
+	// OSC 5522: the gridwell-open browser shim ($BROWSER in every session,
+	// internal/tmux) hands back a url a terminal app tried to open — emacs
+	// browse-url, xdg-open — so it descends into an ephemeral url tile here
+	// instead of spawning a browser on the host (issue #90). The sequence
+	// rides the PTY byte stream (tmux passthrough → WS → term.write), so it
+	// works unchanged for remote shells through ssh mounts.
+	conn.onOSCURL = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) >= 1 && args[0].Type() == js.TypeString {
+			a.shellURLActivate(p.ID, args[0].String())
+		}
+		return true // consumed
+	})
+	term.Get("parser").Call("registerOscHandler", 5522, conn.onOSCURL)
 
 	conn.onMessage = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		data := args[0].Get("data")
@@ -703,6 +718,9 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	}
 	if conn.onLinkActivate.Truthy() {
 		conn.onLinkActivate.Release()
+	}
+	if conn.onOSCURL.Truthy() {
+		conn.onOSCURL.Release()
 	}
 	if conn.term.Truthy() {
 		conn.term.Call("dispose")
