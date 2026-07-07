@@ -75,6 +75,19 @@ export function controlBounds(b: Bounds, size: number, margin: number): Bounds {
   };
 }
 
+// cookieDomainMatches decides whether a stored cookie belongs to the SITE the
+// user is clearing (issue #136): the cookie's domain (leading dot stripped)
+// and the page host must be equal, or one a dot-boundary suffix of the other —
+// so clearing from accounts.google.com drops .google.com cookies too, the way
+// sites actually span subdomains. Pure and unit-tested: an over-broad match
+// here would silently log the user out of unrelated sites.
+export function cookieDomainMatches(host: string, cookieDomain: string): boolean {
+  const h = host.toLowerCase();
+  const d = cookieDomain.replace(/^\./, '').toLowerCase();
+  if (!h || !d) return false;
+  return h === d || h.endsWith('.' + d) || d.endsWith('.' + h);
+}
+
 // namePillBounds places the native name bubble (issue #118) centered at the
 // top of a view's content box. Pure geometry, unit-tested like controlBounds.
 export function namePillBounds(b: Bounds, width: number, height: number, margin: number): Bounds {

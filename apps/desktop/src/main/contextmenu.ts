@@ -29,6 +29,9 @@ export interface ContextParams {
   // canGoBack/canGoForward gate the navigation items (from navigationHistory).
   canGoBack: boolean;
   canGoForward: boolean;
+  // pageHost is the current page's hostname — labels the clear-site-data
+  // item; '' hides it (nothing sensible to clear on about:blank).
+  pageHost: string;
 }
 
 // ContextActions are the effects the menu items invoke. Injected so the
@@ -43,6 +46,10 @@ export interface ContextActions {
   back(): void;
   forward(): void;
   reload(): void;
+  // clearSiteData wipes the current site's cookies (domain-suffix matched)
+  // and the page origin's storage from THIS plugin's partition, then reloads
+  // (issue #136).
+  clearSiteData(): void;
 }
 
 // MenuTemplateItem is the structural subset of Electron's
@@ -83,6 +90,11 @@ export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): Men
   items.push({ label: 'Back', enabled: p.canGoBack, click: () => a.back() });
   items.push({ label: 'Forward', enabled: p.canGoForward, click: () => a.forward() });
   items.push({ label: 'Reload', click: () => a.reload() });
+
+  if (p.pageHost) {
+    items.push({ type: 'separator' });
+    items.push({ label: `Clear Site Data (${p.pageHost})`, click: () => a.clearSiteData() });
+  }
 
   return items;
 }

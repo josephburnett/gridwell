@@ -20,6 +20,7 @@ function spyActions() {
     back: rec('back'),
     forward: rec('forward'),
     reload: rec('reload'),
+    clearSiteData: rec('clearSiteData'),
   };
   return { actions, calls };
 }
@@ -32,6 +33,7 @@ function baseParams(over: Partial<ContextParams> = {}): ContextParams {
     editFlags: { canCut: false, canCopy: false, canPaste: false },
     canGoBack: false,
     canGoForward: false,
+    pageHost: '',
     ...over,
   };
 }
@@ -121,4 +123,18 @@ test('Back/Forward enablement tracks the history flags', () => {
   t.find((i) => i.label === 'Reload')!.click!();
   assert.equal(calls.back?.length, 1);
   assert.equal(calls.reload?.length, 1);
+});
+
+// Issue #136: the clear-site-data item appears only with a real page host,
+// labeled with it, and fires its action.
+test('clear site data appears with a page host and fires', () => {
+  const { actions, calls } = spyActions();
+  const none = urlContextMenuTemplate(baseParams(), actions);
+  assert.equal(none.some((i) => i.label?.startsWith('Clear Site Data')), false);
+
+  const t = urlContextMenuTemplate(baseParams({ pageHost: 'accounts.google.com' }), actions);
+  const item = t.find((i) => i.label === 'Clear Site Data (accounts.google.com)');
+  assert.ok(item, 'item present and labeled with the host');
+  item!.click!();
+  assert.ok('clearSiteData' in calls, 'the action fired');
 });

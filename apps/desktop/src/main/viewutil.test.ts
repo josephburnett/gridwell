@@ -8,6 +8,7 @@ import {
   controlBounds,
   parkedBounds,
   namePillBounds,
+  cookieDomainMatches,
   minWidthZoomFactor,
   composeZoom,
   serializeHistory,
@@ -315,4 +316,18 @@ test('namePillBounds centers the bubble at the top, shrinking into narrow views'
   const narrow = namePillBounds({ x: 0, y: 0, width: 100, height: 300 }, 240, 24, 4);
   assert.equal(narrow.width, 92);
   assert.equal(narrow.x, 4);
+});
+
+// Issue #136: the site-clearing cookie match — equal hosts or dot-boundary
+// suffixes only. Over-broad matching would log the user out of unrelated
+// sites; under-broad would leave .google.com cookies behind.
+test('cookieDomainMatches spans subdomains but never unrelated sites', () => {
+  assert.equal(cookieDomainMatches('accounts.google.com', '.google.com'), true);
+  assert.equal(cookieDomainMatches('google.com', 'accounts.google.com'), true);
+  assert.equal(cookieDomainMatches('google.com', 'google.com'), true);
+  assert.equal(cookieDomainMatches('google.com', '.GOOGLE.com'), true);
+  assert.equal(cookieDomainMatches('notgoogle.com', '.google.com'), false);
+  assert.equal(cookieDomainMatches('google.com', 'oogle.com'), false);
+  assert.equal(cookieDomainMatches('google.com', 'github.com'), false);
+  assert.equal(cookieDomainMatches('', 'google.com'), false);
 });
