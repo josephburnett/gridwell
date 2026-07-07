@@ -11,6 +11,7 @@ import {
   controlBounds,
   parkedBounds,
   minWidthZoomFactor,
+  URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
@@ -548,11 +549,6 @@ export class WebviewRegistry {
     });
   }
 }
-
-// URL_MIN_LAYOUT_WIDTH is the narrowest layout width a live URL view renders
-// at; below this the page is zoomed to fit rather than reflowed. See
-// applyMinWidthZoom.
-const URL_MIN_LAYOUT_WIDTH = 640;
 
 // clearSharedSession wipes the shared cookies/storage for ALL tiles. Not
 // used yet (a future "sign out" gesture); since the session is shared, this
