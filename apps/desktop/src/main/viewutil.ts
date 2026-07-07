@@ -105,6 +105,53 @@ export function minWidthZoomFactor(width: number, minWidth: number): number {
   return width >= minWidth ? 1 : Math.max(0.25, width / minWidth);
 }
 
+// UrlHistory is the persisted shape of a url tile's navigation back-stack
+// (issue #113): the entry list (pageState stripped — urls+titles only, so the
+// blob stays small and schema-stable) and the active index.
+export interface UrlHistory {
+  index: number;
+  entries: { url: string; title: string }[];
+}
+
+// URL_HISTORY_CAP bounds how many entries a freeze persists. The newest
+// entries ending at the active index survive; the index is re-based.
+export const URL_HISTORY_CAP = 50;
+
+// serializeHistory turns a live navigationHistory snapshot into the persisted
+// JSON, capped. Returns '' when there is nothing worth persisting (a single
+// entry restores identically via plain loadURL).
+export function serializeHistory(
+  entries: { url: string; title: string }[],
+  index: number,
+  cap: number = URL_HISTORY_CAP,
+): string {
+  if (entries.length < 2) return '';
+  let es = entries.map((e) => ({ url: e.url, title: e.title }));
+  let idx = Math.min(Math.max(index, 0), es.length - 1);
+  if (es.length > cap) {
+    const start = Math.max(0, idx - cap + 1);
+    es = es.slice(start, start + cap);
+    idx = idx - start;
+  }
+  return JSON.stringify({ index: idx, entries: es });
+}
+
+// parseHistory validates persisted history JSON back into a restorable shape,
+// or null when absent/invalid (the caller falls back to a plain loadURL — a
+// corrupt blob must never break revive).
+export function parseHistory(json: string | undefined): UrlHistory | null {
+  if (!json) return null;
+  try {
+    const h = JSON.parse(json) as UrlHistory;
+    if (!Array.isArray(h.entries) || h.entries.length === 0) return null;
+    if (!h.entries.every((e) => typeof e.url === 'string' && e.url !== '')) return null;
+    const index = Math.min(Math.max(Number(h.index) || 0, 0), h.entries.length - 1);
+    return { index, entries: h.entries.map((e) => ({ url: e.url, title: String(e.title ?? '') })) };
+  } catch {
+    return null;
+  }
+}
+
 // composeZoom multiplies the layout min-width zoom with the USER content zoom
 // (the tile's persisted content_zoom, issue #82) — the two are independent
 // facts and neither may overwrite the other. Clamped to Chromium's

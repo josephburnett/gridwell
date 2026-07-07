@@ -12,6 +12,8 @@ import {
   parkedBounds,
   minWidthZoomFactor,
   composeZoom,
+  serializeHistory,
+  parseHistory,
   URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
   failLoadMessage,
@@ -215,7 +217,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = '', contentZoom = 0): Promise<void> {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = '', contentZoom = 0, history = ''): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = partitionFor(pluginUuid);
     let e = this.entries.get(paneId);
@@ -306,7 +308,15 @@ export class WebviewRegistry {
       void control.webContents.loadURL(CONTROL_HTML);
       this.wireNav(paneId, e);
       this.applyMinWidthZoom(e);
-      void view.webContents.loadURL(url);
+      // A persisted back-stack revives with its history (issue #113); absent
+      // or invalid falls back to a plain load — a corrupt blob must never
+      // break revive.
+      const h = parseHistory(history);
+      if (h) {
+        void view.webContents.navigationHistory.restore({ entries: h.entries, index: h.index });
+      } else {
+        void view.webContents.loadURL(url);
+      }
       return;
     }
 
@@ -424,15 +434,20 @@ export class WebviewRegistry {
   // destroys the view, and returns the freeze payload for persistence.
   async remove(paneId: string): Promise<FreezeResult> {
     const e = this.entries.get(paneId);
-    if (!e) return { jpegBase64: '', url: '', title: '' };
+    if (!e) return { jpegBase64: '', url: '', title: '', history: '' };
     this.entries.delete(paneId);
 
     let jpegBase64 = '';
     let url = '';
     let title = '';
+    let history = '';
     try {
       url = e.view.webContents.getURL();
       title = e.view.webContents.getTitle();
+      // The navigation back-stack, persisted so a revived tile can still go
+      // "back" (issue #113). pageState is stripped (urls+titles only).
+      const nav = e.view.webContents.navigationHistory;
+      history = serializeHistory(nav.getAllEntries(), nav.getActiveIndex());
       // Commit DOM storage (localStorage) to the shared persistent partition
       // BEFORE the renderer is closed. Chromium writes cookies eagerly but
       // flushes localStorage lazily, so an abrupt webContents.close() can drop
@@ -476,7 +491,7 @@ export class WebviewRegistry {
         // ignore
       }
     }
-    return { jpegBase64, url, title };
+    return { jpegBase64, url, title, history };
   }
 
   // capture grabs a current frame for mirroring to other panes, without

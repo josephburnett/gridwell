@@ -464,4 +464,26 @@ func init() {
 			}
 		},
 	})
+	// v4: url_history (issue #113). Seed a v3 url tile; verify the column
+	// arrives NULL and the row survived.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 4,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
+				VALUES ('fixt-v4', ` + rootID + `, 'url', 4, 4, 1, 1, 'https://example.com', '', 100, 100)`); err != nil {
+				t.Fatalf("seed v3 tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var hist sql.NullString
+			if err := db.QueryRow(`SELECT url_history FROM tiles WHERE object_id = 'fixt-v4'`).Scan(&hist); err != nil {
+				t.Fatalf("read migrated tile: %v", err)
+			}
+			if hist.Valid {
+				t.Errorf("url_history = %q, want NULL default", hist.String)
+			}
+		},
+	})
 }

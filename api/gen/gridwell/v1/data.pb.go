@@ -303,7 +303,13 @@ type Tile struct {
 	// the text font, the terminal font, the page zoom (issue #82). Framing,
 	// not content: persisted per tile, never bumps version. 0 means unset
 	// (renders at 1.0). Written by SetContentZoom only.
-	ContentZoom   float64 `protobuf:"fixed64,27,opt,name=content_zoom,json=contentZoom,proto3" json:"content_zoom,omitempty"`
+	ContentZoom float64 `protobuf:"fixed64,27,opt,name=content_zoom,json=contentZoom,proto3" json:"content_zoom,omitempty"`
+	// url_history is a url tile's persisted navigation back-stack (JSON
+	// {index, entries:[{url,title}]}, capped) captured at freeze so a revived
+	// tile can still go "back" (issue #113). Rides the url SetTile writeback;
+	// an empty value on a write leaves the stored history untouched (a partial
+	// capture must not clobber it, mirroring the preview-JPEG rule).
+	UrlHistory    string `protobuf:"bytes,28,opt,name=url_history,json=urlHistory,proto3" json:"url_history,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -504,6 +510,13 @@ func (x *Tile) GetContentZoom() float64 {
 		return x.ContentZoom
 	}
 	return 0
+}
+
+func (x *Tile) GetUrlHistory() string {
+	if x != nil {
+		return x.UrlHistory
+	}
+	return ""
 }
 
 // NetworkContext declares how url tiles in this plugin reach the network.
@@ -3177,7 +3190,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12%\n" +
-	"\x0eproxy_endpoint\x18\b \x01(\tR\rproxyEndpoint\"\xd6\x04\n" +
+	"\x0eproxy_endpoint\x18\b \x01(\tR\rproxyEndpoint\"\xf7\x04\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3204,7 +3217,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fpreview_blob_id\x18\x15 \x01(\x03R\rpreviewBlobId\x12\x19\n" +
 	"\balt_text\x18\x19 \x01(\tR\aaltText\x12\x1c\n" +
 	"\treference\x18\x1a \x01(\bR\treference\x12!\n" +
-	"\fcontent_zoom\x18\x1b \x01(\x01R\vcontentZoom\"e\n" +
+	"\fcontent_zoom\x18\x1b \x01(\x01R\vcontentZoom\x12\x1f\n" +
+	"\vurl_history\x18\x1c \x01(\tR\n" +
+	"urlHistory\"e\n" +
 	"\x0eNetworkContext\x12\x18\n" +
 	"\x06direct\x18\x01 \x01(\bH\x00R\x06direct\x122\n" +
 	"\x05proxy\x18\x02 \x01(\v2\x1a.gridwell.v1.ProxyEndpointH\x00R\x05proxyB\x05\n" +

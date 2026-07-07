@@ -57,7 +57,7 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, preview_blob_id, alt_text, content_zoom`
+	url_string, preview_blob_id, alt_text, content_zoom, url_history`
 
 // scanTile scans a single row into an rpc.Tile. It expects the columns to
 // match tileColumns in order.
@@ -71,13 +71,14 @@ func scanTile(scanner interface {
 		urlStr     sql.NullString
 		previewBID sql.NullInt64
 		textMode   sql.NullString
+		urlHist    sql.NullString
 	)
 	if err := scanner.Scan(
 		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
 		&n.X, &n.Y, &n.W, &n.H,
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
-		&urlStr, &previewBID, &n.AltText, &n.ContentZoom,
+		&urlStr, &previewBID, &n.AltText, &n.ContentZoom, &urlHist,
 	); err != nil {
 		return nil, err
 	}
@@ -89,6 +90,9 @@ func scanTile(scanner interface {
 	}
 	if urlStr.Valid {
 		n.URLString = urlStr.String
+	}
+	if urlHist.Valid {
+		n.URLHistory = urlHist.String
 	}
 	if previewBID.Valid {
 		n.PreviewBlobID = previewBID.Int64

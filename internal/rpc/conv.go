@@ -92,6 +92,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		AltText:       t.AltText,
 		Reference:     t.Reference,
 		ContentZoom:   t.ContentZoom,
+		UrlHistory:    t.URLHistory,
 	}
 }
 
@@ -125,6 +126,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		AltText:       t.AltText,
 		Reference:     t.Reference,
 		ContentZoom:   t.ContentZoom,
+		URLHistory:    t.UrlHistory,
 	}
 }
 
@@ -239,7 +241,7 @@ func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetTileRequest {
 }
 func SetURLStateToProto(r *SetURLStateRequest) *pb.SetTileRequest {
 	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
-		Tile: &pb.Tile{Kind: KindURL, UrlString: r.URL, AltText: r.Title}, Preview: r.JPEG}
+		Tile: &pb.Tile{Kind: KindURL, UrlString: r.URL, AltText: r.Title, UrlHistory: r.History}, Preview: r.JPEG}
 }
 
 // Mutation request converters.

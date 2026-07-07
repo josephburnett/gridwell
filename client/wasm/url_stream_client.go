@@ -104,7 +104,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if g, ok := a.c.Grid(t.GridID); ok {
 		proxyEndpoint = g.Meta.ProxyEndpoint
 	}
-	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t))
+	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t), t.URLHistory)
 	a.draw()
 }
 
@@ -124,7 +124,7 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 	anchor := v.anchor
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
-	bridgeRemove(paneID, func(jpeg []byte, url, title string) {
+	bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
 		if freeze && (len(jpeg) > 0 || url != "" || title != "") {
 			// Look up the tile's current version from cache so the freeze is
 			// a versioned, in-place content edit (copy-on-clone: nothing is
@@ -135,7 +135,7 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 					Path:    rpc.Path{WellIDs: path},
 					TileID:  tileID,
 					Version: version,
-					JPEG:    jpeg, URL: url, Title: title,
+					JPEG:    jpeg, URL: url, Title: title, History: history,
 				})
 				if err != nil {
 					urlLog("SetURLState tile=%s err=%v", tileID, err)

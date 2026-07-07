@@ -9,6 +9,8 @@ import {
   parkedBounds,
   minWidthZoomFactor,
   composeZoom,
+  serializeHistory,
+  parseHistory,
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   dragExceeded,
@@ -262,4 +264,33 @@ test('proxyRulesFor accepts a socks5 endpoint and rejects garbage', () => {
   assert.equal(proxyRulesFor(''), '');
   assert.equal(proxyRulesFor('http://evil/ '), '');
   assert.equal(proxyRulesFor('socks5://a b'), '');
+});
+
+test('serializeHistory strips pageState, caps around the active index, rebases', () => {
+  const mk = (n: number) => ({ url: `https://x/${n}`, title: `t${n}`, pageState: 'BIG' });
+  // Single entry: nothing worth persisting (plain loadURL restores it).
+  assert.equal(serializeHistory([mk(1)], 0), '');
+  // Two entries round-trip, pageState gone.
+  const two = JSON.parse(serializeHistory([mk(1), mk(2)], 1));
+  assert.deepEqual(two, { index: 1, entries: [{ url: 'https://x/1', title: 't1' }, { url: 'https://x/2', title: 't2' }] });
+  // 60 entries, active at the end, cap 50: keep the last 50, index rebased.
+  const many = Array.from({ length: 60 }, (_, i) => mk(i));
+  const capped = JSON.parse(serializeHistory(many, 59, 50));
+  assert.equal(capped.entries.length, 50);
+  assert.equal(capped.index, 49);
+  assert.equal(capped.entries[0].url, 'https://x/10');
+});
+
+test('parseHistory validates and clamps; garbage falls back to null', () => {
+  const good = parseHistory('{"index":1,"entries":[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"}]}');
+  assert.ok(good);
+  assert.equal(good!.index, 1);
+  assert.equal(parseHistory(undefined), null);
+  assert.equal(parseHistory(''), null);
+  assert.equal(parseHistory('not json'), null);
+  assert.equal(parseHistory('{"index":0,"entries":[]}'), null);
+  assert.equal(parseHistory('{"index":0,"entries":[{"url":""}]}'), null);
+  // An out-of-range index clamps rather than breaking restore.
+  const clamped = parseHistory('{"index":99,"entries":[{"url":"https://a","title":""}]}');
+  assert.equal(clamped!.index, 0);
 });
