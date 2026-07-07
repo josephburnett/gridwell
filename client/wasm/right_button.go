@@ -313,8 +313,17 @@ func (a *App) onRightMove(sx, sy float64) {
 	rd.curY = sy
 	switch rd.kind {
 	case rightDragResize:
-		newRatio := pane.RatioFromCursor(rd.container, rd.splitDir, sx, sy)
-		rd.targetSplit.Ratio = newRatio
+		// Move only the grabbed border (issue #112): the same cascading
+		// resize the left drag uses (adjacent pane compresses first; nested
+		// borders stay put), min-walled at the collapse threshold so the
+		// adjacent pane visibly crushes toward "release closes it". The old
+		// single-ratio write scaled the whole opposite subtree, visibly
+		// sliding borders the user never grabbed.
+		cursor := sx
+		if rd.splitDir == pane.Horizontal {
+			cursor = sy
+		}
+		pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), rd.targetSplit, cursor, rightCloseThreshold)
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(&rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
 		a.advanceCloneDrag(sx, sy)
@@ -716,8 +725,13 @@ func (a *App) commitTileResize(rd *rightDragState) {
 // commitResize applies the final ratio and, if either side is below
 // rightCloseThreshold, collapses that side.
 func (a *App) commitResize(rd *rightDragState, sx, sy float64) {
-	ratio, collapse := gesture.ResizeOutcome(rd.container, rd.splitDir, sx, sy, rightCloseThreshold)
-	rd.targetSplit.Ratio = ratio
+	// The live layout was applied by onRightMove (pane.ResizeThrough, walled
+	// at the collapse threshold) — the release only decides COLLAPSE, from
+	// the raw cursor: dragging past the wall by enough means "close the
+	// side". Reassigning the raw proportional ratio here would undo the
+	// only-the-grabbed-border-moves behavior at the moment of release
+	// (issue #112).
+	_, collapse := gesture.ResizeOutcome(rd.container, rd.splitDir, sx, sy, rightCloseThreshold)
 	// Before a side is dropped, flush every leaf pane it holds: persist
 	// unsaved text edits and freeze any live URL/shell stream. Otherwise a
 	// collapsed pane's live view parks hidden (still running, never frozen)
