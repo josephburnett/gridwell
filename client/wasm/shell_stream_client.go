@@ -180,7 +180,8 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// right-button mousedown that starts a pane gesture — so a split/clone/
 	// resize could only be begun from the thin border ring. Forward the
 	// right button into the same canvas gesture pipeline every other tile
-	// uses; the left button stays with xterm (typing / focus / selection).
+	// uses; the left button stays with xterm (typing / caret / selection)
+	// except for its pane-focus side effect, handled inline below.
 	// Once onMouseDown sets a right gesture, draw() parks this overlay
 	// (liveOverlaysHidden), so the rest of the drag lands on the canvas.
 	onMouse := js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -190,7 +191,17 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			return nil
 		}
 		if ev.Get("button").Int() != 2 {
-			return nil // left button: let xterm handle it
+			// Left/middle stay with xterm (typing, caret, selection), but pane
+			// focus must still follow the click: the overlay swallows the
+			// mousedown, so the canvas path that normally transfers focus never
+			// runs. Without this, clicking into a terminal from another pane
+			// leaves Gridwell focus behind — and the focus-gated ascend circle
+			// stays hidden over the shell you are typing in (issue #78). Same
+			// contract as the URL view's forwarded VIEW_LEFTDOWN.
+			if cur := a.tree.FindPane(p.ID); cur != nil {
+				a.focusToPane(cur)
+			}
+			return nil
 		}
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
@@ -439,6 +450,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 // which a canvas-drawn circle (occluded by the xterm overlay) can't.
 func newShellCircle(doc js.Value) js.Value {
 	c := doc.Call("createElement", "div")
+	c.Set("className", "gw-shell-ascend") // stable hook for e2e visibility asserts
 	s := c.Get("style")
 	s.Set("position", "absolute")
 	s.Set("right", "5px")
