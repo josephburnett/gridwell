@@ -162,3 +162,29 @@ func TestLerpExpEndpointsAndShape(t *testing.T) {
 		t.Errorf("fallback linear")
 	}
 }
+
+// TestFadeAlpha: the decaying-highlight opacity — 1 at the start, 0 at/after
+// the duration, strictly decreasing in between (quadratic tail so the fade
+// lingers briefly then drops away).
+func TestFadeAlpha(t *testing.T) {
+	if got := FadeAlpha(1000, 1000, 2000); got != 1 {
+		t.Errorf("at start: alpha = %v, want 1", got)
+	}
+	if got := FadeAlpha(3000, 1000, 2000); got != 0 {
+		t.Errorf("at end: alpha = %v, want 0", got)
+	}
+	if got := FadeAlpha(9000, 1000, 2000); got != 0 {
+		t.Errorf("past end: alpha = %v, want 0", got)
+	}
+	prev := 1.1
+	for ms := 0.0; ms <= 2000; ms += 100 {
+		a := FadeAlpha(1000+ms, 1000, 2000)
+		if a < 0 || a > 1 {
+			t.Fatalf("alpha out of range at +%vms: %v", ms, a)
+		}
+		if a >= prev {
+			t.Fatalf("alpha not strictly decreasing at +%vms: %v >= %v", ms, a, prev)
+		}
+		prev = a
+	}
+}

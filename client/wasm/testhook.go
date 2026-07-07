@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
@@ -60,7 +61,25 @@ func (a *App) installTestHook() {
 		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
+		"traces":        js.FuncOf(a.thTraces),
 	}))
+}
+
+// thTraces returns the armed ascent-trace highlights as
+// [{paneId, tileId, alpha}] — the fading "you just came from HERE" outlines
+// (issue #83). Pure read; alpha is computed with the same FadeAlpha the
+// renderer uses, so a spec can watch a trace arm and then expire.
+func (a *App) thTraces(_ js.Value, _ []js.Value) any {
+	now := nowMs()
+	out := js.Global().Get("Array").New()
+	for paneID, tr := range a.traces {
+		o := js.Global().Get("Object").New()
+		o.Set("paneId", paneID)
+		o.Set("tileId", tr.tileID)
+		o.Set("alpha", anim.FadeAlpha(now, tr.startMs, traceDurMs))
+		out.Call("push", o)
+	}
+	return out
 }
 
 // thRenderedCaret returns the focused pane's rendered-mode caret as

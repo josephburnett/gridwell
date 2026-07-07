@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -90,9 +91,13 @@ const (
 	colorNoEntryStroke = "#f6f6f6"
 	colorLocked        = "#26262a"
 	colorSelected      = "#e3b16f"
-	colorEdgeDot       = "#5a6a8a"
-	colorPlusBg        = "#23252d"
-	colorPlusBgHi      = "#2d3140"
+	// colorTrace is the ascent-trace ring — the fading "you just came from
+	// HERE" outline (issue #83). Brighter yellow than the gold selection so
+	// the two read differently while both are visible.
+	colorTrace    = "#ffd94a"
+	colorEdgeDot  = "#5a6a8a"
+	colorPlusBg   = "#23252d"
+	colorPlusBgHi = "#2d3140"
 	// colorPlusBgDelete fills the + button when it's the live trashcan
 	// delete target and the dragged tile is hovering over it — a danger red
 	// confirming "release here deletes".
@@ -171,6 +176,20 @@ func drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
 	c.Set("lineWidth", 2.0)
 	c.Call("strokeRect", x-1, y-1, w+2, h+2)
 	c.Set("lineWidth", 1.0)
+}
+
+// drawTraceOutline paints the fading yellow ascent-trace ring just outside
+// the tile (same geometry as the selection outline, thicker and alpha-faded).
+func drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
+	if alpha <= 0 {
+		return
+	}
+	c.Call("save")
+	c.Set("globalAlpha", alpha)
+	c.Set("strokeStyle", colorTrace)
+	c.Set("lineWidth", 3.0)
+	c.Call("strokeRect", x-2, y-2, w+4, h+4)
+	c.Call("restore")
 }
 
 // plusButtonRadius mirrors palette.Default().PlusRadius so the wasm
@@ -426,6 +445,18 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				dashed := !inSource && isLinkTile(&nn)
 				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside, dashed, p.ID)
 				a.drawPluginHealthTint(&nn, left, top, w, h)
+			}
+			// Ascent trace: the fading "you just came from HERE" outline on the
+			// tile this pane most recently ascended out of (issue #83). Drawn
+			// after the tiles so it paints on top; alpha decays via the frame
+			// loop (pruneTraces keeps it ticking, then drops the entry).
+			if tr, ok := a.traces[p.ID]; ok {
+				if n, ok := g.Tiles[tr.tileID]; ok {
+					left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
+					drawTraceOutline(a.cctx, left, top,
+						float64(n.W)*cellSize, float64(n.H)*cellSize,
+						anim.FadeAlpha(nowMs(), tr.startMs, traceDurMs))
+				}
 			}
 			a.drawEdgeIndicators(g.Tiles, pscreen, r)
 			if a.ghost != nil && a.ghost.paneID == p.ID {

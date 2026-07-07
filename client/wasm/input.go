@@ -1151,7 +1151,8 @@ func (a *App) animatePortalAscent(p *pane.Pane, f pane.Frame, well *rpc.Tile) {
 	p.DropFrame() // the transition (below) drives the restore, not an instant pop
 	menuOpen := f.MenuOpen
 	a.startTransition(&paneTransition{
-		paneID: p.ID,
+		paneID:      p.ID,
+		traceTileID: well.ID,
 		segments: []transSegment{
 			// Child: the plugin's root grid zooms out to the calibrated swap.
 			{
@@ -1262,7 +1263,8 @@ func (a *App) startAscent(p *pane.Pane) {
 	durations := anim.SplitN([]float64{childDist, parentDist}, totalTransitionMs)
 
 	a.startTransition(&paneTransition{
-		paneID: p.ID,
+		paneID:      p.ID,
+		traceTileID: well.ID,
 		segments: []transSegment{
 			// Child grid: combined pan+zoom to land on calibrated state.
 			{
@@ -1627,7 +1629,8 @@ func (a *App) startTextAscent(p *pane.Pane) {
 	// another text tile (an embed click) — restore that doc (and, for a
 	// cross-grid follow, its anchor + path) as the ascent landing on complete.
 	a.startTransition(&paneTransition{
-		paneID: p.ID,
+		paneID:      p.ID,
+		traceTileID: file.ID,
 		segments: []transSegment{
 			// Single combined pan+zoom segment back to the saved viewport.
 			{
