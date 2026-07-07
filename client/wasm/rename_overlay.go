@@ -67,6 +67,17 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 // read-only context label ("home" on the node grid, the plugin's config
 // label at its root, "ephemeral" inside a dying visit, a text tile's derived
 // first-line name).
+// bubbleDecorate applies pane-state markers to the bubble text — currently
+// the zoom indicator (issue #124). ONE owner: both the DOM pill and the
+// native live-url pill render bubbleLabel's output, so they can never
+// disagree about whether the pane reads as zoomed.
+func (a *App) bubbleDecorate(p *pane.Pane, label string) string {
+	if a.tree.Zoomed == p.ID {
+		return "⛶ " + label
+	}
+	return label
+}
+
 func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 	if t, ok := a.renameTarget(p); ok {
 		if t.AltText == "" {
@@ -119,6 +130,7 @@ func (a *App) syncRenamePill() {
 		// above a WebContentsView). Push the label when it changes.
 		pill.Get("style").Set("display", "none")
 		label, _, _ := a.bubbleLabel(p)
+		label = a.bubbleDecorate(p, label)
 		if a.lastNativePill != p.ID+"\x00"+label {
 			a.lastNativePill = p.ID + "\x00" + label
 			bridgeSetNameLabel(p.ID, label)
@@ -126,7 +138,7 @@ func (a *App) syncRenamePill() {
 		return
 	}
 	label, editable, muted := a.bubbleLabel(p)
-	pill.Set("textContent", label)
+	pill.Set("textContent", a.bubbleDecorate(p, label))
 	color := colorPlusFg
 	if muted {
 		color = colorMuted
