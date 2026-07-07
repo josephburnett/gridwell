@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import { GridwellDriver } from './driver';
+import { pluginUUIDs, killTmuxServers } from './homes';
 
 // apps/desktop, and the repo root two levels up (where `make build` lays out the
 // gridwell sidecar + plugin binaries and the web/ static dir).
@@ -38,36 +39,6 @@ export function seedHome(extra: PluginSpec[] = []): string {
   return home;
 }
 
-// pluginUUIDs extracts the plugin UUIDs from <home>/server.yaml. Used by
-// teardown to kill the per-plugin tmux servers.
-function pluginUUIDs(home: string): string[] {
-  const p = path.join(home, 'server.yaml');
-  let src: string;
-  try {
-    src = fs.readFileSync(p, 'utf-8');
-  } catch {
-    return [];
-  }
-  const uuids: string[] = [];
-  for (const line of src.split('\n')) {
-    // YAML line: `  id: <uuid>`
-    const m = line.match(/^\s*id:\s*([0-9a-f]{32})\s*$/i);
-    if (m) uuids.push(m[1]);
-  }
-  return uuids;
-}
-
-// killTmuxServers kills the gridwell-private tmux server for each plugin UUID.
-// Each localdb plugin owns a tmux server on socket "gridwell-<uuid>"; if a
-// test crashes before deleting shell tiles those sessions linger and can
-// interfere with the next test (same socket name if the UUID is reused, or
-// just leaked resources). This is a best-effort kill: no-op if the server
-// is not running.
-function killTmuxServers(uuids: string[]): void {
-  for (const uuid of uuids) {
-    spawnSync('tmux', ['-L', `gridwell-${uuid}`, 'kill-server'], { stdio: 'ignore' });
-  }
-}
 
 // assertSidecarExited polls (briefly) that the sidecar process is no longer
 // alive after app.close(). Fails loudly so the LEAKING test is blamed, not a
