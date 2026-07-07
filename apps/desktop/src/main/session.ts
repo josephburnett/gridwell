@@ -186,11 +186,18 @@ export async function hydratePartition(
   }
   const { cookies, files } = parsed;
   const partition = partitionFor(pluginUuid);
-  // Directory snapshot first — but ONLY onto a partition this process hasn't
-  // initialized (no on-disk dir yet): writing under a live session is
-  // undefined, and within a run the live directory is already current.
+  // The blob restores ONLY onto a partition that doesn't exist on disk yet (a
+  // fresh machine, a copied plugin DB, a wiped profile). An EXISTING partition
+  // is always at least as current as the blob — Chromium persists cookies and
+  // storage in the dir itself — and injecting blob cookies over it is a
+  // ROLLBACK hazard: one failed dehydrate freezes the blob, and every entry
+  // would then roll live session cookies back to that stale snapshot. That
+  // exact chain (238MB blob → saves failing → stale blob re-injected on every
+  // descent) produced Google's "problem with your cookie settings" (issue
+  // #120). The dir-restore half always followed this rule; cookies now do too.
   const dir = partitionDir(partition);
-  if (Object.keys(files).length > 0 && !fs.existsSync(dir)) {
+  if (fs.existsSync(dir)) return;
+  if (Object.keys(files).length > 0) {
     try {
       restoreDir(dir, files);
     } catch {
