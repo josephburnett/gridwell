@@ -197,6 +197,12 @@ type App struct {
 	shellAlive        map[string]bool
 	shellAliveProbing map[string]bool
 
+	// traces holds the per-pane ascent-trace highlight (the fading "you just
+	// came from HERE" outline, issue #83). Armed by completeTransition when
+	// the finished transition was an ascent; pruned by frame() as each fade
+	// runs out. Ephemeral view state, like selection.
+	traces map[string]traceState
+
 	// textTextarea is the lazily-created <textarea> element used for
 	// markdown text-mode editing. It is positioned over the focused pane
 	// when pane.TextFocus != 0 and pane.TextMode == "text", and hidden
@@ -415,7 +421,22 @@ type paneTransition struct {
 	// has reached the tile's footprint at OvertakeZoom (so the toggle
 	// button appearing doesn't pop into view mid-animation).
 	onComplete func()
+	// traceTileID, when set (ascents only), arms the ephemeral "you just came
+	// from HERE" highlight on that tile once the transition lands — a fading
+	// outline so the user can tell which shell/well/url they just left
+	// (issue #83). Pure view state; nothing persists.
+	traceTileID string
 }
+
+// traceState is one armed ascent-trace highlight: the tile to outline in the
+// pane's grid view and the fade clock's start. Held per pane in App.traces.
+type traceState struct {
+	tileID  string
+	startMs float64
+}
+
+// traceDurMs is how long the ascent-trace outline takes to fade out.
+const traceDurMs = 2000.0
 
 type transSegment struct {
 	path                     []string
@@ -560,6 +581,7 @@ func main() {
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},
+		traces:            map[string]traceState{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")
@@ -789,7 +811,25 @@ func (a *App) frame() {
 			a.scheduleFrame()
 		}
 	}
+	// Ascent-trace fades need frames until they run out; prune the expired.
+	if a.pruneTraces(now) {
+		a.scheduleFrame()
+	}
 	a.draw()
+}
+
+// pruneTraces drops expired ascent-trace highlights and reports whether any
+// are still fading (i.e. the frame loop must keep ticking).
+func (a *App) pruneTraces(now float64) bool {
+	alive := false
+	for paneID, tr := range a.traces {
+		if anim.FadeAlpha(now, tr.startMs, traceDurMs) <= 0 {
+			delete(a.traces, paneID)
+			continue
+		}
+		alive = true
+	}
+	return alive
 }
 
 // startTransition installs the given transition and primes the first
@@ -848,6 +888,12 @@ func (a *App) completeTransition() {
 	a.clearSelected(p.ID)
 	a.gridLoadFailed = map[string]bool{}
 	a.fetchGrid(a.gridIDForPane(p))
+	if tr.traceTileID != "" {
+		// The ascent landed: light the trace on the tile the pane came out
+		// of and keep the frame loop alive for the fade.
+		a.traces[p.ID] = traceState{tileID: tr.traceTileID, startMs: nowMs()}
+		a.scheduleFrame()
+	}
 	if tr.onComplete != nil {
 		tr.onComplete()
 	}

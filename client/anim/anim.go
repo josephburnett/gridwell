@@ -119,3 +119,12 @@ func LerpExp(from, to, t float64) float64 {
 	}
 	return from * math.Pow(to/from, t)
 }
+
+// FadeAlpha is the opacity of a decaying highlight (the ascent trace,
+// client/wasm issue #83) at nowMs: 1 when the fade starts, easing to 0 at
+// startMs+durationMs with a quadratic tail — bright long enough to notice,
+// then gone.
+func FadeAlpha(nowMs, startMs, durationMs float64) float64 {
+	r := 1 - Progress(nowMs, startMs, durationMs)
+	return r * r
+}
