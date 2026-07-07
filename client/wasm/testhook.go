@@ -62,7 +62,20 @@ func (a *App) installTestHook() {
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
 		"traces":        js.FuncOf(a.thTraces),
+		"shellRenderer": js.FuncOf(a.thShellRenderer),
 	}))
+}
+
+// thShellRenderer returns which renderer the focused pane's live shell
+// attached ("webgl" / "canvas"; "" = no live shell). The e2e asserts "webgl"
+// so a platform change can never silently downgrade the terminal renderer
+// again (issue #128 — Chromium dropped the automatic SwiftShader fallback
+// and the #84 artifact class returned unnoticed).
+func (a *App) thShellRenderer(js.Value, []js.Value) any {
+	if conn := a.shellConnFor(a.tree.Focus); conn != nil {
+		return conn.rendererKind
+	}
+	return ""
 }
 
 // thTraces returns the armed ascent-trace highlights as

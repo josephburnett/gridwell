@@ -43,6 +43,14 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   await pill.dispatchEvent('mousedown', { button: 0 });
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);
 
+  // The terminal runs on the WEBGL renderer — never the canvas fallback,
+  // whose dirty-region artifacts are the #84 bug class. Chromium silently
+  // dropped software WebGL once (issue #128); this assertion makes any
+  // future downgrade a loud suite failure.
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellRenderer()))
+    .toBe('webgl');
+
   // It is a real terminal: type into it (keys go to the PTY via xterm).
   await window.keyboard.type('echo ephemeral-shell-proof');
   await window.keyboard.press('Enter');
