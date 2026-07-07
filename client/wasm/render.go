@@ -1063,7 +1063,7 @@ func (a *App) overlayChildPreview(n *rpc.Tile, x, y, w, h, borderPx float64) {
 	c.Call("beginPath")
 	c.Call("rect", x, y, w, h)
 	c.Call("clip")
-	drawImageCoverCentered(c, img, x, y, w, h)
+	drawImageContain(c, img, x, y, w, h)
 	c.Call("restore")
 	line := colorURLLine
 	if n.Kind == rpc.KindShell {

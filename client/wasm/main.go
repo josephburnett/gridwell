@@ -226,11 +226,6 @@ type App struct {
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
 
-	// urlPanDragging is true while the user is dragging inside a frozen
-	// URL descent pane. Used to switch the canvas cursor to "grabbing"
-	// during the drag and back to "grab" on release.
-	urlPanDragging bool
-
 	// embedHits collects click-targets for tile-embeds rendered inside
 	// text panes this frame. Reset at the start of each draw() and
 	// appended to as embeds are painted by drawMarkdownInPane. Queried by

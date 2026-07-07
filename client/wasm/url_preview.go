@@ -17,55 +17,34 @@ import (
 // closeSession). Right-click on a URL tile means fork-on-drag-release,
 // nothing else.
 
-// drawImageCoverCentered draws img into the (x,y,w,h) rect using
-// object-fit: cover semantics anchored to the center of the source
-// image — the image is uniformly scaled so it fully covers the
-// destination, and any overflow is cropped evenly from both sides
-// (never stretched).
-//
-// No image bytes are discarded — this is purely a draw-time crop, so
-// subsequent renders at a different destination aspect ratio (e.g.
-// after a tile resize) crop differently from the same source frame.
-func drawImageCoverCentered(c js.Value, img js.Value, x, y, w, h float64) {
-	drawImageCover(c, img, x, y, w, h, 0, 0)
-}
-
-// drawImageCover draws img into (x,y,w,h) with cover semantics and an
-// additional (panX, panY) offset applied in destination pixels. The pan
-// shifts which portion of the scaled image is visible, clamped so the
-// image always covers the full destination rect (no empty space).
-//
-// panX > 0 slides the image left (shows right portion); panY > 0 slides
-// up (shows lower portion). Clamping is handled by the caller via
-// clampURLPan — here we only apply the raw offset.
-func drawImageCover(c js.Value, img js.Value, x, y, w, h, panX, panY float64) {
+// drawImageContain draws img into the (x,y,w,h) rect using object-fit:
+// contain semantics: black bars fill the rect, then the image is uniformly
+// scaled to FIT and centered — bars remain on at most one axis. The owner's
+// call (issue #89): a preview is always shown whole, never cover-cropped, so
+// radically different aspect ratios still read as what they are. The single
+// wasm chokepoint every raster preview draw flows through.
+func drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
+	c.Set("fillStyle", "#000")
+	c.Call("fillRect", x, y, w, h)
 	iw := img.Get("naturalWidth").Float()
 	ih := img.Get("naturalHeight").Float()
-	// Cover source-rect + pan is the pure preview.CoverSrcRect; a degenerate
+	// The fit rect is the pure preview.ContainDstRect; a degenerate
 	// image/dest falls back to a stretch draw.
-	sx, sy, sw, sh, ok := preview.CoverSrcRect(iw, ih, w, h, panX, panY)
+	dx, dy, dw, dh, ok := preview.ContainDstRect(iw, ih, x, y, w, h)
 	if !ok {
 		c.Call("drawImage", img, x, y, w, h)
 		return
 	}
-	c.Call("drawImage", img, sx, sy, sw, sh, x, y, w, h)
-}
-
-// clampURLPan clamps the frozen-descent pan so the cover-scaled image always
-// fills the destination rect. Thin wrapper over the tested preview.ClampPan.
-func clampURLPan(panX, panY, iw, ih, w, h float64) (float64, float64) {
-	return preview.ClampPan(panX, panY, iw, ih, w, h)
+	c.Call("drawImage", img, dx, dy, dw, dh)
 }
 
 // drawURLTileInPane renders a URL tile that's currently the pane's
-// TextFocus (i.e., the user descended into it). The pane's
-// inner-rect (x, y, w, h) gets the cached preview image in cover mode.
-// While the WebSocket stream is open, frames flow into the same
-// urlPreview cache, so this draw call automatically reflects them.
-//
-// Frozen descents apply pan (urlPanX/Y) so the user can drag to see the
-// overflow. Live descents show the center crop (no pan — clicks forward
-// to Chromium and the page manages its own viewport).
+// TextFocus (i.e., the user descended into it). The pane's inner-rect
+// (x, y, w, h) gets the cached preview image letterboxed to fit. While the
+// WebSocket stream is open, frames flow into the same urlPreview cache, so
+// this draw call automatically reflects them. (The old frozen-descent
+// cover-crop pan is gone with cover mode itself — under fit there is no
+// overflow to pan into.)
 func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	// When live, the native WebContentsView paints over this content box;
 	// the JPEG drawn here is the fallback shown while the view is parked
@@ -82,21 +61,7 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
-			live := a.urlViewFor(p.ID) != nil
-			if live {
-				// Live: center-crop, no pan — the page renders at pane size.
-				drawImageCoverCentered(a.cctx, img, x, y, w, h)
-			} else {
-				// Frozen: cover + pan so the user can drag to see overflow.
-				var panX, panY float64
-				if pl, ok := a.localIf(p.ID); ok {
-					panX, panY = pl.PanX, pl.PanY
-				}
-				iw := img.Get("naturalWidth").Float()
-				ih := img.Get("naturalHeight").Float()
-				panX, panY = clampURLPan(panX, panY, iw, ih, w, h)
-				drawImageCover(a.cctx, img, x, y, w, h, panX, panY)
-			}
+			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else {
 		a.fetchURLPreview(n.ID, n.PreviewBlobID)
@@ -110,7 +75,7 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 
 // drawShellTileInPane renders a shell tile that's currently the pane's
 // TextFocus (the user descended into it). Mirrors drawURLTileInPane:
-// the cached freeze-frame JPEG fills the pane in cover mode; when no
+// the cached freeze-frame JPEG letterboxes into the pane; when no
 // preview is loaded yet the fetch is kicked off and a hint paints the
 // stored cwd so the user sees *something* while the JPEG decodes.
 //
@@ -129,7 +94,7 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
-			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ID, n.PreviewBlobID)
@@ -160,7 +125,7 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
-			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ID, n.PreviewBlobID)
@@ -180,7 +145,7 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 
 // drawURLTile renders a URL tile in the parent grid view. Layers:
 //  1. dark-grey background (matches the file inner-bg used elsewhere)
-//  2. the cached preview JPEG cropped to the tile footprint, or a
+//  2. the cached preview JPEG letterboxed into the tile footprint, or a
 //     placeholder showing the URL text if no preview is loaded yet
 //  3. the tile outline + selection highlight
 func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
@@ -194,7 +159,7 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 
 	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
-			drawImageCoverCentered(a.cctx, img, x, y, w, h)
+			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else {
 		if w > 20 && h > 20 {

@@ -127,12 +127,8 @@ func (a *App) updateURLCursor(p *pane.Pane, _ pane.Rect) {
 		a.canvas.Get("style").Set("cursor", "")
 		return
 	}
-	// Frozen: grab while hovering content area.
-	if a.urlPanDragging {
-		a.canvas.Get("style").Set("cursor", "grabbing")
-	} else {
-		a.canvas.Get("style").Set("cursor", "grab")
-	}
+	// Frozen: default cursor — the letterboxed preview has no pan gesture.
+	a.canvas.Get("style").Set("cursor", "")
 }
 
 // focusToPane transfers wasm focus to pane p. If focus actually changes it
@@ -342,22 +338,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 				// right-click on the corner circle. Swallow it.
 				return nil
 			}
-			// Live pane: the native view owns content clicks; nothing to do.
-			if a.urlViewFor(p.ID) != nil {
-				return nil
-			}
-			// Frozen pane: start a pan drag to navigate cover-mode overflow.
-			a.urlPanDragging = true
-			a.dragging = &dragState{
-				originPaneID:  p.ID,
-				originFocused: prevFocus == p.ID,
-				tileID:        "",
-				startScreenX:  sx,
-				startScreenY:  sy,
-				curScreenX:    sx,
-				curScreenY:    sy,
-			}
-			a.updateURLCursor(p, r)
+			// Inside the content box: a live view owns its own clicks (the
+			// canvas never sees them); on a frozen pane the preview is
+			// letterboxed to fit — nothing to pan — so the click is just
+			// swallowed. (The cover-mode pan drag lived here; removed with
+			// cover mode itself, issue #89.)
 			return nil
 		}
 		// The rendered/raw toggle is a DOM overlay button
@@ -607,23 +592,13 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 	}
 	if d.tileID == "" && !d.isTemplate {
-		// Pan the source pane smoothly. For frozen URL descents, pan
-		// translates the cover-mode crop (urlPanX/Y). In file-rendered
-		// mode the drag scrolls the file's logical content; in grid mode
-		// it pans the parent-grid view.
+		// Pan the source pane smoothly. In file-rendered mode the drag
+		// scrolls the file's logical content; in grid mode it pans the
+		// parent-grid view. (Frozen URL descents no longer pan — the
+		// preview letterboxes to fit, issue #89.)
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.TextFocus != "" && a.isURLDescent(focused) && a.urlViewFor(focused.ID) == nil {
-				// Frozen URL descent: translate cover-crop pan. The delta
-				// is negated because dragging right should shift the image
-				// right (show left portion), i.e., decrease panX.
-				pl := a.local(focused.ID)
-				pl.PanX -= (sx - d.curScreenX)
-				pl.PanY -= (sy - d.curScreenY)
-				// Clamping is deferred to draw time (clampURLPan) because
-				// we need the image natural dimensions which may vary frame
-				// to frame as frames arrive.
-			} else if focused.TextFocus != "" && focused.TextMode == rpc.TextModeRendered {
+			if focused.TextFocus != "" && focused.TextMode == rpc.TextModeRendered {
 				z := nonzero(focused.TextZoom)
 				focused.TextScrollX -= (sx - d.curScreenX) / z
 				focused.TextScrollY -= (sy - d.curScreenY) / z
@@ -676,15 +651,6 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		}
 		if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
-		}
-	}
-	// End a frozen URL pan drag: clear the dragging flag and restore grab cursor.
-	if a.urlPanDragging && args[0].Get("button").Int() == 0 {
-		a.urlPanDragging = false
-		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-			a.updateURLCursor(p, r)
-		} else {
-			a.canvas.Get("style").Set("cursor", "")
 		}
 	}
 	if a.dragging == nil {
@@ -1529,11 +1495,10 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextScrollX = initialScrollX
 			fp.TextZoom = textFixedScale
 			// Reset per-pane view state on each new descent — it's view state,
-			// not tile state, so it does not survive across descents: the frozen-
-			// URL pan, plus any rendered-mode caret + dirty mark left by a previous
-			// occupant of this pane (a fresh doc starts with no caret).
+			// not tile state, so it does not survive across descents: any
+			// rendered-mode caret + dirty mark left by a previous occupant of
+			// this pane (a fresh doc starts with no caret).
 			pl := a.local(fp.ID)
-			pl.PanX, pl.PanY = 0, 0
 			pl.ClearCaret()
 			pl.Dirty = false
 			a.refreshFileOverlay()
