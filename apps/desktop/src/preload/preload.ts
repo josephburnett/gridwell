@@ -9,6 +9,7 @@ import {
   SetBoundsArgs,
   SetHiddenArgs,
   SetZoomArgs,
+  OpenBelowEvent,
   RemoveArgs,
   PaneRef,
   FreezeResult,
@@ -88,6 +89,14 @@ const api = {
     const h = (_e: unknown, ev: ForwardedRightdown) => cb(ev);
     ipcRenderer.on(EV.leftForward, h);
     return () => ipcRenderer.removeListener(EV.leftForward, h);
+  },
+  // onOpenBelow fires when a live view's page tried to open a NEW WINDOW
+  // (target=_blank, window.open, ctrl/cmd-click); the wasm splits the pane
+  // and opens the url as an ephemeral visit below (issue #111).
+  onOpenBelow(cb: (ev: OpenBelowEvent) => void): () => void {
+    const h = (_e: unknown, ev: OpenBelowEvent) => cb(ev);
+    ipcRenderer.on(EV.openBelow, h);
+    return () => ipcRenderer.removeListener(EV.openBelow, h);
   },
   // onError fires for every main-process failure that must reach the user
   // (webview lifecycle, session hydrate/dehydrate, sidecar boot/exit) — the
