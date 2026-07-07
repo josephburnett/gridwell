@@ -151,10 +151,11 @@ test('URL_MIN_LAYOUT_WIDTH pins the production zoom-to-fit threshold', () => {
   assert.equal(minWidthZoomFactor(400, URL_MIN_LAYOUT_WIDTH), 0.5);
 });
 
-// Regression guard for mechanism B of issue #33: classifyRightPress requires
-// BOTH distance and time to classify as a drag. A fast trackpad tap that drifts
-// a few pixels past the 4px threshold is still a click — the context menu must
-// fire. An intentional hold-and-drag that exceeds both thresholds is a gesture.
+// Regression guards for issue #33 mechanism B and issue #119: a fast trackpad
+// tap that drifts a few pixels past the 4px threshold is still a click — the
+// context menu must fire — while a fast FLICK past the far threshold is a
+// gesture regardless of duration, and an intentional hold-and-drag exceeding
+// both small thresholds is a gesture too.
 test('classifyRightPress requires both distance and time to classify as drag', () => {
   const dist = RIGHT_DRAG_THRESHOLD; // 4 px
   const time = RIGHT_DRAG_TIME_MS; // 200 ms
@@ -293,4 +294,15 @@ test('parseHistory validates and clamps; garbage falls back to null', () => {
   // An out-of-range index clamps rather than breaking restore.
   const clamped = parseHistory('{"index":99,"entries":[{"url":"https://a","title":""}]}');
   assert.equal(clamped!.index, 0);
+});
+
+test('classifyRightPress: a fast flick past the far threshold is a drag (#119)', () => {
+  const dist = RIGHT_DRAG_THRESHOLD;
+  const time = RIGHT_DRAG_TIME_MS;
+  // 30px up in 50ms: unambiguous drag even though the time gate fails.
+  assert.equal(classifyRightPress(0, -30, 50, dist, time), true);
+  // 10px in 50ms: past 4px but inside the far threshold and too fast — click.
+  assert.equal(classifyRightPress(10, 0, 50, dist, time), false);
+  // Exactly at the far boundary stays a click (strictly-greater semantics).
+  assert.equal(classifyRightPress(24, 0, 50, dist, time), false);
 });
