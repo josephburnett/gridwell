@@ -60,7 +60,8 @@ async function main() {
   const origin = await sidecarStub(blobs);
 
   // ── dehydrate: a cookie set in the partition must reach the PUT blob ─────
-  const uuidA = 'harness-plugin-a';
+  const runId = Date.now().toString(36);
+  const uuidA = `harness-a-${runId}`;
   const sesA = electronSession.fromPartition(partitionFor(uuidA));
   await sesA.cookies.set({
     url: 'https://example.com/',
@@ -83,7 +84,7 @@ async function main() {
   console.log(`dehydrate ok: ${putEnv.cookies.length} cookie(s) captured`);
 
   // ── hydrate: a canned blob's cookies must appear in a FRESH partition ────
-  const uuidB = 'harness-plugin-b';
+  const uuidB = `harness-b-${runId}`;
   blobs.set(uuidB, put); // reuse plugin A's blob as the canned session
   await hydratePartition(origin, uuidB, (m) => errs.push(m));
   if (errs.length > 0) fail(`hydrate reported: ${errs.join('; ')}`);
@@ -93,6 +94,34 @@ async function main() {
     fail(`hydrated partition has ${restored.length} login cookie(s), want the saved one`);
   }
   console.log('hydrate ok: login cookie restored into a fresh partition');
+
+  // ── rollback protection: hydrate must NOT touch an EXISTING partition ────
+  // One failed dehydrate freezes the blob; injecting its cookies over a live
+  // partition on the next entry would roll the session back — the exact chain
+  // behind Google's "problem with your cookie settings" (issue #120).
+  const uuidC = `harness-c-${runId}`;
+  const sesC = electronSession.fromPartition(partitionFor(uuidC));
+  await sesC.cookies.set({
+    url: 'https://example.com/',
+    name: 'fresh',
+    value: 'live-session',
+    domain: 'example.com',
+    path: '/',
+    secure: true,
+    expirationDate: Date.now() / 1000 + 3600,
+  });
+  await sesC.flushStorageData(); // materialize the partition dir on disk
+  blobs.set(uuidC, put); // a STALE blob (carries 'login', not 'fresh')
+  await hydratePartition(origin, uuidC, (m) => errs.push(m));
+  if (errs.length > 0) fail(`rollback-case hydrate reported: ${errs.join('; ')}`);
+  const cCookies = await sesC.cookies.get({});
+  if (!cCookies.find((c) => c.name === 'fresh')) {
+    fail('hydrate onto an existing partition dropped the LIVE cookie');
+  }
+  if (cCookies.find((c) => c.name === 'login')) {
+    fail('hydrate injected STALE blob cookies over an existing partition (rollback!)');
+  }
+  console.log('rollback ok: an existing partition is never overwritten by the blob');
 
   // ── failure surfacing: a dead sidecar must report, not swallow ───────────
   const failures: string[] = [];
@@ -128,21 +157,28 @@ async function main() {
   const viewD = mkView(partitionFor(uuidD));
   win.contentView.addChildView(viewD);
   await viewD.webContents.loadURL(`${origin}/page`);
-  await new Promise((r) => setTimeout(r, 300)); // let the write land
-  await dehydratePartition(origin, uuidD, (m) => fail(`dehydrate D: ${m}`));
-  const blobD = blobs.get(uuidD);
-  if (!blobD) fail('no blob for D');
-  const env = JSON.parse(blobD.toString('utf8'));
-  if (env.v !== 2) fail(`blob is not a v2 envelope: ${blobD.slice(0, 40)}`);
+  // Chromium flushes localStorage's leveldb lazily; a single fixed wait made
+  // this intermittently miss the value. Retry the dehydrate until the
+  // snapshot carries it (bounded), like every timing-dependent assertion.
+  let env: { v: number; files: Record<string, string> } = { v: 0, files: {} };
+  let carriesValue = false;
+  for (let attempt = 0; attempt < 5 && !carriesValue; attempt++) {
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    await dehydratePartition(origin, uuidD, (m) => fail(`dehydrate D: ${m}`));
+    const blobD = blobs.get(uuidD);
+    if (!blobD) fail('no blob for D');
+    env = JSON.parse(blobD!.toString('utf8'));
+    if (env.v !== 2) fail(`blob is not a v2 envelope: ${blobD!.slice(0, 40)}`);
+    carriesValue = Object.keys(env.files ?? {}).some((f: string) =>
+      Buffer.from(env.files[f], 'base64').includes('local-sekrit'));
+  }
   const fileNames = Object.keys(env.files ?? {});
   if (fileNames.length === 0) fail('v2 blob captured no partition files (localStorage missing)');
-  const carriesValue = fileNames.some((f: string) =>
-    Buffer.from(env.files[f], 'base64').includes('local-sekrit'));
   console.log(`dir snapshot ok: ${fileNames.length} file(s), value-present=${carriesValue}`);
   if (!carriesValue) fail('the localStorage value never reached the snapshot — flush timing');
 
   const uuidE = `harness-e-${run}`;
-  blobs.set(uuidE, blobD);
+  blobs.set(uuidE, blobs.get(uuidD)!);
   await hydratePartition(origin, uuidE, (m) => fail(`hydrate E: ${m}`));
   const viewE = mkView(partitionFor(uuidE));
   win.contentView.addChildView(viewE);
