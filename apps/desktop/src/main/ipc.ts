@@ -20,6 +20,7 @@ export const CH = {
   place: 'gw:place',       // PlaceArgs → void
   setBounds: 'gw:setBounds', // SetBoundsArgs → void
   setHidden: 'gw:setHidden', // SetHiddenArgs → void
+  setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom, issue #82)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
   reload: 'gw:reload',     // PaneRef → void
@@ -91,6 +92,14 @@ export interface PlaceArgs {
   // proxyEndpoint is the grid-stamped network context for this tile's plugin
   // ("socks5://host:port" through a node mount; "" = direct).
   proxyEndpoint?: string;
+  // contentZoom is the tile's persisted USER content zoom (issue #82),
+  // composed with the min-width layout zoom. 0/absent = 1.0.
+  contentZoom?: number;
+}
+
+export interface SetZoomArgs {
+  paneId: string;
+  zoom: number;
 }
 
 export interface SetBoundsArgs {

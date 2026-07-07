@@ -442,4 +442,26 @@ func init() {
 			}
 		},
 	})
+	// v3: content_zoom (issue #82). Seed a v2 tile; verify the column arrives
+	// defaulted to 0 and the row survived.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 3,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v3', ` + rootID + `, 'shell', 2, 2, 1, 1, 'v2-row', 100, 100)`); err != nil {
+				t.Fatalf("seed v2 tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var zoom float64
+			if err := db.QueryRow(`SELECT content_zoom FROM tiles WHERE object_id = 'fixt-v3'`).Scan(&zoom); err != nil {
+				t.Fatalf("read migrated tile: %v", err)
+			}
+			if zoom != 0 {
+				t.Errorf("content_zoom = %v, want default 0", zoom)
+			}
+		},
+	})
 }

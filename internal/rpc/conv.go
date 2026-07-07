@@ -91,6 +91,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		PreviewBlobId: t.PreviewBlobID,
 		AltText:       t.AltText,
 		Reference:     t.Reference,
+		ContentZoom:   t.ContentZoom,
 	}
 }
 
@@ -123,6 +124,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		PreviewBlobID: t.PreviewBlobId,
 		AltText:       t.AltText,
 		Reference:     t.Reference,
+		ContentZoom:   t.ContentZoom,
 	}
 }
 

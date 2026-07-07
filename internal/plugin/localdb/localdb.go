@@ -206,6 +206,14 @@ func (p *Plugin) SetTileAlt(ctx context.Context, req *gridwellv1.SetTileAltReque
 	return tileResp(p.st.GetTile(ctx, req.TileId))
 }
 
+// SetContentZoom persists the per-tile content scale (issue #82) — framing,
+// never a version bump.
+func (p *Plugin) SetContentZoom(ctx context.Context, req *gridwellv1.SetContentZoomRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
+		TileID: req.TileId, Version: req.Version, ContentZoom: req.ContentZoom,
+	}))
+}
+
 // ── Creates ──────────────────────────────────────────────────────────────────
 
 // CreateTile is the single create: tile.kind selects which typed store create

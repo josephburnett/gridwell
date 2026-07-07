@@ -212,6 +212,9 @@ type Tile struct {
 	// child_grid_id as unlink-only / share (never cascade). Set by the server
 	// in qualifyTiles; wire-only, derived, never a stored column.
 	Reference bool `json:"reference,omitempty"`
+	// ContentZoom scales the content rendered inside a text/shell/url tile
+	// (issue #82). Framing: persisted, never bumps version; 0 = unset (1.0).
+	ContentZoom float64 `json:"content_zoom,omitempty"`
 }
 
 // Reads.
@@ -419,6 +422,13 @@ type UpdateTextRequest struct {
 	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 	Data    []byte `json:"data"`
+}
+
+// SetContentZoomRequest persists a tile's content scale (framing; no bump).
+type SetContentZoomRequest struct {
+	TileID      string  `json:"tile_id"`
+	Version     int64   `json:"version"`
+	ContentZoom float64 `json:"content_zoom"`
 }
 
 type DeleteTileRequest struct {

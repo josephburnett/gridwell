@@ -53,7 +53,7 @@ func (b viewBounds) toJS() js.Value {
 // url at bounds, bound to the owning plugin's session partition (pluginUUID is
 // the session boundary). proxyEndpoint ("" = direct) is the grid-stamped
 // network context — a remote plugin's tiles browse through the tunnel SOCKS.
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string) {
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string, contentZoom float64) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -66,6 +66,7 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("bounds", b.toJS())
 	args.Set("pluginUuid", pluginUUID)
 	args.Set("proxyEndpoint", proxyEndpoint)
+	args.Set("contentZoom", contentZoom)
 	g.Call("placeWebview", args)
 }
 
@@ -108,6 +109,20 @@ func bridgeSetHidden(paneID string, hidden, focused bool) {
 	args.Set("hidden", hidden)
 	args.Set("focused", focused)
 	g.Call("setHidden", args)
+}
+
+// bridgeSetZoom sets the USER content zoom for the live view on paneID (the
+// tile's content_zoom, issue #82). The main process composes it with the
+// min-width layout zoom — the two multiply; neither overwrites the other.
+func bridgeSetZoom(paneID string, zoom float64) {
+	g := bridge()
+	if !g.Truthy() {
+		return
+	}
+	args := js.Global().Get("Object").New()
+	args.Set("paneId", paneID)
+	args.Set("zoom", zoom)
+	g.Call("setZoom", args)
 }
 
 // bridgeRemove tears the view down and invokes onFreeze with the final

@@ -229,7 +229,13 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	}
 	opts := js.Global().Get("Object").New()
 	opts.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
-	opts.Set("fontSize", 13)
+	// Base font scaled by the tile's persisted content zoom (issue #82), so a
+	// zoomed terminal comes back at your size on every descent.
+	fontSize := int(shellBaseFontPx)
+	if t := a.findTileByID(tileID); t != nil {
+		fontSize = int(shellBaseFontPx*contentZoomOf(t) + 0.5)
+	}
+	opts.Set("fontSize", fontSize)
 	opts.Set("convertEol", true)
 	opts.Set("cursorBlink", true)
 	// Dark theme tuned to the shell-fill / markdown-body backgrounds.

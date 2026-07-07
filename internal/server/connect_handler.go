@@ -296,6 +296,17 @@ func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb
 	return h.tileResp(uuid, resp, err)
 }
 
+func (h *connectHandler) SetContentZoom(ctx context.Context, req *connect.Request[pb.SetContentZoomRequest]) (*connect.Response[pb.TileResponse], error) {
+	c, local, uuid, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.SetContentZoom(ctx, &pb.SetContentZoomRequest{
+		TileId: local, Version: req.Msg.Version, ContentZoom: req.Msg.ContentZoom,
+	})
+	return h.tileResp(uuid, resp, err)
+}
+
 // ── creates ──────────────────────────────────────────────────────────────────
 
 // CreateTile is the single create router: resolve the owning plugin by

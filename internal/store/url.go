@@ -92,6 +92,38 @@ func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string, user b
 	})
 }
 
+// SetContentZoom persists the per-tile content scale (text font, terminal
+// font, page zoom — issue #82). Framing: emitTileChanged, never a version
+// bump — the enforced split (CLAUDE.md face #3). Wells are refused: their
+// view_zoom is the grid viewport, a different concept with its own writer.
+func (s *Store) SetContentZoom(ctx context.Context, req *rpc.SetContentZoomRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	if req.ContentZoom < 0 {
+		return nil, fmt.Errorf("%w: content_zoom must be >= 0", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
+		if err != nil {
+			return err
+		}
+		if isWellKind(n.Kind) {
+			return fmt.Errorf("%w: a well has no content zoom", ErrInvalidArgument)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tiles SET content_zoom = ?, updated_at = ? WHERE id = ?`,
+			req.ContentZoom, s.now().Unix(), tileID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
 // Navigation no longer has its own RPC: in the Electron model the live
 // WebContentsView reports its final address back through SetURLState at
 // freeze time, so the old rod-era SetURLString (driven by a server-side

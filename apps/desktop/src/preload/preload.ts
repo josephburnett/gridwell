@@ -8,6 +8,7 @@ import {
   PlaceArgs,
   SetBoundsArgs,
   SetHiddenArgs,
+  SetZoomArgs,
   RemoveArgs,
   PaneRef,
   FreezeResult,
@@ -29,6 +30,11 @@ const api = {
   },
   setHidden(args: SetHiddenArgs): Promise<void> {
     return ipcRenderer.invoke(CH.setHidden, args);
+  },
+  // setZoom sets the live view's USER content zoom (the tile's persisted
+  // content_zoom, issue #82); main composes it with the min-width zoom.
+  setZoom(args: SetZoomArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.setZoom, args);
   },
   removeWebview(args: RemoveArgs): Promise<FreezeResult> {
     return ipcRenderer.invoke(CH.remove, args);

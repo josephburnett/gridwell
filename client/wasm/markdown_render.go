@@ -34,7 +34,10 @@ import (
 // file pane, so screen px and logical px coincide here.)
 func (a *App) textContentWidth(p *pane.Pane) float64 {
 	_, _, w, _ := textInnerBox(p, paneRectFor(a, p))
-	return w
+	// LOGICAL width: the wrap width the layout runs at, which the render
+	// transform (textScaleFor) blows back up — so zooming re-wraps lines to
+	// keep filling the pane, browser-style (issue #82).
+	return w / a.textScaleFor(p)
 }
 
 // drawMarkdownInPane renders a markdown file as the contents of the pane
@@ -48,7 +51,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	}
 	// (x, y) is the inner box top-left (textInnerBox); markdownOrigin(p, r)
 	// rederives the same point for the caret hit-test, so they stay in sync.
-	scale := textFixedScale
+	scale := a.textScaleFor(p)
 	originX := x - p.TextScrollX*scale
 	originY := y - p.TextScrollY*scale
 
@@ -343,7 +346,7 @@ func (a *App) markdownMeasure(st markdownStyle, scale float64) markdown.Measure 
 // source of truth the painter and the caret hit-test both transform through.
 func (a *App) markdownOrigin(p *pane.Pane, r pane.Rect) (originX, originY, scale float64) {
 	x, y, _, _ := textInnerBox(p, r)
-	scale = textFixedScale
+	scale = a.textScaleFor(p)
 	return x - p.TextScrollX*scale, y - p.TextScrollY*scale, scale
 }
 
@@ -356,7 +359,7 @@ func (a *App) markdownCaretAt(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy flo
 		return 0, false
 	}
 	st := defaultMarkdownStyle()
-	measure := a.markdownMeasure(st, textFixedScale)
+	measure := a.markdownMeasure(st, a.textScaleFor(p))
 	res := a.layoutMarkdown(string(body), a.textContentWidth(p), measure, markdownLayoutStyle(st))
 	originX, originY, scale := a.markdownOrigin(p, r)
 	return markdown.CaretFromPoint(res.Ops, string(body), (sx-originX)/scale, (sy-originY)/scale, measure)
@@ -402,7 +405,7 @@ func (a *App) editRenderedKey(ev js.Value) {
 	}
 	st := defaultMarkdownStyle()
 	lstyle := markdownLayoutStyle(st)
-	measure := a.markdownMeasure(st, textFixedScale)
+	measure := a.markdownMeasure(st, a.textScaleFor(p))
 	res := a.layoutMarkdown(src, a.textContentWidth(p), measure, lstyle)
 	out := markdown.EditKey(src, caret, ev.Get("key").String(), res.Ops, lstyle, measure)
 	if !out.Handled {

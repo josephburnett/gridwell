@@ -8,6 +8,7 @@ import {
   controlBounds,
   parkedBounds,
   minWidthZoomFactor,
+  composeZoom,
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   dragExceeded,
@@ -131,6 +132,13 @@ test('minWidthZoomFactor scales a narrow view to fit and clamps the floor', () =
   // Below the floor the zoom clamps at 0.25 rather than shrinking to nothing.
   assert.equal(minWidthZoomFactor(64, min), 0.25);
   assert.equal(minWidthZoomFactor(1, min), 0.25);
+});
+
+test('composeZoom multiplies layout and user zoom, clamped to the Chromium floor', () => {
+  assert.equal(composeZoom(1, 1.5), 1.5); // wide pane, user zoomed in
+  assert.equal(composeZoom(0.5, 2), 1); // they multiply
+  assert.equal(composeZoom(1, 0), 1); // 0 = unset → 1.0
+  assert.equal(composeZoom(0.25, 0.5), 0.25); // floor
 });
 
 test('URL_MIN_LAYOUT_WIDTH pins the production zoom-to-fit threshold', () => {
