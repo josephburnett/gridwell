@@ -392,35 +392,6 @@ func TestSplitRatioFromPos(t *testing.T) {
 	}
 }
 
-func TestClampRatioToMinPx(t *testing.T) {
-	// Horizontal split clamps on height; vertical on width. minPx 80 over a
-	// 400-extent => minR = 0.2, so the valid band is [0.2, 0.8].
-	hc := Rect{W: 1000, H: 400}
-	if got := ClampRatioToMinPx(hc, Horizontal, 0.05, 80); absf(got-0.2) > 1e-9 {
-		t.Errorf("clamp low: got %v, want 0.2", got)
-	}
-	if got := ClampRatioToMinPx(hc, Horizontal, 0.95, 80); absf(got-0.8) > 1e-9 {
-		t.Errorf("clamp high: got %v, want 0.8", got)
-	}
-	if got := ClampRatioToMinPx(hc, Horizontal, 0.5, 80); absf(got-0.5) > 1e-9 {
-		t.Errorf("in-range unchanged: got %v, want 0.5", got)
-	}
-	// Vertical uses width; same 1000 extent -> minR = 0.08.
-	vc := Rect{W: 1000, H: 400}
-	if got := ClampRatioToMinPx(vc, Vertical, 0.01, 80); absf(got-0.08) > 1e-9 {
-		t.Errorf("vertical clamp low: got %v, want 0.08", got)
-	}
-	// Degenerate extent returns the ratio unchanged.
-	if got := ClampRatioToMinPx(Rect{W: 0, H: 0}, Vertical, 0.3, 80); got != 0.3 {
-		t.Errorf("degenerate: got %v, want 0.3", got)
-	}
-	// minR capped at 0.5 when minPx exceeds half the extent (range collapses
-	// to the midpoint rather than inverting).
-	if got := ClampRatioToMinPx(Rect{W: 100, H: 100}, Vertical, 0.1, 90); absf(got-0.5) > 1e-9 {
-		t.Errorf("minR cap: got %v, want 0.5", got)
-	}
-}
-
 func TestRectContains(t *testing.T) {
 	r := Rect{X: 10, Y: 20, W: 30, H: 40}
 	cases := []struct {

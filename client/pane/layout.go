@@ -357,33 +357,6 @@ func SplitRatioFromPos(side Side, paneRect Rect, pos float64) float64 {
 	return 0.5
 }
 
-// ClampRatioToMinPx keeps a split ratio within [minR, 1-minR], where minR is
-// minPx expressed as a fraction of the container's extent along the split
-// axis (its height for a Horizontal split, width for Vertical). This reserves
-// at least minPx for each side so neither child collapses. A degenerate
-// container (extent <= 0) returns the ratio unchanged; minR is itself capped
-// at 0.5 so the clamp range never inverts.
-func ClampRatioToMinPx(container Rect, dir Direction, ratio, minPx float64) float64 {
-	extent := container.W
-	if dir == Horizontal {
-		extent = container.H
-	}
-	if extent <= 0 {
-		return ratio
-	}
-	minR := minPx / extent
-	if minR > 0.5 {
-		minR = 0.5
-	}
-	if ratio < minR {
-		return minR
-	}
-	if ratio > 1-minR {
-		return 1 - minR
-	}
-	return ratio
-}
-
 func collectDividers(n *TreeNode, r Rect, bandPx float64, out *[]Divider) {
 	if n.IsLeaf() {
 		return
