@@ -4,18 +4,20 @@ import "testing"
 
 func testColors() BorderColors {
 	return BorderColors{
-		Focused:      "FOCUS",
-		FocusedFaded: "FOCUS_FADED",
-		Root:         "ROOT",
-		Text:         "TEXT",
-		TextFaded:    "TEXT_FADED",
-		URL:          "URL",
-		URLFaded:     "URL_FADED",
-		URLLive:      "URL_LIVE",
-		Shell:        "SHELL",
-		ShellFaded:   "SHELL_FADED",
-		Exit:         "EXIT",
-		ExitFaded:    "EXIT_FADED",
+		Focused:        "FOCUS",
+		FocusedFaded:   "FOCUS_FADED",
+		Root:           "ROOT",
+		Text:           "TEXT",
+		TextFaded:      "TEXT_FADED",
+		URL:            "URL",
+		URLFaded:       "URL_FADED",
+		URLLive:        "URL_LIVE",
+		Shell:          "SHELL",
+		ShellFaded:     "SHELL_FADED",
+		Exit:           "EXIT",
+		ExitFaded:      "EXIT_FADED",
+		Ephemeral:      "EPHEMERAL",
+		EphemeralFaded: "EPHEMERAL_FADED",
 	}
 }
 
@@ -192,5 +194,28 @@ func TestBorderColorURLLiveBeatsCacheMiss(t *testing.T) {
 	}
 	if got := BorderColor(in, testColors()); got != "FOCUS" {
 		t.Errorf("URLLive without TileKnown: got %q, want FOCUS", got)
+	}
+}
+
+// TestBorderColorEphemeralTile (issue #85): an ephemeral (scratch-grid)
+// descent is GRAY regardless of tile kind — the border is the warning that
+// ascent deletes the tile (a shell's tmux session included).
+func TestBorderColorEphemeralTile(t *testing.T) {
+	c := testColors()
+	for _, kind := range []string{"url", "shell"} {
+		in := BorderInput{HasTextFocus: true, TileKnown: true, TileKind: kind,
+			Ephemeral: true, Focused: true, URLLive: true}
+		if got := BorderColor(in, c); got != c.Ephemeral {
+			t.Errorf("%s ephemeral focused = %q, want gray %q (live must not win)", kind, got, c.Ephemeral)
+		}
+		in.Focused = false
+		if got := BorderColor(in, c); got != c.EphemeralFaded {
+			t.Errorf("%s ephemeral unfocused = %q, want faded gray", kind, got)
+		}
+	}
+	// Non-ephemeral keeps its kind color.
+	in := BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell", Focused: true}
+	if got := BorderColor(in, c); got != c.Shell {
+		t.Errorf("persistent shell = %q, want shell orange", got)
 	}
 }

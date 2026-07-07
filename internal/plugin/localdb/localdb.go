@@ -50,6 +50,31 @@ func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	})
 }
 
+// CleanupScratch deletes every tile in the scratch grid at startup. Scratch
+// tiles are ephemeral by definition — gray means gone-on-ascent (issue #85);
+// the client deletes them when the user ascends, and this sweep is the crash
+// net (an ascent that never ran) plus the one-time wipe of pre-#85 scratch
+// history. Runs before CleanupOrphanedShells so a deleted ephemeral shell's
+// row is gone by the time the orphan sweep looks for session owners.
+func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
+	scratch, err := p.st.ScratchGridID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	g, err := p.st.GetGrid(ctx, scratch)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, t := range g.Tiles {
+		if err := p.st.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: t.ID, Version: t.Version}); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
 // Store returns the underlying store (used by the server to wire shell
 // session cleanup and orphan detection at startup).
 func (p *Plugin) Store() *store.Store { return p.st }
@@ -206,6 +231,12 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		}
 		return tileResp(p.st.CreateURL(ctx, &rpc.CreateURLRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, URL: t.UrlString}))
 	case rpc.KindShell:
+		// A shell create targeting the scratch grid is an EPHEMERAL shell
+		// (clicked, not dragged, from the + palette): off-grid, path-free,
+		// deleted on ascent (issue #85). Mirrors the url routing above.
+		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
+			return tileResp(p.st.CreateScratchShell(ctx))
+		}
 		return tileResp(p.st.CreateShell(ctx, &rpc.CreateShellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)

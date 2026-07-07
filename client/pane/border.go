@@ -17,13 +17,18 @@ package pane
 //	  Gridwell's data world). Orange.
 //	Exit / ExitFaded — read-only host content (a text tile inside a source
 //	  grid). Brown, echoing the plugin well that led here.
+//	Ephemeral / EphemeralFaded — descent into an EPHEMERAL (scratch-grid)
+//	  tile: gray, overriding the kind color, because ascending DELETES the
+//	  tile (a shell's tmux session included) — the border is the warning
+//	  not to start persistent work there (issue #85).
 type BorderColors struct {
-	Focused, FocusedFaded  string
-	Root                   string
-	Text, TextFaded        string
-	URL, URLFaded, URLLive string
-	Shell, ShellFaded      string
-	Exit, ExitFaded        string
+	Focused, FocusedFaded     string
+	Root                      string
+	Text, TextFaded           string
+	URL, URLFaded, URLLive    string
+	Shell, ShellFaded         string
+	Exit, ExitFaded           string
+	Ephemeral, EphemeralFaded string
 }
 
 // BorderInput is everything BorderColor needs to know about a pane in
@@ -59,6 +64,10 @@ type BorderInput struct {
 	// IsLauncher is true when the pane sits at the node grid (the landing
 	// page). The only place the brown Root identity shows.
 	IsLauncher bool
+	// Ephemeral is true when the descended tile lives in the plugin's
+	// scratch grid — it will be DELETED on ascent. Overrides the kind color
+	// with gray (only meaningful when HasTextFocus and TileKnown).
+	Ephemeral bool
 }
 
 // BorderColor returns the CSS color string for the pane's outline,
@@ -77,6 +86,11 @@ type BorderInput struct {
 func BorderColor(s BorderInput, c BorderColors) string {
 	if s.HasTextFocus {
 		if s.TileKnown {
+			// Gray beats the kind color: an ephemeral tile dies on ascent,
+			// and the border is how the user knows (issue #85).
+			if s.Ephemeral {
+				return focused(s, c.Ephemeral, c.EphemeralFaded)
+			}
 			switch s.TileKind {
 			case "url":
 				if s.URLLive {

@@ -1,0 +1,58 @@
+import { test, expect } from './fixtures';
+
+// Issue #85: clicking (not dragging) the SHELL swatch opens an EPHEMERAL
+// shell — created off-grid in the scratch grid, descended into, PTY spawned.
+// Ascending DELETES it: the tile row is gone (the plugin kills the tmux
+// session and all its processes as part of the delete), nothing lands on the
+// home grid, and no error surfaces. Gray border while inside is the warning;
+// the tile fact behind it (scratch-grid residence) is asserted via the oracle.
+
+test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', async ({
+  window,
+  gw,
+}) => {
+  const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
+
+  const local = (await (async () => {
+    await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0);
+    return gw.launcher();
+  })()).find((l) => l.kind === 'localdb');
+  const scratchGridID = local!.scratchGridID;
+  expect(scratchGridID, 'localdb advertises a scratch grid').toBeTruthy();
+
+  await gw.enterPlugin('localdb');
+  const home = await gw.focused();
+  const homeBefore = await gw.getGrid(home.gridID);
+
+  // Click (not drag) the shell swatch → descend straight into a live shell.
+  await gw.clickPaletteSwatch('shell');
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+
+  // The shell tile lives in the OFF-GRID scratch grid, not on home.
+  const scratch = await gw.getGrid(scratchGridID);
+  const scratchShells = (scratch.tiles ?? []).filter((t) => t.kind === 'shell');
+  expect(scratchShells, 'one ephemeral shell in the scratch grid').toHaveLength(1);
+  expect(tileCount(await gw.getGrid(home.gridID)), 'home grid unchanged').toBe(
+    tileCount(homeBefore),
+  );
+
+  // It is a real terminal: type into it (keys go to the PTY via xterm).
+  await window.keyboard.type('echo ephemeral-shell-proof');
+  await window.keyboard.press('Enter');
+  await window.waitForTimeout(400);
+
+  // Ascend (corner circle — the shell overlay forwards only the right
+  // button): the tile is DELETED, tmux session included.
+  await gw.rightClickPlus();
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
+  await expect
+    .poll(async () => (await gw.getGrid(scratchGridID)).tiles?.length ?? 0, { timeout: 10_000 })
+    .toBe(0);
+  expect(tileCount(await gw.getGrid(home.gridID)), 'ascent left home unchanged').toBe(
+    tileCount(homeBefore),
+  );
+
+  // Nothing on the error strip: no stray freeze, no failed delete.
+  const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
+  expect(e.notices, 'no error notices from the ephemeral shell round trip').toHaveLength(0);
+});

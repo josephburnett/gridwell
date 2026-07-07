@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // TestScratchGridStableAndDistinct: the scratch grid id is created once and
@@ -76,5 +78,71 @@ func TestScratchGridHoldsEphemeralURL(t *testing.T) {
 	}
 	if len(got.Tiles) != 2 {
 		t.Errorf("scratch grid has %d tiles, want 2 accumulated visits", len(got.Tiles))
+	}
+}
+
+// TestScratchTileMutationsNeedNoPath (issue #85): a scratch-grid tile is
+// off-grid — no descent path can reach it, so checkPathLeaf must treat the
+// scratch grid as its own leaf. Before this, EVERY mutation on an ephemeral
+// tile failed "descent path is invalid" (the ascent freeze surfaced it on the
+// error strip on every ephemeral visit), and delete-on-ascent would be
+// impossible.
+func TestScratchTileMutationsNeedNoPath(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	tile, err := s.CreateScratchURL(ctx, "https://example.com/eph")
+	if err != nil {
+		t.Fatalf("create ephemeral url: %v", err)
+	}
+	// A content writeback with an EMPTY path succeeds.
+	if _, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
+		TileID: tile.ID, Version: tile.Version, URL: "https://example.com/eph2",
+	}); err != nil {
+		t.Fatalf("SetURLState on a scratch tile: %v", err)
+	}
+	// And so does delete (version bumped by the url write above).
+	cur, err := s.GetTile(ctx, tile.ID)
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: cur.Version}); err != nil {
+		t.Fatalf("DeleteTile on a scratch tile: %v", err)
+	}
+	if _, err := s.GetTile(ctx, tile.ID); err == nil {
+		t.Fatal("scratch tile still readable after delete")
+	}
+}
+
+// TestCreateScratchShell (issue #85): the ephemeral-shell twin of
+// CreateScratchURL — a shell tile created off-grid in the scratch grid,
+// deletable with no path.
+func TestCreateScratchShell(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+
+	tile, err := s.CreateScratchShell(ctx)
+	if err != nil {
+		t.Fatalf("CreateScratchShell: %v", err)
+	}
+	if tile.Kind != rpc.KindShell {
+		t.Fatalf("kind = %q, want shell", tile.Kind)
+	}
+	scratch, _ := s.ScratchGridID(ctx)
+	if tile.GridID != scratch {
+		t.Fatalf("tile grid = %q, want scratch %q", tile.GridID, scratch)
+	}
+	rootGrid, err := s.GetGrid(ctx, root)
+	if err != nil {
+		t.Fatalf("GetGrid(root): %v", err)
+	}
+	for _, rt := range rootGrid.Tiles {
+		if rt.ID == tile.ID {
+			t.Fatal("ephemeral shell leaked onto the root grid")
+		}
+	}
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
+		t.Fatalf("DeleteTile: %v", err)
 	}
 }

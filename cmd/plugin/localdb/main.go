@@ -59,6 +59,14 @@ func main() {
 	defer func() { _ = tmuxCleanup() }()
 
 	p := localdb.New(st, shellsvc.NewManager(shellsvc.NewLive(ctrl)))
+	// Scratch tiles are ephemeral (deleted on ascent); this sweep is the
+	// crash net. Before the orphan sweep, so a swept shell's session reads
+	// as orphaned and gets killed there.
+	if swept, err := p.CleanupScratch(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "gridwell-localdb: scratch cleanup: %v\n", err)
+	} else if swept > 0 {
+		fmt.Fprintf(os.Stderr, "gridwell-localdb: scratch cleanup removed %d ephemeral tile(s)\n", swept)
+	}
 	if killed, err := p.CleanupOrphanedShells(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "gridwell-localdb: orphan cleanup: %v\n", err)
 	} else if killed > 0 {

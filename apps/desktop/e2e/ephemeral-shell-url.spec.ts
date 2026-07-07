@@ -3,7 +3,8 @@ import { test, expect } from './fixtures';
 // Real-stack test for "descend into a url clicked in a shell": from inside a
 // live shell, activating a url descends into a live ephemeral visit (off-grid,
 // in the scratch grid), and — unlike the menu case — ASCENDING returns to the
-// shell (it went inactive, not gone), with nothing left on the grid.
+// SHELL (it went inactive, not gone), with nothing left on the grid; the
+// ephemeral url itself is DELETED by that ascent (issue #85).
 //
 // The terminal-cell link click itself can't be hit-tested from the canvas, so
 // the e2e fires the exact callback xterm's link provider runs (shellVisitURL);
@@ -55,12 +56,19 @@ test('clicking a url in a shell descends, then ascends back to the shell', async
   expect(scratchURLs, 'one ephemeral url tile in the scratch grid').toHaveLength(1);
   expect(tileCount(await gw.getGrid(home.gridID)), 'home grid still just the shell').toBe(homeWithShell);
 
-  // Ascend ONCE: back in the shell (inactive → active again), not on the grid.
+  // Ascend ONCE: back in the shell (inactive → active again), not on the grid
+  // — and the ephemeral url tile is DELETED (issue #85).
   await gw.middleClickCell(0, 0);
   expect((await gw.focused()).textFocus, 'one ascent returns to the shell').toBe(shellFocus);
   await expect
     .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length))
     .toBe(wcBefore);
+  await expect
+    .poll(async () => {
+      const sc = await gw.getGrid(scratchGridID);
+      return (sc.tiles ?? []).filter((t) => String(t.urlString ?? '').includes('visited=shx')).length;
+    }, { timeout: 10_000 })
+    .toBe(0);
 
   // Leave clean: ascend out of the shell to the grid (the shell's corner circle,
   // not a middle-click — its overlay only forwards the right button), then delete

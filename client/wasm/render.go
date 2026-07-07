@@ -75,6 +75,12 @@ const (
 	// colorShellFill is the dark-orange body shown behind a shell tile's
 	// preview / placeholder glyph.
 	colorShellFill = "#2e220f"
+	// colorEphemeralBorder is the GRAY pane border for a descent into an
+	// ephemeral (scratch-grid) tile — url or shell alike. Gray overrides the
+	// kind color: ascending DELETES the tile (a shell's tmux session and all
+	// its processes included), and the border is the warning (issue #85).
+	colorEphemeralBorder      = "#8b8e96"
+	colorEphemeralBorderFaded = "#4b4d52"
 	// colorExitBorder / colorExitFill are the error red used for a broken
 	// embed reference (a link whose target no longer resolves) — a genuine
 	// "this is wrong" signal, distinct from the plugin/shell identities.
@@ -1173,10 +1179,14 @@ func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focus
 		URLLive:      urlLive,
 		IsLauncher:   a.isNodeGridPane(p),
 	}
-	if p.TextFocus != "" && gridOK {
-		if tile, ok := g.Tiles[p.TextFocus]; ok {
+	if p.TextFocus != "" {
+		// descendedTile (not g.Tiles) so an EPHEMERAL descent — focused off
+		// the pane's grid, in the scratch grid — resolves too; its border
+		// goes gray because ascent deletes it (issue #85).
+		if tile, ok := a.descendedTile(p); ok {
 			in.TileKnown = true
 			in.TileKind = tile.Kind
+			in.Ephemeral = a.isEphemeralTile(p, &tile)
 		}
 	}
 	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
@@ -1188,18 +1198,20 @@ func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focus
 // paneBorderColors bundles the wasm renderer's color constants for the
 // pure pane.BorderColor decision function.
 var paneBorderColors = pane.BorderColors{
-	Focused:      colorFocusBorder,
-	FocusedFaded: colorFocusBorderFaded,
-	Root:         colorPluginBorder,
-	Text:         colorMarkdownLine,
-	TextFaded:    colorMarkdownLineFaded,
-	URL:          colorURLLine,
-	URLFaded:     colorURLLineFaded,
-	URLLive:      colorURLLiveLine,
-	Shell:        colorShellBorder,
-	ShellFaded:   colorShellBorderFaded,
-	Exit:         colorPluginBorder,
-	ExitFaded:    colorPluginBorderFaded,
+	Focused:        colorFocusBorder,
+	FocusedFaded:   colorFocusBorderFaded,
+	Root:           colorPluginBorder,
+	Text:           colorMarkdownLine,
+	TextFaded:      colorMarkdownLineFaded,
+	URL:            colorURLLine,
+	URLFaded:       colorURLLineFaded,
+	URLLive:        colorURLLiveLine,
+	Shell:          colorShellBorder,
+	ShellFaded:     colorShellBorderFaded,
+	Exit:           colorPluginBorder,
+	ExitFaded:      colorPluginBorderFaded,
+	Ephemeral:      colorEphemeralBorder,
+	EphemeralFaded: colorEphemeralBorderFaded,
 }
 
 // The palette/identity glyphs all share one visual spec so the creation

@@ -108,10 +108,12 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	a.draw()
 }
 
-// closeURLStream freezes and tears down the live view for paneID: it removes
-// the WebContentsView, captures a final frame, and persists the frozen
-// preview + address + title via SetURLState. Idempotent.
-func (a *App) closeURLStream(paneID string) {
+// closeURLStream tears down the live view for paneID: it removes the
+// WebContentsView, captures a final frame, and (when freeze is true) persists
+// the frozen preview + address + title via SetURLState. An ephemeral tile's
+// ascent passes freeze=false — the tile is about to be deleted, and a freeze
+// would bump its version out from under the delete (issue #85). Idempotent.
+func (a *App) closeURLStream(paneID string, freeze bool) {
 	pl, ok := a.localIf(paneID)
 	if !ok || pl.urlView == nil {
 		return
@@ -123,7 +125,7 @@ func (a *App) closeURLStream(paneID string) {
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
 	bridgeRemove(paneID, func(jpeg []byte, url, title string) {
-		if len(jpeg) > 0 || url != "" || title != "" {
+		if freeze && (len(jpeg) > 0 || url != "" || title != "") {
 			// Look up the tile's current version from cache so the freeze is
 			// a versioned, in-place content edit (copy-on-clone: nothing is
 			// shared, so there is no fork — the write lands on this tile's row).
@@ -164,7 +166,7 @@ func (a *App) closeAllURLStreams() {
 		}
 	}
 	for _, id := range ids {
-		a.closeURLStream(id)
+		a.closeURLStream(id, true)
 	}
 }
 

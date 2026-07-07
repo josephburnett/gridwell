@@ -366,8 +366,8 @@ func (a *App) localIf(paneID string) (*paneLocal, bool) {
 // the per-pane maps leaked their entries (a bounded leak, since pane ids are
 // never reused, but now the lifecycle is explicit and complete).
 func (a *App) forgetPane(paneID string) {
-	a.closeURLStream(paneID)
-	a.closeShellStream(paneID)
+	a.closeURLStream(paneID, true)
+	a.closeShellStream(paneID, true)
 	delete(a.locals, paneID)
 }
 

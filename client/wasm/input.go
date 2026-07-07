@@ -699,6 +699,18 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 	}
 
+	// A shell swatch clicked without dragging is an EPHEMERAL shell: created
+	// in the off-grid scratch grid, descended into, PTY spawned. Ascent
+	// DELETES it — tile row and tmux session with all its processes (gray
+	// border says so). A drag instead places a real, persistent shell tile.
+	if d.isTemplate && d.item.primitive == tplShell && !d.started {
+		if fp := a.tree.FindPane(d.originPaneID); fp != nil && a.scratchGridForPane(fp) != "" {
+			a.menu.Close()
+			a.visitEphemeralShell(fp)
+		}
+		return nil
+	}
+
 	// Snapshot every world-read the drop decision needs, ONCE, using the
 	// local d (a.dragging is already nil above). DecideDrop then picks the
 	// action and the switch executes side effects. onMouseMove builds the
@@ -1568,14 +1580,23 @@ func (a *App) startTextAscent(p *pane.Pane) {
 	// to wait.
 	a.saveTextBeforeAscent(p, file)
 
+	// Ascending out of an EPHEMERAL tile deletes it — gray means gone
+	// (issue #85): no freeze (pointless for a tile about to die, and a url
+	// freeze would bump the version out from under the delete), then the
+	// row goes away (for a shell, the plugin kills its tmux session too).
+	ephemeral := a.isEphemeralTile(p, &file)
+
 	// If we're ascending out of a URL tile, close the live stream (if any).
 	if file.Kind == rpc.KindURL {
-		a.closeURLStream(p.ID)
+		a.closeURLStream(p.ID, !ephemeral)
 	}
 	// Shell ascent: capture the JPEG, persist it as the frozen
 	// preview, close the WS. closeShellStream handles all three.
 	if file.Kind == rpc.KindShell {
-		a.closeShellStream(p.ID)
+		a.closeShellStream(p.ID, !ephemeral)
+	}
+	if ephemeral {
+		a.deleteEphemeralTile(file.ID, file.Version)
 	}
 
 	// (Mode + framed window are persisted by saveTextBeforeAscent, which
@@ -1617,8 +1638,15 @@ func (a *App) startTextAscent(p *pane.Pane) {
 // cached or the text tile row vanished while we were focused on it. We just
 // clear TextFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
-	a.closeURLStream(p.ID)   // no-op if not a URL descent
-	a.closeShellStream(p.ID) // no-op if not a shell descent
+	// The freeze is kept here (streams may be live) except for an ephemeral
+	// tile, which is deleted instead — same rule as startTextAscent.
+	ephemeral := false
+	if t, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &t) {
+		ephemeral = true
+		defer a.deleteEphemeralTile(t.ID, t.Version)
+	}
+	a.closeURLStream(p.ID, !ephemeral)   // no-op if not a URL descent
+	a.closeShellStream(p.ID, !ephemeral) // no-op if not a shell descent
 	saved := a.popPaneState(p.ID)
 	p.TextFocus = ""
 	if saved != nil {
@@ -2033,19 +2061,23 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 	})
 }
 
-// descendEphemeral descends fp into the off-grid ephemeral url tile and goes
-// live. The pane keeps its grid — the tile is resolved by id (render / url
-// stream / ascent all use descendedTile) — so one ordinary ascent lands right
-// back here and the visit, living only in the scratch grid, leaves nothing
-// behind ("it's gone when you ascend"). If fp is ALREADY descended (a live
+// descendEphemeral descends fp into the off-grid ephemeral tile (url or
+// shell) and goes live. The pane keeps its grid — the tile is resolved by id
+// (render / streams / ascent all use descendedTile) — so one ordinary ascent
+// lands right back here, and the ascent DELETES the tile (issue #85): gone
+// means gone, tmux session included. If fp is ALREADY descended (a live
 // shell, from the shell-link click) that descent is stashed so one ascent
-// returns to it — the shell goes inactive, not gone — rather than clearing
-// straight to the grid.
+// returns to it — the underlying shell goes inactive, not gone — rather than
+// clearing straight to the grid.
 func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 	paneID := fp.ID
 	openLive := func() {
 		if ffp := a.tree.FindPane(paneID); ffp != nil && ffp.TextFocus != "" {
-			a.openURLStream(ffp, tile.ID)
+			if tile.Kind == rpc.KindShell {
+				a.openShellStream(ffp, tile.ID)
+			} else {
+				a.openURLStream(ffp, tile.ID)
+			}
 		}
 	}
 	if fp.TextFocus == "" {
@@ -2071,6 +2103,56 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 		top.TextScrollX = savedScrollX
 		top.TextScrollY = savedScrollY
 	}
+}
+
+// isEphemeralTile reports whether t is an ephemeral (scratch-grid) tile of
+// the plugin pane p sits in. The one client-side derivation of "ephemeral":
+// the tile's grid IS the plugin's scratch grid — both facts are server-owned
+// (Grid.ScratchGridID rides on the grid, chained through mounts), so no new
+// wire field is needed. Ephemeral tiles are deleted on ascent; the descended
+// pane border goes gray to say so (issue #85).
+func (a *App) isEphemeralTile(p *pane.Pane, t *rpc.Tile) bool {
+	s := a.scratchGridForPane(p)
+	return s != "" && t.GridID == s
+}
+
+// deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
+// gone: the row is deleted, and for a shell the plugin kills its tmux session
+// (all processes) as part of the delete. A failure surfaces on the strip
+// (charter §6); otherwise the tile would silently leak in the scratch grid
+// until the startup sweep.
+func (a *App) deleteEphemeralTile(tileID string, version int64) {
+	go func() {
+		err := a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
+			TileID: tileID, Version: version,
+		})
+		if err != nil {
+			a.reportErr(errsurface.Error, "ephemeral",
+				"ephemeral tile cleanup failed: "+rpcErrText(err))
+		}
+	}()
+}
+
+// visitEphemeralShell creates an ephemeral shell tile in the current plugin's
+// scratch grid and descends into it, spawning the PTY — "open a shell" from
+// the menu's shell swatch (clicked, not dragged). The shell twin of
+// visitEphemeralURL, with the opposite exit contract: ascent DELETES the tile
+// and its tmux session (issue #85) — gray border warns not to leave
+// persistent work there.
+func (a *App) visitEphemeralShell(p *pane.Pane) {
+	scratch := a.scratchGridForPane(p)
+	if scratch == "" {
+		return // plugin has no scratch grid — nothing to open into
+	}
+	paneID := p.ID
+	req := &rpc.CreateShellRequest{Path: rpc.Path{}, GridID: scratch, X: 0, Y: 0, W: 1, H: 1}
+	a.postTileMutate("CreateShell", scratch, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateShell(ctx, req)
+	}, func(tile rpc.Tile) {
+		if fp := a.tree.FindPane(paneID); fp != nil {
+			a.descendEphemeral(fp, &tile)
+		}
+	})
 }
 
 // shellURLActivate handles a click on an http(s) url in a live shell (the xterm

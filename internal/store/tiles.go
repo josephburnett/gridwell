@@ -290,6 +290,44 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*rpc.Tile, er
 	return out, err
 }
 
+// CreateScratchShell creates an ephemeral shell tile in the scratch grid —
+// the shell twin of CreateScratchURL: off any visible grid, no descent path,
+// no overlap check. Unlike a placed shell it is DELETED on ascent (the client
+// drives that; the plugin's delete kills the tmux session), so nothing
+// persists — gray border means gone-on-ascent (issue #85).
+func (s *Store) CreateScratchShell(ctx context.Context) (*rpc.Tile, error) {
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	gridID, err := parseID(scratch)
+	if err != nil {
+		return nil, err
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		now := s.now().Unix()
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				alt_text, created_at, updated_at)
+			VALUES (?, ?, 'shell', 0, 0, 1, 1, 'shell', ?, ?)`,
+			s.newID(), gridID, now, now)
+		if err != nil {
+			return fmt.Errorf("insert scratch shell tile: %w", err)
+		}
+		tileID, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
 // ResizeTile changes a tile's footprint to (X, Y, W, H).
 func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rpc.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
