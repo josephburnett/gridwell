@@ -21,19 +21,22 @@ test('right-clicking the bubble zooms a pane and back, restoring the layout exac
   expect(before).toHaveLength(2);
   const focusedBefore = before.find((p) => p.focused)!;
 
-  // Zoom the focused pane via its bubble: it owns the whole layout.
+  // Zoom the focused pane via its bubble: it owns the whole layout, and the
+  // bubble says so (the zoom marker, issue #124).
   await rightClickBubble(window);
   await gw.waitIdle();
   const zoomed = await gw.panes();
   expect(zoomed, 'only the zoomed pane is laid out').toHaveLength(1);
   expect(zoomed[0].id).toBe(focusedBefore.id);
   expect(zoomed[0].w, 'zoomed pane spans the full width').toBeGreaterThan(focusedBefore.w * 1.5);
+  await expect(window.locator('#gw-rename-pill')).toContainText('⛶');
 
   // Unzoom: byte-identical layout.
   await rightClickBubble(window);
   await gw.waitIdle();
   const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(after).toHaveLength(2);
+  await expect(window.locator('#gw-rename-pill')).not.toContainText('⛶');
   for (let i = 0; i < 2; i++) {
     expect(after[i].id).toBe(before[i].id);
     expect(after[i].x).toBeCloseTo(before[i].x, 3);

@@ -107,7 +107,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	// The native name bubble is born with its label — a post-place push can
 	// race entry creation and be dropped (issue #118).
 	label, _, _ := a.bubbleLabel(p)
-	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t), t.URLHistory, label)
+	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t), t.URLHistory, a.bubbleDecorate(p, label))
 	a.draw()
 }
 
