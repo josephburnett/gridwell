@@ -35,9 +35,11 @@ func TestProtoMatchesDDL(t *testing.T) {
 			protoOnly:   []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint"},
 		},
 		{
-			table:       "tiles",
-			message:     (&pb.Tile{}).ProtoReflect().Descriptor(),
-			storageOnly: []string{"created_at", "updated_at"},
+			table:   "tiles",
+			message: (&pb.Tile{}).ProtoReflect().Descriptor(),
+			// alt_user is the server-side "user owns this name" latch (issue
+			// #61) — consulted by the capture paths, never sent on the wire.
+			storageOnly: []string{"created_at", "updated_at", "alt_user"},
 			// reference is derived by the server (qualifyTiles) from a tile's
 			// child_grid_id shape, never persisted — wire-only, so it has no
 			// DDL column by design.

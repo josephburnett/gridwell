@@ -145,6 +145,11 @@ CREATE TABLE IF NOT EXISTS tiles (
     -- alt_text verbatim (no derivation). Empty string until something stamps
     -- it (e.g. a URL tile before its page title is captured).
     alt_text      TEXT NOT NULL DEFAULT '',
+    -- alt_user=1 marks alt_text as USER-OWNED (the rename gesture, issue
+    -- #61): automatic captures (a url's page title on freeze, a shell's
+    -- foreground command on detach) must not overwrite a name the user set.
+    -- Added post-v1 (schema v2, additive).
+    alt_user      INTEGER NOT NULL DEFAULT 0,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (

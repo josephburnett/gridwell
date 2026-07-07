@@ -319,6 +319,8 @@ func (a *App) draw() {
 	// And any live URL tiles — native WebContentsViews follow their pane's
 	// content box and park off-screen during canvas-overlay gestures.
 	a.syncURLViews()
+	// The rename pill tracks the focused pane's top-center (issue #61).
+	a.syncRenamePill()
 
 	// The notice strip lives in the band layoutPanes reserved below every
 	// pane; drawn last so a notice is never painted over.

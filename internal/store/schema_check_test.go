@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -62,6 +63,17 @@ func TestOpenAcceptsGenuineV1DB(t *testing.T) {
 	for _, ddl := range []string{pragmas, systemDDL, tablesV1, sessionDDL} {
 		if _, err := db.Exec(ddl); err != nil {
 			t.Fatalf("apply v1 ddl: %v", err)
+		}
+	}
+	// A DB genuinely written by a v1 binary carries both header stamps; without
+	// them this fixture only impersonated v1 while no migrations existed (the
+	// unstamped file was silently treated as fresh).
+	for _, stamp := range []string{
+		"PRAGMA application_id = " + strconv.Itoa(applicationID),
+		"PRAGMA user_version = 1",
+	} {
+		if _, err := db.Exec(stamp); err != nil {
+			t.Fatalf("stamp v1 header: %v", err)
 		}
 	}
 	if err := db.Close(); err != nil {

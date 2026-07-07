@@ -44,8 +44,10 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 			}
 		}
 		if req.Title != "" {
+			// The page-title capture defers to a user-set name (alt_user,
+			// issue #61) — renaming a url tile must survive every freeze.
 			if _, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
+				`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ? AND alt_user = 0`,
 				req.Title, s.now().Unix(), tileID); err != nil {
 				return err
 			}
@@ -61,20 +63,31 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 	return out, nil
 }
 
-// SetTileAlt updates a tile's stored alt-text. Used by the shell stream
-// handler to bake the tmux foreground command into the tile as its label.
-// Bumps the tile's version.
-func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string) error {
+// SetTileAlt updates a tile's stored alt-text. Two writers, one rule (issue
+// #61): user=true is the RENAME gesture — it sets the name and latches
+// alt_user so it is owned by the user from then on; user=false is an
+// automatic capture (the shell detach path baking in the tmux foreground
+// command) — it silently no-ops once the user owns the name (no write, no
+// version bump). Bumps the tile's version when it writes.
+func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string, user bool) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		if _, err := s.loadTile(ctx, tx, tileID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
-			alt, s.now().Unix(), tileID); err != nil {
+		q := `UPDATE tiles SET alt_text = ?, alt_user = 1, updated_at = ? WHERE id = ?`
+		if !user {
+			q = `UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ? AND alt_user = 0`
+		}
+		res, err := tx.ExecContext(ctx, q, alt, s.now().Unix(), tileID)
+		if err != nil {
 			return err
 		}
-		_, err := s.finishContentEdit(ctx, tx, tileID, events)
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return nil // capture deferred to a user-owned name: no edit happened
+		}
+		_, err = s.finishContentEdit(ctx, tx, tileID, events)
 		return err
 	})
 }
