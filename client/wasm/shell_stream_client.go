@@ -157,7 +157,7 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 // wires the two together. Idempotent: a second call for the same pane
 // closes the previous attachment first.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
-	a.closeShellStream(p.ID)
+	a.closeShellStream(p.ID, true)
 
 	doc := js.Global().Get("document")
 	container := doc.Call("createElement", "div")
@@ -635,19 +635,21 @@ func (a *App) mirrorLiveShells() {
 // closeShellStream is the freeze path: capture a JPEG of the
 // terminal (so the next descent shows it as the frozen preview),
 // POST it via SetShellPreview, then close the WebSocket. The
-// server-side WS-close just detaches the tmux client — bash keeps
+// server-side WS-close just detaches the tmux client — the shell keeps
 // running inside the tmux session so a future refresh reattaches to
-// the same state. Idempotent.
-func (a *App) closeShellStream(paneID string) {
+// the same state. An ephemeral shell's ascent passes freeze=false: the
+// tile (and its tmux session) is about to be deleted, so there is
+// nothing to freeze for (issue #85). Idempotent.
+func (a *App) closeShellStream(paneID string, freeze bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
 		return
 	}
 	conn.closed = true
-	// Best-effort JPEG capture from the canvas addon's element. If
+	// Best-effort JPEG capture from the renderer's content canvas. If
 	// anything goes wrong we just skip the preview update — the cwd
 	// still persists via the server's close handler.
-	if jpegBytes := snapshotShellCanvas(conn.container); jpegBytes != nil {
+	if jpegBytes := snapshotShellCanvas(conn.container); freeze && jpegBytes != nil {
 		tileID := conn.tileID
 		// Update the local preview cache immediately so the next
 		// descent shows this frame instead of the previous one. The
@@ -674,7 +676,7 @@ func (a *App) closeAllShellStreams() {
 		}
 	}
 	for _, id := range ids {
-		a.closeShellStream(id)
+		a.closeShellStream(id, true)
 	}
 }
 

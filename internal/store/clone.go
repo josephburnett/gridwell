@@ -72,6 +72,17 @@ func isWellKind(kind string) bool {
 // never forks — it writes the tile exactly where it sits. The path is still
 // validated (it's how the pane says where it is) and the tile must be in it.
 func (s *Store) checkPathLeaf(ctx context.Context, tx *sql.Tx, path rpc.Path, tile *rpc.Tile) (int64, error) {
+	// Off-grid (scratch) tiles have no descent path — the scratch grid hangs
+	// off no well, so no path can name it. It is its own leaf: an ephemeral
+	// visit's freeze and its delete-on-ascent (issue #85) both mutate the
+	// tile path-free. Without this, EVERY mutation on a scratch tile failed
+	// "descent path is invalid" (the ascent freeze surfaced that on the error
+	// strip on every ephemeral visit).
+	var scratch string
+	if err := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`,
+		systemKeyScratchGridID).Scan(&scratch); err == nil && scratch != "" && tile.GridID == scratch {
+		return parseID(scratch)
+	}
 	seq, err := s.buildGridSequence(ctx, tx, path)
 	if err != nil {
 		return 0, err
