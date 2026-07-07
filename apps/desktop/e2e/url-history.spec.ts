@@ -21,7 +21,7 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
-  await window.fill('#gw-url-input', `${gw.origin}/?h=1`);
+  await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?h=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
   await expect
@@ -36,7 +36,7 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
       async ({ webContents }, [org, m]: string[]) => {
         const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('h='));
         if (!wc) throw new Error('live view not found');
-        await wc.executeJavaScript(`location.href = ${JSON.stringify(`${org}/?h=${m}`)}`);
+        await wc.executeJavaScript(`location.href = ${JSON.stringify(`${org}/wasm_exec.js?h=${m}`)}`);
       },
       [gw.origin, marker],
     );

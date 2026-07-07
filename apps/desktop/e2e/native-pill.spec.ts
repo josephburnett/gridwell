@@ -23,7 +23,7 @@ test('the native bubble over a live url pane renames and zooms', async ({
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
-  await window.fill('#gw-url-input', `${gw.origin}/?pill=1`);
+  await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?pill=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
   await expect

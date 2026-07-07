@@ -25,7 +25,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   );
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
-  await window.fill('#gw-url-input', `${gw.origin}/?src=page`);
+  await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?src=page`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
   await expect
@@ -38,7 +38,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   await electronApp.evaluate(async ({ webContents }, org: string) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('src=page'));
     if (!wc) throw new Error('live view not found');
-    await wc.executeJavaScript(`window.open(${JSON.stringify(`${org}/?opened=below`)})`, true);
+    await wc.executeJavaScript(`window.open(${JSON.stringify(`${org}/wasm_exec.js?opened=below`)})`, true);
   }, gw.origin);
 
   // A new pane appears BELOW, focused, descended into an ephemeral url tile.
