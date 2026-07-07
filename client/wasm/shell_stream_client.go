@@ -24,12 +24,12 @@ import (
 // split-tree edits. js.Func handlers are tracked so we Release them on
 // close (FuncOf-allocated callbacks pin Go memory until released).
 type shellStreamConn struct {
-	ws        js.Value
-	term      js.Value // xterm.Terminal
-	fitAddon  js.Value // FitAddon — proposeDimensions + fit
-	canvasAdd js.Value // CanvasAddon — gives the terminal a single <canvas>
-	container js.Value // host <div> in the DOM
-	circle    js.Value // corner ascend handle painted above the terminal
+	ws          js.Value
+	term        js.Value // xterm.Terminal
+	fitAddon    js.Value // FitAddon — proposeDimensions + fit
+	renderAddon js.Value // renderer addon: WebglAddon, or CanvasAddon fallback
+	container   js.Value // host <div> in the DOM
+	circle      js.Value // corner ascend handle painted above the terminal
 
 	tileID string
 	paneID string
@@ -239,14 +239,13 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	opts.Set("theme", theme)
 	term := Terminal.New(opts)
 
-	// Canvas addon gives us one <canvas> element we can toDataURL at
-	// freeze; fit addon resizes the buffer dimensions to fit the
-	// container, which we then mirror to the server.
+	// Fit addon resizes the buffer dimensions to fit the container, which we
+	// then mirror to the server. The renderer addon (WebGL, canvas fallback)
+	// is attached AFTER open — the WebGL addon requires an opened terminal.
 	fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
-	canvasAdd := js.Global().Get("CanvasAddon").Get("CanvasAddon").New()
 	term.Call("loadAddon", fitAddon)
-	term.Call("loadAddon", canvasAdd)
 	term.Call("open", container)
+	renderAddon := attachShellRenderer(term)
 
 	// Corner ascend handle, appended after the terminal so it paints on top of
 	// the opaque xterm canvas (a canvas-drawn circle can't, hence the URL tile's
@@ -274,19 +273,19 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	ws.Set("binaryType", "arraybuffer")
 
 	conn := &shellStreamConn{
-		ws:        ws,
-		term:      term,
-		fitAddon:  fitAddon,
-		canvasAdd: canvasAdd,
-		container: container,
-		circle:    circle,
-		tileID:    tileID,
-		paneID:    p.ID,
-		anchor:    p.Anchor,
-		path:      slices.Clone(p.Path),
-		onMouse:   onMouse,
-		lastCols:  uint16(cols),
-		lastRows:  uint16(rows),
+		ws:          ws,
+		term:        term,
+		fitAddon:    fitAddon,
+		renderAddon: renderAddon,
+		container:   container,
+		circle:      circle,
+		tileID:      tileID,
+		paneID:      p.ID,
+		anchor:      p.Anchor,
+		path:        slices.Clone(p.Path),
+		onMouse:     onMouse,
+		lastCols:    uint16(cols),
+		lastRows:    uint16(rows),
 	}
 
 	// Make http(s) URLs in the terminal clickable: a click descends into the
@@ -471,6 +470,92 @@ func newShellCircle(doc js.Value) js.Value {
 	// Up chevron: the corner is the "go up / out" (ascend) handle.
 	c.Set("textContent", "⌃")
 	return c
+}
+
+// attachShellRenderer gives the opened terminal a GPU renderer: the WebGL
+// addon, falling back to the legacy canvas addon when WebGL2 is unavailable
+// (headless/xvfb without GL, an exotic browser in web mode) or when the GPU
+// context is later lost. The canvas renderer's dirty-region tracking misses
+// cursor-addressed rewrites and scroll-region scrolls — stale/misaligned
+// glyphs until a resize forces a full repaint (issue #84); the WebGL renderer
+// redraws from buffer state every frame, so that artifact class cannot occur.
+// Returns the active addon (held on shellStreamConn to pin it; the terminal's
+// dispose tears it down).
+func attachShellRenderer(term js.Value) js.Value {
+	if addon, ok := tryWebglAddon(term); ok {
+		return addon
+	}
+	return loadCanvasAddon(term)
+}
+
+// tryWebglAddon loads the WebGL renderer, reporting ok=false when the addon
+// is missing or throws (no WebGL2 context available). Constructed with
+// preserveDrawingBuffer=true so the freeze capture's toDataURL reads real
+// pixels rather than a cleared back buffer.
+func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
+	defer func() {
+		if recover() != nil { // loadAddon throws when WebGL2 is unavailable
+			shellLog("webgl renderer unavailable; using canvas renderer")
+			addon, ok = js.Value{}, false
+		}
+	}()
+	ns := js.Global().Get("WebglAddon")
+	if !ns.Truthy() {
+		return js.Value{}, false
+	}
+	a := ns.Get("WebglAddon").New(true) // preserveDrawingBuffer
+	term.Call("loadAddon", a)
+	// A lost GPU context would leave the terminal frozen mid-session: dispose
+	// the webgl addon and continue on the canvas renderer in place. One-shot;
+	// the callback releases itself.
+	var lossCb js.Func
+	lossCb = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		shellLog("webgl context lost; falling back to canvas renderer")
+		a.Call("dispose")
+		loadCanvasAddon(term)
+		lossCb.Release()
+		return nil
+	})
+	a.Call("onContextLoss", lossCb)
+	return a, true
+}
+
+// loadCanvasAddon attaches the legacy canvas renderer.
+func loadCanvasAddon(term js.Value) js.Value {
+	a := js.Global().Get("CanvasAddon").Get("CanvasAddon").New()
+	term.Call("loadAddon", a)
+	return a
+}
+
+// shellContentCanvas returns the canvas the terminal CONTENT is painted on —
+// NOT merely the first canvas in the container. The WebGL renderer's main
+// canvas is class-less while its link layer (transparent, glyph-free) comes
+// first in the DOM; capturing the first canvas produced an all-black preview.
+// The canvas renderer paints glyphs on its class="xterm-text-layer" canvas.
+func shellContentCanvas(container js.Value) js.Value {
+	list := container.Call("querySelectorAll", "canvas")
+	n := list.Get("length").Int()
+	var textLayer, first js.Value
+	for i := 0; i < n; i++ {
+		c := list.Call("item", i)
+		if !first.Truthy() {
+			first = c
+		}
+		cls := c.Get("className").String()
+		if cls == "" {
+			return c // the WebGL main canvas
+		}
+		if cls == "xterm-text-layer" && !textLayer.Truthy() {
+			textLayer = c
+		}
+	}
+	if textLayer.Truthy() {
+		return textLayer
+	}
+	if first.Truthy() {
+		return first
+	}
+	return js.Value{}
 }
 
 // jsBytes converts a Go-side raw byte string to a JS Uint8Array. Used
@@ -697,17 +782,14 @@ func (a *App) syncShellOverlayPosition() {
 	}
 }
 
-// snapshotShellCanvas pulls the canvas element xterm's CanvasAddon
-// renders into and returns its bytes as JPEG. Returns nil if no
-// canvas is present (renderer hasn't initialized, or addon failed to
-// load).
+// snapshotShellCanvas pulls the canvas element the active renderer paints
+// terminal content into and returns its bytes as JPEG. Returns nil if no
+// canvas is present (renderer hasn't initialized, or addon failed to load).
 func snapshotShellCanvas(container js.Value) []byte {
 	if !container.Truthy() {
 		return nil
 	}
-	// xterm with CanvasAddon paints into one canvas at a known
-	// selector; querySelector('canvas') returns the first one.
-	canvas := container.Call("querySelector", "canvas")
+	canvas := shellContentCanvas(container)
 	if !canvas.Truthy() {
 		return nil
 	}
