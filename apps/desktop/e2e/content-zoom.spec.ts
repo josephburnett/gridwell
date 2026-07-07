@@ -50,7 +50,7 @@ test('Ctrl+= zooms a live url view (composed with the layout zoom)', async ({
   );
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
-  await window.fill('#gw-url-input', `${gw.origin}/?zoom=82`);
+  await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?zoom=82`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
   await expect
