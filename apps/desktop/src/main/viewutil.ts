@@ -175,6 +175,13 @@ export const RIGHT_DRAG_THRESHOLD = 4;
 // drift-lints both copies).
 export const RIGHT_DRAG_TIME_MS = 200;
 
+// RIGHT_DRAG_FAR_THRESHOLD is the distance (CSS px) beyond which a right-drag
+// is unambiguous on its own — no trackpad tap drifts this far, so the time
+// gate no longer applies. A fast flick (large distance, short duration) used
+// to read as a click and pop the context menu instead of arming the pane
+// gesture (issue #119).
+export const RIGHT_DRAG_FAR_THRESHOLD = 24;
+
 // dragExceeded reports whether a pointer that started at the press point has
 // moved far enough to count as a drag (not a click). Used to tell a right-click
 // — which must reach the page's own context menu — apart from a right-drag,
@@ -183,20 +190,23 @@ export function dragExceeded(dx: number, dy: number, threshold: number): boolean
   return dx * dx + dy * dy > threshold * threshold;
 }
 
-// classifyRightPress returns true (= drag) only when BOTH the distance and time
-// thresholds are exceeded. Requiring both means a normal jittery trackpad tap
-// (large distance but very short hold) still classifies as a click and produces
-// the context menu, while an intentional right-drag (large distance AND the
-// button held for a moment) correctly arms the pane gesture. Pure function,
-// unit-tested; urlview-preload.ts inlines equivalent logic (can't import).
+// classifyRightPress returns true (= drag) when the distance and time
+// thresholds are BOTH exceeded — or when the distance alone is past the far
+// threshold, which no accidental tap-drift reaches (a fast flick is a
+// gesture, issue #119; a jittery trackpad tap stays a click and produces the
+// context menu, issue #33 mechanism B). Pure function, unit-tested;
+// urlview-preload.ts inlines equivalent logic (can't import).
 export function classifyRightPress(
   dx: number,
   dy: number,
   durationMs: number,
   distThreshold: number,
   timeThresholdMs: number,
+  farThreshold: number = RIGHT_DRAG_FAR_THRESHOLD,
 ): boolean {
-  return dx * dx + dy * dy > distThreshold * distThreshold && durationMs >= timeThresholdMs;
+  const d2 = dx * dx + dy * dy;
+  if (d2 > farThreshold * farThreshold) return true;
+  return d2 > distThreshold * distThreshold && durationMs >= timeThresholdMs;
 }
 
 // controlVisible decides whether a live URL view's corner control (the

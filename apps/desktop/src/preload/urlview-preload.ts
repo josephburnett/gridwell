@@ -34,6 +34,9 @@ const RIGHT_DRAG_THRESHOLD = 4;
 // distance threshold before it counts as a pane gesture. A fast trackpad tap
 // that drifts a few pixels past the threshold is still a click, not a drag.
 const RIGHT_DRAG_TIME_MS = 200;
+// Mirrors viewutil.RIGHT_DRAG_FAR_THRESHOLD: distance past this is a drag
+// regardless of duration — a fast flick is a gesture, not a click (#119).
+const RIGHT_DRAG_FAR_THRESHOLD = 24;
 // MouseEvent.buttons bit for the secondary (right) button.
 const RIGHT_BUTTON_MASK = 2;
 
@@ -87,14 +90,17 @@ window.addEventListener(
     if (rightDragged) return;
     const dx = e.screenX - rightStartX;
     const dy = e.screenY - rightStartY;
-    // Both conditions must hold to count as a drag: distance past the threshold
-    // AND the button held for at least RIGHT_DRAG_TIME_MS. This gates out a fast
-    // trackpad tap that drifts a few pixels (distance exceeded but duration <
-    // threshold) so it still reaches the page's contextmenu handler and produces
-    // the native context menu, instead of being swallowed as a pane gesture.
+    // A drag needs distance past the threshold AND the button held for
+    // RIGHT_DRAG_TIME_MS — gating out a fast trackpad tap that drifts a few
+    // pixels, which must still produce the native context menu — OR distance
+    // past the FAR threshold alone: no tap drifts that far, so a fast flick
+    // arms the pane gesture instead of popping the menu (issue #119).
+    // Mirrors viewutil.classifyRightPress (preloads can't import).
+    const d2 = dx * dx + dy * dy;
     if (
-      dx * dx + dy * dy > RIGHT_DRAG_THRESHOLD * RIGHT_DRAG_THRESHOLD &&
-      Date.now() - rightDownTime >= RIGHT_DRAG_TIME_MS
+      d2 > RIGHT_DRAG_FAR_THRESHOLD * RIGHT_DRAG_FAR_THRESHOLD ||
+      (d2 > RIGHT_DRAG_THRESHOLD * RIGHT_DRAG_THRESHOLD &&
+        Date.now() - rightDownTime >= RIGHT_DRAG_TIME_MS)
     ) {
       // Crossed both thresholds → a pane gesture. Forward the ORIGINAL press
       // point so main classifies it where the press began; main then parks the
