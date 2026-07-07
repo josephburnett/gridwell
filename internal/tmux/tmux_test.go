@@ -428,3 +428,63 @@ func TestNewResolvesShell(t *testing.T) {
 		}
 	})
 }
+
+// TestBrowserShimScript (issue #90): the gridwell-open shim New() writes must
+// emit the url as an OSC 5522 sequence on stdout — tmux-passthrough-wrapped
+// (ESCs doubled, DCS tmux; wrapper) when $TMUX is set, bare otherwise. Run
+// the real script through sh: this is the seam the terminal parses.
+func TestBrowserShimScript(t *testing.T) {
+	c, cleanup, err := New("gridwell-test-shim", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cleanup() })
+	if c.browserShim == "" {
+		t.Fatal("no browser shim path")
+	}
+
+	run := func(tmuxEnv string) string {
+		cmd := exec.Command("sh", c.browserShim, "https://example.com/x")
+		cmd.Env = append(os.Environ(), "TMUX="+tmuxEnv)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("run shim (TMUX=%q): %v", tmuxEnv, err)
+		}
+		return string(out)
+	}
+
+	bare := run("")
+	if want := "\x1b]5522;https://example.com/x\x1b\\"; bare != want {
+		t.Errorf("bare = %q, want %q", bare, want)
+	}
+	wrapped := run("/tmp/tmux-sock,123,0")
+	if want := "\x1bPtmux;\x1b\x1b]5522;https://example.com/x\x1b\x1b\\\x1b\\"; wrapped != want {
+		t.Errorf("wrapped = %q, want %q", wrapped, want)
+	}
+}
+
+// TestArgsCreateInjectsBrowserEnv: new sessions carry BROWSER pointing at the
+// shim (tmux new-session -e), so terminal apps that launch a browser hand the
+// url back to gridwell instead of spawning one on the host.
+func TestArgsCreateInjectsBrowserEnv(t *testing.T) {
+	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c",
+		shell: "bash", browserShim: "/tmp/gridwell-open"}
+	got := c.Args("t/9", ModeCreate, 80, 24, "")
+	found := false
+	for i, a := range got {
+		if a == "-e" && i+1 < len(got) && got[i+1] == "BROWSER=/tmp/gridwell-open" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("argv missing -e BROWSER=<shim>: %v", got)
+	}
+}
+
+// TestConfigAllowsPassthrough: the shim's OSC rides tmux's DCS passthrough,
+// which is off by default — the gridwell config must enable it.
+func TestConfigAllowsPassthrough(t *testing.T) {
+	if !strings.Contains(gridwellConfig, "allow-passthrough on") {
+		t.Error("gridwell tmux config must set allow-passthrough on")
+	}
+}
