@@ -39,6 +39,27 @@ function partitionDir(partition: string): string {
 
 // snapshotDir reads every file under dir into a rel-path → base64 map.
 // Returns {} when the directory doesn't exist (a never-persisted partition).
+// SESSION_STATE_ROOTS is the allowlist of partition entries that ARE session
+// state — what the blob exists to carry. Everything else in the partition is
+// Chromium's regenerable machinery, dominated by disk caches ("Cache",
+// "Code Cache", GPU/Dawn caches): a real logged-in partition measured 238MB
+// of which 227MB was cache and <1MB was state (issue #123). Snapshotting the
+// whole directory ballooned the blob until dehydrate's PUT failed on every
+// ascent — the allowlist makes that class of growth impossible.
+const SESSION_STATE_ROOTS = [
+  'Cookies', // SQLite file (+ -journal/-wal siblings, matched by prefix)
+  'Local Storage',
+  'Session Storage',
+  'IndexedDB',
+  'WebStorage',
+];
+
+// sessionStateEntry reports whether a top-level partition entry is on the
+// session-state allowlist (exact match, or a sibling like "Cookies-journal").
+export function sessionStateEntry(name: string): boolean {
+  return SESSION_STATE_ROOTS.some((root) => name === root || name.startsWith(root + '-'));
+}
+
 export function snapshotDir(dir: string): Record<string, string> {
   const out: Record<string, string> = {};
   const walk = (rel: string) => {
@@ -51,6 +72,8 @@ export function snapshotDir(dir: string): Record<string, string> {
     }
     for (const e of entries) {
       const childRel = rel === '' ? e.name : `${rel}/${e.name}`;
+      // Only session-state roots leave the top level (issue #123).
+      if (rel === '' && !sessionStateEntry(e.name)) continue;
       if (e.isDirectory()) walk(childRel);
       else if (e.isFile()) {
         try {
@@ -120,11 +143,13 @@ export async function dehydratePartition(
     const envelope: SessionBlob = { v: 2, cookies, files };
     const blob = Buffer.from(JSON.stringify(envelope), 'utf8');
     await fetch(`${origin}/session/${pluginUuid}`, { method: 'PUT', body: blob });
-  } catch {
-    // Sidecar gone / network blip / flush failure — the on-disk partition is
-    // still the working copy, but the plugin DB (system of record) didn't get
-    // this run's cookies.
-    onError?.('session save failed — logins may not persist');
+  } catch (err) {
+    // Sidecar gone / network blip / flush failure / an oversized blob — the
+    // on-disk partition is still the working copy, but the plugin DB (system
+    // of record) didn't get this run's state. Carry the underlying error:
+    // the bare notice took partition forensics to diagnose (issue #123).
+    const detail = err instanceof Error ? err.message : String(err);
+    onError?.(`session save failed (${detail}) — logins may not persist`);
   }
 }
 
