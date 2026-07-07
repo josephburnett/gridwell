@@ -20,6 +20,14 @@ import { sidecarExitMessage } from './sidecar-messages';
 // Electron keeps its default ~/.config/gridwell-desktop profile.
 applyUserDataOverride((name, value) => app.setPath(name as Parameters<typeof app.setPath>[0], value), process.env);
 
+// Chromium ≥137 removed the SILENT SwiftShader fallback for WebGL — software
+// WebGL now needs this switch. Without it, any GPU-less display (WSLg, xvfb)
+// has no WebGL2, the terminal's WebGL renderer silently falls back to the
+// legacy canvas renderer, and the #84 text-artifact class returns (issue
+// #128; this is a restore of the Electron-33-era behavior the terminal
+// shipped and was tested on, not a new exposure).
+app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+
 // MIRROR_INTERVAL_MS is how often live views are captured and their frames
 // pushed to the renderer so OTHER panes showing the same tile mirror live
 // navigation (the preview = descent = ascent invariant, live edition). The

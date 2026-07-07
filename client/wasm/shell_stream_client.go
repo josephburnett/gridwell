@@ -24,12 +24,13 @@ import (
 // split-tree edits. js.Func handlers are tracked so we Release them on
 // close (FuncOf-allocated callbacks pin Go memory until released).
 type shellStreamConn struct {
-	ws          js.Value
-	term        js.Value // xterm.Terminal
-	fitAddon    js.Value // FitAddon — proposeDimensions + fit
-	renderAddon js.Value // renderer addon: WebglAddon, or CanvasAddon fallback
-	container   js.Value // host <div> in the DOM
-	circle      js.Value // corner ascend handle painted above the terminal
+	ws           js.Value
+	term         js.Value // xterm.Terminal
+	fitAddon     js.Value // FitAddon — proposeDimensions + fit
+	renderAddon  js.Value // renderer addon: WebglAddon, or CanvasAddon fallback
+	rendererKind string   // "webgl" or "canvas" — which addon actually attached (issue #128)
+	container    js.Value // host <div> in the DOM
+	circle       js.Value // corner ascend handle painted above the terminal
 
 	tileID string
 	paneID string
@@ -252,7 +253,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
 	term.Call("loadAddon", fitAddon)
 	term.Call("open", container)
-	renderAddon := attachShellRenderer(term)
+	renderAddon, rendererKind := attachShellRenderer(term)
 
 	// Corner ascend handle, appended after the terminal so it paints on top of
 	// the opaque xterm canvas (a canvas-drawn circle can't, hence the URL tile's
@@ -280,19 +281,20 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	ws.Set("binaryType", "arraybuffer")
 
 	conn := &shellStreamConn{
-		ws:          ws,
-		term:        term,
-		fitAddon:    fitAddon,
-		renderAddon: renderAddon,
-		container:   container,
-		circle:      circle,
-		tileID:      tileID,
-		paneID:      p.ID,
-		anchor:      p.Anchor,
-		path:        slices.Clone(p.Path),
-		onMouse:     onMouse,
-		lastCols:    uint16(cols),
-		lastRows:    uint16(rows),
+		ws:           ws,
+		term:         term,
+		fitAddon:     fitAddon,
+		renderAddon:  renderAddon,
+		rendererKind: rendererKind,
+		container:    container,
+		circle:       circle,
+		tileID:       tileID,
+		paneID:       p.ID,
+		anchor:       p.Anchor,
+		path:         slices.Clone(p.Path),
+		onMouse:      onMouse,
+		lastCols:     uint16(cols),
+		lastRows:     uint16(rows),
 	}
 
 	// Make http(s) URLs in the terminal clickable: a click descends into the
@@ -502,11 +504,16 @@ func newShellCircle(doc js.Value) js.Value {
 // redraws from buffer state every frame, so that artifact class cannot occur.
 // Returns the active addon (held on shellStreamConn to pin it; the terminal's
 // dispose tears it down).
-func attachShellRenderer(term js.Value) js.Value {
+func attachShellRenderer(term js.Value) (js.Value, string) {
 	if addon, ok := tryWebglAddon(term); ok {
-		return addon
+		return addon, "webgl"
 	}
-	return loadCanvasAddon(term)
+	// The canvas renderer's dirty-region artifacts are why WebGL exists here
+	// (#84) — a silent downgrade brought them back once already (Chromium
+	// dropped the automatic SwiftShader fallback, issue #128). The kind is
+	// recorded and e2e-asserted so it can never be silent again.
+	shellLog("shell renderer: canvas FALLBACK (webgl unavailable)")
+	return loadCanvasAddon(term), "canvas"
 }
 
 // tryWebglAddon loads the WebGL renderer, reporting ok=false when the addon
