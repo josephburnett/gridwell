@@ -8,7 +8,7 @@ import { test, expect } from './fixtures';
 async function rightClickBubble(window: any) {
   const pill = window.locator('#gw-rename-pill');
   await pill.waitFor({ state: 'visible', timeout: 5_000 });
-  await pill.dispatchEvent('mousedown', { button: 2 });
+  await pill.click({ button: 'right' }); // real mouse — see #130
 }
 
 test('right-clicking the bubble zooms a pane and back, restoring the layout exactly', async ({
@@ -52,11 +52,11 @@ test('the bubble shows a read-only context label on non-renamable panes', async 
   // plugin's config label. Neither opens the rename input on left-click.
   const pill = window.locator('#gw-rename-pill');
   await expect(pill).toHaveText('home');
-  await pill.dispatchEvent('mousedown', { button: 0 });
+  await pill.click();
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);
 
   await gw.enterPlugin('localdb');
   await expect(pill).toHaveText('e2e'); // the seeded plugin's name
-  await pill.dispatchEvent('mousedown', { button: 0 });
+  await pill.click();
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);
 });

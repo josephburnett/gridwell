@@ -25,7 +25,9 @@ test('the rename pill names the grid you are in', async ({ gw, window }) => {
   const pill = window.locator('#gw-rename-pill');
   await expect(pill).toBeVisible();
   await expect(pill).toHaveText('unnamed');
-  await pill.dispatchEvent('mousedown');
+  // REAL mouse click — a synthetic dispatchEvent has no default actions and
+  // masked the blur-to-body bug that made real renames "do nothing" (#130).
+  await pill.click();
   const input = window.locator('#gw-rename-input');
   await expect(input).toBeVisible();
   await input.fill('kitchen');
@@ -52,7 +54,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
   // Rename it while inside — the tmux-pane-rename case.
   const pill = window.locator('#gw-rename-pill');
   await expect(pill).toBeVisible();
-  await pill.dispatchEvent('mousedown');
+  await pill.click(); // real mouse (see above)
   const input = window.locator('#gw-rename-input');
   await input.fill('my-work');
   await input.press('Enter');
