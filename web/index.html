@@ -23,8 +23,12 @@
       border: 1px solid #292c36;
       border-radius: 6px;
       padding: 20px 24px;
-      min-width: 360px;
+      /* FIXED width: suggestion matches used to stretch the card per
+         keystroke, making it jump (issue #132). Long entries ellipsize
+         inside the stable box instead. */
+      width: 480px;
       max-width: 80vw;
+      box-sizing: border-box;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     }
     .gw-modal h2 { margin: 0 0 16px 0; font-size: 14px; font-weight: 500; color: #d8d9de; letter-spacing: 0.04em; text-transform: lowercase; }

@@ -206,7 +206,9 @@ func (a *App) syncURLViews() {
 // previews on the canvas — or drags a boundary across an overlay — must hide
 // them first, else the overlay eats the move/up events and the gesture stalls.
 func (a *App) liveOverlaysHidden() bool {
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.renameEditing
+	// The url modal is DOM — a live WebContentsView would paint OVER it,
+	// hiding what you type (issue #131) — so it parks the views too.
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.renameEditing || a.urlModalOpen
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL
