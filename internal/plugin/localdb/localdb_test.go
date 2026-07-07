@@ -375,3 +375,62 @@ func TestInfoRootViewSeedAndSetRootViewWriteback(t *testing.T) {
 		t.Errorf("schema_version changed after SetRootView: %d → %d", info0.SchemaVersion, info1.SchemaVersion)
 	}
 }
+
+// TestCleanupScratchSweepsEphemeralTiles (issue #85's crash net, coverage gap
+// found in the audit): the startup sweep deletes EVERY scratch-grid tile — an
+// ascent that never ran (crash, hard kill) must not leak ephemeral visits.
+func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	scratch := scratchGrid(t, p)
+
+	// Two ephemeral tiles a crashed session left behind: a url and a shell
+	// (created through the plugin's scratch routing, like the client does).
+	for _, tile := range []*gridwellv1.Tile{
+		{Kind: "url", X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/leak"},
+		{Kind: "shell", X: 0, Y: 0, W: 1, H: 1},
+	} {
+		if _, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: tile}); err != nil {
+			t.Fatalf("create scratch %s: %v", tile.Kind, err)
+		}
+	}
+	g, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: scratch})
+	if err != nil {
+		t.Fatalf("GetGrid(scratch): %v", err)
+	}
+	if len(g.Tiles) != 2 {
+		t.Fatalf("scratch has %d tiles, want 2", len(g.Tiles))
+	}
+
+	swept, err := p.CleanupScratch(ctx)
+	if err != nil {
+		t.Fatalf("CleanupScratch: %v", err)
+	}
+	if swept != 2 {
+		t.Errorf("swept = %d, want 2", swept)
+	}
+	g, err = p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: scratch})
+	if err != nil {
+		t.Fatalf("GetGrid(scratch) after sweep: %v", err)
+	}
+	if len(g.Tiles) != 0 {
+		t.Errorf("scratch still has %d tiles after the sweep", len(g.Tiles))
+	}
+	// Idempotent: a clean scratch sweeps zero.
+	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
+		t.Errorf("second sweep = (%d, %v), want (0, nil)", swept, err)
+	}
+}
+
+// scratchGrid returns the plugin's scratch grid id from Info.
+func scratchGrid(t *testing.T, p *localdb.Plugin) string {
+	t.Helper()
+	info, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.ScratchGridId == "" {
+		t.Fatal("Info.ScratchGridId empty")
+	}
+	return info.ScratchGridId
+}
