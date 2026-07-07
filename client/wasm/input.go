@@ -1589,7 +1589,7 @@ func (a *App) startTextAscent(p *pane.Pane) {
 	// (issue #85): no freeze (pointless for a tile about to die, and a url
 	// freeze would bump the version out from under the delete), then the
 	// row goes away (for a shell, the plugin kills its tmux session too).
-	ephemeral := a.isEphemeralTile(p, &file)
+	ephemeral := a.isEphemeralTile(p, &file) && !a.otherPaneShowsTile(p.ID, file.ID)
 
 	// If we're ascending out of a URL tile, close the live stream (if any).
 	if file.Kind == rpc.KindURL {
@@ -1646,7 +1646,7 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	// The freeze is kept here (streams may be live) except for an ephemeral
 	// tile, which is deleted instead — same rule as startTextAscent.
 	ephemeral := false
-	if t, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &t) {
+	if t, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &t) && !a.otherPaneShowsTile(p.ID, t.ID) {
 		ephemeral = true
 		defer a.deleteEphemeralTile(t.ID, t.Version)
 	}
@@ -2121,6 +2121,21 @@ func (a *App) isEphemeralTile(p *pane.Pane, t *rpc.Tile) bool {
 	return s != "" && t.GridID == s
 }
 
+// otherPaneShowsTile reports whether any pane OTHER than paneID is currently
+// descended into tileID. Delete-on-ascent must not fire while another pane
+// still shows the ephemeral visit — splitting an ephemeral descent clones the
+// view, and the clone's file-level ascent would otherwise delete the tile out
+// from under the source pane (found while building issue #111).
+func (a *App) otherPaneShowsTile(paneID, tileID string) bool {
+	found := false
+	a.tree.Walk(func(p *pane.Pane) {
+		if p.ID != paneID && p.TextFocus == tileID {
+			found = true
+		}
+	})
+	return found
+}
+
 // deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
 // gone: the row is deleted, and for a shell the plugin kills its tmux session
 // (all processes) as part of the delete. A failure surfaces on the strip
@@ -2158,6 +2173,40 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 			a.descendEphemeral(fp, &tile)
 		}
 	})
+}
+
+// openLinkBelow handles a link a live view tried to open in a NEW WINDOW
+// (target=_blank, window.open, ctrl/cmd-click — issue #111): split the pane
+// horizontally and open the url as an EPHEMERAL visit in the new lower half.
+// The link renders next to the page it came from, on the same plugin session,
+// and dies on ascent like every ephemeral visit (#85). If the split fails
+// (degenerate pane) the visit opens in place instead — the link must never be
+// silently dropped.
+func (a *App) openLinkBelow(paneID, url string) {
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return
+	}
+	// SplitOnSideAt splits the FOCUSED pane; the link's pane may not be it
+	// (a background page can window.open). Focus it first — that is also
+	// where the user's attention is about to go.
+	a.focusToPane(p)
+	newP, err := a.tree.SplitOnSideAt(pane.SideBottom, 0.5)
+	if err != nil {
+		a.visitEphemeralURL(p, url)
+		return
+	}
+	// The clone inherits the source's content descent (TextFocus), which a
+	// live view can't duplicate — same rule as commitSplit: ascend the file
+	// level so the visit descends from the containing grid. (The ephemeral
+	// delete-on-ascent is guarded by otherPaneShowsTile, so this ascent
+	// never deletes the tile the SOURCE pane still shows.)
+	if newP.TextFocus != "" {
+		a.startTextAscent(newP)
+	}
+	a.draw()
+	a.scheduleURLUpdate()
+	a.visitEphemeralURL(newP, url)
 }
 
 // shellURLActivate handles a click on an http(s) url in a live shell (the xterm

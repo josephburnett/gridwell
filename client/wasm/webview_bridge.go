@@ -234,6 +234,15 @@ func (a *App) installWebviewListeners() {
 		a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
 		return nil
 	})
+	// The page in a LIVE URL view tried to open a NEW WINDOW (target=_blank,
+	// window.open, ctrl/cmd-click). Main denies the popup and forwards the
+	// url here; the pane splits and the link opens as an ephemeral visit in
+	// the lower half (issue #111).
+	onOpenBelow := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
+		return nil
+	})
 	// The Electron main process reports every webview/session/sidecar failure
 	// it detects (issue #46) over this one channel; feed it straight into the
 	// same error surface every other failure path uses (a.reportErr) — one
@@ -251,6 +260,7 @@ func (a *App) installWebviewListeners() {
 	g.Call("onRightForward", onRightForward)
 	g.Call("onMiddleForward", onMiddleForward)
 	g.Call("onLeftForward", onLeftForward)
+	g.Call("onOpenBelow", onOpenBelow)
 	g.Call("onError", onError)
 	// Listeners live for the lifetime of the app; no Release.
 }

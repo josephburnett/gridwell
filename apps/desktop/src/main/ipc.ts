@@ -51,6 +51,7 @@ export const EV = {
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
+  openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
                       // (webview, session, sidecar) that must reach the user.
                       // Charter §1/§6: one owner, no second "silent" path for
                       // a main-process failure.
@@ -147,6 +148,15 @@ export interface NavEvent {
   tileId: number;
   url: string;
   title: string;
+}
+
+// OpenBelowEvent carries a link a live view tried to open in a NEW WINDOW
+// (target=_blank, window.open, ctrl/cmd-click — everything Chromium routes to
+// the window-open handler). The renderer splits the pane and opens the url as
+// an ephemeral visit in the lower half (issue #111).
+export interface OpenBelowEvent {
+  paneId: string;
+  url: string;
 }
 
 // ErrorEvent is the one payload shape for EV.error: every main-process

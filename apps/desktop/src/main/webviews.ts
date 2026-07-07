@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session } from 'electron';
 import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent, ErrorEvent } from './ipc';
+import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent } from './ipc';
 import {
   SESSION_PARTITION,
   partitionFor,
@@ -98,6 +98,10 @@ export interface RegistryCallbacks {
   // stays free of IPC knowledge — it only reports; index.ts decides how the
   // report reaches the renderer.
   onError?: (ev: ErrorEvent) => void;
+  // onOpenBelow fires when a hosted view's page tries to open a NEW WINDOW
+  // (target=_blank, window.open, ctrl/cmd-click). The renderer splits the
+  // pane and opens the url as an ephemeral visit below (issue #111).
+  onOpenBelow?: (ev: OpenBelowEvent) => void;
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
@@ -265,13 +269,17 @@ export class WebviewRegistry {
       const control = new WebContentsView({
         webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
       });
-      // target=_blank / window.open: follow the link in this same view
-      // instead of letting Electron spawn a detached BrowserWindow. A
-      // same-view navigation is an ordinary click as far as the server is
-      // concerned (real Chromium, the tile's persistent session), so it
-      // avoids the bot-guard friction a popup window tends to trip.
+      // target=_blank / window.open / ctrl-click: everything Chromium would
+      // open as a new window or tab arrives here. Never spawn a detached
+      // BrowserWindow — instead hand the url to the renderer, which splits
+      // the pane and opens it as an EPHEMERAL visit in the lower half
+      // (issue #111): the link opens in real Chromium on the tile's
+      // persistent session (no popup bot-guard friction), in a pane you can
+      // read next to the page you came from, and it dies on ascent.
       view.webContents.setWindowOpenHandler(({ url: target }) => {
-        if (target && target !== 'about:blank') void view.webContents.loadURL(target);
+        if (target && target !== 'about:blank') {
+          this.cb.onOpenBelow?.({ paneId, url: target });
+        }
         return { action: 'deny' };
       });
       // F11 fullscreen: the canvas handles F11 via window.ts, but a focused

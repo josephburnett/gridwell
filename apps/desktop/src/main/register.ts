@@ -14,6 +14,7 @@ import {
   ViewRightdown,
   ForwardedRightdown,
   ErrorEvent,
+  OpenBelowEvent,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
 
@@ -112,6 +113,12 @@ export function makeNavForwarder(rootWC: WebContents) {
   return (ev: { paneId: string; tileId: number; url: string; title: string }) => {
     safeSend(rootWC, EV.nav, ev);
   };
+}
+
+// makeOpenBelowForwarder relays a live view's new-window link to the renderer
+// (EV.openBelow), which splits the pane and opens it ephemeral (issue #111).
+export function makeOpenBelowForwarder(rootWC: WebContents): (ev: OpenBelowEvent) => void {
+  return (ev) => safeSend(rootWC, EV.openBelow, ev);
 }
 
 // sendFrame ships a mirror/capture frame to the renderer.
