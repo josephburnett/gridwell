@@ -18,13 +18,16 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// TextMode mirrors rpc.TextModeText / rpc.TextModeRendered. The embed
-// package can't import rpc (cyclic), so it accepts the bare string.
+// Local names for the rpc text-mode values. (A comment here used to claim
+// this package couldn't import rpc — that was stale; rpc depends only on the
+// generated proto, so the values are read from their owner.)
 const (
-	ModeRaw      = "text"
-	ModeRendered = "rendered"
+	ModeRaw      = rpc.TextModeText
+	ModeRendered = rpc.TextModeRendered
 )
 
 // DocTarget classifies what a drag should do when the cursor is over a
@@ -274,11 +277,7 @@ func Markdown(origin string, tileID string, alt string) string {
 // Should be replaced by the per-tile stored alt at insert time when
 // available.
 func DefaultAlt(kind string, tileID string) string {
-	seg := tileID
-	if i := strings.LastIndexByte(tileID, '/'); i >= 0 {
-		seg = tileID[i+1:]
-	}
-	return fmt.Sprintf("%s tile %s", kind, seg)
+	return fmt.Sprintf("%s tile %s", kind, rpc.LocalOf(tileID))
 }
 
 // Insert places `link` into `src` at byte offset `off`, padding with

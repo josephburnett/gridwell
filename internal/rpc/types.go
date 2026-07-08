@@ -94,6 +94,18 @@ func NamespaceOf(id string) string {
 	return ""
 }
 
+// LocalOf returns a qualified id's LAST segment — the id local to the owning
+// plugin ("7" for "uuid/7" or "ssh1/rp1/7"; a bare id is its own local id).
+// Complement of NamespaceOf: QualifyID(NamespaceOf(id), LocalOf(id)) == id
+// for any qualified id. The display half of the codec — human-readable URL
+// path segments, default alt text, node-grid tile ids.
+func LocalOf(id string) string {
+	if i := strings.LastIndexByte(id, '/'); i >= 0 {
+		return id[i+1:]
+	}
+	return id
+}
+
 // PluginWellTile builds the synthetic exit-well tile a plugin is rendered as
 // when it isn't sitting in a real grid: the drag ghost, the menu swatch, and
 // the launcher start-page tile (whose preview is the plugin's root grid). A 1×1

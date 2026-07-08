@@ -27,6 +27,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // State is the parsed/about-to-be-encoded URL state.
@@ -130,13 +132,9 @@ func Encode(s State) string {
 	} else {
 		for _, id := range s.TileIDs {
 			path.WriteByte('/')
-			// Strip plugin UUID prefix (e.g. "uuid/42" → "42") for
+			// Strip the namespace prefix (e.g. "uuid/42" → "42") for
 			// human-readable URLs; the client re-qualifies on decode.
-			seg := id
-			if i := strings.LastIndexByte(id, '/'); i >= 0 {
-				seg = id[i+1:]
-			}
-			path.WriteString(seg)
+			path.WriteString(rpc.LocalOf(id))
 		}
 	}
 

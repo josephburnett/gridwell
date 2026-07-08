@@ -90,6 +90,31 @@ func TestSplitID(t *testing.T) {
 	}
 }
 
+// TestLocalOf pins the display half of the codec. Until LocalOf existed the
+// last-segment strip was re-implemented inline in three client packages
+// (wasm input, embed's DefaultAlt, url's Encode) — the same computation,
+// three copies. The invariant that makes LocalOf safe everywhere:
+// QualifyID(NamespaceOf(id), LocalOf(id)) reproduces any qualified id.
+func TestLocalOf(t *testing.T) {
+	cases := []struct{ id, local string }{
+		{"u/7", "7"},
+		{"ssh1/rp1/7", "7"},
+		{"42", "42"}, // a bare id is its own local id
+		{"", ""},
+		{"u/", ""},
+	}
+	for _, c := range cases {
+		if got := LocalOf(c.id); got != c.local {
+			t.Errorf("LocalOf(%q) = %q, want %q", c.id, got, c.local)
+		}
+	}
+	for _, id := range []string{"u/7", "ssh1/rp1/7", "a/b/c/d"} {
+		if got := QualifyID(NamespaceOf(id), LocalOf(id)); got != id {
+			t.Errorf("QualifyID(NamespaceOf, LocalOf) round trip of %q = %q", id, got)
+		}
+	}
+}
+
 func TestIsExitWell(t *testing.T) {
 	cases := []struct {
 		name string

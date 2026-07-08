@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
@@ -136,17 +135,14 @@ func (a *App) applyURLOnBoot() {
 	p.Anchor = state.Anchor
 
 	// The URL's path segments are bare well ids within the anchor's grid
-	// namespace; qualify them with the anchor's namespace PREFIX — everything
-	// up to its last segment — so they match the grid's keys. For a plain
-	// plugin root ("uuid/1") that is the plugin uuid; for a remote grid
-	// reached through a mount ("ssh1/rp1/1") it is the whole chain prefix.
-	anchorPrefix := state.Anchor
-	if i := strings.LastIndexByte(anchorPrefix, '/'); i >= 0 {
-		anchorPrefix = anchorPrefix[:i]
-	}
+	// namespace; qualify them with the anchor's NAMESPACE — everything up to
+	// its last segment — so they match the grid's keys. For a plain plugin
+	// root ("uuid/1") that is the plugin uuid; for a remote grid reached
+	// through a mount ("ssh1/rp1/1") it is the whole chain prefix.
+	anchorPrefix := rpc.NamespaceOf(state.Anchor)
 	qualified := make([]string, len(state.TileIDs))
 	for i, id := range state.TileIDs {
-		qualified[i] = anchorPrefix + "/" + id
+		qualified[i] = rpc.QualifyID(anchorPrefix, id)
 	}
 
 	// No path → sit at the anchor's root grid.
