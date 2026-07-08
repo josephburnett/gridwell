@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -167,6 +168,25 @@ func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *rpc.Tile) 
 	return nil, nil
 }
 
+// tileCopyColumns is the full set of tiles columns a clone writes, in the
+// bind order of insertTileCopy's INSERT. Every schema column must be either
+// here or on the deliberate not-copied list in TestTileCopyColumnsAreTotal —
+// that drift lint is what makes "add a column, forget the clone path" a loud
+// failure instead of a silently incomplete copy.
+var tileCopyColumns = []string{
+	"object_id", "version", "grid_id", "kind", "x", "y", "w", "h",
+	"view_x", "view_y", "view_zoom", "child_grid_id",
+	"text_x", "text_y", "text_w", "text_h", "text_mode", "blob_id",
+	"url_string", "preview_blob_id", "alt_text", "alt_user",
+	"content_zoom", "url_history",
+	"created_at", "updated_at",
+}
+
+// placeholders returns "?, ?, …" with n placeholders.
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
+}
+
 // insertTileCopy inserts a copy of tile n into gridID at (x, y) with the given
 // child grid, preserving object_id + version (provenance) and sharing the
 // blob (refcount bumped). The per-kind column nullability mirrors the schema
@@ -176,12 +196,16 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 	var (
 		blob, previewBlob sql.NullInt64
 		urlStr, textMode  sql.NullString
+		urlHist           sql.NullString
 	)
 	switch n.Kind {
 	case rpc.KindURL:
 		urlStr = sql.NullString{String: n.URLString, Valid: true}
 		if n.PreviewBlobID != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
+		}
+		if n.URLHistory != "" {
+			urlHist = sql.NullString{String: n.URLHistory, Valid: true}
 		}
 	case rpc.KindShell:
 		// A PTY can't be copied, so a cloned shell is a screenshot: carry the
@@ -197,17 +221,27 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
 	}
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (object_id, version, grid_id, kind, x, y, w, h,
-			view_x, view_y, view_zoom, child_grid_id,
-			text_x, text_y, text_w, text_h, text_mode, blob_id,
-			url_string, preview_blob_id, alt_text,
-			created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	// alt_user is storage-only (deliberately not on rpc.Tile), so the latch is
+	// read straight from the source row: a user-owned name must stay
+	// user-owned on the copy, or the next automatic title capture clobbers it
+	// (the issue-#61 class).
+	srcID, err := parseID(n.ID)
+	if err != nil {
+		return 0, fmt.Errorf("tile copy: source id %q: %w", n.ID, err)
+	}
+	var altUser int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT alt_user FROM tiles WHERE id = ?`, srcID).Scan(&altUser); err != nil {
+		return 0, fmt.Errorf("tile copy: read alt_user of source %d: %w", srcID, err)
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO tiles (`+strings.Join(tileCopyColumns, ", ")+`)
+		VALUES (`+placeholders(len(tileCopyColumns))+`)`,
 		n.ObjectID, n.Version, gridID, n.Kind, x, y, n.W, n.H,
 		n.ViewX, n.ViewY, n.ViewZoom, child,
 		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
-		urlStr, previewBlob, n.AltText,
+		urlStr, previewBlob, n.AltText, altUser,
+		n.ContentZoom, urlHist,
 		now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert tile copy: %w", err)
