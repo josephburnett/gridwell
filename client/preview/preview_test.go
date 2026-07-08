@@ -162,9 +162,17 @@ func TestPutWildcardMatchesAnyBlobID(t *testing.T) {
 			t.Errorf("wildcard entry missed Get(42, %d)", want)
 		}
 	}
-	// But wantBlobID=0 still misses, even for a wildcard.
-	if _, ok := c.Get("42", 0); ok {
-		t.Errorf("wildcard entry hit Get(42, 0); zero means no-preview")
+	// And wantBlobID=0 hits TOO: a tile that has never had a server-side
+	// preview advertises PreviewBlobID 0, and the very first freeze parks
+	// its frame under the wildcard before SetURLState/SetShellPreview
+	// round-trips. If zero missed, the just-frozen frame stayed invisible
+	// (placeholder glyph) until the SSE echo landed — the regression this
+	// case pins. Zero-miss protection is only for entries keyed to a REAL
+	// blob id (see TestGetWithZeroBlobIDAlwaysMisses): those are server
+	// state that may be stale; a wildcard is a local capture that is by
+	// definition fresher than the server.
+	if _, ok := c.Get("42", 0); !ok {
+		t.Errorf("wildcard entry missed Get(42, 0); the first-ever freeze of a tile must show immediately")
 	}
 }
 
