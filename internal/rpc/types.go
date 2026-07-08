@@ -37,22 +37,31 @@ func IsWellKind(kind string) bool {
 }
 
 // The "<uuid>/<local>" shape is Gridwell's one cross-plugin id convention: a
-// plugin-scoped local id prefixed with the owning plugin's UUID. QualifyID and
-// UUIDOf are its only encode/decode points — shared by the server (id
-// qualification, routing.go) and the client (cache lookup, exit-well
-// classification) so the two can never disagree on the format.
+// plugin-scoped local id prefixed with the owning plugin's UUID. QualifyID,
+// SplitID, UUIDOf, and NamespaceOf are its only encode/decode points — shared
+// by the server (id qualification and routing) and the client (cache lookup,
+// exit-well classification) so the two can never disagree on the format.
 
 // QualifyID builds a qualified id "<uuid>/<local>" from its parts.
 func QualifyID(uuid, local string) string { return uuid + "/" + local }
 
-// UUIDOf returns the plugin-uuid segment of a qualified id ("<uuid>/<local>"),
-// or "" when the id has no "/" (a bare/unqualified id). Inverse of QualifyID on
-// the uuid segment.
-func UUIDOf(id string) string {
-	if i := strings.IndexByte(id, '/'); i >= 0 {
-		return id[:i]
+// SplitID splits a qualified id at its FIRST separator — the one-hop routing
+// peel. uuid names the plugin this hop routes to; rest is the id from that
+// plugin's perspective (itself possibly a chain). ok is false when the id has
+// no non-empty first segment (a bare/local id, or a degenerate leading "/").
+func SplitID(id string) (uuid, rest string, ok bool) {
+	if i := strings.IndexByte(id, '/'); i > 0 {
+		return id[:i], id[i+1:], true
 	}
-	return ""
+	return "", "", false
+}
+
+// UUIDOf returns the plugin-uuid segment of a qualified id ("<uuid>/<local>"),
+// or "" when the id is bare/unqualified. Defined on SplitID so the two can
+// never disagree.
+func UUIDOf(id string) string {
+	uuid, _, _ := SplitID(id)
+	return uuid
 }
 
 // IsExitWell reports whether a well tile's child grid lives in a different

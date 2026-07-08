@@ -100,7 +100,7 @@ func TestPreviewTileNotFound(t *testing.T) {
 	hs, _, root := newTestServer(t)
 	// A qualified id in the (registered) primary plugin namespace with a bogus
 	// local id → routes to the plugin → not found.
-	uuid, _, _ := splitPluginID(root)
+	uuid, _, _ := rpc.SplitID(root)
 	got, err := http.Get(hs.URL + "/preview/tile/" + uuid + "/999999")
 	if err != nil {
 		t.Fatal(err)

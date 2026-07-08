@@ -72,7 +72,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	if mount.ChildGridID != secondRoot {
 		t.Fatalf("mount child = %q, want %q", mount.ChildGridID, secondRoot)
 	}
-	if u, _, _ := splitPluginID(mount.ID); u != primaryUUID {
+	if u, _, _ := rpc.SplitID(mount.ID); u != primaryUUID {
 		t.Errorf("mount well lives in %q, want primary", u)
 	}
 
@@ -93,7 +93,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateText in second DB: %v", err)
 	}
-	if u, _, _ := splitPluginID(txt.ID); u != secondUUID {
+	if u, _, _ := rpc.SplitID(txt.ID); u != secondUUID {
 		t.Errorf("text tile lives in %q, want second DB %q", u, secondUUID)
 	}
 
