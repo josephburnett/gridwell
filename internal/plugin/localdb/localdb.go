@@ -232,7 +232,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// the exit well's label. On an interior well, alt_text is the
 		// user-given grid name (the + palette's name field); empty = unnamed.
 		if t.ChildGridId != "" {
-			return tileResp(p.st.CreateExitWell(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.ChildGridId, t.AltText))
+			return tileResp(p.st.CreateExitWell(ctx, path, req.GridId, t.X, t.Y, t.W, t.H,
+				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom))
 		}
 		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
 	case rpc.KindText:
