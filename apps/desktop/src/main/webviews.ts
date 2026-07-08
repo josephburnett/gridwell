@@ -576,6 +576,30 @@ export class WebviewRegistry {
     if (!e) return { jpegBase64: '', url: '', title: '', history: '' };
     this.entries.delete(paneId);
 
+    // The DURABLE work first, on the partition handle — the session outlives
+    // the view, so this succeeds even when the renderer is crashed/destroyed.
+    // Ordering matters: the preview reads below throw on a dead view, and
+    // when they ran first their throw skipped the flush + dehydrate — the
+    // only write path that persists this run's logins/drafts to the plugin
+    // DB (the system of record). The loss surfaced only as "preview not
+    // updated" while the real casualty was the session.
+    try {
+      // Commit DOM storage (localStorage) to the persistent partition BEFORE
+      // the renderer is closed. Chromium writes cookies eagerly but flushes
+      // localStorage lazily, so an abrupt webContents.close() can drop recent
+      // localStorage writes — which is exactly where GitLab autosaves an
+      // unsubmitted comment draft. Flushing here is what makes that draft
+      // survive ascend → descend → go-live.
+      session.fromPartition(e.partition).flushStorageData();
+    } catch {
+      // dehydratePartition flushes again itself and reports its own errors.
+    }
+    // Capture the plugin's session back to its DB on ascent — fire-and-forget
+    // so teardown isn't blocked on the network.
+    void dehydratePartition(this.origin, e.pluginUuid, (message) =>
+      this.cb.onError?.({ source: 'electron:session', message }),
+    );
+
     let jpegBase64 = '';
     let url = '';
     let title = '';
@@ -587,19 +611,6 @@ export class WebviewRegistry {
       // "back" (issue #113). pageState is stripped (urls+titles only).
       const nav = e.view.webContents.navigationHistory;
       history = serializeHistory(nav.getAllEntries(), nav.getActiveIndex());
-      // Commit DOM storage (localStorage) to the shared persistent partition
-      // BEFORE the renderer is closed. Chromium writes cookies eagerly but
-      // flushes localStorage lazily, so an abrupt webContents.close() can drop
-      // recent localStorage writes — which is exactly where GitLab autosaves
-      // an unsubmitted comment draft. Flushing here is what makes that draft
-      // survive ascend → descend → go-live. Cheap and best-effort; the session
-      // outlives the view, so the write lands even though the view goes away.
-      e.view.webContents.session.flushStorageData();
-      // Capture the plugin's session back to its DB (the system of record) on
-      // ascent — fire-and-forget so teardown isn't blocked on the network.
-      void dehydratePartition(this.origin, e.pluginUuid, (message) =>
-        this.cb.onError?.({ source: 'electron:session', message }),
-      );
       jpegBase64 = await captureJpegBase64(e.view);
     } catch {
       // Best-effort: a crashed/destroyed view yields an empty freeze. This is

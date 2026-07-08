@@ -6,6 +6,7 @@
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 //
 // Prints "HARNESS PASS" / "HARNESS FAIL: ..." and exits with 0/1.
+import * as http from 'http';
 import { app, BaseWindow } from 'electron';
 import { WebviewRegistry } from '../main/webviews';
 import type { NavEvent } from '../main/ipc';
@@ -18,6 +19,31 @@ function fail(msg: string): never {
   console.error('HARNESS FAIL:', msg);
   app.exit(1);
   throw new Error(msg); // unreachable; satisfies never
+}
+
+// sidecarStub serves GET/PUT /session/<uuid> from an in-memory map (the
+// same shape session-harness uses), so the dead-view scenario below can
+// assert the dehydrate PUT actually arrived.
+function sidecarStub(blobs: Map<string, Buffer>): Promise<string> {
+  return new Promise((resolve) => {
+    const srv = http.createServer((req, res) => {
+      const uuid = (req.url ?? '').replace('/session/', '');
+      if (req.method === 'PUT') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c) => chunks.push(c));
+        req.on('end', () => {
+          blobs.set(uuid, Buffer.concat(chunks));
+          res.writeHead(200).end();
+        });
+        return;
+      }
+      res.writeHead(200).end(blobs.get(uuid) ?? Buffer.alloc(0));
+    });
+    srv.listen(0, '127.0.0.1', () => {
+      const a = srv.address() as { port: number };
+      resolve(`http://127.0.0.1:${a.port}`);
+    });
+  });
 }
 
 async function waitForNonEmptyCapture(
@@ -60,6 +86,38 @@ app.whenReady().then(async () => {
   if (freeze.jpegBase64.length === 0) fail('freeze snapshot empty');
   if (registry.has('pane1')) fail('pane still registered after remove');
   console.log(`freeze ok: ${freeze.jpegBase64.length} base64 chars, title=${JSON.stringify(freeze.title)}`);
+
+  // ── a dead view still saves its session on remove() ────────────────────
+  // The crashed-tab ascent: every view-bound read in remove() throws once
+  // the webContents is gone, but the SESSION outlives the view, so the
+  // flush + dehydrate must still run — it is the only write path that
+  // persists this run's logins/drafts to the plugin DB. (Ordering
+  // regression: the preview reads used to run first and their throw skipped
+  // the dehydrate entirely; the loss surfaced only as "preview not
+  // updated".)
+  const blobs = new Map<string, Buffer>();
+  const origin = await sidecarStub(blobs);
+  const errors: string[] = [];
+  const reg2 = new WebviewRegistry(win, origin, { onError: (e2) => errors.push(e2.message) });
+  await reg2.place('pane2', 43, 'obj-dead', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 'dead-view-uuid');
+  if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
+    fail('dead-view scenario: view produced no frame within 6s');
+  }
+  // Destroy the renderer out from under the registry — the crashed-tab shape.
+  (reg2 as unknown as { entries: Map<string, { view: { webContents: { close(): void } } }> })
+    .entries.get('pane2')!
+    .view.webContents.close();
+  await new Promise((r) => setTimeout(r, 300));
+  const deadFreeze = await reg2.remove('pane2');
+  if (deadFreeze.jpegBase64 !== '') fail('dead view yielded a non-empty freeze');
+  const putDeadline = Date.now() + 5000;
+  while (!blobs.has('dead-view-uuid') && Date.now() < putDeadline) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!blobs.has('dead-view-uuid')) {
+    fail("dead-view remove() skipped the session dehydrate — this run's logins were dropped");
+  }
+  console.log('dead-view dehydrate ok: session PUT arrived despite the crashed view');
 
   console.log('HARNESS PASS');
   app.exit(0);
