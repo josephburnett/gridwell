@@ -157,34 +157,10 @@ func TestSplitPluginID(t *testing.T) {
 	}
 }
 
-// TestClassifyStoreError maps each store sentinel to its transport-agnostic
-// class — the single place the wire error code is decided.
-func TestClassifyStoreError(t *testing.T) {
-	cases := []struct {
-		err  error
-		want storeErrorClass
-	}{
-		{store.ErrNotFound, classNotFound},
-		{store.ErrInvalidArgument, classInvalidArgument},
-		{store.ErrInvalidPath, classInvalidArgument},
-		{store.ErrNotURLTile, classInvalidArgument},
-		{store.ErrNotTextTile, classInvalidArgument},
-		{store.ErrNotWellTile, classInvalidArgument},
-		{store.ErrNotShellTile, classInvalidArgument},
-		{store.ErrOverlap, classConflict},
-		{store.ErrVersionConflict, classConflict},
-		{errors.New("boom"), classInternal},
-	}
-	for _, c := range cases {
-		if got := classifyStoreError(c.err); got != c.want {
-			t.Errorf("classifyStoreError(%v) = %d, want %d", c.err, got, c.want)
-		}
-	}
-	// Wrapped sentinels still classify (errors.Is unwraps).
-	if classifyStoreError(errors.Join(errors.New("ctx"), store.ErrVersionConflict)) != classConflict {
-		t.Error("a wrapped ErrVersionConflict should classify as conflict")
-	}
-}
+// The sentinel→class mapping itself is pinned in internal/store
+// (TestClassifyError / TestEverySentinelIsClassified); here we only assert
+// the server consumes it (TestAsConnectError below drives the store-sentinel
+// fall-through path).
 
 // TestAsConnectError maps both gRPC status codes (from plugin subprocesses) and
 // local store sentinels onto Connect codes.
