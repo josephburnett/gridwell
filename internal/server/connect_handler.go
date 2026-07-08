@@ -14,6 +14,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // connectHandler implements gridwellv1connect.GridwellHandler as a thin router
@@ -723,7 +724,7 @@ func isUnimplemented(err error) bool {
 // arrive as gRPC status errors — the plugins translate store sentinels into
 // codes (see localdb.errToStatus) so NotFound / InvalidArgument / overlap and
 // version conflicts survive the routing hop; a non-gRPC error falls through to
-// the same classifyStoreError categorization used by the raw-HTTP endpoints.
+// the same store.ClassifyError categorization used by the raw-HTTP endpoints.
 func asConnectError(err error) error {
 	if err == nil {
 		return nil
@@ -740,12 +741,12 @@ func asConnectError(err error) error {
 			return connect.NewError(connect.CodeInternal, errors.New(st.Message()))
 		}
 	}
-	switch classifyStoreError(err) {
-	case classNotFound:
+	switch store.ClassifyError(err) {
+	case store.ClassNotFound:
 		return connect.NewError(connect.CodeNotFound, err)
-	case classInvalidArgument:
+	case store.ClassInvalidArgument:
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case classConflict:
+	case store.ClassConflict:
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	default:
 		return connect.NewError(connect.CodeInternal, err)

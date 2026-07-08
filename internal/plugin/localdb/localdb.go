@@ -496,23 +496,20 @@ func tileResp(t *rpc.Tile, err error) (*gridwellv1.TileResponse, error) {
 
 // errToStatus maps a store sentinel error to a gRPC status code so the
 // classification survives the routing hop to the server (which maps the code
-// to a Connect status). Mirrors the server's classifyStoreError; an unmatched
-// error passes through (grpc wraps it as codes.Unknown → CodeInternal).
+// to a Connect status). The sentinel→class table is store.ClassifyError —
+// the one owner, next to the sentinels — so this cannot drift from the
+// server's mapping. An unclassified error passes through (grpc wraps it as
+// codes.Unknown → CodeInternal).
 func errToStatus(err error) error {
-	switch {
-	case err == nil:
+	if err == nil {
 		return nil
-	case errors.Is(err, store.ErrNotFound):
+	}
+	switch store.ClassifyError(err) {
+	case store.ClassNotFound:
 		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, store.ErrInvalidArgument),
-		errors.Is(err, store.ErrInvalidPath),
-		errors.Is(err, store.ErrNotURLTile),
-		errors.Is(err, store.ErrNotTextTile),
-		errors.Is(err, store.ErrNotWellTile),
-		errors.Is(err, store.ErrNotShellTile):
+	case store.ClassInvalidArgument:
 		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, store.ErrOverlap),
-		errors.Is(err, store.ErrVersionConflict):
+	case store.ClassConflict:
 		return status.Error(codes.FailedPrecondition, err.Error())
 	default:
 		return err

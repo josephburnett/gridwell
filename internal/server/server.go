@@ -212,47 +212,17 @@ func (s *Server) staticOrSPA(dir string) http.Handler {
 	})
 }
 
-// storeErrorClass is the transport-neutral category of a store sentinel
-// error. Both the Connect handler (asConnectError) and the raw-HTTP endpoints
-// (writeHTTPError) map from this single classification, so the set of "which
-// sentinels are invalid-argument vs conflict vs not-found" lives in exactly
-// one place — a new sentinel can't be wired into one mapping and forgotten in
-// the other.
-type storeErrorClass int
-
-const (
-	classInternal storeErrorClass = iota
-	classNotFound
-	classInvalidArgument
-	classConflict
-)
-
-// classifyStoreError categorizes a store sentinel error. nil maps to
-// classInternal; callers handle nil before calling where it matters.
-func classifyStoreError(err error) storeErrorClass {
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return classNotFound
-	case errors.Is(err, store.ErrInvalidArgument),
-		errors.Is(err, store.ErrInvalidPath),
-		errors.Is(err, store.ErrNotURLTile),
-		errors.Is(err, store.ErrNotTextTile),
-		errors.Is(err, store.ErrNotWellTile),
-		errors.Is(err, store.ErrNotShellTile):
-		return classInvalidArgument
-	case errors.Is(err, store.ErrOverlap),
-		errors.Is(err, store.ErrVersionConflict):
-		return classConflict
-	default:
-		return classInternal
-	}
-}
+// The sentinel→class table lives in internal/store (store.ClassifyError),
+// next to the sentinel declarations, so every transport — Connect
+// (asConnectError), raw HTTP (writeHTTPError), and the plugin gRPC hop
+// (localdb.errToStatus) — maps from the one classification. Do not
+// re-enumerate the sentinels here.
 
 // writeHTTPError maps an error to the right HTTP status and writes a plain-text
 // body. Used by the non-Connect endpoints (preview image, ShellStream). Errors
 // now arrive from plugins as gRPC status errors, so map those codes; a raw
 // store sentinel (should not occur post-routing) falls through to the same
-// classifyStoreError categorization.
+// store.ClassifyError categorization.
 func writeHTTPError(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	if st, ok := status.FromError(err); ok {
@@ -267,12 +237,12 @@ func writeHTTPError(w http.ResponseWriter, err error) {
 		http.Error(w, st.Message(), code)
 		return
 	}
-	switch classifyStoreError(err) {
-	case classNotFound:
+	switch store.ClassifyError(err) {
+	case store.ClassNotFound:
 		code = http.StatusNotFound
-	case classInvalidArgument:
+	case store.ClassInvalidArgument:
 		code = http.StatusBadRequest
-	case classConflict:
+	case store.ClassConflict:
 		code = http.StatusConflict
 	}
 	http.Error(w, err.Error(), code)
