@@ -85,13 +85,28 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 		t.Fatalf("CreateText: %v", err)
 	}
 
+	// The source well has a framing the user set — the preview the clone
+	// gesture is copying. It must ride along: descending the link should
+	// land exactly where descending the source would.
+	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
+		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
+		ViewX: 7, ViewY: -2, ViewZoom: 1.75,
+	})
+	if err != nil {
+		t.Fatalf("SetWellView: %v", err)
+	}
+
 	// Right-drag the well into plugin B: the destination gains a LINK.
 	link, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: well.Version,
+		TileID: well.ID, Version: framed.Version,
 		DestGridID: rootB, X: 3, Y: 3,
 	})
 	if err != nil {
 		t.Fatalf("cross-plugin CloneTile: %v", err)
+	}
+	if link.ViewX != 7 || link.ViewY != -2 || link.ViewZoom != 1.75 {
+		t.Errorf("link framing = (%v, %v, %v), want the source's (7, -2, 1.75) — a clone must not reset the viewport",
+			link.ViewX, link.ViewY, link.ViewZoom)
 	}
 	if u, _, _ := rpc.SplitID(link.ID); u != uuidB {
 		t.Errorf("link lives in %q, want destination plugin %q", u, uuidB)

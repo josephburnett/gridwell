@@ -403,6 +403,12 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// The link: same child grid, shared. Deleting it later only unlinks
 		// (the destination store's rule for qualified children).
 		create.Tile.ChildGridId = st.ChildGridId
+		// The source's framing rides along: the link's preview and descent
+		// target must land exactly where the source's would (preview =
+		// descent target = ascent return; a clone never resets a viewport).
+		create.Tile.ViewX = st.ViewX
+		create.Tile.ViewY = st.ViewY
+		create.Tile.ViewZoom = st.ViewZoom
 	case "text":
 		body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
 		if err != nil {

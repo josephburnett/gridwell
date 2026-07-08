@@ -174,8 +174,10 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 // owned by the destination plugin and named by a qualified "<uuid>/<id>"
 // string. Deleting the well removes only the reference, never the backing
 // directory or process (that is a separate gesture on a tile *inside* the
-// grid).
-func (s *Store) CreateExitWell(ctx context.Context, path rpc.Path, gridID string, x, y, w, h int64, childGridID, alt string) (*rpc.Tile, error) {
+// grid). viewX/viewY/viewZoom carry the source's framing when the exit well
+// is a cross-plugin CLONE of a framed well — the link must preview and
+// descend to exactly where the source did; zeros are the default view.
+func (s *Store) CreateExitWell(ctx context.Context, path rpc.Path, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64) (*rpc.Tile, error) {
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
 	}
@@ -185,8 +187,8 @@ func (s *Store) CreateExitWell(ctx context.Context, path rpc.Path, gridID string
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
 					view_x, view_y, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
-				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-				objID, gid, x, y, w, h, childGridID, alt, now, now)
+				VALUES (?, ?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gid, x, y, w, h, viewX, viewY, viewZoom, childGridID, alt, now, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert exit well: %w", err)
 			}
