@@ -114,6 +114,16 @@ func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 			GridId: rpc.QualifyID(uuid, p.TileRemoved.GridId),
 			TileId: rpc.QualifyID(uuid, p.TileRemoved.TileId),
 		}}}
+	case *pb.Event_PluginHealth:
+		// The plugin uuid is an id like any other: one segment prepended per
+		// hop. A mounted node's fan-in re-serves its own plugins' health
+		// transitions; unqualified, they arrive addressed by a bare remote
+		// uuid that names nothing on this side of the mount.
+		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+			PluginUuid: rpc.QualifyID(uuid, p.PluginHealth.PluginUuid),
+			Healthy:    p.PluginHealth.Healthy,
+			Detail:     p.PluginHealth.Detail,
+		}}}
 	}
 	return ev
 }
