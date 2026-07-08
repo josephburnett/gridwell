@@ -76,8 +76,10 @@ func (a *App) handleContentZoomKey(ev js.Value) bool {
 	if p == nil || p.TextFocus == "" {
 		return false
 	}
+	// Content zoom applies exactly to the content-descent kinds — the set has
+	// one owner (it drifted once and dropped shell descents; see its comment).
 	t, ok := a.descendedTile(p)
-	if !ok || (t.Kind != rpc.KindText && t.Kind != rpc.KindURL && t.Kind != rpc.KindShell) {
+	if !ok || !rpc.IsContentDescentKind(t.Kind) {
 		return false
 	}
 	ev.Call("preventDefault")

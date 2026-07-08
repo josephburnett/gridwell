@@ -6,7 +6,6 @@ import (
 	"context"
 	"math"
 	"slices"
-	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/anim"
@@ -1303,7 +1302,7 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		// A link tile whose target isn't available — a broken or rootless
 		// plugin on the node grid. Say why instead of silently doing nothing
 		// (charter §6); pluginhealth owns the wording when it knows the plugin.
-		if pl, ok := a.pluginByUUID(lastSegment(well.ID)); ok {
+		if pl, ok := a.pluginByUUID(rpc.LocalOf(well.ID)); ok {
 			if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
 				a.reportErr(sev, source, message)
 				return
@@ -1344,15 +1343,6 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 	}
 	a.pushPaneState(p.ID, paneState{Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom})
 	a.installDescent(p, r, from, w, well.ChildGridID, "", 0, 0)
-}
-
-// lastSegment returns the final segment of a qualified id — for a node-grid
-// tile that is the plugin's uuid (its local tile id).
-func lastSegment(id string) string {
-	if i := strings.LastIndexByte(id, '/'); i >= 0 {
-		return id[i+1:]
-	}
-	return id
 }
 
 // installDescent computes the standard two-segment descent transition into a

@@ -179,7 +179,7 @@ func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
 		color := colorLauncherRootlessTint
 		// The LOCAL node grid knows more: broken (Info failed) gets the
 		// alarm tint, rootless the softer one.
-		if pl, ok := a.pluginByUUID(lastSegment(n.ID)); ok && pluginhealth.Classify(pl) == pluginhealth.Broken {
+		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.ID)); ok && pluginhealth.Classify(pl) == pluginhealth.Broken {
 			color = colorLauncherBrokenTint
 		}
 		a.cctx.Set("fillStyle", color)
