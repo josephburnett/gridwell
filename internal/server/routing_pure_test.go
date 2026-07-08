@@ -141,6 +141,31 @@ func TestQualifyEvent(t *testing.T) {
 	if rem.GetTileRemoved().GridId != "u/1" || rem.GetTileRemoved().TileId != "u/5" {
 		t.Errorf("TileRemoved = %+v", rem.GetTileRemoved())
 	}
+
+	// PluginHealth carries a plugin uuid, which is an id like any other: each
+	// hop prepends one segment. A mounted node's fan-in re-serves its own
+	// plugins' health transitions; without the prepend they arrive addressed
+	// by a bare remote uuid that names nothing on this side of the mount, so
+	// the "live updates stopped" notice attaches to nothing (or, worse, could
+	// collide with a local source key). Regression: qualifyEvent's switch
+	// omitted this variant and passed it through verbatim.
+	health := qualifyEvent("ssh1", true, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		PluginUuid: "rp", Healthy: false, Detail: "stream ended",
+	}}})
+	if got := health.GetPluginHealth().GetPluginUuid(); got != "ssh1/rp" {
+		t.Errorf("transit PluginHealth uuid = %q, want ssh1/rp (chain rule: one segment per hop)", got)
+	}
+	if health.GetPluginHealth().Healthy || health.GetPluginHealth().Detail != "stream ended" {
+		t.Errorf("PluginHealth payload mutated beyond the uuid: %+v", health.GetPluginHealth())
+	}
+	// Leaf plugins don't emit PluginHealth today, but the chain rule is
+	// uniform: every id in a response gets this hop prepended.
+	leafHealth := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+		PluginUuid: "x", Healthy: true,
+	}}})
+	if got := leafHealth.GetPluginHealth().GetPluginUuid(); got != "u/x" {
+		t.Errorf("leaf PluginHealth uuid = %q, want u/x", got)
+	}
 }
 
 // TestSplitPluginID covers the parse both ways.
