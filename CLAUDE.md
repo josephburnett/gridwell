@@ -45,6 +45,15 @@ Exceptions are deliberate and few: the menu appears only on the focused pane (to
 show focus), and processes/files outside Gridwell may come and go outside our
 control (though their *placement* stays stable while they exist).
 
+**Session-ephemeral by decision (issue #13, owner call 2026-07-08):** the
+split-pane layout (splits, ratios, pane zoom — the whole `pane.Tree`), the
+rendered-mode caret, and the selection live only in the client session and
+reset on reload. These are the *documented* exceptions to charter §7 ("no
+client-only state") — transient workspace scaffolding, not content; nothing
+they lose is a user's data. Only the focused pane's descent path + viewport
+rides the URL. Do not persist these without a new owner decision, and do not
+re-litigate the choice.
+
 ---
 
 ## The engineering charter (READ THIS — it is why fixes haven't stuck)
@@ -169,6 +178,9 @@ Anything the user can change is a server fact, written through the store and
 reflected by an event. Client state is a *cache and a view* of server truth,
 never an authority. (This is also why §1 matters: the client copies of framing
 are caches that must reconcile to the one server-owned `view_*`.)
+The decided exceptions — split-pane layout, rendered caret, selection — are
+listed under the guiding rule above; they are ephemeral by owner decision,
+not by omission.
 
 ### 8. DRY is correctness, not tidiness.
 
