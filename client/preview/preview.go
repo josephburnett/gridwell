@@ -84,20 +84,21 @@ func NewCache(dec Decoder) *Cache {
 //   - and the entry's recorded blob id matches wantBlobID (or is
 //     wildcard).
 //
-// wantBlobID == 0 means the tile has no server-side preview; Get
-// always returns not-ok in that case so callers don't show a
-// possibly-stale cached image on a tile the server says is blank.
+// wantBlobID == 0 means the tile has no server-side preview yet. An entry
+// keyed to a REAL blob id misses in that case (it is server state that may
+// be stale — don't show a cached image on a tile the server says is blank),
+// but a WILDCARD entry hits: it is a local capture parked ahead of the
+// server (the first-ever freeze of a url/shell tile, whose PreviewBlobID is
+// still 0 until the SetURLState/SetShellPreview echo lands), by definition
+// fresher than anything the server knows.
 func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
-	if wantBlobID == 0 {
-		return nil, false
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[tileID]
 	if !ok || e.image == nil || !e.image.Truthy() {
 		return nil, false
 	}
-	if e.blobID != wildcardBlobID && e.blobID != wantBlobID {
+	if e.blobID != wildcardBlobID && (wantBlobID == 0 || e.blobID != wantBlobID) {
 		return nil, false
 	}
 	return e.image, true
