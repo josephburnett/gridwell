@@ -52,10 +52,25 @@ func EnsureVersion(ctx context.Context, db *sql.DB, appID int64, target int, mig
 	}
 
 	if gotApp == 0 && userVer == 0 {
-		if err := setPragmaInt(ctx, db, "application_id", appID); err != nil {
+		// Both identity stamps in ONE transaction (header pragmas are
+		// transactional): a crash between them would leave application_id set
+		// with user_version 0, and the next Open would run the full migration
+		// chain against the latest-shape tables — non-idempotent ADD COLUMNs
+		// that fail forever. Atomic means the file is either unstamped
+		// (stamped next Open) or fully stamped; no third state.
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin: %w", err)
+		}
+		if err := setPragmaIntTx(ctx, tx, "application_id", appID); err != nil {
+			_ = tx.Rollback()
 			return err
 		}
-		return setPragmaInt(ctx, db, "user_version", int64(target))
+		if err := setPragmaIntTx(ctx, tx, "user_version", int64(target)); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		return tx.Commit()
 	}
 	if gotApp != appID {
 		return fmt.Errorf("not a Gridwell database of this kind: application_id %#x, want %#x", gotApp, appID)
@@ -80,12 +95,18 @@ func EnsureVersion(ctx context.Context, db *sql.DB, appID int64, target int, mig
 			return fmt.Errorf("migration to v%d: %w", m.To, err)
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	// The stamp rides IN the migration transaction (header pragmas are
+	// transactional): commit-then-stamp had a crash window that persisted the
+	// DDL without the version recording it, after which every Open re-ran the
+	// non-idempotent chain ("duplicate column name") and the file — forever-
+	// data by contract — was unopenable. Atomic means the file is either at
+	// the old version with none of the chain applied, or at target with all
+	// of it; no third state exists to crash into.
+	if err := setPragmaIntTx(ctx, tx, "user_version", int64(target)); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
-	// user_version is a header field set outside the migration transaction;
-	// callers hold MaxOpenConns(1), so it lands on the same file.
-	return setPragmaInt(ctx, db, "user_version", int64(target))
+	return tx.Commit()
 }
 
 // readPragmaInt reads an integer-valued PRAGMA. The name is a trusted literal,
@@ -102,5 +123,13 @@ func readPragmaInt(ctx context.Context, db *sql.DB, name string) (int64, error) 
 // parameters, so the value is formatted in; callers pass trusted constants.
 func setPragmaInt(ctx context.Context, db *sql.DB, name string, v int64) error {
 	_, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA %s = %d", name, v))
+	return err
+}
+
+// setPragmaIntTx is setPragmaInt inside a transaction — header pragmas are
+// transactional in SQLite, which is what makes the migrate-and-stamp and the
+// fresh-identity stamps atomic.
+func setPragmaIntTx(ctx context.Context, tx *sql.Tx, name string, v int64) error {
+	_, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA %s = %d", name, v))
 	return err
 }
