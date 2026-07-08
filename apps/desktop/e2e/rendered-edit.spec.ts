@@ -96,3 +96,35 @@ test('clicking rendered text places the caret where typing lands', async ({ gw }
     .poll(async () => gw.getTileContent(tileID), { timeout: 10_000 })
     .toBe(want);
 });
+
+// Issue #140: the raw→rendered toggle FLUSHES the textarea (one UpdateText)
+// and the first rendered keystroke schedules ANOTHER save. Both used to claim
+// the tile version they saw in the cache, so while the toggle's save was in
+// flight the keystroke's save claimed the same version, lost the conflict,
+// and the reconcile reverted the typed character — the intermittent
+// "para onex → para one" flake. The saves now run through a per-tile serial
+// queue that reads the version at send time. Holding every UpdateText at the
+// network for longer than the save debounce (600ms) turns that former race
+// into a deterministic sequence: this spec fails on the pre-queue code every
+// run, not one run in twenty.
+test('a keystroke typed right after the mode toggle survives a slow save', async ({
+  gw,
+  window,
+}) => {
+  const tileID = await createAndDescendMarkdown(gw);
+  await gw.typeText('para one');
+
+  await window.route('**/gridwell.v1.Gridwell/UpdateText', async (r: any) => {
+    await new Promise((res) => setTimeout(res, 900));
+    await r.continue();
+  });
+
+  await gw.toggleTextMode(); // flush save — held at the network
+  await gw.typeText('x'); // debounced save fires while the flush is in flight
+  await gw.rightClickPlus(); // ascend — its flush rides the same queue
+
+  await expect
+    .poll(async () => gw.getTileContent(tileID), { timeout: 20_000 })
+    .toBe('para onex');
+  await window.unroute('**/gridwell.v1.Gridwell/UpdateText');
+});

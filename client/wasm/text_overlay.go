@@ -661,12 +661,5 @@ func (a *App) saveTextFromTextarea(p *pane.Pane) {
 	// accessor the renderer and parent-grid preview read.
 	a.textareaDirty = false
 	a.c.PutTileContent(file.ID, []byte(buf))
-	go func() {
-		a.postUpdateText(gid, &rpc.UpdateTextRequest{
-			Path:    rpc.Path{WellIDs: p.Path},
-			TileID:  file.ID,
-			Version: file.Version,
-			Data:    []byte(buf),
-		}, []byte(buf))
-	}()
+	a.enqueueTextSave(gid, p.Path, file.ID, file.Version, []byte(buf))
 }
