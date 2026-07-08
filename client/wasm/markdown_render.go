@@ -452,14 +452,7 @@ func (a *App) saveTextFromCache(p *pane.Pane) {
 		pl.Dirty = false
 	}
 	content := append([]byte(nil), body...)
-	go func() {
-		a.postUpdateText(gid, &rpc.UpdateTextRequest{
-			Path:    rpc.Path{WellIDs: p.Path},
-			TileID:  file.ID,
-			Version: file.Version,
-			Data:    content,
-		}, content)
-	}()
+	a.enqueueTextSave(gid, p.Path, file.ID, file.Version, content)
 }
 
 // placeMarkdownCaret sets pane p's rendered-mode caret to the source offset

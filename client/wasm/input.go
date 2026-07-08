@@ -1798,8 +1798,16 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 
 	path := slices.Clone(p.Path)
 	mode := p.TextMode
-	go func() {
+	// Through the per-tile save queue (issue #140): a debounced keystroke
+	// save may still be in flight, and this flush claims a version too — the
+	// queue serializes them and the version is read at send time.
+	a.textSaves.Enqueue(file.ID, func() {
 		curVersion := file.Version
+		if g, ok := a.c.Grid(gid); ok {
+			if f, ok := g.Tiles[file.ID]; ok {
+				curVersion = f.Version
+			}
+		}
 		// Update content first if the user was editing.
 		if hasBuf {
 			tile, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
@@ -1828,7 +1836,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		a.doTileMutate("SetTextView", gid, func(ctx context.Context) (*rpc.Tile, error) {
 			return a.cl.SetTextView(ctx, req)
 		})
-	}()
+	})
 }
 
 // startPaletteDrag arms a drag from the i'th palette item. The dragState is

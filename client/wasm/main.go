@@ -23,6 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -75,6 +76,10 @@ type App struct {
 
 	tree *pane.Tree
 	c    *cache.Cache
+
+	// textSaves serializes UpdateText posts per tile so pipelined saves
+	// chain versions instead of racing (issue #140); see enqueueTextSave.
+	textSaves *textedit.SaveQueue
 
 	width, height float64
 
@@ -570,6 +575,7 @@ func main() {
 		win:               js.Global().Get("window"),
 		cl:                rpc.NewDefaultClient(origin),
 		c:                 cache.New(),
+		textSaves:         textedit.NewSaveQueue(),
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
 		errs:              errsurface.New(),
