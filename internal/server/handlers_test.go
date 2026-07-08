@@ -318,7 +318,7 @@ func TestErrorCodeMapping(t *testing.T) {
 	}
 
 	// Invalid path (bogus well id, qualified to the primary) → InvalidArgument.
-	pUUID, _, _ := splitPluginID(root)
+	pUUID, _, _ := rpc.SplitID(root)
 	_, err = cl.CreateWell(ctx, &rpc.CreateWellRequest{
 		Path:   rpc.Path{WellIDs: []string{pUUID + "/99"}},
 		GridID: root, X: 10, Y: 10, W: 1, H: 1,

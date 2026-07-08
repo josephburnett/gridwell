@@ -56,6 +56,40 @@ func TestQualifyIDUUIDOfRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSplitID pins the one-hop routing peel every layer shares. Until this
+// codec was unified, the server carried its own splitPluginID and two literal
+// copies of the peel (session.go, nodeexport.go) whose no-slash handling had
+// already diverged from UUIDOf — the exact "same fact, parallel copies" seam
+// the charter forbids. These cases are the contract: a chain peels exactly one
+// segment; a bare id, an empty id, and a degenerate leading "/" are all
+// unqualified (ok=false), never a half-parse.
+func TestSplitID(t *testing.T) {
+	cases := []struct {
+		id, uuid, rest string
+		ok             bool
+	}{
+		{"u/1", "u", "1", true},
+		{"ssh1/rp1/7", "ssh1", "rp1/7", true}, // a chain peels ONE segment
+		{"u/", "u", "", true},                 // empty rest is still qualified
+		{"42", "", "", false},                 // bare local id
+		{"", "", "", false},
+		{"/x", "", "", false}, // degenerate: no first segment
+		{"/", "", "", false},
+	}
+	for _, c := range cases {
+		uuid, rest, ok := SplitID(c.id)
+		if uuid != c.uuid || rest != c.rest || ok != c.ok {
+			t.Errorf("SplitID(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				c.id, uuid, rest, ok, c.uuid, c.rest, c.ok)
+		}
+		// UUIDOf is defined on SplitID; assert the agreement anyway so a
+		// future re-implementation of either cannot drift silently.
+		if got := UUIDOf(c.id); got != c.uuid {
+			t.Errorf("UUIDOf(%q) = %q, disagrees with SplitID's uuid %q", c.id, got, c.uuid)
+		}
+	}
+}
+
 func TestIsExitWell(t *testing.T) {
 	cases := []struct {
 		name string

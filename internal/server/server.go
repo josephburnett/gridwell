@@ -25,6 +25,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
@@ -114,7 +115,7 @@ func (s *Server) routeClient(uuid string) (pb.GridwellClient, bool) {
 // client and the local (unprefixed) id. Used by the shell + preview
 // infrastructure to address a tile in whichever plugin holds it.
 func (s *Server) clientForID(id string) (client pb.GridwellClient, local string, ok bool) {
-	uuid, local, split := splitPluginID(id)
+	uuid, local, split := rpc.SplitID(id)
 	if !split {
 		return nil, "", false
 	}

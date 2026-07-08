@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // connectHandler implements gridwellv1connect.GridwellHandler as a thin router
@@ -37,7 +38,7 @@ func newConnectHandler(srv *Server) *connectHandler {
 // (unprefixed) id, and the owning plugin uuid. Ids are always qualified in the
 // rootless model (there is no privileged plugin a bare id could fall back to).
 func (h *connectHandler) route(id string) (client pb.GridwellClient, local, uuid string, err error) {
-	uuid, local, ok := splitPluginID(id)
+	uuid, local, ok := rpc.SplitID(id)
 	if !ok {
 		return nil, "", "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unqualified id %q", id))
 	}
@@ -52,7 +53,7 @@ func (h *connectHandler) route(id string) (client pb.GridwellClient, local, uuid
 // foreign-prefixed ids untouched (so a cross-plugin reference stays qualified
 // and the target plugin rejects it rather than misresolving it locally).
 func stripUUID(id, uuid string) string {
-	if u, l, ok := splitPluginID(id); ok && u == uuid {
+	if u, l, ok := rpc.SplitID(id); ok && u == uuid {
 		return l
 	}
 	return id
@@ -69,7 +70,7 @@ func localPathFor(p *pb.Path, uuid string) *pb.Path {
 	}
 	start := len(p.WellIds)
 	for start > 0 {
-		if u, _, ok := splitPluginID(p.WellIds[start-1]); !ok || u != uuid {
+		if u, _, ok := rpc.SplitID(p.WellIds[start-1]); !ok || u != uuid {
 			break // a bare or foreign-plugin segment marks the boundary
 		}
 		start--
@@ -101,7 +102,7 @@ func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 	switch p := ev.Payload.(type) {
 	case *pb.Event_GridChanged:
 		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
-			GridId: qualifyID(uuid, p.GridChanged.GridId),
+			GridId: rpc.QualifyID(uuid, p.GridChanged.GridId),
 		}}}
 	case *pb.Event_TileChanged:
 		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
@@ -109,8 +110,8 @@ func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 		}}}
 	case *pb.Event_TileRemoved:
 		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
-			GridId: qualifyID(uuid, p.TileRemoved.GridId),
-			TileId: qualifyID(uuid, p.TileRemoved.TileId),
+			GridId: rpc.QualifyID(uuid, p.TileRemoved.GridId),
+			TileId: rpc.QualifyID(uuid, p.TileRemoved.TileId),
 		}}}
 	}
 	return ev
@@ -136,7 +137,7 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 	if g != nil {
 		if transit {
 			if g.ScratchGridId != "" {
-				g.ScratchGridId = qualifyID(uuid, g.ScratchGridId)
+				g.ScratchGridId = rpc.QualifyID(uuid, g.ScratchGridId)
 			}
 			// The transit hop's own tunnel proxy REPLACES whatever the remote
 			// stamped: page traffic must enter the tunnel where the USER is,
@@ -148,7 +149,7 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
 			g.Writable = info.Writable
 			if info.ScratchGridId != "" {
-				g.ScratchGridId = qualifyID(uuid, info.ScratchGridId)
+				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			}
 			g.ProxyEndpoint = proxyEndpointOf(info)
 		}
@@ -243,12 +244,12 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
 		if info.RootGridId != "" {
-			rootGridID = qualifyID(uuid, info.RootGridId)
+			rootGridID = rpc.QualifyID(uuid, info.RootGridId)
 		}
 		// Qualified scratch grid id (ephemeral-url target); empty for plugins
 		// that don't support ephemeral visits.
 		if info.ScratchGridId != "" {
-			scratchGridID = qualifyID(uuid, info.ScratchGridId)
+			scratchGridID = rpc.QualifyID(uuid, info.ScratchGridId)
 		}
 		if label == "" {
 			label = info.DisplayName
@@ -354,7 +355,7 @@ func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.
 	if err != nil {
 		return nil, err
 	}
-	if dstUUID, _, ok := splitPluginID(m.DestGridId); ok && dstUUID != uuid {
+	if dstUUID, _, ok := rpc.SplitID(m.DestGridId); ok && dstUUID != uuid {
 		return h.cloneAcrossPlugins(ctx, m, c, local, uuid)
 	}
 	m.TileId = local

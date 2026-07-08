@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // NodeHandler wraps the server's HTTP mux in h2c and routes gRPC to the node
@@ -247,9 +248,9 @@ func (n *nodeExport) Subscribe(_ *pb.SubscribeRequest, stream pb.Gridwell_Subscr
 // sessionRoute resolves a session's plugin chain: "<uuid>" (this node's
 // plugin, rest "") or "<uuid>/<rest>" (forward rest through the mount).
 func (n *nodeExport) sessionRoute(chain string) (pb.GridwellClient, string, bool) {
-	uuid, rest := chain, ""
-	if i := strings.IndexByte(chain, '/'); i > 0 {
-		uuid, rest = chain[:i], chain[i+1:]
+	uuid, rest, qualified := rpc.SplitID(chain)
+	if !qualified {
+		uuid, rest = chain, ""
 	}
 	c, ok := n.srv.routeClient(uuid)
 	return c, rest, ok

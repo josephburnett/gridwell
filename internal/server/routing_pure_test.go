@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
@@ -144,14 +145,14 @@ func TestQualifyEvent(t *testing.T) {
 
 // TestSplitPluginID covers the parse both ways.
 func TestSplitPluginID(t *testing.T) {
-	if u, l, ok := splitPluginID("abc/12"); !ok || u != "abc" || l != "12" {
+	if u, l, ok := rpc.SplitID("abc/12"); !ok || u != "abc" || l != "12" {
 		t.Errorf("split(abc/12) = %q,%q,%v", u, l, ok)
 	}
-	if _, _, ok := splitPluginID("bare"); ok {
+	if _, _, ok := rpc.SplitID("bare"); ok {
 		t.Error("a bare id should report ok=false")
 	}
 	// A leading slash is not a plugin prefix (IndexByte > 0 required).
-	if _, _, ok := splitPluginID("/x"); ok {
+	if _, _, ok := rpc.SplitID("/x"); ok {
 		t.Error("leading-slash id should report ok=false")
 	}
 }

@@ -93,7 +93,7 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cross-plugin CloneTile: %v", err)
 	}
-	if u, _, _ := splitPluginID(link.ID); u != uuidB {
+	if u, _, _ := rpc.SplitID(link.ID); u != uuidB {
 		t.Errorf("link lives in %q, want destination plugin %q", u, uuidB)
 	}
 	if link.ChildGridID != well.ChildGridID {
@@ -160,7 +160,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cross-plugin text clone: %v", err)
 	}
-	if u, _, _ := splitPluginID(copyT.ID); u != uuidB {
+	if u, _, _ := rpc.SplitID(copyT.ID); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
 	}
 	body, err := cl.GetTileContent(ctx, copyT.ID)

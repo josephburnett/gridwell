@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // sessionBlob serves the per-plugin Chromium session blob (cookies + web
@@ -28,9 +29,9 @@ func (s *Server) sessionBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing plugin chain", http.StatusBadRequest)
 		return
 	}
-	uuid, rest := chain, ""
-	if i := strings.IndexByte(chain, '/'); i > 0 {
-		uuid, rest = chain[:i], chain[i+1:]
+	uuid, rest, qualified := rpc.SplitID(chain)
+	if !qualified {
+		uuid, rest = chain, ""
 	}
 	client, ok := s.routeClient(uuid)
 	if !ok {
