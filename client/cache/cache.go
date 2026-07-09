@@ -159,6 +159,19 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if cur, exists := g.Tiles[n.ID]; exists && n.Version < cur.Version {
 			return false
 		}
+		// A blob change invalidates the cached content bytes — without this,
+		// a framing-class blob write (a pane tile's layout, which never bumps
+		// version) from another view leaves c.content serving the OLD bytes
+		// forever, and the preview never repaints the new arrangement.
+		// Deliberately scoped to non-text kinds: a text tile's content cache
+		// doubles as the optimistic edit buffer (PutTileContent on every
+		// rendered-mode keystroke), and dropping it on a save-echo racing a
+		// debounced edit would visibly revert typing (the I11/#5 family —
+		// text staleness under a foreign writer is tracked there, not here).
+		if cur, exists := g.Tiles[n.ID]; exists &&
+			n.Kind != rpc.KindText && n.BlobID != cur.BlobID {
+			delete(c.content, n.ID)
+		}
 		g.Tiles[n.ID] = n
 		return true
 	case rpc.EventTileRemoved:

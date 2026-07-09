@@ -255,3 +255,55 @@ func TestRemoveTileFreesContent(t *testing.T) {
 		t.Errorf("content leaked after tile removal")
 	}
 }
+
+// TestApplyBlobChangeDropsContent: a TileChanged carrying a NEW blob at the
+// SAME version (a framing-class blob write — a pane tile's layout never bumps
+// version) must invalidate the cached content bytes, or this client's preview
+// serves the OLD layout forever (fetchTileContent short-circuits on a cache
+// hit, so nothing would ever refetch).
+func TestApplyBlobChangeDropsContent(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindPane, Version: 3, BlobID: 7},
+	})
+	c.PutTileContent("10", []byte(`{"v":1,"old":true}`))
+
+	changed := c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindPane, Version: 3, BlobID: 8},
+	}})
+	if !changed {
+		t.Fatal("same-version blob change must apply (framing writes never bump)")
+	}
+	if _, ok := c.TileContent("10"); ok {
+		t.Fatal("stale content bytes survived a blob change — the preview would never repaint")
+	}
+	// Same blob again: nothing to drop, content written after the event stays.
+	c.PutTileContent("10", []byte(`{"v":1,"new":true}`))
+	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindPane, Version: 3, BlobID: 8},
+	}})
+	if _, ok := c.TileContent("10"); !ok {
+		t.Fatal("an unchanged blob must not drop content")
+	}
+}
+
+// TestApplyBlobChangeSparesTextContent pins the DELIBERATE scoping of the
+// drop: a text tile's content cache doubles as the optimistic edit buffer
+// (rendered-mode keystrokes land there before the debounced UpdateText), so a
+// save-echo racing a newer local edit must not blow the buffer away — that
+// would visibly revert typing. Text staleness under a foreign writer is the
+// I11/#5 optimistic-echo residual, owned there, not here.
+func TestApplyBlobChangeSparesTextContent(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7},
+	})
+	c.PutTileContent("10", []byte("# newer unsaved keystrokes"))
+
+	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 4, BlobID: 8},
+	}})
+	if _, ok := c.TileContent("10"); !ok {
+		t.Fatal("text optimistic edit buffer was dropped by a save echo")
+	}
+}

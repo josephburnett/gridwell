@@ -104,6 +104,12 @@ type App struct {
 	// state anywhere else.
 	errs *errsurface.Surface
 
+	// paneLayouts memoizes each pane tile's decoded workspace tree, keyed by
+	// tile id and invalidated by blob generation (see paneTileLayout). A
+	// cache and a view of the server blob, never an authority — the DECODE
+	// is what's memoized; the truth is the tile row + content bytes.
+	paneLayouts map[string]*paneLayoutEntry
+
 	// caps is the host capability set (client/caps), derived ONCE at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks
 	// bridgeAvailable() to make a behavior decision.
@@ -588,6 +594,7 @@ func main() {
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},
 		traces:            map[string]traceState{},
+		paneLayouts:       map[string]*paneLayoutEntry{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")

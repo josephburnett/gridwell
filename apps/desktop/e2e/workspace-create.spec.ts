@@ -1,0 +1,73 @@
+import { test, expect } from './fixtures';
+import { tileAt } from './oracle';
+
+// The pane tile's client birth (stage 3 of the workspace primitive): the
+// palette carries a fifth "pane" swatch, drag-creating it persists a
+// kind="pane" tile server-side, and a foreign layout write reaches this
+// client's preview-relevant state. The last assertion pins the delivery
+// seam: SetPaneLayout is framing-class (version stays 0), so the SSE echo
+// arrives at the SAME version and only the blob field distinguishes it —
+// a same-version event must still apply (the I11 interlock drops only
+// STRICTLY older events) for the preview signature to move. The stale
+// CONTENT-bytes half of that echo (cache.Apply's blob-change drop) is
+// pinned separately by unit test in client/cache.
+
+const SERVICE = 'gridwell.v1.Gridwell';
+
+async function setPaneLayout(origin: string, tileId: string, version: number, layout: unknown): Promise<void> {
+  const data = Buffer.from(JSON.stringify(layout)).toString('base64');
+  const res = await fetch(`${origin}/${SERVICE}/SetPaneLayout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ tileId, version: String(version), data }),
+  });
+  if (!res.ok) throw new Error(`SetPaneLayout(${tileId}) failed: ${res.status} ${await res.text()}`);
+}
+
+// sig reads one tile's preview signature from the focused pane's grid.
+async function sig(window: any, tileId: string): Promise<string> {
+  const sigs = await window.evaluate(
+    () => (window as any).__gridwellTest.previewSigs() as Record<string, string>,
+  );
+  return sigs[tileId] ?? '';
+}
+
+test('workspace primitive: drag-create persists a pane tile and its preview tracks the layout blob', async ({ gw, window }) => {
+  await gw.enterPlugin('localdb');
+  const f = await gw.focused();
+  const rootGrid = f.gridID;
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+
+  // The fifth swatch exists and creates: dragCreate resolves the swatch by
+  // its templateKindName, so a missing palette entry fails right here.
+  await gw.openPalette();
+  await gw.dragCreate('pane', wx, wy);
+  const snap = await gw.getGrid(rootGrid);
+  const pt = tileAt(snap, 'pane', wx, wy);
+  expect(pt, `a pane tile should be persisted at (${wx},${wy})`).toBeTruthy();
+
+  // Baseline: never-arranged (no layout blob), version 0.
+  const sig0 = await sig(window, pt!.id);
+  expect(sig0, 'pane tile should appear in the focused grid preview sigs').toContain('kpane');
+
+  // Another writer arranges the workspace. The layout write is framing-class
+  // (version stays 0), so ONLY the blob-change invalidation can propagate it.
+  await setPaneLayout(gw.origin, pt!.id, 0, {
+    v: 1,
+    root: {
+      split: {
+        dir: 'v', ratio: 0.4,
+        a: { pane: { id: 'p1', zoom: 1 } },
+        b: { pane: { id: 'p2', zoom: 1 } },
+      },
+    },
+    focus: 'p2',
+  });
+  await expect
+    .poll(async () => sig(window, pt!.id), {
+      message: 'preview signature must pick up the new layout blob via SSE',
+      timeout: 10_000,
+    })
+    .not.toBe(sig0);
+});

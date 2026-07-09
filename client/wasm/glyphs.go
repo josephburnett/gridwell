@@ -236,3 +236,25 @@ func drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 	}
 	c.Set("lineWidth", 1.0)
 }
+
+// drawPaneGlyph paints a stylized split-workspace cue centered in
+// (x, y, w, h): a rectangle divided by one vertical line, with the right
+// half divided again horizontally — the smallest drawing that reads
+// "arranged panes" at any zoom. Used for the pane-tile palette swatch and
+// the face of a workspace whose layout isn't loaded (or arranged) yet.
+func drawPaneGlyph(c js.Value, x, y, w, h float64, color string) {
+	beginGlyph(c, w, h, color)
+	cx, cy, half := glyphBox(x, y, w, h)
+	left, top := cx-half, cy-half*0.75
+	gw, gh := half*2, half*1.5
+	c.Call("strokeRect", left, top, gw, gh)
+	// Vertical divider at 45%, horizontal divider across the right half.
+	vx := left + gw*0.45
+	c.Call("beginPath")
+	c.Call("moveTo", vx, top)
+	c.Call("lineTo", vx, top+gh)
+	c.Call("moveTo", vx, top+gh*0.5)
+	c.Call("lineTo", left+gw, top+gh*0.5)
+	c.Call("stroke")
+	endGlyph(c)
+}
