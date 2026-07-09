@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
+	"github.com/josephburnett/gridwell/client/workspace"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -109,6 +110,12 @@ type App struct {
 	// cache and a view of the server blob, never an authority — the DECODE
 	// is what's memoized; the truth is the tile row + content bytes.
 	paneLayouts map[string]*paneLayoutEntry
+
+	// ws is the workspace stack — the ONE owner of "which pane tile is the
+	// user inside, and what outer tree does each descent restore" (see
+	// client/workspace). a.tree is the display of its top; the persisted
+	// layout is owned by the server blob.
+	ws workspace.Stack
 
 	// caps is the host capability set (client/caps), derived ONCE at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks
@@ -285,6 +292,12 @@ type scheduler struct {
 	// rafScheduled tracks a pending requestAnimationFrame so we don't
 	// queue redundant frames.
 	rafScheduled bool
+
+	// wsSaveScheduled / wsSaveCb debounce the workspace-layout persister
+	// (see scheduleWorkspaceSave): draw() arms it while inside a workspace;
+	// the callback encodes, hash-diffs, and posts SetPaneLayout on change.
+	wsSaveScheduled bool
+	wsSaveCb        js.Func
 
 	// urlUpdateScheduled / urlUpdateCb debounce the URL replaceState:
 	// multiple state changes within the window coalesce into one.
@@ -675,6 +688,11 @@ func (a *App) afterBootstrap() {
 		a.fetchGrid(a.nodeGrid)
 	}
 
+	a.sched.wsSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.wsSaveScheduled = false
+		a.flushWorkspaceSave()
+		return nil
+	})
 	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.urlUpdateScheduled = false
 		a.replaceURLNow()
