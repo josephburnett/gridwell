@@ -75,6 +75,11 @@ const (
 	// colorShellFill is the dark-orange body shown behind a shell tile's
 	// preview / placeholder glyph.
 	colorShellFill = "#2e220f"
+
+	// Pane (workspace) tiles: teal — a hue no other kind uses, so a stored
+	// workspace reads distinctly in a grid, a palette swatch, and a ghost.
+	colorPaneTileFill   = "#10282b"
+	colorPaneTileBorder = "#3aa8a8"
 	// colorEphemeralBorder is the GRAY pane border for a descent into an
 	// ephemeral (scratch-grid) tile — url or shell alike. Gray overrides the
 	// kind color: ascending DELETES the tile (a shell's tmux session and all
@@ -217,11 +222,15 @@ const (
 	// tplShell spawns an interactive bash shell tile. Starts frozen with
 	// no preview; the user refreshes to spawn the PTY.
 	tplShell
+	// tplPane creates a durable workspace (a pane tile): a stored split-pane
+	// layout you descend into. Created never-arranged; the first descent
+	// installs the default single pane.
+	tplPane
 )
 
 // primitiveKinds is the palette layout order of the built-in tile
 // primitives, left to right. They appear in any writable grid.
-var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell}
+var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell, tplPane}
 
 // paletteItem is one entry in the creation palette: a built-in tile
 // primitive that the user drags onto the canvas to create a tile.
@@ -716,6 +725,9 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.drawShellTile(n, x, y, w, h, selected)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
+	case rpc.KindPane:
+		a.drawPaneTilePreview(n, x, y, w, h, selected, outside)
+		return
 	}
 	if n.Kind != rpc.KindWell {
 		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx)
@@ -1115,6 +1127,12 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		c.Set("fillStyle", fill)
 		c.Call("fillRect", x, y, w, h)
 		strokeTileBorder(c, x, y, w, h, line, borderPx)
+	case rpc.KindPane:
+		// The flat face a workspace shows one level down inside another
+		// preview ("one level deep, flat beyond") and in the drag ghost.
+		c.Set("fillStyle", colorPaneTileFill)
+		c.Call("fillRect", x, y, w, h)
+		strokeTileBorder(c, x, y, w, h, colorPaneTileBorder, borderPx)
 	default:
 		c.Set("fillStyle", colorLocked)
 		c.Call("fillRect", x, y, w, h)

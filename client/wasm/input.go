@@ -1878,6 +1878,8 @@ func paletteItemGhostNode(item paletteItem) rpc.Tile {
 		return rpc.Tile{Kind: rpc.KindURL, W: 1, H: 1}
 	case tplShell:
 		return rpc.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"}
+	case tplPane:
+		return rpc.Tile{Kind: rpc.KindPane, W: 1, H: 1, AltText: "workspace"}
 	}
 	return rpc.Tile{}
 }
@@ -1944,6 +1946,8 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
 	case tplShell:
 		a.createShellAtCell(destPane, dropX, dropY)
+	case tplPane:
+		a.createPaneAtCell(destPane, dropX, dropY)
 	}
 	a.menu.Close()
 }

@@ -139,6 +139,8 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorURLLine)
 	case tplShell:
 		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
+	case tplPane:
+		drawPaneGlyph(a.cctx, x, y, w, h, colorPaneTileBorder)
 	}
 	if hovered {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)

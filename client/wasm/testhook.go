@@ -484,6 +484,8 @@ func templateKindName(k templateKind) string {
 		return "url"
 	case tplShell:
 		return "shell"
+	case tplPane:
+		return "pane"
 	}
 	return ""
 }
