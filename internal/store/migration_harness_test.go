@@ -486,4 +486,78 @@ func init() {
 			}
 		},
 	})
+	// v5: the 'pane' kind — the chain's first table-REBUILD migration. Seed
+	// pins the id-reuse trap: DROP TABLE tiles deletes its sqlite_sequence
+	// row, and the copy re-seeds at the max SURVIVING id, so without the
+	// save/restore in rebuildTilesForPaneKind a tile deleted before the
+	// migration would get its id REUSED after it (embeds/deep links/client
+	// caches are keyed by id). Seed a survivor + a higher-id tile that is
+	// then deleted; verify the survivor's row is byte-identical, a fresh
+	// insert mints ABOVE the deleted id, and the new CHECK accepts 'pane'
+	// while still rejecting a malformed well.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 5,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, content_zoom, url_history, created_at, updated_at)
+				VALUES ('fixt-v5-survivor', ` + rootID + `, 'url', 6, 6, 2, 1, 'https://survivor.example', 'named', 1.5, '{"index":0,"entries":[]}', 100, 100)`); err != nil {
+				t.Fatalf("seed survivor tile: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v5-deleted', ` + rootID + `, 'shell', 8, 8, 1, 1, '', 100, 100)`); err != nil {
+				t.Fatalf("seed doomed tile: %v", err)
+			}
+			if _, err := db.Exec(`DELETE FROM tiles WHERE object_id = 'fixt-v5-deleted'`); err != nil {
+				t.Fatalf("delete doomed tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			// The survivor crossed the rebuild intact, id included.
+			var kind, url, alt, hist string
+			var zoom float64
+			var survivorID, deletedMax int64
+			if err := db.QueryRow(`SELECT id, kind, url_string, alt_text, content_zoom, url_history
+				FROM tiles WHERE object_id = 'fixt-v5-survivor'`).
+				Scan(&survivorID, &kind, &url, &alt, &zoom, &hist); err != nil {
+				t.Fatalf("read survivor: %v", err)
+			}
+			if kind != "url" || url != "https://survivor.example" || alt != "named" || zoom != 1.5 || hist == "" {
+				t.Errorf("survivor row damaged by rebuild: kind=%q url=%q alt=%q zoom=%v hist=%q", kind, url, alt, zoom, hist)
+			}
+			deletedMax = survivorID + 1 // the doomed tile was minted right after the survivor
+			// The id-reuse trap: a fresh insert must mint ABOVE the deleted id.
+			var gridID int64
+			if err := db.QueryRow(`SELECT grid_id FROM tiles WHERE object_id = 'fixt-v5-survivor'`).Scan(&gridID); err != nil {
+				t.Fatalf("read grid id: %v", err)
+			}
+			res, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v5-post', ?, 'pane', 10, 10, 2, 2, 'workspace', 100, 100)`, gridID)
+			if err != nil {
+				t.Fatalf("insert pane tile after rebuild (new CHECK should accept it): %v", err)
+			}
+			newID, err := res.LastInsertId()
+			if err != nil {
+				t.Fatalf("new id: %v", err)
+			}
+			if newID <= deletedMax {
+				t.Errorf("id REUSED after rebuild: new id %d <= deleted id %d (sqlite_sequence not restored)", newID, deletedMax)
+			}
+			// The rebuilt CHECK still rejects a malformed row (a well without
+			// a child grid) — the constraint moved, it didn't loosen.
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v5-bad', ?, 'well', 12, 12, 1, 1, '', 100, 100)`, gridID); err == nil {
+				t.Errorf("rebuilt CHECK accepted a well without child_grid_id")
+			}
+			// The three tiles indexes survived the rebuild.
+			var nIdx int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
+				WHERE type = 'index' AND tbl_name = 'tiles' AND name LIKE 'idx_tiles_%'`).Scan(&nIdx); err != nil {
+				t.Fatalf("count indexes: %v", err)
+			}
+			if nIdx != 3 {
+				t.Errorf("tiles indexes after rebuild = %d, want 3", nIdx)
+			}
+		},
+	})
 }

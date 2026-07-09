@@ -206,6 +206,17 @@ func (p *Plugin) SetTileAlt(ctx context.Context, req *gridwellv1.SetTileAltReque
 	return tileResp(p.st.GetTile(ctx, req.TileId))
 }
 
+// SetPaneLayout writes a pane tile's serialized workspace layout — framing,
+// never a version bump (the whole layout is arrangement; owner decision
+// 2026-07-08). Path-free by id, like SetTileAlt.
+func (p *Plugin) SetPaneLayout(ctx context.Context, req *gridwellv1.SetPaneLayoutRequest) (*gridwellv1.TileResponse, error) {
+	id, err := strconv.ParseInt(req.TileId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid tile_id")
+	}
+	return tileResp(p.st.SetPaneLayout(ctx, id, req.Version, req.Data))
+}
+
 // SetContentZoom persists the per-tile content scale (issue #82) — framing,
 // never a version bump.
 func (p *Plugin) SetContentZoom(ctx context.Context, req *gridwellv1.SetContentZoomRequest) (*gridwellv1.TileResponse, error) {
@@ -255,6 +266,11 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 			return tileResp(p.st.CreateScratchShell(ctx))
 		}
 		return tileResp(p.st.CreateShell(ctx, &rpc.CreateShellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
+	case rpc.KindPane:
+		// A durable workspace. req.Data is the optional initial layout blob
+		// (usually empty: NULL blob_id = never arranged); alt_text is the
+		// workspace name the bottom bar shows.
+		return tileResp(p.st.CreatePane(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Data))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}
@@ -292,6 +308,10 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return tileResp(p.st.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{Path: path, TileID: req.TileId, Version: req.Version, JPEG: req.Preview}))
 	case rpc.KindURL:
 		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{Path: path, TileID: req.TileId, Version: req.Version, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText, History: t.UrlHistory}))
+	case rpc.KindPane:
+		// Refused so the kind→operation mapping stays total: the layout blob
+		// rides its own verb (SetPaneLayout — path-free, framing-class).
+		return nil, status.Error(codes.InvalidArgument, "set: pane layout rides SetPaneLayout")
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "set: unknown kind %q", t.Kind)
 	}

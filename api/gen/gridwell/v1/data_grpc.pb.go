@@ -50,6 +50,7 @@ const (
 	Gridwell_UpdateText_FullMethodName        = "/gridwell.v1.Gridwell/UpdateText"
 	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
 	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
+	Gridwell_SetPaneLayout_FullMethodName     = "/gridwell.v1.Gridwell/SetPaneLayout"
 	Gridwell_SetContentZoom_FullMethodName    = "/gridwell.v1.Gridwell/SetContentZoom"
 	Gridwell_SetRootView_FullMethodName       = "/gridwell.v1.Gridwell/SetRootView"
 	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
@@ -89,6 +90,10 @@ type GridwellClient interface {
 	UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
 	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	// SetPaneLayout writes a pane tile's serialized workspace layout.
+	// Framing-class (never bumps version); path-free by id. See the request
+	// message for both rationales.
+	SetPaneLayout(ctx context.Context, in *SetPaneLayoutRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	// SetContentZoom persists the per-tile content scale (text font, terminal
 	// font, page zoom — issue #82). Framing: never bumps version. Refused for
 	// wells (their view_zoom is the grid viewport, a different concept).
@@ -305,6 +310,16 @@ func (c *gridwellClient) SetTileAlt(ctx context.Context, in *SetTileAltRequest, 
 	return out, nil
 }
 
+func (c *gridwellClient) SetPaneLayout(ctx context.Context, in *SetPaneLayoutRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetPaneLayout_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridwellClient) SetContentZoom(ctx context.Context, in *SetContentZoomRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
@@ -387,6 +402,10 @@ type GridwellServer interface {
 	UpdateText(context.Context, *UpdateTextRequest) (*TileResponse, error)
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
 	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
+	// SetPaneLayout writes a pane tile's serialized workspace layout.
+	// Framing-class (never bumps version); path-free by id. See the request
+	// message for both rationales.
+	SetPaneLayout(context.Context, *SetPaneLayoutRequest) (*TileResponse, error)
 	// SetContentZoom persists the per-tile content scale (text font, terminal
 	// font, page zoom — issue #82). Framing: never bumps version. Refused for
 	// wells (their view_zoom is the grid viewport, a different concept).
@@ -461,6 +480,9 @@ func (UnimplementedGridwellServer) DeleteTile(context.Context, *DeleteTileReques
 }
 func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTileAlt not implemented")
+}
+func (UnimplementedGridwellServer) SetPaneLayout(context.Context, *SetPaneLayoutRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetPaneLayout not implemented")
 }
 func (UnimplementedGridwellServer) SetContentZoom(context.Context, *SetContentZoomRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetContentZoom not implemented")
@@ -790,6 +812,24 @@ func _Gridwell_SetTileAlt_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gridwell_SetPaneLayout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetPaneLayoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).SetPaneLayout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_SetPaneLayout_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).SetPaneLayout(ctx, req.(*SetPaneLayoutRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gridwell_SetContentZoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetContentZoomRequest)
 	if err := dec(in); err != nil {
@@ -921,6 +961,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetTileAlt",
 			Handler:    _Gridwell_SetTileAlt_Handler,
+		},
+		{
+			MethodName: "SetPaneLayout",
+			Handler:    _Gridwell_SetPaneLayout_Handler,
 		},
 		{
 			MethodName: "SetContentZoom",

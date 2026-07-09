@@ -10,7 +10,7 @@ package store
 // each with its own database; a well that points at one is an ordinary `well`
 // row whose child_grid_id is a qualified "<plugin-uuid>/<grid-id>" reference.
 //
-// There are four tile kinds:
+// There are five tile kinds:
 //   - well  (interior): points at a child grid. Blue when the child is in this
 //     same store; red ("exit well") when child_grid_id names another plugin.
 //   - text  (interior): markdown blob (green).
@@ -20,6 +20,9 @@ package store
 //     preview and detaches. The bash + scrollback live in the tmux server and
 //     persist across ascents (and gridwell restarts); they are gone only when
 //     the tile is deleted or the host reboots.
+//   - pane  (interior): a durable workspace — blob_id holds the serialized
+//     split-pane layout (client/pane LayoutV1). Added at schema v5 via the
+//     first CHECK-rebuild migration.
 //
 // Well rows carry one view rectangle (view_x, view_y, view_zoom) that is
 // at once the preview frame, the descent target, and the ascent return.
@@ -67,7 +70,11 @@ CREATE TABLE IF NOT EXISTS session (
 // replaying migrations. Every column added here after v1 must be matched by an
 // additive migration (see migrations.go); TestSchemaEquivalence proves the two
 // agree. See internal/store/CLAUDE.md for the schema-evolution contract.
-func tablesDDL() string { return tablesTemplate }
+//
+// The tiles table is built by tilesTableDDL so its one DDL source is shared
+// with the CHECK-rebuild migration path (migrations.go): a rebuild creates
+// tiles_new from the same text a fresh Open uses, so the two cannot drift.
+func tablesDDL() string { return tablesTemplate + tilesTableDDL("tiles") + tilesIndexDDL }
 
 const tablesTemplate = `
 CREATE TABLE IF NOT EXISTS grids (
@@ -103,8 +110,15 @@ CREATE TABLE IF NOT EXISTS blobs (
     -- carries no meaning for dedup, so neither is stored.
     media_type TEXT NOT NULL DEFAULT ''
 );
+`
 
-CREATE TABLE IF NOT EXISTS tiles (
+// tilesTableDDL returns the CREATE TABLE for the current tiles shape with the
+// table name parameterized: "tiles" for a fresh Open, "tiles_new" for the
+// CHECK-rebuild migration (the only migration shape that can change the kind
+// CHECK — see internal/store/CLAUDE.md). One text, two readers, no drift.
+func tilesTableDDL(name string) string {
+	return `
+CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- AUTOINCREMENT for the same reason as grids: a reused tile id would
     -- collide with the client's per-tile caches (e.g. the URL preview cache
     -- keyed by tile id), showing a deleted tile's frozen frame on a new one.
@@ -112,7 +126,7 @@ CREATE TABLE IF NOT EXISTS tiles (
     object_id     TEXT NOT NULL,
     version       INTEGER NOT NULL DEFAULT 0,
     grid_id       INTEGER NOT NULL REFERENCES grids(id),
-    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','shell')),
+    kind          TEXT NOT NULL CHECK (kind IN ('well','text','url','shell','pane')),
     x             INTEGER NOT NULL,
     y             INTEGER NOT NULL,
     w             INTEGER NOT NULL DEFAULT 1 CHECK (w > 0),
@@ -167,8 +181,19 @@ CREATE TABLE IF NOT EXISTS tiles (
     OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
     OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
     OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
+    -- pane: a durable workspace. blob_id (nullable) holds the serialized
+    -- layout (client/pane LayoutV1, application/vnd.gridwell.pane-layout+json);
+    -- NULL means never arranged (descent installs the default single pane).
+    OR (kind = 'pane'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND text_mode IS NULL)
     )
 );
+`
+}
+
+// tilesIndexDDL recreates the tiles indexes; shared by the fresh path
+// (tablesDDL) and the rebuild migration for the same no-drift reason as
+// tilesTableDDL.
+const tilesIndexDDL = `
 CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_object_id ON tiles(object_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);

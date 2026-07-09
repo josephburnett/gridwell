@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -52,6 +52,71 @@ var migrations = []migration{
 	// v4: url_history — a url tile's navigation back-stack across
 	// freeze/revive (issue #113).
 	{to: 4, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN url_history TEXT`)},
+	// v5: the 'pane' tile kind (durable workspaces). A kind lives in the
+	// tiles table-level CHECK, which ALTER TABLE cannot touch — this is the
+	// chain's first table-REBUILD migration (the recipe in
+	// internal/store/CLAUDE.md). No column changes; only the CHECK.
+	{to: 5, run: rebuildTilesForPaneKind},
+}
+
+// tilesRebuildColumns is the explicit column list a rebuild copies — every
+// tiles column as of v5, id included (identity is preserved byte-for-byte;
+// a rebuild changes the CHECK, never the data).
+const tilesRebuildColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
+	view_x, view_y, view_zoom, child_grid_id,
+	text_x, text_y, text_w, text_h, text_mode, blob_id,
+	url_string, preview_blob_id, alt_text, alt_user, content_zoom, url_history,
+	created_at, updated_at`
+
+// rebuildTilesForPaneKind rebuilds the tiles table with the v5 CHECK (adding
+// the 'pane' kind): create tiles_new from the SAME DDL text a fresh Open uses
+// (tilesTableDDL — one source, no drift), copy every row id-for-id, drop the
+// old table, rename, recreate the indexes.
+//
+// The sqlite_sequence save/restore is load-bearing: DROP TABLE tiles deletes
+// its sqlite_sequence row, and the copy re-seeds at the max SURVIVING id — so
+// without the restore, the ids of tiles deleted above that max would be
+// REUSED after the migration, violating the "ids are never reused" invariant
+// (embeds, deep links, and client caches are keyed by id and would resolve to
+// the wrong tile). The fixture in migration_harness_test.go pins this trap.
+func rebuildTilesForPaneKind(ctx context.Context, tx *sql.Tx) error {
+	var seq sql.NullInt64
+	err := tx.QueryRowContext(ctx,
+		`SELECT seq FROM sqlite_sequence WHERE name = 'tiles'`).Scan(&seq)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("read tiles sequence: %w", err)
+	}
+	for _, ddl := range []string{
+		tilesTableDDL("tiles_new"),
+		`INSERT INTO tiles_new (` + tilesRebuildColumns + `)
+			SELECT ` + tilesRebuildColumns + ` FROM tiles`,
+		`DROP TABLE tiles`,
+		`ALTER TABLE tiles_new RENAME TO tiles`,
+	} {
+		if _, err := tx.ExecContext(ctx, ddl); err != nil {
+			return fmt.Errorf("rebuild tiles: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, tilesIndexDDL); err != nil {
+		return fmt.Errorf("rebuild tiles indexes: %w", err)
+	}
+	if seq.Valid {
+		// The rename carried tiles_new's sequence row (seeded at max surviving
+		// id) over to 'tiles'; raise it back to the pre-rebuild high-water mark
+		// so deleted ids stay dead. INSERT covers the empty-table edge (no row
+		// was minted by the copy).
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO sqlite_sequence (name, seq) SELECT 'tiles', 0
+			 WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'tiles')`); err != nil {
+			return fmt.Errorf("seed tiles sequence: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sqlite_sequence SET seq = ? WHERE name = 'tiles' AND seq < ?`,
+			seq.Int64, seq.Int64); err != nil {
+			return fmt.Errorf("restore tiles sequence: %w", err)
+		}
+	}
+	return nil
 }
 
 // addColumnDDL builds a migration run-func executing one additive DDL

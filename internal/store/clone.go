@@ -220,6 +220,13 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		if n.TextMode != "" {
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
+	case rpc.KindPane:
+		// The layout blob is shared by refcount like a text body; the copy
+		// diverges on its first edit (content addressing). NULL (never
+		// arranged) copies as NULL.
+		if n.BlobID != 0 {
+			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
+		}
 	}
 	// alt_user is storage-only (deliberately not on rpc.Tile), so the latch is
 	// read straight from the source row: a user-owned name must stay
@@ -419,7 +426,11 @@ func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef
 	switch kind {
 	case rpc.KindWell:
 		return childGrid, 0
-	case rpc.KindText:
+	case rpc.KindText, rpc.KindPane:
+		// A pane tile owns its layout blob exactly as a text tile owns its
+		// body: clone shares by refcount, delete decs, GC at zero. The
+		// PLACES the layout references are not owned — deleting a workspace
+		// deletes only the arrangement.
 		return 0, blob
 	case rpc.KindURL, rpc.KindShell:
 		return 0, previewBlob

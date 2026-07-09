@@ -82,6 +82,8 @@ const (
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
 	// GridwellSetTileAltProcedure is the fully-qualified name of the Gridwell's SetTileAlt RPC.
 	GridwellSetTileAltProcedure = "/gridwell.v1.Gridwell/SetTileAlt"
+	// GridwellSetPaneLayoutProcedure is the fully-qualified name of the Gridwell's SetPaneLayout RPC.
+	GridwellSetPaneLayoutProcedure = "/gridwell.v1.Gridwell/SetPaneLayout"
 	// GridwellSetContentZoomProcedure is the fully-qualified name of the Gridwell's SetContentZoom RPC.
 	GridwellSetContentZoomProcedure = "/gridwell.v1.Gridwell/SetContentZoom"
 	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
@@ -121,6 +123,10 @@ type GridwellClient interface {
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
+	// SetPaneLayout writes a pane tile's serialized workspace layout.
+	// Framing-class (never bumps version); path-free by id. See the request
+	// message for both rationales.
+	SetPaneLayout(context.Context, *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error)
 	// SetContentZoom persists the per-tile content scale (text font, terminal
 	// font, page zoom — issue #82). Framing: never bumps version. Refused for
 	// wells (their view_zoom is the grid viewport, a different concept).
@@ -253,6 +259,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
 			connect.WithClientOptions(opts...),
 		),
+		setPaneLayout: connect.NewClient[v1.SetPaneLayoutRequest, v1.TileResponse](
+			httpClient,
+			baseURL+GridwellSetPaneLayoutProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetPaneLayout")),
+			connect.WithClientOptions(opts...),
+		),
 		setContentZoom: connect.NewClient[v1.SetContentZoomRequest, v1.TileResponse](
 			httpClient,
 			baseURL+GridwellSetContentZoomProcedure,
@@ -300,6 +312,7 @@ type gridwellClient struct {
 	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	setTileAlt        *connect.Client[v1.SetTileAltRequest, v1.TileResponse]
+	setPaneLayout     *connect.Client[v1.SetPaneLayoutRequest, v1.TileResponse]
 	setContentZoom    *connect.Client[v1.SetContentZoomRequest, v1.TileResponse]
 	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
@@ -396,6 +409,11 @@ func (c *gridwellClient) SetTileAlt(ctx context.Context, req *connect.Request[v1
 	return c.setTileAlt.CallUnary(ctx, req)
 }
 
+// SetPaneLayout calls gridwell.v1.Gridwell.SetPaneLayout.
+func (c *gridwellClient) SetPaneLayout(ctx context.Context, req *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.setPaneLayout.CallUnary(ctx, req)
+}
+
 // SetContentZoom calls gridwell.v1.Gridwell.SetContentZoom.
 func (c *gridwellClient) SetContentZoom(ctx context.Context, req *connect.Request[v1.SetContentZoomRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.setContentZoom.CallUnary(ctx, req)
@@ -444,6 +462,10 @@ type GridwellHandler interface {
 	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
+	// SetPaneLayout writes a pane tile's serialized workspace layout.
+	// Framing-class (never bumps version); path-free by id. See the request
+	// message for both rationales.
+	SetPaneLayout(context.Context, *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error)
 	// SetContentZoom persists the per-tile content scale (text font, terminal
 	// font, page zoom — issue #82). Framing: never bumps version. Refused for
 	// wells (their view_zoom is the grid viewport, a different concept).
@@ -572,6 +594,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellSetPaneLayoutHandler := connect.NewUnaryHandler(
+		GridwellSetPaneLayoutProcedure,
+		svc.SetPaneLayout,
+		connect.WithSchema(gridwellMethods.ByName("SetPaneLayout")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellSetContentZoomHandler := connect.NewUnaryHandler(
 		GridwellSetContentZoomProcedure,
 		svc.SetContentZoom,
@@ -634,6 +662,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
 		case GridwellSetTileAltProcedure:
 			gridwellSetTileAltHandler.ServeHTTP(w, r)
+		case GridwellSetPaneLayoutProcedure:
+			gridwellSetPaneLayoutHandler.ServeHTTP(w, r)
 		case GridwellSetContentZoomProcedure:
 			gridwellSetContentZoomHandler.ServeHTTP(w, r)
 		case GridwellSetRootViewProcedure:
@@ -721,6 +751,10 @@ func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTileAlt is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetPaneLayout(context.Context, *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetPaneLayout is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) SetContentZoom(context.Context, *connect.Request[v1.SetContentZoomRequest]) (*connect.Response[v1.TileResponse], error) {

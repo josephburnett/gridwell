@@ -144,3 +144,52 @@ func TestDeleteExitWellThroughPluginNoCascade(t *testing.T) {
 		}
 	}
 }
+
+// TestPaneDispatch: the pane kind's plugin-level contract. CreateTile routes
+// a pane create (carrying the optional initial layout in Data); SetTile
+// REFUSES the kind (the layout rides its own verb — the mapping stays total,
+// nothing falls to a silent no-op); SetPaneLayout writes the blob without a
+// version bump (framing).
+func TestPaneDispatch(t *testing.T) {
+	p := openPlugin(t)
+	root := rootGrid(t, p)
+	ctx := context.Background()
+
+	pt := createTile(t, p, root, &gridwellv1.Tile{Kind: "pane", X: 0, Y: 4, W: 2, H: 2, AltText: "ws"},
+		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
+	if pt.Kind != "pane" || pt.BlobId == 0 || pt.AltText != "ws" {
+		t.Fatalf("pane create: %+v", pt)
+	}
+
+	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: pt.Id, Version: pt.Version,
+		Tile: &gridwellv1.Tile{Kind: "pane"}}); err == nil {
+		t.Error("SetTile on a pane tile must be refused (layout rides SetPaneLayout)")
+	}
+
+	if _, err := p.SetPaneLayout(ctx, &gridwellv1.SetPaneLayoutRequest{
+		TileId: pt.Id, Version: pt.Version,
+		Data: []byte(`{"v":1,"root":{"split":{"dir":"v","ratio":0.5,"a":{"pane":{"id":"p1","zoom":1}},"b":{"pane":{"id":"p2","zoom":1}}}},"focus":"p2"}`),
+	}); err != nil {
+		t.Fatalf("SetPaneLayout: %v", err)
+	}
+	after := getTile(t, p, pt.Id)
+	if after.Version != pt.Version {
+		t.Errorf("layout write bumped version %d -> %d (framing must not)", pt.Version, after.Version)
+	}
+	if after.BlobId == pt.BlobId {
+		t.Errorf("layout write did not move the blob")
+	}
+
+	// The layout reads back over the generic content path with the codec's
+	// media type (self-describing).
+	body, err := p.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: pt.Id})
+	if err != nil {
+		t.Fatalf("GetTileContent: %v", err)
+	}
+	if body.MediaType != "application/vnd.gridwell.pane-layout+json" {
+		t.Errorf("media_type = %q", body.MediaType)
+	}
+	if len(body.Data) == 0 {
+		t.Error("layout content empty")
+	}
+}

@@ -223,6 +223,10 @@ func CreateShellToProto(r *CreateShellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H}}
 }
+func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
+	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label}, Data: r.Data}
+}
 
 // SetTile converters. The wire has a single SetTile dispatched on the target
 // tile's Kind; these helpers map each kind's framing/preview writeback onto it.

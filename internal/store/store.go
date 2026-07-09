@@ -34,6 +34,7 @@ var (
 	ErrNotTextTile     = errors.New("not a text tile")
 	ErrNotWellTile     = errors.New("not a well tile")
 	ErrNotShellTile    = errors.New("not a shell tile")
+	ErrNotPaneTile     = errors.New("not a pane tile")
 	ErrVersionConflict = errors.New("version mismatch")
 )
 

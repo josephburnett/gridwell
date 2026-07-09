@@ -143,3 +143,35 @@ func TestContentZoomIsFraming(t *testing.T) {
 		t.Error("SetContentZoom on a well must be refused")
 	}
 }
+
+// TestSetPaneLayoutIsFramingNoVersionBump: a pane tile's whole layout is
+// arrangement of references to other content — the SetWellView of workspaces
+// (owner decision 2026-07-08: no layout history; edit in place). Writing it
+// must NOT bump the version, or every casual split/resize would invalidate
+// caches and churn edit history that deliberately doesn't exist.
+func TestSetPaneLayoutIsFramingNoVersionBump(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+
+	tile, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "ws", nil)
+	if err != nil {
+		t.Fatalf("CreatePane: %v", err)
+	}
+	v0 := tile.Version
+
+	out, err := s.SetPaneLayout(ctx, mustParseID(t, tile.ID), v0,
+		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
+	if err != nil {
+		t.Fatalf("SetPaneLayout: %v", err)
+	}
+	if out.Version != v0 {
+		t.Errorf("layout write bumped version %d -> %d; layout is framing", v0, out.Version)
+	}
+	if tileVersion(t, s, tile.ID) != v0 {
+		t.Errorf("layout write bumped the stored version")
+	}
+	if out.BlobID == 0 {
+		t.Errorf("layout not persisted")
+	}
+}
