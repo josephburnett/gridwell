@@ -52,6 +52,7 @@ func (a *App) installTestHook() {
 			}
 			return nil
 		}),
+		"workspace":     js.FuncOf(a.thWorkspace),
 		"launcher":      js.FuncOf(a.thLauncher),
 		"palette":       js.FuncOf(a.thPalette),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
@@ -495,6 +496,23 @@ func stringsToAny(ss []string) []any {
 	out := make([]any, len(ss))
 	for i, s := range ss {
 		out[i] = s
+	}
+	return out
+}
+
+// thWorkspace exposes the workspace stack: nesting depth, crumb names, and
+// the current pane tile's id — what a spec needs to assert "the bar is
+// there, named right, and ascent actually left". Read-only over the same
+// state the bar renders, so it can't disagree with pixels.
+func (a *App) thWorkspace(js.Value, []js.Value) any {
+	names := a.ws.Names()
+	out := map[string]any{
+		"depth": a.ws.Depth(),
+		"names": stringsToAny(names),
+	}
+	if top := a.ws.Top(); top != nil {
+		out["tileID"] = top.TileID
+		out["readOnly"] = top.ReadOnly
 	}
 	return out
 }

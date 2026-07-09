@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -329,9 +330,15 @@ func (a *App) draw() {
 	// The rename pill tracks the focused pane's top-center (issue #61).
 	a.syncRenamePill()
 
-	// The notice strip lives in the band layoutPanes reserved below every
-	// pane; drawn last so a notice is never painted over.
+	// The reserved bottom bands, drawn last so nothing paints over them:
+	// the workspace bar (when inside a pane tile), then the notice strip.
+	a.drawWorkspaceBar()
 	a.drawErrStrip()
+
+	// Inside a workspace, every repaint arms the debounced layout persister:
+	// the blob is DERIVED from the live tree (encode + hash-diff), so there
+	// is no per-gesture persistence call site to forget.
+	a.scheduleWorkspaceSave()
 }
 
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.
@@ -347,7 +354,11 @@ func (a *App) layoutPanes() map[string]pane.Rect {
 // minus the reserved notice strip. One owner — the cascading divider resize
 // (pane.ResizeThrough) must see the exact rect the layout uses.
 func (a *App) rootLayoutRect() pane.Rect {
-	return pane.Rect{X: 0, Y: 0, W: a.width, H: a.height - errsurface.StripHeight(a.errs.Len())}
+	// Two reserved bands, bottom-up: the notice strip, then the workspace
+	// bar (visible only inside a pane tile). Panes fill what's left, so
+	// neither band can be painted over — by canvas or native views.
+	return pane.Rect{X: 0, Y: 0, W: a.width,
+		H: a.height - errsurface.StripHeight(a.errs.Len()) - wsbar.Height(a.ws.Depth())}
 }
 
 // drawErrStrip paints the notice strip in the reserved band at the bottom of

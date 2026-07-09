@@ -59,6 +59,12 @@ func (a *App) replaceURLNow() {
 //     For text mode, fill cursor (col, row) read from the textarea.
 //   - Otherwise: TileIDs = path; viewport from Cx, Cy, Zoom.
 func (a *App) encodeFocusedPaneURL() url.State {
+	// Inside a workspace, the pane tile IS the place: the interior (every
+	// pane's anchor/path/viewport) is server-owned by the layout blob, so
+	// nothing else rides the URL (one fact, one owner — the blob wins).
+	if top := a.ws.Top(); top != nil {
+		return url.State{Workspace: top.TileID}
+	}
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return url.State{}
@@ -113,6 +119,14 @@ func (a *App) applyURLOnBoot() {
 	if err != nil {
 		// Bad URL — drop to root.
 		state = url.State{}
+	}
+
+	// A workspace place restores the innermost pane tile from its blob; the
+	// workspace stack stays empty above it (nesting is session-only), so a
+	// bar ascent falls back to the pane tile's containing grid.
+	if state.Workspace != "" {
+		go a.bootWorkspace(state.Workspace)
+		return
 	}
 
 	p := a.tree.FocusedPane()

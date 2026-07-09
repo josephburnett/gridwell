@@ -54,6 +54,15 @@ type State struct {
 	// cursor position to preserve. Encoded as `?c=Col&r=Row`.
 	CursorMode bool
 	Col, Row   int
+
+	// Workspace is the qualified TILE id of the pane tile the user is
+	// inside (`?w=`). When set, it is the WHOLE place: the workspace's
+	// interior — every pane's anchor, path, and viewport — is server-owned
+	// (the layout blob), so no path/anchor/viewport is encoded alongside it
+	// (one fact, one owner; the blob wins). Nesting is session-only, so
+	// only the innermost workspace rides the URL; ascending after a reload
+	// falls back to the pane tile's containing grid.
+	Workspace string
 }
 
 // DefaultZoom is the implicit zoom value when `z` is absent.
@@ -126,6 +135,12 @@ func GridState(path []string, cx, cy, zoom float64) State {
 // entirely when no params are set; defaults are stripped so a fresh
 // pane at root produces just "/".
 func Encode(s State) string {
+	// Inside a workspace the pane tile IS the place; nothing else rides.
+	if s.Workspace != "" {
+		q := url.Values{}
+		q.Set("w", s.Workspace)
+		return "/?" + q.Encode()
+	}
 	var path strings.Builder
 	if len(s.TileIDs) == 0 {
 		path.WriteByte('/')
@@ -218,6 +233,9 @@ func Decode(raw string) (State, error) {
 	}
 	if v, ok := q["a"]; ok {
 		s.Anchor = v[0]
+	}
+	if v, ok := q["w"]; ok {
+		s.Workspace = v[0]
 	}
 	if cv, ok := q["c"]; ok {
 		if rv, okR := q["r"]; okR {

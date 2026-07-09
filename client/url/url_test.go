@@ -356,3 +356,29 @@ func TestAnchorRoundTrip(t *testing.T) {
 		t.Errorf("tile ids = %v, want %v", out.TileIDs, in.TileIDs)
 	}
 }
+
+// TestWorkspaceURLRoundTrip: inside a workspace the pane tile is the WHOLE
+// place — `?w=<qualified tile id>` and nothing else (the interior is
+// server-owned by the layout blob; encoding a path/viewport alongside would
+// be a second copy of a fact the blob owns).
+func TestWorkspaceURLRoundTrip(t *testing.T) {
+	raw := Encode(State{Workspace: "abcd-uuid/42", Anchor: "ignored/1", TileIDs: []string{"7"}, X: 3})
+	if raw != "/?w=abcd-uuid%2F42" {
+		t.Fatalf("Encode workspace = %q", raw)
+	}
+	s, err := Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Workspace != "abcd-uuid/42" {
+		t.Fatalf("Workspace = %q", s.Workspace)
+	}
+	if s.Anchor != "" || len(s.TileIDs) != 0 {
+		t.Fatalf("workspace URL must carry nothing else: %+v", s)
+	}
+	// A chained (remote) workspace id survives the round trip.
+	s2, err := Decode(Encode(State{Workspace: "ssh-uuid/plugin-uuid/9"}))
+	if err != nil || s2.Workspace != "ssh-uuid/plugin-uuid/9" {
+		t.Fatalf("chained workspace: %+v err=%v", s2, err)
+	}
+}

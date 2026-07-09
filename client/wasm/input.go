@@ -223,6 +223,12 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		}
 		return nil
 	}
+	// Workspace bar: the reserved band above the strip. A left-click on a
+	// crumb LEAVES that workspace (and everything deeper) — the one gesture
+	// that crosses the workspace boundary; in-pane ascent never does.
+	if args[0].Get("button").Int() == 0 && a.workspaceBarClick(sx, sy) {
+		return nil
+	}
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil
@@ -984,6 +990,11 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 		return true
 	case rpc.IsContentDescentKind(hit.Kind):
 		a.startTextDescent(p, hit, nil)
+		return true
+	case rpc.IsWorkspaceKind(hit.Kind):
+		// The third descent verb: swap the whole pane tree for the stored
+		// workspace. The way back out is the bar, not the corner circle.
+		a.startWorkspaceDescent(p, hit)
 		return true
 	}
 	return false
