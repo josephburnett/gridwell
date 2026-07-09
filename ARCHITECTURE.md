@@ -443,6 +443,16 @@ comments corrected). What remains is *naming* drift:
 - **Open a live URL tile.** Canvas places a rect; IPC asks the native layer for a
   `WebContentsView` on the plugin partition; `syncURLViews` tracks its bounds
   every frame and parks it during overlays.
+- **Enter a workspace (pane tile).** The THIRD descent verb: flush every
+  outer leaf (the collapse path's flush — text saves, url/shell freeze,
+  forgetPane), push a `client/workspace` frame (outer tree + origin pane +
+  tile id/version), decode the layout blob (`client/pane` LayoutV1; ids are
+  owner-frame-relative, the reader prepends its transit chain), swap
+  `App.tree`. The bar (`client/wsbar`, reserved band like the notice strip)
+  names the nesting and owns the way out: crumb k leaves workspace k and
+  deeper. While inside, `draw()` arms a debounced persister that encodes the
+  live tree, hash-diffs, and posts `SetPaneLayout` (framing — never bumps
+  version) only on change; the URL is `?w=<tile id>` and nothing else.
 - **Show the menu.** `menu.Open(paneID)` on the focused pane (the one owner —
   `client/menu`); native overlays park; canvas paints the menu on top. Closing
   goes through the same owner's transitions (focus change, ascent, gesture end).
@@ -471,6 +481,7 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
 | I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — separation verified **by code inspection only**. No mid-transition event-injection test exists, and the optimistic-echo reconcile (last-writer-wins, no version interlock) is untested at any level. | ⚠️ inspected, **untested** |
 | I12 | A plugin's user state survives its source being unreachable | `proc`: Probe-before-sweep; `fs`: ENOENT-only sweep (`cce8614`), both tested (§4) | ✅ construction + tested |
+| I13 | A workspace (pane tile) restores exactly as left; a pure visit never writes | the live tree is the ONE in-session owner; the blob is the at-rest form, DERIVED by the persister (encode + hash-diff — no per-gesture hooks to forget; identical bytes = no write). Codec round-trip property + golden v1 fixture (`client/pane`), persister decision unit-tested (`client/workspace`), round trip + reload + read-only-blob e2e (`workspace-*.spec.ts`) | ✅ construction + tested |
 
 Progress this effort converted most of the bottom half toward the top: **I8/I10
 construction-enforced and tested; I7/I9 verified and locked/tested.** I8 was

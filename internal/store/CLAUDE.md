@@ -68,10 +68,18 @@ version bookkeeping and equivalence stay honest.
 `ALTER TABLE ADD COLUMN` **cannot** change the table-level `CHECK` constraint on
 `tiles` (the `kind IN (…)` / per-kind column rules). Adding a new tile kind
 therefore needs a **table-rebuild migration**, all inside the migration tx:
-create `tiles_new` with the new CHECK → `INSERT INTO tiles_new SELECT … FROM
-tiles` → `DROP TABLE tiles` → `ALTER TABLE tiles_new RENAME TO tiles` → recreate
-the three `idx_tiles_*` indexes. The equivalence and chain tests still guard the
-result. Reach for this only when a CHECK must change.
+create `tiles_new` with the new CHECK → `INSERT INTO tiles_new (explicit
+columns, id included) SELECT … FROM tiles` → `DROP TABLE tiles` → `ALTER TABLE
+tiles_new RENAME TO tiles` → recreate the three `idx_tiles_*` indexes — **and
+save/restore the `sqlite_sequence` row for `tiles`**: `DROP TABLE` deletes it,
+and the copy re-seeds at the max *surviving* id, so without the restore the ids
+of previously-deleted tiles get REUSED (violating the identity invariant below;
+embeds and deep links would resolve to the wrong tile). The v5 migration
+(`rebuildTilesForPaneKind`, the first executed rebuild) is the worked example:
+it builds `tiles_new` from the same `tilesTableDDL` text a fresh Open uses (one
+DDL source, no drift), and its fixture pins the id-reuse trap. The equivalence
+and chain tests still guard the result. Reach for this only when a CHECK must
+change.
 
 ## Test discipline (must stay green)
 
