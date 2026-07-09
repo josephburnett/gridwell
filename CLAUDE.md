@@ -45,14 +45,24 @@ Exceptions are deliberate and few: the menu appears only on the focused pane (to
 show focus), and processes/files outside Gridwell may come and go outside our
 control (though their *placement* stays stable while they exist).
 
-**Session-ephemeral by decision (issue #13, owner call 2026-07-08):** the
-split-pane layout (splits, ratios, pane zoom — the whole `pane.Tree`), the
-rendered-mode caret, and the selection live only in the client session and
-reset on reload. These are the *documented* exceptions to charter §7 ("no
-client-only state") — transient workspace scaffolding, not content; nothing
-they lose is a user's data. Only the focused pane's descent path + viewport
-rides the URL. Do not persist these without a new owner decision, and do not
-re-litigate the choice.
+**Session-ephemeral by decision (issue #13, owner call 2026-07-08; pane
+tiles added 2026-07-09):** the SESSION split-pane layout (splits, ratios,
+pane zoom — the `pane.Tree` at the root of a session), the rendered-mode
+caret, and the selection live only in the client session and reset on
+reload. These are the *documented* exceptions to charter §7 ("no client-only
+state") — transient workspace scaffolding, not content; nothing they lose is
+a user's data. Only the focused pane's descent path + viewport rides the URL.
+**The opt-in durable home for a layout is the `pane` tile** (owner decision
+2026-07-09): make a workspace a *thing* and its whole arrangement — splits,
+ratios, per-pane places and viewports, focus, zoom — becomes a server fact
+(the layout blob, written by the snapshot-diff persister; layout writes are
+framing-class and never bump version). The session tree at the root stays
+ephemeral; the workspace *stack* (which pane tile you are inside, and the
+outer tree each descent replaced) is session-only like portal frames — a
+reload restores the innermost workspace from `?w=`, and its bar ascent falls
+back to the pane tile's containing grid. Do not persist the remaining
+session-ephemeral items without a new owner decision, and do not re-litigate
+the choice.
 
 ---
 

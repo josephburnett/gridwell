@@ -36,15 +36,24 @@ const wsSaveDebounceMs = 500
 // rewriting history).
 func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 	originPane := p.ID
-	if pt.BlobID == 0 {
-		// Never arranged: the default workspace, writable from the start.
-		tree := defaultWorkspaceTree()
-		a.installWorkspace(pt, tree, originPane, false, nil, true)
-		return
-	}
 	tileID := pt.ID
-	tile := *pt
 	go func() {
+		// Refetch the tile rather than trusting the cached row: a stale
+		// BlobID of 0 (another client's first arrange whose echo hasn't
+		// landed here yet) would install the WRITABLE default, and the
+		// persister could then overwrite the fresh arrangement — layout
+		// writes carry no version bump to conflict on. One RPC closes the
+		// window to genuine concurrent edits (the I11/#5 residual class).
+		fresh, err := a.cl.GetTile(context.Background(), tileID)
+		if err != nil {
+			a.surfaceRPCError("GetTile", err)
+			return
+		}
+		if fresh.BlobID == 0 {
+			// Never arranged: the default workspace, writable from the start.
+			a.installWorkspace(fresh, defaultWorkspaceTree(), originPane, false, nil, true)
+			return
+		}
 		data, err := a.cl.GetTileContent(context.Background(), tileID)
 		if err != nil {
 			a.surfaceRPCError("GetTileContent", err)
@@ -59,7 +68,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 			tree = defaultWorkspaceTree()
 			readOnly = true
 		}
-		a.installWorkspace(&tile, tree, originPane, readOnly, data, true)
+		a.installWorkspace(fresh, tree, originPane, readOnly, data, true)
 	}()
 }
 
@@ -82,6 +91,11 @@ func defaultWorkspaceTree() *pane.Tree {
 func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string, readOnly bool, baseline []byte, keepOuter bool) {
 	a.transition = nil
 	a.menu.Close()
+	// Entering a NESTED workspace: flush the current one's layout first —
+	// its tree is about to sit un-drawn in a frame for an unbounded time,
+	// and the debounce must not still be holding its latest arrangement.
+	// A no-op at depth 0 (no workspace to flush).
+	a.flushWorkspaceSave()
 	outer := a.tree
 	a.flushDroppedSubtree(outer.Root)
 	if !keepOuter {
