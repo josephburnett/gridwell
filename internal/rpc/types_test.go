@@ -161,3 +161,36 @@ func TestPluginWellTile(t *testing.T) {
 		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
 	}
 }
+
+// TestKindPartition pins the three descent-class predicates as a PARTITION of
+// the descendable kinds: every kind belongs to exactly one of grid descent
+// (IsWellKind), text-focus descent (IsContentDescentKind), or workspace
+// descent (IsWorkspaceKind). A new kind that joins no class — or two — falls
+// through (or double-fires) the click router and the URL-restore walk, the
+// exact drift that once dropped shell descents on reload.
+func TestKindPartition(t *testing.T) {
+	all := []string{KindWell, KindText, KindURL, KindShell, KindPane}
+	for _, k := range all {
+		n := 0
+		if IsWellKind(k) {
+			n++
+		}
+		if IsContentDescentKind(k) {
+			n++
+		}
+		if IsWorkspaceKind(k) {
+			n++
+		}
+		if n != 1 {
+			t.Errorf("kind %q belongs to %d descent classes, want exactly 1", k, n)
+		}
+	}
+	if !IsWorkspaceKind(KindPane) {
+		t.Errorf("IsWorkspaceKind(%q) = false, want true", KindPane)
+	}
+	for _, k := range []string{KindWell, KindText, KindURL, KindShell, ""} {
+		if IsWorkspaceKind(k) {
+			t.Errorf("IsWorkspaceKind(%q) = true, want false", k)
+		}
+	}
+}

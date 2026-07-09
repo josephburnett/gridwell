@@ -136,6 +136,9 @@ func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, e
 func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateShellToProto(req))))
 }
+func (c *Client) CreatePane(ctx context.Context, req *CreatePaneRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreatePaneToProto(req))))
+}
 
 // Set* are typed sugar over the single SetTile RPC.
 func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Tile, error) {
@@ -187,6 +190,15 @@ func (c *Client) UpdateText(ctx context.Context, req *UpdateTextRequest) (*Tile,
 // tile (the server latches ownership so automatic captures defer, issue #61).
 func (c *Client) SetTileAlt(ctx context.Context, tileID, alt string) (*Tile, error) {
 	return tileResp(c.cl.SetTileAlt(ctx, connect.NewRequest(&pb.SetTileAltRequest{TileId: tileID, Alt: alt})))
+}
+
+// SetPaneLayout writes a pane tile's serialized workspace layout (the
+// LayoutV1 blob). Framing-class: never bumps version; path-free by id (see
+// the proto rationale).
+func (c *Client) SetPaneLayout(ctx context.Context, tileID string, version int64, data []byte) (*Tile, error) {
+	return tileResp(c.cl.SetPaneLayout(ctx, connect.NewRequest(&pb.SetPaneLayoutRequest{
+		TileId: tileID, Version: version, Data: data,
+	})))
 }
 
 // SetContentZoom persists a tile's content scale (framing; never bumps

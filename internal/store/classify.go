@@ -34,6 +34,7 @@ var sentinelClasses = []struct {
 	{ErrNotTextTile, ClassInvalidArgument},
 	{ErrNotWellTile, ClassInvalidArgument},
 	{ErrNotShellTile, ClassInvalidArgument},
+	{ErrNotPaneTile, ClassInvalidArgument},
 	{ErrOverlap, ClassConflict},
 	{ErrVersionConflict, ClassConflict},
 	// Schema divergence is a deployment/data problem, not a caller mistake:

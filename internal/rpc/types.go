@@ -25,6 +25,11 @@ const (
 	KindText  = "text"
 	KindURL   = "url"
 	KindShell = "shell"
+	// KindPane is a durable workspace: a tile whose content blob is a
+	// serialized split-pane layout (the LayoutV1 codec in client/pane).
+	// Descending into it swaps the whole pane tree; ascending restores the
+	// outer arrangement. The string is frozen into the localdb CHECK.
+	KindPane = "pane"
 )
 
 // IsWellKind reports whether a tile kind has a child grid that can be
@@ -134,6 +139,17 @@ func PluginWellTile(pl PluginInfo) Tile {
 // reload (the restore walk omitted shell).
 func IsContentDescentKind(kind string) bool {
 	return kind == KindText || kind == KindURL || kind == KindShell
+}
+
+// IsWorkspaceKind reports whether a tile kind is a pane tile — the THIRD
+// descent class. A workspace descent is neither a grid descent (IsWellKind:
+// push onto pane.Path) nor a text-focus descent (IsContentDescentKind: set
+// pane.TextFocus); it swaps the whole pane tree and pushes a workspace
+// frame. The three predicates partition the descendable kinds; the pin test
+// keeps the sets disjoint and total so a new kind cannot silently fall
+// through a descent or URL-restore dispatch.
+func IsWorkspaceKind(kind string) bool {
+	return kind == KindPane
 }
 
 // Grid source kinds. NULL ("") means a regular Gridwell-owned grid. fs
@@ -315,6 +331,20 @@ type CreateTextRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	Data   []byte `json:"data"`
+}
+
+type CreatePaneRequest struct {
+	Path   Path   `json:"path"`
+	GridID string `json:"grid_id"`
+	X      int64  `json:"x"`
+	Y      int64  `json:"y"`
+	W      int64  `json:"w"`
+	H      int64  `json:"h"`
+	// Label is the workspace name (alt_text; the bottom bar's breadcrumb).
+	Label string `json:"label,omitempty"`
+	// Data is the optional initial layout blob; empty = never arranged
+	// (descent installs the default single pane).
+	Data []byte `json:"data,omitempty"`
 }
 
 type CreateURLRequest struct {

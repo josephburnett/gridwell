@@ -266,6 +266,24 @@ message SetTileAltRequest {
   string alt = 2;
 }
 
+// SetPaneLayout writes a pane tile's layout blob (the serialized split-pane
+// workspace: split tree, per-pane places and viewports — the LayoutV1 codec
+// in client/pane). Framing-class: the whole layout is arrangement of
+// references to other content — the SetWellView of workspaces — so it NEVER
+// bumps version (owner decision 2026-07-08: layout history is not preserved;
+// edit in place). Version is still claimed for the in-place-edit check like
+// every tile write.
+//
+// Path-free by tile id (the SetTileAlt shape, not the UpdateText shape):
+// after a reload the client is INSIDE the workspace and does not hold the
+// pane tile's containing descent path — persistence must not depend on
+// reconstructing a place that may have gone stale.
+message SetPaneLayoutRequest {
+  string tile_id = 1;
+  int64  version = 2;
+  bytes  data    = 3;
+}
+
 // SetContentZoom persists the content scale of a text/shell/url tile.
 // Framing (no version bump); version is still claimed for the in-place-edit
 // check like every tile write.
@@ -332,7 +350,7 @@ message CreateTileRequest {
   Path   path    = 1;
   string grid_id = 2;
   Tile   tile    = 3;
-  bytes  data    = 4;   // text body bytes; empty for other kinds
+  bytes  data    = 4;   // text body / pane layout bytes; empty for other kinds
 }
 
 // ShellSessionAlive reports whether the tile's gridwell-private tmux
@@ -509,6 +527,11 @@ service Gridwell {
   rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
   rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
+
+  // SetPaneLayout writes a pane tile's serialized workspace layout.
+  // Framing-class (never bumps version); path-free by id. See the request
+  // message for both rationales.
+  rpc SetPaneLayout(SetPaneLayoutRequest) returns (TileResponse);
 
   // SetContentZoom persists the per-tile content scale (text font, terminal
   // font, page zoom — issue #82). Framing: never bumps version. Refused for

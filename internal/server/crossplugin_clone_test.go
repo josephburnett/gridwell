@@ -239,3 +239,76 @@ func TestCloneAcrossPluginsChecksVersion(t *testing.T) {
 		t.Fatal("stale-version cross-plugin clone succeeded, want conflict")
 	}
 }
+
+// TestClonePaneAcrossPluginsCopiesLayout: a workspace crosses a plugin
+// boundary as a BYTE COPY of its layout blob (like text) — and because the
+// layout's ids are owner-frame-relative by the codec's rule, the copy's panes
+// keep naming the ORIGINAL places: arrangement copies, referenced content is
+// shared. The copies then diverge independently (content addressing).
+func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
+	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
+	ctx := context.Background()
+
+	layout := []byte(`{"v":1,"root":{"pane":{"id":"p1","anchor":"someplugin/1","zoom":1}},"focus":"p1"}`)
+	pt, err := cl.CreatePane(ctx, &rpc.CreatePaneRequest{
+		GridID: rootA, X: 0, Y: 0, W: 2, H: 2, Label: "ws", Data: layout,
+	})
+	if err != nil {
+		t.Fatalf("CreatePane: %v", err)
+	}
+	cp, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: pt.ID, Version: pt.Version, DestGridID: rootB, X: 1, Y: 1,
+	})
+	if err != nil {
+		t.Fatalf("cross-plugin pane clone: %v", err)
+	}
+	if u, _, _ := rpc.SplitID(cp.ID); u != uuidB {
+		t.Errorf("copy lives in %q, want %q", u, uuidB)
+	}
+	if cp.Kind != rpc.KindPane || cp.AltText != "ws" {
+		t.Errorf("copy shape: %+v", cp)
+	}
+	body, err := cl.GetTileContent(ctx, cp.ID)
+	if err != nil {
+		t.Fatalf("copy content: %v", err)
+	}
+	if string(body) != string(layout) {
+		t.Errorf("copied layout = %q, want the source bytes (references preserved verbatim)", body)
+	}
+
+	// Independence: rearranging the copy leaves the source's layout alone.
+	if _, err := cl.SetPaneLayout(ctx, cp.ID, cp.Version,
+		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)); err != nil {
+		t.Fatalf("edit copy: %v", err)
+	}
+	orig, err := cl.GetTileContent(ctx, pt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(orig) != string(layout) {
+		t.Errorf("editing the copy changed the source layout: %q", orig)
+	}
+}
+
+// TestClonePaneAcrossPluginsNeverArranged: a pane tile with no layout blob
+// clones as an empty workspace (no Data round trip to fail on).
+func TestClonePaneAcrossPluginsNeverArranged(t *testing.T) {
+	cl, _, rootA, _, rootB := twoPluginServer(t)
+	ctx := context.Background()
+
+	pt, err := cl.CreatePane(ctx, &rpc.CreatePaneRequest{
+		GridID: rootA, X: 0, Y: 0, W: 2, H: 2, Label: "empty",
+	})
+	if err != nil {
+		t.Fatalf("CreatePane: %v", err)
+	}
+	cp, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: pt.ID, Version: pt.Version, DestGridID: rootB, X: 0, Y: 0,
+	})
+	if err != nil {
+		t.Fatalf("cross-plugin clone of never-arranged pane: %v", err)
+	}
+	if cp.BlobID != 0 {
+		t.Errorf("never-arranged copy grew a blob: %+v", cp)
+	}
+}

@@ -79,6 +79,10 @@ func (p *Plugin) SetContentZoom(ctx context.Context, r *gridwellv1.SetContentZoo
 	return p.c.SetContentZoom(ctx, r)
 }
 
+func (p *Plugin) SetPaneLayout(ctx context.Context, r *gridwellv1.SetPaneLayoutRequest) (*gridwellv1.TileResponse, error) {
+	return p.c.SetPaneLayout(ctx, r)
+}
+
 // ── server-stream forwards (downstream only) ─────────────────────────────────
 
 func (p *Plugin) GetSession(r *gridwellv1.GetSessionRequest, ss grpc.ServerStreamingServer[gridwellv1.BlobChunk]) error {

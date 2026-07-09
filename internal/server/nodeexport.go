@@ -213,6 +213,14 @@ func (n *nodeExport) SetTileAlt(ctx context.Context, r *pb.SetTileAltRequest) (*
 	return resp.Msg, nil
 }
 
+func (n *nodeExport) SetPaneLayout(ctx context.Context, r *pb.SetPaneLayoutRequest) (*pb.TileResponse, error) {
+	resp, err := n.h.SetPaneLayout(ctx, connect.NewRequest(r))
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return resp.Msg, nil
+}
+
 func (n *nodeExport) SetContentZoom(ctx context.Context, r *pb.SetContentZoomRequest) (*pb.TileResponse, error) {
 	resp, err := n.h.SetContentZoom(ctx, connect.NewRequest(r))
 	if err != nil {

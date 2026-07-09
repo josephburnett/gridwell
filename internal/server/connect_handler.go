@@ -308,6 +308,20 @@ func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb
 	return h.tileResp(uuid, resp, err)
 }
 
+// SetPaneLayout routes by tile id (path-free, the SetTileAlt shape) — the
+// layout blob itself is opaque here; its ids are owner-frame-relative by the
+// codec's rule, so no rewriting happens at this hop or any transit hop.
+func (h *connectHandler) SetPaneLayout(ctx context.Context, req *connect.Request[pb.SetPaneLayoutRequest]) (*connect.Response[pb.TileResponse], error) {
+	c, local, uuid, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.SetPaneLayout(ctx, &pb.SetPaneLayoutRequest{
+		TileId: local, Version: req.Msg.Version, Data: req.Msg.Data,
+	})
+	return h.tileResp(uuid, resp, err)
+}
+
 func (h *connectHandler) SetContentZoom(ctx context.Context, req *connect.Request[pb.SetContentZoomRequest]) (*connect.Response[pb.TileResponse], error) {
 	c, local, uuid, err := h.route(req.Msg.TileId)
 	if err != nil {
@@ -420,6 +434,20 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 	case "shell":
 		// A shell's PTY session is plugin-local; the copy is a fresh shell
 		// tile carrying the same label.
+	case "pane":
+		// A workspace clones as a byte copy of its layout blob (like text).
+		// The layout's ids are owner-frame-relative — the copy's panes keep
+		// naming the ORIGINAL places (a pane tile is arrangement of
+		// references, not content), which is exactly the cross-plugin link
+		// semantics, carried in bytes instead of a child_grid_id. A
+		// never-arranged pane tile (no blob) copies with no Data.
+		if st.BlobId != 0 {
+			body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
+			if err != nil {
+				return nil, asConnectError(err)
+			}
+			create.Data = body.Data
+		}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("cross-plugin clone: unsupported tile kind %q", st.Kind))
