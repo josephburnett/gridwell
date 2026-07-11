@@ -49,6 +49,11 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   const lower = panes[panes.length - 1];
   expect(lower.focused, 'the new lower pane took focus').toBe(true);
   expect(lower.y, 'the new pane sits below').toBeGreaterThan(panes[0].y);
+  // The universal pane minimum (issue #167) holds for the programmatic
+  // ephemeral split too: neither half may be born below MinPanePx (32).
+  for (const p of panes) {
+    expect(p.h, `pane ${p.id} height respects the universal minimum`).toBeGreaterThanOrEqual(32);
+  }
   await expect
     .poll(async () => {
       const sc = await gw.getGrid(scratchGridID);

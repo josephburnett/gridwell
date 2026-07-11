@@ -123,17 +123,16 @@ func TestClassifyPriority(t *testing.T) {
 }
 
 func TestSplitOutcome(t *testing.T) {
-	// A 200x200 pane; split off the top. band = 10.
+	// A 200x200 pane; split off the top.
 	r := pane.Rect{X: 0, Y: 0, W: 200, H: 200}
-	band := 10.0
 
 	// No drag away from the top edge → cancel.
-	if _, ok := SplitOutcome(pane.SideTop, r, band, 100, 5, 100, 5); ok {
+	if _, ok := SplitOutcome(pane.SideTop, r, 100, 5, 100, 5); ok {
 		t.Errorf("SplitOutcome with no drag = ok, want cancel")
 	}
 
 	// Drag down well into the pane → active, ratio in (0,1).
-	ratio, ok := SplitOutcome(pane.SideTop, r, band, 100, 5, 100, 100)
+	ratio, ok := SplitOutcome(pane.SideTop, r, 100, 5, 100, 100)
 	if !ok {
 		t.Fatalf("SplitOutcome with a real drag = cancel, want ok")
 	}

@@ -32,10 +32,10 @@ const (
 const resizeBandPx = 10.0
 
 // rightCloseThreshold is the minimum size (in screen px) a pane side
-// must have along the resize axis to *not* be closed at release. Two
-// resize bands wide so the gesture reads as "you can't shrink past a
-// pane that's only resize zones."
-const rightCloseThreshold = 2 * resizeBandPx
+// must have along the resize axis to *not* be closed at release: the
+// universal pane minimum (issue #167) — a right-drag crushing a side
+// below what any pane may legally be reads as "close it".
+const rightCloseThreshold = pane.MinPanePx
 
 // rightDragKind classifies an in-flight right-button gesture. Set on
 // mousedown; the tile-vs-pane fork is decided by where the cursor
@@ -812,15 +812,12 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 	if lr.targetSplit.Dir == pane.Horizontal {
 		cursor = sy
 	}
-	pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, cursor, leftResizeMinPx)
+	// The universal pane minimum (issue #167). Unlike the right-button
+	// resize (which collapses a side crushed below the same minimum), the
+	// left button clamps here so a minimized pane is always recoverable.
+	pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, cursor, pane.MinPanePx)
 	a.draw()
 }
-
-// leftResizeMinPx is the smallest a pane side may shrink to under a
-// left-drag resize. Unlike the right-button resize (which collapses a side
-// below rightCloseThreshold), the left button clamps here so a minimized
-// pane is always recoverable. Passed into pane.ResizeThrough.
-const leftResizeMinPx = 32.0
 
 // commitSwap exchanges the origin pane with whatever pane the cursor
 // is over at release. Same-pane release = no-op (cancel). Off-canvas
@@ -843,7 +840,7 @@ func (a *App) commitSwap(rd *rightDragState, sx, sy float64) {
 //
 // Anything else is cancelled silently.
 func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
-	ratio, ok := gesture.SplitOutcome(rd.splitSide, rd.splitPane, resizeBandPx, rd.startX, rd.startY, sx, sy)
+	ratio, ok := gesture.SplitOutcome(rd.splitSide, rd.splitPane, rd.startX, rd.startY, sx, sy)
 	if !ok {
 		return
 	}
