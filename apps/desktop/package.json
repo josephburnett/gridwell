@@ -82,5 +82,8 @@
         "nsis"
       ]
     }
+  },
+  "dependencies": {
+    "tldts": "^7.4.8"
   }
 }
