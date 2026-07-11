@@ -312,17 +312,25 @@ func SplitGestureActive(side Side, startX, startY, curX, curY float64) bool {
 	return false
 }
 
+// MinPanePx is THE minimum size of a pane side, universal across every way
+// a pane can acquire a size (issue #167): the left-drag resize clamp, the
+// right-drag crush-to-collapse threshold, the drag-to-split clamp, and the
+// programmatic ephemeral split. One owner — a pane below this cannot be
+// produced, whatever the gesture. (The resize BAND, resizeBandPx=10, is a
+// different fact: how thick the grab zone is, not how small a pane may be.)
+const MinPanePx = 32.0
+
 // SplitClampedPosition projects the cursor onto the split's axis and
 // clamps it to the valid range. The valid range leaves at least
-// 2*bandPx on each side so both resulting panes can hold a full resize
-// band. The second return is false when the cursor is outside the
-// valid range (or the pane is too small to split at all), letting the
-// caller render the preview in a "won't commit" style.
-func SplitClampedPosition(side Side, paneRect Rect, bandPx, curX, curY float64) (float64, bool) {
+// MinPanePx on each side — the universal pane minimum — so a split can
+// never produce a sub-minimum pane. The second return is false when the
+// cursor is outside the valid range (or the pane is too small to split at
+// all), letting the caller render the preview in a "won't commit" style.
+func SplitClampedPosition(side Side, paneRect Rect, curX, curY float64) (float64, bool) {
 	switch side {
 	case SideTop, SideBottom:
-		minY := paneRect.Y + 2*bandPx
-		maxY := paneRect.Y + paneRect.H - 2*bandPx
+		minY := paneRect.Y + MinPanePx
+		maxY := paneRect.Y + paneRect.H - MinPanePx
 		if minY >= maxY {
 			return 0, false
 		}
@@ -334,8 +342,8 @@ func SplitClampedPosition(side Side, paneRect Rect, bandPx, curX, curY float64) 
 		}
 		return curY, true
 	case SideLeft, SideRight:
-		minX := paneRect.X + 2*bandPx
-		maxX := paneRect.X + paneRect.W - 2*bandPx
+		minX := paneRect.X + MinPanePx
+		maxX := paneRect.X + paneRect.W - MinPanePx
 		if minX >= maxX {
 			return 0, false
 		}

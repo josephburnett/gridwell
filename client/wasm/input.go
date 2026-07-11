@@ -2213,6 +2213,15 @@ func (a *App) openLinkBelow(paneID, url string) {
 	// (a background page can window.open). Focus it first — that is also
 	// where the user's attention is about to go.
 	a.focusToPane(p)
+	// The universal pane minimum applies to programmatic splits too (issue
+	// #167): a pane too short for two minimum panes opens the visit in
+	// place instead of birthing a sub-minimum pane (SplitOnSideAt itself
+	// only clamps the ratio — its doc makes sub-min rejection the caller's
+	// job).
+	if r := paneRectFor(a, p); r.H < 2*pane.MinPanePx {
+		a.visitEphemeralURL(p, url)
+		return
+	}
 	newP, err := a.tree.SplitOnSideAt(pane.SideBottom, 0.5)
 	if err != nil {
 		a.visitEphemeralURL(p, url)

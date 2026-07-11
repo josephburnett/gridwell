@@ -353,7 +353,7 @@ func jsArray(vals ...float64) js.Value {
 // grey otherwise.
 func (a *App) drawSplitPreview(rd *rightDragState) {
 	a.drawSplitZoneHint(rd)
-	pos, valid := pane.SplitClampedPosition(rd.splitSide, rd.splitPane, resizeBandPx, rd.curX, rd.curY)
+	pos, valid := pane.SplitClampedPosition(rd.splitSide, rd.splitPane, rd.curX, rd.curY)
 	active := valid && pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, rd.curX, rd.curY)
 
 	// Find the pane being split for color resolution.

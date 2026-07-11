@@ -114,14 +114,15 @@ func Classify(in Input) Kind {
 // SplitOutcome resolves the release of a Split gesture into the final
 // child-A ratio, composing the already-tested pane helpers: the gesture
 // must be dragged away from its edge (SplitGestureActive), land in a
-// position that leaves both children at least bandPx (SplitClampedPosition),
-// and that position maps to a ratio (SplitRatioFromPos). ok is false for a
-// silent cancel.
-func SplitOutcome(side pane.Side, paneRect pane.Rect, bandPx, startX, startY, curX, curY float64) (ratio float64, ok bool) {
+// position that leaves both children at least pane.MinPanePx
+// (SplitClampedPosition — the universal minimum, issue #167), and that
+// position maps to a ratio (SplitRatioFromPos). ok is false for a silent
+// cancel.
+func SplitOutcome(side pane.Side, paneRect pane.Rect, startX, startY, curX, curY float64) (ratio float64, ok bool) {
 	if !pane.SplitGestureActive(side, startX, startY, curX, curY) {
 		return 0, false
 	}
-	pos, ok := pane.SplitClampedPosition(side, paneRect, bandPx, curX, curY)
+	pos, ok := pane.SplitClampedPosition(side, paneRect, curX, curY)
 	if !ok {
 		return 0, false
 	}

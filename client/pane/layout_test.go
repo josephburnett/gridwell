@@ -322,35 +322,45 @@ func TestSplitGestureActive(t *testing.T) {
 }
 
 func TestSplitClampedPosition(t *testing.T) {
-	// 1000x800 pane at origin, band 10 -> valid Y range [20, 780], valid X range [20, 980].
+	// Issue #167: the clamp leaves MinPanePx (32) on each side — the SAME
+	// universal minimum every other sizing path enforces. 1000x800 pane at
+	// origin -> valid Y range [32, 768], valid X range [32, 968].
 	pr := Rect{X: 0, Y: 0, W: 1000, H: 800}
-	band := 10.0
 
-	pos, ok := SplitClampedPosition(SideTop, pr, band, 500, 400)
+	pos, ok := SplitClampedPosition(SideTop, pr, 500, 400)
 	if !ok || pos != 400 {
 		t.Errorf("top middle: got (%v,%v), want (400,true)", pos, ok)
 	}
-	pos, ok = SplitClampedPosition(SideTop, pr, band, 500, 5)
-	if ok || pos != 20 {
-		t.Errorf("top above valid: got (%v,%v), want (20,false)", pos, ok)
+	pos, ok = SplitClampedPosition(SideTop, pr, 500, 5)
+	if ok || pos != MinPanePx {
+		t.Errorf("top above valid: got (%v,%v), want (%v,false)", pos, ok, MinPanePx)
 	}
-	pos, ok = SplitClampedPosition(SideTop, pr, band, 500, 900)
-	if ok || pos != 780 {
-		t.Errorf("top below valid: got (%v,%v), want (780,false)", pos, ok)
+	pos, ok = SplitClampedPosition(SideTop, pr, 500, 900)
+	if ok || pos != 800-MinPanePx {
+		t.Errorf("top below valid: got (%v,%v), want (%v,false)", pos, ok, 800-MinPanePx)
 	}
-	pos, ok = SplitClampedPosition(SideLeft, pr, band, 5, 400)
-	if ok || pos != 20 {
-		t.Errorf("left of valid: got (%v,%v), want (20,false)", pos, ok)
+	pos, ok = SplitClampedPosition(SideLeft, pr, 5, 400)
+	if ok || pos != MinPanePx {
+		t.Errorf("left of valid: got (%v,%v), want (%v,false)", pos, ok, MinPanePx)
 	}
-	pos, ok = SplitClampedPosition(SideRight, pr, band, 990, 400)
-	if ok || pos != 980 {
-		t.Errorf("right of valid: got (%v,%v), want (980,false)", pos, ok)
+	pos, ok = SplitClampedPosition(SideRight, pr, 990, 400)
+	if ok || pos != 1000-MinPanePx {
+		t.Errorf("right of valid: got (%v,%v), want (%v,false)", pos, ok, 1000-MinPanePx)
 	}
-	// Pane too small to split.
-	tiny := Rect{X: 0, Y: 0, W: 30, H: 30}
-	_, ok = SplitClampedPosition(SideTop, tiny, band, 15, 15)
+	// Pane too small to hold two minimum panes: unsplittable.
+	tiny := Rect{X: 0, Y: 0, W: 2*MinPanePx - 1, H: 2*MinPanePx - 1}
+	_, ok = SplitClampedPosition(SideTop, tiny, 31, 31)
 	if ok {
-		t.Error("tiny pane: should not be in valid range")
+		t.Error("sub-2*min pane: should not be splittable")
+	}
+}
+
+// TestMinPanePxValue pins the universal minimum (issue #167): every sizing
+// path — left-drag clamp, right-drag crush threshold, split clamp, the
+// programmatic ephemeral split — reads THIS constant. Change it consciously.
+func TestMinPanePxValue(t *testing.T) {
+	if MinPanePx != 32.0 {
+		t.Errorf("MinPanePx = %v, want 32", MinPanePx)
 	}
 }
 
