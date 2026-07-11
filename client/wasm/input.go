@@ -281,7 +281,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// as the right-button resize, but it never closes a pane (clamped to a
 	// recoverable minimum). Checked first so a grab near the edge wins over
 	// content interactions. No divider on that side → falls through.
+	// preventDefault, like the right-button path: the unprevented default
+	// action (native selection/drag) engages past the OS drag threshold on
+	// a FAST drag and steals the pointer from the canvas mid-resize
+	// (issue #168; invisible to synthetic CDP input, so the e2e pins the
+	// prevented flag rather than the steal itself).
 	if a.armLeftResize(p, r, sx, sy) {
+		args[0].Call("preventDefault")
 		return nil
 	}
 
