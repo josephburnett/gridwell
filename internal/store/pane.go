@@ -88,3 +88,57 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 	}
 	return out, nil
 }
+
+// WorkspaceEphemeralRefs returns the set of LOCAL tile ids referenced as a
+// content descent (text_focus) by ANY pane tile's layout blob in this store.
+// The boot scratch sweep reads it to spare workspace-owned ephemerals (issue
+// #174 part 2). The blob is the ONE record of workspace ownership — no second
+// bookkeeping table — so a reference dies exactly when its pane tile (or the
+// arrangement that named it) does, and the next sweep reclaims the tile.
+// unreadable=true when any pane blob failed to decode (corrupt, or written by
+// a newer Gridwell): the caller must then reap NOTHING — a wrongly-swept
+// workspace shell is a killed process, unrecoverable; a delayed sweep is not.
+func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]bool, unreadable bool, err error) {
+	uuid, err := s.PluginUUID(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT blob_id FROM tiles WHERE kind = 'pane' AND blob_id IS NOT NULL`)
+	if err != nil {
+		return nil, false, fmt.Errorf("workspace refs: %w", err)
+	}
+	defer rows.Close()
+	var blobIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, false, err
+		}
+		blobIDs = append(blobIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	refs = map[string]bool{}
+	for _, blobID := range blobIDs {
+		data, _, err := s.GetBlobWithMedia(ctx, blobID)
+		if err != nil {
+			unreadable = true
+			continue
+		}
+		tree, err := pane.DecodeLayout(data, func(id string) string { return id })
+		if err != nil {
+			unreadable = true
+			continue
+		}
+		for _, id := range pane.LeafTextFocusIDs(tree) {
+			// Blob ids are qualified in the owning node's frame; only
+			// same-plugin references resolve to rows in THIS store.
+			if u, local, ok := rpc.SplitID(id); ok && u == uuid {
+				refs[local] = true
+			}
+		}
+	}
+	return refs, unreadable, nil
+}

@@ -2,6 +2,7 @@ package localdb_test
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -419,6 +420,79 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 	// Idempotent: a clean scratch sweeps zero.
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
 		t.Errorf("second sweep = (%d, %v), want (0, nil)", swept, err)
+	}
+}
+
+// TestCleanupScratchSparesWorkspaceEphemerals (issue #174 part 2): a scratch
+// tile referenced by a pane tile's layout blob is a WORKSPACE'S ephemeral —
+// part of a durable arrangement, alive on purpose across app restarts (its
+// tmux session survives them) — and the boot sweep must not reap it. An
+// unreferenced scratch tile still sweeps (the crash net), and once the pane
+// tile is deleted the reference dies with the blob, so the next sweep
+// reclaims it: self-healing, no second bookkeeping copy.
+func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
+	p := openPlugin(t)
+	ctx := context.Background()
+	scratch := scratchGrid(t, p)
+
+	uuid, err := p.Store().PluginUUID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := p.Store().RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A workspace-owned ephemeral shell + an orphaned (crash-leaked) one.
+	owned, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
+		Tile: &gridwellv1.Tile{Kind: "shell", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaked, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
+		Tile: &gridwellv1.Tile{Kind: "shell", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The pane tile whose layout references the owned shell (qualified id,
+	// exactly what the client persister writes).
+	pt, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
+		Tile: &gridwellv1.Tile{Kind: "pane", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := fmt.Sprintf(`{"v":1,"root":{"pane":{"id":"p1","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}},"focus":"p1"}`,
+		uuid+"/"+root, uuid+"/"+owned.Tile.Id)
+	if _, err := p.SetPaneLayout(ctx, &gridwellv1.SetPaneLayoutRequest{
+		TileId: pt.Tile.Id, Version: pt.Tile.Version, Data: []byte(layout),
+	}); err != nil {
+		t.Fatalf("SetPaneLayout: %v", err)
+	}
+
+	swept, err := p.CleanupScratch(ctx)
+	if err != nil {
+		t.Fatalf("CleanupScratch: %v", err)
+	}
+	if swept != 1 {
+		t.Errorf("swept = %d, want 1 (only the leaked tile)", swept)
+	}
+	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: owned.Tile.Id}); err != nil {
+		t.Errorf("workspace-owned ephemeral was swept at boot: %v", err)
+	}
+	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: leaked.Tile.Id}); err == nil {
+		t.Error("crash-leaked scratch tile survived the sweep")
+	}
+
+	// Delete the pane tile row (the blob reference dies with it): the next
+	// sweep reclaims the formerly-owned ephemeral. (The server-level delete
+	// reap usually gets there first; the sweep is the net.)
+	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id, Version: pt.Tile.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 1 {
+		t.Errorf("post-delete sweep = (%d, %v), want (1, nil) — the reference must die with the blob", swept, err)
 	}
 }
 
