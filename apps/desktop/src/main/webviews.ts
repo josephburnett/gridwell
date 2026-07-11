@@ -66,11 +66,22 @@ interface Entry {
   // that raced the load is never lost.
   namePill: WebContentsView;
   nameLabel: string;
+  // lastUserClickMs is when the view's preload last forwarded a left press —
+  // the one legitimate way a view acquires OS focus (issue #172). The focus
+  // guard treats a grab inside this grace window as user intent.
+  lastUserClickMs: number;
 }
 
 // CONTROL_SIZE / CONTROL_MARGIN place the corner button at the bottom-right
 // of the URL view, matching the canvas circle's position on frozen panes.
 const CONTROL_SIZE = 36;
+
+// USER_CLICK_FOCUS_GRACE_MS is how long after a forwarded left press a view
+// may legitimately acquire OS focus (issue #172): the native focus lands
+// immediately on press, while the wasm marks the pane focused a round trip
+// later — the stamp bridges that gap. Long enough for a slow frame, far
+// shorter than any refresh cadence worth stealing for.
+const USER_CLICK_FOCUS_GRACE_MS = 1500;
 const CONTROL_MARGIN = 6;
 
 // CONTROL_HTML is the corner button's page: a circular back-arrow chip. Its
@@ -148,6 +159,12 @@ export interface RegistryCallbacks {
   // while this view owns OS keyboard focus (issue #170). The renderer's
   // applyContentZoom — the one owner of cache + persistence — handles it.
   onZoomKey?: (ev: ZoomKeyEvent) => void;
+  // onFocusStolen fires when a live view acquired OS keyboard focus WITHOUT
+  // the user acting on its pane — a page-initiated navigation makes Chromium
+  // focus the new document's widget (issue #172). index.ts hands focus back
+  // to the root window's webContents, where the canvas and every shell
+  // overlay live.
+  onFocusStolen?: (ev: { paneId: string }) => void;
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
@@ -375,7 +392,7 @@ export class WebviewRegistry {
         webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
       });
       const startHidden = this._globalHidden;
-      e = { view, control, namePill, nameLabel, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid, userZoom: contentZoom };
+      e = { view, control, namePill, nameLabel, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid, userZoom: contentZoom, lastUserClickMs: 0 };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -522,6 +539,18 @@ export class WebviewRegistry {
       origins.map((origin) => ses.clearStorageData({ origin }).catch(() => {})),
     );
     wc.reload();
+  }
+
+  // noteUserClick stamps the entry whose view the given webContents belongs
+  // to: its preload just forwarded a left press — the one legitimate path to
+  // OS focus for a live view (issue #172). The focus guard honors the stamp.
+  noteUserClick(sender: WebContents): void {
+    for (const e of this.entries.values()) {
+      if (e.view.webContents === sender) {
+        e.lastUserClickMs = Date.now();
+        return;
+      }
+    }
   }
 
   // clearSiteDataFor is the pane-addressed variant (the e2e drives it —
@@ -717,6 +746,20 @@ export class WebviewRegistry {
     e.view.webContents.on('did-navigate', emit);
     e.view.webContents.on('did-navigate-in-page', emit);
     e.view.webContents.on('page-title-updated', emit);
+    // A page-initiated navigation (self-refresh timer, meta-refresh, JS
+    // reload) makes Chromium focus the new document's widget — silently
+    // stealing OS keyboard focus from whatever the user was typing in
+    // (issue #172), and the grab can land (and re-land) asynchronously after
+    // any single navigation event, so the guard sits on the focus event
+    // itself: a view may hold OS focus only when its pane is the focused
+    // pane OR the user just pressed into it (the forwarded left-down stamps
+    // lastUserClickMs before wasm marks the pane focused). Anything else is
+    // a steal — hand focus back.
+    e.view.webContents.on('focus', () => {
+      if (e.focused) return;
+      if (Date.now() - e.lastUserClickMs < USER_CLICK_FOCUS_GRACE_MS) return;
+      this.cb.onFocusStolen?.({ paneId });
+    });
     // zoomFactor resets across (cross-origin) navigations — re-apply the
     // min-width zoom once the new document has loaded.
     e.view.webContents.on('did-finish-load', () => this.applyMinWidthZoom(e));
