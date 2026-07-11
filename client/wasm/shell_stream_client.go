@@ -27,8 +27,8 @@ type shellStreamConn struct {
 	ws           js.Value
 	term         js.Value // xterm.Terminal
 	fitAddon     js.Value // FitAddon — proposeDimensions + fit
-	renderAddon  js.Value // renderer addon: WebglAddon, or CanvasAddon fallback
-	rendererKind string   // "webgl" or "canvas" — which addon actually attached (issue #128)
+	renderAddon  js.Value // renderer addon: WebglAddon, or zero (DOM fallback)
+	rendererKind string   // "webgl" or "dom" — which renderer actually attached (issue #128)
 	container    js.Value // host <div> in the DOM
 	circle       js.Value // corner ascend handle painted above the terminal
 
@@ -229,6 +229,11 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		return
 	}
 	opts := js.Global().Get("Object").New()
+	// xterm 6 gates its "proposed" APIs — parser.registerOscHandler (the
+	// gridwell-open OSC 5522 hook) and term.unicode.activeVersion (the
+	// Unicode 11 widths) — behind this flag (issue #175). Both are load-
+	// bearing here; without it Terminal method calls panic the wasm.
+	opts.Set("allowProposedApi", true)
 	opts.Set("fontFamily", `ui-monospace, "SF Mono", Menlo, Consolas, monospace`)
 	// Base font scaled by the tile's persisted content zoom (issue #82), so a
 	// zoomed terminal comes back at your size on every descent.
@@ -247,9 +252,18 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	opts.Set("theme", theme)
 	term := Terminal.New(opts)
 
+	// Unicode 11 widths (issue #175): the default table is Unicode 6 —
+	// modern emoji/wide glyphs get the wrong cell width, shifting every
+	// following cell on the line (heavy-TUI scatter, worst at the edges).
+	// Loaded BEFORE open so the first paint already measures correctly.
+	if u11 := js.Global().Get("Unicode11Addon"); u11.Truthy() {
+		term.Call("loadAddon", u11.Get("Unicode11Addon").New())
+		term.Get("unicode").Set("activeVersion", "11")
+	}
+
 	// Fit addon resizes the buffer dimensions to fit the container, which we
-	// then mirror to the server. The renderer addon (WebGL, canvas fallback)
-	// is attached AFTER open — the WebGL addon requires an opened terminal.
+	// then mirror to the server. The renderer addon (WebGL, DOM fallback) is
+	// attached AFTER open — the WebGL addon requires an opened terminal.
 	fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
 	term.Call("loadAddon", fitAddon)
 	term.Call("open", container)
@@ -498,22 +512,23 @@ func newShellCircle(doc js.Value) js.Value {
 // attachShellRenderer gives the opened terminal a GPU renderer: the WebGL
 // addon, falling back to the legacy canvas addon when WebGL2 is unavailable
 // (headless/xvfb without GL, an exotic browser in web mode) or when the GPU
-// context is later lost. The canvas renderer's dirty-region tracking misses
-// cursor-addressed rewrites and scroll-region scrolls — stale/misaligned
-// glyphs until a resize forces a full repaint (issue #84); the WebGL renderer
-// redraws from buffer state every frame, so that artifact class cannot occur.
+// context is later lost. The retired canvas addon's dirty-region tracking
+// missed cursor-addressed rewrites and scroll-region scrolls (issue #84);
+// the WebGL renderer redraws from buffer state every frame, and the DOM
+// fallback repaints rows wholesale, so that artifact class cannot occur.
 // Returns the active addon (held on shellStreamConn to pin it; the terminal's
 // dispose tears it down).
 func attachShellRenderer(term js.Value) (js.Value, string) {
 	if addon, ok := tryWebglAddon(term); ok {
 		return addon, "webgl"
 	}
-	// The canvas renderer's dirty-region artifacts are why WebGL exists here
-	// (#84) — a silent downgrade brought them back once already (Chromium
-	// dropped the automatic SwiftShader fallback, issue #128). The kind is
-	// recorded and e2e-asserted so it can never be silent again.
-	shellLog("shell renderer: canvas FALLBACK (webgl unavailable)")
-	return loadCanvasAddon(term), "canvas"
+	// No renderer addon → xterm's built-in DOM renderer. Slower, but free of
+	// the canvas addon's dirty-region artifact class (#84) — and the canvas
+	// addon has no stable xterm-6 release, so it's gone (issue #175). The
+	// kind is recorded and e2e-asserted so a downgrade can never be silent
+	// (issue #128).
+	shellLog("shell renderer: DOM FALLBACK (webgl unavailable)")
+	return js.Value{}, "dom"
 }
 
 // tryWebglAddon loads the WebGL renderer, reporting ok=false when the addon
@@ -523,7 +538,7 @@ func attachShellRenderer(term js.Value) (js.Value, string) {
 func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 	defer func() {
 		if recover() != nil { // loadAddon throws when WebGL2 is unavailable
-			shellLog("webgl renderer unavailable; using canvas renderer")
+			shellLog("webgl renderer unavailable; using the DOM renderer")
 			addon, ok = js.Value{}, false
 		}
 	}()
@@ -534,13 +549,12 @@ func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 	a := ns.Get("WebglAddon").New(true) // preserveDrawingBuffer
 	term.Call("loadAddon", a)
 	// A lost GPU context would leave the terminal frozen mid-session: dispose
-	// the webgl addon and continue on the canvas renderer in place. One-shot;
-	// the callback releases itself.
+	// the webgl addon; xterm continues on its built-in DOM renderer in
+	// place. One-shot; the callback releases itself.
 	var lossCb js.Func
 	lossCb = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		shellLog("webgl context lost; falling back to canvas renderer")
+		shellLog("webgl context lost; falling back to the DOM renderer")
 		a.Call("dispose")
-		loadCanvasAddon(term)
 		lossCb.Release()
 		return nil
 	})
@@ -548,18 +562,12 @@ func tryWebglAddon(term js.Value) (addon js.Value, ok bool) {
 	return a, true
 }
 
-// loadCanvasAddon attaches the legacy canvas renderer.
-func loadCanvasAddon(term js.Value) js.Value {
-	a := js.Global().Get("CanvasAddon").Get("CanvasAddon").New()
-	term.Call("loadAddon", a)
-	return a
-}
-
 // shellContentCanvas returns the canvas the terminal CONTENT is painted on —
 // NOT merely the first canvas in the container. The WebGL renderer's main
 // canvas is class-less while its link layer (transparent, glyph-free) comes
 // first in the DOM; capturing the first canvas produced an all-black preview.
-// The canvas renderer paints glyphs on its class="xterm-text-layer" canvas.
+// (The retired canvas addon painted glyphs on a class="xterm-text-layer"
+// canvas; the DOM fallback has no canvas at all — callers handle nil.)
 func shellContentCanvas(container js.Value) js.Value {
 	list := container.Call("querySelectorAll", "canvas")
 	n := list.Get("length").Int()
