@@ -114,7 +114,7 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 // is the shell orange — bash runs outside Gridwell's data world. Reuses
 // urlPreview as the JPEG cache; the cache is keyed by tile id so URL and
 // shell tiles can share a single decode pool.
-func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
+func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool) {
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
 	a.cctx.Call("rect", x, y, w, h)
@@ -136,7 +136,13 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 		drawShellGlyph(a.cctx, x, y, w, h, colorShellBorder)
 	}
 
+	if dashed {
+		setTileDash(a.cctx)
+	}
 	strokeTileBorder(a.cctx, x, y, w, h, colorShellBorder, tileBorderPx)
+	if dashed {
+		clearTileDash(a.cctx)
+	}
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}
@@ -148,7 +154,7 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 //  2. the cached preview JPEG letterboxed into the tile footprint, or a
 //     placeholder showing the URL text if no preview is loaded yet
 //  3. the tile outline + selection highlight
-func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
+func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool) {
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
 	a.cctx.Call("rect", x, y, w, h)
@@ -170,7 +176,13 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected bool) {
 		a.fetchURLPreview(n.ID, n.PreviewBlobID)
 	}
 
+	if dashed {
+		setTileDash(a.cctx)
+	}
 	strokeTileBorder(a.cctx, x, y, w, h, colorURLLine, tileBorderPx)
+	if dashed {
+		clearTileDash(a.cctx)
+	}
 	if selected {
 		drawSelectedTileOutline(a.cctx, x, y, w, h)
 	}

@@ -729,19 +729,19 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindURL:
-		a.drawURLTile(n, x, y, w, h, selected)
+		a.drawURLTile(n, x, y, w, h, selected, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindShell:
-		a.drawShellTile(n, x, y, w, h, selected)
+		a.drawShellTile(n, x, y, w, h, selected, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindPane:
-		a.drawPaneTilePreview(n, x, y, w, h, selected, outside)
+		a.drawPaneTilePreview(n, x, y, w, h, selected, outside, dashed)
 		return
 	}
 	if n.Kind != rpc.KindWell {
-		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx)
+		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
 	// Trigger prefetch if we don't have the child grid yet. Recursion
@@ -1062,7 +1062,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 			continue
 		}
 		nn := n
-		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource), borderPx)
+		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource), borderPx, false)
 		// A url/shell tile shown inside a well preview must carry the same
 		// cached frame the parent-grid renderer paints — otherwise a tile that
 		// is live in another pane stays a flat colored box here while its live
@@ -1111,10 +1111,16 @@ func (a *App) overlayChildPreview(n *rpc.Tile, x, y, w, h, borderPx float64) {
 // `selected` highlights the tile with a dedicated outline color. This is
 // the "flat" renderer used for nested previews (no recursion) and for
 // non-well tiles; the parent-grid renderer is drawNodeWithPreview.
-func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64) {
+func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64, dashed bool) {
 	// Fill + per-kind outline color in one pass; strokeTileBorder draws
 	// the inset border for all kinds that have one. borderPx lets the
-	// caller scale the outline down for distant previews.
+	// caller scale the outline down for distant previews. dashed marks a
+	// LINK (an embed or a dragged reference) — every kind must honor it,
+	// or that kind lies about ownership (issue #169).
+	if dashed {
+		setTileDash(c)
+		defer clearTileDash(c)
+	}
 	switch n.Kind {
 	case rpc.KindWell:
 		c.Set("fillStyle", colorBg)

@@ -82,7 +82,7 @@ func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 // previews use ("one level deep, flat beyond" holds here too: a well or
 // pane tile inside a leaf draws as its flat face). A never-arranged or
 // not-yet-loaded workspace shows the split glyph.
-func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, outside bool) {
+func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx
 	c.Set("fillStyle", colorPaneTileFill)
 	c.Call("fillRect", x, y, w, h)
@@ -108,7 +108,13 @@ func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, out
 		c.Call("restore")
 	}
 
+	if dashed {
+		setTileDash(c)
+	}
 	strokeTileBorder(c, x, y, w, h, colorPaneTileBorder, tileBorderPx)
+	if dashed {
+		clearTileDash(c)
+	}
 	if selected {
 		drawSelectedTileOutline(c, x, y, w, h)
 	}

@@ -129,7 +129,7 @@ func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
 func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
 	n := paletteItemGhostNode(item)
 	outside := tileOutside(&n, false)
-	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx)
+	drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx, false)
 	switch item.primitive {
 	case tplWell:
 		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
