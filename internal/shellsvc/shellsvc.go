@@ -68,7 +68,9 @@ func (l *liveStreamer) OpenSession(tileID string, mode tmux.Mode, cols, rows uin
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("shellsvc: empty tmux argv for tile %s mode %v", tileID, mode)
 	}
-	return shelldriver.Start(shelldriver.Config{Cols: cols, Rows: rows, BashPath: argv[0], Args: argv[1:]})
+	// ctrl.Env carries the shadow-launcher PATH (issue #166): panes inherit
+	// PATH from the tmux SERVER process, which this client may lazy-start.
+	return shelldriver.Start(shelldriver.Config{Cols: cols, Rows: rows, BashPath: argv[0], Args: argv[1:], Env: l.ctrl.Env()})
 }
 
 func (l *liveStreamer) HasSession(tileID string) (bool, error)    { return l.ctrl.HasSession(tileID) }

@@ -63,6 +63,40 @@ else
 fi
 `
 
+// shadowLauncherNames are the url-opening commands shadowed in front of PATH
+// for new shell sessions (issue #166). $BROWSER alone is not enough: emacs
+// browse-url execs xdg-open directly, and a desktop-backed xdg-open resolves
+// the handler via the DE without ever reading $BROWSER. gio is deliberately
+// NOT shadowed — it is a general-purpose file tool, and every DE flow that
+// would reach `gio open` goes through xdg-open first, which is shadowed.
+var shadowLauncherNames = []string{
+	"xdg-open", "gnome-open", "kde-open",
+	"x-www-browser", "www-browser", "sensible-browser",
+}
+
+// shadowLauncherScript is the body of every shadow launcher (issue #166).
+// Web urls are handed to the gridwell-open shim (first %q); anything else —
+// xdg-open opens files too — falls through to the real command of the same
+// name by stripping the shadow dir (second %q) from PATH and re-exec'ing, so
+// host workflows keep working and the script can never exec itself.
+const shadowLauncherScript = `#!/bin/sh
+# gridwell shadow launcher (issue #166): web urls come back to gridwell.
+case "$1" in
+http://*|https://*)
+	exec %q "$1"
+	;;
+esac
+newpath=
+IFS=:
+for d in $PATH; do
+	[ "$d" = %q ] && continue
+	newpath="${newpath:+$newpath:}$d"
+done
+unset IFS
+export PATH="$newpath"
+exec "$(basename "$0")" "$@"
+`
+
 // Controller is one gridwell-owned tmux server. Construct with New;
 // the returned cleanup removes the on-disk config file.
 type Controller struct {
@@ -85,6 +119,10 @@ type Controller struct {
 	// alongside the config); ModeCreate injects it as $BROWSER so terminal
 	// apps hand urls back to gridwell instead of spawning a host browser.
 	browserShim string
+	// shadowDir is the directory of shadow launchers (xdg-open & friends,
+	// issue #166) ModeCreate prepends to the session PATH, catching programs
+	// that exec a system opener directly instead of reading $BROWSER.
+	shadowDir string
 }
 
 // New initializes a Controller on the given socket name. The config
@@ -148,21 +186,54 @@ func New(socketName, binary, shell string) (*Controller, func() error, error) {
 		_ = os.Remove(f.Name())
 		return nil, nil, fmt.Errorf("tmux: chmod browser shim: %w", err)
 	}
+	shadowDir, err := writeShadowLaunchers(shim.Name())
+	if err != nil {
+		_ = os.Remove(shim.Name())
+		_ = os.Remove(f.Name())
+		return nil, nil, err
+	}
 	c := &Controller{
 		binary:      binary,
 		socketName:  socketName,
 		configPath:  f.Name(),
 		shell:       shell,
 		browserShim: shim.Name(),
+		shadowDir:   shadowDir,
 	}
 	cleanup := func() error {
 		err1 := os.Remove(c.configPath)
 		if err2 := os.Remove(c.browserShim); err1 == nil {
 			err1 = err2
 		}
+		if err3 := os.RemoveAll(c.shadowDir); err1 == nil {
+			err1 = err3
+		}
 		return err1
 	}
 	return c, cleanup, nil
+}
+
+// writeShadowLaunchers writes the shadow bin dir (issue #166): one launcher
+// per shadowLauncherNames, each forwarding web urls to the gridwell-open shim
+// at shimPath and falling through to the real command otherwise.
+func writeShadowLaunchers(shimPath string) (string, error) {
+	dir, err := os.MkdirTemp("", "gridwell-shadow-bin-*")
+	if err != nil {
+		return "", fmt.Errorf("tmux: create shadow launcher dir: %w", err)
+	}
+	body := fmt.Sprintf(shadowLauncherScript, shimPath, dir)
+	for _, name := range shadowLauncherNames {
+		p := dir + "/" + name
+		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
+			_ = os.RemoveAll(dir)
+			return "", fmt.Errorf("tmux: write shadow launcher %s: %w", name, err)
+		}
+		if err := os.Chmod(p, 0o755); err != nil {
+			_ = os.RemoveAll(dir)
+			return "", fmt.Errorf("tmux: chmod shadow launcher %s: %w", name, err)
+		}
+	}
+	return dir, nil
 }
 
 // Args returns the argv for spawning a tmux client connected to the
@@ -192,10 +263,10 @@ func (c *Controller) Args(tileID string, mode Mode, cols, rows uint16, startDir 
 			args = append(args, "-c", startDir)
 		}
 		if c.browserShim != "" {
-			// Terminal apps that launch a browser (emacs browse-url,
-			// xdg-open) consult $BROWSER: point it at the gridwell-open
-			// shim so the url comes back as an OSC and descends into an
-			// ephemeral url tile instead of opening Chrome (issue #90).
+			// Terminal apps that read $BROWSER hand the url to the
+			// gridwell-open shim, which sends it back as an OSC and
+			// descends into an ephemeral url tile instead of opening
+			// Chrome (issue #90).
 			args = append(args, "-e", "BROWSER="+c.browserShim)
 		}
 		args = append(args,
@@ -206,6 +277,36 @@ func (c *Controller) Args(tileID string, mode Mode, cols, rows uint16, startDir 
 		args = append(args, "attach-session", "-t", name)
 	}
 	return args
+}
+
+// Env returns the environment for spawning the tmux CLIENT that may
+// lazy-start the gridwell tmux server. tmux (verified on 3.5a) refuses to
+// apply a PATH from `-e`/set-environment to panes — a pane's PATH comes only
+// from the SERVER process's environment — so the shadow-launcher dir (issue
+// #166) must ride the env of the client that starts the server. Consequence:
+// the shadow takes effect when the gridwell tmux server starts; a server
+// already running from an older gridwell keeps its old PATH until it exits
+// (the same "existing sessions keep their env" class as ModeAttach). TERM is
+// defaulted here because handing shelldriver an explicit env bypasses its own
+// fallback. Best-effort: a login script that hard-resets PATH drops the
+// shadow, same as any env-based injection.
+func (c *Controller) Env() []string {
+	env := filterEnv(os.Environ(), "PATH", "TERM")
+	path := os.Getenv("PATH")
+	if c.shadowDir != "" {
+		if path == "" {
+			path = c.shadowDir
+		} else {
+			path = c.shadowDir + ":" + path
+		}
+	}
+	env = append(env, "PATH="+path)
+	term := os.Getenv("TERM")
+	if term == "" {
+		term = "xterm-256color"
+	}
+	env = append(env, "TERM="+term)
+	return env
 }
 
 // Mode is the create-or-attach choice the WS handler makes per
