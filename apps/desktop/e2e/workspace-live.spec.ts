@@ -63,7 +63,7 @@ test('workspace descent freezes an outer live url; ascent restores the frozen de
   // for an explicit revive.
   const panes = await gw.panes();
   const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13);
+  await window.mouse.click(30, barTop + 13, { button: 'right' });
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const restored = (await gw.panes()).find((p: any) => p.textFocus !== '');

@@ -257,13 +257,28 @@ func (a *App) openRenameInput() {
 	if !ok {
 		return
 	}
+	r := a.paneRectByID(p.ID)
+	tileID := target.ID
+	a.openNameInputAt(target.AltText, 180, func(st js.Value) {
+		st.Set("transform", "translateX(-50%)")
+		st.Set("left", pxOf(r.X+r.W/2))
+		st.Set("top", pxOf(r.Y+paneBorderPx+3))
+	}, func(val string) {
+		a.commitRename(tileID, val)
+	})
+}
+
+// openNameInputAt spawns the ONE inline rename input — the same DOM shape
+// and commit/cancel keys for every rename surface (the pane name bubble,
+// the workspace bar crumb). position sets the placement styles; onCommit
+// receives the trimmed value on Enter (Escape/blur cancels).
+func (a *App) openNameInputAt(value string, width float64, position func(st js.Value), onCommit func(string)) {
 	doc := js.Global().Get("document")
 	in := doc.Call("createElement", "input")
 	in.Set("id", "gw-rename-input")
-	in.Set("value", target.AltText)
+	in.Set("value", value)
 	st := in.Get("style")
 	st.Set("position", "absolute")
-	st.Set("transform", "translateX(-50%)")
 	st.Set("zIndex", "8")
 	st.Set("background", colorMenuBg)
 	st.Set("border", "1px solid "+colorFocusBorder)
@@ -272,12 +287,9 @@ func (a *App) openRenameInput() {
 	st.Set("font", "12px sans-serif")
 	st.Set("color", colorMenuItemHi)
 	st.Set("outline", "none")
-	st.Set("width", "180px")
-	r := a.paneRectByID(p.ID)
-	st.Set("left", pxOf(r.X+r.W/2))
-	st.Set("top", pxOf(r.Y+paneBorderPx+3))
+	st.Set("width", pxOf(width))
+	position(st)
 	a.renameEditing = true
-	tileID := target.ID
 
 	closed := false
 	var keyCb, blurCb js.Func
@@ -292,7 +304,7 @@ func (a *App) openRenameInput() {
 		blurCb.Release()
 		a.renameEditing = false
 		if commit {
-			a.commitRename(tileID, val)
+			onCommit(val)
 		}
 		a.draw()
 	}

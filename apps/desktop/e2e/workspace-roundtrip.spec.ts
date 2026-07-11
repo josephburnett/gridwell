@@ -27,7 +27,7 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
 async function barClick(gw: any, window: any): Promise<void> {
   const panes = await gw.panes();
   const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13);
+  await window.mouse.click(30, barTop + 13, { button: 'right' });
   await gw.waitIdle();
 }
 
@@ -54,10 +54,13 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   }).toBe(1);
   expect((await workspaceState(window)).tileID).toBe(pt!.id);
 
-  // 2. Arrange: split, then navigate one leaf into the localdb plugin.
+  // The organize-this default: a fresh workspace opens on the grid its
+  // tile was dropped into — the place you were organizing — not home.
+  expect((await gw.focused()).gridID, 'a fresh workspace must open on its containing grid').toBe(rootGrid);
+
+  // 2. Arrange: split (both leaves inherit the containing grid).
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
-  await gw.enterPlugin('localdb');
 
   // The persister writes the arrangement without any save gesture: the
   // blob appears on the server (never-arranged tiles have no content).
@@ -82,12 +85,8 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
   await expect.poll(async () => (await gw.panes()).length).toBe(2);
   const inner = await gw.panes();
-  const navigated = inner.filter((p: any) => p.anchor && p.anchor !== '' && p.gridID !== '');
-  expect(navigated.length, 'both leaves resolve grids').toBe(2);
-  expect(
-    inner.some((p: any) => p.gridID === rootGrid),
-    'the navigated leaf must still be inside the localdb plugin',
-  ).toBe(true);
+  const resolved = inner.filter((p: any) => p.gridID === rootGrid);
+  expect(resolved.length, 'both leaves must still frame the containing grid').toBe(2);
 
   // Teardown: leave the workspace so the shared session ends at the root.
   await barClick(gw, window);

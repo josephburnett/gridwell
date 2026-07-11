@@ -208,6 +208,7 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 // zoom animation or the async create→fetchGrid refresh.
 func (a *App) thIdle(js.Value, []js.Value) any {
 	return a.transition == nil &&
+		a.wsPending == nil &&
 		a.dragging == nil &&
 		len(a.gridInflight) == 0 &&
 		len(a.tileInflight) == 0

@@ -21,7 +21,7 @@ async function barClickCrumb(gw: any, window: any, level: number): Promise<void>
   const state = await workspaceState(window);
   // Crumbs divide the width evenly (capped at 240px) — click crumb k's center.
   const crumbW = Math.min(width / Math.max(state.depth, 1), 240);
-  await window.mouse.click((level - 1) * crumbW + crumbW / 2, barTop + 13);
+  await window.mouse.click((level - 1) * crumbW + crumbW / 2, barTop + 13, { button: 'right' });
   await gw.waitIdle();
 }
 
@@ -42,10 +42,10 @@ test('nested workspaces: breadcrumbs, session-only membership, safe self-referen
   const B = tileAt(snap, 'pane', ax + 2, ay);
   expect(A && B, 'both pane tiles persisted').toBeTruthy();
 
-  // Enter A; navigate its default pane into the plugin root (where B sits).
+  // Enter A: the organize-this default puts its pane on the CONTAINING
+  // grid (where B sits) — no navigation needed.
   await gw.descendCell(ax, ay);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
-  await gw.enterPlugin('localdb');
   await expect.poll(async () => (await gw.focused()).gridID).toBe(rootGrid);
 
   // A's persister records the pane's PLACE — the grid containing B.
