@@ -82,6 +82,11 @@ const CONTROL_SIZE = 36;
 // later — the stamp bridges that gap. Long enough for a slow frame, far
 // shorter than any refresh cadence worth stealing for.
 const USER_CLICK_FOCUS_GRACE_MS = 1500;
+
+// FOCUS_RECHECK_MS is the settle delay before the steal guard double-checks:
+// long enough for an in-flight widget-focus commit to land, short enough
+// that leaked keystrokes stay negligible.
+const FOCUS_RECHECK_MS = 120;
 const CONTROL_MARGIN = 6;
 
 // CONTROL_HTML is the corner button's page: a circular back-arrow chip. Its
@@ -755,11 +760,22 @@ export class WebviewRegistry {
     // pane OR the user just pressed into it (the forwarded left-down stamps
     // lastUserClickMs before wasm marks the pane focused). Anything else is
     // a steal — hand focus back.
-    e.view.webContents.on('focus', () => {
+    const bounceStolenFocus = () => {
       if (e.focused) return;
       if (Date.now() - e.lastUserClickMs < USER_CLICK_FOCUS_GRACE_MS) return;
       this.cb.onFocusStolen?.({ paneId });
-    });
+      // The grab can still be IN FLIGHT when the bounce runs — Chromium's
+      // widget-focus commit then lands after it with no further focus
+      // event. Recheck once the dust settles and bounce again if the view
+      // still holds focus it shouldn't.
+      setTimeout(() => {
+        if (!e.focused && e.view.webContents.isFocused() &&
+            Date.now() - e.lastUserClickMs >= USER_CLICK_FOCUS_GRACE_MS) {
+          this.cb.onFocusStolen?.({ paneId });
+        }
+      }, FOCUS_RECHECK_MS);
+    };
+    e.view.webContents.on('focus', bounceStolenFocus);
     // zoomFactor resets across (cross-origin) navigations — re-apply the
     // min-width zoom once the new document has loaded.
     e.view.webContents.on('did-finish-load', () => this.applyMinWidthZoom(e));
