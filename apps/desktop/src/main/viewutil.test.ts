@@ -10,6 +10,7 @@ import {
   namePillBounds,
   cookieDomainMatches,
   storageOriginsFor,
+  zoomChordKey,
   minWidthZoomFactor,
   composeZoom,
   serializeHistory,
@@ -364,4 +365,17 @@ test('storageOriginsFor derives origins from matched cookie hosts', () => {
     'https://accounts.google.com',
     'https://google.com',
   ]);
+});
+
+// Issue #170: the live-view zoom forward accepts exactly the key set the
+// wasm handler accepts — a drift here makes the two focus states zoom
+// differently.
+test('zoomChordKey matches the wasm chord set', () => {
+  assert.equal(zoomChordKey({ key: '=', control: true }), '=');
+  assert.equal(zoomChordKey({ key: '+', control: true }), '+');
+  assert.equal(zoomChordKey({ key: '-', meta: true }), '-');
+  assert.equal(zoomChordKey({ key: '0', control: true }), '0');
+  assert.equal(zoomChordKey({ key: '=', control: false, meta: false }), '');
+  assert.equal(zoomChordKey({ key: 'a', control: true }), '');
+  assert.equal(zoomChordKey({ key: 'F11', control: true }), '');
 });

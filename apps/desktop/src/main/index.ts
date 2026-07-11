@@ -2,7 +2,7 @@ import { app, dialog } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, makeNavForwarder, makeOpenBelowForwarder, sendFrame, sendError } from './register';
+import { registerWebviewIpc, makeNavForwarder, makeOpenBelowForwarder, makeZoomKeyForwarder, sendFrame, sendError } from './register';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent } from './viewutil';
 import { applyUserDataOverride } from './userdata';
@@ -77,6 +77,7 @@ async function boot(): Promise<void> {
     onNav: makeNavForwarder(rootWC),
     onError: (ev) => sendError(rootWC, ev.source, ev.message),
     onOpenBelow: makeOpenBelowForwarder(rootWC),
+    onZoomKey: makeZoomKeyForwarder(rootWC),
   });
   registry = reg;
   registerWebviewIpc(reg, rootWC, win);

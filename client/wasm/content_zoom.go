@@ -61,15 +61,8 @@ func (a *App) handleContentZoomKey(ev js.Value) bool {
 	if !(ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()) {
 		return false
 	}
-	var next func(cur float64) float64
-	switch ev.Get("key").String() {
-	case "+", "=":
-		next = func(c float64) float64 { return clampContentZoom(c * contentZoomStep) }
-	case "-":
-		next = func(c float64) float64 { return clampContentZoom(c / contentZoomStep) }
-	case "0":
-		next = func(float64) float64 { return 1.0 }
-	default:
+	next := contentZoomNext(ev.Get("key").String())
+	if next == nil {
 		return false
 	}
 	p := a.tree.FocusedPane()
@@ -85,6 +78,43 @@ func (a *App) handleContentZoomKey(ev js.Value) bool {
 	ev.Call("preventDefault")
 	a.applyContentZoom(p, &t, next(contentZoomOf(&t)))
 	return true
+}
+
+// contentZoomNext maps a zoom-chord key to its step function; nil for keys
+// that are not part of the chord. One mapping for both entry points (the
+// canvas keydown and the live-view forward), so they can never step
+// differently.
+func contentZoomNext(key string) func(cur float64) float64 {
+	switch key {
+	case "+", "=":
+		return func(c float64) float64 { return clampContentZoom(c * contentZoomStep) }
+	case "-":
+		return func(c float64) float64 { return clampContentZoom(c / contentZoomStep) }
+	case "0":
+		return func(float64) float64 { return 1.0 }
+	}
+	return nil
+}
+
+// contentZoomKeyFromView applies a zoom chord forwarded from a LIVE URL view
+// (issue #170): the view owns OS keyboard focus, so the window-level keydown
+// never fires — main intercepts the chord in before-input-event and relays
+// it keyed by pane. Same guard set as handleContentZoomKey, same one owner
+// (applyContentZoom) underneath.
+func (a *App) contentZoomKeyFromView(paneID, key string) {
+	next := contentZoomNext(key)
+	if next == nil {
+		return
+	}
+	p := a.tree.FindPane(paneID)
+	if p == nil || p.TextFocus == "" {
+		return
+	}
+	t, ok := a.descendedTile(p)
+	if !ok || !rpc.IsContentDescentKind(t.Kind) {
+		return
+	}
+	a.applyContentZoom(p, &t, next(contentZoomOf(&t)))
 }
 
 // applyContentZoom updates the cache (the one client copy every reader uses),
