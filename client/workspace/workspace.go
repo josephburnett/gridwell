@@ -79,6 +79,16 @@ func (s *Stack) Top() *Frame {
 	return &s.frames[len(s.frames)-1]
 }
 
+// At returns the frame at a 1-based nesting level (leftmost crumb = 1),
+// mutable (the crumb rename updates Name/TileVersion in place), or nil when
+// out of range.
+func (s *Stack) At(level int) *Frame {
+	if level < 1 || level > len(s.frames) {
+		return nil
+	}
+	return &s.frames[level-1]
+}
+
 // Names returns the breadcrumb labels, outermost first.
 func (s *Stack) Names() []string {
 	out := make([]string, len(s.frames))

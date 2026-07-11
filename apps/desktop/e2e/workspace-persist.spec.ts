@@ -61,7 +61,7 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
   // tile's containing grid.
   const panes = await gw.panes();
   const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13);
+  await window.mouse.click(30, barTop + 13, { button: 'right' });
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   // The re-anchor fetches the tile asynchronously (a click handler cannot

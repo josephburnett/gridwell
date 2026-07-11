@@ -117,6 +117,10 @@ type App struct {
 	// layout is owned by the server blob.
 	ws workspace.Stack
 
+	// wsPending coordinates an in-flight workspace descent (animation ×
+	// fetch); nil when none. thIdle reports busy while it exists.
+	wsPending *wsPending
+
 	// caps is the host capability set (client/caps), derived ONCE at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks
 	// bridgeAvailable() to make a behavior decision.

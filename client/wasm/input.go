@@ -223,10 +223,12 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		}
 		return nil
 	}
-	// Workspace bar: the reserved band above the strip. A left-click on a
-	// crumb LEAVES that workspace (and everything deeper) — the one gesture
-	// that crosses the workspace boundary; in-pane ascent never does.
-	if args[0].Get("button").Int() == 0 && a.workspaceBarClick(sx, sy) {
+	// Workspace bar: the reserved band above the strip. The crumb mirrors
+	// the pane name bubble: LEFT-click renames that workspace inline;
+	// RIGHT-click LEAVES it (and everything deeper) — the one gesture that
+	// crosses the workspace boundary; in-pane ascent never does.
+	if a.workspaceBarClick(sx, sy, args[0].Get("button").Int()) {
+		args[0].Call("preventDefault")
 		return nil
 	}
 	p, r, ok := a.paneAtScreen(sx, sy)
