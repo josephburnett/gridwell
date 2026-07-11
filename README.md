@@ -1,19 +1,18 @@
 # Gridwell
 
 Gridwell is a personal operating environment built on a single principle:
+**things stay as you leave them.**
 
-> **Things stay as you leave them.**
+Tiles live on a 2D grid. Drop one at a coordinate and it stays there. It
+works like a physical space: step out of a room and look back (ascent) and
+you see it exactly as you left it. Step back in (descent) and it is indeed
+the same. Most software resorts, refreshes, and relayouts itself underneath
+you. Gridwell doesn't. It is write-heavy — you rearrange it constantly, drop
+tiles, capture pages, type — but nothing changes except by your explicit
+action. You navigate by remembering where things are, not by searching for
+where they went.
 
-Everything else in this document is derived from that one sentence.
-
-Gridwell is a physical space. Tiles live on a 2D grid; drop one at a
-coordinate and it stays there. Step out of a room and look back (ascent):
-you see it exactly as you left it. Step back in (descent): it is indeed the
-same. The rest of computing resorts, refreshes, and relayouts itself
-underneath you; Gridwell does not. It is write-heavy — you rearrange it
-constantly, drop tiles, capture pages, type — but **nothing changes except by
-your explicit action.** Navigating it is remembering where things are, not
-searching for where they went.
+Everything else in this document derives from that one principle.
 
 ## The principle, derived
 
@@ -22,50 +21,50 @@ Four faces of the one rule:
 1. **Placement is persistent.** A tile at (x, y, w, h) stays until you move
    it. No auto-relayout, no resort, ever.
 2. **Identity is persistent.** A tile's id is assigned once and never
-   changes. Editing rewrites the tile in place; a reference — an embed, a
+   changes. Editing rewrites the tile in place, so a reference — an embed, a
    bookmark, a deep link — always resolves to *that* tile. Copies exist only
-   by the explicit clone gesture: an eager, independent deep copy, so editing
+   by the explicit clone gesture: an eager, independent deep copy. Editing
    one copy can never touch another.
-3. **Preview = descent target = ascent return.** What a tile's preview shows
-   is what you see when you descend into it, and ascending writes back what
-   you were just looking at. One stored framing, read the same way every
-   time. The round trip is idempotent.
-4. **Reading never mutates.** Looking at something is never a write.
+3. **Preview = descent target = ascent return.** A tile's preview shows what
+   you'll see when you descend into it. Ascending writes back what you were
+   just looking at. One stored framing, read the same way every time, so the
+   round trip is idempotent.
+4. **Reading never mutates.** Looking at something is never a content edit.
    Panning, zooming, and scrolling re-frame a preview (a real, persisted
-   mutation) but are not content edits — a tile's `version` bumps only when
-   you change what it *says*, never how it is framed.
+   change), but a tile's `version` bumps only when you change what it says —
+   never how it is framed.
 
-When a design decision is unclear, the principle is the deciding factor —
-over performance, over elegance, over convenience. If a design lets
-something change that you didn't change, the design is wrong.
+When a design decision is unclear, the principle decides — over performance,
+over elegance, over convenience. If a design lets something change that you
+didn't change, the design is wrong.
 
 ## The primitives
 
 Five tile kinds, created by dragging a swatch out of the **+ palette**:
 
-- **text** — a Markdown document. Descend and type; rendered or raw.
-- **url** — a web page. Frozen it is a captured preview; live it is a real
+- **text** — a Markdown document. Descend and type, rendered or raw.
+- **url** — a web page. Frozen, it's a captured preview; live, it's a real
   embedded Chromium view (desktop app only).
 - **shell** — a real PTY (bash under tmux), live in the tile.
 - **well** — a nested grid. Its preview is the room seen through the door.
 - **pane** — a workspace: a whole split-pane arrangement made durable as a
-  tile. Step in and the window becomes that arrangement; step out and it is
+  tile. Step in and the window becomes that arrangement. Step out and it is
   saved exactly as arranged.
 
-A **dashed border always means link.** Solid ⇒ delete is real. Dashed ⇒
-delete is unlinking. Everywhere, no exceptions. A **gray border means
-ephemeral**: a scratch shell or url visit (click a palette swatch instead of
-dragging it) that is deleted when you ascend out of it.
+Borders carry meaning. Solid ⇒ delete is real. Dashed ⇒ it's a link, and
+delete only unlinks. Everywhere, no exceptions. Gray ⇒ ephemeral: a scratch
+shell or url visit (click a palette swatch instead of dragging it) that is
+deleted when you ascend out of it.
 
-Text tiles can **embed** other tiles: drag any tile onto an open text
+Text tiles can **embed** other tiles. Drag any tile onto an open text
 document and a Markdown link to its id is inserted — a soft link, like a
 symlink. Rendered, it paints a live preview of the target; clicking it
-descends into the real thing. Because the link is an id and ids never move,
-it survives any restructuring of the space around it.
+descends into the real thing. And because the link is an id and ids never
+move, it survives any restructuring of the space around it.
 
 ## Navigation
 
-Everything is expressed with just the mouse: ascent, descent, zoom, scroll,
+Everything is done with just the mouse: ascent, descent, zoom, scroll,
 resize, clone, move.
 
 | Gesture | Action |
@@ -77,7 +76,7 @@ resize, clone, move.
 | left-drag empty space | pan |
 | left-drag a tile | move it (never across a plugin boundary) |
 | drag a tile onto the + button (it becomes a trashcan) | delete |
-| right-drag from a tile's center | **clone** — and the one gesture that crosses boundaries |
+| right-drag from a tile's center | **clone** — the one gesture that crosses boundaries |
 | right-drag from a tile's edge | resize |
 | right-drag inward from a pane edge | split the pane (the new pane is another view of where you are) |
 | drag a divider | resize panes; right-drag can crush a pane closed |
@@ -85,35 +84,37 @@ resize, clone, move.
 | right-click the name pill | zoom the pane, tmux-style |
 
 The corner circle also does the kind-specific thing: go-live on a frozen url
-tile, back on a live one, refresh on a shell. On a touch screen the same
-vocabulary holds: tap = click, long-press = right button, two-finger tap =
-ascend, pinch = zoom.
+tile, back on a live one, refresh on a shell. Touch maps onto the same
+vocabulary: tap = click, long-press = right button, two-finger tap = ascend,
+pinch = zoom.
 
-**The URL bar is a place.** It always reflects the focused pane — anchor,
-path of tile ids, viewport — so any moment is a bookmarkable deep link.
-Split-pane layout at the window root is deliberately session-ephemeral
-(scaffolding, not content); the durable home for an arrangement is the pane
-tile. Inside a workspace, the bar at the bottom names the nesting —
-left-click a crumb to rename it, right-click to leave it.
+The URL bar is a *place*. It always reflects the focused pane — anchor, path
+of tile ids, viewport — so any moment is a bookmarkable deep link. Inside a
+workspace, the bar at the bottom of the window names the nesting: left-click
+a crumb to rename it, right-click to leave it.
+
+Note: the split-pane layout at the window root is deliberately
+session-ephemeral — scaffolding, not content. The durable home for an
+arrangement you care about is the pane tile.
 
 ## Plugins and federation
 
 Every space is a plugin: a separately compiled binary with its own SQLite
-database and its own id space. `localdb` holds your content; `fs` and `proc`
+database and its own id space. `localdb` holds your content. `fs` and `proc`
 project the filesystem and process table in as read-only grids — honest
 views of a world Gridwell doesn't own (files and processes come and go, but
-their *placement* stays stable while they exist); `ssh` mounts another
+their *placement* stays stable while they exist). `ssh` mounts another
 machine.
 
 The landing page is the **node grid**: one link tile per plugin. Descending
-into any link tile is a portal, and it is the same portal whether the link
+into a link tile is a portal, and it's the same portal whether the link
 points at a local plugin, a mounted directory, or a machine on the other
 side of an SSH tunnel. Drop a connection to another Gridwell node and go
-into it — the exact same consistent experience as your local database. Ids
-qualify and chain (`<plugin>/<id>`, `<ssh>/<plugin>/<id>`), so a reference
-resolves through any number of hops.
+into it — the exact same experience as your local database. Ids qualify and
+chain (`<plugin>/<id>`, `<ssh>/<plugin>/<id>`), so a reference resolves
+through any number of hops.
 
-Two consequences of the principle at this scale:
+The principle has two consequences at this scale:
 
 - **Cross-plugin clone is a link, not a copy.** Identity never migrates
   between id spaces, and deletes never propagate across a plugin boundary.
@@ -123,8 +124,8 @@ Two consequences of the principle at this scale:
 
 One gRPC service (`api/gridwell/v1/data.proto`) is the whole interface —
 client to server, server to plugin, node to node. Every byte crosses it,
-including live shell PTYs and session blobs. The storage format is frozen
-and additive-only: the data is meant to last forever, even as the
+including live shell PTYs and session blobs. And the storage format is
+frozen and additive-only: the data is meant to last forever, even as the
 application changes.
 
 ## Running it
@@ -145,17 +146,17 @@ the desktop window and your phone. Give it a reachable address in
 bind: "100.64.0.7:8080"   # your Tailscale IP
 ```
 
-then `gridwell serve` (or launch the app; its window uses the same origin).
-In a browser, live url tiles stay frozen; everything else — grids, text,
-wells, navigation, live shells — works, touch included.
+then run `gridwell serve` (or launch the app; its window uses the same
+origin). In a browser, live url tiles stay frozen. Everything else — grids,
+text, wells, navigation, live shells — works, touch included.
 
-**The API is unauthenticated.** Anyone who can reach the bound address can
-read and write every tile and open shells on your machine. Bind loopback or
-a VPN-only address (Tailscale is the intended transport); never an open
+Note: **the API is unauthenticated.** Anyone who can reach the bound address
+can read and write every tile and open shells on your machine. Bind loopback
+or a VPN-only address (Tailscale is the intended transport), never an open
 interface. `gridwell serve` warns loudly when the bind is not loopback.
 
 To mount a remote node, the remote just runs `gridwell serve` on loopback —
-the same one port that serves browsers answers the tunnel; nothing new is
+the same one port that serves browsers answers the tunnel, so nothing new is
 exposed. On the mounting machine:
 
 ```sh
@@ -169,9 +170,9 @@ gridwell init --kind ssh --name work \
 
 `known_hosts` is required — the plugin refuses to trust an unverified host.
 
-The CLI is three commands: `gridwell init` (register a plugin),
-`gridwell serve` (run the node), `gridwell backup` (snapshot every plugin DB,
-safe while serving).
+The CLI is three commands: `gridwell init` (register a plugin), `gridwell
+serve` (run the node), and `gridwell backup` (snapshot every plugin DB, safe
+while serving).
 
 ## Reading further
 
