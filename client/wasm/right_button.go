@@ -871,9 +871,12 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 // the requested side, or nil if pane abuts the screen edge with no
 // sibling on that side.
 func (a *App) dividerOnSide(p *pane.Pane, side pane.Side) *pane.Divider {
-	root := pane.Rect{X: 0, Y: 0, W: a.width, H: a.height}
+	// One owner for the layout rect: pane rects come from layoutPanes over
+	// rootLayoutRect, so divider geometry must use the SAME rect — a second
+	// copy here (the full window) drifted by the workspace bar's height and
+	// the adjacency match below never fired inside a workspace (issue #173).
 	r := paneRectFor(a, p)
-	divs := pane.Dividers(a.tree, root, resizeBandPx)
+	divs := pane.Dividers(a.tree, a.rootLayoutRect(), resizeBandPx)
 	// The adjacency match (which divider touches this pane's edge on `side`)
 	// is the pure pane.DividerOnSide; picking the wrong one would resize an
 	// unrelated boundary.
