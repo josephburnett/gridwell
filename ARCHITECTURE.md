@@ -6,9 +6,10 @@ importantly — **where the chronic instability comes from and why**. It is
 written for the next engineer (human or agent) who has to change something
 without breaking three other things.
 
-`CLAUDE.md` states the *philosophy* (the guiding rule: "things stay as you
-left them") and the *domain model* (tiles, wells, clone, plugins). Read it
-first. This document states the *machine* — and it was checked against the
+`README.md` states what Gridwell *is* — the principle ("things stay as you
+leave them"), the primitives, and the gesture vocabulary. `CLAUDE.md` states
+the *philosophy* in full and the *engineering charter* (how to change the
+code without breaking it). Read them first. This document states the *machine* — and it was checked against the
 code, not the prose. Where the code contradicts a comment, that is called out
 explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
 
@@ -34,7 +35,7 @@ explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
 ┌───────────────▼──────────────────────────────────────────────────────┐
 │ Go→wasm client               client/wasm/  +  pure client/* packages  │
 │   canvas, panes, gestures, framing, previews, menu, embeds            │
-│   THE INSTABILITY EPICENTER (10.7k LOC, 0 unit tests — see §5)         │
+│   THE INSTABILITY EPICENTER (~13.4k LOC, 0 unit tests — see §5)        │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  Connect-RPC  (the Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
@@ -223,10 +224,10 @@ side. *This is what "enforced by construction" looks like.*
 testable `client/*` packages (`pane`, `preview`, `markdown`, `gesture`,
 `zoomtrans`, `urlnorm`, …). Those packages are clean and well-tested.
 
-**The problem is the shim never stayed thin.** `client/wasm` is **22 files,
-~10,700 LOC, and 0 test files.** The hottest files in the entire repository
-live here (`input.go` ~2,100 LOC, `render.go` ~1,200, `right_button.go` ~850,
-`main.go` ~875). `make check` *compiles* this package (the `GOOS=js` build) but
+**The problem is the shim never stayed thin.** `client/wasm` is **26 files,
+~13,400 LOC, and 0 test files** (as of July 2026 — and still growing). The
+hottest files in the entire repository live here (`input.go` ~2,300 LOC,
+`render.go` ~1,350, `right_button.go` ~900, `main.go` ~1,150). `make check` *compiles* this package (the `GOOS=js` build) but
 **executes none of it.** Only the e2e harness touches it — as a black box.
 Within it, `embed.go`/`embed_drop.go`, `touch.go`, and `file_overlay.go` are
 reachable by **no gate at all** (no e2e simulates an embed edit, a touch
@@ -235,7 +236,7 @@ recurring bug with no test home.
 
 ### 5.1 The `App` god-object
 
-`App` (`main.go:51`) carries ~30 fields and ~12 maps keyed by pane id, mutated
+`App` (`main.go:58`) carries ~30 fields and ~12 maps keyed by pane id, mutated
 from many synchronous gesture paths *and* from goroutines (SSE, shell/url
 streams) with **no transaction and no single owner.** Two structural
 consequences:
@@ -316,9 +317,9 @@ exactly why the owner's worst bugs (live tiles, menus over live tiles, previews
 of live tiles) escape the fast gate.
 
 **`WebviewRegistry`** owns a `Map<paneId, {view, control, bounds, hidden,
-focused, partition, …}>`. Of the 16 files in `src/main`, **only 3 have unit
-tests**; `webviews.ts` (444 LOC — the registry, and the documented
-bounds/clip/teardown bug source) has none.
+focused, partition, …}>`. Of the 15 implementation files in `src/main`, 8
+now have unit tests — but `webviews.ts` (823 LOC — the registry, and the
+documented bounds/clip/teardown bug source) is still not one of them.
 
 **The tightest timing seam in the system — `syncURLViews`, run every frame:**
 - The renderer sends CSS-px `ContentBox` bounds over IPC; `roundBounds` snaps to
@@ -331,8 +332,14 @@ bounds/clip/teardown bug source) has none.
   rule "controls show only on the focused pane." The same rule, expressed twice,
   in two languages — see §8.
 
-**Sessions.** One Chromium partition per plugin, `persist:plugin-<uuid>`. ⚠️ Only
-cookies are synced via Get/PutSession; localStorage is not. **Teardown** detaches
+**Sessions.** One Chromium partition per plugin, `persist:plugin-<uuid>`
+(behind a mount the key is the full namespace chain, peeled per hop — PR #68).
+The Get/PutSession blob is a **v2 envelope** `{v:2, cookies, files}`: cookies
+plus the partition's on-disk session state under the `SESSION_STATE_ROOTS`
+allowlist (Local Storage, Session Storage, IndexedDB, WebStorage — never the
+Chromium caches, the 238MB lesson of #123). Restore hydrates **only a
+never-initialized partition** (dir-existence check) so a stale blob can never
+roll live logins back (#120's root cause). **Teardown** detaches
 both the view and its control even if the preview capture times out (a hard-won
 fix — capture-independent teardown).
 
@@ -393,24 +400,19 @@ ranked target for the §7 cure. (Verified against the code, June 2026.)
 ## 9. Known drift (do NOT trust these names)
 
 Stale comments and names have repeatedly misled changes here. The rule: **fix
-the comment/name in the same commit you touch the file.** The original COW /
-in-process / Attach comment drift is fixed (`cow.go`→`clone.go`,
-`cow_test.go`→`clone_test.go`, `config.go`/`loader.go`/`connect_handler.go`
-comments corrected). What remains is *naming* drift:
+the comment/name in the same commit you touch the file.** Most of the
+original catalog is resolved: the COW / in-process / Attach comment drift
+(`cow.go`→`clone.go`, corrected loader/handler comments), the file→text Go
+identifier sweep and the `tf`/`tm` Frame keys (PR #74), the
+`panebox.OvertakeZoom`→`FitZoom` rename, and the `urlStreams`-era naming are
+all fixed. What remains (verified July 2026):
 
-- **"file" vs "text".** Go identifiers standardized on `Text*`
-  (`TextFocus`/`TextMode`), but the wasm layer still says `fileTextarea`,
-  `fileInnerBox`, `startFileDescent`, and `pane.Pane`'s JSON tags are the
-  legacy `file_focus`/`file_mode`. The rename is half-done; finish it when
-  touching those files.
-- **Three JSON vocabularies for one shape.** `pane.Pane` (`file_focus`),
-  `pane.Frame` (`tf`/`tm`), and `panestate.Saved` (`text_focus`) serialize the
-  same conceptual fields under three key schemes. Harmless while they never
-  cross-decode; a hazard the moment one does.
-- **`panebox.OvertakeZoom` is misnamed** — it computes `zoomtrans.Fit` (min
-  ratio), not `Overtake` (max); callers carry apology comments.
-- **`urlStreams`-era naming**: the live URL handle is a webview bridge, not a
-  stream (noted in the stabilization plan's parking lot).
+- **Three legacy JSON keys on `pane.Pane`.** `TextScrollX/Y` and `TextZoom`
+  still tag as `file_scroll_x`/`file_scroll_y`/`file_zoom` while every
+  neighboring field (and `pane.Frame`, `panestate.Saved`, and the persisted
+  `LayoutV1` codec in `client/pane/wire.go`) says `text_*`. Inert today —
+  nothing marshals `pane.Pane` itself — but a hazard the moment something
+  does; finish the rename when touching that struct.
 
 ---
 
