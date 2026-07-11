@@ -300,3 +300,23 @@ func paneIDNum(id string) (int, bool) {
 	}
 	return n, true
 }
+
+// LeafTextFocusIDs returns the TextFocus tile id of every leaf that has one —
+// the workspace's content descents, in tree order. The delete-time ephemeral
+// reap (issue #174) reads the references this way without any client
+// machinery; ids are in whatever frame the decoder's abs produced.
+func LeafTextFocusIDs(t *Tree) []string {
+	var out []string
+	var walk func(n TreeNode)
+	walk = func(n TreeNode) {
+		if n.Pane != nil && n.Pane.TextFocus != "" {
+			out = append(out, n.Pane.TextFocus)
+		}
+		if n.Split != nil {
+			walk(n.Split.A)
+			walk(n.Split.B)
+		}
+	}
+	walk(t.Root)
+	return out
+}

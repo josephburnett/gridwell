@@ -332,3 +332,22 @@ func TestLayoutDropsUpFrames(t *testing.T) {
 		t.Fatal("decoded pane has Up frames")
 	}
 }
+
+// TestLeafTextFocusIDs: the delete-time ephemeral reap (issue #174) reads a
+// workspace's content descents straight off the decoded tree — every leaf's
+// TextFocus, in tree order, empty ones skipped.
+func TestLeafTextFocusIDs(t *testing.T) {
+	blob := []byte(`{"v":1,"root":{"split":{"dir":"v","ratio":0.5,` +
+		`"a":{"pane":{"id":"p1","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"u/7"}},` +
+		`"b":{"split":{"dir":"h","ratio":0.5,` +
+		`"a":{"pane":{"id":"p2","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1}},` +
+		`"b":{"pane":{"id":"p3","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"u/9"}}}}}},"focus":"p1"}`)
+	tree, err := DecodeLayout(blob, func(id string) string { return id })
+	if err != nil {
+		t.Fatalf("DecodeLayout: %v", err)
+	}
+	got := LeafTextFocusIDs(tree)
+	if len(got) != 2 || got[0] != "u/7" || got[1] != "u/9" {
+		t.Errorf("LeafTextFocusIDs = %v, want [u/7 u/9]", got)
+	}
+}

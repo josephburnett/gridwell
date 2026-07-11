@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -50,16 +51,30 @@ func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	})
 }
 
-// CleanupScratch deletes every tile in the scratch grid at startup. Scratch
-// tiles are ephemeral by definition — gray means gone-on-ascent (issue #85);
-// the client deletes them when the user ascends, and this sweep is the crash
-// net (an ascent that never ran) plus the one-time wipe of pre-#85 scratch
-// history. Runs before CleanupOrphanedShells so a deleted ephemeral shell's
-// row is gone by the time the orphan sweep looks for session owners.
+// CleanupScratch deletes every UNOWNED tile in the scratch grid at startup.
+// Scratch tiles are ephemeral by definition — gray means gone-on-ascent
+// (issue #85); the client deletes them when the user ascends, and this sweep
+// is the crash net (an ascent that never ran). The exception (issue #174):
+// a scratch tile referenced by a pane tile's layout blob belongs to a
+// WORKSPACE — a durable arrangement whose ephemerals live across app
+// restarts on purpose (their tmux sessions survive them) — and is spared;
+// the reference dies with the pane tile, so a later sweep reclaims it. If
+// any pane blob is unreadable (corrupt / newer format) the sweep reaps
+// NOTHING: a wrongly-killed workspace shell is unrecoverable, a delayed
+// sweep is not. Runs before CleanupOrphanedShells so a swept shell's row is
+// gone by the time the orphan sweep looks for session owners.
 func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 	scratch, err := p.st.ScratchGridID(ctx)
 	if err != nil {
 		return 0, err
+	}
+	refs, unreadable, err := p.st.WorkspaceEphemeralRefs(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if unreadable {
+		log.Printf("localdb: scratch sweep skipped: a pane layout blob is unreadable (never guess at workspace ownership)")
+		return 0, nil
 	}
 	g, err := p.st.GetGrid(ctx, scratch)
 	if err != nil {
@@ -67,6 +82,9 @@ func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for _, t := range g.Tiles {
+		if refs[t.ID] {
+			continue // a workspace's ephemeral — owned, not leaked
+		}
 		if err := p.st.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: t.ID, Version: t.Version}); err != nil {
 			return n, err
 		}
