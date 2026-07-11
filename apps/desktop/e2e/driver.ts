@@ -317,6 +317,39 @@ export class GridwellDriver {
     await this.rightDragScreen(p.x + p.w - 5, y, p.x + p.w * 0.45, y);
   }
 
+  // splitFocusedPaneHorizontal right-drags inward from the focused pane's
+  // bottom edge band, splitting it into two stacked panes.
+  async splitFocusedPaneHorizontal(): Promise<void> {
+    const p = await this.focused();
+    const x = p.x + p.w / 2;
+    await this.rightDragScreen(x, p.y + p.h - 5, x, p.y + p.h * 0.45);
+  }
+
+  // hDividerGeom returns the midpoint of the horizontal boundary between two
+  // STACKED panes (the top pane's bottom edge).
+  private async hDividerGeom(): Promise<{ x: number; y: number; topPaneH: number; topId: string }> {
+    const ps = (await this.panes()).slice().sort((a, b) => a.y - b.y);
+    if (ps.length < 2) throw new Error('hDividerGeom needs two panes');
+    const top = ps[0];
+    return { x: top.x + top.w / 2, y: top.y + top.h, topPaneH: top.h, topId: top.id };
+  }
+
+  // resizeHDivider drags the stacked-pane boundary by dy (down grows the top
+  // pane) with the given button; returns the top pane's height before/after.
+  async resizeHDivider(
+    button: 'left' | 'right',
+    dy: number,
+  ): Promise<{ before: number; after: number }> {
+    const g = await this.hDividerGeom();
+    if (button === 'right') {
+      await this.rightDragScreen(g.x, g.y - 2, g.x, g.y + dy);
+    } else {
+      await this.leftDragScreen(g.x, g.y - 2, g.x, g.y + dy);
+    }
+    const after = (await this.panes()).find((p) => p.id === g.topId);
+    return { before: g.topPaneH, after: after ? after.h : 0 };
+  }
+
   // leftDragScreen presses the LEFT button at (fromX,fromY), nudges past the
   // threshold, drags to (toX,toY) and releases — used for the clamped left-drag
   // pane-boundary resize.
