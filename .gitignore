@@ -18,3 +18,4 @@ s*.png
 
 # Chromium profile when the server is run from the repo root.
 /chromium/
+test-results/
