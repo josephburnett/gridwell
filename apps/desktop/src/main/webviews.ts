@@ -21,6 +21,7 @@ import {
   renderProcessGoneMessage,
   proxyRulesFor,
   cookieDomainMatches,
+  storageOriginsFor,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
@@ -471,12 +472,14 @@ export class WebviewRegistry {
     return undefined;
   }
 
-  // clearSiteData wipes the current site from the view's partition (issue
-  // #136): every cookie whose domain suffix-matches the page host (so a
-  // google subdomain clears .google.com), plus the page origin's storage
-  // (localStorage, IndexedDB, service workers, caches), then reloads so the
-  // site sees the cleared state. The next ascent dehydrates the cleaned
-  // partition into the plugin DB, so the reset persists.
+  // clearSiteData wipes the current SITE from the view's partition (issue
+  // #136): every cookie of the same registrable domain — including SIBLING
+  // subdomains, so clearing from mail.google.com reaches the login state on
+  // accounts.google.com (issue #177) — plus storage (localStorage, IndexedDB,
+  // service workers, caches) for the page origin and every matched cookie
+  // host, then reloads so the site sees the cleared state. The next ascent
+  // dehydrates the cleaned partition into the plugin DB, so the reset
+  // persists.
   async clearSiteData(wc: WebContents): Promise<void> {
     let u: URL;
     try {
@@ -486,16 +489,21 @@ export class WebviewRegistry {
     }
     const ses = wc.session;
     const cookies = await ses.cookies.get({});
+    const matched = cookies.filter((c) => cookieDomainMatches(u.hostname, c.domain ?? ''));
     await Promise.all(
-      cookies
-        .filter((c) => cookieDomainMatches(u.hostname, c.domain ?? ''))
-        .map((c) => {
-          const proto = c.secure ? 'https' : 'http';
-          const host = (c.domain ?? '').replace(/^\./, '');
-          return ses.cookies.remove(`${proto}://${host}${c.path ?? '/'}`, c.name).catch(() => {});
-        }),
+      matched.map((c) => {
+        const proto = c.secure ? 'https' : 'http';
+        const host = (c.domain ?? '').replace(/^\./, '');
+        return ses.cookies.remove(`${proto}://${host}${c.path ?? '/'}`, c.name).catch(() => {});
+      }),
     );
-    await ses.clearStorageData({ origin: u.origin }).catch(() => {});
+    const origins = storageOriginsFor(
+      u.origin,
+      matched.map((c) => c.domain ?? ''),
+    );
+    await Promise.all(
+      origins.map((origin) => ses.clearStorageData({ origin }).catch(() => {})),
+    );
     wc.reload();
   }
 

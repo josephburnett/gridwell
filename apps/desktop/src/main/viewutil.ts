@@ -1,3 +1,5 @@
+import { getDomain } from 'tldts';
+
 import type { Bounds } from './ipc';
 
 // SESSION_PARTITION is the fallback Electron partition for url tiles with no
@@ -76,16 +78,39 @@ export function controlBounds(b: Bounds, size: number, margin: number): Bounds {
 }
 
 // cookieDomainMatches decides whether a stored cookie belongs to the SITE the
-// user is clearing (issue #136): the cookie's domain (leading dot stripped)
-// and the page host must be equal, or one a dot-boundary suffix of the other —
-// so clearing from accounts.google.com drops .google.com cookies too, the way
-// sites actually span subdomains. Pure and unit-tested: an over-broad match
-// here would silently log the user out of unrelated sites.
+// user is clearing (issue #136): the same registrable domain (public-suffix
+// list via tldts), which spans ancestors AND siblings — Google keeps its
+// login state on accounts.google.com while the user clears from
+// mail.google.com, and a clear that can't reach the sibling strands a broken
+// login forever (issue #177). Hosts outside the PSL world (IPs, single
+// labels) keep the exact/ancestor dot-boundary rules and never sibling-match.
+// Pure and unit-tested: an over-broad match here would silently log the user
+// out of unrelated sites (foo.co.uk must not reach bar.co.uk).
 export function cookieDomainMatches(host: string, cookieDomain: string): boolean {
   const h = host.toLowerCase();
   const d = cookieDomain.replace(/^\./, '').toLowerCase();
   if (!h || !d) return false;
-  return h === d || h.endsWith('.' + d) || d.endsWith('.' + h);
+  if (h === d || h.endsWith('.' + d) || d.endsWith('.' + h)) return true;
+  const site = getDomain(h);
+  return site !== null && site === getDomain(d);
+}
+
+// storageOriginsFor derives the storage-clear scope from the SAME matched
+// cookie set that drives cookie removal (issue #177, one owner): each matched
+// cookie host contributes its https and http origins (default ports — cookie
+// domains carry none), plus the page origin verbatim (the only place a
+// non-default port can come from). Sibling-subdomain storage (Google's
+// accounts.google.com localStorage) is reachable exactly when a cookie put
+// the host in scope; an origin with storage but no cookie at all stays out.
+export function storageOriginsFor(pageOrigin: string, cookieDomains: string[]): string[] {
+  const origins = new Set<string>([pageOrigin]);
+  for (const d of cookieDomains) {
+    const host = d.replace(/^\./, '').toLowerCase();
+    if (!host) continue;
+    origins.add(`https://${host}`);
+    origins.add(`http://${host}`);
+  }
+  return [...origins];
 }
 
 // namePillBounds places the native name bubble (issue #118) centered at the
