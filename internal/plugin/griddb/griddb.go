@@ -54,6 +54,17 @@ func ApplyMove(db *sql.DB, labelCol string, req *gridwellv1.MoveTileRequest) (*g
 	return tileResp(db, labelCol, tileID)
 }
 
+// ApplyGetTile reads one tile row by id — the call the cross-plugin clone
+// router makes against the SOURCE plugin (issue #171); every griddb-backed
+// plugin must answer it or a right-drag out of its grid fails.
+func ApplyGetTile(db *sql.DB, labelCol string, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
+	tileID, err := parseTileID(req.TileId)
+	if err != nil {
+		return nil, err
+	}
+	return tileResp(db, labelCol, tileID)
+}
+
 // ApplyResize sets a tile's footprint (x, y, w, h) and returns the updated tile.
 func ApplyResize(db *sql.DB, labelCol string, req *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
 	tileID, err := parseTileID(req.TileId)

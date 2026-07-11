@@ -3,11 +3,15 @@ package server
 import (
 	"context"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
@@ -287,6 +291,83 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	}
 	if string(orig) != string(layout) {
 		t.Errorf("editing the copy changed the source layout: %q", orig)
+	}
+}
+
+// TestCloneDirWellFromFsPluginIsALink (issue #171): right-dragging a
+// directory from an fs grid into a localdb grid failed "GetTile is not
+// implemented" — cloneAcrossPlugins' FIRST call is src.GetTile, which the fs
+// (and proc) plugins never implemented. This crosses the real seam: server
+// routing → in-process fs plugin → link created in the localdb destination.
+func TestCloneDirWellFromFsPluginIsALink(t *testing.T) {
+	ctx := context.Background()
+	reg := plugin.NewRegistry()
+
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	_, dstRoot := registerPrimaryLocaldb(t, reg, st)
+
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fsP, err := fsplugin.Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("fs open: %v", err)
+	}
+	t.Cleanup(func() { _ = fsP.Close() })
+	fsP.SetRoot(dir)
+	info, err := fsP.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("fs info: %v", err)
+	}
+	fsClient, fsCloser, err := plugin.ServeInProcess(fsP)
+	if err != nil {
+		t.Fatalf("fs serve: %v", err)
+	}
+	t.Cleanup(fsCloser)
+	const fsUUID = "fs-src-uuid"
+	reg.Register(fsUUID, "fs", fsClient, nil)
+
+	srv := New(reg, Config{})
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	// GetGrid materializes the directory's tiles (the user is dragging a
+	// visible tile from the rendered fs grid).
+	g, err := cl.GetGrid(ctx, fsUUID+"/"+info.RootGridId)
+	if err != nil {
+		t.Fatalf("GetGrid (fs root): %v", err)
+	}
+	var sub *rpc.Tile
+	for i := range g.Tiles {
+		if g.Tiles[i].AltText == "sub" {
+			sub = &g.Tiles[i]
+		}
+	}
+	if sub == nil {
+		t.Fatalf("sub dir tile missing: %+v", g.Tiles)
+	}
+
+	link, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: sub.ID, Version: sub.Version, DestGridID: dstRoot, X: 1, Y: 1,
+	})
+	if err != nil {
+		t.Fatalf("cross-plugin CloneTile from fs: %v", err)
+	}
+	if link.ChildGridID != sub.ChildGridID {
+		t.Errorf("link child = %q, want the fs dir's grid %q (shared, not copied)",
+			link.ChildGridID, sub.ChildGridID)
+	}
+	if !link.Reference {
+		t.Error("cross-plugin link must be marked Reference (dashed border)")
+	}
+	if link.AltText != "sub" {
+		t.Errorf("link label = %q, want the directory's name", link.AltText)
 	}
 }
 

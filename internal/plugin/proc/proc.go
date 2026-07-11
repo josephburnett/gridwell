@@ -247,6 +247,13 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 
 // MoveTile repositions a process tile within its grid and persists the new
 // position so it survives the next GetGrid and a restart.
+// GetTile returns one tile row by id — cloneAcrossPlugins' first call against
+// the source plugin when a tile is right-dragged into another plugin's grid
+// (issue #171; same class as fs).
+func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplyGetTile(p.db, procLabelCol, req)
+}
+
 func (p *Plugin) MoveTile(_ context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
 	return griddb.ApplyMove(p.db, procLabelCol, req)
 }
