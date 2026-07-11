@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
@@ -506,6 +507,16 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
+	// A pane tile's layout blob is the ONLY record of the workspace's
+	// ephemeral leaves (scratch-grid tiles). Deleting the workspace deletes
+	// only the arrangement — but must terminate what the arrangement OWNS,
+	// exactly like closing a pane does (issue #174): reap referenced
+	// scratch tiles BEFORE the pane tile row (and with it the blob) goes
+	// away. Transit tiles skip this hop — the forwarded delete reaches the
+	// owning node's router, whose blob ids are in that node's frame.
+	if !h.srv.pluginReg.Transit(uuid) {
+		h.reapWorkspaceEphemerals(ctx, c, local, m.TileId)
+	}
 	m.TileId = local
 	m.Path = localPathFor(m.Path, uuid)
 	// The owning plugin reaps the tile's shell session (if any) as part of
@@ -514,6 +525,61 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 		return nil, asConnectError(err)
 	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
+}
+
+// reapWorkspaceEphemerals deletes the SCRATCH-grid tiles a pane tile's layout
+// blob references (issue #174) — the workspace's ephemeral shells/urls, whose
+// tmux sessions die through the existing DeleteTile chain. Referenced
+// non-scratch tiles are content the workspace merely views and are never
+// touched; an unreadable blob (corrupt, or written by a newer Gridwell) reaps
+// NOTHING — never guess — and the boot sweep reclaims the leftovers once the
+// pane tile (and so the blob that shielded them) is gone. Best-effort: a
+// failure here must not block the user's delete, so errors go to the log.
+func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, owner pb.GridwellClient, localID, qualifiedID string) {
+	tr, err := owner.GetTile(ctx, &pb.GetTileRequest{TileId: localID})
+	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindPane || tr.GetTile().BlobId == 0 {
+		return
+	}
+	body, err := owner.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: localID})
+	if err != nil || len(body.GetData()) == 0 {
+		return
+	}
+	// Blob ids are in THIS node's frame (the encoder strips the reader's
+	// transit prefix, which is empty for a locally-owned pane tile).
+	tree, err := pane.DecodeLayout(body.GetData(), func(id string) string { return id })
+	if err != nil {
+		log.Printf("gridwell: delete %s: layout blob unreadable, reaping nothing: %v", qualifiedID, err)
+		return
+	}
+	for _, id := range pane.LeafTextFocusIDs(tree) {
+		ec, elocal, euuid, err := h.route(id)
+		if err != nil {
+			continue
+		}
+		if h.srv.pluginReg.Transit(euuid) {
+			// A remote node's ephemeral: this node can't see the remote's
+			// scratch-grid fact through the raw transit client. v1 limit —
+			// the remote's boot sweep reclaims it.
+			log.Printf("gridwell: delete %s: not reaping remote ephemeral candidate %s (transit)", qualifiedID, id)
+			continue
+		}
+		// "Is this tile ephemeral" = its grid IS the owning plugin's scratch
+		// grid — the same fact the server's GetGrid stamps from Info (the raw
+		// plugin response doesn't carry it).
+		info, err := h.srv.pluginInfo(ctx, euuid)
+		if err != nil || info.ScratchGridId == "" {
+			continue
+		}
+		et, err := ec.GetTile(ctx, &pb.GetTileRequest{TileId: elocal})
+		if err != nil || et.GetTile() == nil || et.GetTile().GridId != info.ScratchGridId {
+			continue // not an ephemeral — viewed content, never touched
+		}
+		if _, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{
+			TileId: elocal, Version: et.GetTile().Version,
+		}); err != nil {
+			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)
+		}
+	}
 }
 
 // SetRootView persists the plugin root-grid framing (the same fact as SetTile
