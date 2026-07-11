@@ -15,6 +15,7 @@ import {
   ForwardedRightdown,
   ErrorEvent,
   OpenBelowEvent,
+  ZoomKeyEvent,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
 
@@ -131,6 +132,13 @@ export function makeNavForwarder(rootWC: WebContents) {
 // (EV.openBelow), which splits the pane and opens it ephemeral (issue #111).
 export function makeOpenBelowForwarder(rootWC: WebContents): (ev: OpenBelowEvent) => void {
   return (ev) => safeSend(rootWC, EV.openBelow, ev);
+}
+
+// makeZoomKeyForwarder relays the content-zoom chord from a focused live view
+// to the renderer (EV.zoomKey), where the one zoom owner applies + persists it
+// (issue #170).
+export function makeZoomKeyForwarder(rootWC: WebContents): (ev: ZoomKeyEvent) => void {
+  return (ev) => safeSend(rootWC, EV.zoomKey, ev);
 }
 
 // sendFrame ships a mirror/capture frame to the renderer.

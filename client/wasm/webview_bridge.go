@@ -257,6 +257,16 @@ func (a *App) installWebviewListeners() {
 		a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
 		return nil
 	})
+	// The content-zoom chord was pressed while a LIVE URL view owned OS
+	// keyboard focus (issue #170): the window-level keydown never fires, so
+	// main intercepts the chord in before-input-event and relays it here,
+	// keyed by pane. Routed through the same one zoom owner as the canvas
+	// chord (applyContentZoom: cache + live surface + persistence).
+	onZoomKey := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
+		return nil
+	})
 	// The native name bubble over a live url pane was clicked (issue #118):
 	// left opens the rename input (renameEditing parks the view so the DOM
 	// input is usable), right toggles the pane zoom.
@@ -283,6 +293,7 @@ func (a *App) installWebviewListeners() {
 	g.Call("onMiddleForward", onMiddleForward)
 	g.Call("onLeftForward", onLeftForward)
 	g.Call("onOpenBelow", onOpenBelow)
+	g.Call("onZoomKey", onZoomKey)
 	g.Call("onNameClick", onNameClick)
 	g.Call("onError", onError)
 	// Listeners live for the lifetime of the app; no Release.

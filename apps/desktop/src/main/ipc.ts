@@ -54,6 +54,7 @@ export const EV = {
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
+  zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus (issue #170)
   nameClick: 'gw:name-click-ev', // NameClickEvent — the native bubble was clicked (issue #118)
                       // (webview, session, sidecar) that must reach the user.
                       // Charter §1/§6: one owner, no second "silent" path for
@@ -163,6 +164,16 @@ export interface NavEvent {
 export interface OpenBelowEvent {
   paneId: string;
   url: string;
+}
+
+// ZoomKeyEvent: Ctrl/Cmd +/=/-/0 pressed while a live URL view owns OS
+// keyboard focus (issue #170). Main intercepts it in before-input-event and
+// relays it here so the renderer's applyContentZoom — the one owner of the
+// cache update + SetContentZoom persistence — runs, exactly as if the chord
+// had been typed on the canvas.
+export interface ZoomKeyEvent {
+  paneId: string;
+  key: string;
 }
 
 // NameClickEvent: the native name bubble over a live url pane was clicked.

@@ -10,6 +10,7 @@ import {
   SetHiddenArgs,
   SetZoomArgs,
   OpenBelowEvent,
+  ZoomKeyEvent,
   NameClickEvent,
   RemoveArgs,
   PaneRef,
@@ -98,6 +99,14 @@ const api = {
     const h = (_e: unknown, ev: OpenBelowEvent) => cb(ev);
     ipcRenderer.on(EV.openBelow, h);
     return () => ipcRenderer.removeListener(EV.openBelow, h);
+  },
+  // onZoomKey fires when the content-zoom chord was pressed while a live
+  // view owned OS keyboard focus (issue #170); the wasm zoom owner applies
+  // and persists it.
+  onZoomKey(cb: (ev: ZoomKeyEvent) => void): () => void {
+    const h = (_e: unknown, ev: ZoomKeyEvent) => cb(ev);
+    ipcRenderer.on(EV.zoomKey, h);
+    return () => ipcRenderer.removeListener(EV.zoomKey, h);
   },
   // onNameClick fires when the native name bubble over a live url pane is
   // clicked (issue #118): left → rename, right → pane zoom.

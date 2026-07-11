@@ -113,6 +113,22 @@ export function storageOriginsFor(pageOrigin: string, cookieDomains: string[]): 
   return [...origins];
 }
 
+// zoomChordKey normalizes a before-input-event Input to the content-zoom
+// chord key it carries ('+', '=', '-', '0'), or '' when the input is not the
+// chord (issue #170). Same key set the wasm handleContentZoomKey accepts —
+// keep them in step or the two focus states zoom differently.
+export function zoomChordKey(input: { key: string; control?: boolean; meta?: boolean }): string {
+  if (!input.control && !input.meta) return '';
+  switch (input.key) {
+    case '+':
+    case '=':
+    case '-':
+    case '0':
+      return input.key;
+  }
+  return '';
+}
+
 // namePillBounds places the native name bubble (issue #118) centered at the
 // top of a view's content box. Pure geometry, unit-tested like controlBounds.
 export function namePillBounds(b: Bounds, width: number, height: number, margin: number): Bounds {

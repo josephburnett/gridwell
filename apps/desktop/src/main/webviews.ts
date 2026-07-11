@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent } from './ipc';
+import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, ZoomKeyEvent } from './ipc';
 import {
   SESSION_PARTITION,
   partitionFor,
@@ -22,6 +22,7 @@ import {
   proxyRulesFor,
   cookieDomainMatches,
   storageOriginsFor,
+  zoomChordKey,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { hydratePartition, dehydratePartition } from './session';
@@ -143,6 +144,10 @@ export interface RegistryCallbacks {
   // (target=_blank, window.open, ctrl/cmd-click). The renderer splits the
   // pane and opens the url as an ephemeral visit below (issue #111).
   onOpenBelow?: (ev: OpenBelowEvent) => void;
+  // onZoomKey fires when the content-zoom chord (Ctrl/Cmd +/=/-/0) is pressed
+  // while this view owns OS keyboard focus (issue #170). The renderer's
+  // applyContentZoom — the one owner of cache + persistence — handles it.
+  onZoomKey?: (ev: ZoomKeyEvent) => void;
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
@@ -335,9 +340,21 @@ export class WebviewRegistry {
       // live URL view owns OS keyboard focus, so that handler never sees the
       // key. Mirror it here so fullscreen toggles no matter which view is
       // focused.
+      // The content-zoom chord gets the same treatment as F11 (issue #170):
+      // intercepted here and relayed to the renderer, where the ONE zoom
+      // owner (applyContentZoom) updates the cache and persists — calling
+      // registry.setZoom directly from main would move the view but skip
+      // both.
       view.webContents.on('before-input-event', (event, input) => {
-        if (input.type === 'keyDown' && input.key === 'F11') {
+        if (input.type !== 'keyDown') return;
+        if (input.key === 'F11') {
           this.toggleFullScreen();
+          event.preventDefault();
+          return;
+        }
+        const key = zoomChordKey(input);
+        if (key) {
+          this.cb.onZoomKey?.({ paneId, key });
           event.preventDefault();
         }
       });
