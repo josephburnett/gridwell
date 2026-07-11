@@ -81,7 +81,10 @@ export function registerWebviewIpc(
   // native WebContentsView swallows the canvas's own mousedown, so the preload
   // forwards a (non-suppressed) left-down here. Relay to the renderer in canvas
   // coords so it can call focusToPane without breaking in-page interaction.
-  ipcMain.on(VIEW.leftdown, (_event, p: ViewRightdown): void => {
+  ipcMain.on(VIEW.leftdown, (event, p: ViewRightdown): void => {
+    // The press is the one legitimate path to OS focus for a live view —
+    // stamp it so the focus guard doesn't bounce the click (issue #172).
+    registry.noteUserClick(event.sender);
     const cb = win.getContentBounds();
     const fwd: ForwardedRightdown = { x: p.sx - cb.x, y: p.sy - cb.y };
     safeSend(rootWC, EV.leftForward, fwd);

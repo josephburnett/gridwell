@@ -78,6 +78,9 @@ async function boot(): Promise<void> {
     onError: (ev) => sendError(rootWC, ev.source, ev.message),
     onOpenBelow: makeOpenBelowForwarder(rootWC),
     onZoomKey: makeZoomKeyForwarder(rootWC),
+    // A live view stole focus via page-initiated navigation (issue #172):
+    // give it back to the root renderer, where the user was typing.
+    onFocusStolen: () => rootWC.focus(),
   });
   registry = reg;
   registerWebviewIpc(reg, rootWC, win);
