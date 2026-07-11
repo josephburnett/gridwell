@@ -274,6 +274,13 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
 }
 
+// GetTile returns one tile row by id — cloneAcrossPlugins' first call against
+// the source plugin when a tile is right-dragged into another plugin's grid
+// (issue #171). The row was materialized by the GetGrid that rendered it.
+func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplyGetTile(p.db, fsLabelCol, req)
+}
+
 // MoveTile repositions a tile within its directory grid and persists the new
 // position so it survives the next GetGrid and a restart.
 func (p *Plugin) MoveTile(_ context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {

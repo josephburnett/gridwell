@@ -157,6 +157,43 @@ func TestGetGrid_ListsEntries(t *testing.T) {
 	}
 }
 
+// TestGetTile_ReturnsRow (issue #171): cloneAcrossPlugins' FIRST call against
+// the source plugin is GetTile — without it, right-dragging a directory from
+// an fs grid into another plugin's grid fails "GetTile is not implemented".
+// The row is already materialized by GetGrid; GetTile is a per-tile read.
+func TestGetTile_ReturnsRow(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, err := attachAt(p, dir)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	grid, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	var sub *gridwellv1.Tile
+	for _, t2 := range grid.Tiles {
+		if t2.AltText == "sub" {
+			sub = t2
+		}
+	}
+	if sub == nil {
+		t.Fatal("sub tile missing")
+	}
+	got, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: sub.Id})
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if got.Tile.Id != sub.Id || got.Tile.Kind != "well" ||
+		got.Tile.ChildGridId != sub.ChildGridId || got.Tile.AltText != "sub" {
+		t.Errorf("GetTile = %+v, want the GetGrid row %+v", got.Tile, sub)
+	}
+	if _, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: "999999"}); err == nil {
+		t.Error("GetTile for a missing id must error, not fabricate a tile")
+	}
+}
+
 func TestGetGrid_AutoLayout(t *testing.T) {
 	dir := t.TempDir()
 	// Create 3 files: a.txt, b.txt, c.txt

@@ -155,6 +155,39 @@ func TestGetGrid_ListsChildren(t *testing.T) {
 	}
 }
 
+// TestGetTile_ReturnsRow (issue #171): same class as fs — cloneAcrossPlugins
+// calls GetTile on the SOURCE plugin first; proc never implemented it, so a
+// right-drag of a process well into another plugin failed "not implemented".
+func TestGetTile_ReturnsRow(t *testing.T) {
+	root, parentPID, childPID := stubProcRoot(t)
+	p := openPlugin(t, root, nil)
+	ar, _ := attachAt(p, parentPID)
+	resp, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: ar.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	childKey := strconv.FormatInt(childPID, 10)
+	var child *gridwellv1.Tile
+	for _, t2 := range resp.Tiles {
+		if t2.AltText == childKey {
+			child = t2
+		}
+	}
+	if child == nil {
+		t.Fatal("child PID tile missing")
+	}
+	got, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: child.Id})
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if got.Tile.Id != child.Id || got.Tile.Kind != child.Kind || got.Tile.AltText != childKey {
+		t.Errorf("GetTile = %+v, want the GetGrid row %+v", got.Tile, child)
+	}
+	if _, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: "999999"}); err == nil {
+		t.Error("GetTile for a missing id must error, not fabricate a tile")
+	}
+}
+
 func TestGetGrid_StableIDs(t *testing.T) {
 	root, parentPID, _ := stubProcRoot(t)
 	p := openPlugin(t, root, nil)
