@@ -463,6 +463,109 @@ func TestBrowserShimScript(t *testing.T) {
 	}
 }
 
+// TestShadowLaunchers (issue #166): $BROWSER alone is not enough — emacs
+// browse-url execs xdg-open directly, and a desktop-backed xdg-open resolves
+// via the DE handler without ever reading $BROWSER. New() must write a shadow
+// bin dir of launcher scripts that (a) hand web urls to the gridwell-open
+// shim and (b) fall through to the REAL command of the same name for
+// everything else (xdg-open opens files too). Run the real scripts through
+// sh: this is the seam emacs crosses.
+func TestShadowLaunchers(t *testing.T) {
+	c, cleanup, err := New("gridwell-test-shadow", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cleanup() })
+	if c.shadowDir == "" {
+		t.Fatal("no shadow launcher dir")
+	}
+
+	wantNames := []string{"xdg-open", "gnome-open", "kde-open",
+		"x-www-browser", "www-browser", "sensible-browser"}
+	for _, name := range wantNames {
+		p := c.shadowDir + "/" + name
+		st, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("shadow launcher %s: %v", name, err)
+		}
+		if st.Mode().Perm()&0o111 == 0 {
+			t.Errorf("shadow launcher %s not executable: %v", name, st.Mode())
+		}
+	}
+
+	// (a) a web url is handed to the shim, which emits the OSC 5522 sequence
+	// (bare here — TMUX unset). DE mode must not matter: the whole point is
+	// intercepting BEFORE xdg-open's desktop dispatch.
+	cmd := exec.Command(c.shadowDir+"/xdg-open", "https://example.com/x")
+	cmd.Env = append(filterEnv(os.Environ(), "TMUX"), "XDG_CURRENT_DESKTOP=GNOME")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("shadow xdg-open url: %v", err)
+	}
+	if want := "\x1b]5522;https://example.com/x\x1b\\"; string(out) != want {
+		t.Errorf("shadow xdg-open url = %q, want %q", out, want)
+	}
+
+	// (b) a non-url argument falls through to the real command found on PATH
+	// with the shadow dir stripped — no self-exec loop, host workflows keep
+	// working. The "real" xdg-open here records its argv to a marker file.
+	realDir := t.TempDir()
+	marker := realDir + "/marker"
+	real := "#!/bin/sh\nprintf '%s' \"$*\" > " + marker + "\n"
+	if err := os.WriteFile(realDir+"/xdg-open", []byte(real), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd = exec.Command(c.shadowDir+"/xdg-open", "/tmp/some-file.pdf")
+	cmd.Env = append(filterEnv(os.Environ(), "TMUX", "PATH"),
+		"PATH="+c.shadowDir+":"+realDir+":/usr/bin:/bin")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("shadow xdg-open file fallthrough: %v (%s)", err, out)
+	}
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("real xdg-open never ran: %v", err)
+	}
+	if string(got) != "/tmp/some-file.pdf" {
+		t.Errorf("real xdg-open argv = %q, want %q", got, "/tmp/some-file.pdf")
+	}
+
+	// cleanup removes the whole shadow dir.
+	if err := cleanup(); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if _, err := os.Stat(c.shadowDir); !os.IsNotExist(err) {
+		t.Errorf("shadow dir survives cleanup: %v", err)
+	}
+}
+
+// TestEnvPrependsShadowPath (issue #166): the tmux CLIENT env must carry the
+// shadow bin dir at the front of PATH — panes inherit PATH from the tmux
+// SERVER process (tmux 3.5a ignores `-e PATH=`/set-environment for panes),
+// and the client Env() feeds is what lazy-starts that server.
+func TestEnvPrependsShadowPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("TERM", "")
+	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c",
+		shell: "bash", browserShim: "/tmp/gridwell-open", shadowDir: "/tmp/gw-shadow"}
+	var gotPath, gotTerm string
+	for _, e := range c.Env() {
+		if v, ok := strings.CutPrefix(e, "PATH="); ok {
+			gotPath = v
+		}
+		if v, ok := strings.CutPrefix(e, "TERM="); ok {
+			gotTerm = v
+		}
+	}
+	if gotPath != "/tmp/gw-shadow:/usr/bin:/bin" {
+		t.Errorf("Env PATH = %q, want shadow-prefixed", gotPath)
+	}
+	// Passing an explicit env bypasses shelldriver's TERM fallback; Env must
+	// preserve that behavior itself.
+	if gotTerm != "xterm-256color" {
+		t.Errorf("Env TERM = %q, want xterm-256color default", gotTerm)
+	}
+}
+
 // TestArgsCreateInjectsBrowserEnv: new sessions carry BROWSER pointing at the
 // shim (tmux new-session -e), so terminal apps that launch a browser hand the
 // url back to gridwell instead of spawning one on the host.
