@@ -98,7 +98,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	}
 
 	// Content routes to the second plugin.
-	body, err := cl.GetTileContent(ctx, txt.ID)
+	body, _, err := cl.GetTileContent(ctx, txt.ID)
 	if err != nil {
 		t.Fatalf("GetTileContent: %v", err)
 	}

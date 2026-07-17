@@ -183,20 +183,21 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
 
-// GetTileContent returns a text tile's stored body bytes (the markdown source).
+// GetTileContent returns a text tile's stored body bytes (the markdown source)
+// paired with the tile row version they belong to — the client's save basis.
 func (p *Plugin) GetTileContent(ctx context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
 	tile, err := p.st.GetTile(ctx, req.TileId)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
 	if tile.BlobID == 0 {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return &gridwellv1.GetTileContentResponse{Version: tile.Version}, nil
 	}
 	data, mediaType, err := p.st.GetBlobWithMedia(ctx, tile.BlobID)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: mediaType}, nil
+	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: mediaType, Version: tile.Version}, nil
 }
 
 // GetTile reads a single tile's metadata.

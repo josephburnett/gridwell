@@ -1502,9 +1502,16 @@ func (x *GetTileContentRequest) GetTileId() string {
 }
 
 type GetTileContentResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Data      []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	MediaType string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	// The tile row version these bytes belong to, read by the owning plugin in
+	// the same call that read the bytes. The client's optimistic-concurrency
+	// basis: a later UpdateText claiming this version asserts "my edit is based
+	// on exactly these bytes" — pairing them here, at the owner, makes it
+	// impossible for a client to claim a version whose content it never saw.
+	// Plugins whose bodies are not version-edited (fs, proc) leave it 0.
+	Version       int64 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1551,6 +1558,13 @@ func (x *GetTileContentResponse) GetMediaType() string {
 		return x.MediaType
 	}
 	return ""
+}
+
+func (x *GetTileContentResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
 }
 
 // GetTile reads a single tile's metadata. The server's preview + shell
@@ -3355,11 +3369,12 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x16GetTilePreviewResponse\x12\x12\n" +
 	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\"0\n" +
 	"\x15GetTileContentRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileId\"K\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\"e\n" +
 	"\x16GetTileContentResponse\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
 	"\n" +
-	"media_type\x18\x02 \x01(\tR\tmediaType\")\n" +
+	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\")\n" +
 	"\x0eGetTileRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\">\n" +
 	"\x11SetTileAltRequest\x12\x17\n" +

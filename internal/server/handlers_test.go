@@ -95,12 +95,33 @@ func TestCreateTextRPC(t *testing.T) {
 
 	// Body is fetched by routable tile id (GetBlob is unroutable in the
 	// rootless model — blob ids carry no plugin namespace).
-	data, err := cl.GetTileContent(ctx, tile.ID)
+	data, version, err := cl.GetTileContent(ctx, tile.ID)
 	if err != nil {
 		t.Fatalf("get tile content: %v", err)
 	}
 	if string(data) != "# hi" {
 		t.Errorf("content = %q", data)
+	}
+	if version != tile.Version {
+		t.Errorf("content version = %d, want the tile row's %d", version, tile.Version)
+	}
+
+	// The bytes↔version pairing is the client's save basis: after an edit
+	// bumps the row, a re-fetch must return the NEW version with the new
+	// bytes — pairing them in one plugin read is what lets a client never
+	// claim a version whose content it hasn't seen.
+	upd, err := cl.UpdateText(ctx, &rpc.UpdateTextRequest{
+		TileID: tile.ID, Version: tile.Version, Data: []byte("# hi v2"),
+	})
+	if err != nil {
+		t.Fatalf("update text: %v", err)
+	}
+	data, version, err = cl.GetTileContent(ctx, tile.ID)
+	if err != nil {
+		t.Fatalf("get tile content after edit: %v", err)
+	}
+	if string(data) != "# hi v2" || version != upd.Version {
+		t.Errorf("after edit: content = %q version = %d, want %q at version %d", data, version, "# hi v2", upd.Version)
 	}
 }
 
@@ -262,7 +283,7 @@ func TestUpdateTextRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	data, err := cl.GetTileContent(ctx, tile.ID)
+	data, _, err := cl.GetTileContent(ctx, tile.ID)
 	if err != nil {
 		t.Fatalf("get tile content: %v", err)
 	}

@@ -141,7 +141,7 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 	if _, err := cl.GetTile(ctx, well.ID); err != nil {
 		t.Errorf("deleting the link destroyed the source well: %v", err)
 	}
-	if _, err := cl.GetTileContent(ctx, inner.ID); err != nil {
+	if _, _, err := cl.GetTileContent(ctx, inner.ID); err != nil {
 		t.Errorf("deleting the link destroyed the source's content: %v", err)
 	}
 	_ = uuidA
@@ -182,7 +182,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	if u, _, _ := rpc.SplitID(copyT.ID); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
 	}
-	body, err := cl.GetTileContent(ctx, copyT.ID)
+	body, _, err := cl.GetTileContent(ctx, copyT.ID)
 	if err != nil {
 		t.Fatalf("copy content: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("edit copy: %v", err)
 	}
-	orig, err := cl.GetTileContent(ctx, txt.ID)
+	orig, _, err := cl.GetTileContent(ctx, txt.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	if cp.Kind != rpc.KindPane || cp.AltText != "ws" {
 		t.Errorf("copy shape: %+v", cp)
 	}
-	body, err := cl.GetTileContent(ctx, cp.ID)
+	body, _, err := cl.GetTileContent(ctx, cp.ID)
 	if err != nil {
 		t.Fatalf("copy content: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)); err != nil {
 		t.Fatalf("edit copy: %v", err)
 	}
-	orig, err := cl.GetTileContent(ctx, pt.ID)
+	orig, _, err := cl.GetTileContent(ctx, pt.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

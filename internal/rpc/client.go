@@ -55,15 +55,18 @@ func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Jpeg, nil
 }
 
-// GetTileContent fetches a text tile's descent body bytes. Routable by tile
-// id, so it resolves content for plugin-owned tiles (a file's metadata, a
-// process's @info) as well as local store tiles.
-func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, error) {
+// GetTileContent fetches a text tile's descent body bytes paired with the
+// tile row version they belong to (0 for plugins whose bodies are not
+// version-edited — fs, proc). Routable by tile id, so it resolves content
+// for plugin-owned tiles (a file's metadata, a process's @info) as well as
+// local store tiles. The version is the caller's save basis: cache it WITH
+// the bytes, never apart from them.
+func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, int64, error) {
 	r, err := c.cl.GetTileContent(ctx, connect.NewRequest(&pb.GetTileContentRequest{TileId: tileID}))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return r.Msg.Data, nil
+	return r.Msg.Data, r.Msg.Version, nil
 }
 
 // ListPlugins returns the node's configured plugins in config order, for the

@@ -64,7 +64,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 2b. The file tile's descent body (its metadata) routes to the plugin.
-	body, err := cl.GetTileContent(ctx, alpha.ID)
+	body, _, err := cl.GetTileContent(ctx, alpha.ID)
 	if err != nil {
 		t.Fatalf("GetTileContent: %v", err)
 	}

@@ -244,6 +244,13 @@ message GetTileContentRequest {
 message GetTileContentResponse {
   bytes data = 1;
   string media_type = 2;
+  // The tile row version these bytes belong to, read by the owning plugin in
+  // the same call that read the bytes. The client's optimistic-concurrency
+  // basis: a later UpdateText claiming this version asserts "my edit is based
+  // on exactly these bytes" — pairing them here, at the owner, makes it
+  // impossible for a client to claim a version whose content it never saw.
+  // Plugins whose bodies are not version-edited (fs, proc) leave it 0.
+  int64 version = 3;
 }
 
 // GetTile reads a single tile's metadata. The server's preview + shell
