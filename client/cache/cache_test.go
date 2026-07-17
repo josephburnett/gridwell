@@ -373,6 +373,38 @@ func TestPutGridReconcilesContentLikeAnEvent(t *testing.T) {
 	}
 }
 
+// TestFetchNeverClobbersDirtyContent closes the enqueue-to-send race: a save
+// is queued with FROZEN bytes but claims its basis at SEND time (issue #140's
+// chaining). If a content fetch completing in that window could replace the
+// dirty entry, it would advance the basis under the queued save — stale bytes
+// would go out claiming the current version, re-forging the stomp the basis
+// exists to prevent — and would also overwrite unsaved typing on screen. A
+// fetch must never replace a dirty entry; the entry's own save resolves it.
+func TestFetchNeverClobbersDirtyContent(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 1}})
+	c.PutFetchedContent("10", []byte("# v1 body"), 1)
+	c.PutEditedContent("10", []byte("# v1 body + local typing")) // save queued, bytes frozen
+
+	// A foreign edit's refetch completes mid-window with version-2 content.
+	c.PutFetchedContent("10", []byte("# foreign v2 body"), 2)
+
+	if b, _ := c.TileContent("10"); string(b) != "# v1 body + local typing" {
+		t.Fatalf("fetch overwrote unsaved typing: %q", b)
+	}
+	if base, _ := c.SaveBasis("10"); base != 1 {
+		t.Fatalf("basis = %d, want 1 — a floating basis under a queued save is the stomp re-forged", base)
+	}
+
+	// A clean entry (no local edits) IS replaced — that's how foreign content
+	// becomes visible.
+	c.PutSavedContent("10", []byte("# settled"), 3)
+	c.PutFetchedContent("10", []byte("# fresher"), 4)
+	if b, _ := c.TileContent("10"); string(b) != "# fresher" {
+		t.Fatalf("clean entry not refreshed by fetch: %q", b)
+	}
+}
+
 // TestSaveBasisFollowsBytesNotRow is the interlock itself: the version a save
 // claims tracks the BYTES the client has seen, never the row version foreign
 // events advance. Claiming the row version was the stomp mechanism — stale

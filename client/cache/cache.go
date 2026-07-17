@@ -62,9 +62,20 @@ func New() *Cache {
 // PutFetchedContent stores a body read from the server, paired with the tile
 // row version the server read it under (GetTileContentResponse.version). The
 // entry is clean: server truth, no local edits riding on it.
+//
+// A DIRTY entry is never replaced: the fetch raced local unsaved edits (a
+// keystroke typed during the fetch's flight, or an ascent flush that queued a
+// save while the fetch was out). Overwriting would both destroy the typing on
+// screen AND advance the basis a queued save claims at send time — re-forging
+// exactly the stale-bytes-with-current-version claim SaveBasis exists to
+// prevent. The dirty entry's own save resolves it: accepted (basis current) or
+// 409-reconciled (basis stale), either way through a path the user can see.
 func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if e, ok := c.content[tileID]; ok && e.dirty {
+		return
+	}
 	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
 }
 
