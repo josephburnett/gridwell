@@ -483,4 +483,14 @@ export class GridwellDriver {
   textareaInfo(): Promise<{ paneID: string; tileID: string; hasContent: boolean; x: number; y: number; w: number; h: number } | null> {
     return this.win.evaluate(() => (window as any).__gridwellTest.textareaInfo());
   }
+
+  // textareaValue reads the raw-text overlay's current buffer straight from
+  // the DOM — what the user actually sees in a text descent. null when no
+  // textarea overlay exists.
+  textareaValue(): Promise<string | null> {
+    return this.win.evaluate(() => {
+      const ta = document.querySelector('textarea');
+      return ta ? ta.value : null;
+    });
+  }
 }

@@ -1767,6 +1767,14 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		if !ta.IsNull() && !ta.IsUndefined() {
 			buf = ta.Get("value").String()
 			hasBuf = true
+			// This flush is now the owner of the buffer's pending edit —
+			// exactly like saveTextFromTextarea, which also clears the flag
+			// when it takes the buffer. Leaving it set was the stuck-dirty
+			// bug: a declined debounce after ascent left textareaDirty true
+			// forever, DecideTextareaSync then treated every later sync as
+			// "typing in progress", and the stale buffer it preserved got
+			// saved over a foreign writer's edit on the next open/close.
+			a.textareaDirty = false
 		}
 	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.paneDirty(p.ID) {
 		// Rendered-mode edits live in the content store (PutEditedContent per

@@ -381,13 +381,56 @@ func TestDecideTextareaSync(t *testing.T) {
 			},
 		},
 		{
-			name: "same tile, textarea non-empty → preserve typing",
+			// The foreign-writer visibility rule: with NO pending edit the
+			// buffer is a mere view of the cached body and must follow it.
+			// Another device edited this tile; the event evicted the stale
+			// body, the refetch landed the foreign bytes — the open editor
+			// repaints. (Real typing always sets PendingEdit, so this input
+			// combination IS the stale-view case; the old "non-empty →
+			// preserve" rule kept the stale buffer, and the ascent flush
+			// then saved it back over the foreign edit — the stomp.)
+			name: "same tile, clean buffer differs from cache → follow the cache",
 			in: TextareaSyncInput{
 				FocusedTileID: "5",
 				LastTileID:    "5",
-				CurrentValue:  "user just typed this",
+				CurrentValue:  "stale buffer from before the foreign edit",
 				BlobCached:    true,
-				BlobContent:   "stale cache content",
+				BlobContent:   "foreign edit, refetched",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "foreign edit, refetched",
+				NewLastTileID: "5",
+			},
+		},
+		{
+			// Clean buffer already matches the cache: no write, no churn (a
+			// SetValue would move the caret/scroll for nothing).
+			name: "same tile, clean buffer equals cache → leave alone",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "settled body",
+				BlobCached:    true,
+				BlobContent:   "settled body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: "5",
+			},
+		},
+		{
+			// Deleting everything is an edit like any other: an empty DIRTY
+			// buffer must not be "helpfully" reseeded from the cache — that
+			// would resurrect the deleted text under the user's caret.
+			name: "same tile, pending edit emptied the buffer → preserve",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "",
+				BlobCached:    true,
+				BlobContent:   "deleted content",
+				PendingEdit:   true,
 			},
 			want: TextareaSyncDecision{
 				SetValue:      false,

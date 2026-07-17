@@ -61,6 +61,28 @@ export async function getTileContent(origin: string, tileId: string): Promise<st
   return body.data ? Buffer.from(body.data, 'base64').toString('utf8') : '';
 }
 
+// updateText writes a text tile's body DIRECTLY through the server — a
+// foreign writer, as far as the app under test is concerned (another device
+// editing the same tile). version is the optimistic-concurrency claim; throws
+// on any non-OK response including a version conflict.
+export async function updateText(
+  origin: string,
+  tileId: string,
+  version: number,
+  text: string,
+): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/UpdateText`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({
+      tileId,
+      version,
+      data: Buffer.from(text, 'utf8').toString('base64'),
+    }),
+  });
+  if (!res.ok) throw new Error(`UpdateText(${tileId}@${version}) failed: ${res.status} ${await res.text()}`);
+}
+
 // tileAt returns the tile of the given kind at cell (x, y), or undefined.
 // proto-JSON encodes int64 fields as either numbers or strings, so coordinates
 // are compared numerically.

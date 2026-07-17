@@ -377,9 +377,16 @@ type TextareaSyncDecision struct {
 //     has the last edited tile's content by default"). If the blob is
 //     already cached, seed with it in the same step so the user doesn't
 //     see a flash of empty.
-//   - Same tile, textarea empty: the value was cleared by a mode toggle
-//     or by a pending blob fetch; seed when the blob arrives.
-//   - Same tile, textarea non-empty: in-progress typing — preserve.
+//   - Same tile, PENDING edit: in-progress typing — preserve. The buffer is
+//     the one authority for unsaved keystrokes.
+//   - Same tile, NO pending edit: the buffer is a mere view of the cached
+//     body — follow it. This is what makes a foreign writer's edit (another
+//     device, same tile) appear in an open editor instead of lingering as a
+//     stale buffer: the arriving event evicts the stale body, the refetch
+//     lands the foreign bytes, and this sync repaints the textarea. Before
+//     this rule the clean buffer was preserved merely for being non-empty —
+//     a fourth un-owned copy of the content, and the ascent flush then saved
+//     those stale bytes back (the foreign-edit stomp).
 //
 // LastTileID always advances to FocusedTileID so the blob-fetch
 // onComplete sees the "same tile, value-driven" branch rather than
@@ -399,7 +406,7 @@ func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 			FlushOldFirst: in.PendingEdit && in.LastTileID != "",
 		}
 	}
-	if in.CurrentValue == "" && in.BlobCached {
+	if !in.PendingEdit && in.BlobCached && in.CurrentValue != in.BlobContent {
 		return TextareaSyncDecision{
 			SetValue:      true,
 			Value:         in.BlobContent,
