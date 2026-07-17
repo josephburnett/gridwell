@@ -16,6 +16,7 @@ package federation_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial/sshdialtest"
+	gwrpc "github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // repoRoot walks up from the test binary's source dir to the module root.
@@ -263,5 +265,98 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("session on the REMOTE (direct) = %q — the blob did not land in the remote plugin's DB", got)
 	}
 
-	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read + session OK")
+	// 6. LIVE EVENTS cross the mount (the user-visible contract behind "things
+	//    stay as you left them" on a remote view): a write made DIRECTLY on the
+	//    remote node (another device talking to rtb, not through this mount)
+	//    must arrive on the LOCAL node's Subscribe stream as a TileChanged
+	//    carrying the fully chained tile id. This is the seam no in-process
+	//    test can see: remote localdb → remote node export fan-in → gridwell-ssh
+	//    relay → local fan-in (transit re-qualification) → the client stream.
+	// The Subscribe open blocks until the server flushes its first event
+	// (Connect holds response headers until the first Send), so the open and
+	// the receive loop both live in the goroutine; the main loop keeps making
+	// remote edits until one of their events arrives.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	gotEvents := make(chan gwrpc.Event, 64)
+	subErr := make(chan error, 1)
+	go func() {
+		defer close(gotEvents)
+		sub, err := gwrpc.NewDefaultClient(localOrigin).Subscribe(ctx)
+		if err != nil {
+			subErr <- err
+			return
+		}
+		defer sub.Close()
+		for {
+			ev, ok, err := sub.Recv()
+			if err != nil || !ok {
+				return
+			}
+			select {
+			case gotEvents <- ev:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// The remote-direct ids are the chained ids with the ssh hop peeled.
+	peel := func(id string) string { return strings.SplitN(id, "/", 2)[1] }
+	// protojson omits zero fields, so a fresh tile's "version" key is absent.
+	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
+	txtID := txt["id"].(string)
+	version := num(txt["version"])
+
+	// Write on the remote until an event lands locally: the local fan-in dials
+	// the remote stream asynchronously, so the first write can race stream
+	// establishment. Each write is a REAL remote edit (version chains), so any
+	// one of them arriving proves the whole path.
+	writeTick := time.NewTicker(500 * time.Millisecond)
+	defer writeTick.Stop()
+	deadline2 := time.After(25 * time.Second)
+	wrote := 0
+	for {
+		var arrived *gwrpc.TileChanged
+		select {
+		case <-writeTick.C:
+			body := fmt.Sprintf("# edited on the remote, take %d", wrote)
+			resp := rpc(t, remoteOrigin, "UpdateText", map[string]any{
+				"path":    map[string]any{"wellIds": []string{peel(wellID)}},
+				"tileId":  peel(txtID),
+				"version": version,
+				"data":    base64.StdEncoding.EncodeToString([]byte(body)),
+			})
+			version = num(resp["tile"].(map[string]any)["version"])
+			wrote++
+			continue
+		case ev, ok := <-gotEvents:
+			if !ok {
+				select {
+				case err := <-subErr:
+					t.Fatalf("local Subscribe: %v", err)
+				default:
+					t.Fatal("local Subscribe stream ended before the remote edit's event arrived")
+				}
+			}
+			if ev.Kind == gwrpc.EventTileChanged && ev.TileChanged != nil &&
+				ev.TileChanged.Tile.ID == txtID {
+				arrived = ev.TileChanged
+			}
+		case <-deadline2:
+			t.Fatalf("no TileChanged for %s arrived on the local stream after %d remote edits — events do not cross the ssh mount", txtID, wrote)
+		}
+		if arrived == nil {
+			continue
+		}
+		if arrived.Tile.Version < 1 {
+			t.Fatalf("event version = %d, want a remote EDIT's bumped version (create is 0)", arrived.Tile.Version)
+		}
+		if arrived.Tile.GridID != wellChild {
+			t.Fatalf("event grid id = %q, want the chained %q", arrived.Tile.GridID, wellChild)
+		}
+		break
+	}
+
+	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read + session + live events OK")
 }
