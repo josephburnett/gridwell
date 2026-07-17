@@ -298,12 +298,19 @@ consequences:
   *data* and redraws, but cannot move the framing a transition is animating —
   it's correct fan-out ("mutation is local and reflected"), not a "reading
   mutates" bug. The animation owns framing; events own data; the two never cross.
-- **Residual: the optimistic-edit echo (narrow).** A local optimistic edit, then
-  the authoritative `Subscribe` echo, both go through `cache.Apply` (upsert by
-  id) with no per-field merge or version interlock. For the same content this is
-  an idempotent re-apply (no visible change); it only matters under a genuine
-  concurrent edit to the same tile — rare in a single-tenant app, but the place a
-  reconcile *should* be explicit rather than last-writer-wins.
+- **The echo/foreign-writer reconcile is now explicit (was: last-writer-wins).**
+  `cache.Apply` drops an event STRICTLY OLDER than the cached row (the stale-echo
+  interlock, `TestApplyStaleEchoDropped`), and both row-arrival paths (`Apply`
+  and `PutGrid`, one `reconcileContent`) age the text-body cache: a newer row
+  drops a CLEAN body (so a foreign writer's edit refetches and appears) and
+  spares a DIRTY one (unsaved typing). Content entries bind `{bytes, base
+  version, dirty}` — one owner — and saves claim `SaveBasis` (the version the
+  bytes derive from, advanced only by fetches and save responses), so a client
+  can never claim a version whose content it hasn't seen; a stale save 409s and
+  reconciles visibly. The clean textarea buffer follows the entry
+  (`DecideTextareaSync`), so no stale DOM copy survives to be flushed back.
+  Crossed end-to-end by `foreign-writer.spec.ts` (a second writer against the
+  live app) and, for the remote transport, the federation gate's event step.
 
 ---
 
@@ -481,7 +488,7 @@ convention-only invariants are where bugs are born — they need the §7 cure.
 | I8 | Text preview == what you left (no re-wrap) | `PreviewScaleScroll` lays out at the framing `ContentW` + scales; `TextW` = the descent wrap width. `drawMarkdownNode` always passes `focused=false` (stored framing only). Tested: `TestPreviewContentWidthInvariantToFootprint`, `TestPreviewNotAffectedByFocusedPaneWidth`, `text-pane-split.spec.ts` | ✅ construction + tested (fix #35) |
 | I9 | Controls show only on the focused pane | wasm owns focus → native `controlVisible` (unit-tested); the wasm→native propagation is now e2e-tested (`control-focus.spec.ts`) | ✅ data single-sourced + tested (predicate dup remains) |
 | I10 | Menu changes only by user action | one owner `client/menu` (was 11 imperative sites); unit + e2e tested | ✅ construction |
-| I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — separation verified **by code inspection only**. No mid-transition event-injection test exists, and the optimistic-echo reconcile (last-writer-wins, no version interlock) is untested at any level. | ⚠️ inspected, **untested** |
+| I11 | Reading never mutates (SSE during animation) | events flow only to `cache`; framing writes only in input/urlsync — separation verified **by code inspection only**; no mid-transition event-injection test exists. The echo/foreign-writer reconcile HAS graduated: stale echoes dropped, content aged by `reconcileContent`, saves claim `SaveBasis` — unit-tested (`client/cache`) and crossed by `foreign-writer.spec.ts` + the federation event step. | ⚠️ framing separation inspected-only; reconcile ✅ construction + tested |
 | I12 | A plugin's user state survives its source being unreachable | `proc`: Probe-before-sweep; `fs`: ENOENT-only sweep (`cce8614`), both tested (§4) | ✅ construction + tested |
 | I13 | A workspace (pane tile) restores exactly as left; a pure visit never writes | the live tree is the ONE in-session owner; the blob is the at-rest form, DERIVED by the persister (encode + hash-diff — no per-gesture hooks to forget; identical bytes = no write). Codec round-trip property + golden v1 fixture (`client/pane`), persister decision unit-tested (`client/workspace`), round trip + reload + read-only-blob e2e (`workspace-*.spec.ts`) | ✅ construction + tested |
 
@@ -493,7 +500,9 @@ it is now removed and locked by two new tests. The genuine-convention items
 left: **I7** — the five framing copies are five legitimate *roles* kept
 consistent by convention (round trip tested by `framing-roundtrip.spec.ts`; a
 deeper single-owner `Frame` is possible but not warranted without a visual/render
-net) — and **I11**, whose separation is real in today's code but guarded by
-nothing; a new write into the SSE path would regress it silently (issue #5).
+net) — and **I11**, whose FRAMING separation is real in today's code but guarded
+by nothing; a new framing write into the SSE path would regress it silently.
+(I11's other half — the echo/foreign-writer reconcile — graduated: version
+interlock + content aging in `client/cache`, crossed by `foreign-writer.spec.ts`.)
 I12 graduated (`cce8614`): the sweep rule now holds, tested, in both plugins
 it governs.

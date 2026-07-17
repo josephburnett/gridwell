@@ -101,6 +101,11 @@ invent a parallel one:**
 - `client/menu` — "is the menu open, and on which pane": one state machine
   where 14 scattered boolean writes used to live. The worked proof that
   applying this cure to a chronic symptom makes it stop recurring.
+- `cache` content entries — "the text bytes this client has seen, and which
+  server version they derive from": one `{bytes, base, dirty}` fact. Saves
+  claim `SaveBasis` (advanced only by fetches and save responses), so a
+  version can never be claimed apart from its bytes — the foreign-writer
+  stomp became unrepresentable instead of patched.
 
 Each makes a bug class *unrepresentable*. That is the goal of every change:
 prefer the design where the bug **cannot be written**, over the design where the
@@ -238,10 +243,13 @@ them** (`ARCHITECTURE.md §11`; each is a tracked GitHub issue):
   (`framing-roundtrip.spec.ts`), but "the well *preview* and a sibling pane are
   byte-identical to before" is still unobservable — the e2e `testhook` does not
   expose a preview signature; extend it.
-- **SSE during animation / optimistic echo** (I11, issue #5): the code
-  separation is verified by inspection only. No test injects an event
-  mid-transition, and the optimistic-edit echo has no version interlock or
-  test. A new write into the SSE path would regress this silently.
+- **SSE during animation** (I11): the framing/data separation is verified by
+  inspection only — no test injects an event mid-transition; a new framing
+  write into the SSE path would regress silently. (The other I11 half — the
+  optimistic-echo / foreign-writer reconcile — graduated 2026-07-17: stale
+  echoes dropped, text bodies aged with the row version, saves claim
+  `cache.SaveBasis`; unit-tested in `client/cache` and crossed end-to-end by
+  `foreign-writer.spec.ts` and the federation gate's event step.)
 (I10 menu persistence and I12 source-sweep stability graduated: single
 owners, unit + e2e / seam tests.)
 
