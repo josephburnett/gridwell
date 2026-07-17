@@ -660,6 +660,6 @@ func (a *App) saveTextFromTextarea(p *pane.Pane) {
 	// store (tile-scoped by tile id, so it never leaks into a clone), the same
 	// accessor the renderer and parent-grid preview read.
 	a.textareaDirty = false
-	a.c.PutTileContent(file.ID, []byte(buf))
+	a.c.PutEditedContent(file.ID, []byte(buf))
 	a.enqueueTextSave(gid, p.Path, file.ID, file.Version, []byte(buf))
 }

@@ -145,7 +145,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	//     in directly. Without this, focus-shifting back to the doc
 	//     would re-display the stale buffer, and worse, a raw→rendered
 	//     toggle would save the stale buffer back over the drop.
-	a.c.PutTileContent(tile.ID, []byte(newSrc))
+	a.c.PutEditedContent(tile.ID, []byte(newSrc))
 	if a.lastTextareaTileID == dt.tileID &&
 		!a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
 		a.textTextarea.Set("value", newSrc)
@@ -157,12 +157,19 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 		a.local(dt.pane.ID).SetCaret(dt.insertOffset + (len(newSrc) - len(bytes)))
 	}
 
+	// Claim the save basis — the version of the bytes the insert was computed
+	// over — not the drag-time row version: a foreign edit landing since the
+	// drag started must conflict visibly, never be overwritten.
+	saveVersion := dt.version
+	if base, ok := a.c.SaveBasis(dt.tileID); ok {
+		saveVersion = base
+	}
 	path := slices.Clone(dt.pane.Path)
 	go func() {
 		_, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: path},
 			TileID:  dt.tileID,
-			Version: dt.version,
+			Version: saveVersion,
 			Data:    []byte(newSrc),
 		}, []byte(newSrc))
 		if !ok {

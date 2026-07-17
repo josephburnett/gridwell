@@ -23,11 +23,29 @@ type Cache struct {
 	grids map[string]*Grid
 	// content holds text tile bodies keyed by tile id — the single text-body
 	// store. A body is fetched by tile id via GetTileContent (routable; blob ids
-	// are not) and written back by PutTileContent, both for confirmed saves and
-	// for optimistic, not-yet-saved edits. Keying by tile id makes every write
-	// tile-scoped: editing one clone never touches a sibling's body. See
-	// TileContent / PutTileContent.
-	content map[string][]byte
+	// are not) and written back for confirmed saves and for optimistic,
+	// not-yet-saved edits. Keying by tile id makes every write tile-scoped:
+	// editing one clone never touches a sibling's body.
+	//
+	// Each entry binds the bytes to the server version they derive from (Base)
+	// — ONE fact, "the content state this client has seen", with one owner.
+	// Splitting them (bytes here, version on the grid row) was the stomp bug:
+	// a foreign writer's event advanced the row version while the stale bytes
+	// stayed cached, so the next save carried current-version + old-bytes and
+	// sailed through the server's optimistic-concurrency check, silently
+	// destroying the foreign edit. Saves now claim SaveBasis (the entry's
+	// Base), which only fetches and save responses ever advance — a version
+	// can never be claimed apart from the bytes it vouches for.
+	content map[string]*contentEntry
+}
+
+// contentEntry is a text tile's body plus its provenance. Base is the tile
+// row version the bytes derive from; Dirty marks unsaved local edits (the
+// optimistic buffer) that reconciliation must not throw away.
+type contentEntry struct {
+	data  []byte
+	base  int64
+	dirty bool
 }
 
 // Grid is a cached grid plus its tiles indexed by id for cheap upsert.
@@ -38,21 +56,66 @@ type Grid struct {
 
 // New returns an empty cache.
 func New() *Cache {
-	return &Cache{grids: map[string]*Grid{}, content: map[string][]byte{}}
+	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{}}
 }
 
-// PutTileContent stores a text tile's body bytes keyed by tile id. This is the
-// single text-body writer: confirmed saves (postUpdateText) and optimistic,
-// not-yet-saved edits (rendered-mode keystrokes, raw textarea input, embed
-// drops) all land here, so the renderer — which reads bodies through
-// TileContent — always reflects an edit immediately. Keyed by tile id, so a
-// write is tile-scoped and never leaks into a clone that shares content.
-func (c *Cache) PutTileContent(tileID string, data []byte) {
+// PutFetchedContent stores a body read from the server, paired with the tile
+// row version the server read it under (GetTileContentResponse.version). The
+// entry is clean: server truth, no local edits riding on it.
+func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cp := make([]byte, len(data))
-	copy(cp, data)
-	c.content[tileID] = cp
+	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
+}
+
+// PutEditedContent stores an optimistic, not-yet-saved local edit (rendered-
+// mode keystrokes, raw textarea input, embed drops) so the renderer reflects
+// it immediately. The entry keeps its existing Base — the edit is based on
+// the bytes already here — and turns dirty so reconciliation never discards
+// it. An edit with no prior entry keeps Base 0: its save claims a version the
+// server has moved past, fails the version check, and reconciles visibly —
+// it can never silently overwrite anything.
+func (c *Cache) PutEditedContent(tileID string, data []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e := c.content[tileID]
+	if e == nil {
+		e = &contentEntry{}
+		c.content[tileID] = e
+	}
+	e.data = cloneBytes(data)
+	e.dirty = true
+}
+
+// PutSavedContent stores the body a completed UpdateText confirmed, with the
+// response tile's version as the new base — the next queued save chains from
+// it (issue #140). The entry is clean again: the server holds these bytes.
+func (c *Cache) PutSavedContent(tileID string, data []byte, base int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
+}
+
+// SaveBasis returns the version an UpdateText for this tile must claim: the
+// version of the bytes the user's edit is actually based on. Only content
+// fetches and save responses advance it — a foreign writer's event advances
+// the grid ROW version but never this, so a save based on bytes the client
+// hasn't refreshed claims the old version and is rejected by the server
+// instead of silently overwriting the foreign edit.
+func (c *Cache) SaveBasis(tileID string) (int64, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.content[tileID]
+	if !ok {
+		return 0, false
+	}
+	return e.base, true
+}
+
+func cloneBytes(b []byte) []byte {
+	cp := make([]byte, len(b))
+	copy(cp, b)
+	return cp
 }
 
 // DropTileContent forgets a tile's cached body so the next read refetches it
@@ -70,20 +133,62 @@ func (c *Cache) DropTileContent(tileID string) {
 func (c *Cache) TileContent(tileID string) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	b, ok := c.content[tileID]
-	return b, ok
+	e, ok := c.content[tileID]
+	if !ok {
+		return nil, false
+	}
+	return e.data, true
 }
 
 // PutGrid replaces a grid's metadata and tile set. Used after a fresh
-// GetGrid call.
+// GetGrid call. Each replaced row runs the same content reconciliation as a
+// Subscribe event (reconcileContent) — a refetch and an event are the same
+// fact arriving on two paths and must age cached bodies identically, or one
+// path silently advances the version past the bytes (the stomp class).
 func (c *Cache) PutGrid(g rpc.Grid, tiles []rpc.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	old := c.grids[g.ID]
 	gr := &Grid{Meta: g, Tiles: map[string]rpc.Tile{}}
 	for _, n := range tiles {
+		if old != nil {
+			if cur, ok := old.Tiles[n.ID]; ok {
+				c.reconcileContent(cur, n)
+			}
+		}
 		gr.Tiles[n.ID] = n
 	}
 	c.grids[g.ID] = gr
+}
+
+// reconcileContent ages the cached body when a fresher row for the same tile
+// arrives, whatever path it arrived on (Subscribe event or grid refetch).
+// Callers hold c.mu.
+//
+// Text tiles: a row version beyond the entry's base means a foreign writer
+// changed the content — drop a CLEAN entry so the next render refetches (the
+// foreign edit becomes visible), keep a DIRTY one (the user's unsaved typing;
+// its save claims the old base, the server rejects it, and the conflict path
+// reconciles visibly). Same-version rows never drop: framing writes don't
+// bump version and must not evict the body.
+//
+// Non-text tiles: version is not the content key (a pane tile's layout blob
+// is framing-class and never bumps version), so a changed blob id is the
+// staleness signal instead.
+func (c *Cache) reconcileContent(cur, n rpc.Tile) {
+	e, ok := c.content[n.ID]
+	if !ok {
+		return
+	}
+	if n.Kind == rpc.KindText {
+		if !e.dirty && n.Version > e.base {
+			delete(c.content, n.ID)
+		}
+		return
+	}
+	if n.BlobID != cur.BlobID {
+		delete(c.content, n.ID)
+	}
 }
 
 // Grid returns a snapshot of a cached grid, or (nil, false) if absent.
@@ -159,18 +264,8 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 		if cur, exists := g.Tiles[n.ID]; exists && n.Version < cur.Version {
 			return false
 		}
-		// A blob change invalidates the cached content bytes — without this,
-		// a framing-class blob write (a pane tile's layout, which never bumps
-		// version) from another view leaves c.content serving the OLD bytes
-		// forever, and the preview never repaints the new arrangement.
-		// Deliberately scoped to non-text kinds: a text tile's content cache
-		// doubles as the optimistic edit buffer (PutTileContent on every
-		// rendered-mode keystroke), and dropping it on a save-echo racing a
-		// debounced edit would visibly revert typing (the I11/#5 family —
-		// text staleness under a foreign writer is tracked there, not here).
-		if cur, exists := g.Tiles[n.ID]; exists &&
-			n.Kind != rpc.KindText && n.BlobID != cur.BlobID {
-			delete(c.content, n.ID)
+		if cur, exists := g.Tiles[n.ID]; exists {
+			c.reconcileContent(cur, n)
 		}
 		g.Tiles[n.ID] = n
 		return true

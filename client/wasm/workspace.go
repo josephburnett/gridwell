@@ -136,7 +136,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 		if fresh.BlobID == 0 {
 			tree = workspaceTreeFromPlace(origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
 		} else {
-			data, err = a.cl.GetTileContent(context.Background(), tileID)
+			data, _, err = a.cl.GetTileContent(context.Background(), tileID)
 			if err != nil {
 				a.surfaceRPCError("GetTileContent", err)
 				pd.failed = true
@@ -246,7 +246,7 @@ func (a *App) bootWorkspace(tileID string) {
 		a.installWorkspace(tile, homeTree(), "", false, nil, false)
 		return
 	}
-	data, err := a.cl.GetTileContent(context.Background(), tileID)
+	data, _, err := a.cl.GetTileContent(context.Background(), tileID)
 	if err != nil {
 		a.surfaceRPCError("GetTileContent", err)
 		return

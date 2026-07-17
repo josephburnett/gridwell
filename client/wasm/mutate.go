@@ -155,31 +155,37 @@ func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent 
 		a.scheduleFrame()
 		return rpc.Tile{}, false
 	}
-	// Advance the cached tile to the response row NOW — not when the SSE
-	// echo lands. Text saves are serialized per tile and claim the version
-	// at send time (issue #140); that only chains if the previous write's
-	// response has already moved the cached version forward.
+	// Advance the cached tile AND the save basis to the response row NOW —
+	// not when the SSE echo lands. Text saves are serialized per tile and
+	// claim their basis at send time (issue #140); that only chains if the
+	// previous write's response has already moved the basis forward.
 	a.c.UpdateTile(gid, *tile)
-	a.c.PutTileContent(tile.ID, newContent)
+	a.c.PutSavedContent(tile.ID, newContent, tile.Version)
 	return *tile, true
 }
 
 // enqueueTextSave posts an UpdateText through the per-tile serial queue.
 // The version is claimed AT SEND TIME — after any earlier write for the same
-// tile has completed and advanced the cache — so pipelined saves (the
+// tile has completed and advanced the save basis — so pipelined saves (the
 // raw→rendered toggle's flush and the keystroke typed right after it,
 // issue #140) chain versions instead of both claiming the same one and
-// losing the second edit to a conflict reconcile. fallbackVersion (the
-// enqueue-time version) is used if the tile has left the cache meanwhile,
-// so the server still sees the write and surfaces the real story.
+// losing the second edit to a conflict reconcile.
+//
+// The claim is the cache's SaveBasis — the version of the BYTES this edit is
+// based on — never the grid row version. The row advances when a foreign
+// writer's event or a grid refetch lands, without this client ever seeing the
+// new content; claiming it would carry current-version + stale-bytes past the
+// server's optimistic-concurrency check and silently destroy the foreign edit
+// (the remote-stomp bug). Claiming the basis makes that save conflict
+// instead, which reconciles visibly. fallbackVersion (the enqueue-time row
+// version) is used only if the content entry is gone, so the server still
+// sees the write and surfaces the real story.
 func (a *App) enqueueTextSave(gid string, path []string, tileID string, fallbackVersion int64, data []byte) {
 	pathCopy := append([]string(nil), path...)
 	a.textSaves.Enqueue(tileID, func() {
 		version := fallbackVersion
-		if g, ok := a.c.Grid(gid); ok {
-			if file, ok := g.Tiles[tileID]; ok {
-				version = file.Version
-			}
+		if base, ok := a.c.SaveBasis(tileID); ok {
+			version = base
 		}
 		a.postUpdateText(gid, &rpc.UpdateTextRequest{
 			Path:    rpc.Path{WellIDs: pathCopy},

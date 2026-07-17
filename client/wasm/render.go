@@ -1002,13 +1002,13 @@ func (a *App) fetchTileContent(tileID string) {
 		return
 	}
 	go func() {
-		data, err := a.cl.GetTileContent(context.Background(), tileID)
+		data, version, err := a.cl.GetTileContent(context.Background(), tileID)
 		if err != nil {
 			// The tile body will simply never appear — say why (charter §6).
 			a.surfaceRPCError("GetTileContent", err)
 			return
 		}
-		a.c.PutTileContent(tileID, data)
+		a.c.PutFetchedContent(tileID, data, version)
 		a.refreshFileOverlay()
 		a.draw()
 	}()

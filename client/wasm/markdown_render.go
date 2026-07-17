@@ -415,7 +415,7 @@ func (a *App) editRenderedKey(ev js.Value) {
 	if out.Changed {
 		// Write through the content store — the same accessor the renderer reads
 		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
-		a.c.PutTileContent(file.ID, []byte(out.Src))
+		a.c.PutEditedContent(file.ID, []byte(out.Src))
 		pl.Dirty = true
 		a.scheduleFileSave()
 		a.scheduleURLUpdate()

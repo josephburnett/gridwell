@@ -43,10 +43,10 @@ func TestTileContentEditDoesNotLeakToClone(t *testing.T) {
 	// body — but each addressed by its own tile id.
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
 	c.PutGrid(rpc.Grid{ID: "2"}, []rpc.Tile{{ID: "20", GridID: "2", Kind: rpc.KindText}})
-	c.PutTileContent("10", []byte("Hello World"))
-	c.PutTileContent("20", []byte("Hello World"))
+	c.PutFetchedContent("10", []byte("Hello World"), 1)
+	c.PutFetchedContent("20", []byte("Hello World"), 1)
 
-	c.PutTileContent("10", []byte("Goodbye"))
+	c.PutEditedContent("10", []byte("Goodbye"))
 
 	if b, _ := c.TileContent("10"); string(b) != "Goodbye" {
 		t.Errorf("edited tile body = %q, want Goodbye", b)
@@ -65,9 +65,9 @@ func TestTileContentEditDoesNotLeakToClone(t *testing.T) {
 func TestRenderedEditVisibleThroughRenderAccessor(t *testing.T) {
 	c := New()
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
-	c.PutTileContent("10", []byte("Hello")) // what the renderer reads
+	c.PutFetchedContent("10", []byte("Hello"), 1) // what the renderer reads
 
-	c.PutTileContent("10", []byte("Hello world")) // what an edit writes
+	c.PutEditedContent("10", []byte("Hello world")) // what an edit writes
 
 	got, _ := c.TileContent("10")
 	if string(got) != "Hello world" {
@@ -166,7 +166,7 @@ func TestTileContentPutGet(t *testing.T) {
 	if _, ok := c.TileContent("7"); ok {
 		t.Fatal("empty cache should not have content for tile 7")
 	}
-	c.PutTileContent("7", []byte("hello"))
+	c.PutFetchedContent("7", []byte("hello"), 1)
 	b, ok := c.TileContent("7")
 	if !ok {
 		t.Fatal("tile 7 content missing after put")
@@ -174,9 +174,9 @@ func TestTileContentPutGet(t *testing.T) {
 	if string(b) != "hello" {
 		t.Errorf("content = %q, want hello", string(b))
 	}
-	// PutTileContent copies the bytes so caller mutations don't propagate.
+	// Content puts copy the bytes so caller mutations don't propagate.
 	src := []byte("world")
-	c.PutTileContent("8", src)
+	c.PutEditedContent("8", src)
 	src[0] = 'X'
 	got, _ := c.TileContent("8")
 	if string(got) != "world" {
@@ -186,7 +186,7 @@ func TestTileContentPutGet(t *testing.T) {
 
 func TestDropTileContent(t *testing.T) {
 	c := New()
-	c.PutTileContent("7", []byte("rejected optimistic edit"))
+	c.PutEditedContent("7", []byte("rejected optimistic edit"))
 	c.DropTileContent("7")
 	if _, ok := c.TileContent("7"); ok {
 		t.Fatal("content survived DropTileContent; a rejected edit would keep rendering as saved")
@@ -245,7 +245,7 @@ func TestUpdateTile(t *testing.T) {
 func TestRemoveTileFreesContent(t *testing.T) {
 	c := New()
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
-	c.PutTileContent("10", []byte("Goodbye"))
+	c.PutEditedContent("10", []byte("Goodbye"))
 	if _, ok := c.TileContent("10"); !ok {
 		t.Fatal("content not stored")
 	}
@@ -266,7 +266,7 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
 		{ID: "10", GridID: "1", Kind: rpc.KindPane, Version: 3, BlobID: 7},
 	})
-	c.PutTileContent("10", []byte(`{"v":1,"old":true}`))
+	c.PutFetchedContent("10", []byte(`{"v":1,"old":true}`), 3)
 
 	changed := c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
 		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindPane, Version: 3, BlobID: 8},
@@ -278,7 +278,7 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 		t.Fatal("stale content bytes survived a blob change — the preview would never repaint")
 	}
 	// Same blob again: nothing to drop, content written after the event stays.
-	c.PutTileContent("10", []byte(`{"v":1,"new":true}`))
+	c.PutFetchedContent("10", []byte(`{"v":1,"new":true}`), 3)
 	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
 		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindPane, Version: 3, BlobID: 8},
 	}})
@@ -287,23 +287,125 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 	}
 }
 
-// TestApplyBlobChangeSparesTextContent pins the DELIBERATE scoping of the
-// drop: a text tile's content cache doubles as the optimistic edit buffer
-// (rendered-mode keystrokes land there before the debounced UpdateText), so a
-// save-echo racing a newer local edit must not blow the buffer away — that
-// would visibly revert typing. Text staleness under a foreign writer is the
-// I11/#5 optimistic-echo residual, owned there, not here.
-func TestApplyBlobChangeSparesTextContent(t *testing.T) {
+// TestApplyTextEventSparesDirtyContent: a text tile's DIRTY content entry is
+// the user's unsaved typing (rendered-mode keystrokes land there before the
+// debounced UpdateText), so no arriving row — save echo or foreign edit —
+// may blow it away; that would visibly revert typing. The dirty entry keeps
+// its old save basis instead, so its eventual save claims a version the
+// server has moved past, is rejected, and reconciles VISIBLY through the
+// conflict path — never a silent overwrite in either direction.
+func TestApplyTextEventSparesDirtyContent(t *testing.T) {
 	c := New()
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
 		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7},
 	})
-	c.PutTileContent("10", []byte("# newer unsaved keystrokes"))
+	c.PutFetchedContent("10", []byte("# saved state"), 3)
+	c.PutEditedContent("10", []byte("# newer unsaved keystrokes"))
 
 	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
 		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 4, BlobID: 8},
 	}})
-	if _, ok := c.TileContent("10"); !ok {
-		t.Fatal("text optimistic edit buffer was dropped by a save echo")
+	if b, ok := c.TileContent("10"); !ok || string(b) != "# newer unsaved keystrokes" {
+		t.Fatal("dirty optimistic edit buffer was dropped by an arriving row")
+	}
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Fatalf("dirty entry's save basis = %d, want the version its bytes derive from (3)", base)
+	}
+}
+
+// TestApplyForeignTextEventDropsCleanContent is the regression for the
+// remote-staleness half of the stomp bug (the "today" tile): a foreign
+// writer's TileChanged advances a text tile's row version, and a CLEAN cached
+// body from before that version is now provably stale — it must drop so the
+// next render refetches and the foreign edit becomes visible. Before this
+// rule the cache kept the old bytes forever (fetchTileContent short-circuits
+// on a hit), so the remote edit never appeared on screen while the row
+// version silently advanced underneath — arming the stomp.
+func TestApplyForeignTextEventDropsCleanContent(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3, BlobID: 7},
+	})
+	c.PutFetchedContent("10", []byte("# stale"), 3)
+
+	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 4, BlobID: 8},
+	}})
+	if _, ok := c.TileContent("10"); ok {
+		t.Fatal("clean stale body survived a foreign edit's event — the remote change would never appear")
+	}
+
+	// A SAME-version event (framing — pans/scrolls never bump version) must
+	// not evict the body; that would refetch content on every pan echo.
+	c.PutFetchedContent("10", []byte("# current"), 4)
+	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 4, BlobID: 8},
+	}})
+	if b, ok := c.TileContent("10"); !ok || string(b) != "# current" {
+		t.Fatal("same-version (framing) event evicted the body")
+	}
+}
+
+// TestPutGridReconcilesContentLikeAnEvent: a grid REFETCH and a Subscribe
+// event are the same fact arriving on two paths; both must age cached bodies
+// identically. Before this, PutGrid replaced rows (advancing the version a
+// save would claim) without touching content — a refetch could arm the stomp
+// even with the event path fixed.
+func TestPutGridReconcilesContentLikeAnEvent(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3},
+		{ID: "11", GridID: "1", Kind: rpc.KindText, Version: 3},
+	})
+	c.PutFetchedContent("10", []byte("# clean stale"), 3)
+	c.PutFetchedContent("11", []byte("# saved"), 3)
+	c.PutEditedContent("11", []byte("# dirty typing"))
+
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 5},
+		{ID: "11", GridID: "1", Kind: rpc.KindText, Version: 5},
+	})
+	if _, ok := c.TileContent("10"); ok {
+		t.Fatal("clean stale body survived a refetch that advanced the row version")
+	}
+	if b, ok := c.TileContent("11"); !ok || string(b) != "# dirty typing" {
+		t.Fatal("dirty edit buffer was dropped by a grid refetch")
+	}
+}
+
+// TestSaveBasisFollowsBytesNotRow is the interlock itself: the version a save
+// claims tracks the BYTES the client has seen, never the row version foreign
+// events advance. Claiming the row version was the stomp mechanism — stale
+// bytes + current version sails through the server's optimistic-concurrency
+// check and destroys the foreign edit.
+func TestSaveBasisFollowsBytesNotRow(t *testing.T) {
+	c := New()
+	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{
+		{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 3},
+	})
+	if _, ok := c.SaveBasis("10"); ok {
+		t.Fatal("no content yet — there is no basis to claim")
+	}
+	c.PutFetchedContent("10", []byte("# body v3"), 3)
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Fatalf("basis after fetch = %d, want 3", base)
+	}
+	// Local edits ride on the fetched bytes: basis unchanged.
+	c.PutEditedContent("10", []byte("# body v3 + typing"))
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Fatalf("basis after local edit = %d, want 3", base)
+	}
+	// A foreign event advances the ROW to 7; the dirty entry's basis must NOT
+	// follow — the client never saw version 7's bytes.
+	c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{
+		Tile: rpc.Tile{ID: "10", GridID: "1", Kind: rpc.KindText, Version: 7},
+	}})
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Fatalf("basis after foreign event = %d, want 3 (claiming 7 would stomp the foreign edit)", base)
+	}
+	// A confirmed save advances it: the server accepted these bytes as v8.
+	c.PutSavedContent("10", []byte("# merged"), 8)
+	if base, _ := c.SaveBasis("10"); base != 8 {
+		t.Fatalf("basis after save = %d, want 8", base)
 	}
 }

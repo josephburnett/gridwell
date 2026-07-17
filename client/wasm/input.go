@@ -1769,7 +1769,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			hasBuf = true
 		}
 	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.paneDirty(p.ID) {
-		// Rendered-mode edits live in the content store (PutTileContent per
+		// Rendered-mode edits live in the content store (PutEditedContent per
 		// keystroke); flush them on ascent so a quick exit within the save
 		// debounce doesn't drop them.
 		if body, ok := a.tileBody(&file); ok {
@@ -1784,7 +1784,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// transition. Tile-scoped (keyed by tile id) so the content lands only on
 	// this tile, not on any clone that shares its body.
 	if hasBuf {
-		a.c.PutTileContent(file.ID, []byte(buf))
+		a.c.PutEditedContent(file.ID, []byte(buf))
 	}
 
 	// The framed window in doc px: scroll position + the inner box size
@@ -1817,12 +1817,23 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 				curVersion = f.Version
 			}
 		}
-		// Update content first if the user was editing.
+		// Update content first if the user was editing. The CONTENT write
+		// claims the save basis — the version of the bytes the buffer was
+		// seeded from — never the row version read above: a foreign writer's
+		// event advances the row without this client seeing the new bytes,
+		// and claiming it would save the stale buffer right over the foreign
+		// edit (the remote-stomp bug; this ascent flush was its exact path,
+		// since hasBuf is true for a merely-opened textarea too). A stale
+		// basis conflicts at the server and reconciles visibly instead.
 		if hasBuf {
+			saveVersion := curVersion
+			if base, ok := a.c.SaveBasis(file.ID); ok {
+				saveVersion = base
+			}
 			tile, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
 				Path:    rpc.Path{WellIDs: path},
 				TileID:  file.ID,
-				Version: curVersion,
+				Version: saveVersion,
 				Data:    []byte(buf),
 			}, []byte(buf))
 			if !ok {
