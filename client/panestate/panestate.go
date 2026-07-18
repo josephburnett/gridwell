@@ -38,9 +38,10 @@ const noCaret = -1
 type State struct {
 	// Selected is the selected tile id in this pane ("" = nothing selected).
 	Selected string
-	// Dirty marks a rendered-mode body with unsaved edits, so a quick ascent
-	// (within the save debounce) still flushes it.
-	Dirty  bool
+	// NOTE: there is deliberately no per-pane "unsaved edit" mark. That fact
+	// is tile-scoped and lives on the content-store entry (cache.DirtyContent)
+	// — a pane-scoped copy was reset by the pane's next descent, stranding the
+	// edit it described (the 2026-07-18 incident's sibling bug).
 	ascent []Saved
 	caret  int
 }

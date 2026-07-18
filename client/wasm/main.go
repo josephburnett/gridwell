@@ -269,15 +269,6 @@ type App struct {
 	// drop target.
 	lastTextareaTileID string
 
-	// textareaDirty is the single owner of "the textarea buffer holds an
-	// edit of lastTextareaTileID that has not been posted yet". Set on the
-	// textarea input event; cleared by saveTextFromTextarea (every save
-	// path). Distinct from sched.textSaveScheduled (timer armed): the
-	// timer can fire and decline (focus elsewhere) while the edit is
-	// still pending — the rebind flush in refreshFileOverlay rescues it
-	// via embed.DecideTextareaSync's FlushOldFirst.
-	textareaDirty bool
-
 	// textareaReady tracks whether the single textarea currently holds the
 	// focused tile's content (vs. being empty from a recent pane switch or
 	// pending blob fetch). Set true when refreshFileOverlay seeds the textarea
@@ -419,13 +410,6 @@ func (a *App) clearSelected(paneID string) {
 	if pl, ok := a.localIf(paneID); ok {
 		pl.Selected = ""
 	}
-}
-
-// paneDirty reports whether paneID has unsaved rendered-mode edits — a read that
-// never materializes state.
-func (a *App) paneDirty(paneID string) bool {
-	pl, ok := a.localIf(paneID)
-	return ok && pl.Dirty
 }
 
 // paneTransition is the active per-pane zoom animation. It is a series of

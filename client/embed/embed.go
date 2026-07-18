@@ -344,10 +344,12 @@ type TextareaSyncInput struct {
 	CurrentValue  string
 	BlobCached    bool
 	BlobContent   string
-	// PendingEdit reports that the textarea buffer holds an edit of
-	// LastTileID that has not been posted yet (typed within the save
-	// debounce, or the debounce fired while focus was elsewhere and its
-	// guard declined). On a rebind this edit is about to be destroyed.
+	// PendingEdit reports that LastTileID's content-store entry carries an
+	// unsaved edit (typing in flight). The textarea mirrors every keystroke
+	// into the content store, so on a rebind nothing is lost — the entry is
+	// tile-scoped and the debounced sweep posts it. PendingEdit only decides
+	// whether a SAME-tile sync may rewrite the DOM value (rewriting mid-typing
+	// would jump the cursor).
 	PendingEdit bool
 }
 
@@ -362,11 +364,6 @@ type TextareaSyncDecision struct {
 	SetValue      bool
 	Value         string
 	NewLastTileID string
-	// FlushOldFirst: before applying this decision, persist CurrentValue
-	// to LastTileID. Set on a rebind away from a tile whose buffer holds
-	// a pending (unsaved) edit — clearing without flushing silently
-	// destroys the user's typing (the fast-pane-switch data-loss bug).
-	FlushOldFirst bool
 }
 
 // DecideTextareaSync drives the textarea singleton's value across focus
@@ -393,6 +390,9 @@ type TextareaSyncDecision struct {
 // re-clearing the user's freshly-typed content.
 func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 	if in.LastTileID != in.FocusedTileID {
+		// Rebinding away from LastTileID destroys nothing: every keystroke
+		// was mirrored into its tile-scoped content-store entry, and the
+		// dirty sweep posts that entry no matter where focus went.
 		val := ""
 		if in.BlobCached {
 			val = in.BlobContent
@@ -401,9 +401,6 @@ func DecideTextareaSync(in TextareaSyncInput) TextareaSyncDecision {
 			SetValue:      true,
 			Value:         val,
 			NewLastTileID: in.FocusedTileID,
-			// The buffer still belongs to LastTileID here; if it carries an
-			// unsaved edit it must be posted before the clear destroys it.
-			FlushOldFirst: in.PendingEdit && in.LastTileID != "",
 		}
 	}
 	if !in.PendingEdit && in.BlobCached && in.CurrentValue != in.BlobContent {

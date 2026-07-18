@@ -9,7 +9,6 @@ import (
 	"syscall/js"
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -415,8 +414,9 @@ func (a *App) editRenderedKey(ev js.Value) {
 	if out.Changed {
 		// Write through the content store — the same accessor the renderer reads
 		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
+		// The entry's dirty mark IS the pending-edit fact; the debounced sweep
+		// posts it by tile id no matter where focus goes next.
 		a.c.PutEditedContent(file.ID, []byte(out.Src))
-		pl.Dirty = true
 		a.scheduleFileSave()
 		a.scheduleURLUpdate()
 	}
@@ -424,36 +424,9 @@ func (a *App) editRenderedKey(ev js.Value) {
 	a.draw()
 }
 
-// saveTextFromCache posts the focused rendered-mode tile's current cached body
-// (already updated optimistically by each keystroke) and clears its dirty mark.
-// The raw-text path is saveTextFromTextarea; this is its rendered-mode twin.
-func (a *App) saveTextFromCache(p *pane.Pane) {
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
-	if !ok {
-		// A dirty rendered-mode edit with nowhere to post — surface it, or
-		// the typing silently never persists (charter §6).
-		a.reportErr(errsurface.Error, "textedit", "text save failed — grid no longer loaded")
-		return
-	}
-	file, ok := g.Tiles[p.TextFocus]
-	if !ok {
-		a.reportErr(errsurface.Error, "textedit", "text save failed — tile no longer exists")
-		return
-	}
-	if file.Kind != rpc.KindText || a.tileReadOnly(&file) {
-		return
-	}
-	body, ok := a.tileBody(&file)
-	if !ok {
-		return
-	}
-	if pl, ok := a.localIf(p.ID); ok {
-		pl.Dirty = false
-	}
-	content := append([]byte(nil), body...)
-	a.enqueueTextSave(gid, p.Path, file.ID, file.Version, content)
-}
+// saveTextFromCache is GONE — rendered-mode edits persist through the same
+// single door as raw-mode ones (client/wasm/text_flush.go): the content-store
+// entry's dirty mark is the pending-edit fact, swept by tile id.
 
 // placeMarkdownCaret sets pane p's rendered-mode caret to the source offset
 // nearest the click (sx, sy), when the descended tile is an editable text tile.

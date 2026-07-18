@@ -13,8 +13,8 @@ func TestNewHasNoCaret(t *testing.T) {
 	if s.AscentDepth() != 0 {
 		t.Fatalf("new ascent depth = %d, want 0", s.AscentDepth())
 	}
-	if s.Selected != "" || s.Dirty {
-		t.Fatal("new state must be unselected and clean")
+	if s.Selected != "" {
+		t.Fatal("new state must be unselected")
 	}
 }
 

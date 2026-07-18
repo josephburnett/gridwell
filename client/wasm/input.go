@@ -1520,13 +1520,13 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextScrollY = initialScroll
 			fp.TextScrollX = initialScrollX
 			fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
-			// Reset per-pane view state on each new descent — it's view state,
-			// not tile state, so it does not survive across descents: any
-			// rendered-mode caret + dirty mark left by a previous occupant of
-			// this pane (a fresh doc starts with no caret).
+			// Reset the per-pane caret on each new descent — it's view state,
+			// not tile state, so it does not survive across descents (a fresh
+			// doc starts with no caret). Unsaved-edit state is NOT touched
+			// here: it lives tile-scoped in the content store, so descending
+			// this pane elsewhere can't strand a previous document's typing.
 			pl := a.local(fp.ID)
 			pl.ClearCaret()
-			pl.Dirty = false
 			a.refreshFileOverlay()
 			// URL / shell descent show the frozen JPEG preview by
 			// default. afterDescend fires here so an auto-go-live
@@ -1754,45 +1754,18 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
 
-	// Capture the textarea contents (if any) before we tear it down.
-	// Source-backed tiles are read-only — even if a stale TextMode said
-	// "text" and the textarea had a buffer, we must not post it as the
-	// new content (the server would reject it, and the local cache would
-	// be transiently wrong).
-	readOnly := a.tileReadOnly(&file)
-	var buf string
-	hasBuf := false
-	if !readOnly && p.TextMode == rpc.TextModeText {
-		ta := a.textTextarea
-		if !ta.IsNull() && !ta.IsUndefined() {
-			buf = ta.Get("value").String()
-			hasBuf = true
-			// This flush is now the owner of the buffer's pending edit —
-			// exactly like saveTextFromTextarea, which also clears the flag
-			// when it takes the buffer. Leaving it set was the stuck-dirty
-			// bug: a declined debounce after ascent left textareaDirty true
-			// forever, DecideTextareaSync then treated every later sync as
-			// "typing in progress", and the stale buffer it preserved got
-			// saved over a foreign writer's edit on the next open/close.
-			a.textareaDirty = false
-		}
-	} else if !readOnly && p.TextMode == rpc.TextModeRendered && a.paneDirty(p.ID) {
-		// Rendered-mode edits live in the content store (PutEditedContent per
-		// keystroke); flush them on ascent so a quick exit within the save
-		// debounce doesn't drop them.
-		if body, ok := a.tileBody(&file); ok {
-			buf = string(body)
-			hasBuf = true
-		}
-	}
-	if pl, ok := a.localIf(p.ID); ok {
-		pl.Dirty = false
-	}
-	// Pre-write the parent-grid preview to the user's edits before the ascent
-	// transition. Tile-scoped (keyed by tile id) so the content lands only on
-	// this tile, not on any clone that shares its body.
-	if hasBuf {
-		a.c.PutEditedContent(file.ID, []byte(buf))
+	// Content: read the tile's OWN content-store entry, and only when it
+	// carries an unsaved edit. Never the DOM. The old code read the singleton
+	// textarea here and attributed it to whatever tile THIS pane pointed at —
+	// which is how a bulk flush (pane collapse, workspace boundary) over a
+	// pane the singleton wasn't bound to saved one document's bytes as
+	// another's content (the 2026-07-18 cross-tile stomp). It also posted
+	// unconditionally, so a merely-opened tile rewrote its blob and bumped
+	// its version on every visit; dirty-gating makes a pure read write-free
+	// (the guiding rule: reading never mutates).
+	buf, hasBuf := a.c.DirtyContent(file.ID)
+	if a.tileReadOnly(&file) {
+		hasBuf = false
 	}
 
 	// The framed window in doc px: scroll position + the inner box size
@@ -1826,13 +1799,12 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			}
 		}
 		// Update content first if the user was editing. The CONTENT write
-		// claims the save basis — the version of the bytes the buffer was
-		// seeded from — never the row version read above: a foreign writer's
-		// event advances the row without this client seeing the new bytes,
-		// and claiming it would save the stale buffer right over the foreign
-		// edit (the remote-stomp bug; this ascent flush was its exact path,
-		// since hasBuf is true for a merely-opened textarea too). A stale
-		// basis conflicts at the server and reconciles visibly instead.
+		// claims the save basis — the version of the bytes the entry derives
+		// from — never the row version read above: a foreign writer's event
+		// advances the row without this client seeing the new bytes, and
+		// claiming it would save the stale entry right over the foreign edit
+		// (the remote-stomp bug). A stale basis conflicts at the server and
+		// reconciles visibly instead.
 		if hasBuf {
 			saveVersion := curVersion
 			if base, ok := a.c.SaveBasis(file.ID); ok {
@@ -1842,8 +1814,8 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 				Path:    rpc.Path{WellIDs: path},
 				TileID:  file.ID,
 				Version: saveVersion,
-				Data:    []byte(buf),
-			}, []byte(buf))
+				Data:    buf,
+			}, buf)
 			if !ok {
 				return
 			}

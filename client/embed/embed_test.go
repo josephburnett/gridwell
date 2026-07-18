@@ -451,12 +451,13 @@ func TestDecideTextareaSync(t *testing.T) {
 			},
 		},
 		{
-			// The fast-pane-switch data-loss bug (issue #35): typing into
-			// tile 4 arms the debounced save; switching to another text
-			// descent within the debounce rebinds the textarea. The rebind
-			// must flush the pending buffer to tile 4 BEFORE clearing, or
-			// the edit silently vanishes.
-			name: "different tile with pending edit → flush old before clear",
+			// The fast-pane-switch case (issue #35): typing into tile 4 arms
+			// the debounced save; switching to another text descent within
+			// the debounce rebinds the textarea. The rebind simply seeds the
+			// new tile — tile 4's typing already lives in ITS content-store
+			// entry (every keystroke mirrors), and the dirty sweep posts it
+			// regardless of where focus went. Nothing to rescue at the seam.
+			name: "different tile with pending edit → rebind; the old edit is cache-owned",
 			in: TextareaSyncInput{
 				FocusedTileID: "7",
 				LastTileID:    "4",
@@ -469,24 +470,6 @@ func TestDecideTextareaSync(t *testing.T) {
 				SetValue:      true,
 				Value:         "tile 7 body",
 				NewLastTileID: "7",
-				FlushOldFirst: true,
-			},
-		},
-		{
-			// No previous binding → nothing to flush even if the dirty flag
-			// is somehow set.
-			name: `pending edit but no previous binding (LastTileID "") → no flush`,
-			in: TextareaSyncInput{
-				FocusedTileID: "7",
-				LastTileID:    "",
-				CurrentValue:  "",
-				PendingEdit:   true,
-			},
-			want: TextareaSyncDecision{
-				SetValue:      true,
-				Value:         "",
-				NewLastTileID: "7",
-				FlushOldFirst: false,
 			},
 		},
 		{

@@ -121,26 +121,10 @@ func CanvasHiddenByOverlay(isDescended, isFocused, isTextMode, textareaReady boo
 	return isDescended && isFocused && isTextMode && textareaReady
 }
 
-// ShouldDebouncedSaveFire reports whether a debounced text-save timer,
-// when it fires, should actually persist the textarea's contents.
-//
-// The save scheduler queues a timer on every keystroke; by the time it
-// fires the world may have moved on, so three things must still hold:
-//
-//   - hasFocusedPane — there is a focused pane to read from.
-//   - textFocusTileID != "" && isTextMode — that pane is editing a text
-//     tile in raw-text mode. (Rendered-mode edits persist on their own path,
-//     saveFileFromCache, gated on the dirty mark; a non-text or unfocused
-//     pane has nothing to save.)
-//   - lastTextareaTileID == textFocusTileID — the shared textarea
-//     singleton is still bound to the SAME tile the timer was scheduled
-//     for. A save scheduled while editing tile A must NOT fire after the
-//     user has descended into tile B: it would read A's stale buffer out
-//     of the singleton and persist it as B's content (the "new tile
-//     contains the last edited tile's text" regression).
-func ShouldDebouncedSaveFire(hasFocusedPane bool, textFocusTileID string, isTextMode bool, lastTextareaTileID string) bool {
-	if !hasFocusedPane || textFocusTileID == "" || !isTextMode {
-		return false
-	}
-	return lastTextareaTileID == textFocusTileID
-}
+// ShouldDebouncedSaveFire is GONE. It guarded the debounced save's read of
+// the singleton textarea — proving the DOM still belonged to the tile being
+// saved. Saves no longer read the DOM at all: keystrokes mirror into the
+// tile-scoped content store, and the debounce sweeps DIRTY ENTRIES by tile id
+// (App.flushDirtyText), which needs no focus/binding proof and cannot strand
+// an edit whose pane moved on. A guard at one call site was also the trap
+// that caused the 2026-07-18 stomp: the ascent/collapse flushes never got it.
