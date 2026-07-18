@@ -7,6 +7,7 @@
 package cache
 
 import (
+	"bytes"
 	"maps"
 	"sync"
 
@@ -101,9 +102,20 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 // PutSavedContent stores the body a completed UpdateText confirmed, with the
 // response tile's version as the new base — the next queued save chains from
 // it (issue #140). The entry is clean again: the server holds these bytes.
+//
+// EXCEPT when newer local edits landed while the save was in flight: the
+// entry is dirty with DIFFERENT bytes than the ones this save confirmed.
+// The cache entry is the ONE owner of unsaved typing (there is no DOM buffer
+// to fall back on), so replacing it would destroy those keystrokes. Keep the
+// newer bytes and their dirty mark; only the basis advances — the follow-up
+// save chains from the version this write established.
 func (c *Cache) PutSavedContent(tileID string, data []byte, base int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if e, ok := c.content[tileID]; ok && e.dirty && !bytes.Equal(e.data, data) {
+		e.base = base
+		return
+	}
 	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
 }
 
@@ -121,6 +133,36 @@ func (c *Cache) SaveBasis(tileID string) (int64, bool) {
 		return 0, false
 	}
 	return e.base, true
+}
+
+// DirtyContent returns a copy of the tile's body iff the entry carries an
+// unsaved local edit. The read every flush path uses: bytes come out keyed by
+// the tile id they were edited under, so a flush can never attribute one
+// tile's buffer to another (the cross-tile stomp becomes unrepresentable).
+func (c *Cache) DirtyContent(tileID string) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.content[tileID]
+	if !ok || !e.dirty {
+		return nil, false
+	}
+	return cloneBytes(e.data), true
+}
+
+// DirtyTileIDs returns the ids of every tile whose cached body carries an
+// unsaved edit. The debounced save sweeps this list — pending edits are found
+// by tile id, not by which pane or overlay happens to hold focus, so an edit
+// can never be stranded by focus moving on before the timer fired.
+func (c *Cache) DirtyTileIDs() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []string
+	for id, e := range c.content {
+		if e.dirty {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func cloneBytes(b []byte) []byte {

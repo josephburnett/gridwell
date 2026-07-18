@@ -396,9 +396,11 @@ func TestFetchNeverClobbersDirtyContent(t *testing.T) {
 		t.Fatalf("basis = %d, want 1 — a floating basis under a queued save is the stomp re-forged", base)
 	}
 
-	// A clean entry (no local edits) IS replaced — that's how foreign content
-	// becomes visible.
-	c.PutSavedContent("10", []byte("# settled"), 3)
+	// The typing's own save settles the entry clean (the response carries the
+	// entry's exact bytes — saves post DirtyContent, so a response can only
+	// differ when newer typing landed mid-flight, which must survive). A clean
+	// entry IS replaced by a fetch — that's how foreign content becomes visible.
+	c.PutSavedContent("10", []byte("# v1 body + local typing"), 3)
 	c.PutFetchedContent("10", []byte("# fresher"), 4)
 	if b, _ := c.TileContent("10"); string(b) != "# fresher" {
 		t.Fatalf("clean entry not refreshed by fetch: %q", b)
@@ -439,5 +441,71 @@ func TestSaveBasisFollowsBytesNotRow(t *testing.T) {
 	c.PutSavedContent("10", []byte("# merged"), 8)
 	if base, _ := c.SaveBasis("10"); base != 8 {
 		t.Fatalf("basis after save = %d, want 8", base)
+	}
+}
+
+// TestSavedContentKeepsMidFlightTyping: with the cache entry as the ONE owner
+// of unsaved typing (no DOM buffer behind it), a save response landing after
+// further keystrokes must not roll the entry back to the bytes it confirmed —
+// that would silently destroy the typing. The newer bytes stay, still dirty;
+// only the basis advances so the follow-up save chains.
+func TestSavedContentKeepsMidFlightTyping(t *testing.T) {
+	c := New()
+	c.PutFetchedContent("10", []byte("draft"), 1)
+	c.PutEditedContent("10", []byte("draft v2")) // save of "draft v2" goes out
+	c.PutEditedContent("10", []byte("draft v2 plus more typing"))
+
+	// The "draft v2" save's response lands: version 2 confirmed.
+	c.PutSavedContent("10", []byte("draft v2"), 2)
+
+	if b, _ := c.TileContent("10"); string(b) != "draft v2 plus more typing" {
+		t.Fatalf("save response destroyed mid-flight typing: %q", b)
+	}
+	if d, ok := c.DirtyContent("10"); !ok || string(d) != "draft v2 plus more typing" {
+		t.Fatalf("newer typing must stay dirty (pending its own save); got %q ok=%v", d, ok)
+	}
+	if base, _ := c.SaveBasis("10"); base != 2 {
+		t.Fatalf("basis = %d, want 2 — the follow-up save chains from the confirmed write", base)
+	}
+
+	// Response matching the entry's bytes settles it clean.
+	c.PutSavedContent("10", []byte("draft v2 plus more typing"), 3)
+	if _, ok := c.DirtyContent("10"); ok {
+		t.Fatal("entry must be clean once the server holds its exact bytes")
+	}
+}
+
+// TestDirtyAccessors: DirtyContent answers only for entries carrying unsaved
+// edits, and DirtyTileIDs enumerates exactly those — the debounced sweep's
+// worklist, keyed by tile id rather than by whichever pane has focus.
+func TestDirtyAccessors(t *testing.T) {
+	c := New()
+	c.PutFetchedContent("10", []byte("clean"), 1)
+	c.PutFetchedContent("20", []byte("original"), 4)
+	c.PutEditedContent("20", []byte("edited"))
+
+	if _, ok := c.DirtyContent("10"); ok {
+		t.Fatal("clean entry reported dirty")
+	}
+	if _, ok := c.DirtyContent("99"); ok {
+		t.Fatal("absent entry reported dirty")
+	}
+	d, ok := c.DirtyContent("20")
+	if !ok || string(d) != "edited" {
+		t.Fatalf("dirty entry not returned: %q ok=%v", d, ok)
+	}
+	// The returned slice is a copy — mutating it must not corrupt the entry.
+	d[0] = 'X'
+	if b, _ := c.TileContent("20"); string(b) != "edited" {
+		t.Fatalf("DirtyContent leaked the internal buffer: %q", b)
+	}
+
+	ids := c.DirtyTileIDs()
+	if len(ids) != 1 || ids[0] != "20" {
+		t.Fatalf("DirtyTileIDs = %v, want [20]", ids)
+	}
+	c.PutSavedContent("20", []byte("edited"), 5)
+	if ids := c.DirtyTileIDs(); len(ids) != 0 {
+		t.Fatalf("after save DirtyTileIDs = %v, want empty", ids)
 	}
 }
