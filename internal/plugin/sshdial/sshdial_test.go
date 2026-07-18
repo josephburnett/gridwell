@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	xproxy "golang.org/x/net/proxy"
 
@@ -184,6 +185,63 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 	if !strings.HasPrefix(pg.Grid.ScratchGridId, "ur2/") {
 		t.Errorf("remote scratch = %q, want the remote's qualified ur2/<id>", pg.Grid.ScratchGridId)
+	}
+}
+
+// TestTunnelRecoversAfterSSHDeath is the outage seam: the ssh session dies
+// UNDER an established mount (laptop sleep, network change, remote sshd
+// restart) and comes back. The mount must heal by itself — the original
+// design captured one ssh.Client in the gRPC dialer at spawn, so every
+// reconnect attempt tunneled through the dead session and the mount stayed
+// dark until the plugin was restarted, while the server's fan-in retried
+// forever against a transport that could never recover.
+func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
+	nodeAddr, _ := remoteNode(t)
+	creds, sshd := sshdialtest.Restartable(t, t.TempDir())
+
+	client, _, closer, err := sshdial.Dial(sshdial.Config{
+		Host:       creds.Addr,
+		User:       "joe",
+		KeyPath:    creds.KeyPath,
+		KnownHosts: creds.KnownHostsPath,
+		Addr:       nodeAddr,
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	t.Cleanup(closer)
+	ctx := context.Background()
+
+	if _, err := client.Info(ctx, &gridwellv1.InfoRequest{}); err != nil {
+		t.Fatalf("Info before outage: %v", err)
+	}
+
+	// The whole sshd goes away: listener AND the established session.
+	sshd.Kill()
+
+	// While it is down, RPCs must FAIL (loudly — that is what feeds the
+	// fan-in health notice), not hang.
+	failCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	if _, err := client.Info(failCtx, &gridwellv1.InfoRequest{}); err == nil {
+		cancel()
+		t.Fatal("Info succeeded through a dead tunnel")
+	}
+	cancel()
+
+	// The sshd returns on the same address. The mount must recover WITHOUT
+	// any restart: gRPC's next reconnect calls the dialer, the dialer
+	// re-establishes the ssh session. Poll within the reconnect backoff.
+	sshd.Resume(t)
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		_, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("mount never recovered after the sshd returned: %v", err)
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

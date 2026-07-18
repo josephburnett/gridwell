@@ -17,11 +17,15 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
@@ -67,13 +71,123 @@ func FromPluginConfig(cfg map[string]string) (Config, error) {
 	return c, nil
 }
 
-// Dial opens the tunnel and returns a client of the remote node's export,
-// the address of a loopback SOCKS5 proxy whose upstream is the SAME tunnel
-// (a browser pointed at it exits on the remote's network — the
+// redialer is THE owner of "is the ssh session up" — the fact that used to
+// have no owner at all. The original Dial captured one *ssh.Client in the
+// gRPC dialer closure; when that session died (laptop sleep, network change,
+// remote sshd restart), every gRPC reconnect attempt tunneled through the
+// same dead session and failed forever — the server's fan-in retried with
+// perfect backoff against a transport that could never recover, and the
+// mount stayed dark until the whole plugin was restarted.
+//
+// Every consumer of the tunnel (the gRPC channel AND the SOCKS proxy) dials
+// through dial(), which re-establishes the ssh layer on demand: a dead
+// session is dropped and rebuilt on the next attempt, single-flight under
+// mu so concurrent callers don't stampede the remote sshd.
+type redialer struct {
+	host    string
+	user    string
+	auth    []ssh.AuthMethod
+	hostKey ssh.HostKeyCallback
+
+	mu     sync.Mutex
+	client *ssh.Client // nil = not established or known dead
+}
+
+// dial opens addr on the remote host through the current ssh session,
+// establishing or re-establishing the session as needed. A channel-open
+// failure drops the whole session and retries once through a fresh one:
+// distinguishing "session dead" from "remote endpoint refused" isn't worth
+// the fragility, and the cost is one extra ssh handshake bounded by the
+// caller's (gRPC's) backoff.
+func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
+	if c := r.current(); c != nil {
+		conn, err := c.Dial("tcp", addr)
+		if err == nil {
+			return conn, nil
+		}
+		r.drop(c)
+	}
+	c, err := r.establish()
+	if err != nil {
+		return nil, err
+	}
+	conn, err := c.Dial("tcp", addr)
+	if err != nil {
+		r.drop(c)
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (r *redialer) current() *ssh.Client {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.client
+}
+
+// drop forgets a dead session (only if it is still the current one — a
+// concurrent caller may already have re-established) and closes it so any
+// goroutines blocked on it unwind.
+func (r *redialer) drop(dead *ssh.Client) {
+	r.mu.Lock()
+	if r.client == dead {
+		r.client = nil
+	}
+	r.mu.Unlock()
+	go dead.Close()
+}
+
+// establish returns the current session or dials a fresh one. Holding mu for
+// the whole handshake is deliberate: it makes re-establishment single-flight,
+// so a burst of failing RPCs produces one ssh handshake, not one each.
+func (r *redialer) establish() (*ssh.Client, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.client != nil {
+		return r.client, nil
+	}
+	c, err := ssh.Dial("tcp", r.host, &ssh.ClientConfig{
+		User:            r.user,
+		Auth:            r.auth,
+		HostKeyCallback: r.hostKey,
+		// Without a timeout a black-holing network (dropped NAT mapping,
+		// sleeping laptop's dead route) would hang the handshake — and mu —
+		// indefinitely.
+		Timeout: 10 * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ssh dial %q: %w", r.host, err)
+	}
+	r.client = c
+	return c, nil
+}
+
+// close tears down the current session, if any.
+func (r *redialer) close() {
+	r.mu.Lock()
+	c := r.client
+	r.client = nil
+	r.mu.Unlock()
+	if c != nil {
+		_ = c.Close()
+	}
+}
+
+// Dial builds the tunnel transport and returns a client of the remote node's
+// export, the address of a loopback SOCKS5 proxy whose upstream is the SAME
+// tunnel (a browser pointed at it exits on the remote's network — the
 // NetworkContext for remote live url tiles), and a closer. The client speaks
 // the remote's qualified ids verbatim; the host server's transit
 // qualification prepends this plugin's uuid on the way back to the local
 // client, so chains compose one segment per hop.
+//
+// Config-shaped failures (unreadable key, bad known_hosts) fail here, at
+// spawn, where they are a misconfiguration to surface. The ssh session
+// itself is established LAZILY on first use and re-established after any
+// death (see redialer) — so a mount whose remote is down at spawn, or whose
+// tunnel dies later, heals by itself the moment the remote is reachable
+// again; until then every RPC fails loudly and the server's fan-in health
+// machinery (issue #47) tells the user.
 func Dial(cfg Config) (client gridwellv1.GridwellClient, socksAddr string, closer func(), err error) {
 	keyBytes, err := os.ReadFile(cfg.KeyPath)
 	if err != nil {
@@ -87,25 +201,43 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, socksAddr string, close
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("load known_hosts %q: %w", cfg.KnownHosts, err)
 	}
-	sshClient, err := ssh.Dial("tcp", cfg.Host, &ssh.ClientConfig{
-		User:            cfg.User,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: hostKey,
-	})
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("ssh dial %q: %w", cfg.Host, err)
+	rd := &redialer{
+		host:    cfg.Host,
+		user:    cfg.User,
+		auth:    []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		hostKey: hostKey,
 	}
 
 	conn, err := grpc.NewClient(cfg.Addr,
 		grpc.WithContextDialer(func(_ context.Context, a string) (net.Conn, error) {
 			// The dialer ignores grpc's notion of the address and opens addr
-			// on the remote host through the SSH connection.
-			return sshClient.Dial("tcp", a)
+			// on the remote host through the (self-healing) SSH session.
+			return rd.dial("tcp", a)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// HTTP/2 pings through the tunnel: a session that dies WITHOUT an
+		// error (sleep, NAT expiry) would otherwise leave long-lived streams
+		// — the event Subscribe above all — blocked in Recv forever, which
+		// presents as tiles silently going stale with no retry and no health
+		// notice. The ping timeout turns that into Unavailable, the fan-in
+		// retries, and the retry's dial rebuilds the ssh session.
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:    30 * time.Second,
+			Timeout: 10 * time.Second,
+		}),
+		// A mount is one user's tunnel, not a fleet: cap the reconnect
+		// backoff well below gRPC's 2-minute default so a healed network
+		// means a healed mount in seconds.
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  time.Second,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   10 * time.Second,
+			},
+		}),
 	)
 	if err != nil {
-		sshClient.Close()
 		return nil, "", nil, fmt.Errorf("grpc over tunnel: %w", err)
 	}
 
@@ -113,15 +245,15 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, socksAddr string, close
 	socksLn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		_ = conn.Close()
-		sshClient.Close()
+		rd.close()
 		return nil, "", nil, fmt.Errorf("socks listen: %w", err)
 	}
-	go serveSOCKS5(socksLn, sshClient.Dial)
+	go serveSOCKS5(socksLn, rd.dial)
 
 	closer = func() {
 		_ = socksLn.Close()
 		_ = conn.Close()
-		_ = sshClient.Close()
+		rd.close()
 	}
 	return gridwellv1.NewGridwellClient(conn), socksLn.Addr().String(), closer, nil
 }

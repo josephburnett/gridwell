@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -42,6 +43,27 @@ type Creds struct {
 // their requested destinations. Key material is written under dir (a
 // t.TempDir()); the listener is torn down with the test.
 func Server(t *testing.T, dir string) Creds {
+	creds, _ := Restartable(t, dir)
+	return creds
+}
+
+// Handle controls a restartable test sshd: Kill drops the listener AND every
+// live ssh session (a listener close alone leaves established sessions
+// running — a real outage kills both), Resume rebinds the same address with
+// the same host key. This is how a test simulates the tunnel dying — laptop
+// sleep, network change, remote sshd restart — the failure the redialer in
+// sshdial exists to recover from.
+type Handle struct {
+	addr string
+	conf *ssh.ServerConfig
+
+	mu    sync.Mutex
+	ln    net.Listener
+	conns map[net.Conn]struct{}
+}
+
+// Restartable is Server with a Handle for killing and resuming the sshd.
+func Restartable(t *testing.T, dir string) (Creds, *Handle) {
 	t.Helper()
 
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -83,26 +105,73 @@ func Server(t *testing.T, dir string) Creds {
 	if err != nil {
 		t.Fatalf("sshd listen: %v", err)
 	}
-	t.Cleanup(func() { ln.Close() })
-	go serve(ln, conf)
+	h := &Handle{addr: ln.Addr().String(), conf: conf, ln: ln, conns: map[net.Conn]struct{}{}}
+	t.Cleanup(h.Kill)
+	go h.serve(ln)
 
 	khPath := filepath.Join(dir, "known_hosts")
-	line := knownhosts.Line([]string{ln.Addr().String()}, hostSigner.PublicKey()) + "\n"
+	line := knownhosts.Line([]string{h.addr}, hostSigner.PublicKey()) + "\n"
 	if err := os.WriteFile(khPath, []byte(line), 0o600); err != nil {
 		t.Fatalf("write known_hosts: %v", err)
 	}
 
-	return Creds{Addr: ln.Addr().String(), KeyPath: keyPath, KnownHostsPath: khPath}
+	return Creds{Addr: h.addr, KeyPath: keyPath, KnownHostsPath: khPath}, h
 }
 
-func serve(ln net.Listener, conf *ssh.ServerConfig) {
+// Kill closes the listener and every live connection — the whole sshd is
+// gone, established tunnels included. Idempotent.
+func (h *Handle) Kill() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.ln != nil {
+		_ = h.ln.Close()
+		h.ln = nil
+	}
+	for c := range h.conns {
+		_ = c.Close()
+	}
+	h.conns = map[net.Conn]struct{}{}
+}
+
+// Resume rebinds the SAME address (so existing creds/known_hosts stay valid)
+// and serves again.
+func (h *Handle) Resume(t *testing.T) {
+	t.Helper()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.ln != nil {
+		return
+	}
+	ln, err := net.Listen("tcp", h.addr)
+	if err != nil {
+		t.Fatalf("sshd resume on %s: %v", h.addr, err)
+	}
+	h.ln = ln
+	go h.serve(ln)
+}
+
+func (h *Handle) track(c net.Conn) {
+	h.mu.Lock()
+	h.conns[c] = struct{}{}
+	h.mu.Unlock()
+}
+
+func (h *Handle) untrack(c net.Conn) {
+	h.mu.Lock()
+	delete(h.conns, c)
+	h.mu.Unlock()
+}
+
+func (h *Handle) serve(ln net.Listener) {
 	for {
 		c, err := ln.Accept()
 		if err != nil {
 			return
 		}
+		h.track(c)
 		go func() {
-			sc, chans, reqs, err := ssh.NewServerConn(c, conf)
+			defer h.untrack(c)
+			sc, chans, reqs, err := ssh.NewServerConn(c, h.conf)
 			if err != nil {
 				return
 			}
