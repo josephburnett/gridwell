@@ -631,6 +631,10 @@ func main() {
 	// cleanup runs after a small delay and the user's final state
 	// might miss the preview write.
 	app.win.Call("addEventListener", "beforeunload", js.FuncOf(func(this js.Value, args []js.Value) any {
+		// Post any typing still inside the save-debounce window. The enqueue
+		// is async and may not finish before teardown, but firing it here
+		// beats guaranteeing the loss by never firing at all.
+		app.flushDirtyText()
 		app.closeAllURLStreams()
 		app.closeAllShellStreams()
 		return nil

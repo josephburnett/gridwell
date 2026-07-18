@@ -311,6 +311,22 @@ consequences:
   (`DecideTextareaSync`), so no stale DOM copy survives to be flushed back.
   Crossed end-to-end by `foreign-writer.spec.ts` (a second writer against the
   live app) and, for the remote transport, the federation gate's event step.
+- **Text content has ONE door to the server, and it never reads the DOM
+  (2026-07-18).** The content entry also owns the pending-edit fact: every
+  keystroke (raw mode mirrors on input; rendered mode always did) lands in the
+  tile-scoped entry, and every flush — debounce sweep, ascent, pane collapse,
+  workspace boundary, mode toggle — goes through `client/wasm/text_flush.go`,
+  which posts `cache.DirtyContent(tileID)` iff dirty. The prior design read the
+  singleton `<textarea>` at flush time and paired it with whatever tile the
+  flushed pane pointed at; a bulk flush over a pane the singleton wasn't bound
+  to saved one document's bytes as another's content, at the victim's own valid
+  basis (the cross-tile stomp — the incident that destroyed a remote tile's
+  content). Guards at individual call sites (`ShouldDebouncedSaveFire`,
+  `FlushOldFirst`) were deleted WITH the hazard they policed: bytes can only be
+  posted under the id they were edited under, and a clean entry never writes
+  (a mere open/close no longer bumps the version). Crossed end-to-end by
+  `cross-tile-stomp.spec.ts`, `stranded-edit.spec.ts`, and
+  `workspace-rebind.spec.ts`.
 
 ---
 

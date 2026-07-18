@@ -101,11 +101,15 @@ invent a parallel one:**
 - `client/menu` — "is the menu open, and on which pane": one state machine
   where 14 scattered boolean writes used to live. The worked proof that
   applying this cure to a chronic symptom makes it stop recurring.
-- `cache` content entries — "the text bytes this client has seen, and which
-  server version they derive from": one `{bytes, base, dirty}` fact. Saves
-  claim `SaveBasis` (advanced only by fetches and save responses), so a
-  version can never be claimed apart from its bytes — the foreign-writer
-  stomp became unrepresentable instead of patched.
+- `cache` content entries — "the text bytes this client has seen, which
+  server version they derive from, and whether they carry an unsaved edit":
+  one `{bytes, base, dirty}` fact. Saves claim `SaveBasis` (advanced only by
+  fetches and save responses), so a version can never be claimed apart from
+  its bytes — the foreign-writer stomp became unrepresentable instead of
+  patched. And every save READS the entry by tile id through one door
+  (`client/wasm/text_flush.go`) — no flush touches the DOM — so bytes can
+  never be posted under another tile's id (the 2026-07-18 cross-tile stomp,
+  same cure extended one level).
 
 Each makes a bug class *unrepresentable*. That is the goal of every change:
 prefer the design where the bug **cannot be written**, over the design where the
