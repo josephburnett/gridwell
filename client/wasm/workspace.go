@@ -220,6 +220,13 @@ func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string,
 
 	a.tree = tree
 	a.restoreWorkspaceLeaves(tree)
+	// The installed tree's focused leaf may be text-descended (a restored
+	// text_focus). Rebind the textarea singleton to it NOW: without this the
+	// overlay keeps showing — and scroll-tracking against — whatever tile it
+	// was bound to before the swap, which is exactly the stale-binding state
+	// the 2026-07-18 stomp rode in on. (Saves no longer trust the binding,
+	// but the DISPLAY must not lie either.)
+	a.refreshFileOverlay()
 	a.scheduleURLUpdate()
 	a.draw()
 }
@@ -361,6 +368,9 @@ func (a *App) ascendWorkspaceLevels(count int) {
 			a.tree = a.fallbackTreeFor(f.TileID)
 		}
 	}
+	// Same rebind as installWorkspace: the restored outer tree's focused pane
+	// may itself be text-descended, and the singleton must follow the swap.
+	a.refreshFileOverlay()
 	a.scheduleURLUpdate()
 	a.draw()
 }
