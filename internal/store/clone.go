@@ -84,6 +84,15 @@ func (s *Store) checkPathLeaf(ctx context.Context, tx *sql.Tx, path rpc.Path, ti
 		systemKeyScratchGridID).Scan(&scratch); err == nil && scratch != "" && tile.GridID == scratch {
 		return parseID(scratch)
 	}
+	// An EMPTY path addresses the tile by id alone — the same contract as
+	// GetTileContent. The tile's row already owns its location (GridID);
+	// requiring callers to re-supply it as a descent path made every new save
+	// path a chance to supply it wrong, and forced focus-independent flushes
+	// (the dirty-content sweep) to reconstruct state the server has. A
+	// non-empty path still validates against the tile as before.
+	if len(path.WellIDs) == 0 {
+		return parseID(tile.GridID)
+	}
 	seq, err := s.buildGridSequence(ctx, tx, path)
 	if err != nil {
 		return 0, err

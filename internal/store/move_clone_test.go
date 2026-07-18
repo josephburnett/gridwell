@@ -192,3 +192,44 @@ func TestUpdateTextVersionConflict(t *testing.T) {
 		t.Errorf("got %v, want ErrVersionConflict", err)
 	}
 }
+
+// TestUpdateTextEmptyPathAddressesNestedTile: an empty path means "address the
+// tile by id alone" — the same contract as GetTileContent. The tile's row owns
+// its location; a save must not fail (or need client-side path reconstruction)
+// just because the writer isn't a descended pane. This is what lets the
+// dirty-content sweep post an edit after the editing pane moved elsewhere.
+func TestUpdateTextEmptyPathAddressesNestedTile(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
+		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nested, err := s.CreateText(ctx, &rpc.CreateTextRequest{
+		Path: rpc.Path{WellIDs: []string{w.ID}}, GridID: w.ChildGridID,
+		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# nested"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{}, TileID: nested.ID, Version: nested.Version,
+		Data: []byte("# nested v2"),
+	})
+	if err != nil {
+		t.Fatalf("empty-path update of a nested tile: %v", err)
+	}
+	if updated.Version != nested.Version+1 {
+		t.Errorf("version = %d, want %d", updated.Version, nested.Version+1)
+	}
+	// A WRONG path still fails — supplying a path means asserting it.
+	if _, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
+		Path: rpc.Path{WellIDs: []string{nested.ID}}, TileID: nested.ID,
+		Version: updated.Version, Data: []byte("# nope"),
+	}); err == nil {
+		t.Fatal("a bogus path must still be rejected")
+	}
+}
