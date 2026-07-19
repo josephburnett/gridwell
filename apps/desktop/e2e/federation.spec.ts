@@ -2,34 +2,31 @@ import { test, expect } from './fixtures';
 import { tileAt, Tile } from './oracle';
 
 // The federated space, end to end through the real stack:
-//   - the landing page is the NODE GRID — a real, read-only, server-owned
-//     grid whose tiles are dashed links, one per plugin;
+//   - boot lands on the FIRST plugin in server.yaml (owner decision
+//     2026-07-19); the node grid remains a real, read-only, server-owned
+//     grid of dashed links — the federation surface an ssh mount lands on;
 //   - right-dragging a well across a plugin boundary creates a LINK in the
 //     destination (the grid is shared, never copied), and deleting the link
 //     only unlinks;
-//   - right-dragging a plugin tile off the landing page into a grid mounts
-//     that plugin as a link well — the gesture the launcher's tiles exist for.
-//
-// Why was this not caught before? The launcher was a client-side special case
-// with no grid behind it (nothing to drag), and cross-plugin CloneTile had no
-// implementation — both halves of "link any plugin or grid into my grids"
-// were missing and neither had a spec.
+//   - dragging a plugin swatch out of the + menu into a grid mounts that
+//     plugin as a link well — the gesture the menu's plugin row exists for.
 
 test.use({ extraPlugins: [{ kind: 'localdb', name: 'second' }] });
 
-test('the landing page is the node grid: a real grid of plugin link tiles', async ({ gw, window }) => {
-  // The hook is empty until ListPlugins and the node-grid fetch land.
-  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length >= 2, null, {
-    timeout: 15_000,
-  });
-  const tiles = await gw.launcher();
-  expect(tiles.length, 'both plugins appear on the landing page').toBe(2);
+test('boot lands on the first plugin; the node grid stays a real grid of links', async ({ gw, window }) => {
+  const pls = await gw.plugins();
+  expect(pls.map((p) => p.label), 'both plugins configured, server.yaml order').toEqual(['e2e', 'second']);
 
-  // The focused pane is anchored at a REAL grid ("<node>/0"), not a synthetic
-  // client-side page — the oracle can read it like any grid.
+  // Boot home: the FIRST plugin's root grid, not the node grid.
   const f = await gw.focused();
-  expect(f.gridID, 'pane anchored at the node grid').toMatch(/\/0$/);
-  const g = await gw.getGrid(f.gridID);
+  expect(f.gridID, 'pane anchored at the first plugin root').toBe(pls[0].rootGridID);
+
+  // The node grid still exists as the federation surface: a REAL grid
+  // ("<node>/0") the oracle can read like any grid, one dashed link per
+  // plugin.
+  const nodeGrid = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  expect(nodeGrid, 'node identity learned').toMatch(/\/0$/);
+  const g = await gw.getGrid(nodeGrid);
   const labels = (g.tiles ?? []).map((t: Tile) => t.altText).sort();
   expect(labels, 'tiles labeled by config name').toEqual(['e2e', 'second']);
   for (const t of g.tiles ?? []) {
@@ -38,11 +35,12 @@ test('the landing page is the node grid: a real grid of plugin link tiles', asyn
   }
 });
 
-test('right-drag links a well across plugins; deleting the link never touches the source', async ({ gw, window }) => {
-  // Split at boot: both panes clone the node grid; focus lands on the NEW
-  // pane. Focus panes with CORNER clicks throughout: pane centers hold tiles,
-  // and a center click on a focused pane would descend.
-  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length >= 2, null, { timeout: 15_000 });
+test('right-drag links a well across plugins; deleting the link never touches the source', async ({ gw }) => {
+  // Split at boot: both panes clone the boot grid (the first plugin's root);
+  // focus lands on the NEW pane. Focus panes with CORNER clicks throughout:
+  // pane centers hold tiles, and a center click on a focused pane would
+  // descend.
+  await gw.plugins();
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
   const a0 = (await gw.panes()).find((p) => p.id !== bId)!;
@@ -87,45 +85,25 @@ test('right-drag links a well across plugins; deleting the link never touches th
   expect(srcAfter.childGridId).toBe(src.childGridId);
 });
 
-test('right-drag a plugin tile off the landing page mounts it as a link', async ({ gw, window }) => {
-  // Split at boot (both panes clone the node grid; the new pane B keeps it),
-  // then pane A enters "e2e".
-  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length >= 2, null, { timeout: 15_000 });
-  await gw.splitFocusedPaneVertical();
-  const bId = (await gw.focused()).id;
-  const a0 = (await gw.panes()).find((p) => p.id !== bId)!;
-  await gw.clickScreen(a0.x + 20, a0.y + 20);
-  await gw.enterPlugin('e2e');
-  const a = (await gw.panes()).find((p) => p.id === a0.id)!;
-  const b = (await gw.panes()).find((p) => p.id === bId)!;
+test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }) => {
+  // Boot lands on "e2e" (the first plugin). Drag the "second" plugin's menu
+  // swatch onto a cell OFF-center so later clicks never land on it.
+  const pls = await gw.plugins();
+  const second = pls.find((p) => p.label === 'second')!;
+  const f = await gw.focused();
+  const tx = Math.round(f.cx);
+  const ty = Math.round(f.cy) - 1;
+  await gw.openPalette();
+  await gw.dragPluginLink('second', tx, ty);
 
-  // Locate the "second" plugin tile on pane B's node grid (cell coords from
-  // the oracle — the node grid is a real grid).
-  const bNow = b;
-  const ng = await gw.getGrid(bNow.gridID);
-  const pluginTile = (ng.tiles ?? []).find((t: Tile) => t.altText === 'second')!;
-  expect(pluginTile, 'plugin tile on the node grid').toBeTruthy();
-
-  // Right-drag it into pane A's grid. Proto-JSON serializes int64 as strings
-  // and omits zeros, hence the coercion. The target offsets VERTICALLY from
-  // pane A's center: a horizontal offset at descent zoom can cross the
-  // half-width pane's edge and land the drop in pane B instead (learned the
-  // hard way — the drop then targeted the read-only node grid).
-  const aCur = (await gw.panes()).find((p) => p.id === a.id)!;
-  const tx = Math.round(aCur.cx);
-  const ty = Math.round(aCur.cy) - 1;
-  await gw.cloneDragAcrossPanes(b.id, Number(pluginTile.x ?? 0), Number(pluginTile.y ?? 0), a.id, tx, ty);
-
-  const mount = tileAt(await gw.getGrid(a.gridID), 'well', tx, ty)!;
+  const mount = tileAt(await gw.getGrid(f.gridID), 'well', tx, ty)!;
   expect(mount, 'mount link created in the destination grid').toBeTruthy();
-  expect(mount.childGridId, "the link points at the plugin's root").toBe(pluginTile.childGridId);
+  expect(mount.childGridId, "the link points at the plugin's root").toBe(second.rootGridID);
   expect(mount.reference, 'mounts are links — deletes will not propagate').toBe(true);
   expect(mount.altText, 'the mount carries the plugin label').toBe('second');
 
-  // Descend through the mount: pane A now shows the second plugin's grid.
-  const aBack = (await gw.panes()).find((p) => p.id === a.id)!;
-  await gw.clickScreen(aBack.x + 20, aBack.y + 20);
+  // Descend through the mount: the pane now shows the second plugin's grid.
   await gw.descendCell(tx, ty);
-  const aAfter = (await gw.panes()).find((p) => p.id === a.id)!;
-  expect(aAfter.gridID, 'descent through the mount reaches the plugin').toBe(pluginTile.childGridId);
+  const after = await gw.focused();
+  expect(after.gridID, 'descent through the mount reaches the plugin').toBe(second.rootGridID);
 });

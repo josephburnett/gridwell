@@ -16,12 +16,9 @@ test('clicking the menu url swatch descends into an off-grid ephemeral visit', a
   // so count defensively.
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
-  // The localdb's scratch grid id is advertised on the launcher tile.
-  const local = (await (async () => {
-    await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0);
-    return gw.launcher();
-  })()).find((l) => l.kind === 'localdb');
-  expect(local, 'localdb plugin on the launcher').toBeTruthy();
+  // The localdb's scratch grid id is advertised on its plugin entry.
+  const local = (await gw.plugins()).find((l) => l.kind === 'localdb');
+  expect(local, 'localdb plugin configured').toBeTruthy();
   const scratchGridID = local!.scratchGridID;
   expect(scratchGridID, 'localdb advertises a scratch grid').toBeTruthy();
 

@@ -12,10 +12,7 @@ import { test, expect } from './fixtures';
 test('clicking a url in a shell descends, then ascends back to the shell', async ({ electronApp, window, gw }) => {
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
-  const local = (await (async () => {
-    await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0);
-    return gw.launcher();
-  })()).find((l) => l.kind === 'localdb');
+  const local = (await gw.plugins()).find((l) => l.kind === 'localdb');
   const scratchGridID = local!.scratchGridID;
   expect(scratchGridID, 'localdb advertises a scratch grid').toBeTruthy();
 

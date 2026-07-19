@@ -23,9 +23,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   gw,
   window,
 }) => {
-  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0);
-  const scratchGridID = (await gw.launcher()).find((l: any) => l.kind === 'localdb')!
-    .scratchGridID;
+  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'localdb')!.scratchGridID;
   await gw.enterPlugin('localdb');
   const f = await gw.focused();
   const rootGrid = f.gridID;

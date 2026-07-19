@@ -12,11 +12,16 @@ import { test, expect } from './fixtures';
 // viewport the user sees), so they catch a desync between the live pane, the
 // saved ascent state, and the server-persisted well view_*.
 //
-// The plugin-root viewport tests (I7-portal) lock invariant I7 at the
-// launcher↔plugin-root seam: enter a plugin, pan/zoom its root grid, ascend to
-// the launcher, re-enter — the viewport must be exactly as left.  This seam
-// was previously untested (framing-roundtrip only covered wells inside a
-// plugin) and was broken: every re-entry reset to the default calibrated zoom.
+// The plugin-root viewport test (I7-portal) locks invariant I7 at the
+// menu↔plugin-root seam: enter a plugin from the + menu, pan/zoom its root
+// grid, ascend, re-enter — the viewport must be exactly as left. The seam
+// moved when the launcher landing page was reversed (2026-07-19): a menu
+// portal has no containing link tile, so the ascent writeback goes straight
+// to the plugin's root view (SetRootView) instead of through a node-grid
+// tile. This seam was broken once before (every re-entry reset to the
+// default calibrated zoom), so it keeps its crossing test.
+
+test.use({ extraPlugins: [{ kind: 'localdb', name: 'second' }] });
 
 test('re-descending a reframed well returns to exactly what you left', async ({ gw }) => {
   await gw.enterPlugin('localdb');
@@ -48,10 +53,11 @@ test('re-descending a reframed well returns to exactly what you left', async ({ 
   expect(back.cy, 'center y round-tripped').toBeCloseTo(left.cy, 1);
 });
 
-test('plugin root-grid viewport persists across launcher ascent and re-entry', async ({ gw }) => {
-  // Invariant: enter a plugin, reframe its root grid, ascend to the launcher,
-  // re-enter — viewport must match what was left (issue #32).
-  await gw.enterPlugin('localdb');
+test('plugin root-grid viewport persists across + menu ascent and re-entry', async ({ gw, window }) => {
+  // Invariant: enter a plugin from the + menu, reframe its root grid, ascend
+  // (portal back home), re-enter — viewport must match what was left
+  // (issue #32, rehomed onto the menu portal 2026-07-19).
+  await gw.enterPlugin('second');
   const pluginGrid = (await gw.focused()).gridID;
 
   // Reframe the plugin root: zoom in, then pan. The grid is empty so the
@@ -62,13 +68,29 @@ test('plugin root-grid viewport persists across launcher ascent and re-entry', a
   const left = await gw.focused();
   expect(left.zoom, 'reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
 
-  // Ascend back to the launcher.
+  // Ascend back home. The menu portal has no containing link tile, so the
+  // framing writeback goes straight to the plugin's root view.
   await gw.rightClickPlus();
-  const launcher = await gw.focused();
-  expect(launcher.gridID, 'ascended to the launcher').not.toBe(pluginGrid);
+  const home = await gw.focused();
+  expect(home.gridID, 'ascended back home').not.toBe(pluginGrid);
 
-  // Re-enter the plugin: viewport must match what we left.
-  await gw.enterPlugin('localdb');
+  // The write is SERVER truth, not just a client cache: the node grid serves
+  // each plugin's root view as its link tile's framing, so the reframed zoom
+  // must show up there. Poll — the SetRootView post is async.
+  const nodeGrid = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  await expect
+    .poll(
+      async () => {
+        const ng = await gw.getGrid(nodeGrid);
+        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'second');
+        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+      },
+      { timeout: 5_000 },
+    )
+    .toBeGreaterThan(0);
+
+  // Re-enter from the menu: viewport must match what we left.
+  await gw.enterPlugin('second');
   const back = await gw.focused();
   expect(back.gridID, 're-entered the same plugin root').toBe(pluginGrid);
   expect(back.zoom, 'zoom restored after re-entry').toBeCloseTo(left.zoom, 1);

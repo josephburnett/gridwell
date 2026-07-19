@@ -48,14 +48,11 @@ test('the bubble shows a read-only context label on non-renamable panes', async 
   gw,
   window,
 }) => {
-  // The node grid (the landing page) is "home"; a plugin root shows the
-  // plugin's config label. Neither opens the rename input on left-click.
+  // A plugin root shows the plugin's config label (boot lands inside the
+  // first plugin, so this is the boot pane) and never opens the rename input
+  // on left-click.
+  await gw.plugins(); // wait for boot to settle on the plugin root
   const pill = window.locator('#gw-rename-pill');
-  await expect(pill).toHaveText('home');
-  await pill.click();
-  await expect(window.locator('#gw-rename-input')).toHaveCount(0);
-
-  await gw.enterPlugin('localdb');
   await expect(pill).toHaveText('e2e'); // the seeded plugin's name
   await pill.click();
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);

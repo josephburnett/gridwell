@@ -54,6 +54,8 @@ func (a *App) installTestHook() {
 		}),
 		"workspace":     js.FuncOf(a.thWorkspace),
 		"launcher":      js.FuncOf(a.thLauncher),
+		"plugins":       js.FuncOf(a.thPlugins),
+		"nodeGrid":      js.FuncOf(func(js.Value, []js.Value) any { return a.nodeGrid }),
 		"palette":       js.FuncOf(a.thPalette),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
@@ -393,13 +395,7 @@ func (a *App) thLauncher(js.Value, []js.Value) any {
 		}
 		// Center of the plugin's tile, in screen pixels.
 		sx, sy := ps.CellToScreen(float64(t.X)+float64(t.W)/2, float64(t.Y)+float64(t.H)/2)
-		status := "enterable"
-		switch pluginhealth.Classify(pl) {
-		case pluginhealth.Broken:
-			status = "broken"
-		case pluginhealth.Rootless:
-			status = "rootless"
-		}
+		status := pluginStatusName(pl)
 		out = append(out, map[string]any{
 			"index":         i,
 			"kind":          pl.Kind,
@@ -414,6 +410,39 @@ func (a *App) thLauncher(js.Value, []js.Value) any {
 		})
 	}
 	return out
+}
+
+// thPlugins returns the configured plugin list (identity, root/scratch grids,
+// pluginhealth classification) with no screen positions — available wherever
+// the pane sits, unlike thLauncher which reads the node grid's tiles. Empty
+// until ListPlugins lands; the driver polls.
+func (a *App) thPlugins(js.Value, []js.Value) any {
+	out := make([]any, 0, len(a.plugins))
+	for i, pl := range a.plugins {
+		out = append(out, map[string]any{
+			"index":         i,
+			"kind":          pl.Kind,
+			"label":         pl.Label,
+			"uuid":          pl.UUID,
+			"rootGridID":    pl.RootGridID,
+			"scratchGridID": pl.ScratchGridID,
+			"infoError":     pl.InfoError,
+			"status":        pluginStatusName(pl),
+		})
+	}
+	return out
+}
+
+// pluginStatusName is the stable string for a plugin's pluginhealth class,
+// shared by thLauncher and thPlugins/thPalette.
+func pluginStatusName(pl rpc.PluginInfo) string {
+	switch pluginhealth.Classify(pl) {
+	case pluginhealth.Broken:
+		return "broken"
+	case pluginhealth.Rootless:
+		return "rootless"
+	}
+	return "enterable"
 }
 
 // thPalette returns the creation palette for the focused pane: whether it is
@@ -442,6 +471,8 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 			e["kind"] = item.plugin.Kind
 			e["label"] = item.plugin.Label
 			e["uuid"] = item.plugin.UUID
+			e["rootGridID"] = item.plugin.RootGridID
+			e["status"] = pluginStatusName(item.plugin)
 		} else {
 			e["kind"] = templateKindName(item.primitive)
 		}

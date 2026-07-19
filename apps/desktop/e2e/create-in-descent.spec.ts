@@ -14,7 +14,7 @@ import { tileAt } from './oracle';
 //   - text tile absent                      → the create request never landed
 //     (wrong grid id / path / anchor, or an error reactToErr swallowed).
 test('text tile dropped into a descended grid is persisted', async ({ gw }) => {
-  // Enter the localdb (home) plugin from the launcher.
+  // Enter the localdb (home) plugin — a no-op since boot lands at its root.
   await gw.enterPlugin('localdb');
 
   let f = await gw.focused();

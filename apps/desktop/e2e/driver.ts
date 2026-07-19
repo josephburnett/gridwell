@@ -35,16 +35,33 @@ export interface PaletteItem {
   index: number;
   // Plugin swatches (top row): click descends into the plugin, drag drops an
   // exit-well link. isPlugin distinguishes them from the primitive swatches;
-  // for a plugin, kind is the plugin kind (localdb/fs/proc/ssh) and label/uuid
-  // identify it.
+  // for a plugin, kind is the plugin kind (localdb/fs/proc/ssh), label/uuid
+  // identify it, and rootGridID/status mirror the pluginhealth surface.
   isPlugin: boolean;
   kind: string;
   label?: string;
   uuid?: string;
+  rootGridID?: string;
+  status?: string;
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+// PluginDescriptor is one configured plugin as the client knows it — the
+// position-free plugin list (window.__gridwellTest.plugins()), available
+// wherever the focused pane sits (unlike launcher(), which needs the pane to
+// be on the node grid).
+export interface PluginDescriptor {
+  index: number;
+  kind: string;
+  label: string;
+  uuid: string;
+  rootGridID: string;
+  scratchGridID: string;
+  infoError: string;
+  status: string;
 }
 
 export interface PaletteInfo {
@@ -93,6 +110,16 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.launcher());
   }
 
+  // plugins returns the configured plugin list with health classification —
+  // the replacement for launcher() lookups that only need identity/grids, now
+  // that boot no longer lands on the node grid. Waits for ListPlugins to land.
+  async plugins(): Promise<PluginDescriptor[]> {
+    await this.win.waitForFunction(() => (window as any).__gridwellTest.plugins().length > 0, null, {
+      timeout: 15_000,
+    });
+    return this.win.evaluate(() => (window as any).__gridwellTest.plugins());
+  }
+
   // localPaneIds returns the pane ids that currently hold per-pane client state
   // (a.locals). After a pane is collapsed its id must disappear here — the proof
   // that forgetPane tore the per-pane state down rather than orphaning it.
@@ -129,25 +156,38 @@ export class GridwellDriver {
 
   // ── Gestures ────────────────────────────────────────────────────────────
 
-  // enterPlugin clicks a launcher plugin tile (single click → descent) and
-  // waits for the entry animation to settle. Matches by kind or label.
+  // enterPlugin puts the focused pane at the given plugin's root grid
+  // (matched by kind or label). Boot already lands on the FIRST configured
+  // plugin's root, so this is often a no-op; otherwise the + menu's plugin
+  // swatch descends (a portal). On the node grid — which has no + button —
+  // it falls back to clicking the plugin's link tile, the launcher gesture.
   async enterPlugin(match: string): Promise<void> {
-    // The hook installs before ListPlugins resolves, so the launcher can be
-    // momentarily empty — wait for the plugin tiles to appear first.
-    await this.win.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0, null, {
-      timeout: 15_000,
-    });
-    const tiles = await this.launcher();
-    const t = tiles.find((x) => x.kind === match || x.label === match);
-    if (!t) throw new Error(`no launcher plugin matching ${match}; have ${tiles.map((x) => x.kind)}`);
-    await this.win.mouse.click(t.x, t.y);
-    await this.waitIdle();
+    const pls = await this.plugins();
+    const pl = pls.find((p) => p.kind === match || p.label === match);
+    if (!pl) throw new Error(`no plugin matching ${match}; have ${pls.map((p) => p.kind)}`);
+    const f = await this.focused();
+    if (pl.rootGridID && f.gridID === pl.rootGridID) return; // already there
+    if (/\/0$/.test(f.anchor) && f.gridID === f.anchor) {
+      await this.win.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0, null, {
+        timeout: 15_000,
+      });
+      const tiles = await this.launcher();
+      const t = tiles.find((x) => x.kind === match || x.label === match);
+      if (!t) throw new Error(`no launcher plugin matching ${match}; have ${tiles.map((x) => x.kind)}`);
+      await this.win.mouse.click(t.x, t.y);
+      await this.waitIdle();
+      return;
+    }
+    await this.clickPluginSwatch(match);
   }
 
   // openPalette opens the focused pane's creation menu by clicking its + button
   // (the pane is already focused after a descent, so a single click opens it).
+  // No-op when already open — the + click is a toggle, and a double open must
+  // not close it.
   async openPalette(): Promise<void> {
     const pal = await this.palette();
+    if (pal.open) return;
     await this.win.mouse.click(pal.plusX, pal.plusY);
     await this.win.waitForFunction(() => (window as any).__gridwellTest.palette().open, null, {
       timeout: 5_000,

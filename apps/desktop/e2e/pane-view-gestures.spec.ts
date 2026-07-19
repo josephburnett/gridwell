@@ -127,27 +127,33 @@ test('clicking an unfocused pane focuses without descending; the second click de
 // well descents. A balanced excursion of BOTH kinds must return both depths
 // to zero: a portal descent that also pushed the session stack would leak an
 // orphan there, which a boot-descended pane could later mis-consume as a
-// well-ascent viewport.
-test('portal and well round trips leave both ascent stacks empty', async ({ gw }) => {
-  await gw.enterPlugin('localdb'); // portal descent (frame pushed)
-  const f = await gw.focused();
-  const cx = Math.round(f.cx);
-  const cy = Math.round(f.cy) - 1;
-  await gw.openPalette();
-  await gw.dragCreate('well', cx, cy);
+// well-ascent viewport. The portal here is a + menu descent into a SECOND
+// plugin (boot already sits inside the first, frameless).
+test.describe('stack hygiene', () => {
+  test.use({ extraPlugins: [{ kind: 'localdb', name: 'second' }] });
 
-  await gw.descendCell(cx, cy); // well descent (session stack pushed)
-  let cur = (await gw.panes()).find((p) => p.id === f.id)!;
-  expect(cur.frameDepth, 'one portal frame while inside the plugin').toBe(1);
-  expect(cur.ascentDepth, 'one well level saved').toBe(1);
+  test('portal and well round trips leave both ascent stacks empty', async ({ gw }) => {
+    const home = (await gw.focused()).anchor;
+    await gw.enterPlugin('second'); // + menu portal descent (frame pushed)
+    const f = await gw.focused();
+    const cx = Math.round(f.cx);
+    const cy = Math.round(f.cy) - 1;
+    await gw.openPalette();
+    await gw.dragCreate('well', cx, cy);
 
-  await gw.middleClickCell(Math.round(cur.cx), Math.round(cur.cy) + 1); // well ascent
-  await gw.waitIdle();
-  await gw.middleClickCell(cx, cy + 2); // portal ascent back to the node grid
-  await gw.waitIdle();
+    await gw.descendCell(cx, cy); // well descent (session stack pushed)
+    let cur = (await gw.panes()).find((p) => p.id === f.id)!;
+    expect(cur.frameDepth, 'one portal frame while inside the plugin').toBe(1);
+    expect(cur.ascentDepth, 'one well level saved').toBe(1);
 
-  cur = (await gw.panes()).find((p) => p.id === f.id)!;
-  expect(cur.anchor, 'back on the node grid').toMatch(/\/0$/);
-  expect(cur.frameDepth, 'no frame leaked').toBe(0);
-  expect(cur.ascentDepth, 'no session-stack entry leaked (the orphan bug)').toBe(0);
+    await gw.middleClickCell(Math.round(cur.cx), Math.round(cur.cy) + 1); // well ascent
+    await gw.waitIdle();
+    await gw.middleClickCell(cx, cy + 2); // portal ascent back home
+    await gw.waitIdle();
+
+    cur = (await gw.panes()).find((p) => p.id === f.id)!;
+    expect(cur.anchor, 'back home (the boot anchor)').toBe(home);
+    expect(cur.frameDepth, 'no frame leaked').toBe(0);
+    expect(cur.ascentDepth, 'no session-stack entry leaked (the orphan bug)').toBe(0);
+  });
 });

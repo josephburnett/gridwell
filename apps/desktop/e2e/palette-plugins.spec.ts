@@ -1,0 +1,82 @@
+import { test, expect } from './fixtures';
+import { tileAt } from './oracle';
+
+// The + menu is the plugin surface (owner decision 2026-07-19, reversing the
+// launcher-as-landing-page decision of PR #41):
+//   - boot lands on the FIRST plugin in server.yaml, with "/" as its URL;
+//   - every configured plugin is a swatch on the + menu's TOP row, above the
+//     primitives;
+//   - clicking a plugin swatch descends into it (a portal — ascent returns
+//     exactly to where the menu was opened);
+//   - dragging a plugin swatch into a grid drops a dashed exit-well link.
+//
+// Why is this spec here? The three behaviors cross the wasm↔server seam
+// (paletteItems → startDescent/CreateWell → localdb → SQLite) and none of the
+// unit layers can see the composition.
+
+test.use({ extraPlugins: [{ kind: 'localdb', name: 'second' }] });
+
+test('boot lands on the first plugin with "/" as its URL', async ({ gw, window }) => {
+  const pls = await gw.plugins();
+  const f = await gw.focused();
+  expect(f.gridID, 'boot anchors at the FIRST configured plugin root').toBe(pls[0].rootGridID);
+  expect(f.anchor, 'not the node grid').not.toMatch(/\/0$/);
+
+  // Home encodes as a bare URL: no anchor param, root path.
+  await gw.waitIdle();
+  const url = await window.evaluate(() => location.pathname + location.search);
+  expect(url, 'home keeps "/" as its URL (no a= anchor)').not.toContain('a=');
+});
+
+test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
+  await gw.plugins();
+  await gw.openPalette();
+  const pal = await gw.palette();
+
+  const plugins = pal.items.filter((i) => i.isPlugin);
+  const primitives = pal.items.filter((i) => !i.isPlugin);
+  expect(plugins.map((i) => i.label), 'both plugins, server.yaml order').toEqual(['e2e', 'second']);
+  expect(primitives.length, 'the primitive swatches are still there').toBeGreaterThanOrEqual(5);
+
+  // Plugins come first in index order and sit strictly ABOVE the primitives.
+  expect(pal.items.slice(0, plugins.length).every((i) => i.isPlugin)).toBe(true);
+  const pluginRowY = Math.max(...plugins.map((i) => i.y));
+  const primitiveRowY = Math.min(...primitives.map((i) => i.y));
+  expect(pluginRowY, 'plugin row is above the primitive row').toBeLessThan(primitiveRowY);
+});
+
+test('clicking a plugin swatch descends; ascent returns to where the menu was', async ({ gw }) => {
+  const pls = await gw.plugins();
+  const second = pls.find((p) => p.label === 'second')!;
+  const before = await gw.focused();
+
+  await gw.clickPluginSwatch('second');
+  const inside = await gw.focused();
+  expect(inside.gridID, 'portaled into the second plugin root').toBe(second.rootGridID);
+  expect(inside.frameDepth, 'one portal frame for the return trip').toBe(1);
+
+  // Ascend: back exactly where the menu was opened.
+  await gw.rightClickPlus();
+  const back = await gw.focused();
+  expect(back.gridID, 'ascent returns to the origin grid').toBe(before.gridID);
+  expect(back.frameDepth, 'the frame was consumed').toBe(0);
+  expect(back.cx, 'viewport x preserved').toBeCloseTo(before.cx, 1);
+  expect(back.cy, 'viewport y preserved').toBeCloseTo(before.cy, 1);
+});
+
+test('dragging a plugin swatch into the grid drops a dashed link', async ({ gw }) => {
+  const pls = await gw.plugins();
+  const second = pls.find((p) => p.label === 'second')!;
+  const f = await gw.focused();
+  const cx = Math.round(f.cx) + 1;
+  const cy = Math.round(f.cy) + 1;
+
+  await gw.openPalette();
+  await gw.dragPluginLink('second', cx, cy);
+
+  const link = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
+  expect(link, 'exit-well link created at the drop cell').toBeTruthy();
+  expect(link.childGridId, "child is the plugin's qualified root").toBe(second.rootGridID);
+  expect(link.reference, 'renders dashed (a link, delete only unlinks)').toBe(true);
+  expect(link.altText, 'labeled with the plugin name').toBe('second');
+});

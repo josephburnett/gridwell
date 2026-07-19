@@ -10,10 +10,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   window,
   gw,
 }) => {
-  const local = (await (async () => {
-    await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0);
-    return gw.launcher();
-  })()).find((l) => l.kind === 'localdb');
+  const local = (await gw.plugins()).find((l) => l.kind === 'localdb');
   const scratchGridID = local!.scratchGridID;
 
   await gw.enterPlugin('localdb');

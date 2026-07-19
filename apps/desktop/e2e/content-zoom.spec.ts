@@ -92,9 +92,8 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
   gw,
 }) => {
   // The scratch grid id (where the ephemeral url tile lands) is advertised
-  // on the plugin's launcher entry.
-  await window.waitForFunction(() => (window as any).__gridwellTest.launcher().length > 0);
-  const scratch = (await gw.launcher()).find((l) => l.kind === 'localdb')!.scratchGridID;
+  // on the plugin's entry.
+  const scratch = (await gw.plugins()).find((l) => l.kind === 'localdb')!.scratchGridID;
   expect(scratch, 'localdb advertises a scratch grid').toBeTruthy();
   await gw.enterPlugin('localdb');
   const wcBefore = await electronApp.evaluate(
