@@ -356,6 +356,27 @@ type CreateWellRequest struct {
 	ViewX    int64   `json:"view_x,omitempty"`
 	ViewY    int64   `json:"view_y,omitempty"`
 	ViewZoom float64 `json:"view_zoom,omitempty"`
+	// ObjectID carries the source's provenance marker when this exit well is
+	// a cross-plugin LINK to an existing well ("" = mint fresh).
+	ObjectID string `json:"object_id,omitempty"`
+}
+
+// CreateLeafLinkRequest creates a LEAF LINK: a text/url/shell/pane tile whose
+// content lives in another plugin's tile (the cross-plugin left-drag). Kind is
+// the target's kind; LinkTargetID is the qualified "<uuid>/<tile-id>"
+// reference; Label is the link's local alt_text (usually the source's);
+// ObjectID carries provenance ("" = fresh).
+type CreateLeafLinkRequest struct {
+	Path         Path   `json:"path"`
+	GridID       string `json:"grid_id"`
+	X            int64  `json:"x"`
+	Y            int64  `json:"y"`
+	W            int64  `json:"w"`
+	H            int64  `json:"h"`
+	Kind         string `json:"kind"`
+	LinkTargetID string `json:"link_target_id"`
+	Label        string `json:"label,omitempty"`
+	ObjectID     string `json:"object_id,omitempty"`
 }
 
 type CreateTextRequest struct {
@@ -383,6 +404,9 @@ type CreatePaneRequest struct {
 	// Data is the optional initial layout blob; empty = never arranged
 	// (descent installs the default single pane).
 	Data []byte `json:"data,omitempty"`
+	// ObjectID carries the source's provenance marker on a cross-plugin
+	// clone ("" = mint fresh). See store createTile.
+	ObjectID string `json:"object_id,omitempty"`
 }
 
 type CreateURLRequest struct {

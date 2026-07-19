@@ -212,23 +212,33 @@ func EventFromProto(e *pb.Event) Event {
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label,
-			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
+			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID}}
 }
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H}, Data: r.Data}
+		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}, Data: r.Data}
 }
 func CreateURLToProto(r *CreateURLRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindURL, X: r.X, Y: r.Y, W: r.W, H: r.H, UrlString: r.URL}}
+		Tile: &pb.Tile{Kind: KindURL, X: r.X, Y: r.Y, W: r.W, H: r.H, UrlString: r.URL, ObjectId: r.ObjectID}}
 }
 func CreateShellToProto(r *CreateShellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H}}
+		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}}
 }
 func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label}, Data: r.Data}
+		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label, ObjectId: r.ObjectID}, Data: r.Data}
+}
+
+// CreateLeafLinkToProto builds the CreateTile for a LEAF LINK: any leaf kind
+// plus a qualified link_target_id. The one create for all four linkable leaf
+// kinds — the destination plugin stores the reference verbatim and no content
+// rides along (bytes live in the target).
+func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
+	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+		Tile: &pb.Tile{Kind: r.Kind, X: r.X, Y: r.Y, W: r.W, H: r.H,
+			LinkTargetId: r.LinkTargetID, AltText: r.Label, ObjectId: r.ObjectID}}
 }
 
 // SetTile converters. The wire has a single SetTile dispatched on the target

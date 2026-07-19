@@ -17,17 +17,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
-// Cross-plugin clone semantics (CLAUDE.md "Identity and clone semantics"):
-// right-dragging a tile across a plugin boundary must NOT copy the subtree —
-// a well becomes a LINK in the destination (an exit well pointing back at the
-// source plugin's grid), and a leaf (text/url) copies its bytes into the
-// destination plugin. This was documented but unimplemented: CloneTile
-// forwarded the foreign DestGridId to the source plugin, whose store failed
-// with "invalid dest_grid_id".
-//
-// Why was this not caught? Every clone test cloned within one plugin; the
-// cross-plugin gesture had no test at the routing seam where it actually
-// branches.
+// Cross-plugin gesture semantics (owner decision 2026-07-19): LEFT-drag
+// across a plugin boundary creates a LINK (one copy of the content — an exit
+// well for a grid, a leaf link via link_target_id for text/url/shell/pane),
+// and RIGHT-drag creates a CLONE (a real copy: leaves copy bytes; a well's
+// deep copy is not yet implemented and must refuse loudly rather than
+// silently substituting a link). The left-drag arrives at the server as a
+// plain CreateTile carrying a qualified reference — the same request shape a
+// + menu plugin-swatch drop uses — so these tests drive both faces through
+// the real router seam. Provenance (object_id, globally unique) rides every
+// cross-plugin link and copy, so lineage survives the boundary.
 
 // twoPluginServer stands up a server with two localdb plugins and returns the
 // client plus each plugin's uuid and qualified root grid id.
@@ -70,7 +69,7 @@ func twoPluginServer(t *testing.T) (cl *rpc.Client, uuidA, rootA, uuidB, rootB s
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), uuidA, rootA, uuidB, rootB
 }
 
-func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
+func TestLinkWellAcrossPlugins(t *testing.T) {
 	cl, uuidA, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -89,9 +88,9 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 		t.Fatalf("CreateText: %v", err)
 	}
 
-	// The source well has a framing the user set — the preview the clone
-	// gesture is copying. It must ride along: descending the link should
-	// land exactly where descending the source would.
+	// The source well has a framing the user set — the preview the link
+	// gesture carries along. Descending the link must land exactly where
+	// descending the source would.
 	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
 		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
 		ViewX: 7, ViewY: -2, ViewZoom: 1.75,
@@ -100,16 +99,21 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 		t.Fatalf("SetWellView: %v", err)
 	}
 
-	// Right-drag the well into plugin B: the destination gains a LINK.
-	link, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: framed.Version,
-		DestGridID: rootB, X: 3, Y: 3,
+	// LEFT-drag the well into plugin B: the client commits a CreateWell
+	// carrying the source's qualified child grid, label, framing, and
+	// provenance — the destination gains a LINK; there is only one copy of
+	// the grid.
+	link, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: rootB, X: 3, Y: 3, W: well.W, H: well.H,
+		ChildGridID: well.ChildGridID, Label: framed.AltText,
+		ViewX: framed.ViewX, ViewY: framed.ViewY, ViewZoom: framed.ViewZoom,
+		ObjectID: framed.ObjectID,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin CloneTile: %v", err)
+		t.Fatalf("cross-plugin link (CreateWell): %v", err)
 	}
 	if link.ViewX != 7 || link.ViewY != -2 || link.ViewZoom != 1.75 {
-		t.Errorf("link framing = (%v, %v, %v), want the source's (7, -2, 1.75) — a clone must not reset the viewport",
+		t.Errorf("link framing = (%v, %v, %v), want the source's (7, -2, 1.75) — a link must not reset the viewport",
 			link.ViewX, link.ViewY, link.ViewZoom)
 	}
 	if u, _, _ := rpc.SplitID(link.ID); u != uuidB {
@@ -123,6 +127,9 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 	}
 	if link.AltText != "recipes" {
 		t.Errorf("link label = %q, want the source's name", link.AltText)
+	}
+	if link.ObjectID != well.ObjectID {
+		t.Errorf("link provenance = %q, want the source's object_id %q", link.ObjectID, well.ObjectID)
 	}
 
 	// The grid is SHARED: reading the link's child sees the source's content.
@@ -145,20 +152,83 @@ func TestCloneWellAcrossPluginsIsALink(t *testing.T) {
 		t.Errorf("deleting the link destroyed the source's content: %v", err)
 	}
 	_ = uuidA
+}
 
-	// An UNNAMED well links too: the link's alt is simply empty. (Regression:
-	// the exit-well insert turned "" into SQL NULL against a NOT NULL column,
-	// so only named wells could cross a plugin boundary.)
-	plain, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
-		GridID: rootA, X: 4, Y: 4, W: 1, H: 1,
+// TestCloneWellAcrossPluginsRefusedLoudly: right-drag = COPY, and a well's
+// deep cross-plugin copy is not implemented yet — the server must refuse with
+// a visible error, never silently substitute a link (a gesture that returns
+// something other than what it names is the silent-divergence class).
+func TestCloneWellAcrossPluginsRefusedLoudly(t *testing.T) {
+	cl, _, rootA, _, rootB := twoPluginServer(t)
+	ctx := context.Background()
+
+	well, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: rootA, X: 0, Y: 0, W: 1, H: 1, Label: "recipes",
 	})
 	if err != nil {
-		t.Fatalf("CreateWell (unnamed): %v", err)
+		t.Fatalf("CreateWell: %v", err)
 	}
-	if _, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: plain.ID, Version: plain.Version, DestGridID: rootB, X: 5, Y: 5,
-	}); err != nil {
-		t.Errorf("cross-plugin clone of an UNNAMED well failed: %v", err)
+	_, err = cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: well.ID, Version: well.Version, DestGridID: rootB, X: 3, Y: 3,
+	})
+	if err == nil {
+		t.Fatal("cross-plugin CloneTile of a well succeeded; deep well copy is unimplemented and must refuse")
+	}
+	if connect.CodeOf(err) != connect.CodeUnimplemented {
+		t.Errorf("refusal code = %v, want unimplemented (a designed refusal, not a routing accident)", connect.CodeOf(err))
+	}
+}
+
+// TestLinkLeafAcrossPlugins: the leaf face of the left-drag — the destination
+// gains a text tile whose content lives in the source plugin's tile
+// (link_target_id), readable through the target id, carrying provenance, and
+// deleting it only unlinks.
+func TestLinkLeafAcrossPlugins(t *testing.T) {
+	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
+	ctx := context.Background()
+
+	txt, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: rootA, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# the one copy"),
+	})
+	if err != nil {
+		t.Fatalf("CreateText: %v", err)
+	}
+	link, err := cl.CreateLeafLink(ctx, &rpc.CreateLeafLinkRequest{
+		GridID: rootB, X: 2, Y: 2, W: 1, H: 1,
+		Kind: rpc.KindText, LinkTargetID: txt.ID,
+		Label: txt.AltText, ObjectID: txt.ObjectID,
+	})
+	if err != nil {
+		t.Fatalf("cross-plugin leaf link: %v", err)
+	}
+	if u, _, _ := rpc.SplitID(link.ID); u != uuidB {
+		t.Errorf("link lives in %q, want destination plugin %q", u, uuidB)
+	}
+	if link.Kind != rpc.KindText || link.LinkTargetID != txt.ID {
+		t.Errorf("link shape: kind=%q target=%q, want text → %q", link.Kind, link.LinkTargetID, txt.ID)
+	}
+	if !link.Reference {
+		t.Error("leaf link must be marked Reference (dashed border, unlink-only delete)")
+	}
+	if link.ObjectID != txt.ObjectID {
+		t.Errorf("link provenance = %q, want the source's object_id %q", link.ObjectID, txt.ObjectID)
+	}
+
+	// One copy: content is read THROUGH the target id the link carries.
+	body, _, err := cl.GetTileContent(ctx, link.LinkTargetID)
+	if err != nil {
+		t.Fatalf("content through link target: %v", err)
+	}
+	if string(body) != "# the one copy" {
+		t.Errorf("content through target = %q", body)
+	}
+
+	// Deleting the link only unlinks — the source and its bytes survive.
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: link.ID, Version: link.Version}); err != nil {
+		t.Fatalf("delete leaf link: %v", err)
+	}
+	if body, _, err := cl.GetTileContent(ctx, txt.ID); err != nil || string(body) != "# the one copy" {
+		t.Errorf("deleting the link touched the source: body=%q err=%v", body, err)
 	}
 }
 
@@ -181,6 +251,10 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	}
 	if u, _, _ := rpc.SplitID(copyT.ID); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
+	}
+	if copyT.ObjectID != txt.ObjectID {
+		t.Errorf("copy provenance = %q, want the source's object_id %q (lineage survives the boundary)",
+			copyT.ObjectID, txt.ObjectID)
 	}
 	body, _, err := cl.GetTileContent(ctx, copyT.ID)
 	if err != nil {
@@ -294,12 +368,13 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	}
 }
 
-// TestCloneDirWellFromFsPluginIsALink (issue #171): right-dragging a
-// directory from an fs grid into a localdb grid failed "GetTile is not
-// implemented" — cloneAcrossPlugins' FIRST call is src.GetTile, which the fs
-// (and proc) plugins never implemented. This crosses the real seam: server
-// routing → in-process fs plugin → link created in the localdb destination.
-func TestCloneDirWellFromFsPluginIsALink(t *testing.T) {
+// TestLinkDirWellFromFsPlugin (formerly the issue-#171 clone test): dragging
+// a directory from an fs grid into a localdb grid creates a LINK — under the
+// 2026-07-19 gestures that is the LEFT-drag, committed as a CreateWell
+// carrying the fs dir's qualified grid. This crosses the real seam: server
+// routing → in-process fs plugin (GetGrid materializes the dir tiles) → link
+// created in the localdb destination.
+func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	ctx := context.Background()
 	reg := plugin.NewRegistry()
 
@@ -353,11 +428,14 @@ func TestCloneDirWellFromFsPluginIsALink(t *testing.T) {
 		t.Fatalf("sub dir tile missing: %+v", g.Tiles)
 	}
 
-	link, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: sub.ID, Version: sub.Version, DestGridID: dstRoot, X: 1, Y: 1,
+	// The left-drag commit: the client builds the link from its cached tile
+	// (the one it is dragging) — no read from the fs plugin is needed.
+	link, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: dstRoot, X: 1, Y: 1, W: sub.W, H: sub.H,
+		ChildGridID: sub.ChildGridID, Label: sub.AltText, ObjectID: sub.ObjectID,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin CloneTile from fs: %v", err)
+		t.Fatalf("cross-plugin link from fs: %v", err)
 	}
 	if link.ChildGridID != sub.ChildGridID {
 		t.Errorf("link child = %q, want the fs dir's grid %q (shared, not copied)",
@@ -368,6 +446,14 @@ func TestCloneDirWellFromFsPluginIsALink(t *testing.T) {
 	}
 	if link.AltText != "sub" {
 		t.Errorf("link label = %q, want the directory's name", link.AltText)
+	}
+
+	// The right-drag (clone) of a dir well is refused loudly — deep copy of a
+	// host directory is unimplemented.
+	if _, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: sub.ID, Version: sub.Version, DestGridID: dstRoot, X: 3, Y: 3,
+	}); connect.CodeOf(err) != connect.CodeUnimplemented {
+		t.Errorf("clone of an fs dir well: err=%v, want unimplemented refusal", err)
 	}
 }
 

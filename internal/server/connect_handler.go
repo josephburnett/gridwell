@@ -369,12 +369,14 @@ func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.M
 }
 
 // CloneTile clones within a plugin, or — when the destination grid belongs to
-// a DIFFERENT plugin — applies the cross-plugin clone contract (CLAUDE.md
-// "Identity and clone semantics"): a well becomes a LINK in the destination
-// (an exit well pointing at the source's grid; the grid is shared, never
-// copied, so no id is ever reassigned), and a leaf copies its bytes into the
-// destination plugin. The source plugin is never asked to write into a grid
-// it doesn't own.
+// a DIFFERENT plugin — applies the cross-plugin clone contract (owner decision
+// 2026-07-19: right-drag = COPY everywhere, left-drag across a boundary =
+// LINK): a leaf copies its bytes into the destination plugin (provenance
+// object_id carried); a well's deep cross-plugin copy is not yet implemented
+// and is refused loudly (the LINK gesture is the left-drag, which arrives
+// here as a plain CreateTile carrying a qualified child_grid_id or
+// link_target_id — never as a clone). The source plugin is never asked to
+// write into a grid it doesn't own.
 func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
 	c, local, uuid, err := h.route(m.TileId)
@@ -410,32 +412,51 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 			fmt.Errorf("version conflict: tile %s is at %d, request has %d", m.TileId, st.Version, m.Version))
 	}
 
+	// Provenance rides every cross-plugin copy: object_id is a random 128-bit
+	// hex, globally unique with no per-plugin qualification, so the copy and
+	// the source share a lineage exactly as a within-plugin clone's rows do
+	// (insertTileCopy preserves it).
 	create := &pb.CreateTileRequest{
-		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H, AltText: st.AltText},
+		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H,
+			AltText: st.AltText, ObjectId: st.ObjectId},
 	}
-	switch st.Kind {
-	case "well":
-		// The link: same child grid, shared. Deleting it later only unlinks
-		// (the destination store's rule for qualified children).
+	switch {
+	case st.Kind == "well" && st.Reference:
+		// The source is itself a LINK (an exit well — a mount, a node-grid
+		// plugin tile, an earlier cross-plugin link). Cloning a link copies
+		// the LINK: same shared child grid, same framing — exactly what a
+		// within-plugin clone of an exit well does. This is also the mount
+		// gesture's path (right-drag a node-grid plugin tile).
 		create.Tile.ChildGridId = st.ChildGridId
-		// The source's framing rides along: the link's preview and descent
-		// target must land exactly where the source's would (preview =
-		// descent target = ascent return; a clone never resets a viewport).
 		create.Tile.ViewX = st.ViewX
 		create.Tile.ViewY = st.ViewY
 		create.Tile.ViewZoom = st.ViewZoom
-	case "text":
+	case st.Kind == "well":
+		// A SOLID well's cross-plugin CLONE is a deep copy of its subtree
+		// into the destination plugin — bulk grid/tile/blob transfer the
+		// plugin surface has no primitive for yet. Refuse loudly rather than
+		// silently substituting a link: the link is the LEFT-drag's meaning,
+		// and a gesture that returns something other than what it names is
+		// the silent-divergence bug class. (Owner decision 2026-07-19; the
+		// old behavior — right-drag well = link — moved to left-drag.)
+		return nil, connect.NewError(connect.CodeUnimplemented,
+			fmt.Errorf("cross-plugin clone of a well is not implemented yet; left-drag creates a link"))
+	case st.LinkTargetId != "":
+		// A leaf LINK clones as another link to the same target (the tile
+		// being copied is a reference; copying it copies the reference).
+		create.Tile.LinkTargetId = st.LinkTargetId
+	case st.Kind == "text":
 		body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
 		if err != nil {
 			return nil, asConnectError(err)
 		}
 		create.Data = body.Data
-	case "url":
+	case st.Kind == "url":
 		create.Tile.UrlString = st.UrlString
-	case "shell":
+	case st.Kind == "shell":
 		// A shell's PTY session is plugin-local; the copy is a fresh shell
 		// tile carrying the same label.
-	case "pane":
+	case st.Kind == "pane":
 		// A workspace clones as a byte copy of its layout blob (like text).
 		// The layout's ids are owner-frame-relative — the copy's panes keep
 		// naming the ORIGINAL places (a pane tile is arrangement of

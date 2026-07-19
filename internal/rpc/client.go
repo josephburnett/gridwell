@@ -142,6 +142,9 @@ func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Til
 func (c *Client) CreatePane(ctx context.Context, req *CreatePaneRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreatePaneToProto(req))))
 }
+func (c *Client) CreateLeafLink(ctx context.Context, req *CreateLeafLinkRequest) (*Tile, error) {
+	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateLeafLinkToProto(req))))
+}
 
 // Set* are typed sugar over the single SetTile RPC.
 func (c *Client) SetWellView(ctx context.Context, req *SetWellViewRequest) (*Tile, error) {
