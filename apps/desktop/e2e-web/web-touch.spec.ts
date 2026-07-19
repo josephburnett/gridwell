@@ -7,14 +7,26 @@ import { longPressDrag, pinch, twoFingerTap } from './touch';
 // drive the canvas exactly as a finger on an iPhone would. Each gesture is
 // verified against pane/server state, never pixels.
 
-test('touch: tap enters a plugin and descends', async ({ gw, window }) => {
-  const launcher = await window.evaluate(() => (window as any).__gridwellTest.launcher());
-  const pl = launcher.find((l: any) => l.label === 'e2e');
-  expect(pl, 'launcher tile present').toBeTruthy();
-  await window.touchscreen.tap(pl.x, pl.y);
+test('touch: tap opens the + menu and descends into a plugin', async ({ gw, window }) => {
+  // Boot already sits at the first plugin's root; plugins live on the + menu
+  // (2026-07-19 reversal). The tap gesture is verified against that portal:
+  // tap the + button, tap the plugin swatch — the pane descends and a frame
+  // is pushed for the return trip.
+  await gw.plugins();
+  const before = await gw.focused();
+  const pal = await gw.palette();
+  await window.touchscreen.tap(pal.plusX, pal.plusY);
+  await window.waitForFunction(() => (window as any).__gridwellTest.palette().open, null, {
+    timeout: 5_000,
+  });
+  const open = await gw.palette();
+  const swatch = open.items.find((i) => i.isPlugin && i.label === 'e2e');
+  expect(swatch, 'plugin swatch present in the + menu').toBeTruthy();
+  await window.touchscreen.tap(swatch!.x + swatch!.w / 2, swatch!.y + swatch!.h / 2);
   await gw.waitIdle();
   const f = await gw.focused();
-  expect(f.anchor, 'tap entered the plugin').not.toBe('');
+  expect(f.gridID, 'tap descended to the plugin root').toBe(before.gridID);
+  expect(f.frameDepth, 'the tap ran the portal descent (frame pushed)').toBe(1);
 });
 
 test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, window }) => {
