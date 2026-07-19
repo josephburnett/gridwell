@@ -466,10 +466,13 @@ all fixed. What remains (verified July 2026):
   round-trip is idempotent **iff** the copies agreed.
 - **Drop a tile.** Gesture → `CreateTile`/`MoveTile`/`CloneTile` with the descent
   `Path` → server routes → store mutates → `Subscribe` event → `cache.Apply`
-  upserts → redraw. A right-drag across a plugin boundary becomes a LINK
-  (`cloneAcrossPlugins`: exit well sharing the source grid) or a byte copy
-  (leaves); a left-drag move never crosses an id namespace (rejected at
-  `DecideDrop`).
+  upserts → redraw. Across a plugin boundary there is no move (owner decision
+  2026-07-19): a LEFT-drag verdicts `DropLink` at `DecideDrop` and commits a
+  plain `CreateTile` carrying a qualified reference (`commitLinkDrop`: exit
+  well for a well, `link_target_id` for a leaf; the source stays put); a
+  RIGHT-drag stays `CloneTile` — `cloneAcrossPlugins` copies bytes for
+  leaves, copies a link tile as another link, and refuses a solid well
+  (deep copy unimplemented, also rejected client-side by `CloneForbidden`).
 - **Pan / zoom.** Framing write → `SetTile` (well/text branch) → **no version
   bump** → event fans out → other panes' previews of the same tile update.
 - **Open a live URL tile.** Canvas places a rect; IPC asks the native layer for a

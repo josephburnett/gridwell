@@ -278,14 +278,28 @@ Nothing the user didn't touch ever re-rows. The consequences:
   content address. No structural sharing, no copy-on-write — so an edit to one
   copy can never touch another, and no id is ever reassigned. (Note: the file
   `internal/store/cow.go` is misnamed; COW was removed. See `ARCHITECTURE.md §9`.)
-- **Cross-plugin clone is a link, not a copy.** Cloning a well across plugin
-  boundaries creates a tile in the destination plugin whose child points back at
-  the source plugin's grid (a qualified cross-plugin reference). The source
-  grid is shared, not duplicated. Cloning a leaf (text/url/shell) across
-  plugins copies the bytes into the destination plugin's blob store.
-- A clone may carry the source's `object_id` as a **provenance marker** (these
-  came from the same origin) — used only by future horizontal-navigation
-  gestures, never for identity or routing. The plugin-scoped numeric id is identity.
+- **Across a plugin boundary there is no move — left-drag links, right-drag
+  clones (owner decision 2026-07-19, reversing PR #55's right-drag-link; do
+  not re-reverse without a new owner decision).** The invariant: a left-drag
+  never duplicates content; a right-drag always does. Identity never migrates
+  an id namespace, so the cross-plugin left-drag creates a LINK — the content
+  stays where its id lives, the destination gains a reference, the source is
+  untouched, and the in-flight ghost teaches this (dashed + chain badge).
+  Every primitive has a link variant: a well links via a qualified
+  `child_grid_id` (the exit well), a leaf (text/url/shell/pane) via
+  `link_target_id` (a qualified tile reference; the row owns no content —
+  readers resolve bytes/preview/session/layout through the target, and the
+  client's one resolution point is `rpc.Tile.ContentID`). A Plugin tile is
+  *always* a link. Cross-plugin right-drag CLONES the dragged tile: a leaf
+  copies bytes, a link tile copies as another link (this is also how a mount
+  is made from the node grid), and a solid well is refused loudly until deep
+  cross-plugin copy exists (`cloneAcrossPlugins`, CodeUnimplemented).
+  Relocation across plugins is the explicit two-step: clone, then delete the
+  source — the identity break happens where the user can see it.
+- Every cross-plugin clone and link carries the source's `object_id` as a
+  **provenance marker** (a globally-unique 128-bit hex — these came from the
+  same origin) — used only by future horizontal-navigation gestures, never for
+  identity or routing. The plugin-scoped numeric id is identity.
 
 ### Why clone is eager (the deciding case)
 
@@ -359,12 +373,18 @@ itself stays a dumb pipe (`internal/plugin/proxy`). The dial path (key auth,
 mandatory known_hosts, tunnel, gRPC-over-h2c) is `internal/plugin/sshdial`,
 seam-tested against a real in-process ssh server fronting a two-plugin node.
 
-**Cross-plugin clone is a link (implemented in the CloneTile router).**
-Right-dragging a well into another plugin's grid creates an exit-well link in
-the DESTINATION sharing the source's grid; leaves (text/url) copy bytes. A
-dashed border always means link: deleting it only unlinks. Left-drag moves
-never cross an id namespace (identity doesn't migrate; the DecideDrop seam
-rejects them client-side).
+**Cross-plugin link is the left-drag; clone is the right-drag (2026-07-19).**
+Left-dragging any tile into another plugin's grid creates a LINK in the
+DESTINATION — an exit well sharing the source's grid, or a leaf link
+(`link_target_id`) naming the source tile — committed as a plain `CreateTile`
+(the same shape a + menu swatch drop uses; `commitLinkDrop`). A dashed border
+always means link: deleting it only unlinks, and content ops read/write
+through the target (`rpc.Tile.ContentID`, the one resolution point). A leaf
+link dragged onward links to the original TARGET, never to the middleman.
+Right-drag CLONES: leaves copy bytes through `cloneAcrossPlugins`, link tiles
+copy as links, and a solid well is refused (unimplemented) — there is no
+cross-plugin move (identity doesn't migrate; `DecideDrop` verdicts `DropLink`
+instead).
 
 **URL and path format.** A pane's URL is its ANCHOR (an `a=` query param
 naming the grid namespace the pane sits inside — absent for the node grid, so

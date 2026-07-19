@@ -313,19 +313,31 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
-  // cloneDragAcrossPanes right-drags (clone/link gesture) the tile at cell
-  // (fcx,fcy) of pane fromID onto cell (tcx,tcy) of pane toID. Within one
-  // plugin this clones; across a plugin boundary it creates a LINK in the
-  // destination (a well) or a byte copy (a leaf).
+  // cloneDragAcrossPanes right-drags (the CLONE gesture — a copy everywhere)
+  // the tile at cell (fcx,fcy) of pane fromID onto cell (tcx,tcy) of pane
+  // toID. Across a plugin boundary a leaf copies its bytes; a SOLID well is
+  // refused (deep copy unimplemented); a link tile copies as another link.
   async cloneDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
+    await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'right');
+  }
+
+  // leftDragAcrossPanes left-drags the tile at cell (fcx,fcy) of pane fromID
+  // onto cell (tcx,tcy) of pane toID. Within one plugin this MOVES; across a
+  // plugin boundary it creates a LINK in the destination and the source stays
+  // put (owner decision 2026-07-19 — there is no cross-plugin move).
+  async leftDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
+    await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'left');
+  }
+
+  private async dragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number, button: 'left' | 'right'): Promise<void> {
     const from = await this.cellCenter(fromID, fcx, fcy);
     const to = await this.cellCenter(toID, tcx, tcy);
     const m = this.win.mouse;
     await m.move(from.x, from.y);
-    await m.down({ button: 'right' });
+    await m.down({ button });
     await m.move(from.x + GridwellDriver.NUDGE, from.y + GridwellDriver.NUDGE);
     await m.move(to.x, to.y, { steps: 10 });
-    await m.up({ button: 'right' });
+    await m.up({ button });
     await this.waitIdle();
   }
 

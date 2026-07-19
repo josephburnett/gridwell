@@ -5,9 +5,12 @@ import { tileAt, Tile } from './oracle';
 //   - boot lands on the FIRST plugin in server.yaml (owner decision
 //     2026-07-19); the node grid remains a real, read-only, server-owned
 //     grid of dashed links — the federation surface an ssh mount lands on;
-//   - right-dragging a well across a plugin boundary creates a LINK in the
-//     destination (the grid is shared, never copied), and deleting the link
-//     only unlinks;
+//   - the 2026-07-19 gestures: LEFT-dragging a tile across a plugin boundary
+//     creates a LINK in the destination (an exit well for a well, a leaf
+//     link for text) and the source stays put — there is no cross-plugin
+//     move; RIGHT-drag is a CLONE (a copy), and a solid well's deep copy is
+//     refused. Deleting a link only unlinks. Editing through a leaf link
+//     lands on the one shared copy of the bytes.
 //   - dragging a plugin swatch out of the + menu into a grid mounts that
 //     plugin as a link well — the gesture the menu's plugin row exists for.
 
@@ -35,54 +38,104 @@ test('boot lands on the first plugin; the node grid stays a real grid of links',
   }
 });
 
-test('right-drag links a well across plugins; deleting the link never touches the source', async ({ gw }) => {
-  // Split at boot: both panes clone the boot grid (the first plugin's root);
-  // focus lands on the NEW pane. Focus panes with CORNER clicks throughout:
-  // pane centers hold tiles, and a center click on a focused pane would
-  // descend.
+// twoPanesTwoPlugins splits the boot pane and enters plugin "e2e" in pane A,
+// "second" in pane B, returning both panes plus A's source cell and B's
+// target cell (both OFF-center so later clicks never land on them). Focus
+// panes with CORNER clicks throughout: pane centers hold tiles, and a center
+// click on a focused pane would descend.
+async function twoPanesTwoPlugins(gw: any) {
   await gw.plugins();
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
-  const a0 = (await gw.panes()).find((p) => p.id !== bId)!;
+  const a0 = (await gw.panes()).find((p: any) => p.id !== bId)!;
 
-  // Pane A: enter "e2e", create a well OFF-center (cy-1) so later clicks
-  // never land on it.
   await gw.clickScreen(a0.x + 20, a0.y + 20);
   await gw.enterPlugin('e2e');
-  const a = (await gw.panes()).find((p) => p.id === a0.id)!;
+  const a = (await gw.panes()).find((p: any) => p.id === a0.id)!;
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
+
+  const b = (await gw.panes()).find((p: any) => p.id === bId)!;
+  await gw.clickScreen(b.x + 20, b.y + 20);
+  await gw.enterPlugin('second');
+  const bNow = (await gw.panes()).find((p: any) => p.id === bId)!;
+  const tx = Math.round(bNow.cx);
+  const ty = Math.round(bNow.cy) - 1;
+  return { a, b: bNow, cx, cy, tx, ty };
+}
+
+test('left-drag links a well across plugins; the source stays; deleting the link never touches it', async ({ gw }) => {
+  const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
+
+  // Pane A: create the source well.
+  await gw.clickScreen(a.x + 20, a.y + 20);
   await gw.openPalette();
   await gw.dragCreate('well', cx, cy);
   const src = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(src, 'source well created').toBeTruthy();
 
-  // Pane B: enter "second".
-  const b = (await gw.panes()).find((p) => p.id === bId)!;
-  await gw.clickScreen(b.x + 20, b.y + 20);
-  await gw.enterPlugin('second');
-  const bNow = (await gw.panes()).find((p) => p.id === bId)!;
-  const tx = Math.round(bNow.cx);
-  const ty = Math.round(bNow.cy) - 1;
+  // The link gesture: LEFT-drag the well from pane A into pane B.
+  await gw.leftDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
 
-  // The link gesture: right-drag the well from pane A into pane B.
-  await gw.clickScreen(a.x + 20, a.y + 20);
-  await gw.cloneDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
-
-  const link = tileAt(await gw.getGrid(bNow.gridID), 'well', tx, ty)!;
+  const link = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
   expect(link, 'link created in the destination plugin').toBeTruthy();
   expect(link.childGridId, 'the grid is SHARED, not copied').toBe(src.childGridId);
   expect(link.reference, 'the link renders dashed').toBe(true);
 
+  // There is no move: the source well is exactly where it was.
+  const srcStill = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
+  expect(srcStill, 'source well stayed put — a cross-plugin left-drag is a link, not a move').toBeTruthy();
+  expect(srcStill.id).toBe(src.id);
+
   // Deleting the link only unlinks: drag it to pane B's trashcan; the source
   // well in plugin "e2e" must survive byte-for-byte.
-  const bAgain = (await gw.panes()).find((p) => p.id === b.id)!;
-  await gw.clickScreen(bAgain.x + 20, bAgain.y + 20);
+  await gw.clickScreen(b.x + 20, b.y + 20);
   await gw.deleteTileCell(tx, ty);
-  expect(tileAt(await gw.getGrid(bNow.gridID), 'well', tx, ty), 'link gone').toBeUndefined();
+  expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'link gone').toBeUndefined();
   const srcAfter = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(srcAfter, 'source well survived the unlink').toBeTruthy();
   expect(srcAfter.childGridId).toBe(src.childGridId);
+});
+
+test('right-drag of a solid well across plugins is refused; a text left-drag links and edits through', async ({ gw }) => {
+  const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
+
+  // Pane A: a solid well and a text tile side by side.
+  await gw.clickScreen(a.x + 20, a.y + 20);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx - 1, cy);
+  const srcWell = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
+  const srcText = tileAt(await gw.getGrid(a.gridID), 'text', cx - 1, cy)!;
+  expect(srcWell && srcText, 'sources created').toBeTruthy();
+
+  // RIGHT-drag (clone) of the SOLID well across the boundary: refused —
+  // its deep copy is unimplemented; the ghost showed no-entry and no RPC
+  // fired. Nothing lands, nothing moves.
+  await gw.cloneDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
+  expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'no well appeared in the destination').toBeUndefined();
+  expect(tileAt(await gw.getGrid(a.gridID), 'well', cx, cy), 'source well untouched').toBeTruthy();
+
+  // LEFT-drag the TEXT tile across: a leaf LINK — dashed, naming the source
+  // tile as its content target; the source stays put.
+  await gw.leftDragAcrossPanes(a.id, cx - 1, cy, b.id, tx, ty);
+  const link = tileAt(await gw.getGrid(b.gridID), 'text', tx, ty)!;
+  expect(link, 'leaf link created in the destination plugin').toBeTruthy();
+  expect(link.reference, 'the leaf link renders dashed').toBe(true);
+  expect(link.linkTargetId, 'the link names the source tile as content owner').toBe(srcText.id);
+  expect(tileAt(await gw.getGrid(a.gridID), 'text', cx - 1, cy), 'source text stayed put').toBeTruthy();
+
+  // Editing THROUGH the link lands on the one shared copy: descend into the
+  // LINK in pane B, type, ascend — the SOURCE tile's stored body carries it.
+  await gw.clickScreen(b.x + 20, b.y + 20);
+  await gw.descendCell(tx, ty);
+  const marker = 'edited-through-the-link';
+  await gw.typeText(marker);
+  await gw.rightClickPlus();
+  await expect
+    .poll(async () => gw.getTileContent(srcText.id), { timeout: 10_000 })
+    .toContain(marker);
 });
 
 test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }) => {

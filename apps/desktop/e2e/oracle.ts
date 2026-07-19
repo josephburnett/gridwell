@@ -22,6 +22,8 @@ export interface Tile {
   w?: number | string;
   h?: number | string;
   childGridId?: string;
+  linkTargetId?: string;
+  reference?: boolean;
   [k: string]: unknown;
 }
 

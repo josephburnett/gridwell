@@ -37,9 +37,11 @@ type dropTarget struct {
 // the SAME dragdrop.DecideDrop verdict the commit path uses, so a
 // previewed action can never diverge from the committed one (the
 // trashcan-delete regression was exactly such a divergence). clone picks
-// the right-drag flavor: Clone=true, no cross-grid Forbidden check
-// (right-drag IS the allowed cross-boundary gesture), and no no-entry
-// badge on a read-only doc (the clone preview never drew one).
+// the right-drag flavor: Clone=true, Forbidden from CloneForbidden (a
+// solid well can't deep-copy across a namespace), and no no-entry badge
+// on a read-only doc (the clone preview never drew one). The left flavor
+// feeds MoveForbidden and, across a namespace, previews the LINK (dashed
+// ghost + chain badge — the teaching signal).
 //
 // SameCell/Occupied are intentionally NOT fed here: the preview is
 // optimistic about placement (it shows the snap-to-cell even over an

@@ -106,6 +106,20 @@ func startServe(t *testing.T, bin, home, bind string) string {
 	}
 }
 
+// rpcRaw posts one Connect-JSON call and returns the raw status + body —
+// for asserting on DESIGNED refusals (rpc t.Fatals on any non-200).
+func rpcRaw(t *testing.T, origin, method string, req any) (int, []byte) {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	hr, err := http.Post(origin+"/gridwell.v1.Gridwell/"+method, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("%s: %v", method, err)
+	}
+	defer hr.Body.Close()
+	data, _ := io.ReadAll(hr.Body)
+	return hr.StatusCode, data
+}
+
 // rpc posts one Connect-JSON call and decodes the response.
 func rpc(t *testing.T, origin, method string, req any) map[string]any {
 	t.Helper()
@@ -218,16 +232,30 @@ func TestFederationSpawn(t *testing.T) {
 		"data":   base64.StdEncoding.EncodeToString([]byte("# across the spawn gate")),
 	})["tile"].(map[string]any)
 
-	// 4. Link the remote well into the LOCAL home grid (cross-plugin clone
-	//    across the tunnel) and read the content back through the link.
-	link := rpc(t, localOrigin, "CloneTile", map[string]any{
+	// 4. Link the remote well into the LOCAL home grid — the 2026-07-19
+	//    left-drag gesture, committed as a plain CreateTile carrying the
+	//    qualified child (the chain id routes it) — and read the content
+	//    back through the link. The old gesture (cross-plugin CloneTile of
+	//    a solid well) is now refused loudly; pin that too.
+	cloneStatus, cloneBody := rpcRaw(t, localOrigin, "CloneTile", map[string]any{
 		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 0, "y": 0,
+	})
+	if cloneStatus/100 == 2 {
+		t.Fatalf("cross-plugin CloneTile of a solid well succeeded through the chain; want unimplemented refusal: %s", cloneBody)
+	}
+	link := rpc(t, localOrigin, "CreateTile", map[string]any{
+		"gridId": homeRoot,
+		"tile": map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1,
+			"childGridId": wellChild, "altText": "remote grid", "objectId": well["objectId"]},
 	})["tile"].(map[string]any)
 	if link["childGridId"] != wellChild {
 		t.Fatalf("link child = %v, want the shared remote grid %s", link["childGridId"], wellChild)
 	}
 	if link["reference"] != true {
 		t.Fatal("the link must arrive as a dashed reference")
+	}
+	if link["objectId"] != well["objectId"] {
+		t.Fatalf("link provenance = %v, want the remote well's object id %v", link["objectId"], well["objectId"])
 	}
 	body := rpc(t, localOrigin, "GetTileContent", map[string]any{"tileId": txt["id"]})
 	got, _ := base64.StdEncoding.DecodeString(body["data"].(string))
