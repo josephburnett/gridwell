@@ -81,9 +81,9 @@ func (a *App) encodeFocusedPaneURL() url.State {
 		s = url.GridState(p.Path, p.Cx, p.Cy, p.Zoom)
 	}
 	// Anchor records which grid namespace the pane sits inside, so a reload
-	// re-enters the same place and walks the path within it. The node grid —
-	// the default landing page — encodes as empty, keeping "/" the home URL.
-	if p.Anchor != a.nodeGrid {
+	// re-enters the same place and walks the path within it. Home — the first
+	// plugin's root grid — encodes as empty, keeping "/" the home URL.
+	if p.Anchor != a.home {
 		s.Anchor = p.Anchor
 	}
 	return s
@@ -134,13 +134,14 @@ func (a *App) applyURLOnBoot() {
 		return
 	}
 
-	// No anchor → the node grid, the landing page (already the pane's boot
-	// anchor). The walk below still applies so "/" plus a viewport restores.
+	// No anchor → home, the landing page (already the pane's boot anchor).
+	// The walk below still applies so "/" plus a viewport restores.
 	if state.Anchor == "" {
-		state.Anchor = a.nodeGrid
+		state.Anchor = a.home
 		if state.Anchor == "" {
-			// Bootstrap couldn't learn the node identity; the error is already
-			// on the strip. Nothing to restore into.
+			// Bootstrap couldn't learn any home (no plugins, no node
+			// identity); the error is already on the strip. Nothing to
+			// restore into.
 			a.draw()
 			a.scheduleURLUpdate()
 			return

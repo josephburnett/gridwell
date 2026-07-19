@@ -69,11 +69,18 @@ type App struct {
 	// Order is config order.
 	plugins []rpc.PluginInfo
 
-	// nodeGrid is the qualified id of this node's node grid — the plugin-list
-	// landing page every pane anchors at on boot ("<node-uuid>/0"). One fact,
-	// learned once from ListPlugins (NodeIdentity); "" only while bootstrap
-	// hasn't answered (or the server predates node identity).
+	// nodeGrid is the qualified id of this node's node grid ("<node-uuid>/0")
+	// — the read-only plugin-list grid, still the federation surface an ssh
+	// mount lands on but no longer the local landing page. One fact, learned
+	// once from ListPlugins (NodeIdentity); "" only while bootstrap hasn't
+	// answered (or the server predates node identity).
 	nodeGrid string
+
+	// home is the qualified grid id "/" means — the first configured
+	// plugin's root grid, node grid as fallback (rpc.HomeGrid, the one
+	// derivation). Every "empty anchor means home" reader (boot, URL
+	// decode/encode, workspace leaf restore) reads THIS, never nodeGrid.
+	home string
 
 	tree *pane.Tree
 	c    *cache.Cache
@@ -651,9 +658,9 @@ func main() {
 }
 
 // bootstrap loads the plugin list and the node's identity, then starts the
-// rest of the client. The landing page is the NODE GRID — a real server-owned
-// grid of plugin link tiles — so panes anchor there; nothing about the
-// launcher lives on the client.
+// rest of the client. The landing page is HOME — the first configured
+// plugin's root grid (node grid fallback, rpc.HomeGrid) — so panes anchor
+// there; plugins are reached from the + menu.
 func (a *App) bootstrap() {
 	plugins, err := a.cl.ListPlugins(context.Background())
 	if err == nil {
@@ -668,16 +675,17 @@ func (a *App) bootstrap() {
 	} else if err != nil {
 		a.reportErr(errsurface.Error, "rpc:ListPlugins", "node identity failed: "+rpcErrText(err))
 	}
+	a.home = rpc.HomeGrid(a.plugins, a.nodeGrid)
 	a.afterBootstrap()
 }
 
 func (a *App) afterBootstrap() {
 	a.canvas.Call("focus")
 	p := a.tree.FocusedPane()
-	p.Anchor = a.nodeGrid // land on the node grid; applyURLOnBoot may restore a location
+	p.Anchor = a.home // land at home; applyURLOnBoot may restore a location
 	p.Path = nil
-	if a.nodeGrid != "" {
-		a.fetchGrid(a.nodeGrid)
+	if a.home != "" {
+		a.fetchGrid(a.home)
 	}
 
 	a.sched.wsSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {

@@ -194,3 +194,28 @@ func TestKindPartition(t *testing.T) {
 		}
 	}
 }
+
+// TestHomeGrid: "/" means the first configured plugin's root grid, skipping
+// plugins without one (broken/rootless), with the node grid as the last
+// resort — the boot/URL home derivation (owner decision 2026-07-19).
+func TestHomeGrid(t *testing.T) {
+	node := "n1/0"
+	first := PluginInfo{UUID: "p1", RootGridID: "p1/1"}
+	second := PluginInfo{UUID: "p2", RootGridID: "p2/1"}
+	rootless := PluginInfo{UUID: "p0"} // no RootGridID: broken or rootless
+	if got := HomeGrid([]PluginInfo{first, second}, node); got != "p1/1" {
+		t.Errorf("HomeGrid = %q, want the FIRST plugin's root p1/1", got)
+	}
+	if got := HomeGrid([]PluginInfo{rootless, second}, node); got != "p2/1" {
+		t.Errorf("HomeGrid = %q, want p2/1 (skip the rootless first plugin)", got)
+	}
+	if got := HomeGrid([]PluginInfo{rootless}, node); got != node {
+		t.Errorf("HomeGrid = %q, want the node grid fallback %q", got, node)
+	}
+	if got := HomeGrid(nil, node); got != node {
+		t.Errorf("HomeGrid(nil) = %q, want the node grid fallback %q", got, node)
+	}
+	if got := HomeGrid(nil, ""); got != "" {
+		t.Errorf("HomeGrid with nothing = %q, want empty", got)
+	}
+}

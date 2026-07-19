@@ -271,14 +271,15 @@ func (a *App) bootWorkspace(tileID string) {
 }
 
 // restoreWorkspaceLeaves applies the boot-blank fixups a freshly-installed
-// tree needs: an empty anchor means home (the node grid), exactly as the
-// boot pane resolves it, and every leaf's grid fetch is kicked so the panes
-// fill in. Loose per the urlwalk rule: a place that no longer resolves stays
-// where its longest live prefix lands (gridIDForPane already walks loosely).
+// tree needs: an empty anchor means home (the first plugin's root grid),
+// exactly as the boot pane resolves it, and every leaf's grid fetch is
+// kicked so the panes fill in. Loose per the urlwalk rule: a place that no
+// longer resolves stays where its longest live prefix lands (gridIDForPane
+// already walks loosely).
 func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	tree.Walk(func(p *pane.Pane) {
 		if p.Anchor == "" {
-			p.Anchor = a.nodeGrid
+			p.Anchor = a.home
 		}
 		if p.Zoom == 0 {
 			p.Zoom = 1
@@ -542,7 +543,7 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 	t := pane.NewTree()
 	p := t.FocusedPane()
-	p.Anchor = a.nodeGrid
+	p.Anchor = a.home
 	paneID := p.ID
 	go func() {
 		tile, err := a.cl.GetTile(context.Background(), tileID)
@@ -553,7 +554,7 @@ func (a *App) fallbackTreeFor(tileID string) *pane.Tree {
 		// Re-anchor only if the pane is still sitting untouched at home —
 		// a user who already navigated wins over the late fetch.
 		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.Anchor != a.nodeGrid || len(fp.Path) > 0 || fp.TextFocus != "" {
+		if fp == nil || fp.Anchor != a.home || len(fp.Path) > 0 || fp.TextFocus != "" {
 			return
 		}
 		fp.Anchor = tile.GridID

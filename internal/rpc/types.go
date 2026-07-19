@@ -131,6 +131,21 @@ func PluginWellTile(pl PluginInfo) Tile {
 	}
 }
 
+// HomeGrid picks the qualified grid id that "/" means: the root grid of the
+// FIRST configured plugin that has one (server.yaml order — the owner's
+// "shown first" pick, 2026-07-19, reversing the launcher-as-landing-page
+// decision), falling back past broken/rootless plugins, and finally to the
+// node grid so a node with no usable plugin still lands on its plugin list.
+// One derivation; every "empty anchor means home" reader goes through it.
+func HomeGrid(plugins []PluginInfo, nodeRoot string) string {
+	for _, pl := range plugins {
+		if pl.RootGridID != "" {
+			return pl.RootGridID
+		}
+	}
+	return nodeRoot
+}
+
 // IsContentDescentKind reports whether a tile kind is a content tile you
 // descend into via a *text-focus* descent (it sets pane.TextFocus) rather than
 // a grid descent — text, url, and shell. Shared by the client's click-to-descend
