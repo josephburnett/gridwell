@@ -1,13 +1,12 @@
 // Package palette computes the layout of Gridwell's tile-creation
 // palette — the popover that opens over the pane's "+" button and
-// holds the template tile previews (well, markdown, url, shell) that
-// the user drags onto the canvas. The palette is always a single
-// horizontal row of primitives; plugins are reachable only from the
-// launcher landing page.
+// holds the swatches the user drags onto the canvas: the configured
+// plugins on a top row (click to enter, drag to drop a link), the
+// tile primitives (well, markdown, url, shell, pane) on a row below.
 //
 // All layout is pure: it depends only on the pane's screen rect, the
-// pane's current zoom, and the number of template tiles. The wasm
-// renderer reads the rects out and paints into them.
+// pane's current zoom, and the tile counts. The wasm renderer reads
+// the rects out and paints into them.
 package palette
 
 import "github.com/josephburnett/gridwell/client/pane"
@@ -57,6 +56,29 @@ type Layout struct {
 	Pane     Rect
 	PaneZoom float64
 	NumTiles int
+	// TopRow is how many of NumTiles sit in the popover's first row (the
+	// plugins); the rest (the primitives) go in a second row below. When
+	// TopRow is unset (<=0) or covers every tile, the popover is a single
+	// row.
+	TopRow int
+}
+
+// topCount / bottomCount split NumTiles across the two popover rows. A TopRow
+// that is unset or covers everything collapses to a single row.
+func (l Layout) topCount() int {
+	if l.TopRow <= 0 || l.TopRow >= l.NumTiles {
+		return l.NumTiles
+	}
+	return l.TopRow
+}
+
+func (l Layout) bottomCount() int { return l.NumTiles - l.topCount() }
+
+func (l Layout) rowCount() int {
+	if l.bottomCount() > 0 {
+		return 2
+	}
+	return 1
 }
 
 // rowWidthPx is the popover width a row of n tiles needs (tiles + gutters).
@@ -88,12 +110,13 @@ func (l Layout) TilePx() float64 {
 }
 
 // PopoverRect returns the screen rect of the entire palette popover,
-// anchored just above the + button: the name field row on top, then a
-// single horizontal row of NumTiles tiles.
+// anchored just above the + button. Wide enough for the wider of the two
+// rows; tall enough for however many rows (1 or 2) are populated.
 func (l Layout) PopoverRect() Rect {
 	tile := l.TilePx()
-	w := l.rowWidthPx(l.NumTiles)
-	h := tile + 2*l.Cfg.GapPx
+	w := max(l.rowWidthPx(l.topCount()), l.rowWidthPx(l.bottomCount()))
+	rows := float64(l.rowCount())
+	h := rows*tile + (rows+1)*l.Cfg.GapPx
 	cx, cy := l.PlusCenter()
 	x := cx + l.Cfg.PlusRadius - w
 	y := cy - l.Cfg.PlusRadius - h - 8
@@ -101,14 +124,21 @@ func (l Layout) PopoverRect() Rect {
 }
 
 // TileRect returns the screen rect of the i'th template tile inside the
-// popover. All tiles sit in a single row left-to-right, below the name field.
+// popover. Tiles 0..topCount-1 fill the top row; the rest fill the bottom
+// row. Each row is centered horizontally within the popover so a short row
+// sits under the middle of a wider one.
 func (l Layout) TileRect(i int) Rect {
 	pop := l.PopoverRect()
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
+	row, col, count := 0, i, l.topCount()
+	if i >= l.topCount() {
+		row, col, count = 1, i-l.topCount(), l.bottomCount()
+	}
+	rowX := pop.X + (pop.W-l.rowWidthPx(count))/2
 	return Rect{
-		X: pop.X + gap + float64(i)*(tile+gap),
-		Y: pop.Y + gap,
+		X: rowX + gap + float64(col)*(tile+gap),
+		Y: pop.Y + gap + float64(row)*(tile+gap),
 		W: tile,
 		H: tile,
 	}
