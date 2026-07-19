@@ -30,6 +30,11 @@ type urlView struct {
 	// (copy-on-clone: tiles are unshared, so the write is in-place — no fork).
 	anchor string
 	path   []string
+	// version is the target tile's version at place time — the freeze
+	// fallback when the tile isn't in any cached grid (a url LINK's target
+	// lives in a foreign grid the client may never have loaded). 0 = rely
+	// on the cache lookup (the ordinary same-plugin case).
+	version int64
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -92,10 +97,41 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if !ok {
 		return
 	}
+	if t.LinkTargetID == "" {
+		a.placeURLView(p.ID, t, 0)
+		return
+	}
+	// A url LINK goes live as its TARGET: the url string, session partition
+	// (the target's plugin owns the cookies — the thing is the target's),
+	// history, and the freeze writeback all belong to the tile that owns the
+	// content. The target row lives in a foreign grid the client has likely
+	// never loaded, so fetch it; the view places when the row arrives.
+	paneID := p.ID
+	go func() {
+		target, err := a.cl.GetTile(context.Background(), t.LinkTargetID)
+		if err != nil {
+			a.surfaceRPCError("GetTile", err)
+			return
+		}
+		if a.tree.FindPane(paneID) == nil {
+			return // pane closed while the target row was in flight
+		}
+		a.placeURLView(paneID, *target, target.Version)
+	}()
+}
+
+// placeURLView places the native WebContentsView for pane paneID showing
+// tile t (always the CONTENT-owning row — a link never reaches here).
+// version is the freeze fallback for a foreign target (see urlView.version).
+func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
+	p := a.tree.FindPane(paneID)
+	if p == nil {
+		return
+	}
 	r := a.paneRectByID(p.ID)
 	b := contentViewBounds(r)
-	a.local(p.ID).urlView = &urlView{tileID: tileID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path)}
-	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, tileID, t.ObjectID, t.URLString)
+	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
+	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, t.URLString)
 	// The plugin that owns the tile is the session boundary: its namespace
 	// chain selects the Electron partition, so url tiles in different plugins
 	// get isolated cookie jars / web storage. The grid carries the network
@@ -107,7 +143,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	// The native name bubble is born with its label — a post-place push can
 	// race entry creation and be dropped (issue #118).
 	label, _, _ := a.bubbleLabel(p)
-	bridgePlace(p.ID, tileID, t.ObjectID, t.URLString, b, pluginUUIDOf(tileID), proxyEndpoint, contentZoomOf(&t), t.URLHistory, a.bubbleDecorate(p, label))
+	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, pluginUUIDOf(t.ID), proxyEndpoint, contentZoomOf(&t), t.URLHistory, a.bubbleDecorate(p, label))
 	a.draw()
 }
 
@@ -132,7 +168,12 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 			// Look up the tile's current version from cache so the freeze is
 			// a versioned, in-place content edit (copy-on-clone: nothing is
 			// shared, so there is no fork — the write lands on this tile's row).
+			// A foreign target (live through a url link) isn't in any cached
+			// grid; fall back to the version captured at place time.
 			version := a.tileVersionAt(anchor, path, tileID)
+			if version == 0 {
+				version = v.version
+			}
 			go func() {
 				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
 					Path:    rpc.Path{WellIDs: path},

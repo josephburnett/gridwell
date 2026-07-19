@@ -160,7 +160,9 @@ func (a *App) ensureFileTextarea() {
 				"typing arrived with no bound tile — this edit cannot be saved")
 			return nil
 		}
-		a.c.PutEditedContent(a.lastTextareaTileID, []byte(a.textTextarea.Get("value").String()))
+		// Keyed by contentKey: a leaf link's edits accumulate under its
+		// TARGET's id — the one shared content fact (see text_flush.go).
+		a.c.PutEditedContent(a.contentKey(a.lastTextareaTileID), []byte(a.textTextarea.Get("value").String()))
 		a.scheduleFileSave()
 		a.draw()
 		a.scheduleURLUpdate()
@@ -463,7 +465,7 @@ func (a *App) refreshFileOverlay() {
 	// "default" content. The blob-fetch onComplete fires
 	// refreshFileOverlay again with the actual content.
 	gid := a.gridIDForPane(p)
-	_, pendingEdit := a.c.DirtyContent(a.lastTextareaTileID)
+	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.lastTextareaTileID))
 	in := embedpkg.TextareaSyncInput{
 		FocusedTileID: p.TextFocus,
 		LastTileID:    a.lastTextareaTileID,

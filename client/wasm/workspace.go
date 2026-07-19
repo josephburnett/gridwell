@@ -130,6 +130,19 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 			a.maybeInstallWorkspace(pd)
 			return
 		}
+		if fresh.LinkTargetID != "" {
+			// A pane LINK opens the TARGET workspace — the one shared
+			// arrangement; the persister then writes back through the target
+			// id too. Same read-through rule as every other content door.
+			tileID = fresh.LinkTargetID
+			fresh, err = a.cl.GetTile(context.Background(), tileID)
+			if err != nil {
+				a.surfaceRPCError("GetTile", err)
+				pd.failed = true
+				a.maybeInstallWorkspace(pd)
+				return
+			}
+		}
 		var tree *pane.Tree
 		var data []byte
 		readOnly := false
@@ -240,6 +253,15 @@ func (a *App) bootWorkspace(tileID string) {
 	if err != nil {
 		a.surfaceRPCError("GetTile", err)
 		return
+	}
+	if tile.LinkTargetID != "" {
+		// A pane LINK boots the TARGET workspace (see openWorkspace).
+		tileID = tile.LinkTargetID
+		tile, err = a.cl.GetTile(context.Background(), tileID)
+		if err != nil {
+			a.surfaceRPCError("GetTile", err)
+			return
+		}
 	}
 	if !rpc.IsWorkspaceKind(tile.Kind) {
 		a.reportErr(errsurface.Error, "layout:"+tileID, "?w= names a non-workspace tile")

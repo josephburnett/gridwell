@@ -1023,11 +1023,13 @@ func (a *App) fetchTileContent(tileID string) {
 // tileBody returns a text tile's body bytes, fetching lazily on a miss. In the
 // rootless model every tile is owned by some plugin, so the body always comes
 // via GetTileContent (routable by tile id) — blob ids aren't routable.
+// Content is keyed by ContentID (a leaf link resolves to its target), so a
+// link renders the one shared copy of the bytes.
 func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {
-	if b, ok := a.c.TileContent(n.ID); ok {
+	if b, ok := a.c.TileContent(n.ContentID()); ok {
 		return b, true
 	}
-	a.fetchTileContent(n.ID)
+	a.fetchTileContent(n.ContentID())
 	return nil, false
 }
 
@@ -1088,10 +1090,10 @@ func (a *App) overlayChildPreview(n *rpc.Tile, x, y, w, h, borderPx float64) {
 	if n.Kind != rpc.KindURL && n.Kind != rpc.KindShell {
 		return
 	}
-	cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID)
+	cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID)
 	if !ok {
 		if n.PreviewBlobID != 0 {
-			a.fetchURLPreview(n.ID, n.PreviewBlobID)
+			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 		}
 		return
 	}

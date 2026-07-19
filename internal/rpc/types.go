@@ -286,6 +286,19 @@ type Tile struct {
 	LinkTargetID string `json:"link_target_id,omitempty"`
 }
 
+// ContentID returns the tile id that OWNS this tile's content: a leaf link's
+// target, or the tile's own id. Every client content operation — body fetch,
+// edit buffer, save routing, preview fetch, shell session, workspace layout —
+// keys by this, so a link and its target (and every sibling link) share ONE
+// content fact and a write can never land on a link row (which owns no
+// bytes; the store refuses it). The single resolution point for read-through.
+func (t *Tile) ContentID() string {
+	if t.LinkTargetID != "" {
+		return t.LinkTargetID
+	}
+	return t.ID
+}
+
 // Reads.
 
 type GetGridRequest struct {

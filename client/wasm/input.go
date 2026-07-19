@@ -1885,7 +1885,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// unconditionally, so a merely-opened tile rewrote its blob and bumped
 	// its version on every visit; dirty-gating makes a pure read write-free
 	// (the guiding rule: reading never mutates).
-	buf, hasBuf := a.c.DirtyContent(file.ID)
+	buf, hasBuf := a.c.DirtyContent(file.ContentID())
 	if a.tileReadOnly(&file) {
 		hasBuf = false
 	}

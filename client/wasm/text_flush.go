@@ -44,7 +44,12 @@ func (a *App) flushDirtyText() {
 // one, and the server accepts an empty path for an id-addressed write (the
 // tile row owns its location).
 func (a *App) flushTileContent(tileID string) {
-	data, dirty := a.c.DirtyContent(tileID)
+	// Resolve to the CONTENT id: a leaf link's edits live (and save) under
+	// its target's id — the one shared {bytes, base, dirty} fact — so the
+	// write routes to the plugin that owns the bytes and can never land on
+	// the link row (which owns none; the store refuses that).
+	cid := a.contentKey(tileID)
+	data, dirty := a.c.DirtyContent(cid)
 	if !dirty {
 		return
 	}
@@ -64,7 +69,27 @@ func (a *App) flushTileContent(tileID string) {
 	if p := a.paneTextDescendedInto(tileID); p != nil {
 		path = append([]string(nil), p.Path...)
 	}
-	a.enqueueTextSave(t.GridID, path, t.ID, t.Version, data)
+	// The version fallback is only meaningful when t IS the owner row; a
+	// link row's version tracks its own placement, never the target's
+	// bytes. 0 forces the save to claim the cache's SaveBasis (always
+	// present once content was fetched to edit) or conflict visibly.
+	fallback := t.Version
+	if t.ID != cid {
+		fallback = 0
+	}
+	a.enqueueTextSave(t.GridID, path, cid, fallback, data)
+}
+
+// contentKey resolves a tile id to the id that OWNS its content bytes — the
+// wasm-side twin of rpc.Tile.ContentID for call sites that hold only an id
+// (the flush sweep, the textarea binding). Falls back to the id itself when
+// the row isn't cached: content entries are keyed by ContentID at write time,
+// so an uncached id IS already a content id.
+func (a *App) contentKey(tileID string) string {
+	if t := a.cachedTileByID(tileID); t != nil {
+		return t.ContentID()
+	}
+	return tileID
 }
 
 // cachedTileByID walks the cached grids for the tile row, WITHOUT kicking a

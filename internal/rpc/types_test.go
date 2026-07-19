@@ -226,3 +226,19 @@ func TestHomeGrid(t *testing.T) {
 		t.Errorf("HomeGrid with nothing = %q, want empty", got)
 	}
 }
+
+// TestContentID: the ONE resolution point for read-through — a leaf link's
+// content operations key by its target; an owned tile keys by itself. Every
+// client content door (body fetch, edit buffer, save routing, preview fetch,
+// shell session, workspace layout) reads this, so a link and its target share
+// one content fact by construction.
+func TestContentID(t *testing.T) {
+	link := Tile{ID: "b/9", Kind: KindText, LinkTargetID: "a/42"}
+	if got := link.ContentID(); got != "a/42" {
+		t.Errorf("link ContentID = %q, want the target a/42", got)
+	}
+	owned := Tile{ID: "a/42", Kind: KindText}
+	if got := owned.ContentID(); got != "a/42" {
+		t.Errorf("owned ContentID = %q, want its own id", got)
+	}
+}

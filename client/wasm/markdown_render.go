@@ -416,7 +416,7 @@ func (a *App) editRenderedKey(ev js.Value) {
 		// (tileBody -> TileContent) — so the canvas reflects the keystroke now.
 		// The entry's dirty mark IS the pending-edit fact; the debounced sweep
 		// posts it by tile id no matter where focus goes next.
-		a.c.PutEditedContent(file.ID, []byte(out.Src))
+		a.c.PutEditedContent(file.ContentID(), []byte(out.Src))
 		a.scheduleFileSave()
 		a.scheduleURLUpdate()
 	}

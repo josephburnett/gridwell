@@ -109,11 +109,14 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 	if tile == nil {
 		return false
 	}
-	alive, known := a.shellAlive[tile.ID]
+	// A shell LINK probes (and attaches) the TARGET's session: the PTY is
+	// keyed by the owner tile's id, and the link is a second door to the
+	// same session — one shell, seen from two grids.
+	alive, known := a.shellAlive[tile.ContentID()]
 	v := shellconn.DecideShellRefreshVisible(
 		tile.Kind == rpc.KindShell, tile.PreviewBlobID != 0, known, alive)
 	if v.Probe {
-		a.probeShellSessionAlive(tile.ID)
+		a.probeShellSessionAlive(tile.ContentID())
 	}
 	return v.Show
 }
@@ -159,6 +162,9 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 // wires the two together. Idempotent: a second call for the same pane
 // closes the previous attachment first.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
+	// Resolve a shell LINK to its target: the PTY session, the alive cache,
+	// and the freeze writeback all key by the id that owns the session.
+	tileID = a.contentKey(tileID)
 	a.closeShellStream(p.ID, true)
 
 	doc := js.Global().Get("document")

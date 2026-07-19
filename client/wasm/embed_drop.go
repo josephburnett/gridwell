@@ -89,7 +89,7 @@ func (a *App) docDropTargetAt(sx, sy float64) (*docDropTarget, bool) {
 		}
 		offset = off
 	} else {
-		blob, ok := a.c.TileContent(tile.ID)
+		blob, ok := a.c.TileContent(tile.ContentID())
 		if !ok {
 			return nil, false
 		}
@@ -130,7 +130,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	if !hasTile {
 		return
 	}
-	bytes, hasBlob := a.c.TileContent(tile.ID)
+	bytes, hasBlob := a.c.TileContent(tile.ContentID())
 	if !hasBlob {
 		return
 	}
@@ -145,7 +145,7 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 	//     in directly. Without this, focus-shifting back to the doc
 	//     would re-display the stale buffer, and worse, a raw→rendered
 	//     toggle would save the stale buffer back over the drop.
-	a.c.PutEditedContent(tile.ID, []byte(newSrc))
+	a.c.PutEditedContent(tile.ContentID(), []byte(newSrc))
 	if a.lastTextareaTileID == dt.tileID &&
 		!a.textTextarea.IsUndefined() && !a.textTextarea.IsNull() {
 		a.textTextarea.Set("value", newSrc)

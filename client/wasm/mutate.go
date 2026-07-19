@@ -167,7 +167,11 @@ func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent 
 	// not when the SSE echo lands. Text saves are serialized per tile and
 	// claim their basis at send time (issue #140); that only chains if the
 	// previous write's response has already moved the basis forward.
-	a.c.UpdateTile(gid, *tile)
+	// The tile is cached under the RESPONSE row's own grid, not the caller's
+	// gid — for a save routed through a leaf link the response row lives in
+	// the target's (foreign) grid, and writing it under the link's grid
+	// would plant a foreign tile row in the wrong grid map.
+	a.c.UpdateTile(tile.GridID, *tile)
 	a.c.PutSavedContent(tile.ID, newContent, tile.Version)
 	return *tile, true
 }

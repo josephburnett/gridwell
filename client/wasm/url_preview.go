@@ -59,12 +59,12 @@ func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
 			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else {
-		a.fetchURLPreview(n.ID, n.PreviewBlobID)
+		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "16px monospace")
 		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
@@ -92,12 +92,12 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 	a.cctx.Set("fillStyle", colorShellFill)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
 			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else if n.PreviewBlobID != 0 {
-		a.fetchURLPreview(n.ID, n.PreviewBlobID)
+		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 	} else if !a.hasShellStream(p.ID) {
 		// No preview yet, no live stream — pre-refresh state. Show
 		// the shell glyph so the descent reads as a frozen shell
@@ -123,12 +123,12 @@ func (a *App) drawShellTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bo
 	a.cctx.Set("fillStyle", colorShellFill)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
 			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else if n.PreviewBlobID != 0 {
-		a.fetchURLPreview(n.ID, n.PreviewBlobID)
+		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 	} else if w > 20 && h > 20 {
 		// No preview yet (palette drop never refreshed) — paint the
 		// shell glyph so the swatch reads as a shell rather than a
@@ -163,7 +163,7 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if cached, ok := a.urlPreview.Get(n.ID, n.PreviewBlobID); ok {
+	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
 			drawImageContain(a.cctx, img, x, y, w, h)
 		}
@@ -173,7 +173,7 @@ func (a *App) drawURLTile(n *rpc.Tile, x, y, w, h float64, selected, dashed bool
 			a.cctx.Set("font", "12px monospace")
 			a.cctx.Call("fillText", n.URLString, x+8, y+18, w-16)
 		}
-		a.fetchURLPreview(n.ID, n.PreviewBlobID)
+		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
 	}
 
 	if dashed {
