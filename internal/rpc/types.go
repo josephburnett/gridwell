@@ -321,6 +321,13 @@ type CreateWellRequest struct {
 	// display name for such a well. Empty → an ordinary interior well.
 	ChildGridID string `json:"child_grid_id,omitempty"`
 	Label       string `json:"label,omitempty"`
+	// ViewX/ViewY/ViewZoom seed an exit well's framing at creation (e.g. a
+	// plugin link dropped from the + menu starts at the plugin's persisted
+	// root view, the same framing a node-grid tile shows). Zeros = default
+	// view. Ignored for interior wells, which always start unframed.
+	ViewX    int64   `json:"view_x,omitempty"`
+	ViewY    int64   `json:"view_y,omitempty"`
+	ViewZoom float64 `json:"view_zoom,omitempty"`
 }
 
 type CreateTextRequest struct {

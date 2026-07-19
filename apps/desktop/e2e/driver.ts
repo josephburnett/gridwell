@@ -33,7 +33,14 @@ export interface PaneInfo {
 
 export interface PaletteItem {
   index: number;
+  // Plugin swatches (top row): click descends into the plugin, drag drops an
+  // exit-well link. isPlugin distinguishes them from the primitive swatches;
+  // for a plugin, kind is the plugin kind (localdb/fs/proc/ssh) and label/uuid
+  // identify it.
+  isPlugin: boolean;
   kind: string;
+  label?: string;
+  uuid?: string;
   x: number;
   y: number;
   w: number;
@@ -161,8 +168,22 @@ export class GridwellDriver {
   // the swatch, move past the 4px drag threshold, drag to the cell, release.
   async dragCreate(kind: string, cx: number, cy: number): Promise<void> {
     const pal = await this.palette();
-    const item = pal.items.find((i) => i.kind === kind);
+    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
     if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
+    await this.dragSwatchToCell(item, cx, cy);
+  }
+
+  // dragPluginLink drags a plugin swatch (matched by kind or label) onto cell
+  // (cx, cy) of the focused pane — the drop-a-link gesture, distinct from
+  // clickPluginSwatch's descend.
+  async dragPluginLink(match: string, cx: number, cy: number): Promise<void> {
+    const pal = await this.palette();
+    const item = pal.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
+    if (!item) throw new Error(`no plugin swatch ${match}; have ${pal.items.map((i) => i.kind)}`);
+    await this.dragSwatchToCell(item, cx, cy);
+  }
+
+  private async dragSwatchToCell(item: PaletteItem, cx: number, cy: number): Promise<void> {
     const sx = item.x + item.w / 2;
     const sy = item.y + item.h / 2;
     const f = await this.focused();
@@ -184,9 +205,21 @@ export class GridwellDriver {
   async clickPaletteSwatch(kind: string): Promise<void> {
     await this.openPalette();
     const pal = await this.palette();
-    const item = pal.items.find((i) => i.kind === kind);
+    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
     if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
+  }
+
+  // clickPluginSwatch opens the palette and single-clicks (no drag) the plugin
+  // swatch matched by kind or label — the "descend from the menu" gesture; the
+  // pane portals into the plugin's root grid.
+  async clickPluginSwatch(match: string): Promise<void> {
+    await this.openPalette();
+    const pal = await this.palette();
+    const item = pal.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
+    if (!item) throw new Error(`no plugin swatch ${match}; have ${pal.items.map((i) => i.kind)}`);
+    await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
+    await this.waitIdle();
   }
 
   // shellVisitURL fires the focused live shell's url-click path (the exact

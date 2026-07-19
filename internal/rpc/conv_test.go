@@ -159,9 +159,15 @@ func TestMutationRequestRoundTrips(t *testing.T) {
 // unified CreateTile shape with the right Kind and the kind-specific fields in
 // the right place (the one spot per primitive where this mapping lives).
 func TestCreateConvertersSelectKindAndFields(t *testing.T) {
-	well := CreateWellToProto(&CreateWellRequest{GridID: "g", X: 1, Y: 2, W: 3, H: 4, ChildGridID: "cg", Label: "home"})
+	well := CreateWellToProto(&CreateWellRequest{GridID: "g", X: 1, Y: 2, W: 3, H: 4, ChildGridID: "cg", Label: "home",
+		ViewX: 7, ViewY: 8, ViewZoom: 0.5})
 	if well.Tile.Kind != KindWell || well.Tile.ChildGridId != "cg" || well.Tile.AltText != "home" || well.GridId != "g" {
 		t.Errorf("CreateWell mapping wrong: %+v", well.Tile)
+	}
+	// The framing seed rides the create so an exit well (a plugin link dropped
+	// from the + menu) starts at the target's persisted root view.
+	if well.Tile.ViewX != 7 || well.Tile.ViewY != 8 || well.Tile.ViewZoom != 0.5 {
+		t.Errorf("CreateWell dropped the view framing seed: %+v", well.Tile)
 	}
 	text := CreateTextToProto(&CreateTextRequest{GridID: "g", W: 2, H: 2, Data: []byte("hi")})
 	if text.Tile.Kind != KindText || string(text.Data) != "hi" {

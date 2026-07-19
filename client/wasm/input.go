@@ -691,6 +691,22 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	a.canvas.Get("style").Set("cursor", "")
 	sx, sy = mouseXY(args[0], a.canvas)
 
+	// A plugin swatch clicked without dragging (no movement past the
+	// threshold) enters that plugin: the + menu "click to descend" gesture.
+	// A drag instead drops an exit-well link (commitTemplateDrop). The
+	// descent is the SAME portal path a node-grid link tile takes —
+	// startDescent pushes the return frame and swaps the anchor — through a
+	// synthetic link tile placed at the pane's view centre, so ascent lands
+	// back exactly here.
+	if d.isTemplate && d.item.isPlugin && !d.started {
+		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
+			well := paletteItemGhostNode(d.item)
+			well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
+			a.startDescent(fp, &well)
+		}
+		return nil
+	}
+
 	// A url swatch clicked without dragging (no movement past the threshold) is
 	// an EPHEMERAL visit: open the url modal and, on submit, descend into a live
 	// url tile created in the off-grid scratch grid — visit a page without
@@ -1877,8 +1893,15 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 
 // paletteItemGhostNode synthesizes a 1×1 rpc.Tile matching the palette item,
 // so the ghost renderer can paint the in-flight tile using the same drawNode
-// path that a real tile would use.
+// path that a real tile would use. A plugin item is the shared synthetic
+// exit well (rpc.PluginWellTile) with the plugin's uuid as its id, so the
+// health tint and the broken/rootless descent guard can name the plugin.
 func paletteItemGhostNode(item paletteItem) rpc.Tile {
+	if item.isPlugin {
+		t := rpc.PluginWellTile(item.plugin)
+		t.ID = item.plugin.UUID
+		return t
+	}
 	switch item.primitive {
 	case tplWell:
 		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1}
@@ -1912,6 +1935,24 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	// Bail early if the drop cell would overlap an existing node.
 	if a.tileAtCell(destPane, dropX, dropY) != nil {
 		a.cancelDragSnapBack(d)
+		return
+	}
+
+	// A plugin item drops an exit-well link to the plugin's root grid in
+	// the destination grid (drag-a-plugin-onto-a-grid). Only writable
+	// grids accept it; a read-only grid snaps it back.
+	if d.item.isPlugin {
+		if d.item.plugin.RootGridID == "" || !a.gridWritable(a.gridIDForPane(destPane)) {
+			a.cancelDragSnapBack(d)
+			return
+		}
+		targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
+		if a.ghost != nil {
+			a.ghost.paneID = destPane.ID
+		}
+		a.startSnap(targetX, targetY, snapMs)
+		a.createPluginLinkAtCell(destPane, d.item.plugin, dropX, dropY)
+		a.menu.Close()
 		return
 	}
 
@@ -1960,6 +2001,28 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.createPaneAtCell(destPane, dropX, dropY)
 	}
 	a.menu.Close()
+}
+
+// createPluginLinkAtCell fires CreateWell with the plugin's qualified root
+// grid as the child — an exit-well LINK, the same tile a cross-plugin clone
+// of the plugin's node-grid tile creates (the Mount RPC is gone; CreateTile
+// is the one create). The link's framing seeds from the plugin's persisted
+// root view so its preview shows what descent will show.
+func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
+	gid := a.gridIDForPane(p)
+	path := slices.Clone(p.Path)
+	req := &rpc.CreateWellRequest{
+		Path:   rpc.Path{WellIDs: path},
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		ChildGridID: pl.RootGridID,
+		Label:       pl.Label,
+		ViewX:       int64(pl.RootViewCx),
+		ViewY:       int64(pl.RootViewCy),
+		ViewZoom:    pl.RootViewZoom,
+	}
+	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateWell(ctx, req)
+	}, nil)
 }
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.

@@ -431,12 +431,19 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 	for i, item := range items {
 		tx, ty, tw, th := a.paletteTileRect(p, r, i)
 		e := map[string]any{
-			"index": i,
-			"kind":  templateKindName(item.primitive),
-			"x":     tx,
-			"y":     ty,
-			"w":     tw,
-			"h":     th,
+			"index":    i,
+			"isPlugin": item.isPlugin,
+			"x":        tx,
+			"y":        ty,
+			"w":        tw,
+			"h":        th,
+		}
+		if item.isPlugin {
+			e["kind"] = item.plugin.Kind
+			e["label"] = item.plugin.Label
+			e["uuid"] = item.plugin.UUID
+		} else {
+			e["kind"] = templateKindName(item.primitive)
 		}
 		entries = append(entries, e)
 	}
