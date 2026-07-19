@@ -560,4 +560,55 @@ func init() {
 			}
 		},
 	})
+
+	// v6 (link_target_id, the leaf-link variant — a rebuild because the CHECK
+	// gains the link branch): a v5 url tile crosses intact with link_target_id
+	// NULL (its old meaning: not a link); the new CHECK accepts a url LINK row
+	// (url_string NULL, link_target_id set — the exact shape v5 forbade),
+	// still rejects a bare url with neither url_string nor link, and rejects
+	// a link row that smuggles content (the link branch requires every content
+	// column NULL).
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 6,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
+				VALUES ('fixt-v6-url', ` + rootID + `, 'url', 20, 6, 2, 1, 'https://v5.example', 'v5 url', 100, 100)`); err != nil {
+				t.Fatalf("seed v5 url tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var url string
+			var linkTarget sql.NullString
+			var gridID int64
+			if err := db.QueryRow(`SELECT grid_id, url_string, link_target_id
+				FROM tiles WHERE object_id = 'fixt-v6-url'`).Scan(&gridID, &url, &linkTarget); err != nil {
+				t.Fatalf("read v5 url tile: %v", err)
+			}
+			if url != "https://v5.example" || linkTarget.Valid {
+				t.Errorf("v5 row damaged: url=%q link_target=%v (want url intact, link NULL)", url, linkTarget)
+			}
+			// The link branch: a url LINK row (no url_string) is now legal.
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
+				VALUES ('fixt-v6-link', ?, 'url', 22, 6, 1, 1, 'aabbccddeeff00112233445566778899/7', 'linked url', 100, 100)`, gridID); err != nil {
+				t.Errorf("new CHECK rejected a url link row: %v", err)
+			}
+			// Still rejects a url row with neither url_string nor link.
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES ('fixt-v6-bad1', ?, 'url', 24, 6, 1, 1, '', 100, 100)`, gridID); err == nil {
+				t.Errorf("CHECK accepted a url row with no url_string and no link_target_id")
+			}
+			// Rejects a link row smuggling content (url_string on a link).
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, link_target_id, alt_text, created_at, updated_at)
+				VALUES ('fixt-v6-bad2', ?, 'url', 26, 6, 1, 1, 'https://smuggled.example', 'aabbccddeeff00112233445566778899/8', '', 100, 100)`, gridID); err == nil {
+				t.Errorf("CHECK accepted a link row carrying url_string content")
+			}
+			// And a link row on the well kind (wells link via child_grid_id).
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
+				VALUES ('fixt-v6-bad3', ?, 'well', 28, 6, 1, 1, 'aabbccddeeff00112233445566778899/9', '', 100, 100)`, gridID); err == nil {
+				t.Errorf("CHECK accepted link_target_id on a well")
+			}
+		},
+	})
 }

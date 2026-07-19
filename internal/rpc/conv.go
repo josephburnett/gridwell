@@ -93,6 +93,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		Reference:     t.Reference,
 		ContentZoom:   t.ContentZoom,
 		UrlHistory:    t.URLHistory,
+		LinkTargetId:  t.LinkTargetID,
 	}
 }
 
@@ -127,6 +128,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		Reference:     t.Reference,
 		ContentZoom:   t.ContentZoom,
 		URLHistory:    t.UrlHistory,
+		LinkTargetID:  t.LinkTargetId,
 	}
 }
 

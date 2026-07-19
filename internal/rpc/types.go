@@ -277,6 +277,13 @@ type Tile struct {
 	// {index, entries:[{url,title}]}, capped) captured at freeze so a
 	// revived tile can still go back (issue #113). "" = none.
 	URLHistory string `json:"url_history,omitempty"`
+	// LinkTargetID makes a LEAF tile (text/url/shell/pane) a LINK: a
+	// qualified "<uuid>/<tile-id>" reference to the tile owning the content.
+	// The link row stores no content — readers resolve bytes/preview/session
+	// through the target id. The well kind's link variant is a qualified
+	// ChildGridID (the exit well); Reference is the one derived "is a link"
+	// bit over both shapes. "" = an ordinary owned tile.
+	LinkTargetID string `json:"link_target_id,omitempty"`
 }
 
 // Reads.

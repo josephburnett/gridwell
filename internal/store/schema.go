@@ -174,17 +174,35 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- revived tile can still go "back" (issue #113). Content, rides the
     -- versioned freeze writeback. Added post-v1 (schema v4, additive).
     url_history   TEXT,
+    -- link_target_id makes a LEAF tile (text/url/shell/pane) a LINK: a
+    -- qualified "<uuid>/<tile-id>" reference to the tile that owns the
+    -- content. NULL = an ordinary owned tile. A link row stores no content
+    -- of its own (the CHECK's link branch enforces it) — readers resolve
+    -- bytes/preview/session through the target id. The well kind's link
+    -- variant remains a qualified child_grid_id (the exit well); this
+    -- column is never set on wells. Added post-v1 (schema v6, rebuild —
+    -- the CHECK gained the link branch).
+    link_target_id TEXT,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
-       (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL    AND preview_blob_id IS NULL AND text_mode IS NULL)
-    OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
-    OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
-    OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
-    -- pane: a durable workspace. blob_id (nullable) holds the serialized
-    -- layout (client/pane LayoutV1, application/vnd.gridwell.pane-layout+json);
-    -- NULL means never arranged (descent installs the default single pane).
-    OR (kind = 'pane'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND text_mode IS NULL)
+       (link_target_id IS NULL AND (
+          (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL    AND preview_blob_id IS NULL AND text_mode IS NULL)
+       OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
+       OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
+       OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
+       -- pane: a durable workspace. blob_id (nullable) holds the serialized
+       -- layout (client/pane LayoutV1, application/vnd.gridwell.pane-layout+json);
+       -- NULL means never arranged (descent installs the default single pane).
+       OR (kind = 'pane'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND text_mode IS NULL)
+       ))
+    -- link variant: a leaf tile whose content lives in another plugin's tile
+    -- (link_target_id). No content columns — bytes/preview/url are read
+    -- through the target. text framing columns (text_x/y/w/h) and view_*
+    -- stay usable: framing is per-link local, like an exit well's view.
+    OR (link_target_id IS NOT NULL AND kind IN ('text','url','shell','pane')
+        AND child_grid_id IS NULL AND blob_id IS NULL AND url_string IS NULL
+        AND preview_blob_id IS NULL AND text_mode IS NULL)
     )
 );
 `

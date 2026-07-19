@@ -124,6 +124,18 @@ message Tile {
   // an empty value on a write leaves the stored history untouched (a partial
   // capture must not clobber it, mirroring the preview-JPEG rule).
   string url_history = 28;
+
+  // link_target_id makes a LEAF tile (text/url/shell/pane) a LINK: a
+  // qualified "<plugin-uuid>/<tile-id>" reference to the tile that owns the
+  // content. The link row stores no content of its own (no blob, no url, no
+  // preview) — readers resolve bytes/preview/session through the target id,
+  // which the router already routes anywhere (including through transit
+  // chains, which prepend one hop segment exactly as they do for a well's
+  // qualified child_grid_id). Kind stays the target's kind; link-ness is
+  // orthogonal metadata. The well kind's link variant remains a qualified
+  // child_grid_id (the battle-tested exit well) — Reference is the single
+  // derived "is a link" bit over both shapes. Deleting a link only unlinks.
+  string link_target_id = 29;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 5
+const schemaVersion = 6
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -57,21 +57,46 @@ var migrations = []migration{
 	// chain's first table-REBUILD migration (the recipe in
 	// internal/store/CLAUDE.md). No column changes; only the CHECK.
 	{to: 5, run: rebuildTilesForPaneKind},
+	// v6: link_target_id — the leaf-link variant (a text/url/shell/pane tile
+	// whose content lives in another plugin's tile; owner decision
+	// 2026-07-19, cross-plugin left-drag = link). The CHECK gains the link
+	// branch (and a url link row has url_string NULL, which the v5 url
+	// branch forbade), so this is a rebuild, not an ADD COLUMN. Old rows
+	// get link_target_id NULL (not a link) — exactly their old meaning.
+	{to: 6, run: rebuildTilesForLinkTarget},
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
 // tiles column as of v5, id included (identity is preserved byte-for-byte;
-// a rebuild changes the CHECK, never the data).
+// a rebuild changes the CHECK, never the data). Both executed rebuilds (v5,
+// v6) copy this same list: the v6 rebuild reads a v5-shaped table, and the
+// new link_target_id column fills with its NULL default.
 const tilesRebuildColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
 	url_string, preview_blob_id, alt_text, alt_user, content_zoom, url_history,
 	created_at, updated_at`
 
-// rebuildTilesForPaneKind rebuilds the tiles table with the v5 CHECK (adding
-// the 'pane' kind): create tiles_new from the SAME DDL text a fresh Open uses
-// (tilesTableDDL — one source, no drift), copy every row id-for-id, drop the
-// old table, rename, recreate the indexes.
+// rebuildTilesForPaneKind is the v5 rebuild (adds the 'pane' kind to the
+// CHECK). Note the chain's convergence contract: a rebuild always creates
+// tiles_new from the CURRENT tilesTableDDL text, so an old DB replaying v5
+// lands directly on the latest shape and the later rebuild steps are
+// idempotent re-runs — TestSchemaEquivalence proves the chain and a fresh
+// Open converge either way.
+func rebuildTilesForPaneKind(ctx context.Context, tx *sql.Tx) error {
+	return rebuildTiles(ctx, tx)
+}
+
+// rebuildTilesForLinkTarget is the v6 rebuild (adds link_target_id and the
+// CHECK's link branch).
+func rebuildTilesForLinkTarget(ctx context.Context, tx *sql.Tx) error {
+	return rebuildTiles(ctx, tx)
+}
+
+// rebuildTiles rebuilds the tiles table into the current shape: create
+// tiles_new from the SAME DDL text a fresh Open uses (tilesTableDDL — one
+// source, no drift), copy every row id-for-id, drop the old table, rename,
+// recreate the indexes.
 //
 // The sqlite_sequence save/restore is load-bearing: DROP TABLE tiles deletes
 // its sqlite_sequence row, and the copy re-seeds at the max SURVIVING id — so
@@ -79,7 +104,7 @@ const tilesRebuildColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 // REUSED after the migration, violating the "ids are never reused" invariant
 // (embeds, deep links, and client caches are keyed by id and would resolve to
 // the wrong tile). The fixture in migration_harness_test.go pins this trap.
-func rebuildTilesForPaneKind(ctx context.Context, tx *sql.Tx) error {
+func rebuildTiles(ctx context.Context, tx *sql.Tx) error {
 	var seq sql.NullInt64
 	err := tx.QueryRowContext(ctx,
 		`SELECT seq FROM sqlite_sequence WHERE name = 'tiles'`).Scan(&seq)

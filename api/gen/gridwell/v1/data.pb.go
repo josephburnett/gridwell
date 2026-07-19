@@ -309,7 +309,18 @@ type Tile struct {
 	// tile can still go "back" (issue #113). Rides the url SetTile writeback;
 	// an empty value on a write leaves the stored history untouched (a partial
 	// capture must not clobber it, mirroring the preview-JPEG rule).
-	UrlHistory    string `protobuf:"bytes,28,opt,name=url_history,json=urlHistory,proto3" json:"url_history,omitempty"`
+	UrlHistory string `protobuf:"bytes,28,opt,name=url_history,json=urlHistory,proto3" json:"url_history,omitempty"`
+	// link_target_id makes a LEAF tile (text/url/shell/pane) a LINK: a
+	// qualified "<plugin-uuid>/<tile-id>" reference to the tile that owns the
+	// content. The link row stores no content of its own (no blob, no url, no
+	// preview) — readers resolve bytes/preview/session through the target id,
+	// which the router already routes anywhere (including through transit
+	// chains, which prepend one hop segment exactly as they do for a well's
+	// qualified child_grid_id). Kind stays the target's kind; link-ness is
+	// orthogonal metadata. The well kind's link variant remains a qualified
+	// child_grid_id (the battle-tested exit well) — Reference is the single
+	// derived "is a link" bit over both shapes. Deleting a link only unlinks.
+	LinkTargetId  string `protobuf:"bytes,29,opt,name=link_target_id,json=linkTargetId,proto3" json:"link_target_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -515,6 +526,13 @@ func (x *Tile) GetContentZoom() float64 {
 func (x *Tile) GetUrlHistory() string {
 	if x != nil {
 		return x.UrlHistory
+	}
+	return ""
+}
+
+func (x *Tile) GetLinkTargetId() string {
+	if x != nil {
+		return x.LinkTargetId
 	}
 	return ""
 }
@@ -3276,7 +3294,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12%\n" +
-	"\x0eproxy_endpoint\x18\b \x01(\tR\rproxyEndpoint\"\xf7\x04\n" +
+	"\x0eproxy_endpoint\x18\b \x01(\tR\rproxyEndpoint\"\x9d\x05\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3305,7 +3323,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\treference\x18\x1a \x01(\bR\treference\x12!\n" +
 	"\fcontent_zoom\x18\x1b \x01(\x01R\vcontentZoom\x12\x1f\n" +
 	"\vurl_history\x18\x1c \x01(\tR\n" +
-	"urlHistory\"e\n" +
+	"urlHistory\x12$\n" +
+	"\x0elink_target_id\x18\x1d \x01(\tR\flinkTargetId\"e\n" +
 	"\x0eNetworkContext\x12\x18\n" +
 	"\x06direct\x18\x01 \x01(\bH\x00R\x06direct\x122\n" +
 	"\x05proxy\x18\x02 \x01(\v2\x1a.gridwell.v1.ProxyEndpointH\x00R\x05proxyB\x05\n" +

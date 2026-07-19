@@ -187,7 +187,7 @@ var tileCopyColumns = []string{
 	"view_x", "view_y", "view_zoom", "child_grid_id",
 	"text_x", "text_y", "text_w", "text_h", "text_mode", "blob_id",
 	"url_string", "preview_blob_id", "alt_text", "alt_user",
-	"content_zoom", "url_history",
+	"content_zoom", "url_history", "link_target_id",
 	"created_at", "updated_at",
 }
 
@@ -206,9 +206,18 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		blob, previewBlob sql.NullInt64
 		urlStr, textMode  sql.NullString
 		urlHist           sql.NullString
+		linkTarget        sql.NullString
 	)
-	switch n.Kind {
-	case rpc.KindURL:
+	if n.LinkTargetID != "" {
+		// A copy of a LINK is another link to the same target — the link row
+		// holds no content, so there is nothing else to copy (the CHECK's
+		// link branch requires every content column NULL).
+		linkTarget = sql.NullString{String: n.LinkTargetID, Valid: true}
+	}
+	switch {
+	case n.LinkTargetID != "":
+		// No content columns on a link row; skip the per-kind content copy.
+	case n.Kind == rpc.KindURL:
 		urlStr = sql.NullString{String: n.URLString, Valid: true}
 		if n.PreviewBlobID != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
@@ -216,20 +225,20 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		if n.URLHistory != "" {
 			urlHist = sql.NullString{String: n.URLHistory, Valid: true}
 		}
-	case rpc.KindShell:
+	case n.Kind == rpc.KindShell:
 		// A PTY can't be copied, so a cloned shell is a screenshot: carry the
 		// frozen preview blob, but not the live session (keyed by tile id).
 		if n.PreviewBlobID != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobID, Valid: true}
 		}
-	case rpc.KindText:
+	case n.Kind == rpc.KindText:
 		if n.BlobID != 0 {
 			blob = sql.NullInt64{Int64: n.BlobID, Valid: true}
 		}
 		if n.TextMode != "" {
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
-	case rpc.KindPane:
+	case n.Kind == rpc.KindPane:
 		// The layout blob is shared by refcount like a text body; the copy
 		// diverges on its first edit (content addressing). NULL (never
 		// arranged) copies as NULL.
@@ -257,7 +266,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		n.ViewX, n.ViewY, n.ViewZoom, child,
 		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
 		urlStr, previewBlob, n.AltText, altUser,
-		n.ContentZoom, urlHist,
+		n.ContentZoom, urlHist, linkTarget,
 		now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert tile copy: %w", err)

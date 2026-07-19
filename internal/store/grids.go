@@ -57,7 +57,8 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*rpc.
 const tileColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
-	url_string, preview_blob_id, alt_text, content_zoom, url_history`
+	url_string, preview_blob_id, alt_text, content_zoom, url_history,
+	link_target_id`
 
 // scanTile scans a single row into an rpc.Tile. It expects the columns to
 // match tileColumns in order.
@@ -72,6 +73,7 @@ func scanTile(scanner interface {
 		previewBID sql.NullInt64
 		textMode   sql.NullString
 		urlHist    sql.NullString
+		linkTarget sql.NullString
 	)
 	if err := scanner.Scan(
 		&n.ID, &n.ObjectID, &n.Version, &n.GridID, &n.Kind,
@@ -79,8 +81,12 @@ func scanTile(scanner interface {
 		&n.ViewX, &n.ViewY, &n.ViewZoom, &childGrid,
 		&n.TextX, &n.TextY, &n.TextW, &n.TextH, &textMode, &blob,
 		&urlStr, &previewBID, &n.AltText, &n.ContentZoom, &urlHist,
+		&linkTarget,
 	); err != nil {
 		return nil, err
+	}
+	if linkTarget.Valid {
+		n.LinkTargetID = linkTarget.String
 	}
 	if childGrid.Valid {
 		n.ChildGridID = childGrid.String
