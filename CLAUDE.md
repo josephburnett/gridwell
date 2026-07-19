@@ -323,15 +323,25 @@ Plugin storage is the authoritative state for the plugin's tiles. The localdb
 format is **frozen and forward-compatible** — see `internal/store/CLAUDE.md` for
 the additive-only schema-evolution contract; never delete a DB to absorb a change.
 
-**Every node exposes a node grid; the launcher IS one.** A node's plugin list
-is a real, read-only grid — the **node grid**, `<node_id>/0` (`node_id` lives
-in server.yaml; `internal/server/nodegrid.go`) — one dashed **link tile** per
-plugin (tile id = the plugin's uuid, child = its qualified root, framing = its
-persisted root view). The local client anchors panes there on boot: the
-landing page is served, not synthesized client-side. Descending into ANY link
-tile is a **portal** (the pane's anchor swaps to the link's target and a frame
-is pushed for the return trip), so navigation has one vocabulary whether the
-link points at a local plugin, a mounted directory, or a remote node.
+**Every node exposes a node grid; home is the first plugin.** A node's plugin
+list is a real, read-only grid — the **node grid**, `<node_id>/0` (`node_id`
+lives in server.yaml; `internal/server/nodegrid.go`) — one dashed **link
+tile** per plugin (tile id = the plugin's uuid, child = its qualified root,
+framing = its persisted root view). It is the federation surface (an ssh
+mount lands on the remote's node grid; `?a=<node>/0` addresses it), but NOT
+the local landing page: the client boots into **home**, the first configured
+plugin's root grid (`rpc.HomeGrid`, one derivation; node grid as fallback for
+a node with no rooted plugin), and "/" is home's URL. **Plugins live on the +
+menu's top row** (above the primitives): clicking a swatch descends into the
+plugin, dragging one drops an exit-well link — owner decision 2026-07-19,
+reversing the launcher-as-landing-page decision of PR #41; do not re-reverse
+without a new owner decision. Descending into ANY link tile — or a + menu
+plugin swatch — is a **portal** (the pane's anchor swaps to the link's target
+and a frame is pushed for the return trip), so navigation has one vocabulary
+whether the link points at a local plugin, a mounted directory, or a remote
+node. A menu portal's ascent writes the plugin's root view back via
+`SetRootView` directly (`savePluginRootViewBeforeAscent`) — the same fact a
+node-grid tile write routes onto.
 
 **Remote is just a transport, and the mount is the whole node.** The `ssh`
 plugin tunnels to a remote node's one HTTP/h2c port (its `bind:`) and dials

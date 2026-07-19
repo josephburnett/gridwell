@@ -66,9 +66,13 @@ byte (live PTY, the Chromium session blob) crosses this one interface.
 
 **Every node exposes a node grid.** A node's plugin list is a real, read-only
 grid — `<node_id>/0`, served by `internal/server/nodegrid.go` — one dashed
-link tile per plugin. The local client anchors panes there on boot (it IS the
-launcher; there is no client-side launcher), and descending into an ssh mount
-lands on the remote's node grid: one concept, served the same way everywhere.
+link tile per plugin. It is the FEDERATION surface: descending into an ssh
+mount lands on the remote's node grid, and `?a=<node>/0` addresses it locally.
+It is NOT the local landing page (owner decision 2026-07-19, reversing the
+launcher decision of PR #41): the client boots into **home** — the first
+configured plugin's root grid (`rpc.HomeGrid`; node grid as fallback) — and
+plugins are reached from the **+ menu's top row** (click = portal descent,
+drag = drop an exit-well link).
 
 ---
 
@@ -441,9 +445,10 @@ all fixed. What remains (verified July 2026):
 
 ## 10. Map of the key journeys (for orientation)
 
-- **Boot.** `ListPlugins` returns the node identity; panes anchor at the node
-  grid (`<node>/0`) — the landing page is a fetched grid like any other, and
-  "/" is its URL.
+- **Boot.** `ListPlugins` returns the plugin list + node identity; panes
+  anchor at **home** — the first configured plugin's root grid
+  (`rpc.HomeGrid`, node grid as fallback), a fetched grid like any other —
+  and "/" is its URL.
 - **Descend into a well.** Pane reads the tile's `view_*`, pushes the current
   state onto `paneStateStack`, appends to `Path`, restores the stored viewport.
   *(All five framing copies must move together.)* A **link tile**
@@ -455,8 +460,10 @@ all fixed. What remains (verified July 2026):
   `SetWellView` (`emitTileChanged` → **no version bump**); the parent frame is
   popped and restored. A portal ascent does the same through the containing
   link tile (`portalWellForFrame`; on a node-grid tile the provider maps the
-  write onto the plugin's own `SetRootView`). The round-trip is idempotent
-  **iff** the copies agreed.
+  write onto the plugin's own `SetRootView`). A **+ menu portal** has no
+  containing tile: `savePluginRootViewBeforeAscent` writes the plugin's root
+  view directly via `SetRootView` — same fact, no tile carrier. The
+  round-trip is idempotent **iff** the copies agreed.
 - **Drop a tile.** Gesture → `CreateTile`/`MoveTile`/`CloneTile` with the descent
   `Path` → server routes → store mutates → `Subscribe` event → `cache.Apply`
   upserts → redraw. A right-drag across a plugin boundary becomes a LINK
