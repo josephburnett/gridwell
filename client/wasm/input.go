@@ -1108,6 +1108,12 @@ func (a *App) ascendPortal(p *pane.Pane) {
 		a.animatePortalAscent(p, f, well)
 		return
 	}
+	// No containing link tile — a + menu portal (the origin grid holds no
+	// tile for it). The framing writeback still happens, just without a tile
+	// to carry it: write the plugin's root view directly (the SAME fact a
+	// node-grid tile write routes onto via SetRootView), so re-entering the
+	// plugin from the menu lands at the left-off view.
+	a.savePluginRootViewBeforeAscent(p)
 	if !p.PopFrame() {
 		return
 	}
@@ -1117,6 +1123,49 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	a.fetchGrid(a.gridIDForPane(p))
 	a.draw()
 	a.scheduleURLUpdate()
+}
+
+// savePluginRootViewBeforeAscent persists the pane's viewport as its plugin's
+// root view when the pane sits at a plugin ROOT grid — the tile-less half of
+// the portal framing writeback. Same intrinsic math as
+// saveWellViewBeforeAscentFrom over the 1×1 synthetic plugin tile
+// (rpc.PluginWellTile) the pane descended through, and the same no-op guard
+// so casual ascents don't churn the store. The local PluginInfo copy of the
+// root view (a cache of the Info handshake) reconciles immediately so the
+// next + menu descent frames to what was just saved.
+func (a *App) savePluginRootViewBeforeAscent(p *pane.Pane) {
+	if len(p.Path) > 0 || p.TextFocus != "" {
+		return
+	}
+	pl, ok := a.pluginByUUID(uuidOf(p.Anchor))
+	if !ok || pl.RootGridID != p.Anchor {
+		return
+	}
+	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, 1)
+	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, 1)
+	r := paneRectFor(a, p)
+	overtake := zoomtrans.OvertakeZoom(zoomtrans.Well{W: 1, H: 1}, r.W, r.H, cellPx)
+	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
+	if newViewX == int64(pl.RootViewCx) && newViewY == int64(pl.RootViewCy) &&
+		math.Abs(newViewZoom-pl.RootViewZoom) < 0.001 {
+		return
+	}
+	for i := range a.plugins {
+		if a.plugins[i].UUID == pl.UUID {
+			a.plugins[i].RootViewCx = float64(newViewX)
+			a.plugins[i].RootViewCy = float64(newViewY)
+			a.plugins[i].RootViewZoom = newViewZoom
+		}
+	}
+	req := &rpc.SetRootViewRequest{
+		RootGridID: p.Anchor,
+		Cx:         float64(newViewX),
+		Cy:         float64(newViewY),
+		Zoom:       newViewZoom,
+	}
+	a.postVoidPersist("SetRootView", p.Anchor, func(ctx context.Context) error {
+		return a.cl.SetRootView(ctx, req)
+	})
 }
 
 // portalWellForFrame finds the link tile the pane descended through: the well

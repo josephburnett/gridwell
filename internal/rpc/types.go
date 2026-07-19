@@ -128,6 +128,12 @@ func PluginWellTile(pl PluginInfo) Tile {
 		// plugin's own root, never this (synthetic) tile's grid. Mark it so it
 		// renders dashed identically to a mounted plugin well.
 		Reference: true,
+		// The plugin's persisted root view IS this tile's framing — the same
+		// mapping the node grid serves — so previewing and descending through
+		// the synthetic tile land at the left-off view.
+		ViewX:    int64(pl.RootViewCx),
+		ViewY:    int64(pl.RootViewCy),
+		ViewZoom: pl.RootViewZoom,
 	}
 }
 

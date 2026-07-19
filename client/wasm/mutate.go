@@ -115,6 +115,14 @@ func (a *App) postPersist(label string, gid string, call tileCall) {
 	}()
 }
 
+// postVoidPersist is postPersist for RPCs that return no tile — used by
+// SetRootView, the plugin-root framing writeback of a + menu portal ascent.
+func (a *App) postVoidPersist(label string, gid string, call voidCall) {
+	go func() {
+		a.reactToErr(label, gid, call(context.Background()))
+	}()
+}
+
 // postTwoGridMutate is the no-snapback variant of postCrossGridMutate.
 // Used by DeleteTile, where the tile is going to vanish either way —
 // a failed delete still needs the cache refreshed but there's no

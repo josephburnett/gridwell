@@ -143,7 +143,8 @@ func TestIsExitWell(t *testing.T) {
 }
 
 func TestPluginWellTile(t *testing.T) {
-	pl := PluginInfo{Label: "files", RootGridID: "fs-uuid/1"}
+	pl := PluginInfo{Label: "files", RootGridID: "fs-uuid/1",
+		RootViewCx: 3, RootViewCy: -2, RootViewZoom: 0.5}
 	got := PluginWellTile(pl)
 	// The load-bearing invariants the launcher preview depends on: the node is
 	// a well carrying the plugin's root grid as its child, which makes it an
@@ -159,6 +160,12 @@ func TestPluginWellTile(t *testing.T) {
 	}
 	if got.AltText != pl.Label {
 		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
+	}
+	// The plugin's persisted root view rides as the tile's framing (the node
+	// grid's mapping), so a + menu descent lands at the left-off view.
+	if got.ViewX != 3 || got.ViewY != -2 || got.ViewZoom != 0.5 {
+		t.Errorf("PluginWellTile framing = (%d,%d,%v), want the plugin root view (3,-2,0.5)",
+			got.ViewX, got.ViewY, got.ViewZoom)
 	}
 }
 
