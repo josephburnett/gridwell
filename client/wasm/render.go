@@ -1177,15 +1177,16 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// (the ghost is flying over the canvas).
 	outside := tileOutside(n, false)
 	// A dragged link (file-well / process-well / file) shows dashed too, so
-	// you can see what you're carrying. The ghost is always over a regular
-	// surface (no source grid in play), so dashed == isLinkTile.
-	dashed := isLinkTile(n)
+	// you can see what you're carrying — and a drop that will CREATE a link
+	// (the cross-namespace left-drag) previews dashed for the same reason:
+	// dashed always means "this is/becomes a reference".
+	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {
 		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed, "")
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
-			} else if a.ghost.overDoc {
+			} else if a.ghost.overDoc || a.ghost.link {
 				drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 			}
 		}

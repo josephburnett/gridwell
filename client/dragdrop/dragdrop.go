@@ -225,24 +225,37 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 	return moving, pin - moving
 }
 
-// MoveForbidden reports whether a left-drag (move) from a tile in a grid whose
+// MoveForbidden reports whether a left-drag from a tile in a grid whose
 // source kind is srcKind to a destination grid whose source kind is dstKind
 // would be rejected by the server. "" is a regular Gridwell grid; a non-empty
 // kind (fs / proc) is source-backed.
 //
-// It mirrors the server's MoveTile rule exactly: a *cross-grid* move is
-// forbidden when EITHER endpoint is source-backed — a host file can't migrate
-// into Gridwell, regular tiles can't move into a host directory, and host-side
-// mv between two source dirs isn't implemented (clone/right-drag links
-// instead) — or when the endpoints live in different id NAMESPACES
-// (crossPlugin): a tile's id is its identity and never migrates between
-// plugins; the cross-plugin gesture is the right-drag, which creates a link.
-// A same-grid move never crosses any boundary, so it's always allowed.
+// The 2026-07-19 gesture decision: crossing an id NAMESPACE is no longer a
+// forbidden move — it is not a move at all. A cross-plugin left-drag creates
+// a LINK (DropLink; identity never migrates, so "there is no move" — the
+// content stays where its id lives and the destination gains a reference),
+// which is why crossPlugin EXEMPTS the source-kind arms here: linking a host
+// file/dir into a Gridwell grid is the mount philosophy, and a read-only
+// destination is rejected by the separate TargetReadOnly gate. What remains
+// forbidden is the same-namespace cross-grid move with a source-backed
+// endpoint: a host file can't migrate into Gridwell, regular tiles can't
+// move into a host directory, and host-side mv between two source dirs isn't
+// implemented. A same-grid move never crosses any boundary — always allowed.
 func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
-	if sameGrid {
+	if sameGrid || crossPlugin {
 		return false
 	}
-	return crossPlugin || srcKind != "" || dstKind != ""
+	return srcKind != "" || dstKind != ""
+}
+
+// CloneForbidden reports whether a right-drag (clone) is rejected up front: a
+// SOLID (owned, non-reference) well cannot deep-copy across an id namespace —
+// the bulk subtree transfer is unimplemented and the server refuses it — so
+// the UI shows the no-entry badge instead of inviting a doomed drop. A tile
+// that is itself a link (exit well, leaf link) clones fine anywhere: copying
+// a link copies the reference. Within one namespace nothing is forbidden.
+func CloneForbidden(crossPlugin, isWell, isReference bool) bool {
+	return crossPlugin && isWell && !isReference
 }
 
 // DropAction is the single verdict for a drag release (and the matching
@@ -278,6 +291,12 @@ const (
 	DropMove
 	// DropClone: a clean right-drag — CloneTile.
 	DropClone
+	// DropLink: a clean left-drag whose endpoints are in DIFFERENT id
+	// namespaces — create a LINK at the destination (an exit well for a
+	// grid, a leaf link for text/url/shell/pane). There is no cross-plugin
+	// move: identity never migrates, the content stays where its id lives,
+	// and the source tile is untouched (owner decision 2026-07-19).
+	DropLink
 )
 
 // DropInput is the snapshot of every world-read a drop decision needs,
@@ -287,13 +306,15 @@ const (
 // never be read late.
 //
 // Field provenance in the wasm caller (impure resolvers stay there):
-//   - OverDelete: a.overDeleteButton(d, sx, sy)
-//   - OverDoc:    a.docDropTargetAt(sx, sy)
-//   - DocReject:  a.docRejectAt(sx, sy)
-//   - HasTarget:  a.dropTargetAt(sx, sy, tileID) resolved
-//   - Forbidden:  move-only — !Clone && a.dropForbiddenForMove(d, t)
-//   - SameCell:   target grid == source grid && drop cell == source cell
-//   - Occupied:   a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+//   - OverDelete:  a.overDeleteButton(d, sx, sy)
+//   - OverDoc:     a.docDropTargetAt(sx, sy)
+//   - DocReject:   a.docRejectAt(sx, sy)
+//   - HasTarget:   a.dropTargetAt(sx, sy, tileID) resolved
+//   - Forbidden:   per gesture — move: a.dropForbiddenForMove(d, t)
+//     (MoveForbidden); clone: dropForbiddenForClone(d, t) (CloneForbidden)
+//   - CrossPlugin: dropCrossNamespace(d, t) — NamespaceOf(src) != NamespaceOf(dst)
+//   - SameCell:    target grid == source grid && drop cell == source cell
+//   - Occupied:    a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
 type DropInput struct {
 	Started bool
 	// OriginFocused: the origin pane was already focused when the press
@@ -316,6 +337,10 @@ type DropInput struct {
 	TargetReadOnly bool
 	SameCell       bool
 	Occupied       bool
+	// CrossPlugin: the source grid and the target grid live in different id
+	// namespaces. A clean left-drag then verdicts DropLink instead of
+	// DropMove (a clean right-drag stays DropClone — the server copies).
+	CrossPlugin bool
 }
 
 // DecideDrop maps a gathered DropInput to the single action both preview
@@ -368,6 +393,8 @@ func DecideDrop(in DropInput) DropAction {
 		return DropRejected
 	case in.Clone:
 		return DropClone
+	case in.CrossPlugin:
+		return DropLink
 	default:
 		return DropMove
 	}
@@ -383,7 +410,13 @@ type GhostPlan struct {
 	Fragmentation  float64 // 1 = shattering into the trashcan
 	Forbidden      bool    // draw the no-entry badge
 	OverDoc        bool    // draw the link (embed) badge
-	Cursor         string  // CSS cursor: "" or "not-allowed"
+	// Link: this drop will create a LINK, not move the tile — draw the
+	// dashed ghost + chain badge so the user learns mid-drag that the
+	// source stays put and the destination gains a reference. Without this
+	// signal a cross-plugin left-drag would LOOK like a move and the
+	// source's survival would read as a surprise duplicate.
+	Link   bool
+	Cursor string // CSS cursor: "" or "not-allowed"
 }
 
 // GhostPlanForDrop maps a DecideDrop verdict (plus the two reject causes
@@ -400,6 +433,9 @@ type GhostPlan struct {
 //   - Rejected, forbidden → source size in the target pane, no-entry badge.
 //   - Rejected, otherwise (off-canvas / file-mode) → source size in origin,
 //     no badge.
+//   - Link → snap to the target cell size in the target pane, chain badge:
+//     the drop creates a reference and the source stays put (the teaching
+//     signal for the cross-plugin left-drag).
 //   - Move/Clone → snap to the target cell size in the target pane.
 //
 // SameCell/Occupied never reach here as a distinct style: the preview is
@@ -412,6 +448,8 @@ func GhostPlanForDrop(action DropAction, docReject, forbidden, clone bool,
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
 	case DropEmbed:
 		return GhostPlan{PaneID: docPaneID, TargetCellSize: srcCellSize, OverDoc: true}
+	case DropLink:
+		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Link: true}
 	case DropRejected:
 		switch {
 		case docReject:

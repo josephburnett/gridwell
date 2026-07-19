@@ -371,14 +371,45 @@ func TestMoveForbidden(t *testing.T) {
 		{"cross regular->source", false, false, "", "proc", true},
 		{"cross source->source (regression)", false, false, "fs", "proc", true},
 		{"cross same-kind source->source", false, false, "fs", "fs", true},
-		// A move never crosses a plugin boundary: identity doesn't migrate
-		// id spaces. The cross-plugin gesture is right-drag (a link).
-		{"cross-plugin move", false, true, "", "", true},
+		// Crossing an id namespace is not a forbidden move — it is not a
+		// move at all: the left-drag becomes a LINK (DropLink), so nothing
+		// is forbidden here (owner decision 2026-07-19). The source-kind
+		// arms are exempted too: linking host content into a grid is the
+		// mount philosophy, and a read-only destination is rejected by the
+		// TargetReadOnly gate, not this one.
+		{"cross-plugin left-drag is a link, not forbidden", false, true, "", "", false},
+		{"cross-plugin from a source grid links too", false, true, "fs", "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind); got != c.want {
 				t.Errorf("MoveForbidden(%v, %v, %q, %q) = %v, want %v", c.sameGrid, c.crossPlugin, c.srcKind, c.dstKind, got, c.want)
+			}
+		})
+	}
+}
+
+// TestCloneForbidden pins the right-drag policy: only a SOLID well is blocked
+// from crossing a namespace (its deep copy is unimplemented; the server
+// refuses, so the UI must show no-entry instead of inviting the drop). A tile
+// that is itself a link clones anywhere — copying a link copies the
+// reference — and nothing is forbidden within one namespace.
+func TestCloneForbidden(t *testing.T) {
+	cases := []struct {
+		name                             string
+		crossPlugin, isWell, isReference bool
+		want                             bool
+	}{
+		{"solid well across namespaces", true, true, false, true},
+		{"link well across namespaces (mount, exit well)", true, true, true, false},
+		{"leaf across namespaces (byte copy)", true, false, false, false},
+		{"leaf link across namespaces (link copy)", true, false, true, false},
+		{"solid well within one namespace (deep copy)", false, true, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := CloneForbidden(c.crossPlugin, c.isWell, c.isReference); got != c.want {
+				t.Errorf("CloneForbidden(%v, %v, %v) = %v, want %v", c.crossPlugin, c.isWell, c.isReference, got, c.want)
 			}
 		})
 	}
@@ -440,7 +471,7 @@ func TestDecideDrop(t *testing.T) {
 		{"occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Occupied: true}, DropRejected},
 
-		// --- clone ignores move-only Forbidden (caller feeds Forbidden=false for clone) ---
+		// --- clone flavor ---
 		{"clone with a clean target -> clone",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true}, DropClone},
 		// SameCell/Occupied still reject a clone (both commit paths check them).
@@ -448,6 +479,22 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Occupied: true}, DropRejected},
 		{"clone onto same cell -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, SameCell: true}, DropRejected},
+		// A forbidden clone (solid well across namespaces; caller feeds
+		// CloneForbidden) rejects like a forbidden move.
+		{"forbidden clone -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Forbidden: true}, DropRejected},
+
+		// --- the 2026-07-19 gestures: cross-namespace left-drag is a LINK ---
+		{"cross-plugin left drag -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true}, DropLink},
+		{"cross-plugin right drag -> clone (copy, not link)",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Clone: true}, DropClone},
+		{"cross-plugin link onto occupied -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Occupied: true}, DropRejected},
+		{"cross-plugin link onto read-only target -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, TargetReadOnly: true}, DropRejected},
+		{"cross-plugin drop over delete still deletes",
+			DropInput{Started: true, TileID: "7", OverDelete: true, CrossPlugin: true}, DropDelete},
 	}
 	for _, c := range cases {
 		if got := DecideDrop(c.in); got != c.want {
@@ -488,6 +535,11 @@ func TestGhostPlanForDrop(t *testing.T) {
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
 		{"clone snaps to target cell", DropClone, false, false, true,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+		// The teaching signal: a cross-namespace left-drag previews as a
+		// LINK (chain badge) — never as a bare move, or the source's
+		// survival after the drop would read as a surprise duplicate.
+		{"link snaps to target cell with the chain badge", DropLink, false, false, false,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
 	}
 	for _, c := range cases {
 		got := GhostPlanForDrop(c.action, c.docReject, c.forbidden, c.clone,

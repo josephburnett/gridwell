@@ -511,12 +511,20 @@ type ghost struct {
 	overDoc bool
 
 	// forbidden is set when the cursor is over a drop target that would
-	// be rejected: a rendered-mode doc (read-only), or a regular-grid
-	// cell while the source comes from a source-backed grid (the
-	// left-drag "move" that the server refuses — user must right-drag
-	// to clone/link instead). Renderer paints the international "no
-	// entry" badge over the ghost; mouseup snap-backs without RPC.
+	// be rejected: a rendered-mode doc (read-only), a same-namespace
+	// cross-grid move with a source-backed endpoint, or a solid well
+	// right-dragged across a namespace (deep copy unimplemented).
+	// Renderer paints the international "no entry" badge over the ghost;
+	// mouseup snap-backs without RPC.
 	forbidden bool
+
+	// link is set while a left-drag hovers a target in a DIFFERENT id
+	// namespace: the drop will create a LINK and the source stays put
+	// (owner decision 2026-07-19 — there is no cross-plugin move). The
+	// renderer paints the ghost dashed with the chain badge so the user
+	// learns the meaning mid-drag; without it the source's survival
+	// after the drop would read as a surprise duplicate.
+	link bool
 }
 
 // dragState tracks an in-progress drag from a tile onto the cursor.

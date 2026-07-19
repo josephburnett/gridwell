@@ -65,9 +65,12 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	in.HasTarget = haveT
 	if haveT {
 		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
-	}
-	if haveT && !clone {
-		in.Forbidden = a.dropForbiddenForMove(d, t)
+		in.CrossPlugin = dropCrossNamespace(d, t)
+		if clone {
+			in.Forbidden = dropForbiddenForClone(d, t)
+		} else {
+			in.Forbidden = a.dropForbiddenForMove(d, t)
+		}
 	}
 
 	// The verdict picks the action; GhostPlanForDrop picks the styling. Both
@@ -91,6 +94,7 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	a.ghost.targetFragmentation = plan.Fragmentation
 	a.ghost.forbidden = plan.Forbidden
 	a.ghost.overDoc = plan.OverDoc
+	a.ghost.link = plan.Link
 	a.canvas.Get("style").Set("cursor", plan.Cursor)
 
 	size := a.ghost.displayedCellSize
@@ -179,26 +183,50 @@ func (a *App) gridSourceKind(gridID string) string {
 	return g.Meta.SourceKind
 }
 
-// dropForbiddenForMove reports whether a left-drag (move) gesture from
-// the dragState's source grid to t's destination grid would be rejected
-// by the server. Today the server refuses any cross-grid move whose
-// endpoints have different source kinds — a source-grid tile can't
-// migrate into a regular grid (right-drag clones it instead), and
-// regular tiles can't move into a source-backed grid (host directories
-// aren't a placement medium). The UI flags those gestures so the cursor
-// and the ghost render "no entry" instead of inviting the failed drop.
-//
-// Same-grid drops are always allowed by this check (positional moves
-// inside one grid never cross the source/regular boundary).
+// dropCrossNamespace reports whether the drag's source grid and t's
+// destination grid live in different id namespaces — the one predicate the
+// 2026-07-19 gestures branch on (left-drag becomes a LINK, a solid well's
+// right-drag is refused). One reader of NamespaceOf for all three gather
+// sites (left preview, left commit, right commit) so they cannot disagree.
+func dropCrossNamespace(d *dragState, t *dropTarget) bool {
+	if d == nil || t == nil {
+		return false
+	}
+	return rpc.NamespaceOf(d.srcGridID) != rpc.NamespaceOf(t.gridID)
+}
+
+// dropForbiddenForMove reports whether a left-drag from the dragState's
+// source grid to t's destination grid is rejected up front: a SAME-namespace
+// cross-grid move with a source-backed endpoint (host mv unimplemented; host
+// dirs aren't a placement medium). A cross-namespace left-drag is never a
+// move — it verdicts DropLink — so it is exempt here (the read-only
+// destination case is the separate TargetReadOnly gate). The UI flags the
+// forbidden gestures so the cursor and the ghost render "no entry" instead
+// of inviting the failed drop.
 func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
 	}
 	return dragdrop.MoveForbidden(
 		d.srcGridID == t.gridID,
-		rpc.NamespaceOf(d.srcGridID) != rpc.NamespaceOf(t.gridID),
+		dropCrossNamespace(d, t),
 		a.gridSourceKind(d.srcGridID),
 		a.gridSourceKind(t.gridID),
+	)
+}
+
+// dropForbiddenForClone reports whether a right-drag (clone) is rejected up
+// front: a SOLID well cannot deep-copy across a namespace yet (the server
+// refuses with unimplemented). Links clone anywhere — copying a link copies
+// the reference.
+func dropForbiddenForClone(d *dragState, t *dropTarget) bool {
+	if d == nil || t == nil {
+		return false
+	}
+	return dragdrop.CloneForbidden(
+		dropCrossNamespace(d, t),
+		rpc.IsWellKind(d.snapshotTile.Kind),
+		d.snapshotTile.Reference,
 	)
 }
 

@@ -558,10 +558,11 @@ func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
 func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// Same snapshot-then-DecideDrop discipline as the left-drag commit
 	// (onMouseUp): gather every world-read once, then switch on the verdict
-	// so preview (advanceCloneDrag) and commit share one decision. Clone
-	// differs from move in only two inputs: Clone is true, and there is no
-	// cross-grid Forbidden check — right-drag IS the allowed cross-boundary
-	// gesture (it clones/links), so Forbidden stays false.
+	// so preview (advanceCloneDrag) and commit share one decision. The
+	// right-drag is a CLONE everywhere (a copy of the dragged tile — a link
+	// tile copies as another link); its one Forbidden case is a SOLID well
+	// crossing a namespace, whose deep copy the server refuses
+	// (dropForbiddenForClone).
 	in := dragdrop.DropInput{
 		Started:       d.started,
 		OriginFocused: d.originFocused,
@@ -578,6 +579,8 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	var dropX, dropY int64
 	if haveT {
 		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
+		in.CrossPlugin = dropCrossNamespace(d, t)
+		in.Forbidden = dropForbiddenForClone(d, t)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
 		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil

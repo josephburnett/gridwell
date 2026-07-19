@@ -767,6 +767,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	if haveT {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
 		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
+		in.CrossPlugin = dropCrossNamespace(d, t)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
 		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
@@ -841,6 +842,25 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		// occupied — snap back without a doomed round-trip to the server.
 		a.cancelDragSnapBack(d)
 		return nil
+
+	case dragdrop.DropLink:
+		// Cross-namespace left-drag: the destination gains a LINK and the
+		// source stays put — there is no cross-plugin move (owner decision
+		// 2026-07-19). The ghost previewed this with the dashed chain badge.
+		targetX := t.originX + float64(dropX)*t.cellSize
+		targetY := t.originY + float64(dropY)*t.cellSize
+		if a.ghost != nil {
+			a.ghost.paneID = t.pane.ID
+			a.ghost.targetCellSize = t.cellSize
+			// The source was hidden for a would-be move; it stays — unhide it
+			// now so the world reads "source intact + link appearing".
+			a.ghost.hiddenTileID = ""
+			a.ghost.hiddenPaneID = ""
+		}
+		a.startSnap(targetX, targetY, snapMs)
+		a.commitLinkDrop(d, t, dropX, dropY)
+		a.draw()
+		return nil
 	}
 
 	// DropMove: animate ghost to the snapped cell in the target grid's coords.
@@ -858,8 +878,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	srcGridID := d.srcGridID
 	version := d.snapshotTile.Version
 
-	// Left-drag is always a move; clone is handled by the right-drag path
-	// (commitRightClone in right_button.go) and never reaches here.
+	// Same-namespace left-drag is a move; clone is handled by the right-drag
+	// path (commitRightClone in right_button.go) and never reaches here.
 	req := &rpc.MoveTileRequest{
 		Path:       rpc.Path{WellIDs: srcPath},
 		TileID:     d.tileID,
@@ -874,6 +894,43 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	}, d)
 	a.draw()
 	return nil
+}
+
+// commitLinkDrop creates the LINK a cross-namespace left-drag drops: an exit
+// well for a dragged well (same qualified child grid, framing, and label —
+// identical to what a + menu plugin-swatch drop or a node-grid mount
+// produces), a leaf link for text/url/shell/pane (link_target_id names the
+// dragged tile — or, when the dragged tile is itself a leaf link, its
+// TARGET, so links never chain through middleman tiles). Provenance
+// object_id rides along; the source tile is not touched.
+func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+	src := d.snapshotTile
+	dstGridID := t.gridID
+	dstPath := rpc.Path{WellIDs: slices.Clone(t.path)}
+	if rpc.IsWellKind(src.Kind) {
+		req := &rpc.CreateWellRequest{
+			Path: dstPath, GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
+			ChildGridID: src.ChildGridID, Label: src.AltText,
+			ViewX: src.ViewX, ViewY: src.ViewY, ViewZoom: src.ViewZoom,
+			ObjectID: src.ObjectID,
+		}
+		a.postTileMutate("CreateWell", dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
+			return a.cl.CreateWell(ctx, req)
+		}, nil)
+		return
+	}
+	target := src.LinkTargetID
+	if target == "" {
+		target = src.ID
+	}
+	req := &rpc.CreateLeafLinkRequest{
+		Path: dstPath, GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
+		Kind: src.Kind, LinkTargetID: target, Label: src.AltText,
+		ObjectID: src.ObjectID,
+	}
+	a.postTileMutate("CreateLeafLink", dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateLeafLink(ctx, req)
+	}, nil)
 }
 
 // nodeAtCellInGrid returns the cached tile covering (cellX, cellY) in
