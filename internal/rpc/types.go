@@ -366,6 +366,9 @@ type CreateTextRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	Data   []byte `json:"data"`
+	// ObjectID carries the source's provenance marker on a cross-plugin
+	// clone ("" = mint fresh). See store createTile.
+	ObjectID string `json:"object_id,omitempty"`
 }
 
 type CreatePaneRequest struct {
@@ -390,6 +393,9 @@ type CreateURLRequest struct {
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
 	URL    string `json:"url"`
+	// ObjectID carries the source's provenance marker on a cross-plugin
+	// clone ("" = mint fresh). See store createTile.
+	ObjectID string `json:"object_id,omitempty"`
 }
 
 // CreateShellRequest creates a shell tile. The bash session is not
@@ -405,6 +411,9 @@ type CreateShellRequest struct {
 	Y      int64  `json:"y"`
 	W      int64  `json:"w"`
 	H      int64  `json:"h"`
+	// ObjectID carries the source's provenance marker on a cross-plugin
+	// clone ("" = mint fresh). See store createTile.
+	ObjectID string `json:"object_id,omitempty"`
 }
 
 // Mutations: Version is the claimed current version of TileID.

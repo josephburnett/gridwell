@@ -47,6 +47,13 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 				qt.ChildGridId = rpc.QualifyID(uuid, t.ChildGridId)
 			}
 		}
+		// A leaf link (text/url/shell/pane with a link_target_id) is a
+		// reference by construction: the store only accepts a QUALIFIED
+		// target, so there is no bare-id arm — the same one derived
+		// Reference bit covers both link shapes (exit well, leaf link).
+		if t.LinkTargetId != "" {
+			qt.Reference = true
+		}
 		out[i] = &qt
 	}
 	return out
@@ -69,6 +76,12 @@ func qualifyTilesTransit(uuid string, tiles []*pb.Tile) []*pb.Tile {
 		qt.GridId = rpc.QualifyID(uuid, t.GridId)
 		if t.ChildGridId != "" {
 			qt.ChildGridId = rpc.QualifyID(uuid, t.ChildGridId)
+		}
+		if t.LinkTargetId != "" {
+			// A leaf link's target chains exactly like a qualified child: the
+			// remote's "<uuid>/<tile>" is reachable only through this hop, so
+			// prepend one segment. The wire Reference bit rides verbatim.
+			qt.LinkTargetId = rpc.QualifyID(uuid, t.LinkTargetId)
 		}
 		out[i] = &qt
 	}

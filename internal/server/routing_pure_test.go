@@ -118,6 +118,39 @@ func TestQualifyTilesTransit(t *testing.T) {
 	}
 }
 
+// TestQualifyTilesLeafLink: a leaf link (text/url/shell/pane carrying a
+// link_target_id) is the leaf twin of the exit well at the qualify seam — the
+// ONE derived Reference bit covers both shapes. The stored target is always
+// qualified (the store enforces it), so a leaf plugin's qualification never
+// prefixes it; a transit hop prepends exactly one segment, the same chain rule
+// as a qualified child_grid_id.
+func TestQualifyTilesLeafLink(t *testing.T) {
+	// Leaf plugin: target stays verbatim, Reference derived true.
+	ln := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", Kind: "text", LinkTargetId: "uuidB/42"}})[0]
+	if !ln.Reference {
+		t.Error("a leaf link must derive Reference=true (dashed = link)")
+	}
+	if ln.LinkTargetId != "uuidB/42" {
+		t.Errorf("leaf link target rewritten to %q, want uuidB/42 verbatim", ln.LinkTargetId)
+	}
+	// An owned leaf (no target) is not a reference.
+	owned := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", Kind: "text"}})[0]
+	if owned.Reference {
+		t.Error("an owned leaf must not be a reference")
+	}
+	// Transit hop: the target chains — one prepended segment — and the wire
+	// Reference bit rides verbatim.
+	hop := qualifyTilesTransit("ssh1", []*pb.Tile{{
+		Id: "rp/9", GridId: "rp/1", Kind: "url", LinkTargetId: "otherrp/42", Reference: true,
+	}})[0]
+	if hop.LinkTargetId != "ssh1/otherrp/42" {
+		t.Errorf("transit leaf link target = %q, want ssh1/otherrp/42", hop.LinkTargetId)
+	}
+	if !hop.Reference {
+		t.Error("a remote leaf link must stay a link through the hop")
+	}
+}
+
 func TestQualifyGrid(t *testing.T) {
 	if got := qualifyGrid("u", &pb.Grid{Id: "3"}); got.Id != "u/3" {
 		t.Errorf("qualifyGrid id = %q, want u/3", got.Id)

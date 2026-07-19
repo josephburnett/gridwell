@@ -154,7 +154,7 @@ func TestSetPaneLayoutIsFramingNoVersionBump(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	tile, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "ws", nil)
+	tile, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "ws", nil, "")
 	if err != nil {
 		t.Fatalf("CreatePane: %v", err)
 	}

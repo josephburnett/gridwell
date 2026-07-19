@@ -19,11 +19,11 @@ import (
 // empty leaves blob_id NULL ("never arranged": descent installs the default
 // single pane). alt is the user-given workspace name (the + palette's name
 // field; the bottom bar's breadcrumb reads it).
-func (s *Store) CreatePane(ctx context.Context, path rpc.Path, gridID string, x, y, w, h int64, alt string, data []byte) (*rpc.Tile, error) {
+func (s *Store) CreatePane(ctx context.Context, path rpc.Path, gridID string, x, y, w, h int64, alt string, data []byte, objectID string) (*rpc.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, path, gridID, x, y, w, h,
+	return s.createTile(ctx, path, gridID, x, y, w, h, objectID,
 		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
 			var blob sql.NullInt64
 			if len(data) > 0 {

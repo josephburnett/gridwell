@@ -254,6 +254,14 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
 	}
 	path := rpc.PathFromProto(req.Path)
+	if t.LinkTargetId != "" {
+		// A LEAF LINK: any leaf kind whose content lives in another plugin's
+		// tile (the cross-plugin left-drag). One create for all four kinds;
+		// the store validates the kind set and the qualified-target shape.
+		// t.ObjectId carries provenance (the link names the same origin).
+		return tileResp(p.st.CreateLeafLink(ctx, path, req.GridId, t.X, t.Y, t.W, t.H,
+			t.Kind, t.LinkTargetId, t.AltText, t.ObjectId))
+	}
 	switch t.Kind {
 	case rpc.KindWell:
 		// child_grid_id set → an exit well pointing at a grid owned by another
@@ -263,11 +271,11 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// user-given grid name (the + palette's name field); empty = unnamed.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, path, req.GridId, t.X, t.Y, t.W, t.H,
-				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom))
+				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom, t.ObjectId))
 		}
 		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
 	case rpc.KindText:
-		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Data: req.Data}))
+		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Data: req.Data, ObjectID: t.ObjectId}))
 	case rpc.KindURL:
 		// A url create targeting this plugin's scratch grid is an EPHEMERAL
 		// visit ("descend into a url") — route it path-free (the off-grid
@@ -289,7 +297,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// A durable workspace. req.Data is the optional initial layout blob
 		// (usually empty: NULL blob_id = never arranged); alt_text is the
 		// workspace name the bottom bar shows.
-		return tileResp(p.st.CreatePane(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Data))
+		return tileResp(p.st.CreatePane(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Data, t.ObjectId))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}

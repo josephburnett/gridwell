@@ -397,9 +397,19 @@ func (s *Store) incBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) e
 // blob if it is newly created (self-describing media).
 func (s *Store) swapTileBlob(ctx context.Context, tx *sql.Tx, tileID int64, col string, bytes []byte, mediaType string) (newBlobID int64, changed bool, err error) {
 	var oldBlob sql.NullInt64
+	var linkTarget sql.NullString
 	if err := tx.QueryRowContext(ctx,
-		`SELECT `+col+` FROM tiles WHERE id = ?`, tileID).Scan(&oldBlob); err != nil {
+		`SELECT `+col+`, link_target_id FROM tiles WHERE id = ?`, tileID).Scan(&oldBlob, &linkTarget); err != nil {
 		return 0, false, err
+	}
+	if linkTarget.Valid && linkTarget.String != "" {
+		// A LINK row owns no content — its bytes live in the target tile, and
+		// content mutations must be routed there (by the qualified target id)
+		// or the link and the thing it names silently diverge. Guarded here,
+		// in the one blob kernel every content write flows through (text body,
+		// pane layout, url/shell previews), rather than per caller.
+		return 0, false, fmt.Errorf("%w: tile %d is a link; content lives in its target %s",
+			ErrInvalidArgument, tileID, linkTarget.String)
 	}
 	newBlobID, err = s.putBlob(ctx, tx, hashBytes(bytes), bytes, mediaType)
 	if err != nil {
