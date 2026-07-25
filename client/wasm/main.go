@@ -153,6 +153,14 @@ type App struct {
 	// response lands.
 	gridInflight map[string]bool
 
+	// contentInflight tracks tile ids with a pending GetTileContent request.
+	// Deduped like gridInflight: tileBody fires fetchTileContent on every
+	// cache miss every frame, so without the guard one absent body spawns a
+	// fetch per frame — and any reply older than one that already landed
+	// would repaint stale bytes into the overlay (issue #189; the cache's
+	// PutFetchedContent version guard is the backstop).
+	contentInflight map[string]bool
+
 	// tileInflight tracks qualified tile ids with a pending GetTile request.
 	// An embed names a globally-routable tile id whose grid may never have been
 	// visited (so it isn't cached); resolving it locates the tile's grid and
@@ -604,6 +612,7 @@ func main() {
 		caps:              caps.Derive(bridgeAvailable()),
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
+		contentInflight:   map[string]bool{},
 		tileInflight:      map[string]bool{},
 		tileLoadFailed:    map[string]bool{},
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),

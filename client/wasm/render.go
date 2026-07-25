@@ -999,7 +999,9 @@ func bannerTextColor(n *rpc.Tile, outside bool) string {
 
 // fetchTileContent issues GetTileContent for a plugin tile (file / proc @info)
 // and caches the body by tile id. Idempotent: a successful previous fetch
-// short-circuits.
+// short-circuits, and an in-flight one is never doubled (contentInflight) —
+// concurrent fetches for one tile are how a stale reply could land after a
+// fresher one and repaint old bytes into the overlay (issue #189).
 func (a *App) fetchTileContent(tileID string) {
 	if tileID == "" {
 		return
@@ -1007,7 +1009,12 @@ func (a *App) fetchTileContent(tileID string) {
 	if _, ok := a.c.TileContent(tileID); ok {
 		return
 	}
+	if a.contentInflight[tileID] {
+		return
+	}
+	a.contentInflight[tileID] = true
 	go func() {
+		defer delete(a.contentInflight, tileID)
 		data, version, err := a.cl.GetTileContent(context.Background(), tileID)
 		if err != nil {
 			// The tile body will simply never appear — say why (charter §6).

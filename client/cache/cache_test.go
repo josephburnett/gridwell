@@ -407,6 +407,43 @@ func TestFetchNeverClobbersDirtyContent(t *testing.T) {
 	}
 }
 
+// TestStaleFetchNeverRegressesContent is the 2026-07-25 cursor-jump rollback
+// (issue #189): a GetTileContent reply that was in flight while the user typed
+// and an autosave completed lands LAST, carrying pre-edit bytes read under an
+// older version. The entry is clean the instant the save response settles it,
+// so the dirty guard doesn't apply — without a version guard the late reply
+// rolls both the bytes and the basis backwards, the overlay repaints the old
+// text (caret jumps), and the next save claims a stale basis (a manufactured
+// 409). A fetch may only move the basis FORWARD.
+func TestStaleFetchNeverRegressesContent(t *testing.T) {
+	c := New()
+	// The fetch goes out while no entry exists; before its reply lands the
+	// user types and the autosave confirms the bytes as version 3.
+	c.PutEditedContent("10", []byte("# draft"))
+	c.PutSavedContent("10", []byte("# draft"), 3)
+
+	// The stale reply finally lands: pre-edit bytes, read under version 2.
+	c.PutFetchedContent("10", []byte("# pre-edit"), 2)
+
+	if b, _ := c.TileContent("10"); string(b) != "# draft" {
+		t.Fatalf("stale fetch rolled content back: %q", b)
+	}
+	if base, _ := c.SaveBasis("10"); base != 3 {
+		t.Fatalf("basis = %d, want 3 — a regressed basis manufactures a 409 on the next save", base)
+	}
+
+	// Same-version and fresher replies still apply (idempotent refresh /
+	// foreign-writer visibility).
+	c.PutFetchedContent("10", []byte("# same version"), 3)
+	if b, _ := c.TileContent("10"); string(b) != "# same version" {
+		t.Fatalf("same-version fetch refused: %q", b)
+	}
+	c.PutFetchedContent("10", []byte("# fresher"), 4)
+	if b, _ := c.TileContent("10"); string(b) != "# fresher" {
+		t.Fatalf("fresher fetch refused: %q", b)
+	}
+}
+
 // TestSaveBasisFollowsBytesNotRow is the interlock itself: the version a save
 // claims tracks the BYTES the client has seen, never the row version foreign
 // events advance. Claiming the row version was the stomp mechanism — stale

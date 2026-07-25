@@ -71,10 +71,17 @@ func New() *Cache {
 // exactly the stale-bytes-with-current-version claim SaveBasis exists to
 // prevent. The dirty entry's own save resolves it: accepted (basis current) or
 // 409-reconciled (basis stale), either way through a path the user can see.
+//
+// A STALE reply never regresses the basis (issue #189): a fetch that was in
+// flight while typing + an autosave completed lands last, carrying pre-edit
+// bytes under an older version — the entry is clean by then, so only the
+// version comparison stands between it and a visible rollback (the overlay
+// repaints old bytes, the caret jumps, and the regressed basis manufactures
+// a 409 on the next save). The basis moves forward or not at all.
 func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e, ok := c.content[tileID]; ok && e.dirty {
+	if e, ok := c.content[tileID]; ok && (e.dirty || base < e.base) {
 		return
 	}
 	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
