@@ -98,6 +98,69 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
   expect(back.cy, 'center y restored after re-entry').toBeCloseTo(left.cy, 1);
 });
 
+test('a reframe persists without ascending (issue #190)', async ({ gw }) => {
+  // Before the settle persister, the ONLY framing writers were the ascent
+  // flushes — leave a grid any other way (reload, pane switch, URL edit,
+  // descend deeper) and the viewport silently reverted. This test pins the
+  // fix at the real seam: reframe a child grid and, WITHOUT ascending, the
+  // well's view_* must show up in server truth on its own.
+  await gw.enterPlugin('localdb');
+  const parentGrid = (await gw.focused()).gridID;
+  const cx = Math.round((await gw.focused()).cx);
+  const cy = Math.round((await gw.focused()).cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  await gw.descendCell(cx, cy);
+  const childGrid = (await gw.focused()).gridID;
+
+  await gw.wheelAtFocusedCenter(-300);
+  const zc = await gw.focused();
+  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+  const left = await gw.focused();
+  expect(left.zoom, 'the reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
+
+  // No ascent, no navigation: the debounced settle persister alone must
+  // write the framing. A fresh well's viewZoom is 0 until the first write.
+  await expect
+    .poll(
+      async () => {
+        const pg = await gw.getGrid(parentGrid);
+        const w = (pg.tiles ?? []).find((t: { childGridId?: string }) => t.childGridId === childGrid);
+        return Number((w as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+      },
+      { timeout: 5_000 },
+    )
+    .toBeGreaterThan(0);
+});
+
+test('a plugin root reframe persists without ascending (issue #190)', async ({ gw, window }) => {
+  // Same invariant one seam over: pan/zoom a plugin's ROOT grid and the
+  // root view must reach the server without a + menu ascent (SetRootView
+  // used to fire only from the portal-ascent path).
+  await gw.enterPlugin('second');
+
+  await gw.wheelAtFocusedCenter(-300);
+  const zc = await gw.focused();
+  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+  const left = await gw.focused();
+  expect(left.zoom, 'reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
+
+  // The node grid serves each plugin's root view as its link tile's framing
+  // — poll it WITHOUT ascending.
+  const nodeGrid = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  await expect
+    .poll(
+      async () => {
+        const ng = await gw.getGrid(nodeGrid);
+        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'second');
+        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+      },
+      { timeout: 5_000 },
+    )
+    .toBeGreaterThan(0);
+});
+
 test('ascending restores the parent viewport unchanged', async ({ gw }) => {
   await gw.enterPlugin('localdb');
   const cx = Math.round((await gw.focused()).cx);

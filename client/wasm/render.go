@@ -345,6 +345,11 @@ func (a *App) draw() {
 	// the blob is DERIVED from the live tree (encode + hash-diff), so there
 	// is no per-gesture persistence call site to forget.
 	a.scheduleWorkspaceSave()
+
+	// Same shape for grid framing (issue #190): every repaint arms the
+	// settle persister, whose writers no-op when nothing moved — framing
+	// reaches the server without waiting for an ascent.
+	a.scheduleFramingSave()
 }
 
 // layoutPanes walks the tree and assigns each leaf pane a screen rectangle.

@@ -203,7 +203,6 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	p.Zoom, p.Cx, p.Cy = zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax)
 	a.draw()
 	a.scheduleURLUpdate()
-	a.scheduleRootViewSave()
 	return nil
 }
 
@@ -700,6 +699,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// back exactly here.
 	if d.isTemplate && d.item.isPlugin && !d.started {
 		if fp := a.tree.FindPane(d.originPaneID); fp != nil {
+			// Portal is a place change: flush framing still inside the
+			// settle window first (issue #190).
+			a.flushFramingSave()
 			well := paletteItemGhostNode(d.item)
 			well.X, well.Y = int64(math.Floor(fp.Cx-0.5)), int64(math.Floor(fp.Cy-0.5))
 			a.startDescent(fp, &well)
@@ -812,9 +814,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		return nil
 
 	case dragdrop.DropPanEnd:
-		// Pan drag end: just persist viewport state.
+		// Pan drag end: just persist viewport state (the URL now; the grid
+		// framing via the draw()-armed settle persister).
 		a.scheduleURLUpdate()
-		a.scheduleRootViewSave()
 		a.draw()
 		return nil
 
@@ -1065,6 +1067,10 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 	if hit == nil {
 		return false
 	}
+	// The pane is about to change place: flush framing still inside the
+	// settle window (issue #190), while the viewport still belongs to the
+	// place it describes.
+	a.flushFramingSave()
 	switch {
 	case rpc.IsWellKind(hit.Kind):
 		a.startDescent(p, hit)
@@ -1161,7 +1167,7 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	well := a.portalWellForFrame(p, f)
 	if well != nil {
 		framePath := slices.Clone(f.Path)
-		a.saveWellViewBeforeAscentFrom(p, well, f.Anchor, framePath)
+		a.persistWellView(p, well, f.Anchor, framePath)
 		a.animatePortalAscent(p, f, well)
 		return
 	}
@@ -1170,7 +1176,7 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	// to carry it: write the plugin's root view directly (the SAME fact a
 	// node-grid tile write routes onto via SetRootView), so re-entering the
 	// plugin from the menu lands at the left-off view.
-	a.savePluginRootViewBeforeAscent(p)
+	a.persistPluginRootView(p)
 	if !p.PopFrame() {
 		return
 	}
@@ -1182,15 +1188,16 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	a.scheduleURLUpdate()
 }
 
-// savePluginRootViewBeforeAscent persists the pane's viewport as its plugin's
-// root view when the pane sits at a plugin ROOT grid — the tile-less half of
-// the portal framing writeback. Same intrinsic math as
-// saveWellViewBeforeAscentFrom over the 1×1 synthetic plugin tile
-// (rpc.PluginWellTile) the pane descended through, and the same no-op guard
-// so casual ascents don't churn the store. The local PluginInfo copy of the
-// root view (a cache of the Info handshake) reconciles immediately so the
-// next + menu descent frames to what was just saved.
-func (a *App) savePluginRootViewBeforeAscent(p *pane.Pane) {
+// persistPluginRootView persists the pane's viewport as its plugin's root
+// view when the pane sits at a plugin ROOT grid — the tile-less half of the
+// portal framing writeback, fired at portal ascent and by the settle
+// persister (flushFramingSave). Same intrinsic math as persistWellView over
+// the 1×1 synthetic plugin tile (rpc.PluginWellTile) the pane descended
+// through, and the same no-op guard so quiet calls don't churn the store.
+// The local PluginInfo copy of the root view (a cache of the Info
+// handshake) reconciles immediately so the next + menu descent frames to
+// what was just saved.
+func (a *App) persistPluginRootView(p *pane.Pane) {
 	if len(p.Path) > 0 || p.TextFocus != "" {
 		return
 	}
@@ -1416,6 +1423,10 @@ func (a *App) startAscent(p *pane.Pane) {
 // the well row vanished. We just drop the last entry of the path; the user
 // can wait for the parent to load and reposition manually.
 func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
+	// Still an ascent: flush the leaf framing if its parent is resolvable
+	// (issue #190 — these fallback branches used to skip the writeback the
+	// animated path performs, losing the viewport on an actual ascent).
+	a.persistPaneFraming(p)
 	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
 	p.Path = parentPath
 	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
@@ -1797,9 +1808,17 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 	a.scheduleURLUpdate()
 }
 
-// saveWellViewBeforeAscent updates `well`'s ViewX/ViewY/ViewZoom so its
-// parent-grid preview reflects the user's last position and zoom in
-// the child grid. ViewZoom is stored as the intrinsic ratio
+// saveWellViewBeforeAscent is persistWellView under the pane's own anchor —
+// the ascent-flush entry point (the settle persister passes an explicit
+// anchor because a portal's containing well lives under the FRAME's anchor).
+func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []string) {
+	a.persistWellView(p, well, p.Anchor, parentPath)
+}
+
+// persistWellView updates `well`'s ViewX/ViewY/ViewZoom so its parent-grid
+// preview reflects the user's last position and zoom in the child grid.
+// Fired by every ascent flush and by the settle persister
+// (flushFramingSave). ViewZoom is stored as the intrinsic ratio
 // childZoom_at_ascent / OvertakeZoom_at_ascent — window-independent so
 // the preview stays stable across browser resizes. Mutates well in-place
 // (so the local-side ascent transition uses the new values) and patches
@@ -1808,16 +1827,9 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 // catch up the cache.
 //
 // No-op if the user's current center hasn't moved from the well's
-// stored view (rounded to int cells), so casual ascents don't churn
+// stored view (rounded to int cells), so quiet calls don't churn
 // the DB.
-func (a *App) saveWellViewBeforeAscent(p *pane.Pane, well *rpc.Tile, parentPath []string) {
-	a.saveWellViewBeforeAscentFrom(p, well, p.Anchor, parentPath)
-}
-
-// saveWellViewBeforeAscentFrom is saveWellViewBeforeAscent with an explicit
-// parent anchor: a portal ascent's containing well lives under the FRAME's
-// anchor (another plugin's namespace), not the pane's current one.
-func (a *App) saveWellViewBeforeAscentFrom(p *pane.Pane, well *rpc.Tile, parentAnchor string, parentPath []string) {
+func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string, parentPath []string) {
 	// Quantize the ORIGIN, not the center: descend targets origin + size/2,
 	// and rounding that half-cell center drifted the stored window one cell
 	// per untouched round trip (zoomtrans.ViewOriginFromCenter has the
@@ -2257,6 +2269,9 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 // returns to it — the underlying shell goes inactive, not gone — rather than
 // clearing straight to the grid.
 func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
+	// Place change: flush framing still inside the settle window (issue
+	// #190). A no-op when fp is already descended (TextFocus set).
+	a.flushFramingSave()
 	paneID := fp.ID
 	openLive := func() {
 		if ffp := a.tree.FindPane(paneID); ffp != nil && ffp.TextFocus != "" {

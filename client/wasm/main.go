@@ -314,6 +314,13 @@ type scheduler struct {
 	urlUpdateScheduled bool
 	urlUpdateCb        js.Func
 
+	// framingSaveScheduled / framingSaveCb debounce the grid-framing
+	// persister (see scheduleFramingSave): draw() arms it; the callback
+	// flushes every pane's settled framing through the no-op-guarded
+	// writers.
+	framingSaveScheduled bool
+	framingSaveCb        js.Func
+
 	// textSaveScheduled / textSaveCb debounce the text-tile content save.
 	textSaveScheduled bool
 	textSaveCb        js.Func
@@ -659,6 +666,8 @@ func main() {
 		// is async and may not finish before teardown, but firing it here
 		// beats guaranteeing the loss by never firing at all.
 		app.flushDirtyText()
+		// Same for grid framing still inside its settle window (issue #190).
+		app.flushFramingSave()
 		app.closeAllURLStreams()
 		app.closeAllShellStreams()
 		return nil
@@ -713,6 +722,11 @@ func (a *App) afterBootstrap() {
 	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.urlUpdateScheduled = false
 		a.replaceURLNow()
+		return nil
+	})
+	a.sched.framingSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		a.sched.framingSaveScheduled = false
+		a.flushFramingSave()
 		return nil
 	})
 

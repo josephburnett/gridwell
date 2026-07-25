@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
@@ -19,20 +20,78 @@ import (
 // bookmark / copy-paste reflects the latest state.
 const urlUpdateDebounceMs = 150
 
-// rootViewSaveDebounceMs is the delay before persisting a changed root
-// viewport to the server's default_view. Longer than the URL debounce
-// so a continuous pan/zoom doesn't spam the server with intermediate
-// values — we only care about the resting state.
-const rootViewSaveDebounceMs = 600
+// framingSaveDebounceMs is the delay before persisting settled grid framing
+// (a well's view_*, a plugin's root view) back to the server. Longer than
+// the URL debounce so a continuous pan/zoom doesn't spam the server with
+// intermediate values — only the resting state matters.
+const framingSaveDebounceMs = 600
 
-// scheduleRootViewSave is a no-op: there is no privileged root grid anymore, so
-// no root viewport is persisted server-side. A pane's viewport lives in the URL
-// (replaceURLNow) instead. Kept as a no-op so the viewport-mutating call sites
-// don't need to special-case the rootless model.
-func (a *App) scheduleRootViewSave() {}
+// scheduleFramingSave arms the debounced framing persister. Armed from
+// draw() — every state change redraws, so there is no per-gesture
+// persistence hook to forget (the workspace-layout persister's shape,
+// charter §1). Before this existed (issue #190) framing was written ONLY
+// at ascent, so leaving a grid any other way — descending deeper, a pane
+// switch, a portal, a URL edit, a reload — silently lost the viewport.
+func (a *App) scheduleFramingSave() {
+	if a.sched.framingSaveScheduled {
+		return
+	}
+	a.sched.framingSaveScheduled = true
+	js.Global().Call("setTimeout", a.sched.framingSaveCb, framingSaveDebounceMs)
+}
 
-// flushRootViewSave is a no-op (see scheduleRootViewSave).
-func (a *App) flushRootViewSave() {}
+// flushFramingSave persists every pane's settled grid framing now. The
+// writers it dispatches to no-op when nothing moved, so quiet calls are
+// free. Skipped entirely while a transition animates: animated viewport
+// values are presentation, not user state — persisting one would store
+// framing the user never set (the guiding rule). draw() re-arms the
+// debounce on the next frame, so the flush lands after the animation.
+func (a *App) flushFramingSave() {
+	if a.transition != nil {
+		return
+	}
+	a.tree.Walk(func(p *pane.Pane) { a.persistPaneFraming(p) })
+}
+
+// persistPaneFraming writes pane p's current place framing — the same
+// writes an ascent flushes, fired without waiting for one:
+//   - descended into a child grid: the leaf well's view_* (SetWellView);
+//   - at a portal target: the containing link tile's view_* under the
+//     frame's anchor (a node-grid tile write routes onto SetRootView);
+//   - at a plugin root with no containing tile: the root view directly.
+//
+// Text-descent framing (SetTextView) stays with the text machinery. No-op
+// when the place is unresolvable (uncached parent grid) — the next settle
+// retries.
+func (a *App) persistPaneFraming(p *pane.Pane) {
+	if p.TextFocus != "" {
+		return
+	}
+	if len(p.Path) > 0 {
+		parentPath := p.Path[:len(p.Path)-1]
+		parentGridID := a.gridIDForPathFrom(p.Anchor, parentPath)
+		if parentGridID == "" {
+			return
+		}
+		g, ok := a.c.Grid(parentGridID)
+		if !ok {
+			return
+		}
+		w, ok := g.Tiles[p.Path[len(p.Path)-1]]
+		if !ok {
+			return
+		}
+		a.persistWellView(p, &w, p.Anchor, slices.Clone(parentPath))
+		return
+	}
+	if f, ok := p.TopFrame(); ok {
+		if well := a.portalWellForFrame(p, f); well != nil {
+			a.persistWellView(p, well, f.Anchor, slices.Clone(f.Path))
+			return
+		}
+	}
+	a.persistPluginRootView(p)
+}
 
 // scheduleURLUpdate marks that the URL is out of date and arranges for
 // it to be replaced on the next debounce tick. Cheap to call from any

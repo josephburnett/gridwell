@@ -743,6 +743,10 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 			}
 		}
 	}
+	// The dropped pane never hits the ascent save path OR the settle
+	// persister again (it leaves the tree now) — flush its grid framing
+	// here (issue #190; the text half of this gap was closed first).
+	a.persistPaneFraming(p)
 	// The pane is vanishing: freeze + close its live sessions and drop all its
 	// per-pane state atomically (forgetPane closes the streams), so nothing is
 	// left orphaned behind a now-dead pane id.
