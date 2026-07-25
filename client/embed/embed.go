@@ -136,27 +136,44 @@ func HrefForTile(origin string, tileID string) string {
 	return strings.TrimRight(origin, "/") + path
 }
 
-// uuidHexLen is the character length of a plugin uuid (store/newUUID: a random
-// 128-bit id as lowercase hex). isPluginUUID matches exactly this shape so a
-// qualified embed path "/<uuid>/<id>" is told apart from an ordinary external
-// link like "/user/42" (whose first segment is not 32 hex chars) — without it,
-// every numeric-tailed external link would be mis-rendered as a tile embed.
-const uuidHexLen = 32
+// Plugin ids come in exactly two minted shapes (store/uuid.go — kept local
+// because the embed package can't import store or rpc, cyclic): the legacy
+// 128-bit form (32 lowercase hex chars) and, since 2026-07-25, the short form
+// (7 lowercase base36 chars, leading letter). isPluginID matches BOTH so a
+// qualified embed path "/<id>/<tile>" is told apart from an ordinary external
+// link like "/user/42" (whose first segment is neither shape) — without the
+// shape test, every numeric-tailed external link would be mis-rendered as a
+// tile embed; without the short shape, every short-id qualified embed would
+// silently re-qualify with the embedding doc's plugin and resolve wrong.
+const (
+	uuidHexLen = 32
+	shortIDLen = 7
+)
 
-// isPluginUUID reports whether s is a plugin uuid: exactly uuidHexLen lowercase
-// hex characters. Kept local because the embed package can't import the store
-// or rpc packages (cyclic); the format is a stable contract (store/uuid.go).
-func isPluginUUID(s string) bool {
-	if len(s) != uuidHexLen {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+// isPluginID reports whether s has either minted plugin-id shape.
+func isPluginID(s string) bool {
+	switch len(s) {
+	case uuidHexLen:
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				return false
+			}
+		}
+		return true
+	case shortIDLen:
+		if s[0] < 'a' || s[0] > 'z' {
 			return false
 		}
+		for i := 1; i < len(s); i++ {
+			c := s[i]
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')) {
+				return false
+			}
+		}
+		return true
 	}
-	return true
+	return false
 }
 
 // hrefSegments returns the non-empty path segments of href, or nil if href is
@@ -214,7 +231,7 @@ func parseEmbedHref(href string) (uuid, leaf string, ok bool) {
 	if len(segs) == 0 {
 		return "", "", false
 	}
-	if isPluginUUID(segs[0]) {
+	if isPluginID(segs[0]) {
 		leaf, ok := positiveIntLeaf(segs[1:])
 		return segs[0], leaf, ok
 	}

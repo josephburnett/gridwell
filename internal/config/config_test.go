@@ -127,6 +127,44 @@ plugins:
 	}
 }
 
+// TestLoad_rejectsBadIDs pins the identity-shape contract at the one config
+// door (2026-07-25): a purely-numeric or slash-carrying plugin/node id would
+// be indistinguishable from a tile id in URL paths and embed hrefs (or break
+// the qualified-id codec), and once stored into cross-plugin references it
+// can never be removed. gridwell init mints conforming ids; this catches the
+// hand-edited file.
+func TestLoad_rejectsBadIDs(t *testing.T) {
+	write := func(t *testing.T, yml string) string {
+		t.Helper()
+		f := filepath.Join(t.TempDir(), "server.yaml")
+		if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	bad := map[string]string{
+		"numeric plugin id":  "plugins:\n  - id: \"12345\"\n    name: a\n    kind: localdb\n",
+		"slash in plugin id": "plugins:\n  - id: \"abc/def\"\n    name: a\n    kind: localdb\n",
+		"empty plugin id":    "plugins:\n  - name: a\n    kind: localdb\n",
+		"numeric node id":    "node_id: \"777\"\nplugins:\n  - id: \"abc123\"\n    name: a\n    kind: localdb\n",
+	}
+	for name, yml := range bad {
+		if _, err := Load(write(t, yml)); err == nil {
+			t.Errorf("%s: Load accepted it", name)
+		}
+	}
+	good := map[string]string{
+		"short id":       "plugins:\n  - id: \"k3x9m2q\"\n    name: a\n    kind: localdb\n",
+		"legacy hex id":  "plugins:\n  - id: \"0123456789abcdef0123456789abcdef\"\n    name: a\n    kind: localdb\n",
+		"absent node id": "plugins:\n  - id: \"abc123\"\n    name: a\n    kind: localdb\n",
+	}
+	for name, yml := range good {
+		if _, err := Load(write(t, yml)); err != nil {
+			t.Errorf("%s: Load rejected it: %v", name, err)
+		}
+	}
+}
+
 func TestLoad_defaults_for_missing_fields(t *testing.T) {
 	dir := t.TempDir()
 	yml := `bind: "0.0.0.0:7070"`

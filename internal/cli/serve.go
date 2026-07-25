@@ -235,7 +235,7 @@ func RunServe(args []string) int {
 	// The node's own durable identity qualifies the node grid (the plugin-list
 	// landing page). Minted once and persisted into server.yaml; a pre-node
 	// config gains the field on first serve without touching any plugin id.
-	nodeID, err := config.EnsureNodeID(home, store.NewUUID)
+	nodeID, err := config.EnsureNodeID(home, store.NewShortID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: node id: %v\n", err)
 		return 1

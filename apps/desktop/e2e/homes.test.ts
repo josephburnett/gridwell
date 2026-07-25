@@ -11,13 +11,15 @@ import { sweepLeakedHomes, pluginUUIDs } from './homes';
 
 test('sweepLeakedHomes removes leaked e2e homes and nothing else', () => {
   const leaked = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
+  // Both minted id shapes: legacy 32-hex and the 7-char base36 short form
+  // (2026-07-25). The regex must find each, or its tmux server leaks.
   fs.writeFileSync(
     path.join(leaked, 'server.yaml'),
-    'plugins:\n    - id: 0123456789abcdef0123456789abcdef\n      kind: localdb\n',
+    'plugins:\n    - id: 0123456789abcdef0123456789abcdef\n      kind: localdb\n    - id: k3x9m2q\n      kind: localdb\n',
   );
   const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-real-'));
   try {
-    assert.deepEqual(pluginUUIDs(leaked), ['0123456789abcdef0123456789abcdef']);
+    assert.deepEqual(pluginUUIDs(leaked), ['0123456789abcdef0123456789abcdef', 'k3x9m2q']);
     sweepLeakedHomes();
     assert.equal(fs.existsSync(leaked), false, 'the leaked e2e home is swept');
     assert.equal(fs.existsSync(foreign), true, 'a non-e2e dir is never touched');

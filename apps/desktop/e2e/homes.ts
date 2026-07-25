@@ -19,10 +19,13 @@ export function pluginUUIDs(home: string): string[] {
   }
   const uuids: string[] = [];
   for (const line of src.split('\n')) {
-    // YAML list entry: `    - id: <uuid>` (the leading dash was missing from
+    // YAML list entry: `    - id: <id>` (the leading dash was missing from
     // this regex originally, so the per-test tmux kill matched NOTHING — one
-    // of the reasons servers leaked; caught by the homes unit test).
-    const m = line.match(/^\s*-?\s*id:\s*([0-9a-f]{32})\s*$/i);
+    // of the reasons servers leaked; caught by the homes unit test). Two
+    // minted id shapes exist: legacy 32-hex and the 7-char base36 short form
+    // (2026-07-25) — matching only the long one would leak tmux servers for
+    // every new plugin, the exact issue-#108 regression again.
+    const m = line.match(/^\s*-?\s*id:\s*([0-9a-f]{32}|[a-z][0-9a-z]{6})\s*$/i);
     if (m) uuids.push(m[1]);
   }
   return uuids;

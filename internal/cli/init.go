@@ -75,7 +75,10 @@ func RunInit(args []string) int {
 	}
 
 	// The id is the durable, globally-routable identity; mint it once here.
-	id := store.NewUUID()
+	// Short human-scale form (7-char base36, leading letter) since 2026-07-25;
+	// plugins minted earlier keep their 32-hex ids — both shapes are valid
+	// everywhere, and an id never changes once minted.
+	id := store.NewShortID()
 	dbDir := config.DBDir(home, id)
 	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
@@ -101,7 +104,7 @@ func RunInit(args []string) int {
 
 	// The node's own identity rides in the same file; mint it with the first
 	// plugin so a fresh home is fully identified before the first serve.
-	if _, err := config.EnsureNodeID(home, store.NewUUID); err != nil {
+	if _, err := config.EnsureNodeID(home, store.NewShortID); err != nil {
 		fmt.Fprintf(os.Stderr, "init: node id: %v\n", err)
 		return 1
 	}

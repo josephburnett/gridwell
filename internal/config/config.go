@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -128,7 +129,45 @@ func Load(path string) (*ServerConfig, error) {
 	if err := expandPaths(&cfg); err != nil {
 		return nil, err
 	}
+	if err := validateIDs(&cfg); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
 	return &cfg, nil
+}
+
+// validateIDs enforces the identity-shape contract on every id the file
+// declares. Ids are otherwise opaque strings, but two properties are
+// load-bearing everywhere they travel: no '/' (the qualified-id codec's
+// delimiter — rpc.SplitID) and never purely numeric (URL paths and markdown
+// embed hrefs tell a namespace segment from a tile id by exactly this).
+// `gridwell init` mints conforming ids (store.NewShortID); this is the one
+// door that catches a hand-edited server.yaml before a bad id gets stored
+// into cross-plugin references it can never be removed from.
+func validateIDs(cfg *ServerConfig) error {
+	check := func(what, id string) error {
+		if id == "" {
+			return nil // node_id may be absent pre-EnsureNodeID
+		}
+		if strings.Contains(id, "/") {
+			return fmt.Errorf("%s %q must not contain '/'", what, id)
+		}
+		if _, err := strconv.ParseInt(id, 10, 64); err == nil {
+			return fmt.Errorf("%s %q must not be purely numeric (indistinguishable from a tile id)", what, id)
+		}
+		return nil
+	}
+	if err := check("node_id", cfg.NodeID); err != nil {
+		return err
+	}
+	for _, p := range cfg.Plugins {
+		if p.ID == "" {
+			return fmt.Errorf("plugin %q has no id", p.Name)
+		}
+		if err := check("plugin id", p.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // expandPaths expands "~/" prefixes in every path field of cfg.

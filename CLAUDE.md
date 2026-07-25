@@ -322,12 +322,22 @@ the patches could not make it safe.
 
 Gridwell is a federated space. Each **plugin instance** — a local Gridwell DB,
 a mounted filesystem, the process table, a remote server reached over SSH —
-owns its own id space and is identified by a UUID assigned once and stored
+owns its own id space and is identified by an id assigned once and stored
 permanently (in the plugin's own DB and referenced in `server.yaml`).
 
-A globally qualified id is `<plugin_uuid>/<local_integer>`. The local integer
+**Id shape (owner decision 2026-07-25):** new plugin and node ids are **7
+characters of lowercase base36 with a leading letter** (`store.NewShortID`,
+e.g. `k3x9m2q`) — short enough to read in a URL path, and the leading letter
+guarantees an id can never be purely numeric, which is how paths and embed
+hrefs tell a namespace segment from a tile id (`config.Load` enforces it).
+Ids minted earlier are 32-char hex; **an id is immutable once minted** (it
+lives inside other plugins' stored references, Electron session partitions,
+and tmux socket names), so both shapes are valid everywhere, forever. The
+per-tile provenance `object_id` is unrelated and stays full 128-bit hex.
+
+A globally qualified id is `<plugin_id>/<local_integer>`. The local integer
 is allocated by the plugin (SQLite AUTOINCREMENT; never reused once issued).
-The plugin UUID makes it globally unique. Both are necessary in every stored
+The plugin id makes it globally unique. Both are necessary in every stored
 cross-plugin reference.
 
 **Every plugin has its own SQLite DB.** This is how the plugin allocates stable

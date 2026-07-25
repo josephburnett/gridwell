@@ -138,10 +138,22 @@ func TestLeafTileIDFromHref(t *testing.T) {
 		{"/0123456789abcdef0123456789abcdef/3/4/5", "5"}, // qualified descent chain
 		{"/0123456789abcdef0123456789abcdef", ""},        // a uuid alone is not a tile link
 		{"/0123456789abcdef0123456789abcdef/x", ""},      // qualified but non-numeric leaf
+		// Short plugin ids (7-char base36, leading letter — 2026-07-25) are
+		// the second qualified shape; before isPluginID knew it, these fell
+		// through to the bare-legacy branch, re-qualified with the embedding
+		// doc's plugin, and silently resolved to the wrong tile.
+		{"/k3x9m2q/42", "42"},
+		{"http://localhost:8080/k3x9m2q/7", "7"},
+		{"/k3x9m2q/3/4/5", "5"}, // qualified descent chain
+		{"/k3x9m2q", ""},        // a plugin id alone is not a tile link
+		{"/k3x9m2q/x", ""},      // qualified but non-numeric leaf
 		// An external link whose first segment merely isn't a uuid stays an
 		// external link — the regression a relaxed "non-numeric prefix" rule
 		// would cause (a real link mis-rendered as a tile embed).
-		{"/user/42", ""},
+		{"/user/42", ""},     // 4 chars: neither id shape
+		{"/username/42", ""}, // 8 chars: neither id shape
+		{"/2024xyz/42", ""},  // 7 chars but leading digit: not a short id
+		{"/K3X9M2Q/42", ""},  // uppercase: ids are lowercase-only
 		{"https://github.com/owner/123", ""},
 		// A near-uuid (wrong length / non-hex) is not a plugin uuid.
 		{"/0123456789abcdef0123456789abcde/42", ""},  // 31 hex chars
