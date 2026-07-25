@@ -43,10 +43,11 @@ test('a plugin anchor rides in the URL path and survives a reload (issue #193)',
   const url = await window.evaluate(() => location.pathname + location.search);
   expect(url, 'no legacy a= anchor param').not.toContain('a=');
 
-  // Reload: the new-form URL must decode back into the same anchor.
+  // Reload: the new-form URL must decode back into the same anchor. The
+  // wasm re-fetch is slow under full-suite load — give the hook time.
   await window.evaluate(() => location.reload());
   await window.waitForFunction(() => (window as any).__gridwellTest !== undefined, null, {
-    timeout: 15_000,
+    timeout: 45_000,
   });
   await gw.waitIdle();
   const after = await gw.focused();
