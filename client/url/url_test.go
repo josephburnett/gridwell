@@ -323,37 +323,105 @@ func TestBootViewport(t *testing.T) {
 	}
 }
 
-// TestEncodeAnchor: the anchor (the plugin root the pane sits inside) rides in
-// the `a=` query param alongside the descent path. A bare descent path keeps
-// its short, readable form; the anchor is the qualified grid id.
-func TestEncodeAnchor(t *testing.T) {
-	got := Encode(State{Anchor: "fs-uuid/1", TileIDs: []string{"3", "4"}})
-	want := "/3/4?a=fs-uuid%2F1"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+// TestEncodeAnchorAsPath (2026-07-25): the anchor is leading PATH segments —
+// "plugin ids are just another part of the path". The anchor is already a
+// slash-joined qualified grid id, so it drops straight in; tile ids follow.
+func TestEncodeAnchorAsPath(t *testing.T) {
+	cases := []struct {
+		in   State
+		want string
+	}{
+		{State{Anchor: "k3x9m2q/1", TileIDs: []string{"3", "4"}}, "/k3x9m2q/1/3/4"},
+		{State{Anchor: "k3x9m2q/1"}, "/k3x9m2q/1"},
+		// Chained remote anchor: each hop is one more leading segment.
+		{State{Anchor: "ssh4321/remote9/1", TileIDs: []string{"4", "7"}}, "/ssh4321/remote9/1/4/7"},
+		// Node grid: grid id 0 is a valid anchor grid segment.
+		{State{Anchor: "abc1234/0"}, "/abc1234/0"},
+		// Legacy 32-hex ids encode the same way.
+		{State{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
+			"/0123456789abcdef0123456789abcdef/1/5"},
+		// Viewport rides in the query as before.
+		{State{Anchor: "k3x9m2q/1", TileIDs: []string{"3"}, X: 5.5, Zoom: 1.5}, "/k3x9m2q/1/3?x=5.5&z=1.5"},
+	}
+	for _, c := range cases {
+		if got := Encode(c.in); got != c.want {
+			t.Errorf("Encode(%+v) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 
-// TestEncodeOmitsEmptyAnchor: the launcher start screen has no anchor, so no
-// `a=` param is emitted.
+// TestEncodeOmitsEmptyAnchor: home has no anchor segments — "/" is home.
 func TestEncodeOmitsEmptyAnchor(t *testing.T) {
 	if got := Encode(State{}); got != "/" {
 		t.Errorf("got %q, want /", got)
 	}
 }
 
-// TestAnchorRoundTrip: Encode then Decode preserves the anchor and path.
+// TestAnchorRoundTrip: Encode then Decode preserves the anchor and path, for
+// single and chained namespaces, both id shapes.
 func TestAnchorRoundTrip(t *testing.T) {
-	in := State{Anchor: "db-uuid/9", TileIDs: []string{"12", "7"}}
-	out, err := Decode(Encode(in))
+	cases := []State{
+		{Anchor: "k3x9m2q/9", TileIDs: []string{"12", "7"}},
+		{Anchor: "k3x9m2q/9"},
+		{Anchor: "ssh4321/remote9/1", TileIDs: []string{"4"}},
+		{Anchor: "abc1234/0"},
+		{Anchor: "0123456789abcdef0123456789abcdef/1", TileIDs: []string{"5"}},
+	}
+	for _, in := range cases {
+		out, err := Decode(Encode(in))
+		if err != nil {
+			t.Fatalf("Decode(Encode(%+v)): %v", in, err)
+		}
+		if out.Anchor != in.Anchor {
+			t.Errorf("anchor = %q, want %q", out.Anchor, in.Anchor)
+		}
+		if !reflect.DeepEqual(out.TileIDs, in.TileIDs) {
+			t.Errorf("tile ids = %v, want %v", out.TileIDs, in.TileIDs)
+		}
+	}
+}
+
+// TestDecodeLegacyAnchorQuery: the pre-2026-07-25 `?a=` form still decodes
+// (old bookmarks must keep resolving), but the path form wins when both are
+// present, and Encode never emits `a=` again.
+func TestDecodeLegacyAnchorQuery(t *testing.T) {
+	s, err := Decode("/3/4?a=fs-uuid%2F1")
 	if err != nil {
-		t.Fatalf("Decode: %v", err)
+		t.Fatal(err)
 	}
-	if out.Anchor != in.Anchor {
-		t.Errorf("anchor = %q, want %q", out.Anchor, in.Anchor)
+	if s.Anchor != "fs-uuid/1" {
+		t.Errorf("legacy anchor = %q, want fs-uuid/1", s.Anchor)
 	}
-	if !reflect.DeepEqual(out.TileIDs, in.TileIDs) {
-		t.Errorf("tile ids = %v, want %v", out.TileIDs, in.TileIDs)
+	if !reflect.DeepEqual(s.TileIDs, []string{"3", "4"}) {
+		t.Errorf("tile ids = %v", s.TileIDs)
+	}
+	// Path anchor beats a conflicting legacy query anchor.
+	s2, err := Decode("/k3x9m2q/1/3?a=other%2F9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s2.Anchor != "k3x9m2q/1" {
+		t.Errorf("path anchor should win: %q", s2.Anchor)
+	}
+	// Re-encoding a legacy decode yields the new form.
+	if got := Encode(s); got != "/fs-uuid/1/3/4" {
+		t.Errorf("re-encode of legacy = %q, want /fs-uuid/1/3/4", got)
+	}
+}
+
+// TestDecodeAnchorGrammarRejects: namespace segments with no grid id, and
+// non-numeric segments after the grid, are not Gridwell places.
+func TestDecodeAnchorGrammarRejects(t *testing.T) {
+	for _, raw := range []string{
+		"/k3x9m2q",       // namespace, no grid
+		"/foo/bar",       // two namespace segments, no grid
+		"/k3x9m2q/1/3/x", // non-numeric after the grid
+		"/k3x9m2q/1/x/3", // non-numeric mid-descent
+		"/a/b/c",         // namespace chain, never a grid
+	} {
+		if _, err := Decode(raw); err == nil {
+			t.Errorf("Decode(%q) accepted; want error", raw)
+		}
 	}
 }
 

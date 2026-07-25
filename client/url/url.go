@@ -1,17 +1,25 @@
 // Package url is the encoder/decoder for Gridwell's client URL state.
 //
-// URL shape:
+// URL shape (anchor-as-path since 2026-07-25 — the owner's "plugin ids are
+// just another part of the path"):
 //
-//	/                                root grid, default viewport
-//	/3/4/5                           descended through tiles 3, 4, 5
+//	/                                home, default viewport
+//	/3/4/5                           descended through tiles 3, 4, 5 (home)
+//	/k3x9m2q/1/3/4                   plugin k3x9m2q, grid 1, tiles 3, 4
+//	/ssh4321/remote9/1/4/7           chained remote anchor, then tiles
 //	/3/4/5?x=12.5&y=-3&z=1.5         grid leaf, viewport center + zoom
 //	/3/4/5/9                         file leaf (rendered mode)
 //	/3/4/5/9?c=24&r=10               file leaf in text mode, cursor
 //
-// The path segments are tile row ids in descent order from the user's
-// root grid. The trailing id may be a well-tile or a file-tile; the
-// caller resolves which by walking the ids against the cache after a
-// successful Decode.
+// The grammar has one rule: LEADING NON-NUMERIC segments are the anchor's
+// namespace chain (plugin/node ids — guaranteed non-numeric by config.Load
+// and store.NewShortID), the FIRST numeric segment is the anchor grid id,
+// and every following segment is a tile row id in descent order. No leading
+// non-numeric segment means the home anchor ("/" is home — the first
+// configured plugin's root grid, rpc.HomeGrid). The trailing tile id may be
+// a well-tile or a file-tile; the caller resolves which by walking the ids
+// against the cache after a successful Decode. The legacy `?a=<anchor>`
+// query form is still DECODED (old bookmarks) but never emitted.
 //
 // Presence of `c`/`r` (column / row, 0-indexed) implies "file is in
 // text mode with the cursor at this position". Absence means rendered
@@ -33,10 +41,11 @@ import (
 
 // State is the parsed/about-to-be-encoded URL state.
 type State struct {
-	// Anchor is the qualified grid id of the plugin root the pane currently
-	// sits inside ("<uuid>/<id>", chains for remote grids). Empty → the node
-	// grid, the landing page ("/" is home). TileIDs
-	// are the well descents within that plugin, relative to Anchor.
+	// Anchor is the qualified grid id the pane currently sits inside
+	// ("<plugin_id>/<grid>", chains for remote grids). Empty → HOME (the
+	// first configured plugin's root grid; "/" is home's URL — NOT the node
+	// grid). Encoded as leading path segments; TileIDs are the well descents
+	// within that namespace, relative to Anchor.
 	Anchor string
 
 	// TileIDs is the descent path of tile row ids. Empty means "anchor
@@ -142,8 +151,17 @@ func Encode(s State) string {
 		return "/?" + q.Encode()
 	}
 	var path strings.Builder
-	if len(s.TileIDs) == 0 {
+	// The anchor is path segments: it is already a slash-joined qualified
+	// grid id ("<ns>/.../<grid>"), so writing it verbatim yields exactly the
+	// namespace-chain-then-grid prefix the Decode grammar reads back.
+	if s.Anchor != "" {
 		path.WriteByte('/')
+		path.WriteString(s.Anchor)
+	}
+	if len(s.TileIDs) == 0 {
+		if s.Anchor == "" {
+			path.WriteByte('/')
+		}
 	} else {
 		for _, id := range s.TileIDs {
 			path.WriteByte('/')
@@ -154,9 +172,6 @@ func Encode(s State) string {
 	}
 
 	q := url.Values{}
-	if s.Anchor != "" {
-		q.Set("a", s.Anchor)
-	}
 	if s.CursorMode {
 		// Text mode: always emit c and r so presence can be detected
 		// even when both are zero.
@@ -182,9 +197,11 @@ func Encode(s State) string {
 	return path.String() + "?" + encoded
 }
 
-// Decode parses a path+query string back into a State. Recognizes the
-// `/g/<id>/<id>...` form; `/` (or empty) decodes to a root state.
-// Anything else is rejected.
+// Decode parses a path+query string back into a State. The grammar (see the
+// package comment): leading non-numeric segments are the anchor's namespace
+// chain, the first numeric segment is the anchor grid id, the rest are tile
+// ids; no non-numeric prefix means the home anchor. `/` (or empty) decodes to
+// a root state. Anything else is rejected.
 //
 // The leaf type (well vs file) is *not* resolved here — that requires
 // walking the cache. The `CursorMode` flag and `c`/`r` values are set
@@ -207,21 +224,47 @@ func Decode(raw string) (State, error) {
 			// Unknown URL shape; treat as root.
 			return State{}, errors.New("path does not start with /")
 		}
-		segs := strings.Split(pathPart[1:], "/")
-		ids := make([]string, 0, len(segs))
-		for _, seg := range segs {
-			if seg == "" {
-				continue // tolerate trailing slash
+		var segs []string
+		for seg := range strings.SplitSeq(pathPart[1:], "/") {
+			if seg != "" { // tolerate trailing/doubled slashes
+				segs = append(segs, seg)
 			}
-			// Validate that the segment is an integer (Gridwell URL
-			// detection), but return it as a string; the client
-			// qualifies with the localdb UUID after decoding.
+		}
+		// The anchor/path boundary: skip the leading non-numeric namespace
+		// segments; the first numeric segment is the anchor grid id.
+		first := 0
+		for first < len(segs) {
+			if _, err := strconv.ParseInt(segs[first], 10, 64); err == nil {
+				break
+			}
+			first++
+		}
+		var tileSegs []string
+		switch {
+		case first == 0:
+			// No namespace prefix: a bare tile path under the home anchor.
+			tileSegs = segs
+		case first == len(segs):
+			// Namespace segments with no grid id — not a Gridwell place
+			// (this also catches arbitrary external-looking paths).
+			return State{}, errors.New("namespace segments with no grid id")
+		default:
+			s.Anchor = strings.Join(segs[:first+1], "/")
+			tileSegs = segs[first+1:]
+		}
+		ids := make([]string, 0, len(tileSegs))
+		for _, seg := range tileSegs {
+			// Every descent segment must be an integer (Gridwell URL
+			// detection); returned as strings — the client qualifies them
+			// with the anchor's namespace after decoding.
 			if _, err := strconv.ParseInt(seg, 10, 64); err != nil {
 				return State{}, err
 			}
 			ids = append(ids, seg)
 		}
-		s.TileIDs = ids
+		if len(ids) > 0 {
+			s.TileIDs = ids
+		}
 	}
 
 	if queryPart == "" {
@@ -231,7 +274,9 @@ func Decode(raw string) (State, error) {
 	if err != nil {
 		return s, err
 	}
-	if v, ok := q["a"]; ok {
+	// Legacy anchor form (`?a=<qualified grid>`): still decoded so old
+	// bookmarks resolve; never emitted. The path form wins when both exist.
+	if v, ok := q["a"]; ok && s.Anchor == "" {
 		s.Anchor = v[0]
 	}
 	if v, ok := q["w"]; ok {

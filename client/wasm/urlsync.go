@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"slices"
+	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
@@ -107,9 +108,22 @@ func (a *App) scheduleURLUpdate() {
 // replaceURLNow encodes the focused pane's state and calls
 // history.replaceState. Idempotent; safe even when no user change has
 // happened.
+//
+// url.Encode rebuilds the query from scratch, so any param it doesn't know
+// is dropped on the first write — including the e2e harness gate. Preserve
+// `e2e=1` explicitly: without it, the FIRST replaceState de-instruments the
+// page and any spec that reloads mid-test loses the testhook (found by the
+// #193 reload spec; hook-gating.spec's assert was racing the debounce).
 func (a *App) replaceURLNow() {
 	state := a.encodeFocusedPaneURL()
 	raw := url.Encode(state)
+	if strings.Contains(js.Global().Get("location").Get("search").String(), "e2e=1") {
+		if strings.ContainsRune(raw, '?') {
+			raw += "&e2e=1"
+		} else {
+			raw += "?e2e=1"
+		}
+	}
 	js.Global().Get("history").Call("replaceState", nil, "", raw)
 }
 

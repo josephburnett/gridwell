@@ -28,6 +28,32 @@ test('boot lands on the first plugin with "/" as its URL', async ({ gw, window }
   expect(url, 'home keeps "/" as its URL (no a= anchor)').not.toContain('a=');
 });
 
+test('a plugin anchor rides in the URL path and survives a reload (issue #193)', async ({ gw, window }) => {
+  // 2026-07-25: the anchor is leading PATH segments — /<plugin-id>/<grid> —
+  // not an a= query param. The pane's qualified anchor drops verbatim into
+  // the path, and a reload decodes it back to the same place.
+  await gw.enterPlugin('second');
+  const before = await gw.focused();
+  expect(before.anchor, 'anchored inside the second plugin').not.toBe('');
+
+  // The URL update is debounced; poll for the settled form.
+  await expect
+    .poll(async () => window.evaluate(() => location.pathname + location.search))
+    .toContain('/' + before.anchor);
+  const url = await window.evaluate(() => location.pathname + location.search);
+  expect(url, 'no legacy a= anchor param').not.toContain('a=');
+
+  // Reload: the new-form URL must decode back into the same anchor.
+  await window.evaluate(() => location.reload());
+  await window.waitForFunction(() => (window as any).__gridwellTest !== undefined, null, {
+    timeout: 15_000,
+  });
+  await gw.waitIdle();
+  const after = await gw.focused();
+  expect(after.anchor, 'reload decoded the path anchor').toBe(before.anchor);
+  expect(after.gridID, 'landed on the same grid').toBe(before.gridID);
+});
+
 test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
   await gw.plugins();
   await gw.openPalette();

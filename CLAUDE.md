@@ -396,12 +396,18 @@ copy as links, and a solid well is refused (unimplemented) — there is no
 cross-plugin move (identity doesn't migrate; `DecideDrop` verdicts `DropLink`
 instead).
 
-**URL and path format.** A pane's URL is its ANCHOR (an `a=` query param
-naming the grid namespace the pane sits inside — absent for the node grid, so
-"/" is home) plus bare tile-id path segments within that namespace:
-`/3/4/5?a=<uuid>/1`. Crossing a plugin boundary is a PORTAL — the anchor
-swaps — so path ids never mix namespaces; a remote anchor is simply a chain
-(`a=<ssh>/<plugin>/1`). Two kinds of links:
+**URL and path format (2026-07-25: anchor-as-path).** A pane's URL is its
+ANCHOR — the qualified grid id it sits inside — as LEADING PATH SEGMENTS,
+then bare tile-id segments within that namespace: `/<plugin>/<grid>/3/4`
+(e.g. `/k3x9m2q/1/3/4`). The grammar has one rule: leading non-numeric
+segments are the namespace chain, the first numeric segment is the anchor
+grid id, the rest are tile ids — sound because plugin/node ids can never be
+purely numeric (short-id leading letter; `config.Load` enforces it). Home is
+the empty anchor, so "/" (and bare `/3/4`) is home. Crossing a plugin
+boundary is a PORTAL — the anchor swaps — so tile ids never mix namespaces;
+a remote anchor is simply more leading segments (`/<ssh>/<plugin>/1/4`).
+The legacy `?a=<anchor>` form still decodes (old bookmarks) but is never
+emitted. Two kinds of links:
 - **URL bar / bookmarks** — anchor + path + viewport. A *place*. The
   ascent-return target depends on it.
 - **Markdown embed links** — a single qualified id (`<plugin_uuid>/<tile_id>`).
