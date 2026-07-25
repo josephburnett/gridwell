@@ -425,6 +425,37 @@ func TestDecodeAnchorGrammarRejects(t *testing.T) {
 	}
 }
 
+// TestPushesEntry pins the one owner of "does this navigation deserve a
+// browser history entry" (issue #194): structural moves push, framing and
+// focus switches replace.
+func TestPushesEntry(t *testing.T) {
+	at := func(pane, ws, anchor, path string) Place {
+		return Place{PaneID: pane, Workspace: ws, Anchor: anchor, Path: path}
+	}
+	cases := []struct {
+		name       string
+		prev, next Place
+		seen       bool
+		want       bool
+	}{
+		{"first write after boot replaces", at("p1", "", "", ""), at("p1", "", "k/1", "3"), false, false},
+		{"framing-only change replaces", at("p1", "", "k/1", "3"), at("p1", "", "k/1", "3"), true, false},
+		{"descend pushes", at("p1", "", "k/1", ""), at("p1", "", "k/1", "3"), true, true},
+		{"ascend pushes", at("p1", "", "k/1", "3/4"), at("p1", "", "k/1", "3"), true, true},
+		{"portal (anchor swap) pushes", at("p1", "", "k/1", "3"), at("p1", "", "m/9", ""), true, true},
+		{"text descent pushes", at("p1", "", "k/1", "3"), at("p1", "", "k/1", "3/9"), true, true},
+		{"focus switch replaces", at("p1", "", "k/1", "3"), at("p2", "", "k/1", ""), true, false},
+		{"workspace enter pushes despite pane swap", at("p1", "", "k/1", ""), at("w-p1", "k/42", "", ""), true, true},
+		{"workspace exit pushes despite pane swap", at("w-p1", "k/42", "", ""), at("p1", "", "k/1", ""), true, true},
+		{"inside a workspace the URL is constant — replaces", at("w-p1", "k/42", "", ""), at("w-p2", "k/42", "", ""), true, false},
+	}
+	for _, c := range cases {
+		if got := PushesEntry(c.prev, c.next, c.seen); got != c.want {
+			t.Errorf("%s: PushesEntry = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 // TestWorkspaceURLRoundTrip: inside a workspace the pane tile is the WHOLE
 // place — `?w=<qualified tile id>` and nothing else (the interior is
 // server-owned by the layout blob; encoding a path/viewport alongside would

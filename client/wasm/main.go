@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
+	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/workspace"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -127,6 +128,16 @@ type App struct {
 	// wsPending coordinates an in-flight workspace descent (animation ×
 	// fetch); nil when none. thIdle reports busy while it exists.
 	wsPending *wsPending
+
+	// urlPrevPlace / urlPlaceSeen are the URL writer's push-vs-replace diff
+	// baseline: the structural place the last history write named (issue
+	// #194 — writeURLNow pushes only when the place changed structurally).
+	// urlRestoring marks an in-flight popstate restore, during which every
+	// write replaces (pushing would corrupt the stack being traversed).
+	// Owned by urlsync.go.
+	urlPrevPlace url.Place
+	urlPlaceSeen bool
+	urlRestoring bool
 
 	// caps is the host capability set (client/caps), derived ONCE at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks
@@ -674,6 +685,23 @@ func main() {
 		return nil
 	}))
 
+	// popstate: the browser back/forward traverses descend/ascend (issue
+	// #194 — writeURLNow pushes an entry per structural navigation). The
+	// flag and the target URL are captured HERE, synchronously: a pending
+	// debounced write firing after this callback returns must find the
+	// writer suppressed, or it clobbers the entry the browser just
+	// navigated to. The restore itself fetches, so it runs on a goroutine.
+	app.win.Call("addEventListener", "popstate", js.FuncOf(func(this js.Value, args []js.Value) any {
+		app.urlRestoring = true
+		loc := js.Global().Get("location")
+		raw := loc.Get("pathname").String()
+		if s := loc.Get("search").String(); s != "" {
+			raw += s
+		}
+		go app.restoreFromHistory(raw)
+		return nil
+	}))
+
 	app.installCanvasInput()
 	app.installWebviewListeners()
 	app.installShellMirror()
@@ -722,7 +750,7 @@ func (a *App) afterBootstrap() {
 	})
 	a.sched.urlUpdateCb = js.FuncOf(func(this js.Value, args []js.Value) any {
 		a.sched.urlUpdateScheduled = false
-		a.replaceURLNow()
+		a.writeURLNow()
 		return nil
 	})
 	a.sched.framingSaveCb = js.FuncOf(func(this js.Value, args []js.Value) any {

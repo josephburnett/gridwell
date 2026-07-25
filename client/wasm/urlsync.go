@@ -105,26 +105,113 @@ func (a *App) scheduleURLUpdate() {
 	js.Global().Call("setTimeout", a.sched.urlUpdateCb, urlUpdateDebounceMs)
 }
 
-// replaceURLNow encodes the focused pane's state and calls
-// history.replaceState. Idempotent; safe even when no user change has
-// happened.
+// writeURLNow encodes the focused pane's state and writes it to the browser
+// history — the ONE history writer. push-vs-replace is the tested
+// url.PushesEntry decision over the DIFF between this write's place and the
+// last one written (issue #194): structural navigation (descend / ascend /
+// portal / workspace boundary) pushes an entry so back traverses it; framing
+// changes and pane-focus switches replace in place. No call site carries a
+// "structural" bit — the intent is derived from state, so a forgotten flag
+// is unrepresentable. During a popstate restore (urlRestoring) every write
+// replaces: the restore re-encodes the place the browser already navigated
+// to, and pushing would corrupt the very stack being traversed.
 //
-// url.Encode rebuilds the query from scratch, so any param it doesn't know
-// is dropped on the first write — including the e2e harness gate. Preserve
-// `e2e=1` explicitly: without it, the FIRST replaceState de-instruments the
-// page and any spec that reloads mid-test loses the testhook (found by the
-// #193 reload spec; hook-gating.spec's assert was racing the debounce).
-func (a *App) replaceURLNow() {
-	state := a.encodeFocusedPaneURL()
-	raw := url.Encode(state)
-	if strings.Contains(js.Global().Get("location").Get("search").String(), "e2e=1") {
-		if strings.ContainsRune(raw, '?') {
-			raw += "&e2e=1"
-		} else {
-			raw += "?e2e=1"
-		}
+// Idempotent; safe even when no user change has happened.
+func (a *App) writeURLNow() {
+	// A restore in flight owns the URL: a write here would clobber the very
+	// entry the browser just navigated to with mid-restore pane state (the
+	// bug the forward half of web-history.spec caught). The restore's final
+	// step re-runs this with the flag down.
+	if a.urlRestoring {
+		return
 	}
-	js.Global().Get("history").Call("replaceState", nil, "", raw)
+	state := a.encodeFocusedPaneURL()
+	raw := a.withE2EParam(url.Encode(state))
+	var paneID string
+	if p := a.tree.FocusedPane(); p != nil {
+		paneID = p.ID
+	}
+	place := url.PlaceOf(paneID, state)
+	push := url.PushesEntry(a.urlPrevPlace, place, a.urlPlaceSeen)
+	a.urlPrevPlace = place
+	a.urlPlaceSeen = true
+	if push {
+		js.Global().Get("history").Call("pushState", nil, "", raw)
+	} else {
+		js.Global().Get("history").Call("replaceState", nil, "", raw)
+	}
+}
+
+// withE2EParam re-appends the e2e harness gate. url.Encode rebuilds the query
+// from scratch, so any param it doesn't know is dropped on the first write —
+// including `e2e=1`. Without this the FIRST write de-instruments the page and
+// any spec that reloads or history-navigates mid-test loses the testhook
+// (found by the #193 reload spec; hook-gating's assert was racing the
+// debounce).
+func (a *App) withE2EParam(raw string) string {
+	if !strings.Contains(js.Global().Get("location").Get("search").String(), "e2e=1") {
+		return raw
+	}
+	if strings.ContainsRune(raw, '?') {
+		return raw + "&e2e=1"
+	}
+	return raw + "?e2e=1"
+}
+
+// restoreFromHistory applies a browser back/forward (popstate): a
+// reload-equivalent restore of the focused pane at the URL the browser
+// navigated to. Runs on its own goroutine (fetches block). The session
+// scaffolding that a reload would lose — portal frames, the ascent stack,
+// live streams, selection — resets here too, deliberately: back is
+// navigation to a PLACE, and the place's truth (content, framing) is all
+// server-owned by now (#190), so what's dropped is only transient workspace
+// scaffolding, never data.
+// The caller (the popstate listener) has already set urlRestoring and
+// captured raw — both must happen SYNCHRONOUSLY in the event callback,
+// before any pending debounced write can fire and clobber the target
+// entry's URL.
+func (a *App) restoreFromHistory(raw string) {
+	// Leaving the current place: the same boundary flushes every other
+	// navigation performs (pending text + framing still in their debounce
+	// windows).
+	a.flushDirtyText()
+	a.flushFramingSave()
+
+	defer func() {
+		a.urlRestoring = false
+		// Re-seed the diff baseline at the restored place: seen=false makes
+		// the write a replace even if the restore truncated the path.
+		a.urlPlaceSeen = false
+		a.writeURLNow()
+	}()
+
+	// The popped URL names the WHOLE place. Interior workspace navigation
+	// never pushes entries (the URL is constant inside a workspace), so a
+	// popstate always crosses a place boundary — exit any workspace stack
+	// through its real exit path (layout flushes included) before restoring.
+	if n := a.ws.Depth(); n > 0 {
+		a.ascendWorkspaceLevels(n)
+	}
+
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	// Reload-equivalent per-pane reset: close live streams, drop the session
+	// stacks, and clear the pane's PLACE — applyURLState assumes a
+	// boot-fresh pane (its no-path branch never writes Path, because at boot
+	// there is nothing to overwrite), so a stale descent path would survive
+	// a restore to a shallower place.
+	a.menu.Close()
+	a.transition = nil
+	a.forgetPane(p.ID)
+	p.Up = nil
+	p.Path = nil
+	p.TextFocus = ""
+	p.TextMode = ""
+	a.refreshFileOverlay()
+
+	a.applyURLState(raw)
 }
 
 // encodeFocusedPaneURL builds a url.State from the focused pane.
@@ -188,6 +275,14 @@ func (a *App) applyURLOnBoot() {
 	if s := loc.Get("search").String(); s != "" {
 		raw += s
 	}
+	a.applyURLState(raw)
+}
+
+// applyURLState decodes raw and places the focused pane there — the
+// idempotent "decode a URL and go there" routine shared by boot and the
+// popstate restore (restoreFromHistory). See applyURLOnBoot for the
+// loose-input contract.
+func (a *App) applyURLState(raw string) {
 	state, err := url.Decode(raw)
 	if err != nil {
 		// Bad URL — drop to root.

@@ -306,6 +306,58 @@ func Decode(raw string) (State, error) {
 	return s, nil
 }
 
+// Place identifies the STRUCTURAL location a URL names — everything except
+// framing (viewport, cursor): which pane, which workspace, which anchor,
+// which descent path. Two URLs with equal Places differ only by framing.
+type Place struct {
+	PaneID    string
+	Workspace string
+	Anchor    string
+	Path      string
+}
+
+// PlaceOf derives the Place a State occupies for pane paneID.
+func PlaceOf(paneID string, s State) Place {
+	return Place{
+		PaneID:    paneID,
+		Workspace: s.Workspace,
+		Anchor:    s.Anchor,
+		Path:      strings.Join(s.TileIDs, "/"),
+	}
+}
+
+// SamePlace reports whether two Places name the same structural location
+// (pane identity aside — a focus switch changes PaneID but not where either
+// pane is).
+func SamePlace(a, b Place) bool {
+	return a.Workspace == b.Workspace && a.Anchor == b.Anchor && a.Path == b.Path
+}
+
+// PushesEntry decides pushState vs replaceState for the URL writer — the one
+// owner of "does this navigation deserve a browser history entry" (issue
+// #194: back/forward traverse descend/ascend, never pan/zoom):
+//
+//   - a framing-only change (same place) REPLACES — panning around is not
+//     navigation, and back must never undo a pan;
+//   - a place change in the SAME pane PUSHES — descend, ascend, portal, and
+//     text descents all move the pane somewhere else;
+//   - a workspace boundary PUSHES regardless of pane identity — entering or
+//     leaving a workspace swaps the whole tree (pane ids change with it),
+//     but it is exactly the kind of navigation back should traverse;
+//   - a pane FOCUS switch (different pane, same workspace) REPLACES — the
+//     user didn't go anywhere, the URL just tracks a different pane now;
+//   - the first write after boot REPLACES (seen=false) — boot restores a
+//     place, it doesn't navigate to one.
+func PushesEntry(prev, next Place, seen bool) bool {
+	if !seen || SamePlace(prev, next) {
+		return false
+	}
+	if next.Workspace != prev.Workspace {
+		return true
+	}
+	return next.PaneID == prev.PaneID
+}
+
 // trimFloat formats a float with `prec` decimals, then strips trailing
 // zeros and a trailing decimal point so the URL bar isn't cluttered
 // with "0.50" / "1.000".
