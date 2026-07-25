@@ -361,6 +361,10 @@ func (a *App) ensureFileToggle() {
 		}
 		return nil
 	}))
+	// Touch: the shared translation routes a long-press here as a right
+	// mousedown (ascend) and a tap as a left one (toggle) — without this
+	// the button was mouse-only and long-press did nothing (issue #191).
+	a.installOverlayTouch(btn, nil)
 	a.doc.Get("body").Call("appendChild", btn)
 	a.textToggleBtn = btn
 }

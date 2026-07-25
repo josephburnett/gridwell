@@ -134,13 +134,14 @@ type App struct {
 	caps caps.Caps
 
 	// touch is the touch→mouse gesture classifier (client/touchgest);
-	// touchTimerCb is its retained long-press timer callback; taTouchActive
-	// marks a multi-finger gesture engaged from the file textarea (its
-	// single-finger touches stay native). Owned by touch.go; nothing else
-	// feeds or reads them.
-	touch         *touchgest.Machine
-	touchTimerCb  js.Func
-	taTouchActive bool
+	// touchTimerCb is its retained long-press timer callback;
+	// touchDownTarget is the element the current gesture started on — where
+	// synthetic MouseDowns route, mirroring browser hit-testing for a real
+	// mouse (issue #191). Owned by touch.go; nothing else feeds or reads
+	// them.
+	touch           *touchgest.Machine
+	touchTimerCb    js.Func
+	touchDownTarget js.Value
 
 	// gridLoadFailed records grids whose last fetch returned non-200, so
 	// the renderer can show a meaningful message and we don't retry in

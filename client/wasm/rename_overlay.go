@@ -212,6 +212,10 @@ func (a *App) renamePillEl() js.Value {
 	})
 	pill.Call("addEventListener", "mousedown", a.renamePillClickCb)
 	pill.Call("addEventListener", "contextmenu", a.renamePillClickCb)
+	// Touch: the shared translation routes a long-press here as a right
+	// mousedown (pane zoom) and a tap as a left one (rename), matching the
+	// mouse semantics above (issue #191).
+	a.installOverlayTouch(pill, nil)
 	doc.Get("body").Call("appendChild", pill)
 	a.renamePill = pill
 	return pill

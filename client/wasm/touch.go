@@ -8,34 +8,94 @@ import (
 	"github.com/josephburnett/gridwell/client/touchgest"
 )
 
-// touch.go bridges touch-screen input to the canvas's existing mouse-driven
-// gesture pipeline. All classification (tap vs drag vs long-press-right vs
-// two-finger pinch/scroll/tap) lives in the pure client/touchgest machine;
-// this file only feeds it events and dispatches the synthetic MouseEvents /
-// WheelEvents it returns, so the input handlers need no touch-specific
-// branches and the whole policy is unit-tested without a browser.
+// touch.go bridges touch-screen input to the existing mouse-driven gesture
+// pipeline. All classification (tap vs drag vs long-press-right vs two-finger
+// pinch/scroll/tap) lives in the pure client/touchgest machine; this file only
+// feeds it events and dispatches the synthetic MouseEvents / WheelEvents it
+// returns, so the input handlers need no touch-specific branches and the whole
+// policy is unit-tested without a browser.
+//
+// ONE install (installOverlayTouch) serves every surface — the canvas AND the
+// DOM overlays that implement right-button semantics (the corner toggle
+// circle, the name pill, the xterm container, the file textarea). Real mouse
+// events reach those overlays by browser hit-testing; the touch translation
+// must follow the same routing or a long-press right-click never reaches them
+// (issue #191: the canvas-only install was exactly that gap — long-press on
+// the menu button of a text or shell descent did nothing).
 
 // installTouchInput wires touch→mouse translation on the canvas. touch-action
 // is set to none so the browser doesn't claim the gesture for scrolling/zoom
-// (which would swallow the touchmove stream), and the listeners are registered
-// non-passive so preventDefault both stops that browser handling and suppresses
-// the duplicate compatibility mouse events the browser would otherwise emit.
+// (which would swallow the touchmove stream).
 func (a *App) installTouchInput() {
 	a.touch = touchgest.New()
 	// One retained timer callback (js.Func allocations leak if made per
 	// press); armed blindly on every touchstart, and the machine ignores
 	// firings that don't land on a still-held press.
 	a.touchTimerCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		a.dispatchTouchActions(a.touch.Timer(js.Global().Get("performance").Call("now").Float()))
+		a.dispatchTouchActions(a.touch.Timer(touchNow()))
 		return nil
 	})
 	a.canvas.Get("style").Set("touchAction", "none")
+	a.installOverlayTouch(a.canvas, nil)
+}
+
+// touchNow returns the shared clock every machine feed uses. ONE time domain:
+// the long-press Timer compares against performance.now(), so the Start/Move/
+// End feeds must read the same clock — an event's own timeStamp is epoch-based
+// on some engines, which would put t0 in a different domain and silently kill
+// the long-press classification everywhere.
+func touchNow() float64 {
+	return js.Global().Get("performance").Call("now").Float()
+}
+
+// installOverlayTouch wires the shared touch→mouse translation onto el,
+// feeding the ONE touchgest machine. claim decides at touchstart whether this
+// element takes the gesture (nil claims everything): the textarea claims only
+// multi-finger so native caret/selection/keyboard keep single-finger; the
+// xterm container claims multi-finger plus a single finger starting on the
+// visible ascend circle, leaving the terminal's native touch alone. Once
+// claimed, the whole gesture tail is forwarded, per-finger lifts included.
+// The listeners are non-passive so preventDefault stops the browser's own
+// handling and its duplicate compatibility mouse events.
+func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point) bool) {
+	active := false
 	opts := js.Global().Get("Object").New()
 	opts.Set("passive", false)
-	a.canvas.Call("addEventListener", "touchstart", js.FuncOf(a.onTouchStart), opts)
-	a.canvas.Call("addEventListener", "touchmove", js.FuncOf(a.onTouchMove), opts)
-	a.canvas.Call("addEventListener", "touchend", js.FuncOf(a.onTouchEnd), opts)
-	a.canvas.Call("addEventListener", "touchcancel", js.FuncOf(a.onTouchEnd), opts)
+	handler := func(phase string) js.Func {
+		return js.FuncOf(func(_ js.Value, args []js.Value) any {
+			ev := args[0]
+			touches := ev.Get("touches")
+			pts := touchPoints(touches)
+			if !active {
+				if phase != "start" || (claim != nil && !claim(pts)) {
+					return nil
+				}
+				active = true
+				// MouseDown routes to THIS element for the rest of the
+				// gesture — the same routing the browser gives a real mouse.
+				a.touchDownTarget = el
+			}
+			ev.Call("preventDefault")
+			t := touchNow()
+			switch phase {
+			case "start":
+				a.dispatchTouchActions(a.touch.Start(pts, t))
+				js.Global().Call("setTimeout", a.touchTimerCb, int(touchgest.HoldMs)+5)
+			case "move":
+				a.dispatchTouchActions(a.touch.Move(pts, t))
+			default: // end / cancel
+				a.dispatchTouchActions(a.touch.End(pts, t))
+				if touches.Get("length").Int() == 0 {
+					active = false
+				}
+			}
+			return nil
+		})
+	}
+	el.Call("addEventListener", "touchstart", handler("start"), opts)
+	el.Call("addEventListener", "touchmove", handler("move"), opts)
+	el.Call("addEventListener", "touchend", handler("end"), opts)
+	el.Call("addEventListener", "touchcancel", handler("end"), opts)
 }
 
 // touchPoints converts a TouchList to touchgest points (clientX/Y — the same
@@ -50,17 +110,28 @@ func touchPoints(list js.Value) []touchgest.Point {
 	return pts
 }
 
-// dispatchTouchActions turns the machine's decisions into real DOM events at
-// the canvas so the normal mouse/wheel listeners handle them.
+// dispatchTouchActions turns the machine's decisions into real DOM events.
+// Routing mirrors the real-mouse flow:
+//   - MouseDown fires at the element the gesture started on (every overlay
+//     acts on mousedown: toggle/ascend, rename/zoom, xterm's forward) —
+//     EXCEPT the middle button, which has no element semantics anywhere and
+//     goes straight to the canvas (the ascend shortcut's owner).
+//   - MouseMove / MouseUp / Wheel fire at the canvas: once a mousedown armed
+//     a canvas gesture the overlay is parked and the drag tail belongs to
+//     the gesture pipeline, exactly as with a real mouse.
 func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 	for _, act := range actions {
 		switch act.Kind {
 		case touchgest.MouseDown:
-			a.dispatchMouse("mousedown", act.Pos.X, act.Pos.Y, act.Button, buttonsMask(act.Button))
+			target := a.touchDownTarget
+			if target.IsUndefined() || target.IsNull() || act.Button == 1 {
+				target = a.canvas
+			}
+			a.dispatchMouse(target, "mousedown", act.Pos.X, act.Pos.Y, act.Button, buttonsMask(act.Button))
 		case touchgest.MouseMove:
-			a.dispatchMouse("mousemove", act.Pos.X, act.Pos.Y, act.Button, buttonsMask(act.Button))
+			a.dispatchMouse(a.canvas, "mousemove", act.Pos.X, act.Pos.Y, act.Button, buttonsMask(act.Button))
 		case touchgest.MouseUp:
-			a.dispatchMouse("mouseup", act.Pos.X, act.Pos.Y, act.Button, 0)
+			a.dispatchMouse(a.canvas, "mouseup", act.Pos.X, act.Pos.Y, act.Button, 0)
 		case touchgest.Wheel:
 			a.dispatchWheel(act.Pos.X, act.Pos.Y, act.DeltaY)
 		}
@@ -80,9 +151,9 @@ func buttonsMask(button int) int {
 	}
 }
 
-// dispatchMouse builds and fires a synthetic MouseEvent at the canvas so the
+// dispatchMouse builds and fires a synthetic MouseEvent at target so its
 // normal mousedown/mousemove/mouseup listeners handle it.
-func (a *App) dispatchMouse(typ string, clientX, clientY float64, button, buttons int) {
+func (a *App) dispatchMouse(target js.Value, typ string, clientX, clientY float64, button, buttons int) {
 	init := js.Global().Get("Object").New()
 	init.Set("clientX", clientX)
 	init.Set("clientY", clientY)
@@ -91,7 +162,7 @@ func (a *App) dispatchMouse(typ string, clientX, clientY float64, button, button
 	init.Set("bubbles", true)
 	init.Set("cancelable", true)
 	ev := js.Global().Get("MouseEvent").New(typ, init)
-	a.canvas.Call("dispatchEvent", ev)
+	target.Call("dispatchEvent", ev)
 }
 
 // dispatchWheel fires a synthetic WheelEvent at the canvas so onWheel routes
@@ -108,72 +179,37 @@ func (a *App) dispatchWheel(clientX, clientY, deltaY float64) {
 	a.canvas.Call("dispatchEvent", ev)
 }
 
-// onTouchStart feeds the (new) full touch list to the machine and blindly
-// arms a long-press timer; the machine ignores stale firings, so the timer
-// never needs cancelling.
-func (a *App) onTouchStart(_ js.Value, args []js.Value) any {
-	ev := args[0]
-	ev.Call("preventDefault")
-	t := ev.Get("timeStamp").Float()
-	a.dispatchTouchActions(a.touch.Start(touchPoints(ev.Get("touches")), t))
-	js.Global().Call("setTimeout", a.touchTimerCb, int(touchgest.HoldMs)+5)
-	return nil
-}
-
-func (a *App) onTouchMove(_ js.Value, args []js.Value) any {
-	ev := args[0]
-	ev.Call("preventDefault")
-	a.dispatchTouchActions(a.touch.Move(touchPoints(ev.Get("touches")), ev.Get("timeStamp").Float()))
-	return nil
-}
-
-func (a *App) onTouchEnd(_ js.Value, args []js.Value) any {
-	ev := args[0]
-	ev.Call("preventDefault")
-	a.dispatchTouchActions(a.touch.End(touchPoints(ev.Get("touches")), ev.Get("timeStamp").Float()))
-	return nil
-}
-
 // installTextareaTouch forwards MULTI-finger touches from the file textarea
 // into the same gesture machine the canvas feeds, so two-finger tap (ascend)
 // and pinch work over a text descent — the touch analogue of the textarea's
-// mouse forwarding in file_overlay.go. Single-finger touches are left
+// mouse forwarding in text_overlay.go. Single-finger touches are left
 // entirely native (caret placement, text selection, OS keyboard); the machine
 // accepts a two-finger Start from idle for exactly this case.
 func (a *App) installTextareaTouch(ta js.Value) {
-	opts := js.Global().Get("Object").New()
-	opts.Set("passive", false)
-	handler := func(phase string) js.Func {
-		return js.FuncOf(func(this js.Value, args []js.Value) any {
-			ev := args[0]
-			touches := ev.Get("touches")
-			n := touches.Get("length").Int()
-			// Engage only for multi-finger; once engaged, keep forwarding
-			// through the tail of the gesture (per-finger lifts) so the
-			// machine sees the whole stream.
-			if !a.taTouchActive && n < 2 {
-				return nil
-			}
-			ev.Call("preventDefault")
-			t := ev.Get("timeStamp").Float()
-			pts := touchPoints(touches)
-			switch phase {
-			case "start":
-				a.taTouchActive = true
-				a.dispatchTouchActions(a.touch.Start(pts, t))
-			case "move":
-				a.dispatchTouchActions(a.touch.Move(pts, t))
-			default: // end / cancel
-				a.dispatchTouchActions(a.touch.End(pts, t))
-				if n == 0 {
-					a.taTouchActive = false
-				}
-			}
-			return nil
-		})
+	a.installOverlayTouch(ta, func(pts []touchgest.Point) bool {
+		return len(pts) >= 2
+	})
+}
+
+// shellTouchClaim builds the xterm container's claim: multi-finger gestures
+// (pinch, two-finger-tap ascend), plus a single finger starting on the
+// VISIBLE corner ascend circle — the menu button — so a long-press there
+// arms the same right-button ascend a mouse gets. Everything else stays
+// native to the terminal (tap-to-focus, xterm's own touch scrolling).
+func shellTouchClaim(circle js.Value) func(pts []touchgest.Point) bool {
+	return func(pts []touchgest.Point) bool {
+		if len(pts) >= 2 {
+			return true
+		}
+		if len(pts) != 1 {
+			return false
+		}
+		if circle.Get("style").Get("display").String() == "none" {
+			return false
+		}
+		r := circle.Call("getBoundingClientRect")
+		x, y := pts[0].X, pts[0].Y
+		return x >= r.Get("left").Float() && x <= r.Get("right").Float() &&
+			y >= r.Get("top").Float() && y <= r.Get("bottom").Float()
 	}
-	ta.Call("addEventListener", "touchstart", handler("start"), opts)
-	ta.Call("addEventListener", "touchmove", handler("move"), opts)
-	ta.Call("addEventListener", "touchend", handler("end"), opts)
-	ta.Call("addEventListener", "touchcancel", handler("end"), opts)
 }

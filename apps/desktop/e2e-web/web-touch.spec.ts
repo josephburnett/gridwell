@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from '../e2e/oracle';
-import { longPressDrag, pinch, twoFingerTap } from './touch';
+import { longPressDrag, longPressInPlace, pinch, twoFingerTap } from './touch';
 
 // Crosses the touch seam (client/touchgest → synthetic mouse/wheel events →
 // the untouched gesture engine): REAL TouchEvents injected over CDP must
@@ -57,6 +57,33 @@ test('touch: long-press-drag from the right edge splits the pane', async ({ gw, 
   await longPressDrag(window, { x: f.x + f.w - 5, y }, { x: f.x + f.w * 0.45, y });
   await gw.waitIdle();
   expect((await gw.panes()).length, 'long-press-drag split the pane').toBe(before + 1);
+});
+
+test('touch: long-press on the corner circle ascends a text descent (issue #191)', async ({ gw, window }) => {
+  // Inside a text descent the corner circle is a DOM overlay stacked above
+  // the canvas — a real finger targets the div, not the canvas. The shared
+  // overlay translation must classify the hold as a right mousedown AT the
+  // button (its listener ascends); before the fix the canvas-only install
+  // meant the press never reached touchgest and long-press did nothing.
+  await gw.enterPlugin('e2e');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  const pt = await gw.cellCenter(f.id, cx, cy);
+  await window.touchscreen.tap(pt.x, pt.y);
+  await gw.waitIdle();
+  let p = await gw.focused();
+  expect(p.textFocus, 'tap descended into the text tile').not.toBe('');
+
+  // The corner circle sits at the geometric plus center; the palette hook
+  // reports it for the focused pane in any mode.
+  const pal = await gw.palette();
+  await longPressInPlace(window, { x: pal.plusX, y: pal.plusY });
+  await gw.waitIdle();
+  p = await gw.focused();
+  expect(p.textFocus, 'long-press on the menu button ascended').toBe('');
 });
 
 test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, window }) => {

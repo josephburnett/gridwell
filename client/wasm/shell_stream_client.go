@@ -281,6 +281,12 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// on the focused pane.
 	circle := newShellCircle(doc)
 	container.Call("appendChild", circle)
+	// Touch: multi-finger gestures plus a single finger on the visible
+	// ascend circle feed the shared translation — a long-press on the
+	// corner circle becomes the right mousedown the capture listener
+	// forwards into the canvas ascend gesture (issue #191). Everything
+	// else stays native to the terminal.
+	a.installOverlayTouch(container, shellTouchClaim(circle))
 
 	loc := js.Global().Get("location")
 	proto := "ws:"
