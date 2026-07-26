@@ -42,6 +42,9 @@ const (
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
 	Gridwell_GetTileContent_FullMethodName    = "/gridwell.v1.Gridwell/GetTileContent"
 	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
+	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
+	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
+	Gridwell_PlaceTile_FullMethodName         = "/gridwell.v1.Gridwell/PlaceTile"
 	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
 	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
 	Gridwell_MoveTile_FullMethodName          = "/gridwell.v1.Gridwell/MoveTile"
@@ -81,6 +84,11 @@ type GridwellClient interface {
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
+	// ── Content streams (the one way content bytes move; see the messages) ────
+	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
+	WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error)
+	// PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
+	PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
@@ -230,6 +238,48 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewR
 	return out, nil
 }
 
+func (c *gridwellClient) ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[3], Gridwell_ReadContent_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadContentRequest, ContentChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gridwell_ReadContentClient = grpc.ServerStreamingClient[ContentChunk]
+
+func (c *gridwellClient) WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[4], Gridwell_WriteContent_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WriteContentRequest, TileResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gridwell_WriteContentClient = grpc.ClientStreamingClient[WriteContentRequest, TileResponse]
+
+func (c *gridwellClient) PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_PlaceTile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridwellClient) CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
@@ -352,7 +402,7 @@ func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSession
 
 func (c *gridwellClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[3], Gridwell_Subscribe_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[5], Gridwell_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -393,6 +443,11 @@ type GridwellServer interface {
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
 	GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
+	// ── Content streams (the one way content bytes move; see the messages) ────
+	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
+	WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error
+	// PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
+	PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error)
 	SetTile(context.Context, *SetTileRequest) (*TileResponse, error)
@@ -456,6 +511,15 @@ func (UnimplementedGridwellServer) GetTileContent(context.Context, *GetTileConte
 }
 func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
+}
+func (UnimplementedGridwellServer) ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error {
+	return status.Error(codes.Unimplemented, "method ReadContent not implemented")
+}
+func (UnimplementedGridwellServer) WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error {
+	return status.Error(codes.Unimplemented, "method WriteContent not implemented")
+}
+func (UnimplementedGridwellServer) PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PlaceTile not implemented")
 }
 func (UnimplementedGridwellServer) CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateTile not implemented")
@@ -664,6 +728,42 @@ func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).GetTilePreview(ctx, req.(*GetTilePreviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_ReadContent_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadContentRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GridwellServer).ReadContent(m, &grpc.GenericServerStream[ReadContentRequest, ContentChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gridwell_ReadContentServer = grpc.ServerStreamingServer[ContentChunk]
+
+func _Gridwell_WriteContent_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GridwellServer).WriteContent(&grpc.GenericServerStream[WriteContentRequest, TileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gridwell_WriteContentServer = grpc.ClientStreamingServer[WriteContentRequest, TileResponse]
+
+func _Gridwell_PlaceTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlaceTileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).PlaceTile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_PlaceTile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).PlaceTile(ctx, req.(*PlaceTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -931,6 +1031,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_GetTilePreview_Handler,
 		},
 		{
+			MethodName: "PlaceTile",
+			Handler:    _Gridwell_PlaceTile_Handler,
+		},
+		{
 			MethodName: "CreateTile",
 			Handler:    _Gridwell_CreateTile_Handler,
 		},
@@ -994,6 +1098,16 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "OpenShell",
 			Handler:       _Gridwell_OpenShell_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReadContent",
+			Handler:       _Gridwell_ReadContent_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WriteContent",
+			Handler:       _Gridwell_WriteContent_Handler,
 			ClientStreams: true,
 		},
 		{

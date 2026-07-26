@@ -265,6 +265,61 @@ message GetTileContentResponse {
   int64 version = 3;
 }
 
+// ─── Content streams (2026-07-26 redesign; interface-redesign-plan.md) ──────
+// ReadContent / WriteContent are the ONE way content bytes move: values —
+// finite, versioned, transactional — as opposed to OpenShell's live wire.
+// They replace GetTileContent, UpdateText, SetPaneLayout, and
+// CreateTileRequest.data (which coexist during the migration and are deleted
+// at contraction).
+
+// ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
+// the tile row version the bytes belong to (the client's save basis — bytes
+// and version are paired at the owner, never apart); later chunks carry data
+// only. On a leaf-link tile the serving node resolves through link_target_id
+// (the one resolution point — callers never reimplement link semantics).
+// Plugins whose bodies are not version-edited (fs, proc) send version 0.
+message ReadContentRequest {
+  string tile_id = 1;
+}
+message ContentChunk {
+  bytes data = 1;
+  string media_type = 2; // chunk 1 only
+  int64 version = 3;     // chunk 1 only
+}
+
+// WriteContent streams a tile's content bytes up. The first message binds
+// tile_id and claims the version (optimistic concurrency, checked against the
+// row before any byte is accepted); subsequent messages carry data only.
+// COMMIT AT CLOSE: the write is transactional — the new value becomes visible
+// only when the stream closes cleanly, and a broken stream leaves the old
+// value byte-for-byte intact. Version semantics are kind-determined in the
+// store's one table: a text body is a content edit (bumps version); a pane
+// layout is framing-class (never bumps). Not accepted on link tiles: content
+// ops write through the target the caller names explicitly.
+message WriteContentRequest {
+  string tile_id = 1;
+  int64 version = 2;
+  bytes data = 3;
+}
+
+// PlaceTile is the single placement writeback: placement is one fact,
+// (grid_id, x, y, w, h), and one verb owns it (replaces MoveTile + ResizeTile;
+// both coexist during migration). grid_id is the DESTINATION grid — same as
+// the tile's current grid for a pure resize. The server refuses overlap, and
+// refuses placing a well inside its own subtree by walking ancestors from
+// grid_id (a server-derived check; no client-supplied path). Placement never
+// crosses a plugin boundary (there is no cross-plugin move — link or clone
+// instead).
+message PlaceTileRequest {
+  string tile_id = 1;
+  int64 version = 2;
+  string grid_id = 3;
+  int64 x = 4;
+  int64 y = 5;
+  int64 w = 6;
+  int64 h = 7;
+}
+
 // GetTile reads a single tile's metadata. The server's preview + shell
 // infrastructure uses it to check a tile's kind without enumerating a grid.
 message GetTileRequest {
@@ -536,6 +591,13 @@ service Gridwell {
   rpc GetTile(GetTileRequest)               returns (TileResponse);
   rpc GetTileContent(GetTileContentRequest) returns (GetTileContentResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
+
+  // ── Content streams (the one way content bytes move; see the messages) ────
+  rpc ReadContent(ReadContentRequest)        returns (stream ContentChunk);
+  rpc WriteContent(stream WriteContentRequest) returns (TileResponse);
+
+  // PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
+  rpc PlaceTile(PlaceTileRequest) returns (TileResponse);
 
   // ── Mutations (one create, one writeback, plus placement) ─────────────────
   rpc CreateTile(CreateTileRequest) returns (TileResponse);
