@@ -86,11 +86,16 @@ persisted record shapes. Every field on `Grid`/`Tile` maps 1:1 to a column in
 
 | Group | Methods |
 |---|---|
-| Lifecycle | `Info`, `Probe`, `ListPlugins` |
-| Reads | `GetGrid`, `GetTile`, `GetTileContent`, `GetTilePreview` |
-| Mutations | `CreateTile`, `SetTile`, `MoveTile`, `CloneTile`, `ResizeTile`, `UpdateText`, `DeleteTile`, `SetTileAlt`, `Mount` |
-| Live bytes | `OpenShell` (PTY both ways), `GetSession`/`PutSession`, `ShellSessionAlive` |
+| Lifecycle | `Info`, `Probe`, `ListPlugins`, `SetRootView` |
+| Reads | `GetGrid`, `GetTile`, `GetTilePreview` |
+| Content bytes | `ReadContent` / `WriteContent` (values: versioned, commit-at-close; link-resolving reads) |
+| Mutations | `CreateTile` (metadata only), `SetTile` (framing/preview + rename + content_zoom, one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
+| Live bytes | `OpenShell` (PTY both ways — the one live wire), `ShellSessionAlive` |
 | Events | `Subscribe` |
+
+(2026-07-26 contraction: no request carries a descent `Path`; sessions and
+network context left the wire entirely — the Chromium session is host-local
+and live tiles browse from the host's network.)
 
 **The two fields that encode the guiding rule:**
 
@@ -138,8 +143,8 @@ plugin and translate ids at the boundary.
 browsers; `NodeHandler` wraps the same mux in h2c and routes raw gRPC to the
 **node export**, whose unary methods delegate straight to the connectHandler
 (`statusErr` maps Connect codes back to gRPC) and whose plugin-grade streams
-(`OpenShell`, `GetSession`, `PutSession`) route by the id in their first
-message. `Subscribe` shares the one fan-in body (`subscribe`). A remote
+(`OpenShell`, `WriteContent`) route by the id in their first message, and
+`ReadContent` resolves leaf links at the serving node (`contentRoute`). `Subscribe` shares the one fan-in body (`subscribe`). A remote
 mounter and a browser literally exercise the same routing code.
 
 **The one piece of real logic — and it's exemplary.** `qualifyTiles` sets
@@ -198,7 +203,7 @@ In `internal/store/tiles.go`, **two named helpers** split every mutation:
 | Helper | Used by | Bumps `version`? |
 |---|---|---|
 | `emitTileChanged` | `SetWellView`, `SetTextView` (framing: pan/zoom/scroll) | **No** |
-| `finishContentEdit` | `SetURLState`, `SetShellPreview`, `UpdateText` (content) | **Yes** |
+| `finishContentEdit` | `SetURLState`, `SetShellPreview`, `writeTextContent` (content) | **Yes** |
 
 `localdb.SetTile` dispatches on `tile.kind` to exactly one of these. Because the
 split lives in **one place**, "framing is not a content edit" (face #3 of the
@@ -464,9 +469,9 @@ all fixed. What remains (verified July 2026):
   containing tile: `savePluginRootViewBeforeAscent` writes the plugin's root
   view directly via `SetRootView` — same fact, no tile carrier. The
   round-trip is idempotent **iff** the copies agreed.
-- **Drop a tile.** Gesture → `CreateTile`/`MoveTile`/`CloneTile` with the descent
-  `Path` → server routes → store mutates → `Subscribe` event → `cache.Apply`
-  upserts → redraw. Across a plugin boundary there is no move (owner decision
+- **Drop a tile.** Gesture → `CreateTile`/`PlaceTile`/`CloneTile`, id-addressed
+  + version-claimed → server routes → store mutates → `Subscribe` event →
+  `cache.Apply` upserts → redraw. Across a plugin boundary there is no move (owner decision
   2026-07-19): a LEFT-drag verdicts `DropLink` at `DecideDrop` and commits a
   plain `CreateTile` carrying a qualified reference (`commitLinkDrop`: exit
   well for a well, `link_target_id` for a leaf; the source stays put); a
@@ -476,8 +481,8 @@ all fixed. What remains (verified July 2026):
 - **Pan / zoom.** Framing write → `SetTile` (well/text branch) → **no version
   bump** → event fans out → other panes' previews of the same tile update.
 - **Open a live URL tile.** Canvas places a rect; IPC asks the native layer for a
-  `WebContentsView` on the plugin partition; `syncURLViews` tracks its bounds
-  every frame and parks it during overlays.
+  `WebContentsView` on the ONE shared local partition (`persist:gridwell`);
+  `syncURLViews` tracks its bounds every frame and parks it during overlays.
 - **Enter a workspace (pane tile).** The THIRD descent verb: flush every
   outer leaf (the collapse path's flush — text saves, url/shell freeze,
   forgetPane), push a `client/workspace` frame (outer tree + origin pane +
@@ -486,8 +491,9 @@ all fixed. What remains (verified July 2026):
   `App.tree`. The bar (`client/wsbar`, reserved band like the notice strip)
   names the nesting and owns the way out: crumb k leaves workspace k and
   deeper. While inside, `draw()` arms a debounced persister that encodes the
-  live tree, hash-diffs, and posts `SetPaneLayout` (framing — never bumps
-  version) only on change; the URL is `?w=<tile id>` and nothing else.
+  live tree, hash-diffs, and posts the layout `WriteContent` (framing-class —
+  never bumps version) only on change; the URL is `?w=<tile id>` and nothing
+  else.
 - **Show the menu.** `menu.Open(paneID)` on the focused pane (the one owner —
   `client/menu`); native overlays park; canvas paints the menu on top. Closing
   goes through the same owner's transitions (focus change, ascent, gesture end).

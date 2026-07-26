@@ -16,7 +16,7 @@ import (
 // The name bubble — "name the room you're in" (issues #61, #118). The
 // focused pane always carries a small pill at its top-center naming whatever
 // is in the pane at that moment. LEFT-click opens the rename input when the
-// name is user-editable (Enter commits via SetTileAlt — a USER-owned name the
+// name is user-editable (Enter commits the versioned SetTile rename — a USER-owned name the
 // automatic captures never overwrite; Escape/blur cancels); read-only
 // contexts (the node grid, a plugin root, an ephemeral visit, a text tile's
 // derived name) just show their label. RIGHT-click toggles the tmux-style

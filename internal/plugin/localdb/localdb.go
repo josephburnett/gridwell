@@ -368,8 +368,8 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{TileID: req.TileId, Version: req.Version, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText, History: t.UrlHistory}))
 	case rpc.KindPane:
 		// Refused so the kind→operation mapping stays total: the layout blob
-		// rides its own verb (SetPaneLayout — path-free, framing-class).
-		return nil, status.Error(codes.InvalidArgument, "set: pane layout rides SetPaneLayout")
+		// rides the content door (WriteContent — framing-class for layouts).
+		return nil, status.Error(codes.InvalidArgument, "set: pane layout rides WriteContent")
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "set: unknown kind %q", t.Kind)
 	}

@@ -228,7 +228,7 @@ anything touching live tiles, panes, focus, previews, or the menu.
 | Gate | Runs | Sees | Run it when |
 |---|---|---|---|
 | `make check` | Go build+test, the `GOOS=js` wasm **build**, TS typecheck, `npm test` (main-process unit tests) | pure Go + pure TS logic. **Compiles `client/wasm` but executes none of it.** | every commit, always |
-| `make check-electron` | `npm run test:integration` + `test:bridge` + `test:session` under xvfb | the real Electron `WebContentsView` / PTY bridge / session partitions (cookie + localStorage round trips) | any change to the URL/shell live path, the bridge, `webviews.ts`, or `session.ts` |
+| `make check-electron` | `npm run test:integration` + `test:bridge` under xvfb | the real Electron `WebContentsView` / PTY bridge | any change to the URL/shell live path, the bridge, `webviews.ts`, or the shell IPC relay |
 | `make check-e2e` | Playwright drives the **real app** (Electron + Go sidecar) under xvfb | the full renderer→wasm→RPC→server→SQLite composition, as a black box | any `apps/desktop` change, the native layer, or a cross-seam behavior; pre-merge |
 | `make check-web` | Playwright drives `gridwell serve` + plain system Chromium, headless | the **browser-mode client** (no Electron bridge): caps gating, the no-live URL affordance, the touch gesture layer via real injected TouchEvents | any change to `client/caps`, `client/touchgest`, `touch.go`, the serve/boot path, or other capability-gated behavior |
 | `make check-federation` | the REAL binaries — `gridwell` init/serve, go-plugin subprocess spawn incl. `gridwell-ssh` — through a real ssh tunnel, headless, ~1s after build | the **spawn seam** no in-process test can see (the pluginmeta driver bug lived exactly there) | any change to plugin spawn, `sshdial`, the node export, or id routing |
@@ -418,12 +418,14 @@ emitted. Two kinds of links:
 
 Every Gridwell node — a local server, a plugin, a remote server reached over
 SSH — implements the **same single gRPC service**, defined once in
-`api/gridwell/v1/data.proto` and buf-generated. The client calls the local
-server; the local server calls plugins; an SSH gateway proxies to a remote
-server. Same wire protocol at every hop — **every byte crosses this interface**,
-including live shell PTY and the Chromium session blob. The proto is the single
-source of truth for *both* the wire types and the DB columns; a drift-lint test
-fails the build if `Grid`/`Tile` and `schema.go` diverge.
+`api/gridwell/v1/data.proto` and buf-generated (**reduced to 17 RPCs in the
+2026-07-26 redesign** — eleven owner decisions, recorded in the git history
+of `interface-redesign-plan.md`). The client calls the local server; the
+local server calls plugins; an SSH gateway proxies to a remote server. Same
+wire protocol at every hop — **every byte crosses this interface**, including
+the live shell PTY. The proto is the single source of truth for *both* the
+wire types and the DB columns; a drift-lint test fails the build if
+`Grid`/`Tile` and `schema.go` diverge.
 
 **Every plugin is a separately-compiled Hashicorp go-plugin binary** — including
 the localdb. The server spawns each binary named in `server.yaml` over go-plugin's
@@ -431,33 +433,62 @@ gRPC transport. There is no in-process plugin in production (the in-process path
 survives only as a test harness; its loader comment claiming otherwise is stale —
 `ARCHITECTURE.md §9`).
 
-The surface is orthogonal — one method per concept, not one per kind:
+**The whole contract for any caller is: qualified id, version claim,
+kind-dispatched semantics.** No request carries a descent path (the server
+derives location facts from rows it owns — the move-cycle refusal is a
+store-side ancestor walk), no session or network facts cross the wire, and
+there are exactly two byte-moving shapes: the content streams (values) and
+the shell wire (bytes in motion).
 
-- **Reads:** `GetGrid`, `GetTile`, `GetTileContent`, `GetTilePreview`.
-- **`CreateTile`** — one create for every primitive; `tile.kind` selects the
-  fields. A file/process/remote well is just a `well` tile with a cross-plugin
-  `child_grid_id`.
-- **`SetTile`** — one writeback for every framing/preview change. Pure framing
-  (`view_*`, text scroll) never bumps `version`; a content change (frozen
-  preview, url, title, text body) does. Face #3 of the primary rule, enforced in
-  one place.
-- **Placement mutations:** `MoveTile`, `CloneTile`, `ResizeTile`, `DeleteTile`.
+- **Reads:** `GetGrid`, `GetTile`, `GetTilePreview`.
+- **Content bytes:** `ReadContent` / `WriteContent` — the ONE way content
+  bytes move. Values: a read is finite and repeatable, chunk 1 pairing the
+  bytes with the row version they belong to (the save basis, never split); a
+  write claims a version and COMMITS AT CLOSE — a broken stream leaves the
+  old value byte-for-byte intact. Version semantics stay kind-determined in
+  the store's one table: a text body bumps; a pane layout is framing-class
+  and never does. `ReadContent` (and `GetTilePreview`) on a leaf link
+  resolves to the target AT THE SERVING NODE (`contentRoute` — one
+  resolution point every caller inherits); writes never resolve (a link owns
+  no content and the store refuses its row).
+- **`CreateTile`** — one create for every primitive, METADATA ONLY (a body
+  follows as a `WriteContent`; one way to write bytes). `tile.kind` selects
+  the fields; a file/process/remote well is just a `well` tile with a
+  cross-plugin `child_grid_id`.
+- **`SetTile`** — one writeback for framing/preview and the two absorbed
+  scalar operations, exactly one operation per call: the kind-dispatched
+  writeback (well/text framing never bumps `version`; url/shell freeze
+  does — face #3 of the primary rule, enforced in one place), `rename` (the
+  versioned user rename; latches `alt_user` so automatic captures defer),
+  or `content_zoom` (framing).
+- **`PlaceTile`** — the single placement writeback: placement is one fact,
+  `(grid_id, x, y, w, h)`, and one verb owns it (a move, a resize, or both
+  in one write). Plus `CloneTile` and `DeleteTile`.
 - **Lifecycle:** `Info` reports the plugin's kind, label, and **default root grid
   id** — the whole handshake; there is no `Attach`/`Detach`. `Probe` confirms a
   single tile's presence (a failed read must never sweep a tile — only `GONE`
-  does); `ListPlugins` enumerates a node's plugins.
-- **Live bytes:** `OpenShell` streams a PTY both ways; `GetSession`/`PutSession`
-  move the plugin's Chromium session blob.
+  does); `ListPlugins` enumerates a node's plugins. `SetRootView` persists a
+  plugin root's framing (the lone structural special case — roots have no
+  tile row).
+- **Live bytes:** `OpenShell` streams a PTY both ways — deliberately the ONE
+  live wire, PTY-shaped (`ShellSessionAlive` gates the refresh affordance).
+  A future live tile kind adds its own verb; there is no speculative
+  generic channel.
 - **Events:** `Subscribe` streams change events (localdb emits; fs/proc are
   polled via `GetGrid`).
 
-**The plugin is the session boundary.** Each plugin owns exactly one Chromium
-session (cookies + web storage), stored in its own DB and moved over the
-interface. When you enter a plugin's space the host pulls that blob down with
-`GetSession` and hydrates a dedicated Electron partition (`persist:plugin-<uuid>`);
-every live `url` tile in that plugin renders in a `WebContentsView` bound to that
-partition. On ascent the host flushes and writes the blob back with `PutSession`.
-Copy the plugin's DB and you copy its logins.
+**The Chromium session is host-local (owner decision 2026-07-26, reversing
+"the plugin is the session boundary").** Every live `url` tile — local or
+through a mount — renders on the ONE shared persistent Electron partition
+(`persist:gridwell`): your logins are your logins everywhere. Nothing about
+sessions or networks crosses the interface, and live tiles always browse
+from the host's own network (the tunnel SOCKS proxy is gone). Chromium's own
+disk persistence is the session's system of record — a documented exception
+to charter §7 alongside the split-pane session tree (machine-local state,
+like processes and files). The shell PTY transport is likewise host-side:
+the Electron main process dials the sidecar's node export and relays
+`OpenShell` per pane over IPC (`shellstreams.ts`); browsers get frozen shell
+previews, caps-gated like live url tiles.
 
 ---
 

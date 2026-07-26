@@ -510,7 +510,7 @@ func (a *App) workspaceBarClick(sx, sy float64, button int) bool {
 
 // openWorkspaceRenameInput opens the shared inline rename input over crumb
 // `level` — the same input the pane name bubble uses, committing via the
-// same user-owned SetTileAlt.
+// same user-owned versioned rename.
 func (a *App) openWorkspaceRenameInput(level int) {
 	f := a.ws.At(level)
 	if f == nil {

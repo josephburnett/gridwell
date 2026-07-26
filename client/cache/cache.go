@@ -23,7 +23,7 @@ type Cache struct {
 	mu    sync.Mutex
 	grids map[string]*Grid
 	// content holds text tile bodies keyed by tile id — the single text-body
-	// store. A body is fetched by tile id via GetTileContent (routable; blob ids
+	// store. A body is fetched by tile id via ReadContent (routable; blob ids
 	// are not) and written back for confirmed saves and for optimistic,
 	// not-yet-saved edits. Keying by tile id makes every write tile-scoped:
 	// editing one clone never touches a sibling's body.
@@ -61,7 +61,7 @@ func New() *Cache {
 }
 
 // PutFetchedContent stores a body read from the server, paired with the tile
-// row version the server read it under (GetTileContentResponse.version). The
+// row version the server read it under (ReadContent chunk-1 version). The
 // entry is clean: server truth, no local edits riding on it.
 //
 // A DIRTY entry is never replaced: the fetch raced local unsaved edits (a

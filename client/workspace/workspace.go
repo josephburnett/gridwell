@@ -33,9 +33,9 @@ type Frame struct {
 	// there on ascent.
 	OriginPane string
 	// TileID is the pane tile's qualified id — the owner of the layout blob
-	// and the routing handle for SetPaneLayout.
+	// and the routing handle for the layout WriteContent.
 	TileID string
-	// TileVersion is the OCC claim SetPaneLayout sends. Layout writes never
+	// TileVersion is the OCC claim the layout WriteContent sends. Layout writes never
 	// bump it; it moves only when something else edits the tile (rename).
 	TileVersion int64
 	// Name is the tile's display label at descent time (the bar's crumb).
