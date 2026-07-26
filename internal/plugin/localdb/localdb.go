@@ -205,6 +205,76 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	return tileResp(p.st.GetTile(ctx, req.TileId))
 }
 
+// contentChunkBytes is the ReadContent chunk size. Small enough to stream a
+// large body without one giant message, large enough that a typical text tile
+// is one chunk.
+const contentChunkBytes = 256 * 1024
+
+// ReadContent streams a tile's content bytes (2026-07-26 redesign). Chunk 1
+// carries media_type and the row version the bytes belong to — the caller's
+// save basis, paired with the bytes at the owner; later chunks carry data
+// only. Empty content still sends the one meta chunk so the version always
+// arrives.
+func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
+	data, mediaType, version, err := p.st.ReadContent(stream.Context(), req.TileId)
+	if err != nil {
+		return errToStatus(err)
+	}
+	first := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
+	if len(data) <= contentChunkBytes {
+		first.Data = data
+		return stream.Send(first)
+	}
+	first.Data = data[:contentChunkBytes]
+	if err := stream.Send(first); err != nil {
+		return err
+	}
+	for off := contentChunkBytes; off < len(data); off += contentChunkBytes {
+		end := min(off+contentChunkBytes, len(data))
+		if err := stream.Send(&gridwellv1.ContentChunk{Data: data[off:end]}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WriteContent assembles the client stream and commits ONCE, at clean close —
+// nothing is written until SendAndClose time, so a broken stream leaves the
+// old value byte-for-byte intact (commit-at-close; the store's WriteContent
+// is the one transactional door and owns the kind-dispatched version
+// semantics). The first message binds tile_id and claims the version;
+// accumulation is capped at the store's blob limit so an oversized stream
+// fails fast instead of buffering without bound.
+func (p *Plugin) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.WriteContentRequest, gridwellv1.TileResponse]) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return status.Error(codes.InvalidArgument, "write: empty stream")
+	}
+	tileID, version := first.TileId, first.Version
+	if tileID == "" {
+		return status.Error(codes.InvalidArgument, "write: first message must bind tile_id")
+	}
+	data := append([]byte(nil), first.Data...)
+	for {
+		msg, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err // broken stream: no commit, old value intact
+		}
+		data = append(data, msg.Data...)
+		if int64(len(data)) > store.MaxBlobBytes {
+			return status.Error(codes.InvalidArgument, "write: content too large")
+		}
+	}
+	tile, err := p.st.WriteContent(stream.Context(), tileID, version, data)
+	if err != nil {
+		return errToStatus(err)
+	}
+	return stream.SendAndClose(&gridwellv1.TileResponse{Tile: rpc.TileToProto(tile)})
+}
+
 // SetTileAlt stamps a tile's display label and returns the updated tile. The
 // wire RPC is the USER rename gesture (issue #61): it latches alt_user so the
 // automatic captures (url title, shell command) defer from then on. Text
@@ -317,10 +387,38 @@ func (p *Plugin) ResizeTile(ctx context.Context, req *gridwellv1.ResizeTileReque
 	return tileResp(p.st.ResizeTile(ctx, rpc.ResizeTileFromProto(req)))
 }
 
+// PlaceTile is the single placement writeback (2026-07-26 redesign): one verb
+// owns (grid, x, y, w, h); the store derives the well-into-own-subtree
+// refusal itself.
+func (p *Plugin) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.PlaceTile(ctx, rpc.PlaceTileFromProto(req)))
+}
+
 // SetTile is the single framing/preview writeback: tile.kind selects the one
 // store operation that kind supports, and that mapping fixes the version
 // semantics — well/text framing never bumps version, url/shell preview does.
+// 2026-07-26: it also carries the two absorbed scalar operations — rename
+// (the versioned user rename; latches alt_user) and content_zoom (framing) —
+// exactly ONE operation per call, refused otherwise, so the empty-fields-skip
+// rule never turns ambiguous.
 func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
+	if req.Rename != "" && req.ContentZoom != nil {
+		return nil, status.Error(codes.InvalidArgument, "set: one operation per call (rename OR content_zoom)")
+	}
+	if req.Rename != "" {
+		if req.Tile != nil {
+			return nil, status.Error(codes.InvalidArgument, "set: one operation per call (rename OR tile writeback)")
+		}
+		return tileResp(p.st.RenameTile(ctx, req.TileId, req.Version, req.Rename))
+	}
+	if req.ContentZoom != nil {
+		if req.Tile != nil {
+			return nil, status.Error(codes.InvalidArgument, "set: one operation per call (content_zoom OR tile writeback)")
+		}
+		return tileResp(p.st.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
+			TileID: req.TileId, Version: req.Version, ContentZoom: *req.ContentZoom,
+		}))
+	}
 	t := req.Tile
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "set: nil tile")
