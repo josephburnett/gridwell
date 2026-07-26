@@ -195,13 +195,13 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("ssh mount root = %q, want a chained <ssh>/<rnode>/0 id — did gridwell-ssh spawn?", sshRoot)
 	}
 
-	// 2. The remote node grid lists both remote plugins through the tunnel —
-	//    and its grid carries the TUNNEL's SOCKS endpoint (the NodeMount
-	//    Info override → transit stamp), the network context remote live
-	//    url tiles browse with (#24).
+	// 2. The remote node grid lists both remote plugins through the tunnel.
+	//    (No network context rides the grid anymore — 2026-07-26, owner
+	//    decision 2: live url tiles always browse from the host's network,
+	//    and the tunnel SOCKS proxy is gone.)
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
-	if pe, _ := ng["grid"].(map[string]any)["proxyEndpoint"].(string); !strings.HasPrefix(pe, "socks5://127.0.0.1:") {
-		t.Fatalf("transit grid proxyEndpoint = %q, want the local tunnel SOCKS", pe)
+	if pe, ok := ng["grid"].(map[string]any)["proxyEndpoint"]; ok && pe != "" {
+		t.Fatalf("transit grid still carries a proxyEndpoint %v — the network-context surface should be gone", pe)
 	}
 	tiles := ng["tiles"].([]any)
 	if len(tiles) != 2 {
@@ -263,35 +263,8 @@ func TestFederationSpawn(t *testing.T) {
 		t.Fatalf("content through the chain = %q", got)
 	}
 
-	// 5. The session boundary chains too (#56): PUT a blob for the REMOTE
-	//    'work' plugin through the LOCAL /session/ endpoint (chain =
-	//    "<ssh>/<plugin>"), then read it back BOTH through the chain and
-	//    directly on the remote — the remote plugin's DB is the one home.
-	sshUUID := strings.SplitN(sshRoot, "/", 2)[0]
-	workUUID := strings.SplitN(strings.SplitN(workChild, "/", 2)[1], "/", 2)[0]
-	chain := sshUUID + "/" + workUUID
-	blob := []byte(`[{"name":"login","value":"sekrit","domain":"example.com","path":"/"}]`)
-	putReq, _ := http.NewRequest(http.MethodPut, localOrigin+"/session/"+chain, bytes.NewReader(blob))
-	putResp, err := http.DefaultClient.Do(putReq)
-	if err != nil || putResp.StatusCode/100 != 2 {
-		t.Fatalf("PUT /session/%s: %v %v", chain, err, putResp)
-	}
-	putResp.Body.Close()
-	readBack := func(origin, key string) string {
-		r, err := http.Get(origin + "/session/" + key)
-		if err != nil || r.StatusCode != 200 {
-			t.Fatalf("GET /session/%s: %v %v", key, err, r)
-		}
-		defer r.Body.Close()
-		b, _ := io.ReadAll(r.Body)
-		return string(b)
-	}
-	if got := readBack(localOrigin, chain); got != string(blob) {
-		t.Fatalf("session through the chain = %q, want the stored blob", got)
-	}
-	if got := readBack(remoteOrigin, workUUID); got != string(blob) {
-		t.Fatalf("session on the REMOTE (direct) = %q — the blob did not land in the remote plugin's DB", got)
-	}
+	// (Step 5, the /session/ chain, is gone — 2026-07-26, owner decision 1:
+	// the Chromium session is host-local; no session blob crosses the wire.)
 
 	// 6. LIVE EVENTS cross the mount (the user-visible contract behind "things
 	//    stay as you left them" on a remote view): a write made DIRECTLY on the

@@ -151,19 +151,11 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 			if g.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, g.ScratchGridId)
 			}
-			// The transit hop's own tunnel proxy REPLACES whatever the remote
-			// stamped: page traffic must enter the tunnel where the USER is,
-			// so the outermost hop wins. (Multi-hop exits at the first remote
-			// — a documented limit; SOCKS-over-SOCKS chaining is out of scope.)
-			if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
-				g.ProxyEndpoint = proxyEndpointOf(info)
-			}
 		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
 			g.Writable = info.Writable
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			}
-			g.ProxyEndpoint = proxyEndpointOf(info)
 		}
 	}
 	return connect.NewResponse(&pb.GetGridResponse{
@@ -824,19 +816,6 @@ func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, hea
 	case events <- ev:
 	case <-ctx.Done():
 	}
-}
-
-// proxyEndpointOf flattens an Info's network context to the one wire string
-// the Electron layer feeds ses.setProxy ("socks5://host:port"); "" for
-// direct/unset (the host's own network).
-func proxyEndpointOf(info *pb.InfoResponse) string {
-	if info == nil || info.Network == nil {
-		return ""
-	}
-	if pe := info.Network.GetProxy(); pe != nil && pe.Address != "" {
-		return pe.Scheme + "://" + pe.Address
-	}
-	return ""
 }
 
 // isUnimplemented reports whether a gRPC/Connect error carries an Unimplemented

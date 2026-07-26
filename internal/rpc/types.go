@@ -217,10 +217,6 @@ type Grid struct {
 	// qualified for this receiver (chained through mounts); "" = none.
 	// Same stamping rule as Writable — the fact rides ON the grid.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
-	// ProxyEndpoint is the proxy this grid's live url tiles browse through
-	// ("socks5://host:port"; "" = the host's network). Outermost transit
-	// hop wins — see the proto.
-	ProxyEndpoint string `json:"proxy_endpoint,omitempty"`
 }
 
 // Tile is the persistent unit of content in a grid. Kind selects which subset

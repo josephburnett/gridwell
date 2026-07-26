@@ -48,12 +48,9 @@ message Grid {
   // qualified from the receiver's perspective (chained through mounts) —
   // same stamping rule as writable. "" when the plugin has none. Wire-only.
   string scratch_grid_id = 7;
-  // proxy_endpoint is the proxy this grid's live url tiles should browse
-  // through ("socks5://127.0.0.1:41234"; "" = the host's own network).
-  // Stamped from the owning plugin's Info.network for leaves; a TRANSIT hop
-  // REPLACES it with its own tunnel proxy — page traffic must enter the
-  // tunnel where the user is, so the outermost hop wins. Wire-only.
-  string proxy_endpoint = 8;
+  // 8 (proxy_endpoint): removed 2026-07-26 with the network-context surface
+  // (live url tiles always browse from the host's own network).
+  reserved 8;
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -143,19 +140,6 @@ message Tile {
 // remote server reached over SSH. The client talks to the local server;
 // the server routes to plugins; an SSH gateway transparently proxies.
 
-// NetworkContext declares how url tiles in this plugin reach the network.
-// Unset → url tiles are frozen-only (no live Chromium tab).
-message NetworkContext {
-  oneof via {
-    bool          direct = 1;   // use the host's own network stack
-    ProxyEndpoint proxy  = 2;   // route through a proxy (e.g. SOCKS5 over SSH)
-  }
-}
-message ProxyEndpoint {
-  string scheme  = 1;   // e.g. "socks5"
-  string address = 2;   // e.g. "127.0.0.1:41234"
-}
-
 // Info is the whole plugin handshake: a plugin loaded from server.yaml is
 // simply "there", so Info reports its identity AND its default root grid (the
 // grid the launcher descends into). There is no Attach/Detach — the gRPC
@@ -169,7 +153,7 @@ message InfoResponse {
   // root_grid_id is the plugin's default root (fs uses its configured root,
   // proc pid 1, localdb its singleton root). Click-enter descends here.
   string root_grid_id   = 5;
-  NetworkContext network = 6;  // how url tiles reach the net; unset → frozen-only
+  reserved 6; // network (NetworkContext): removed 2026-07-26 — host network always
   bool   has_session    = 7;   // GetSession/PutSession meaningful
   // scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
   // ("descend into a url" without placing a tile). Never rendered, never

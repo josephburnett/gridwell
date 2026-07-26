@@ -132,9 +132,6 @@ export interface PlaceArgs {
   objectId: string;
   url: string;
   bounds: Bounds;
-  // proxyEndpoint is the grid-stamped network context for this tile's plugin
-  // ("socks5://host:port" through a node mount; "" = direct).
-  proxyEndpoint?: string;
   // contentZoom is the tile's persisted USER content zoom (issue #82),
   // composed with the min-width layout zoom. 0/absent = 1.0.
   contentZoom?: number;

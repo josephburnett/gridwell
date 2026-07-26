@@ -27,7 +27,6 @@ import {
   renderProcessGoneMessage,
   ERR_ABORTED,
   rendererLogLine,
-  proxyRulesFor,
 } from './viewutil';
 
 test('SESSION_PARTITION is persistent and shared by all tiles', () => {
@@ -253,13 +252,6 @@ test('rendererLogLine forwards warnings and errors only, with a level prefix', (
   assert.equal(rendererLogLine(1, 'info chatter'), null);
   assert.equal(rendererLogLine(2, 'gridwell: [conflict:UpdateText] reloaded'), '[renderer:warning] gridwell: [conflict:UpdateText] reloaded');
   assert.equal(rendererLogLine(3, 'gridwell: [rpc:MoveTile] MoveTile failed: x'), '[renderer:error] gridwell: [rpc:MoveTile] MoveTile failed: x');
-});
-
-test('proxyRulesFor accepts a socks5 endpoint and rejects garbage', () => {
-  assert.equal(proxyRulesFor('socks5://127.0.0.1:41234'), 'socks5://127.0.0.1:41234');
-  assert.equal(proxyRulesFor(''), '');
-  assert.equal(proxyRulesFor('http://evil/ '), '');
-  assert.equal(proxyRulesFor('socks5://a b'), '');
 });
 
 test('serializeHistory strips pageState, caps around the active index, rebases', () => {

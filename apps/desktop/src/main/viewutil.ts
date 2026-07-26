@@ -9,13 +9,6 @@ import type { Bounds } from './ipc';
 // The `persist:` prefix makes it durable on disk across app restarts.
 export const SESSION_PARTITION = 'persist:gridwell';
 
-// proxyRulesFor maps a grid-stamped proxy endpoint ("socks5://host:port")
-// to Chromium's proxyRules string, or "" for direct/unset/garbage — a bad
-// endpoint must degrade to the host network, never break page loads.
-export function proxyRulesFor(proxyEndpoint: string): string {
-  if (!/^socks5:\/\/[^\s/]+$/.test(proxyEndpoint)) return '';
-  return proxyEndpoint;
-}
 
 
 // sanitizeUserAgent strips the two tokens that mark Chromium's default UA as a

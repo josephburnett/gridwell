@@ -18,7 +18,6 @@ import {
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
-  proxyRulesFor,
   cookieDomainMatches,
   storageOriginsFor,
   zoomChordKey,
