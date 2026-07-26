@@ -16,20 +16,24 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   await gw.enterPlugin('localdb');
   const panesBefore = (await gw.panes()).length;
 
-  // A live ephemeral visit to the local origin.
-  const wcBefore = await electronApp.evaluate(
-    ({ webContents }) => webContents.getAllWebContents().length,
-  );
+  // A live ephemeral visit to the local origin. Poll for the NAVIGATED
+  // view, not a webContents count: the count grows at view creation, before
+  // loadURL lands (the old count-poll rode the session-hydrate await that
+  // place() no longer performs — one local session, 2026-07-26).
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?src=page`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
   await expect
-    .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
-      timeout: 15_000,
-    })
-    .toBeGreaterThan(wcBefore);
+    .poll(
+      () =>
+        electronApp.evaluate(({ webContents }) =>
+          webContents.getAllWebContents().some((w) => w.getURL().includes('src=page')),
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 
   // The page opens a link the way target=_blank / ctrl-click would.
   await electronApp.evaluate(async ({ webContents }, org: string) => {
