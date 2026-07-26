@@ -13,19 +13,24 @@ test('clear site data wipes this site and spares others', async ({
   gw,
 }) => {
   await gw.enterPlugin('localdb');
-  const wcBefore = await electronApp.evaluate(
-    ({ webContents }) => webContents.getAllWebContents().length,
-  );
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?site=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
+  // Poll for the NAVIGATED view, not a webContents count: the count grows at
+  // view creation, before loadURL lands, and the old count-poll only stayed
+  // ahead of that race by riding the session-hydrate await that place() no
+  // longer performs (one host-local session, 2026-07-26).
   await expect
-    .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
-      timeout: 15_000,
-    })
-    .toBeGreaterThan(wcBefore);
+    .poll(
+      () =>
+        electronApp.evaluate(({ webContents }) =>
+          webContents.getAllWebContents().some((w) => w.getURL().includes('site=1')),
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   const paneId = (await gw.focused()).id;
 
   // Seed: a cookie + localStorage on THIS site (in-page), and a cookie for an

@@ -132,11 +132,6 @@ export interface PlaceArgs {
   objectId: string;
   url: string;
   bounds: Bounds;
-  // pluginUuid is the uuid of the plugin that owns the tile — the session
-  // boundary. It selects the Electron partition (persist:plugin-<uuid>) so url
-  // tiles in different plugins get isolated cookie jars / web storage. Empty
-  // falls back to the shared partition.
-  pluginUuid: string;
   // proxyEndpoint is the grid-stamped network context for this tile's plugin
   // ("socks5://host:port" through a node mount; "" = direct).
   proxyEndpoint?: string;

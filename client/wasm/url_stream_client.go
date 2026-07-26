@@ -132,18 +132,10 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	b := contentViewBounds(r)
 	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, t.URLString)
-	// The plugin that owns the tile is the session boundary: its namespace
-	// chain selects the Electron partition, so url tiles in different plugins
-	// get isolated cookie jars / web storage. The grid carries the network
-	// context (a remote plugin's tiles browse through the tunnel SOCKS).
-	proxyEndpoint := ""
-	if g, ok := a.c.Grid(t.GridID); ok {
-		proxyEndpoint = g.Meta.ProxyEndpoint
-	}
 	// The native name bubble is born with its label — a post-place push can
 	// race entry creation and be dropped (issue #118).
 	label, _, _ := a.bubbleLabel(p)
-	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, pluginUUIDOf(t.ID), proxyEndpoint, contentZoomOf(&t), t.URLHistory, a.bubbleDecorate(p, label))
+	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, contentZoomOf(&t), t.URLHistory, a.bubbleDecorate(p, label))
 	a.draw()
 }
 

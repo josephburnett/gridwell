@@ -181,11 +181,8 @@ func (s *Server) routes() {
 	// etc.); not RPC.
 	s.mux.HandleFunc("/preview/tile/", s.previewTile)
 
-	// Per-plugin Chromium session blob, for the Electron host to hydrate /
-	// dehydrate a partition. Plain HTTP (GET/PUT) so the main process uses a
-	// simple fetch; the handler routes to the owning plugin's GetSession /
-	// PutSession streams.
-	s.mux.HandleFunc("/session/", s.sessionBlob)
+	// (The /session/ door is gone — 2026-07-26: the Chromium session is
+	// host-local; nothing hydrates or dehydrates a plugin session blob.)
 
 	if s.cfg.StaticDir != "" {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticDir))

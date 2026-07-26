@@ -9,14 +9,13 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "npm run build && electron .",
-    "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts src/main/contextmenu.test.ts src/main/gesture-threshold.test.ts src/main/userdata.test.ts src/main/sidecar-messages.test.ts src/main/sidecar.test.ts src/main/session.test.ts src/main/shellstreams.test.ts e2e/homes.test.ts",
+    "test": "node --test --import tsx src/main/lines.test.ts src/main/viewutil.test.ts src/main/contextmenu.test.ts src/main/gesture-threshold.test.ts src/main/userdata.test.ts src/main/sidecar-messages.test.ts src/main/sidecar.test.ts src/main/shellstreams.test.ts e2e/homes.test.ts",
     "test:integration": "npm run build && xvfb-run -a electron dist/harness/capture-harness.js",
     "test:bridge": "npm run build && xvfb-run -a electron dist/harness/bridge-harness.js",
     "test:e2e": "playwright test",
     "test:e2e:web": "playwright test -c playwright.web.config.ts",
     "dist": "npm run build && electron-builder",
-    "dist:dir": "npm run build && electron-builder --dir",
-    "test:session": "npm run build && xvfb-run -a electron dist/harness/session-harness.js"
+    "dist:dir": "npm run build && electron-builder --dir"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

@@ -87,7 +87,7 @@ check: fmt-check
 # they exercise the real Electron WebContentsView / PTY bridge. Requires xvfb +
 # a prior `make vendor` for node_modules.
 check-electron: node-modules
-	cd $(DESKTOP) && npm run test:integration && npm run test:bridge && npm run test:session
+	cd $(DESKTOP) && npm run test:integration && npm run test:bridge
 
 # check-e2e drives the REAL Electron app end to end: Playwright launches the same
 # `electron .` as `make launch` (which spawns the Go sidecar), points it at a

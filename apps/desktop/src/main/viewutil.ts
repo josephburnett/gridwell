@@ -9,13 +9,6 @@ import type { Bounds } from './ipc';
 // The `persist:` prefix makes it durable on disk across app restarts.
 export const SESSION_PARTITION = 'persist:gridwell';
 
-// partitionFor returns the durable partition for a plugin's session key:
-// each key gets its own (persist:plugin-<key>). The plugin is the session
-// boundary; through a node mount the key is the namespace CHAIN
-// ("ssh1/rp1"), so each REMOTE plugin gets its own partition too. Slashes
-// are flattened to dashes — Chromium partition names are plain strings, and
-// the flattening cannot collide because uuids contain no dashes. An empty
-// key falls back to the shared partition.
 // proxyRulesFor maps a grid-stamped proxy endpoint ("socks5://host:port")
 // to Chromium's proxyRules string, or "" for direct/unset/garbage — a bad
 // endpoint must degrade to the host network, never break page loads.
@@ -24,9 +17,6 @@ export function proxyRulesFor(proxyEndpoint: string): string {
   return proxyEndpoint;
 }
 
-export function partitionFor(pluginUuid: string): string {
-  return pluginUuid ? `persist:plugin-${pluginUuid.replaceAll('/', '-')}` : SESSION_PARTITION;
-}
 
 // sanitizeUserAgent strips the two tokens that mark Chromium's default UA as a
 // non-browser embedding — `Electron/<ver>` and the app's own `<AppName>/<ver>` —

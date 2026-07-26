@@ -4,7 +4,6 @@ package main
 
 import (
 	"encoding/base64"
-	"github.com/josephburnett/gridwell/internal/rpc"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -50,10 +49,9 @@ func (b viewBounds) toJS() js.Value {
 }
 
 // bridgePlace asks main to create/attach a WebContentsView for paneID showing
-// url at bounds, bound to the owning plugin's session partition (pluginUUID is
-// the session boundary). proxyEndpoint ("" = direct) is the grid-stamped
-// network context — a remote plugin's tiles browse through the tunnel SOCKS.
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, pluginUUID, proxyEndpoint string, contentZoom float64, history, nameLabel string) {
+// url at bounds. Every live view shares the ONE host-local session (owner
+// decision 2026-07-26 — there is no per-plugin partition or session key).
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, contentZoom float64, history, nameLabel string) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -64,23 +62,10 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("objectId", objectID)
 	args.Set("url", url)
 	args.Set("bounds", b.toJS())
-	args.Set("pluginUuid", pluginUUID)
-	args.Set("proxyEndpoint", proxyEndpoint)
 	args.Set("contentZoom", contentZoom)
 	args.Set("history", history)
 	args.Set("nameLabel", nameLabel)
 	g.Call("placeWebview", args)
-}
-
-// pluginUUIDOf returns the SESSION KEY for a qualified tile id: the id's
-// namespace chain (everything before the last segment — rpc.NamespaceOf).
-// The plugin is the session boundary even through a node mount, so a local
-// tile "uuid/7" keys to "uuid" and a remote tile "ssh1/rp1/7" keys to
-// "ssh1/rp1" — per REMOTE plugin, not per mount. The Electron side derives
-// the partition name from it and addresses GET/PUT /session/<chain>, which
-// routes one segment per hop.
-func pluginUUIDOf(qualifiedTileID string) string {
-	return rpc.NamespaceOf(qualifiedTileID)
 }
 
 // bridgeSetBounds repositions/resizes the view for paneID.

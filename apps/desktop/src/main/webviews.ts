@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, ZoomKeyEvent } from './ipc';
 import {
   SESSION_PARTITION,
-  partitionFor,
   roundBounds,
   boundsEqual,
   controlVisible,
@@ -25,7 +24,6 @@ import {
   zoomChordKey,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
-import { hydratePartition, dehydratePartition } from './session';
 import { captureJpegBase64 } from './capture';
 
 // urlViewPreload is the script injected into every live URL view; it forwards
@@ -48,13 +46,6 @@ interface Entry {
   // content but drop the circle, so the menu/ascend handle is on exactly one
   // pane at a time.
   focused: boolean;
-  // partition is the Electron session partition this view is bound to — the
-  // owning plugin's (persist:plugin-<uuid>). A pane re-targeted at a tile in a
-  // different plugin must tear down rather than cross sessions.
-  partition: string;
-  // pluginUuid owns the tile (the session boundary); used to dehydrate the
-  // session back to the plugin DB on ascent.
-  pluginUuid: string;
   // userZoom is the tile's persisted content zoom (issue #82); composed with
   // the min-width layout zoom in applyMinWidthZoom. 0 = unset (1.0).
   userZoom: number;
@@ -184,9 +175,6 @@ export class WebviewRegistry {
   private readonly cb: RegistryCallbacks;
   private readonly origin: string;
   private readonly entries = new Map<string, Entry>();
-  // hydrated tracks which per-plugin partitions have had their session pulled
-  // down from the plugin DB this run, so we hydrate each at most once.
-  private readonly hydrated = new Set<string>();
   // _globalHidden is the registry's single copy of "are all views currently
   // parked for a gesture/modal" — the last value seen by setHidden. A new view
   // placed while this is true starts parked rather than landing over an open
@@ -297,34 +285,20 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, pluginUuid: string, proxyEndpoint = '', contentZoom = 0, history = '', nameLabel = ''): Promise<void> {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', nameLabel = ''): Promise<void> {
     const rounded = roundBounds(bounds);
-    const partition = partitionFor(pluginUuid);
+    // ONE host-local session (owner decision 2026-07-26): every live url
+    // tile, local or through a mount, browses on the shared persistent
+    // partition — your own logins everywhere. The per-plugin partitions and
+    // their hydrate/dehydrate choreography are gone.
+    const partition = SESSION_PARTITION;
     let e = this.entries.get(paneId);
 
-    if (e && (e.objectId !== objectId || e.partition !== partition)) {
-      // Different tile (or a tile in a different plugin → different session) in
-      // the same pane — tear the old view down first so we don't leak a view or
-      // cross sessions.
+    if (e && e.objectId !== objectId) {
+      // A different tile in the same pane — tear the old view down first so
+      // we don't leak a view.
       this.remove(paneId).catch(() => {});
       e = undefined;
-    }
-
-    // Pull the plugin's session down into its partition before the first view
-    // for it loads, so url tiles open already logged in — and point the
-    // partition at the grid-stamped proxy (a remote plugin's tiles browse
-    // through the tunnel SOCKS, exiting on the remote's network). Once per
-    // partition; the endpoint is stable for a plugin's lifetime (the ssh
-    // process mints it at spawn).
-    if (pluginUuid && !this.hydrated.has(partition)) {
-      this.hydrated.add(partition);
-      const rules = proxyRulesFor(proxyEndpoint);
-      if (rules) {
-        await session.fromPartition(partition).setProxy({ proxyRules: rules });
-      }
-      await hydratePartition(this.origin, pluginUuid, (message) =>
-        this.cb.onError?.({ source: 'electron:session', message }),
-      );
     }
 
     if (!e) {
@@ -397,7 +371,7 @@ export class WebviewRegistry {
         webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
       });
       const startHidden = this._globalHidden;
-      e = { view, control, namePill, nameLabel, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, partition, pluginUuid, userZoom: contentZoom, lastUserClickMs: 0 };
+      e = { view, control, namePill, nameLabel, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0 };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -635,29 +609,19 @@ export class WebviewRegistry {
     if (!e) return { jpegBase64: '', url: '', title: '', history: '' };
     this.entries.delete(paneId);
 
-    // The DURABLE work first, on the partition handle — the session outlives
-    // the view, so this succeeds even when the renderer is crashed/destroyed.
-    // Ordering matters: the preview reads below throw on a dead view, and
-    // when they ran first their throw skipped the flush + dehydrate — the
-    // only write path that persists this run's logins/drafts to the plugin
-    // DB (the system of record). The loss surfaced only as "preview not
-    // updated" while the real casualty was the session.
+    // Commit DOM storage (localStorage) to the persistent partition BEFORE
+    // the renderer is closed. Chromium writes cookies eagerly but flushes
+    // localStorage lazily, so an abrupt webContents.close() can drop recent
+    // localStorage writes — which is exactly where GitLab autosaves an
+    // unsubmitted comment draft. Flushing here is what makes that draft
+    // survive ascend → descend → go-live. (The session itself is host-local
+    // now — Chromium's own disk persistence is the system of record; there
+    // is no dehydrate.)
     try {
-      // Commit DOM storage (localStorage) to the persistent partition BEFORE
-      // the renderer is closed. Chromium writes cookies eagerly but flushes
-      // localStorage lazily, so an abrupt webContents.close() can drop recent
-      // localStorage writes — which is exactly where GitLab autosaves an
-      // unsubmitted comment draft. Flushing here is what makes that draft
-      // survive ascend → descend → go-live.
-      session.fromPartition(e.partition).flushStorageData();
+      session.fromPartition(SESSION_PARTITION).flushStorageData();
     } catch {
-      // dehydratePartition flushes again itself and reports its own errors.
+      // Best-effort: the durable partition flushes on quit regardless.
     }
-    // Capture the plugin's session back to its DB on ascent — fire-and-forget
-    // so teardown isn't blocked on the network.
-    void dehydratePartition(this.origin, e.pluginUuid, (message) =>
-      this.cb.onError?.({ source: 'electron:session', message }),
-    );
 
     let jpegBase64 = '';
     let url = '';
