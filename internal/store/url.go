@@ -78,28 +78,38 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 // alt_user so it is owned by the user from then on; user=false is an
 // automatic capture (the shell detach path baking in the tmux foreground
 // command) — it silently no-ops once the user owns the name (no write, no
-// version bump). Bumps the tile's version when it writes.
+// version bump). Bumps the tile's version when it writes. The versioned user
+// rename on the wire is RenameTile (content.go), which shares setAltTx so
+// the latch arbitration has exactly one implementation.
 func (s *Store) SetTileAlt(ctx context.Context, tileID int64, alt string, user bool) error {
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
 		if _, err := s.loadTile(ctx, tx, tileID); err != nil {
 			return err
 		}
-		q := `UPDATE tiles SET alt_text = ?, alt_user = 1, updated_at = ? WHERE id = ?`
-		if !user {
-			q = `UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ? AND alt_user = 0`
-		}
-		res, err := tx.ExecContext(ctx, q, alt, s.now().Unix(), tileID)
-		if err != nil {
-			return err
-		}
-		if n, err := res.RowsAffected(); err != nil {
-			return err
-		} else if n == 0 {
-			return nil // capture deferred to a user-owned name: no edit happened
-		}
-		_, err = s.finishContentEdit(ctx, tx, tileID, events)
-		return err
+		return s.setAltTx(ctx, tx, tileID, alt, user, events)
 	})
+}
+
+// setAltTx is the ONE alt-text write: the alt_user latch rule lives here and
+// nowhere else. user=true sets the name and latches ownership; user=false is
+// an automatic capture that no-ops (no write, no bump, no event) once the
+// user owns the name.
+func (s *Store) setAltTx(ctx context.Context, tx *sql.Tx, tileID int64, alt string, user bool, events *[]rpc.Event) error {
+	q := `UPDATE tiles SET alt_text = ?, alt_user = 1, updated_at = ? WHERE id = ?`
+	if !user {
+		q = `UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ? AND alt_user = 0`
+	}
+	res, err := tx.ExecContext(ctx, q, alt, s.now().Unix(), tileID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return nil // capture deferred to a user-owned name: no edit happened
+	}
+	_, err = s.finishContentEdit(ctx, tx, tileID, events)
+	return err
 }
 
 // SetContentZoom persists the per-tile content scale (text font, terminal
