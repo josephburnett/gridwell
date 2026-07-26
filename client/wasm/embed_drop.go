@@ -4,7 +4,6 @@ package main
 
 import (
 	"math"
-	"slices"
 	"syscall/js"
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
@@ -159,19 +158,21 @@ func (a *App) commitEmbedDrop(d *dragState, dt *docDropTarget) {
 
 	// Claim the save basis — the version of the bytes the insert was computed
 	// over — not the drag-time row version: a foreign edit landing since the
-	// drag started must conflict visibly, never be overwritten.
+	// drag started must conflict visibly, never be overwritten. The write
+	// addresses the CONTENT owner (a link doc saves under its target's id,
+	// the same discipline as flushTileContent — the link row owns no bytes
+	// and the store refuses a write to it); the row version is only a valid
+	// fallback when this row IS the owner.
+	cid := tile.ContentID()
 	saveVersion := dt.version
-	if base, ok := a.c.SaveBasis(dt.tileID); ok {
+	if tile.ID != cid {
+		saveVersion = 0
+	}
+	if base, ok := a.c.SaveBasis(cid); ok {
 		saveVersion = base
 	}
-	path := slices.Clone(dt.pane.Path)
 	go func() {
-		_, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
-			Path:    rpc.Path{WellIDs: path},
-			TileID:  dt.tileID,
-			Version: saveVersion,
-			Data:    []byte(newSrc),
-		}, []byte(newSrc))
+		_, ok := a.postWriteContent(gid, cid, saveVersion, []byte(newSrc))
 		if !ok {
 			return
 		}

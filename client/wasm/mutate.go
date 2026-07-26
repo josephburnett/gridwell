@@ -138,14 +138,15 @@ func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID string, call 
 	}()
 }
 
-// postUpdateText fires an UpdateText RPC and, on success, replaces the
-// cached blob so renderers reflect the new content immediately. On
-// version-conflict it triggers a grid refetch. Returns the updated
+// postWriteContent fires the one content write (WriteContent — id-addressed,
+// version-claimed, commit-at-close; 2026-07-26 redesign) and, on success,
+// replaces the cached blob so renderers reflect the new content immediately.
+// On version-conflict it triggers a grid refetch. Returns the updated
 // tile and ok=true on success; ok=false on any failure (callers
 // should stop further work).
-func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent []byte) (rpc.Tile, bool) {
-	tile, err := a.cl.UpdateText(context.Background(), req)
-	if !a.reactToErr("UpdateText", gid, err) {
+func (a *App) postWriteContent(gid, tileID string, version int64, newContent []byte) (rpc.Tile, bool) {
+	tile, err := a.cl.WriteContent(context.Background(), tileID, version, newContent)
+	if !a.reactToErr("WriteContent", gid, err) {
 		// Reconcile the rejected optimistic edit: callers wrote newContent
 		// into the cache before this RPC, so on any rejection the screen is
 		// showing bytes the server refused. Drop them so the next render
@@ -155,7 +156,7 @@ func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent 
 		// user why their text just reverted; without this the rejected edit
 		// lingers looking saved, then vanishes on some later refetch —
 		// the silent-disappearance class (charter §6).
-		a.c.DropTileContent(req.TileID)
+		a.c.DropTileContent(tileID)
 		if !isVersionConflict(err) {
 			a.fetchGrid(gid)
 		}
@@ -176,7 +177,7 @@ func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent 
 	return *tile, true
 }
 
-// enqueueTextSave posts an UpdateText through the per-tile serial queue.
+// enqueueTextSave posts a content write through the per-tile serial queue.
 // The version is claimed AT SEND TIME — after any earlier write for the same
 // tile has completed and advanced the save basis — so pipelined saves (the
 // raw→rendered toggle's flush and the keystroke typed right after it,
@@ -192,19 +193,13 @@ func (a *App) postUpdateText(gid string, req *rpc.UpdateTextRequest, newContent 
 // instead, which reconciles visibly. fallbackVersion (the enqueue-time row
 // version) is used only if the content entry is gone, so the server still
 // sees the write and surfaces the real story.
-func (a *App) enqueueTextSave(gid string, path []string, tileID string, fallbackVersion int64, data []byte) {
-	pathCopy := append([]string(nil), path...)
+func (a *App) enqueueTextSave(gid string, tileID string, fallbackVersion int64, data []byte) {
 	a.textSaves.Enqueue(tileID, func() {
 		version := fallbackVersion
 		if base, ok := a.c.SaveBasis(tileID); ok {
 			version = base
 		}
-		a.postUpdateText(gid, &rpc.UpdateTextRequest{
-			Path:    rpc.Path{WellIDs: pathCopy},
-			TileID:  tileID,
-			Version: version,
-			Data:    data,
-		}, data)
+		a.postWriteContent(gid, tileID, version, data)
 	})
 }
 

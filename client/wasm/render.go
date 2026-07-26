@@ -1002,7 +1002,7 @@ func bannerTextColor(n *rpc.Tile, outside bool) string {
 // (B, hideForTextarea suppressed canvas in every pane showing the tile). The
 // fix always passes focused=false to PreviewScaleScroll, using stored framing.
 
-// fetchTileContent issues GetTileContent for a plugin tile (file / proc @info)
+// fetchTileContent issues ReadContent for a plugin tile (file / proc @info)
 // and caches the body by tile id. Idempotent: a successful previous fetch
 // short-circuits, and an in-flight one is never doubled (contentInflight) —
 // concurrent fetches for one tile are how a stale reply could land after a
@@ -1020,10 +1020,10 @@ func (a *App) fetchTileContent(tileID string) {
 	a.contentInflight[tileID] = true
 	go func() {
 		defer delete(a.contentInflight, tileID)
-		data, version, err := a.cl.GetTileContent(context.Background(), tileID)
+		data, _, version, err := a.cl.ReadContent(context.Background(), tileID)
 		if err != nil {
 			// The tile body will simply never appear — say why (charter §6).
-			a.surfaceRPCError("GetTileContent", err)
+			a.surfaceRPCError("ReadContent", err)
 			return
 		}
 		a.c.PutFetchedContent(tileID, data, version)
@@ -1034,7 +1034,7 @@ func (a *App) fetchTileContent(tileID string) {
 
 // tileBody returns a text tile's body bytes, fetching lazily on a miss. In the
 // rootless model every tile is owned by some plugin, so the body always comes
-// via GetTileContent (routable by tile id) — blob ids aren't routable.
+// via ReadContent (routable by tile id) — blob ids aren't routable.
 // Content is keyed by ContentID (a leaf link resolves to its target), so a
 // link renders the one shared copy of the bytes.
 func (a *App) tileBody(n *rpc.Tile) ([]byte, bool) {

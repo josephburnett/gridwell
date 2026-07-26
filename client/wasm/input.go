@@ -874,25 +874,25 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	}
 	a.startSnap(targetX, targetY, snapMs)
 
-	srcPath := slices.Clone(d.srcPath)
-	dstPath := slices.Clone(t.path)
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
-	version := d.snapshotTile.Version
 
 	// Same-namespace left-drag is a move; clone is handled by the right-drag
 	// path (commitRightClone in right_button.go) and never reaches here.
-	req := &rpc.MoveTileRequest{
-		Path:       rpc.Path{WellIDs: srcPath},
-		TileID:     d.tileID,
-		Version:    version,
-		DestGridID: dstGridID,
-		DestPath:   rpc.Path{WellIDs: dstPath},
-		X:          dropX,
-		Y:          dropY,
+	// PlaceTile is the one placement writeback: id + version claim + the full
+	// (grid, x, y, w, h) fact — no descent paths (2026-07-26 redesign; the
+	// well-into-own-subtree refusal is the server's own ancestor walk now).
+	req := &rpc.PlaceTileRequest{
+		TileID:  d.tileID,
+		Version: d.snapshotTile.Version,
+		GridID:  dstGridID,
+		X:       dropX,
+		Y:       dropY,
+		W:       d.snapshotTile.W,
+		H:       d.snapshotTile.H,
 	}
-	a.postCrossGridMutate("MoveTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.MoveTile(ctx, req)
+	a.postCrossGridMutate("PlaceTile", srcGridID, dstGridID, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.PlaceTile(ctx, req)
 	}, d)
 	a.draw()
 	return nil
@@ -1940,20 +1940,27 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		// (the remote-stomp bug). A stale basis conflicts at the server and
 		// reconciles visibly instead.
 		if hasBuf {
+			// The write addresses the CONTENT owner (a link doc saves under
+			// its target's id — flushTileContent's discipline); the row
+			// version is a valid fallback only when this row IS the owner.
+			cid := file.ContentID()
 			saveVersion := curVersion
-			if base, ok := a.c.SaveBasis(file.ID); ok {
+			if file.ID != cid {
+				saveVersion = 0
+			}
+			if base, ok := a.c.SaveBasis(cid); ok {
 				saveVersion = base
 			}
-			tile, ok := a.postUpdateText(gid, &rpc.UpdateTextRequest{
-				Path:    rpc.Path{WellIDs: path},
-				TileID:  file.ID,
-				Version: saveVersion,
-				Data:    buf,
-			}, buf)
+			tile, ok := a.postWriteContent(gid, cid, saveVersion, buf)
 			if !ok {
 				return
 			}
-			curVersion = tile.Version
+			if file.ID == cid {
+				// The SetTextView below claims THIS row's version; only
+				// advance it when the content write bumped this same row
+				// (a link's target version is a different row's fact).
+				curVersion = tile.Version
+			}
 		}
 		// Persist the framed window + mode so re-descent and the preview
 		// honor "however you left it" across reloads.

@@ -339,7 +339,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 // (and any banner) reflects it immediately; the TileChanged event confirms.
 func (a *App) commitRename(tileID, alt string) {
 	go func() {
-		tile, err := a.cl.SetTileAlt(context.Background(), tileID, alt)
+		tile, err := a.postRename(tileID, alt)
 		if err != nil {
 			a.reportErr(errsurface.Error, "rename", "rename failed: "+rpcErrText(err))
 			return
@@ -349,6 +349,25 @@ func (a *App) commitRename(tileID, alt string) {
 		}
 		a.draw()
 	}()
+}
+
+// postRename is the one rename door: the versioned SetTile rename arm
+// (2026-07-26 redesign — a rename is a real user edit and claims a version).
+// The claim comes from the cached row; a conflict retries once with a fresh
+// read, since the racing writer of alt is only ever an automatic capture the
+// latch will out-rank anyway.
+func (a *App) postRename(tileID, alt string) (*rpc.Tile, error) {
+	version := int64(0)
+	if t := a.cachedTileByID(tileID); t != nil {
+		version = t.Version
+	}
+	tile, err := a.cl.RenameTile(context.Background(), tileID, version, alt)
+	if err != nil && isVersionConflict(err) {
+		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
+			tile, err = a.cl.RenameTile(context.Background(), tileID, fresh.Version, alt)
+		}
+	}
+	return tile, err
 }
 
 // pxOf formats a float as a CSS pixel length.

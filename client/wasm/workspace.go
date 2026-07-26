@@ -149,9 +149,9 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 		if fresh.BlobID == 0 {
 			tree = workspaceTreeFromPlace(origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
 		} else {
-			data, _, err = a.cl.GetTileContent(context.Background(), tileID)
+			data, _, _, err = a.cl.ReadContent(context.Background(), tileID)
 			if err != nil {
-				a.surfaceRPCError("GetTileContent", err)
+				a.surfaceRPCError("ReadContent", err)
 				pd.failed = true
 				a.maybeInstallWorkspace(pd)
 				return
@@ -275,9 +275,9 @@ func (a *App) bootWorkspace(tileID string) {
 		a.installWorkspace(tile, homeTree(), "", false, nil, false)
 		return
 	}
-	data, _, err := a.cl.GetTileContent(context.Background(), tileID)
+	data, _, _, err := a.cl.ReadContent(context.Background(), tileID)
 	if err != nil {
-		a.surfaceRPCError("GetTileContent", err)
+		a.surfaceRPCError("ReadContent", err)
 		return
 	}
 	prefix := paneTileChainPrefix(tileID)
@@ -541,7 +541,7 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 	}
 	tileID := f.TileID
 	go func() {
-		tile, err := a.cl.SetTileAlt(context.Background(), tileID, alt)
+		tile, err := a.postRename(tileID, alt)
 		if err != nil {
 			a.reportErr(errsurface.Error, "rename", "rename failed: "+rpcErrText(err))
 			return
@@ -633,24 +633,25 @@ func (a *App) flushWorkspaceSave() {
 	go a.postPaneLayout(tileID, version, data)
 }
 
-// postPaneLayout sends one SetPaneLayout, retrying once on a version
+// postPaneLayout sends one layout write (WriteContent — the one content
+// door; a pane layout is framing-class and never bumps version), retrying once on a version
 // conflict with a refetched claim (rename bumps the version; the layout
 // write itself never does). Success marks the bytes saved and lets the
 // response row fan into the cache exactly like an SSE event (one Apply
 // owner). Failure surfaces (charter §6) and stays unsaved, so the next
 // debounce tick retries naturally.
 func (a *App) postPaneLayout(tileID string, version int64, data []byte) {
-	tile, err := a.cl.SetPaneLayout(context.Background(), tileID, version, data)
+	tile, err := a.cl.WriteContent(context.Background(), tileID, version, data)
 	if err != nil && isVersionConflict(err) {
 		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
 			if top := a.ws.Top(); top != nil && top.TileID == tileID {
 				top.TileVersion = fresh.Version
 			}
-			tile, err = a.cl.SetPaneLayout(context.Background(), tileID, fresh.Version, data)
+			tile, err = a.cl.WriteContent(context.Background(), tileID, fresh.Version, data)
 		}
 	}
 	if err != nil {
-		a.surfaceRPCError("SetPaneLayout", err)
+		a.surfaceRPCError("WriteContent", err)
 		return
 	}
 	if top := a.ws.Top(); top != nil && top.TileID == tileID {
@@ -658,5 +659,5 @@ func (a *App) postPaneLayout(tileID string, version int64, data []byte) {
 		top.TileVersion = tile.Version
 	}
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *tile}})
-	a.resolveErr("rpc:SetPaneLayout")
+	a.resolveErr("rpc:WriteContent")
 }

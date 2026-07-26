@@ -264,6 +264,15 @@ func (c *Client) SetTileAlt(ctx context.Context, tileID, alt string) (*Tile, err
 	return tileResp(c.cl.SetTileAlt(ctx, connect.NewRequest(&pb.SetTileAltRequest{TileId: tileID, Alt: alt})))
 }
 
+// RenameTile is the versioned rename (2026-07-26 redesign: the absorbed
+// SetTile rename arm) — a real user edit with an optimistic-concurrency
+// claim; the server latches alt_user so automatic captures defer.
+func (c *Client) RenameTile(ctx context.Context, tileID string, version int64, alt string) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
+		TileId: tileID, Version: version, Rename: alt,
+	})))
+}
+
 // SetPaneLayout writes a pane tile's serialized workspace layout (the
 // LayoutV1 blob). Framing-class: never bumps version; path-free by id (see
 // the proto rationale).
@@ -274,10 +283,11 @@ func (c *Client) SetPaneLayout(ctx context.Context, tileID string, version int64
 }
 
 // SetContentZoom persists a tile's content scale (framing; never bumps
-// version) — the text/terminal font or page zoom (issue #82).
+// version) — the text/terminal font or page zoom (issue #82). Rides the
+// absorbed SetTile content_zoom arm (2026-07-26 redesign).
 func (c *Client) SetContentZoom(ctx context.Context, req *SetContentZoomRequest) (*Tile, error) {
-	return tileResp(c.cl.SetContentZoom(ctx, connect.NewRequest(&pb.SetContentZoomRequest{
-		TileId: req.TileID, Version: req.Version, ContentZoom: req.ContentZoom,
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
+		TileId: req.TileID, Version: req.Version, ContentZoom: &req.ContentZoom,
 	})))
 }
 

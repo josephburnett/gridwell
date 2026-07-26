@@ -165,7 +165,7 @@ type App struct {
 	// response lands.
 	gridInflight map[string]bool
 
-	// contentInflight tracks tile ids with a pending GetTileContent request.
+	// contentInflight tracks tile ids with a pending ReadContent request.
 	// Deduped like gridInflight: tileBody fires fetchTileContent on every
 	// cache miss every frame, so without the guard one absent body spawns a
 	// fetch per frame — and any reply older than one that already landed
@@ -317,7 +317,7 @@ type scheduler struct {
 
 	// wsSaveScheduled / wsSaveCb debounce the workspace-layout persister
 	// (see scheduleWorkspaceSave): draw() arms it while inside a workspace;
-	// the callback encodes, hash-diffs, and posts SetPaneLayout on change.
+	// the callback encodes, hash-diffs, and posts the layout WriteContent on change.
 	wsSaveScheduled bool
 	wsSaveCb        js.Func
 

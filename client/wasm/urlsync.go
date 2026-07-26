@@ -445,13 +445,13 @@ func (a *App) fetchBlobAndSetCursor(textTileID string, state url.State) {
 		return
 	}
 	go func() {
-		// Content is routable by tile id (GetTileContent); blob ids carry no
+		// Content is routable by tile id (ReadContent); blob ids carry no
 		// plugin namespace and aren't routable on their own. Store it in the
 		// content store — the single text-body store the overlay reads from.
-		data, version, err := a.cl.GetTileContent(context.Background(), textTileID)
+		data, _, version, err := a.cl.ReadContent(context.Background(), textTileID)
 		if err != nil {
 			// The file the URL pointed at stays blank — say why (charter §6).
-			a.surfaceRPCError("GetTileContent", err)
+			a.surfaceRPCError("ReadContent", err)
 			return
 		}
 		a.c.PutFetchedContent(textTileID, data, version)

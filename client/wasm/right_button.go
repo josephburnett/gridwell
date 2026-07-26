@@ -671,7 +671,8 @@ func (a *App) tileAtCellInTarget(t *dropTarget, sx, sy float64) *rpc.Tile {
 	return a.nodeAtCellInGrid(t.gridID, cellX, cellY)
 }
 
-// commitTileResize commits the proposed (X, Y, W, H) via ResizeTile.
+// commitTileResize commits the proposed (X, Y, W, H) via PlaceTile — the one
+// placement writeback (a resize is a placement write within the same grid).
 // If the new size matches the original, no RPC is issued.
 func (a *App) commitTileResize(rd *rightDragState) {
 	n := rd.tileNode
@@ -683,17 +684,17 @@ func (a *App) commitTileResize(rd *rightDragState) {
 		return
 	}
 	gid := a.gridIDForPane(p)
-	req := &rpc.ResizeTileRequest{
-		Path:    rpc.Path{WellIDs: slices.Clone(p.Path)},
+	req := &rpc.PlaceTileRequest{
 		TileID:  n.ID,
 		Version: n.Version,
+		GridID:  n.GridID,
 		X:       rd.tileNewX,
 		Y:       rd.tileNewY,
 		W:       rd.tileNewW,
 		H:       rd.tileNewH,
 	}
-	a.postTileMutate("ResizeTile", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.ResizeTile(ctx, req)
+	a.postTileMutate("PlaceTile", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.PlaceTile(ctx, req)
 	}, nil)
 }
 

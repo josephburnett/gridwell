@@ -4,7 +4,6 @@ package main
 
 import (
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -40,9 +39,8 @@ func (a *App) flushDirtyText() {
 // flushTileContent posts one tile's dirty bytes, resolving the tile row from
 // the cache by id. A no-op for clean entries, non-text tiles, and read-only
 // tiles (their entries can't normally be dirty; the guard is belt-and-braces).
-// The descent path is a courtesy: a pane descended into the tile supplies
-// one, and the server accepts an empty path for an id-addressed write (the
-// tile row owns its location).
+// The write is id-addressed + version-claimed (WriteContent) — there is no
+// descent path on the wire (2026-07-26 redesign).
 func (a *App) flushTileContent(tileID string) {
 	// Resolve to the CONTENT id: a leaf link's edits live (and save) under
 	// its target's id — the one shared {bytes, base, dirty} fact — so the
@@ -65,10 +63,6 @@ func (a *App) flushTileContent(tileID string) {
 	if t.Kind != rpc.KindText || a.tileReadOnly(t) {
 		return
 	}
-	var path []string
-	if p := a.paneTextDescendedInto(tileID); p != nil {
-		path = append([]string(nil), p.Path...)
-	}
 	// The version fallback is only meaningful when t IS the owner row; a
 	// link row's version tracks its own placement, never the target's
 	// bytes. 0 forces the save to claim the cache's SaveBasis (always
@@ -77,7 +71,7 @@ func (a *App) flushTileContent(tileID string) {
 	if t.ID != cid {
 		fallback = 0
 	}
-	a.enqueueTextSave(t.GridID, path, cid, fallback, data)
+	a.enqueueTextSave(t.GridID, cid, fallback, data)
 }
 
 // contentKey resolves a tile id to the id that OWNS its content bytes — the
@@ -106,20 +100,4 @@ func (a *App) cachedTileByID(id string) *rpc.Tile {
 		}
 	}
 	return nil
-}
-
-// paneTextDescendedInto returns a pane text-descended into the given tile (any
-// mode), or nil. Used only to supply a descent path on a flush — a courtesy
-// for path-validating servers, never required for routing.
-func (a *App) paneTextDescendedInto(tileID string) *pane.Pane {
-	if tileID == "" {
-		return nil
-	}
-	var found *pane.Pane
-	a.tree.Walk(func(p *pane.Pane) {
-		if p.TextFocus == tileID {
-			found = p
-		}
-	})
-	return found
 }
