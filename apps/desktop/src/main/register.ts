@@ -16,8 +16,12 @@ import {
   ErrorEvent,
   OpenBelowEvent,
   ZoomKeyEvent,
+  ShellOpenArgs,
+  ShellWriteArgs,
+  ShellResizeArgs,
 } from './ipc';
 import { WebviewRegistry } from './webviews';
+import { ShellStreams } from './shellstreams';
 
 // safeSend is the one guard every main→renderer push goes through: the
 // window can close mid-flight (quit, crash, boot failure racing teardown),
@@ -27,6 +31,32 @@ import { WebviewRegistry } from './webviews';
 // control-click handler; sendError below would have made a fourth).
 function safeSend(wc: WebContents, channel: string, payload: unknown): void {
   if (!wc.isDestroyed()) wc.send(channel, payload);
+}
+
+// registerShellIpc connects the renderer's shell-transport channels to the
+// ShellStreams registry (the gRPC OpenShell relay). Call once after boot.
+export function registerShellIpc(streams: ShellStreams): void {
+  ipcMain.handle(CH.shellOpen, (_e, args: ShellOpenArgs): void => {
+    streams.open(args.paneId, args.tileId, args.cols, args.rows);
+  });
+  ipcMain.handle(CH.shellWrite, (_e, args: ShellWriteArgs): void => {
+    streams.write(args.paneId, args.data);
+  });
+  ipcMain.handle(CH.shellResize, (_e, args: ShellResizeArgs): void => {
+    streams.resize(args.paneId, args.cols, args.rows);
+  });
+  ipcMain.handle(CH.shellClose, (_e, args: PaneRef): void => {
+    streams.close(args.paneId);
+  });
+}
+
+// sendShellData / sendShellExit are the main→renderer pushes for the shell
+// transport, through the same safeSend guard as every other push.
+export function sendShellData(wc: WebContents, paneId: string, data: Uint8Array): void {
+  safeSend(wc, EV.shellData, { paneId, data });
+}
+export function sendShellExit(wc: WebContents, paneId: string, message: string, sessionGone: boolean): void {
+  safeSend(wc, EV.shellExit, { paneId, message, sessionGone });
 }
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the

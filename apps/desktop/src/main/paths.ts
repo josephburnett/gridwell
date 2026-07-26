@@ -39,6 +39,20 @@ export function staticDir(): string {
   return path.join(repoRoot(), 'web');
 }
 
+// dataProtoPath resolves the ONE gridwell proto definition (the shell
+// transport's gRPC client loads it at runtime — no generated JS copy that
+// could drift from the .proto). Same resolution order as the sidecar binary:
+// env override, packaged resources, dev tree.
+export function dataProtoPath(): string {
+	const env = process.env.GRIDWELL_PROTO;
+	if (env && fs.existsSync(env)) return env;
+
+	const packaged = path.join(process.resourcesPath ?? '', 'data.proto');
+	if (fs.existsSync(packaged)) return packaged;
+
+	return path.join(repoRoot(), 'api', 'gridwell', 'v1', 'data.proto');
+}
+
 // The DB path is no longer resolved here: the Go server derives each plugin's
 // DB from its id under the Gridwell home (GRIDWELL_HOME, else ~/.gridwell), so
 // there is nothing for the Electron main process to compute or pass through.

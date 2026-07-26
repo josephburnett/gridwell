@@ -19,17 +19,21 @@ import "github.com/josephburnett/gridwell/client/errsurface"
 type Caps struct {
 	// LiveURL: a URL tile can go live as a native browser view. Only the
 	// Electron shell can host one (a WebContentsView over the canvas); a
-	// plain browser shows the frozen preview instead. Shell tiles are NOT
-	// gated here — xterm.js over the /rpc/ShellStream WebSocket works in any
-	// browser.
+	// plain browser shows the frozen preview instead.
 	LiveURL bool
+	// LiveShell: a shell tile can attach its live PTY. The bytes ride the
+	// Electron main process's gRPC OpenShell stream over IPC (owner decision
+	// 2026-07-26, reversing the browser-client "shells stay live" call: the
+	// WS bridge is gone, and a plain browser shows the frozen preview like a
+	// url tile).
+	LiveShell bool
 }
 
 // Derive computes the capability set from the one environmental fact that
 // distinguishes the hosts: whether the Electron preload bridge
 // (window.gridwell) is present.
 func Derive(bridgePresent bool) Caps {
-	return Caps{LiveURL: bridgePresent}
+	return Caps{LiveURL: bridgePresent, LiveShell: bridgePresent}
 }
 
 // GoLiveNotice returns the errsurface report for a gesture that asked a URL
@@ -39,4 +43,12 @@ func Derive(bridgePresent bool) Caps {
 // The stable source coalesces repeated taps into one row.
 func GoLiveNotice() (sev errsurface.Severity, source, message string) {
 	return errsurface.Info, "livecap", "live web views need the desktop app — showing the frozen preview"
+}
+
+// ShellNotice returns the errsurface report for a gesture that asked a shell
+// tile to attach when LiveShell is false. Same shape and severity rationale
+// as GoLiveNotice; same stable source, so mixed taps still coalesce into one
+// capability row.
+func ShellNotice() (sev errsurface.Severity, source, message string) {
+	return errsurface.Info, "livecap", "live shells need the desktop app — showing the frozen preview"
 }

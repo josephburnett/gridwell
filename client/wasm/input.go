@@ -2350,6 +2350,19 @@ func (a *App) deleteEphemeralTile(tileID string, version int64) {
 		err := a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
 			TileID: tileID, Version: version,
 		})
+		if err != nil && isVersionConflict(err) {
+			// The stream close that precedes this delete triggers the plugin's
+			// detach-time title capture — a version bump racing the claim
+			// (deterministically since the gRPC transport made teardown fast,
+			// 2026-07-26). The delete is the USER's explicit action and an
+			// automatic capture must never outrank it: retry once with a
+			// fresh claim.
+			if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
+				err = a.cl.DeleteTile(context.Background(), &rpc.DeleteTileRequest{
+					TileID: tileID, Version: fresh.Version,
+				})
+			}
+		}
 		if err != nil {
 			a.reportErr(errsurface.Error, "ephemeral",
 				"ephemeral tile cleanup failed: "+rpcErrText(err))

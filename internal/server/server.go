@@ -1,10 +1,11 @@
 // Package server is the HTTP layer of Gridwell. The RPC surface is
 // served by a Connect-RPC handler at /gridwell.v1.Gridwell/<Method>
-// (binary-proto and JSON-over-proto codecs both supported). The shell PTY
-// is a raw-HTTP WebSocket at /rpc/ShellStream (Connect can't model it); the
-// embed preview JPEG/PNG endpoint stays at /preview/tile/<id>; and the
-// static web/ directory is served at /. Live URL tiles are hosted natively
-// by the Electron shell (WebContentsView), so there is no URL WebSocket.
+// (binary-proto and JSON-over-proto codecs both supported); the embed
+// preview JPEG/PNG endpoint stays at /preview/tile/<id>; and the static
+// web/ directory is served at /. Live URL tiles are hosted natively by the
+// Electron shell (WebContentsView), and shell PTY bytes ride the Electron
+// main process's gRPC OpenShell stream against the node export — the
+// browser-facing surface is pure Connect.
 //
 // Single-tenant: no auth, no sessions, no cookies. Callers should bind
 // the listener to loopback only.
@@ -172,10 +173,9 @@ func (s *Server) routes() {
 	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(s))
 	s.mux.Handle(path, handler)
 
-	// Shell PTY session is a WebSocket — Connect doesn't model it; raw
-	// HTTP route stays. (Live URL tiles are hosted natively by the Electron
-	// shell, so there is no URL WebSocket anymore.)
-	s.mux.HandleFunc("/rpc/ShellStream", s.shellStream)
+	// (The shell PTY WebSocket bridge is gone — 2026-07-26: PTY bytes ride
+	// the Electron main process's gRPC OpenShell stream against the node
+	// export; browsers show frozen shell previews, caps-gated.)
 
 	// Embed preview is plain image bytes for external viewers (VS Code,
 	// etc.); not RPC.

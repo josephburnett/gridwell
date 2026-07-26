@@ -19,6 +19,11 @@ import {
   NavEvent,
   ForwardedRightdown,
   ErrorEvent,
+  ShellOpenArgs,
+  ShellWriteArgs,
+  ShellResizeArgs,
+  ShellDataEvent,
+  ShellExitEvent,
 } from '../main/ipc';
 
 const api = {
@@ -47,6 +52,22 @@ const api = {
   },
   reload(args: PaneRef): Promise<void> {
     return ipcRenderer.invoke(CH.reload, args);
+  },
+
+  // Shell transport (2026-07-26): the renderer's xterm speaks to the
+  // main-process gRPC OpenShell stream through these four calls plus the
+  // onShellData/onShellExit pushes below.
+  shellOpen(args: ShellOpenArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.shellOpen, args);
+  },
+  shellWrite(args: ShellWriteArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.shellWrite, args);
+  },
+  shellResize(args: ShellResizeArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.shellResize, args);
+  },
+  shellClose(args: PaneRef): Promise<void> {
+    return ipcRenderer.invoke(CH.shellClose, args);
   },
 
   // onFrame/onNav register renderer-side listeners for main→renderer pushes.
@@ -118,6 +139,19 @@ const api = {
   // setNameLabel pushes the bubble label into a live pane's native pill.
   setNameLabel(args: { paneId: string; label: string }): Promise<void> {
     return ipcRenderer.invoke(CH.setNameLabel, args);
+  },
+  // onShellData delivers PTY output for a pane's terminal.
+  onShellData(cb: (ev: ShellDataEvent) => void): () => void {
+    const h = (_e: unknown, ev: ShellDataEvent) => cb(ev);
+    ipcRenderer.on(EV.shellData, h);
+    return () => ipcRenderer.removeListener(EV.shellData, h);
+  },
+  // onShellExit fires exactly once when a pane's shell stream ends —
+  // whatever ended it (clean close, remote hangup, error).
+  onShellExit(cb: (ev: ShellExitEvent) => void): () => void {
+    const h = (_e: unknown, ev: ShellExitEvent) => cb(ev);
+    ipcRenderer.on(EV.shellExit, h);
+    return () => ipcRenderer.removeListener(EV.shellExit, h);
   },
   // onError fires for every main-process failure that must reach the user
   // (webview lifecycle, session hydrate/dehydrate, sidecar boot/exit) — the

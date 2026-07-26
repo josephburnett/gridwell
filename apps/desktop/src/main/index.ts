@@ -2,7 +2,10 @@ import { app, dialog } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, makeNavForwarder, makeOpenBelowForwarder, makeZoomKeyForwarder, sendFrame, sendError } from './register';
+import { registerWebviewIpc, registerShellIpc, makeNavForwarder, makeOpenBelowForwarder, makeZoomKeyForwarder, sendFrame, sendError, sendShellData, sendShellExit } from './register';
+import { ShellStreams } from './shellstreams';
+import { makeShellDialer } from './shellgrpc';
+import { dataProtoPath } from './paths';
 import { MirrorPump } from './capture';
 import { sanitizeUserAgent } from './viewutil';
 import { applyUserDataOverride } from './userdata';
@@ -45,6 +48,7 @@ const MIRROR_INTERVAL_MS = 250;
 let sidecar: Sidecar | null = null;
 let registry: WebviewRegistry | null = null;
 let pump: MirrorPump | null = null;
+let shells: ShellStreams | null = null;
 // quitting guards the post-boot sidecar exit listener below: before-quit
 // stops the sidecar itself (SIGTERM), and that expected exit must not surface
 // as a "backend crashed, restart the app" notice while the window is already
@@ -84,6 +88,22 @@ async function boot(): Promise<void> {
   });
   registry = reg;
   registerWebviewIpc(reg, rootWC, win);
+
+  // The shell transport: PTY bytes ride a main-process gRPC OpenShell stream
+  // to the sidecar's export port and cross to the renderer's xterm over IPC
+  // (2026-07-26 — the /rpc/ShellStream WS bridge is gone). A dial failure
+  // surfaces on the ONE error wire like every other main-process failure.
+  shells = new ShellStreams(
+    makeShellDialer(`127.0.0.1:${sidecar.port}`, dataProtoPath()),
+    (paneId, data) => sendShellData(rootWC, paneId, data),
+    (ev) => {
+      sendShellExit(rootWC, ev.paneId, ev.message, ev.sessionGone);
+      if (ev.message !== '' && !ev.sessionGone) {
+        sendError(rootWC, 'electron:shell', 'shell stream failed: ' + ev.message);
+      }
+    },
+  );
+  registerShellIpc(shells);
 
   // A PERSISTENT post-boot exit watch (issue #46 point 1): startSidecar's own
   // `child.once('exit', ...)` listener only rejects the boot promise BEFORE it
@@ -140,6 +160,10 @@ app.on('before-quit', () => {
   if (pump) {
     pump.stop();
     pump = null;
+  }
+  if (shells) {
+    shells.closeAll();
+    shells = null;
   }
   if (registry) {
     void registry.removeAll();

@@ -25,6 +25,13 @@ export const CH = {
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
   reload: 'gw:reload',     // PaneRef → void
+
+  // Shell transport (2026-07-26: the WS bridge is gone; PTY bytes ride a
+  // main-process gRPC OpenShell stream, relayed here per pane).
+  shellOpen: 'gw:shell-open',     // ShellOpenArgs → void
+  shellWrite: 'gw:shell-write',   // ShellWriteArgs → void
+  shellResize: 'gw:shell-resize', // ShellResizeArgs → void
+  shellClose: 'gw:shell-close',   // PaneRef → void
 } as const;
 
 // Control overlay (the corner-button view) → main (send, fire-and-forget).
@@ -52,6 +59,8 @@ export const EV = {
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
+  shellData: 'gw:shell-data', // ShellDataEvent — PTY output for a pane's terminal
+  shellExit: 'gw:shell-exit', // ShellExitEvent — the pane's stream ended (exactly once)
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus (issue #170)
@@ -79,6 +88,40 @@ export interface ForwardedRightdown {
 
 export interface PaneRef {
   paneId: string;
+}
+
+// Shell transport payloads. Data crosses as Uint8Array both ways (Electron's
+// structured clone carries it natively — no base64 hop for a keystroke).
+export interface ShellOpenArgs {
+  paneId: string;
+  // tileId is the globally-qualified "<plugin-uuid>/<id>" of the shell tile
+  // that OWNS the PTY session (the renderer resolves a link to its target
+  // before opening — the session is keyed by the owner).
+  tileId: string;
+  cols: number;
+  rows: number;
+}
+export interface ShellWriteArgs {
+  paneId: string;
+  data: Uint8Array;
+}
+export interface ShellResizeArgs {
+  paneId: string;
+  cols: number;
+  rows: number;
+}
+export interface ShellDataEvent {
+  paneId: string;
+  data: Uint8Array;
+}
+export interface ShellExitEvent {
+  paneId: string;
+  // message is '' for a clean end (local close, remote hangup), else the
+  // transport/status error text the renderer surfaces (charter §6).
+  message: string;
+  // sessionGone marks the server's "this tmux session no longer exists"
+  // verdict — the renderer flips the refresh affordance off.
+  sessionGone: boolean;
 }
 
 export interface PlaceArgs {

@@ -257,32 +257,3 @@ func TestAsConnectError(t *testing.T) {
 		}
 	}
 }
-
-// TestParseShellSize: defaults when absent/empty/garbage, raises below the
-// minimum, and caps at the uint16 ceiling.
-func TestParseShellSize(t *testing.T) {
-	if c, r := parseShellSize(map[string][]string{}); c != defaultShellCols || r != defaultShellRows {
-		t.Errorf("absent = (%d,%d), want defaults", c, r)
-	}
-	if c, r := parseShellSize(map[string][]string{"cols": {"abc"}, "rows": {"0"}}); c != defaultShellCols || r != defaultShellRows {
-		t.Errorf("garbage/zero = (%d,%d), want defaults", c, r)
-	}
-	if c, _ := parseShellSize(map[string][]string{"cols": {"3"}}); c != minShellCols {
-		t.Errorf("below min cols = %d, want %d", c, minShellCols)
-	}
-	if c, _ := parseShellSize(map[string][]string{"cols": {"999999"}}); c != 65535 {
-		t.Errorf("overflow cols = %d, want 65535", c)
-	}
-	if c, r := parseShellSize(map[string][]string{"cols": {"100"}, "rows": {"40"}}); c != 100 || r != 40 {
-		t.Errorf("valid = (%d,%d), want (100,40)", c, r)
-	}
-}
-
-func TestClampShell(t *testing.T) {
-	if c, r := clampShell(1, 1); c != minShellCols || r != minShellRows {
-		t.Errorf("clampShell(1,1) = (%d,%d), want (%d,%d)", c, r, minShellCols, minShellRows)
-	}
-	if c, r := clampShell(100, 40); c != 100 || r != 40 {
-		t.Errorf("clampShell(100,40) = (%d,%d), want unchanged", c, r)
-	}
-}

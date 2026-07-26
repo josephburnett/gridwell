@@ -4,12 +4,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
@@ -18,13 +17,15 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// shellStreamConn is one ShellStream WebSocket + its xterm.js host.
-// A DOM container holds the terminal instance; the container's CSS is
-// positioned per-frame so it tracks the pane through resize / pan /
-// split-tree edits. js.Func handlers are tracked so we Release them on
-// close (FuncOf-allocated callbacks pin Go memory until released).
+// shellStreamConn is one live shell attachment: the pane's slot on the
+// main-process gRPC OpenShell relay (bytes cross the preload bridge as
+// shellWrite/onShellData, 2026-07-26 — the WS transport is gone) + its
+// xterm.js host. A DOM container holds the terminal instance; the
+// container's CSS is positioned per-frame so it tracks the pane through
+// resize / pan / split-tree edits. js.Func handlers are tracked so we
+// Release them on close (FuncOf-allocated callbacks pin Go memory until
+// released).
 type shellStreamConn struct {
-	ws           js.Value
 	term         js.Value // xterm.Terminal
 	fitAddon     js.Value // FitAddon — proposeDimensions + fit
 	renderAddon  js.Value // renderer addon: WebglAddon, or zero (DOM fallback)
@@ -43,10 +44,6 @@ type shellStreamConn struct {
 	anchor string
 	path   []string
 
-	onMessage      js.Func
-	onOpen         js.Func
-	onClose        js.Func
-	onError        js.Func
 	onData         js.Func // term.onData(bytes string) callback
 	onResize       js.Func // term.onResize({cols, rows})
 	onMouse        js.Func // container right-button → canvas gesture pipeline
@@ -54,8 +51,7 @@ type shellStreamConn struct {
 	onLinkActivate js.Func // shared link click handler → ephemeral url descent
 	onOSCURL       js.Func // OSC 5522 from the gridwell-open shim → ephemeral url descent
 
-	pending []any // queued sends until WS is OPEN
-	closed  bool
+	closed bool
 
 	lastCols, lastRows uint16
 }
@@ -157,11 +153,18 @@ func (a *App) setShellAlive(tileID string, alive bool) {
 	}
 }
 
-// openShellStream mounts an xterm.js terminal in a DOM overlay over
-// the pane's content area, opens a WebSocket to /rpc/ShellStream, and
-// wires the two together. Idempotent: a second call for the same pane
-// closes the previous attachment first.
+// openShellStream mounts an xterm.js terminal in a DOM overlay over the
+// pane's content area, asks the Electron main process to open the tile's
+// gRPC OpenShell stream, and wires the two together over the preload bridge.
+// Idempotent: a second call for the same pane closes the previous attachment
+// first. In a plain browser (no bridge) the gesture explains itself and the
+// frozen preview stays — owner decision 2026-07-26, reversing "shells stay
+// live" from the browser-client work.
 func (a *App) openShellStream(p *pane.Pane, tileID string) {
+	if !a.caps.LiveShell {
+		a.reportErr(caps.ShellNotice())
+		return
+	}
 	// Resolve a shell LINK to its target: the PTY session, the alive cache,
 	// and the freeze writeback all key by the id that owns the session.
 	tileID = a.contentKey(tileID)
@@ -288,26 +291,13 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// else stays native to the terminal.
 	a.installOverlayTouch(container, shellTouchClaim(circle))
 
-	loc := js.Global().Get("location")
-	proto := "ws:"
-	if loc.Get("protocol").String() == "https:" {
-		proto = "wss:"
-	}
-	host := loc.Get("host").String()
-	// Initial size — fit addon will overwrite, but the URL params let
-	// the server start the PTY at the right dimensions.
+	// Initial size — the fit addon will overwrite it, but the bind message
+	// lets the plugin start the PTY at the right dimensions.
 	cols := term.Get("cols").Int()
 	rows := term.Get("rows").Int()
-	wsURL := proto + "//" + host + "/rpc/ShellStream?tile_id=" +
-		tileID +
-		"&cols=" + strconv.Itoa(cols) + "&rows=" + strconv.Itoa(rows)
-	shellLog("open pane=%s tile=%s url=%s cols=%d rows=%d", p.ID, tileID, wsURL, cols, rows)
-
-	ws := js.Global().Get("WebSocket").New(wsURL)
-	ws.Set("binaryType", "arraybuffer")
+	shellLog("open pane=%s tile=%s cols=%d rows=%d", p.ID, tileID, cols, rows)
 
 	conn := &shellStreamConn{
-		ws:           ws,
 		term:         term,
 		fitAddon:     fitAddon,
 		renderAddon:  renderAddon,
@@ -389,70 +379,14 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	})
 	term.Get("parser").Call("registerOscHandler", 5522, conn.onOSCURL)
 
-	conn.onMessage = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		data := args[0].Get("data")
-		switch data.Type() {
-		case js.TypeObject:
-			// Binary frame: PTY output bytes. Hand straight to xterm
-			// as a Uint8Array — its write() accepts that shape.
-			u8 := js.Global().Get("Uint8Array").New(data)
-			conn.term.Call("write", u8)
-		case js.TypeString:
-			// V1 has no server→client text messages; log for debug.
-			shellLog("text recv pane=%s body=%q", conn.paneID, data.String())
-		}
-		return nil
-	})
-	conn.onOpen = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		pending := conn.pending
-		conn.pending = nil
-		shellLog("onOpen pane=%s tile=%s flushing=%d", p.ID, tileID, len(pending))
-		for _, q := range pending {
-			conn.ws.Call("send", q)
-		}
-		return nil
-	})
-	conn.onClose = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		code := -1
-		reason := ""
-		if len(args) > 0 {
-			code = args[0].Get("code").Int()
-			reason = args[0].Get("reason").String()
-		}
-		shellLog("onClose pane=%s tile=%s code=%d reason=%q", p.ID, tileID, code, reason)
-		// PolicyViolation (1008) is the server's definitive "session is
-		// gone" signal — flip the cache to dead so the refresh button
-		// hides. Any other close code (normal teardown, 1006 abnormal,
-		// transport error) carries no liveness guarantee — an abnormal
-		// close commonly means the attach itself failed against a dead
-		// session — so drop any cached liveness and let the next render
-		// re-probe the authoritative server rather than assuming alive.
-		if shellconn.SessionDeadOnClose(code) {
-			a.setShellAlive(tileID, false)
-		} else if _, ok := a.shellAlive[tileID]; ok {
-			delete(a.shellAlive, tileID)
-			a.draw()
-		}
-		a.releaseShellStream(p.ID, conn)
-		a.draw()
-		return nil
-	})
-	conn.onError = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		shellLog("onError pane=%s tile=%s readyState=%d", p.ID, tileID, conn.ws.Get("readyState").Int())
-		// The terminal connection just broke under the user's prompt; the
-		// onClose path handles liveness, this surfaces the why.
-		a.reportErr(errsurface.Error, "shell", "shell connection error")
-		return nil
-	})
-
-	// xterm → WS: bytes from the user's keypresses, IME, paste.
+	// xterm → PTY: bytes from the user's keypresses, IME, paste. The IPC pipe
+	// preserves ordering behind the shellOpen invoke, so no client-side queue
+	// is needed (what the WS transport's CONNECTING buffer used to do).
 	conn.onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		// args[0] is a JS string of bytes; convert to a Uint8Array for
-		// binary send so terminal control sequences (arrow keys, ESC)
-		// don't get mangled by UTF-8 reinterpretation.
-		s := args[0].String()
-		u8 := jsBytes(s)
-		conn.sendBinary(u8)
+		// args[0] is a JS string of bytes; convert to a Uint8Array so
+		// terminal control sequences (arrow keys, ESC) don't get mangled by
+		// UTF-8 reinterpretation.
+		bridgeShellWrite(conn.paneID, jsBytes(args[0].String()))
 		return nil
 	})
 	term.Call("onData", conn.onData)
@@ -465,16 +399,15 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 			return nil
 		}
 		conn.lastCols, conn.lastRows = cols, rows
-		payload, _ := json.Marshal(rpc.ShellStreamMessage{Kind: "resize", Cols: cols, Rows: rows})
-		conn.sendText(string(payload))
+		bridgeShellResize(conn.paneID, int(cols), int(rows))
 		return nil
 	})
 	term.Call("onResize", conn.onResize)
 
-	ws.Call("addEventListener", "message", conn.onMessage)
-	ws.Call("addEventListener", "open", conn.onOpen)
-	ws.Call("addEventListener", "close", conn.onClose)
-	ws.Call("addEventListener", "error", conn.onError)
+	// Open the stream in main; PTY output arrives via onShellData, an
+	// unexpected end via onShellExit (both installed once in
+	// installWebviewListeners and routed here by pane id).
+	bridgeShellOpen(p.ID, tileID, cols, rows, nil)
 
 	a.local(p.ID).shellConn = conn
 	// First sync: position over the pane content area now that we know
@@ -616,26 +549,42 @@ func jsBytes(s string) js.Value {
 	return u8
 }
 
-// sendBinary forwards a Uint8Array on the WebSocket, queueing if the
-// socket is still CONNECTING.
-func (c *shellStreamConn) sendBinary(u8 js.Value) {
-	switch shellconn.ShellSendAction(c.ws.Get("readyState").Int()) {
-	case shellconn.WSQueue:
-		c.pending = append(c.pending, u8)
-	case shellconn.WSSend:
-		c.ws.Call("send", u8)
+// onShellData routes a PTY output push (main → renderer) to the pane's
+// terminal. A push for a pane with no live conn (torn down a beat ago) is
+// dropped — main's registry already suppresses replaced-stream stragglers;
+// this guards the IPC tail.
+func (a *App) onShellData(paneID string, data js.Value) {
+	conn := a.shellConnFor(paneID)
+	if conn == nil || conn.closed {
+		return
 	}
+	conn.term.Call("write", data)
 }
 
-// sendText forwards a string on the WebSocket. Used for control
-// messages (resize) that go as text frames per the wire protocol.
-func (c *shellStreamConn) sendText(s string) {
-	switch shellconn.ShellSendAction(c.ws.Get("readyState").Int()) {
-	case shellconn.WSQueue:
-		c.pending = append(c.pending, s)
-	case shellconn.WSSend:
-		c.ws.Call("send", s)
+// onShellExit handles an UNEXPECTED stream end (main suppresses the event
+// for a local close — this side already tore down). sessionGone is the
+// server's definitive "this tmux session no longer exists": flip the cache
+// so the refresh affordance hides. Any other end carries no liveness
+// verdict — drop the cached answer and let the next render re-probe.
+func (a *App) onShellExit(paneID, message string, sessionGone bool) {
+	conn := a.shellConnFor(paneID)
+	if conn == nil {
+		return
 	}
+	shellLog("exit pane=%s tile=%s gone=%v msg=%q", paneID, conn.tileID, sessionGone, message)
+	if sessionGone {
+		a.setShellAlive(conn.tileID, false)
+	} else if _, ok := a.shellAlive[conn.tileID]; ok {
+		delete(a.shellAlive, conn.tileID)
+	}
+	if message != "" {
+		// The terminal just broke under the user's prompt — say why
+		// (charter §6).
+		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
+	}
+	conn.closed = true
+	a.releaseShellStream(paneID, conn)
+	a.draw()
 }
 
 // shellMirrorIntervalMs is how often a live shell terminal is snapshotted and
@@ -680,14 +629,15 @@ func (a *App) mirrorLiveShells() {
 	}
 }
 
-// closeShellStream is the freeze path: capture a JPEG of the
-// terminal (so the next descent shows it as the frozen preview),
-// POST it via SetShellPreview, then close the WebSocket. The
-// server-side WS-close just detaches the tmux client — the shell keeps
-// running inside the tmux session so a future refresh reattaches to
-// the same state. An ephemeral shell's ascent passes freeze=false: the
-// tile (and its tmux session) is about to be deleted, so there is
-// nothing to freeze for (issue #85). Idempotent.
+// closeShellStream is the freeze path: capture a JPEG of the terminal (so
+// the next descent shows it as the frozen preview), POST it via
+// SetShellPreview, then end the stream (main closes the gRPC send side and
+// suppresses the exit event — this side asked). The stream close just
+// detaches the tmux client — the shell keeps running inside the tmux
+// session so a future refresh reattaches to the same state. An ephemeral
+// shell's ascent passes freeze=false: the tile (and its tmux session) is
+// about to be deleted, so there is nothing to freeze for (issue #85).
+// Idempotent.
 func (a *App) closeShellStream(paneID string, freeze bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
@@ -708,9 +658,10 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 		a.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
 		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
-	if conn.ws.Truthy() {
-		conn.ws.Call("close")
-	}
+	bridgeShellClose(paneID)
+	// Main suppresses the exit event for a local close, so the teardown runs
+	// here, synchronously — the old WS flow waited for onClose to do this.
+	a.releaseShellStream(paneID, conn)
 }
 
 // closeAllShellStreams closes every open shell stream. Used on
@@ -728,8 +679,8 @@ func (a *App) closeAllShellStreams() {
 	}
 }
 
-// releaseShellStream tears down the DOM + js.Func handlers after the
-// WebSocket fires onClose. Called from the onClose handler.
+// releaseShellStream tears down the DOM + js.Func handlers. Called from
+// closeShellStream (local close) and onShellExit (unexpected end).
 func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	if pl, ok := a.localIf(paneID); ok && pl.shellConn == conn {
 		pl.shellConn = nil
@@ -737,10 +688,6 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	// Detach handlers and dispose the terminal before removing the
 	// DOM node so xterm's internal listeners don't fire against a
 	// removed element.
-	conn.onMessage.Release()
-	conn.onOpen.Release()
-	conn.onClose.Release()
-	conn.onError.Release()
 	conn.onData.Release()
 	conn.onResize.Release()
 	if conn.onMouse.Truthy() {
@@ -873,6 +820,16 @@ func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []b
 		JPEG:    jpeg,
 	}
 	_, err := a.cl.SetShellPreview(context.Background(), req)
+	if err != nil && isVersionConflict(err) {
+		// The stream close racing this freeze triggers the plugin's
+		// detach-time title capture (a version bump). The freeze is the
+		// user's leaving gesture; retry once over the automatic writer with
+		// a fresh claim (same rule as deleteEphemeralTile).
+		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
+			req.Version = fresh.Version
+			_, err = a.cl.SetShellPreview(context.Background(), req)
+		}
+	}
 	if err != nil {
 		shellLog("SetShellPreview tile=%s err=%v", tileID, err)
 		// The terminal frame the user just left is not persisted — the
