@@ -172,6 +172,72 @@ func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error
 	return err
 }
 
+// ReadContent fetches a tile's content bytes — the one content read
+// (2026-07-26 redesign). The stream is assembled here: chunk 1 carries the
+// media type and the row version the bytes belong to (the save basis, paired
+// with the bytes at the owner). A leaf link resolves to its target at the
+// serving node, so callers never reimplement link semantics.
+func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, mediaType string, version int64, err error) {
+	stream, err := c.cl.ReadContent(ctx, connect.NewRequest(&pb.ReadContentRequest{TileId: tileID}))
+	if err != nil {
+		return nil, "", 0, err
+	}
+	defer stream.Close()
+	first := true
+	for stream.Receive() {
+		msg := stream.Msg()
+		if first {
+			mediaType, version = msg.MediaType, msg.Version
+			first = false
+		}
+		data = append(data, msg.Data...)
+	}
+	if err := stream.Err(); err != nil {
+		return nil, "", 0, err
+	}
+	return data, mediaType, version, nil
+}
+
+// writeContentChunkBytes bounds each upload message; the server reassembles
+// and commits once, at clean close.
+const writeContentChunkBytes = 256 * 1024
+
+// WriteContent writes a tile's content bytes — the one content write:
+// version-claimed, commit-at-close (a failure anywhere leaves the old value
+// intact). data is the complete new value; chunking is a transport detail.
+func (c *Client) WriteContent(ctx context.Context, tileID string, version int64, data []byte) (*Tile, error) {
+	stream := c.cl.WriteContent(ctx)
+	end := min(writeContentChunkBytes, len(data))
+	if err := stream.Send(&pb.WriteContentRequest{TileId: tileID, Version: version, Data: data[:end]}); err != nil {
+		_, cerr := stream.CloseAndReceive()
+		if cerr != nil {
+			return nil, cerr
+		}
+		return nil, err
+	}
+	for off := end; off < len(data); off += writeContentChunkBytes {
+		e := min(off+writeContentChunkBytes, len(data))
+		if err := stream.Send(&pb.WriteContentRequest{Data: data[off:e]}); err != nil {
+			_, cerr := stream.CloseAndReceive()
+			if cerr != nil {
+				return nil, cerr
+			}
+			return nil, err
+		}
+	}
+	resp, err := stream.CloseAndReceive()
+	if err != nil {
+		return nil, err
+	}
+	return TileFromProto(resp.Msg.Tile), nil
+}
+
+// PlaceTile is the single placement writeback: one verb owns
+// (grid, x, y, w, h) — a move, a resize, or both in one write.
+func (c *Client) PlaceTile(ctx context.Context, req *PlaceTileRequest) (*Tile, error) {
+	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(PlaceTileToProto(req))))
+}
+
 func (c *Client) MoveTile(ctx context.Context, req *MoveTileRequest) (*Tile, error) {
 	return tileResp(c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req))))
 }

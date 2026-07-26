@@ -189,6 +189,14 @@ func (n *nodeExport) ResizeTile(ctx context.Context, r *pb.ResizeTileRequest) (*
 	return resp.Msg, nil
 }
 
+func (n *nodeExport) PlaceTile(ctx context.Context, r *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+	resp, err := n.h.PlaceTile(ctx, connect.NewRequest(r))
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return resp.Msg, nil
+}
+
 func (n *nodeExport) UpdateText(ctx context.Context, r *pb.UpdateTextRequest) (*pb.TileResponse, error) {
 	resp, err := n.h.UpdateText(ctx, connect.NewRequest(r))
 	if err != nil {
@@ -315,6 +323,79 @@ func (n *nodeExport) OpenShell(stream pb.Gridwell_OpenShellServer) error {
 		return nil
 	}
 	return err
+}
+
+// ReadContent routes through contentRoute — the same link-resolution point
+// the Connect door uses — so a remote mounter reading a link tile's content
+// gets the target's bytes exactly like a local caller. Chunks carry no ids,
+// so nothing needs re-qualification on the way back.
+func (n *nodeExport) ReadContent(r *pb.ReadContentRequest, stream pb.Gridwell_ReadContentServer) error {
+	c, local, err := n.srv.contentRoute(stream.Context(), r.TileId)
+	if err != nil {
+		return err
+	}
+	up, err := c.ReadContent(stream.Context(), &pb.ReadContentRequest{TileId: local})
+	if err != nil {
+		return err
+	}
+	for {
+		chunk, err := up.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(chunk); err != nil {
+			return err
+		}
+	}
+}
+
+// WriteContent peeks the bind message for the tile id, peels one segment, and
+// relays upstream; the upstream close — and so the commit — happens only after
+// a clean inbound end-of-stream. The TileResponse carries ids, so it is
+// re-qualified like every tile-returning verb.
+func (n *nodeExport) WriteContent(stream pb.Gridwell_WriteContentServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	uuid, local, ok := rpc.SplitID(first.TileId)
+	if !ok {
+		return status.Errorf(gcodes.InvalidArgument, "unqualified id %q", first.TileId)
+	}
+	c, found := n.srv.routeClient(uuid)
+	if !found {
+		return status.Errorf(gcodes.NotFound, "no plugin %q", uuid)
+	}
+	up, err := c.WriteContent(stream.Context())
+	if err != nil {
+		return err
+	}
+	if err := up.Send(&pb.WriteContentRequest{TileId: local, Version: first.Version, Data: first.Data}); err != nil {
+		return err
+	}
+	for {
+		msg, err := stream.Recv()
+		if err == io.EOF {
+			resp, cerr := up.CloseAndRecv()
+			if cerr != nil {
+				return cerr
+			}
+			t := resp.GetTile()
+			if t != nil {
+				t = qualifyTilesFor(n.srv.pluginReg.Transit(uuid), uuid, []*pb.Tile{t})[0]
+			}
+			return stream.SendAndClose(&pb.TileResponse{Tile: t})
+		}
+		if err != nil {
+			return err
+		}
+		if err := up.Send(msg); err != nil {
+			return err
+		}
+	}
 }
 
 // GetSession routes by the request's plugin chain (root_grid_id): the FIRST

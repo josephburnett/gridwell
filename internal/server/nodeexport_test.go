@@ -193,3 +193,77 @@ func TestNodeExportOpenShellBidi(t *testing.T) {
 	}
 	_ = stream.CloseSend()
 }
+
+// TestNodeExportContentStreams drives the new content verbs over the raw
+// gRPC export — the wire a remote mounter sees. WriteContent commits at
+// close and the response re-qualifies; ReadContent streams the bytes paired
+// with their version; PlaceTile routes like every unary.
+func TestNodeExportContentStreams(t *testing.T) {
+	c, _ := nodeServer(t)
+	ctx := context.Background()
+
+	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
+	if err != nil {
+		t.Fatalf("GetGrid(node grid): %v", err)
+	}
+	pluginRoot := ng.Tiles[0].ChildGridId
+	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: pluginRoot,
+		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
+	})
+	if err != nil {
+		t.Fatalf("CreateTile: %v", err)
+	}
+
+	w, err := c.WriteContent(ctx)
+	if err != nil {
+		t.Fatalf("WriteContent: %v", err)
+	}
+	if err := w.Send(&gridwellv1.WriteContentRequest{
+		TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# via the export"),
+	}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	resp, err := w.CloseAndRecv()
+	if err != nil {
+		t.Fatalf("CloseAndRecv: %v", err)
+	}
+	if got := resp.Tile.Id; got != created.Tile.Id {
+		t.Errorf("response id = %q, want re-qualified %q", got, created.Tile.Id)
+	}
+
+	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: created.Tile.Id})
+	if err != nil {
+		t.Fatalf("ReadContent: %v", err)
+	}
+	var data []byte
+	var version int64
+	first := true
+	for {
+		chunk, err := r.Recv()
+		if err != nil {
+			break
+		}
+		if first {
+			version = chunk.Version
+			first = false
+		}
+		data = append(data, chunk.Data...)
+	}
+	if string(data) != "# via the export" {
+		t.Errorf("content = %q", data)
+	}
+	if version != resp.Tile.Version {
+		t.Errorf("version %d, want %d — the basis must survive the export hop", version, resp.Tile.Version)
+	}
+
+	placed, err := c.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+		TileId: created.Tile.Id, Version: resp.Tile.Version, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
+	})
+	if err != nil {
+		t.Fatalf("PlaceTile: %v", err)
+	}
+	if placed.Tile.W != 3 || placed.Tile.X != 5 {
+		t.Errorf("placed = (%d,%d %dx%d), want (5,5 3x3)", placed.Tile.X, placed.Tile.Y, placed.Tile.W, placed.Tile.H)
+	}
+}

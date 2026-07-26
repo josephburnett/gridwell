@@ -27,9 +27,11 @@ func (s *Server) previewTile(w http.ResponseWriter, r *http.Request) {
 	// Embed links carry a qualified "<plugin-uuid>/<id>"; route to the owning
 	// plugin (the path keeps the "/" between uuid and id).
 	qualifiedID := strings.TrimPrefix(r.URL.Path, "/preview/tile/")
-	client, localID, ok := s.clientForID(qualifiedID)
-	if !ok {
-		http.Error(w, "invalid tile id", http.StatusBadRequest)
+	// contentRoute: an embed of a leaf link renders its TARGET's preview —
+	// the one resolution point, shared with the RPC doors.
+	client, localID, err := s.contentRoute(r.Context(), qualifiedID)
+	if err != nil {
+		writeHTTPError(w, err)
 		return
 	}
 	tr, err := client.GetTile(r.Context(), &pb.GetTileRequest{TileId: localID})

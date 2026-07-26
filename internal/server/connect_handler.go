@@ -173,9 +173,11 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 }
 
 func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Request[pb.GetTilePreviewRequest]) (*connect.Response[pb.GetTilePreviewResponse], error) {
-	c, local, _, err := h.route(req.Msg.TileId)
+	// contentRoute: a leaf link's preview is its TARGET's preview, resolved at
+	// the serving node (owner decision 8, 2026-07-26).
+	c, local, err := h.srv.contentRoute(ctx, req.Msg.TileId)
 	if err != nil {
-		return nil, err
+		return nil, asConnectError(err)
 	}
 	resp, err := c.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: local})
 	if err != nil {
