@@ -87,8 +87,8 @@ func TestSecondDBMountE2E(t *testing.T) {
 
 	// Create a text tile inside the second DB (descend path through the mount).
 	txt, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{WellIDs: []string{mount.ID}}, GridID: mount.ChildGridID,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# in second"),
+		GridID: mount.ChildGridID,
+		X:      0, Y: 0, W: 1, H: 1, Data: []byte("# in second"),
 	})
 	if err != nil {
 		t.Fatalf("CreateText in second DB: %v", err)
@@ -98,7 +98,7 @@ func TestSecondDBMountE2E(t *testing.T) {
 	}
 
 	// Content routes to the second plugin.
-	body, _, err := cl.GetTileContent(ctx, txt.ID)
+	body, _, _, err := cl.ReadContent(ctx, txt.ID)
 	if err != nil {
 		t.Fatalf("GetTileContent: %v", err)
 	}

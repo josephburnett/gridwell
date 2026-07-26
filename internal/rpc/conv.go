@@ -14,20 +14,6 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// PathToProto converts a Path to its wire form.
-func PathToProto(p Path) *pb.Path {
-	return &pb.Path{WellIds: p.WellIDs}
-}
-
-// PathFromProto converts a wire Path back into the Go type. nil maps to
-// an empty Path; the server treats it as the root pane.
-func PathFromProto(p *pb.Path) Path {
-	if p == nil {
-		return Path{}
-	}
-	return Path{WellIDs: p.WellIds}
-}
-
 // GridToProto converts a Grid to its wire form.
 func GridToProto(g *Grid) *pb.Grid {
 	if g == nil {
@@ -208,25 +194,25 @@ func EventFromProto(e *pb.Event) Event {
 // typed sugar over them; the plugin fans CreateTile back out by Kind.
 
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
-	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label,
 			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID}}
 }
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
-	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}, Data: r.Data}
+	return &pb.CreateTileRequest{GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}}
 }
 func CreateURLToProto(r *CreateURLRequest) *pb.CreateTileRequest {
-	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindURL, X: r.X, Y: r.Y, W: r.W, H: r.H, UrlString: r.URL, ObjectId: r.ObjectID}}
 }
 func CreateShellToProto(r *CreateShellRequest) *pb.CreateTileRequest {
-	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindShell, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}}
 }
 func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
-	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
-		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label, ObjectId: r.ObjectID}, Data: r.Data}
+	return &pb.CreateTileRequest{GridId: r.GridID,
+		Tile: &pb.Tile{Kind: KindPane, X: r.X, Y: r.Y, W: r.W, H: r.H, AltText: r.Label, ObjectId: r.ObjectID}}
 }
 
 // CreateLeafLinkToProto builds the CreateTile for a LEAF LINK: any leaf kind
@@ -234,7 +220,7 @@ func CreatePaneToProto(r *CreatePaneRequest) *pb.CreateTileRequest {
 // kinds — the destination plugin stores the reference verbatim and no content
 // rides along (bytes live in the target).
 func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
-	return &pb.CreateTileRequest{Path: PathToProto(r.Path), GridId: r.GridID,
+	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: r.Kind, X: r.X, Y: r.Y, W: r.W, H: r.H,
 			LinkTargetId: r.LinkTargetID, AltText: r.Label, ObjectId: r.ObjectID}}
 }
@@ -243,36 +229,29 @@ func CreateLeafLinkToProto(r *CreateLeafLinkRequest) *pb.CreateTileRequest {
 // tile's Kind; these helpers map each kind's framing/preview writeback onto it.
 
 func SetWellViewToProto(r *SetWellViewRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
 		Tile: &pb.Tile{Kind: KindWell, ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
 }
 func SetTextViewToProto(r *SetTextViewRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
 		Tile: &pb.Tile{Kind: KindText, TextX: r.TextX, TextY: r.TextY, TextW: r.TextW, TextH: r.TextH, TextMode: r.TextMode}}
 }
 func SetShellPreviewToProto(r *SetShellPreviewRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
 		Tile: &pb.Tile{Kind: KindShell}, Preview: r.JPEG}
 }
 func SetURLStateToProto(r *SetURLStateRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version,
+	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
 		Tile: &pb.Tile{Kind: KindURL, UrlString: r.URL, AltText: r.Title, UrlHistory: r.History}, Preview: r.JPEG}
 }
 
 // Mutation request converters.
 
-func MoveTileFromProto(r *pb.MoveTileRequest) *MoveTileRequest {
-	return &MoveTileRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, DestGridID: r.DestGridId, DestPath: PathFromProto(r.DestPath), X: r.X, Y: r.Y}
-}
-func MoveTileToProto(r *MoveTileRequest) *pb.MoveTileRequest {
-	return &pb.MoveTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, DestGridId: r.DestGridID, DestPath: PathToProto(r.DestPath), X: r.X, Y: r.Y}
-}
-
 func CloneTileFromProto(r *pb.CloneTileRequest) *CloneTileRequest {
-	return &CloneTileRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, DestGridID: r.DestGridId, DestPath: PathFromProto(r.DestPath), X: r.X, Y: r.Y}
+	return &CloneTileRequest{TileID: r.TileId, Version: r.Version, DestGridID: r.DestGridId, X: r.X, Y: r.Y}
 }
 func CloneTileToProto(r *CloneTileRequest) *pb.CloneTileRequest {
-	return &pb.CloneTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, DestGridId: r.DestGridID, DestPath: PathToProto(r.DestPath), X: r.X, Y: r.Y}
+	return &pb.CloneTileRequest{TileId: r.TileID, Version: r.Version, DestGridId: r.DestGridID, X: r.X, Y: r.Y}
 }
 
 func PlaceTileFromProto(r *pb.PlaceTileRequest) *PlaceTileRequest {
@@ -281,13 +260,6 @@ func PlaceTileFromProto(r *pb.PlaceTileRequest) *PlaceTileRequest {
 
 func PlaceTileToProto(r *PlaceTileRequest) *pb.PlaceTileRequest {
 	return &pb.PlaceTileRequest{TileId: r.TileID, Version: r.Version, GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
-}
-
-func ResizeTileFromProto(r *pb.ResizeTileRequest) *ResizeTileRequest {
-	return &ResizeTileRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, X: r.X, Y: r.Y, W: r.W, H: r.H}
-}
-func ResizeTileToProto(r *ResizeTileRequest) *pb.ResizeTileRequest {
-	return &pb.ResizeTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, X: r.X, Y: r.Y, W: r.W, H: r.H}
 }
 
 func ShellSessionAliveFromProto(r *pb.ShellSessionAliveRequest) *ShellSessionAliveRequest {
@@ -303,16 +275,9 @@ func ShellSessionAliveResponseToProto(r *ShellSessionAliveResponse) *pb.ShellSes
 	return &pb.ShellSessionAliveResponse{Alive: r.Alive}
 }
 
-func UpdateTextFromProto(r *pb.UpdateTextRequest) *UpdateTextRequest {
-	return &UpdateTextRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, Data: r.Data}
-}
-func UpdateTextToProto(r *UpdateTextRequest) *pb.UpdateTextRequest {
-	return &pb.UpdateTextRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, Data: r.Data}
-}
-
 func DeleteTileFromProto(r *pb.DeleteTileRequest) *DeleteTileRequest {
-	return &DeleteTileRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version}
+	return &DeleteTileRequest{TileID: r.TileId, Version: r.Version}
 }
 func DeleteTileToProto(r *DeleteTileRequest) *pb.DeleteTileRequest {
-	return &pb.DeleteTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version}
+	return &pb.DeleteTileRequest{TileId: r.TileID, Version: r.Version}
 }

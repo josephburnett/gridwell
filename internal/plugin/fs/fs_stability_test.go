@@ -99,7 +99,7 @@ func TestNewFileAppearsKeepingExistingPlacement(t *testing.T) {
 	}
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	note := tileByName(t, r.Tiles, "note.txt")
-	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 5, Y: 6}); err != nil {
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 5, Y: 6, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,7 +143,7 @@ func TestUnreadableDirKeepsRowsAndIdentity(t *testing.T) {
 	}
 	note := tileByName(t, r.Tiles, "note.txt")
 	// The user arranges the tile; this placement is the state under test.
-	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 5, Y: 6}); err != nil {
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 5, Y: 6, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}
 

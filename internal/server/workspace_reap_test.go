@@ -68,7 +68,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		`"a":{"pane":{"id":"p1","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}},`+
 		`"b":{"pane":{"id":"p2","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}}}},"focus":"p1"}`,
 		root, eph.ID, root, txt.ID)
-	if _, err := cl.SetPaneLayout(ctx, pt.ID, pt.Version, []byte(layout)); err != nil {
+	if _, err := cl.WriteContent(ctx, pt.ID, pt.Version, []byte(layout)); err != nil {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cl.SetPaneLayout(ctx, pt2.ID, pt2.Version, []byte(`{"v":999,"root":{}}`)); err != nil {
+	if _, err := cl.WriteContent(ctx, pt2.ID, pt2.Version, []byte(`{"v":999,"root":{}}`)); err != nil {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
 	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID, Version: pt2.Version}); err != nil {

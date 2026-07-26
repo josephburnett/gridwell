@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -59,29 +60,6 @@ func stripUUID(id, uuid string) string {
 		return l
 	}
 	return id
-}
-
-// localPathFor returns the descent path local to the target plugin. A path can
-// cross plugin boundaries (`…/<p1>/<t>/<p2>/<u>`); only the trailing run of
-// segments owned by the target plugin is meaningful to it, so segments above
-// the last boundary (owned by other plugins) are dropped and the rest are
-// stripped of the uuid prefix.
-func localPathFor(p *pb.Path, uuid string) *pb.Path {
-	if p == nil {
-		return nil
-	}
-	start := len(p.WellIds)
-	for start > 0 {
-		if u, _, ok := rpc.SplitID(p.WellIds[start-1]); !ok || u != uuid {
-			break // a bare or foreign-plugin segment marks the boundary
-		}
-		start--
-	}
-	out := make([]string, 0, len(p.WellIds)-start)
-	for _, id := range p.WellIds[start:] {
-		out = append(out, stripUUID(id, uuid))
-	}
-	return &pb.Path{WellIds: out}
 }
 
 // tileResp qualifies a plugin's TileResponse for the client, applying the
@@ -172,18 +150,6 @@ func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Reques
 		return nil, asConnectError(err)
 	}
 	resp, err := c.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: local})
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	return connect.NewResponse(resp), nil
-}
-
-func (h *connectHandler) GetTileContent(ctx context.Context, req *connect.Request[pb.GetTileContentRequest]) (*connect.Response[pb.GetTileContentResponse], error) {
-	c, local, _, err := h.route(req.Msg.TileId)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: local})
 	if err != nil {
 		return nil, asConnectError(err)
 	}
@@ -294,39 +260,6 @@ func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.Ge
 	resp, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
 	return h.tileResp(uuid, resp, err)
 }
-func (h *connectHandler) SetTileAlt(ctx context.Context, req *connect.Request[pb.SetTileAltRequest]) (*connect.Response[pb.TileResponse], error) {
-	c, local, uuid, err := h.route(req.Msg.TileId)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.SetTileAlt(ctx, &pb.SetTileAltRequest{TileId: local, Alt: req.Msg.Alt})
-	return h.tileResp(uuid, resp, err)
-}
-
-// SetPaneLayout routes by tile id (path-free, the SetTileAlt shape) — the
-// layout blob itself is opaque here; its ids are owner-frame-relative by the
-// codec's rule, so no rewriting happens at this hop or any transit hop.
-func (h *connectHandler) SetPaneLayout(ctx context.Context, req *connect.Request[pb.SetPaneLayoutRequest]) (*connect.Response[pb.TileResponse], error) {
-	c, local, uuid, err := h.route(req.Msg.TileId)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.SetPaneLayout(ctx, &pb.SetPaneLayoutRequest{
-		TileId: local, Version: req.Msg.Version, Data: req.Msg.Data,
-	})
-	return h.tileResp(uuid, resp, err)
-}
-
-func (h *connectHandler) SetContentZoom(ctx context.Context, req *connect.Request[pb.SetContentZoomRequest]) (*connect.Response[pb.TileResponse], error) {
-	c, local, uuid, err := h.route(req.Msg.TileId)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.SetContentZoom(ctx, &pb.SetContentZoomRequest{
-		TileId: local, Version: req.Msg.Version, ContentZoom: req.Msg.ContentZoom,
-	})
-	return h.tileResp(uuid, resp, err)
-}
 
 // ── creates ──────────────────────────────────────────────────────────────────
 
@@ -341,26 +274,11 @@ func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb
 		return nil, err
 	}
 	m.GridId = local
-	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.CreateTile(ctx, m)
 	return h.tileResp(uuid, resp, err)
 }
 
 // ── mutations ──────────────────────────────────────────────────────────────────
-
-func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
-	if err != nil {
-		return nil, err
-	}
-	m.TileId = local
-	m.DestGridId = stripUUID(m.DestGridId, uuid)
-	m.Path = localPathFor(m.Path, uuid)
-	m.DestPath = localPathFor(m.DestPath, uuid)
-	resp, err := c.MoveTile(ctx, m)
-	return h.tileResp(uuid, resp, err)
-}
 
 // CloneTile clones within a plugin, or — when the destination grid belongs to
 // a DIFFERENT plugin — applies the cross-plugin clone contract (owner decision
@@ -382,8 +300,6 @@ func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.
 	}
 	m.TileId = local
 	m.DestGridId = stripUUID(m.DestGridId, uuid)
-	m.Path = localPathFor(m.Path, uuid)
-	m.DestPath = localPathFor(m.DestPath, uuid)
 	resp, err := c.CloneTile(ctx, m)
 	return h.tileResp(uuid, resp, err)
 }
@@ -414,6 +330,7 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		Tile: &pb.Tile{Kind: st.Kind, X: m.X, Y: m.Y, W: st.W, H: st.H,
 			AltText: st.AltText, ObjectId: st.ObjectId},
 	}
+	var copyBody []byte
 	switch {
 	case st.Kind == "well" && st.Reference:
 		// The source is itself a LINK (an exit well — a mount, a node-grid
@@ -440,11 +357,11 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// being copied is a reference; copying it copies the reference).
 		create.Tile.LinkTargetId = st.LinkTargetId
 	case st.Kind == "text":
-		body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
-		if err != nil {
+		// The body bytes follow the create as a WriteContent (below) — one
+		// way to write bytes, even inside the router.
+		if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
 			return nil, asConnectError(err)
 		}
-		create.Data = body.Data
 	case st.Kind == "url":
 		create.Tile.UrlString = st.UrlString
 	case st.Kind == "shell":
@@ -456,13 +373,11 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// naming the ORIGINAL places (a pane tile is arrangement of
 		// references, not content), which is exactly the cross-plugin link
 		// semantics, carried in bytes instead of a child_grid_id. A
-		// never-arranged pane tile (no blob) copies with no Data.
+		// never-arranged pane tile (no blob) copies with no body.
 		if st.BlobId != 0 {
-			body, err := src.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: srcLocal})
-			if err != nil {
+			if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
 				return nil, asConnectError(err)
 			}
-			create.Data = body.Data
 		}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -474,20 +389,56 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		return nil, err
 	}
 	create.GridId = dstLocal
-	create.Path = localPathFor(m.DestPath, dstUUID)
 	out, err := dst.CreateTile(ctx, create)
+	if err != nil {
+		return h.tileResp(dstUUID, out, err)
+	}
+	if copyBody != nil {
+		// The copied bytes follow the create through the one content door.
+		// Not atomic with the create: a failure here leaves an empty copy
+		// (visible, deletable) and surfaces — never a silent half-state.
+		if _, werr := writeAllContent(ctx, dst, out.GetTile().GetId(), out.GetTile().GetVersion(), copyBody); werr != nil {
+			return nil, asConnectError(werr)
+		}
+		// Re-read so the response row carries the post-write version.
+		fresh, gerr := dst.GetTile(ctx, &pb.GetTileRequest{TileId: out.GetTile().GetId()})
+		if gerr == nil {
+			out = fresh
+		}
+	}
 	return h.tileResp(dstUUID, out, err)
 }
-func (h *connectHandler) ResizeTile(ctx context.Context, req *connect.Request[pb.ResizeTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
+
+// readAllContent drains a plugin's ReadContent stream into one value.
+func readAllContent(ctx context.Context, c pb.GridwellClient, tileID string) ([]byte, error) {
+	stream, err := c.ReadContent(ctx, &pb.ReadContentRequest{TileId: tileID})
 	if err != nil {
 		return nil, err
 	}
-	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.ResizeTile(ctx, m)
-	return h.tileResp(uuid, resp, err)
+	var data []byte
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return data, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, chunk.Data...)
+	}
+}
+
+// writeAllContent sends one complete value up a plugin's WriteContent stream
+// (commit-at-close, like every content write).
+func writeAllContent(ctx context.Context, c pb.GridwellClient, tileID string, version int64, data []byte) (*pb.TileResponse, error) {
+	stream, err := c.WriteContent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := stream.Send(&pb.WriteContentRequest{TileId: tileID, Version: version, Data: data}); err != nil {
+		return nil, err
+	}
+	return stream.CloseAndRecv()
 }
 
 // SetTile is the single framing/preview writeback router. The owning plugin
@@ -500,19 +451,7 @@ func (h *connectHandler) SetTile(ctx context.Context, req *connect.Request[pb.Se
 		return nil, err
 	}
 	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
 	resp, err := c.SetTile(ctx, m)
-	return h.tileResp(uuid, resp, err)
-}
-func (h *connectHandler) UpdateText(ctx context.Context, req *connect.Request[pb.UpdateTextRequest]) (*connect.Response[pb.TileResponse], error) {
-	m := req.Msg
-	c, local, uuid, err := h.route(m.TileId)
-	if err != nil {
-		return nil, err
-	}
-	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
-	resp, err := c.UpdateText(ctx, m)
 	return h.tileResp(uuid, resp, err)
 }
 
@@ -533,7 +472,6 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 		h.reapWorkspaceEphemerals(ctx, c, local, m.TileId)
 	}
 	m.TileId = local
-	m.Path = localPathFor(m.Path, uuid)
 	// The owning plugin reaps the tile's shell session (if any) as part of
 	// DeleteTile — the PTY lives behind the interface now.
 	if _, err := c.DeleteTile(ctx, m); err != nil {
@@ -555,13 +493,13 @@ func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, owner pb.G
 	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindPane || tr.GetTile().BlobId == 0 {
 		return
 	}
-	body, err := owner.GetTileContent(ctx, &pb.GetTileContentRequest{TileId: localID})
-	if err != nil || len(body.GetData()) == 0 {
+	body, err := readAllContent(ctx, owner, localID)
+	if err != nil || len(body) == 0 {
 		return
 	}
 	// Blob ids are in THIS node's frame (the encoder strips the reader's
 	// transit prefix, which is empty for a locally-owned pane tile).
-	tree, err := pane.DecodeLayout(body.GetData(), func(id string) string { return id })
+	tree, err := pane.DecodeLayout(body, func(id string) string { return id })
 	if err != nil {
 		log.Printf("gridwell: delete %s: layout blob unreadable, reaping nothing: %v", qualifiedID, err)
 		return

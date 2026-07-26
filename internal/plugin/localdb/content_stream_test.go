@@ -32,12 +32,27 @@ func grpcCreateText(t *testing.T, c gridwellv1.GridwellClient, gridID string, bo
 	r, err := c.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
 		GridId: gridID,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 4, H: 4},
-		Data:   body,
 	})
 	if err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}
-	return r.Tile
+	tile := r.Tile
+	if len(body) > 0 {
+		// Creation is metadata-only; the body follows through the one write.
+		w, err := c.WriteContent(context.Background())
+		if err != nil {
+			t.Fatalf("WriteContent open: %v", err)
+		}
+		if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tile.Id, Version: tile.Version, Data: body}); err != nil {
+			t.Fatalf("WriteContent send: %v", err)
+		}
+		resp, err := w.CloseAndRecv()
+		if err != nil {
+			t.Fatalf("WriteContent close: %v", err)
+		}
+		tile = resp.Tile
+	}
+	return tile
 }
 
 // readAll drains a ReadContent stream, returning the reassembled bytes and

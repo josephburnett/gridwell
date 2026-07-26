@@ -908,10 +908,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	src := d.snapshotTile
 	dstGridID := t.gridID
-	dstPath := rpc.Path{WellIDs: slices.Clone(t.path)}
 	if rpc.IsWellKind(src.Kind) {
 		req := &rpc.CreateWellRequest{
-			Path: dstPath, GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
+			GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
 			ChildGridID: src.ChildGridID, Label: src.AltText,
 			ViewX: src.ViewX, ViewY: src.ViewY, ViewZoom: src.ViewZoom,
 			ObjectID: src.ObjectID,
@@ -926,7 +925,7 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 		target = src.ID
 	}
 	req := &rpc.CreateLeafLinkRequest{
-		Path: dstPath, GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
+		GridID: dstGridID, X: dropX, Y: dropY, W: src.W, H: src.H,
 		Kind: src.Kind, LinkTargetID: target, Label: src.AltText,
 		ObjectID: src.ObjectID,
 	}
@@ -1858,7 +1857,6 @@ func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string,
 
 	parentGridID := a.gridIDForPathFrom(parentAnchor, parentPath)
 	req := &rpc.SetWellViewRequest{
-		Path:     rpc.Path{WellIDs: slices.Clone(parentPath)},
 		TileID:   well.ID,
 		Version:  well.Version,
 		ViewX:    newViewX,
@@ -1920,7 +1918,6 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
 
-	path := slices.Clone(p.Path)
 	mode := p.TextMode
 	// Through the per-tile save queue (issue #140): a debounced keystroke
 	// save may still be in flight, and this flush claims a version too — the
@@ -1965,7 +1962,6 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 		// Persist the framed window + mode so re-descent and the preview
 		// honor "however you left it" across reloads.
 		req := &rpc.SetTextViewRequest{
-			Path:     rpc.Path{WellIDs: path},
 			TileID:   file.ID,
 			Version:  curVersion,
 			TextX:    scrollX,
@@ -2135,9 +2131,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 // root view so its preview shows what descent will show.
 func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
 	req := &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		ChildGridID: pl.RootGridID,
 		Label:       pl.Label,
@@ -2154,11 +2148,9 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 // label, when non-empty, names the new grid (stored as the well's alt_text).
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
 	// Wells are created UNNAMED: naming happens from inside, via the name
 	// bubble (issue #118 — the + menu's name field is gone).
 	req := &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
 	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
@@ -2170,9 +2162,7 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 // initial bytes. Footprint is 1×1.
 func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
 	req := &rpc.CreateTextRequest{
-		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		Data: data,
 	}
@@ -2189,10 +2179,8 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 // start frozen and require an explicit refresh gesture.
 func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
 	paneID := p.ID
 	req := &rpc.CreateURLRequest{
-		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 		URL: url,
 	}
@@ -2256,7 +2244,7 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 	}
 	paneID := p.ID
 	req := &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: scratch, X: 0, Y: 0, W: 1, H: 1, URL: url,
+		GridID: scratch, X: 0, Y: 0, W: 1, H: 1, URL: url,
 	}
 	a.postTileMutate("CreateURL", scratch, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateURL(ctx, req)
@@ -2382,7 +2370,7 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 		return // plugin has no scratch grid — nothing to open into
 	}
 	paneID := p.ID
-	req := &rpc.CreateShellRequest{Path: rpc.Path{}, GridID: scratch, X: 0, Y: 0, W: 1, H: 1}
+	req := &rpc.CreateShellRequest{GridID: scratch, X: 0, Y: 0, W: 1, H: 1}
 	a.postTileMutate("CreateShell", scratch, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateShell(ctx, req)
 	}, func(tile rpc.Tile) {
@@ -2452,10 +2440,8 @@ func (a *App) shellURLActivate(paneID, url string) {
 // to the same tmux session (state preserved).
 func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	path := slices.Clone(p.Path)
 	paneID := p.ID
 	req := &rpc.CreateShellRequest{
-		Path:   rpc.Path{WellIDs: path},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
 	a.postTileMutate("CreateShell", gid, func(ctx context.Context) (*rpc.Tile, error) {

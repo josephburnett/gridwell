@@ -95,7 +95,7 @@ func TestCreateTextRPC(t *testing.T) {
 
 	// Body is fetched by routable tile id (GetBlob is unroutable in the
 	// rootless model — blob ids carry no plugin namespace).
-	data, version, err := cl.GetTileContent(ctx, tile.ID)
+	data, _, version, err := cl.ReadContent(ctx, tile.ID)
 	if err != nil {
 		t.Fatalf("get tile content: %v", err)
 	}
@@ -110,13 +110,11 @@ func TestCreateTextRPC(t *testing.T) {
 	// bumps the row, a re-fetch must return the NEW version with the new
 	// bytes — pairing them in one plugin read is what lets a client never
 	// claim a version whose content it hasn't seen.
-	upd, err := cl.UpdateText(ctx, &rpc.UpdateTextRequest{
-		TileID: tile.ID, Version: tile.Version, Data: []byte("# hi v2"),
-	})
+	upd, err := cl.WriteContent(ctx, tile.ID, tile.Version, []byte("# hi v2"))
 	if err != nil {
 		t.Fatalf("update text: %v", err)
 	}
-	data, version, err = cl.GetTileContent(ctx, tile.ID)
+	data, _, version, err = cl.ReadContent(ctx, tile.ID)
 	if err != nil {
 		t.Fatalf("get tile content after edit: %v", err)
 	}
@@ -210,8 +208,8 @@ func TestResizeAndSetWellViewRPCs(t *testing.T) {
 	}
 	id, v := tile.ID, tile.Version
 
-	tile, err = cl.ResizeTile(ctx, &rpc.ResizeTileRequest{
-		TileID: id, Version: v, X: 0, Y: 0, W: 2, H: 2,
+	tile, err = cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: id, Version: v, GridID: root, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatalf("resize: %v", err)
@@ -277,13 +275,11 @@ func TestUpdateTextRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create text: %v", err)
 	}
-	tile, err = cl.UpdateText(ctx, &rpc.UpdateTextRequest{
-		TileID: tile.ID, Version: tile.Version, Data: []byte("v2"),
-	})
+	tile, err = cl.WriteContent(ctx, tile.ID, tile.Version, []byte("v2"))
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	data, _, err := cl.GetTileContent(ctx, tile.ID)
+	data, _, _, err := cl.ReadContent(ctx, tile.ID)
 	if err != nil {
 		t.Fatalf("get tile content: %v", err)
 	}
@@ -306,9 +302,9 @@ func TestCloneAndMoveRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	moved, err := cl.MoveTile(ctx, &rpc.MoveTileRequest{
+	moved, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
 		TileID: clone.ID, Version: clone.Version,
-		DestGridID: root, X: 8, Y: 8,
+		GridID: root, X: 8, Y: 8, W: clone.W, H: clone.H,
 	})
 	if err != nil {
 		t.Fatalf("move: %v", err)
@@ -338,14 +334,14 @@ func TestErrorCodeMapping(t *testing.T) {
 		t.Errorf("overlap: code %v, want FailedPrecondition", got)
 	}
 
-	// Invalid path (bogus well id, qualified to the primary) → InvalidArgument.
+	// A create into a grid that doesn't exist → InvalidArgument (grid_id is
+	// the authoritative location; there is no descent path).
 	pUUID, _, _ := rpc.SplitID(root)
 	_, err = cl.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path:   rpc.Path{WellIDs: []string{pUUID + "/99"}},
-		GridID: root, X: 10, Y: 10, W: 1, H: 1,
+		GridID: pUUID + "/999999", X: 10, Y: 10, W: 1, H: 1,
 	})
 	if got := errCode(err); got != connect.CodeInvalidArgument {
-		t.Errorf("invalid path: code %v, want InvalidArgument", got)
+		t.Errorf("missing grid: code %v, want InvalidArgument", got)
 	}
 
 	// Non-http URL → InvalidArgument.
@@ -370,15 +366,11 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 	good := tile.Version
 
 	// Bump version via a successful UpdateText.
-	if _, err := cl.UpdateText(ctx, &rpc.UpdateTextRequest{
-		TileID: tile.ID, Version: good, Data: []byte("v2"),
-	}); err != nil {
+	if _, err := cl.WriteContent(ctx, tile.ID, good, []byte("v2")); err != nil {
 		t.Fatalf("first update: %v", err)
 	}
 	// Retry with stale claimed version.
-	_, err = cl.UpdateText(ctx, &rpc.UpdateTextRequest{
-		TileID: tile.ID, Version: good, Data: []byte("v3"),
-	})
+	_, err = cl.WriteContent(ctx, tile.ID, good, []byte("v3"))
 	if got := errCode(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("stale version: code %v, want FailedPrecondition", got)
 	}
@@ -441,7 +433,7 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	// Empty path + scratch grid: a normal create here would fail path validation
 	// (the scratch grid is off-grid); the scratch route bypasses it.
 	tile, err := cl.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: scratch, X: 0, Y: 0, W: 1, H: 1,
+		GridID: scratch, X: 0, Y: 0, W: 1, H: 1,
 		URL: "https://example.com/ephemeral",
 	})
 	if err != nil {

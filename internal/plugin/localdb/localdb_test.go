@@ -37,18 +37,29 @@ func rootGrid(t *testing.T, p *localdb.Plugin) string {
 	return info.RootGridId
 }
 
-// createText is a CreateTile helper for a text tile.
+// createText is a CreateTile helper for a text tile (creation is
+// metadata-only; the body follows through the store's one content write).
 func createText(t *testing.T, p *localdb.Plugin, gridID string, data []byte) *gridwellv1.Tile {
 	t.Helper()
 	cr, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
 		GridId: gridID,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 4, H: 4},
-		Data:   data,
 	})
 	if err != nil {
 		t.Fatalf("CreateTile(text): %v", err)
 	}
-	return cr.Tile
+	out := cr.Tile
+	if len(data) > 0 {
+		if _, err := p.Store().WriteContent(context.Background(), out.Id, out.Version, data); err != nil {
+			t.Fatalf("WriteContent(text): %v", err)
+		}
+		r2, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: out.Id})
+		if err != nil {
+			t.Fatalf("GetTile: %v", err)
+		}
+		out = r2.Tile
+	}
+	return out
 }
 
 func TestInfo(t *testing.T) {
@@ -62,9 +73,6 @@ func TestInfo(t *testing.T) {
 	}
 	if resp.RootGridId == "" {
 		t.Errorf("RootGridId = %q, want non-empty", resp.RootGridId)
-	}
-	if !resp.HasSession {
-		t.Error("expected HasSession=true")
 	}
 }
 
@@ -235,26 +243,28 @@ func TestCreateWell_InteriorVsExit(t *testing.T) {
 	}
 }
 
-// TestGetTileContent_ReturnsBody: a text tile's body is fetched through the
-// plugin (delegating to the store's blob).
-func TestGetTileContent_ReturnsBody(t *testing.T) {
+// TestReadContent_ReturnsBody: a text tile's body is fetched through the
+// store's one content read (the gRPC ReadContent chunks the same value; the
+// stream-level contract is pinned in content_stream_test.go).
+func TestReadContent_ReturnsBody(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	txt := createText(t, p, rootGrid(t, p), []byte("# hello"))
-	resp, err := p.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: txt.Id})
+	data, _, _, err := p.Store().ReadContent(ctx, txt.Id)
 	if err != nil {
-		t.Fatalf("GetTileContent: %v", err)
+		t.Fatalf("ReadContent: %v", err)
 	}
-	if string(resp.Data) != "# hello" {
-		t.Errorf("content = %q, want %q", resp.Data, "# hello")
+	if string(data) != "# hello" {
+		t.Errorf("content = %q, want %q", data, "# hello")
 	}
 }
 
-// TestGetTileAndSetTileAlt: GetTile reads a tile's metadata; SetTileAlt (the
-// wire rename gesture, issue #61) stamps a user-owned label on a shell tile
-// and returns it — and REFUSES a text tile, whose name derives from its first
-// line (a rename there would be clobbered by the next edit).
-func TestGetTileAndSetTileAlt(t *testing.T) {
+// TestGetTileAndRename: GetTile reads a tile's metadata; the SetTile rename
+// arm (the versioned wire rename, issue #61 + 2026-07-26) stamps a
+// user-owned label on a shell tile and returns it — and REFUSES a text tile,
+// whose name derives from its first line (a rename there would be clobbered
+// by the next edit).
+func TestGetTileAndRename(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
@@ -268,8 +278,8 @@ func TestGetTileAndSetTileAlt(t *testing.T) {
 		t.Errorf("GetTile = %+v, want the text tile", got.Tile)
 	}
 
-	if _, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: txt.Id, Alt: "claude"}); err == nil {
-		t.Error("SetTileAlt on a text tile must be refused (its name derives from content)")
+	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: txt.Id, Version: txt.Version, Rename: "claude"}); err == nil {
+		t.Error("rename of a text tile must be refused (its name derives from content)")
 	}
 
 	sh, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
@@ -279,9 +289,9 @@ func TestGetTileAndSetTileAlt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTile(shell): %v", err)
 	}
-	stamped, err := p.SetTileAlt(ctx, &gridwellv1.SetTileAltRequest{TileId: sh.Tile.Id, Alt: "claude"})
+	stamped, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: sh.Tile.Id, Version: sh.Tile.Version, Rename: "claude"})
 	if err != nil {
-		t.Fatalf("SetTileAlt: %v", err)
+		t.Fatalf("rename: %v", err)
 	}
 	if stamped.Tile.AltText != "claude" {
 		t.Errorf("alt = %q, want claude", stamped.Tile.AltText)
@@ -465,10 +475,8 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	}
 	layout := fmt.Sprintf(`{"v":1,"root":{"pane":{"id":"p1","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}},"focus":"p1"}`,
 		uuid+"/"+root, uuid+"/"+owned.Tile.Id)
-	if _, err := p.SetPaneLayout(ctx, &gridwellv1.SetPaneLayoutRequest{
-		TileId: pt.Tile.Id, Version: pt.Tile.Version, Data: []byte(layout),
-	}); err != nil {
-		t.Fatalf("SetPaneLayout: %v", err)
+	if _, err := p.Store().WriteContent(ctx, pt.Tile.Id, pt.Tile.Version, []byte(layout)); err != nil {
+		t.Fatalf("WriteContent(layout): %v", err)
 	}
 
 	swept, err := p.CleanupScratch(ctx)

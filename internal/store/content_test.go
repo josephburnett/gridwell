@@ -49,7 +49,7 @@ func TestWriteContentPaneLayoutNeverBumps(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	pane, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 1, 1, "ws", nil, "")
+	pane, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil, "")
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}
@@ -67,9 +67,9 @@ func TestWriteContentRefusesKindsWithoutContent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	well := placeWell(t, s, rpc.Path{}, root, 0, 0)
+	well := placeWell(t, s, root, 0, 0)
 	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root, X: 3, Y: 0, W: 1, H: 1, URL: "https://example.com",
+		GridID: root, X: 3, Y: 0, W: 1, H: 1, URL: "https://example.com",
 	})
 	if err != nil {
 		t.Fatalf("create url: %v", err)
@@ -87,7 +87,7 @@ func TestWriteContentLinkRefused(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	link, err := s.CreateLeafLink(ctx, rpc.Path{}, root, 0, 0, 1, 1,
+	link, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1,
 		rpc.KindText, "aabbccddaabbccddaabbccddaabbccdd/9", "linked", "")
 	if err != nil {
 		t.Fatalf("create leaf link: %v", err)
@@ -104,7 +104,7 @@ func TestRenameTileVersionedAndLatches(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "https://example.com",
 	})
 	if err != nil {
 		t.Fatalf("create url: %v", err)

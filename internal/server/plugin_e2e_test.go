@@ -64,7 +64,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 2b. The file tile's descent body (its metadata) routes to the plugin.
-	body, _, err := cl.GetTileContent(ctx, alpha.ID)
+	body, _, _, err := cl.ReadContent(ctx, alpha.ID)
 	if err != nil {
 		t.Fatalf("GetTileContent: %v", err)
 	}
@@ -73,11 +73,10 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 3. Move alpha.txt and confirm the new position survives a re-descent.
-	moved, err := cl.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path:       rpc.Path{WellIDs: []string{well.ID}},
-		TileID:     alpha.ID,
-		DestGridID: child,
-		X:          5, Y: 6,
+	moved, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: alpha.ID,
+		GridID: child,
+		X:      5, Y: 6, W: alpha.W, H: alpha.H,
 	})
 	if err != nil {
 		t.Fatalf("MoveTile: %v", err)
@@ -100,7 +99,6 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 
 	// 4. Delete alpha.txt: the file is removed from disk and swept from the grid.
 	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path:   rpc.Path{WellIDs: []string{well.ID}},
 		TileID: alpha.ID,
 	}); err != nil {
 		t.Fatalf("DeleteTile: %v", err)

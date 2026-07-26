@@ -59,18 +59,6 @@ func TestGridProtoRoundTrip(t *testing.T) {
 	}
 }
 
-// TestPathProtoRoundTrip: a populated path round-trips, and a nil wire path
-// decodes to the empty (root) Path the server treats as the root pane.
-func TestPathProtoRoundTrip(t *testing.T) {
-	in := Path{WellIDs: []string{"a", "b", "c"}}
-	if got := PathFromProto(PathToProto(in)); !reflect.DeepEqual(in, got) {
-		t.Errorf("path round-trip: in=%+v out=%+v", in, got)
-	}
-	if got := PathFromProto(nil); len(got.WellIDs) != 0 {
-		t.Errorf("nil wire path should be empty, got %+v", got)
-	}
-}
-
 // TestTilesSliceProto: nil slices stay nil (not []), and a populated slice
 // round-trips element-for-element.
 func TestTilesSliceProto(t *testing.T) {
@@ -120,27 +108,17 @@ func TestEventFromProtoNil(t *testing.T) {
 // converters preserve every field both ways. These are the wire boundary for
 // the placement mutations and the optimistic-concurrency Version key.
 func TestMutationRequestRoundTrips(t *testing.T) {
-	move := &MoveTileRequest{Path: Path{WellIDs: []string{"p"}}, TileID: "t", Version: 2, DestGridID: "dg", DestPath: Path{WellIDs: []string{"d"}}, X: 3, Y: 4}
-	if got := MoveTileFromProto(MoveTileToProto(move)); !reflect.DeepEqual(move, got) {
-		t.Errorf("move round-trip: in=%+v out=%+v", move, got)
+	place := &PlaceTileRequest{TileID: "t", Version: 2, GridID: "dg", X: 3, Y: 4, W: 5, H: 6}
+	if got := PlaceTileFromProto(PlaceTileToProto(place)); !reflect.DeepEqual(place, got) {
+		t.Errorf("place round-trip: in=%+v out=%+v", place, got)
 	}
 
-	clone := &CloneTileRequest{Path: Path{WellIDs: []string{"p"}}, TileID: "t", Version: 5, DestGridID: "dg", DestPath: Path{WellIDs: []string{"d"}}, X: 6, Y: 7}
+	clone := &CloneTileRequest{TileID: "t", Version: 5, DestGridID: "dg", X: 6, Y: 7}
 	if got := CloneTileFromProto(CloneTileToProto(clone)); !reflect.DeepEqual(clone, got) {
 		t.Errorf("clone round-trip: in=%+v out=%+v", clone, got)
 	}
 
-	resize := &ResizeTileRequest{Path: Path{WellIDs: []string{"p"}}, TileID: "t", Version: 8, X: 9, Y: 10, W: 11, H: 12}
-	if got := ResizeTileFromProto(ResizeTileToProto(resize)); !reflect.DeepEqual(resize, got) {
-		t.Errorf("resize round-trip: in=%+v out=%+v", resize, got)
-	}
-
-	upd := &UpdateTextRequest{Path: Path{WellIDs: []string{"p"}}, TileID: "t", Version: 13, Data: []byte("body")}
-	if got := UpdateTextFromProto(UpdateTextToProto(upd)); !reflect.DeepEqual(upd, got) {
-		t.Errorf("updatetext round-trip: in=%+v out=%+v", upd, got)
-	}
-
-	del := &DeleteTileRequest{Path: Path{WellIDs: []string{"p"}}, TileID: "t", Version: 14}
+	del := &DeleteTileRequest{TileID: "t", Version: 14}
 	if got := DeleteTileFromProto(DeleteTileToProto(del)); !reflect.DeepEqual(del, got) {
 		t.Errorf("delete round-trip: in=%+v out=%+v", del, got)
 	}
@@ -169,9 +147,9 @@ func TestCreateConvertersSelectKindAndFields(t *testing.T) {
 	if well.Tile.ViewX != 7 || well.Tile.ViewY != 8 || well.Tile.ViewZoom != 0.5 {
 		t.Errorf("CreateWell dropped the view framing seed: %+v", well.Tile)
 	}
-	text := CreateTextToProto(&CreateTextRequest{GridID: "g", W: 2, H: 2, Data: []byte("hi")})
-	if text.Tile.Kind != KindText || string(text.Data) != "hi" {
-		t.Errorf("CreateText mapping wrong: tile=%+v data=%q", text.Tile, text.Data)
+	text := CreateTextToProto(&CreateTextRequest{GridID: "g", W: 2, H: 2})
+	if text.Tile.Kind != KindText || text.Tile.W != 2 {
+		t.Errorf("CreateText mapping wrong: tile=%+v", text.Tile)
 	}
 	u := CreateURLToProto(&CreateURLRequest{GridID: "g", URL: "https://x"})
 	if u.Tile.Kind != KindURL || u.Tile.UrlString != "https://x" {

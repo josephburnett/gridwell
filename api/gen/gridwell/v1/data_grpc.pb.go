@@ -35,26 +35,17 @@ const (
 	Gridwell_Info_FullMethodName              = "/gridwell.v1.Gridwell/Info"
 	Gridwell_Probe_FullMethodName             = "/gridwell.v1.Gridwell/Probe"
 	Gridwell_ListPlugins_FullMethodName       = "/gridwell.v1.Gridwell/ListPlugins"
-	Gridwell_GetSession_FullMethodName        = "/gridwell.v1.Gridwell/GetSession"
-	Gridwell_PutSession_FullMethodName        = "/gridwell.v1.Gridwell/PutSession"
 	Gridwell_OpenShell_FullMethodName         = "/gridwell.v1.Gridwell/OpenShell"
 	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
-	Gridwell_GetTileContent_FullMethodName    = "/gridwell.v1.Gridwell/GetTileContent"
 	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
 	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
 	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
 	Gridwell_PlaceTile_FullMethodName         = "/gridwell.v1.Gridwell/PlaceTile"
 	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
 	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
-	Gridwell_MoveTile_FullMethodName          = "/gridwell.v1.Gridwell/MoveTile"
 	Gridwell_CloneTile_FullMethodName         = "/gridwell.v1.Gridwell/CloneTile"
-	Gridwell_ResizeTile_FullMethodName        = "/gridwell.v1.Gridwell/ResizeTile"
-	Gridwell_UpdateText_FullMethodName        = "/gridwell.v1.Gridwell/UpdateText"
 	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
-	Gridwell_SetTileAlt_FullMethodName        = "/gridwell.v1.Gridwell/SetTileAlt"
-	Gridwell_SetPaneLayout_FullMethodName     = "/gridwell.v1.Gridwell/SetPaneLayout"
-	Gridwell_SetContentZoom_FullMethodName    = "/gridwell.v1.Gridwell/SetContentZoom"
 	Gridwell_SetRootView_FullMethodName       = "/gridwell.v1.Gridwell/SetRootView"
 	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
@@ -74,15 +65,11 @@ type GridwellClient interface {
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error)
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
-	// ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
-	GetSession(ctx context.Context, in *GetSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BlobChunk], error)
-	PutSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutSessionRequest, PutSessionResponse], error)
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenShellRequest, OpenShellResponse], error)
 	// ── Reads ─────────────────────────────────────────────────────────────────
 	GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error)
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
@@ -92,20 +79,8 @@ type GridwellClient interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	MoveTile(ctx context.Context, in *MoveTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	ResizeTile(ctx context.Context, in *ResizeTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
-	SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	// SetPaneLayout writes a pane tile's serialized workspace layout.
-	// Framing-class (never bumps version); path-free by id. See the request
-	// message for both rationales.
-	SetPaneLayout(ctx context.Context, in *SetPaneLayoutRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	// SetContentZoom persists the per-tile content scale (text font, terminal
-	// font, page zoom — issue #82). Framing: never bumps version. Refused for
-	// wells (their view_zoom is the grid viewport, a different concept).
-	SetContentZoom(ctx context.Context, in *SetContentZoomRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	// SetRootView persists the plugin root-grid framing (the portal-level
 	// analogue of SetTile for a well). Framing only — never bumps version.
 	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
@@ -153,41 +128,9 @@ func (c *gridwellClient) ListPlugins(ctx context.Context, in *ListPluginsRequest
 	return out, nil
 }
 
-func (c *gridwellClient) GetSession(ctx context.Context, in *GetSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BlobChunk], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[0], Gridwell_GetSession_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[GetSessionRequest, BlobChunk]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Gridwell_GetSessionClient = grpc.ServerStreamingClient[BlobChunk]
-
-func (c *gridwellClient) PutSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutSessionRequest, PutSessionResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[1], Gridwell_PutSession_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[PutSessionRequest, PutSessionResponse]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Gridwell_PutSessionClient = grpc.ClientStreamingClient[PutSessionRequest, PutSessionResponse]
-
 func (c *gridwellClient) OpenShell(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenShellRequest, OpenShellResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[2], Gridwell_OpenShell_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[0], Gridwell_OpenShell_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -218,16 +161,6 @@ func (c *gridwellClient) GetTile(ctx context.Context, in *GetTileRequest, opts .
 	return out, nil
 }
 
-func (c *gridwellClient) GetTileContent(ctx context.Context, in *GetTileContentRequest, opts ...grpc.CallOption) (*GetTileContentResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTileContentResponse)
-	err := c.cc.Invoke(ctx, Gridwell_GetTileContent_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetTilePreviewResponse)
@@ -240,7 +173,7 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewR
 
 func (c *gridwellClient) ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[3], Gridwell_ReadContent_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[1], Gridwell_ReadContent_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +192,7 @@ type Gridwell_ReadContentClient = grpc.ServerStreamingClient[ContentChunk]
 
 func (c *gridwellClient) WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[4], Gridwell_WriteContent_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[2], Gridwell_WriteContent_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -300,16 +233,6 @@ func (c *gridwellClient) SetTile(ctx context.Context, in *SetTileRequest, opts .
 	return out, nil
 }
 
-func (c *gridwellClient) MoveTile(ctx context.Context, in *MoveTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_MoveTile_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
@@ -320,60 +243,10 @@ func (c *gridwellClient) CloneTile(ctx context.Context, in *CloneTileRequest, op
 	return out, nil
 }
 
-func (c *gridwellClient) ResizeTile(ctx context.Context, in *ResizeTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_ResizeTile_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_UpdateText_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *gridwellClient) DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteTileResponse)
 	err := c.cc.Invoke(ctx, Gridwell_DeleteTile_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetTileAlt(ctx context.Context, in *SetTileAltRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetTileAlt_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetPaneLayout(ctx context.Context, in *SetPaneLayoutRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetPaneLayout_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *gridwellClient) SetContentZoom(ctx context.Context, in *SetContentZoomRequest, opts ...grpc.CallOption) (*TileResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetContentZoom_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +275,7 @@ func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSession
 
 func (c *gridwellClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[5], Gridwell_Subscribe_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[3], Gridwell_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -433,15 +306,11 @@ type GridwellServer interface {
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	Probe(context.Context, *ProbeRequest) (*ProbeResponse, error)
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
-	// ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
-	GetSession(*GetSessionRequest, grpc.ServerStreamingServer[BlobChunk]) error
-	PutSession(grpc.ClientStreamingServer[PutSessionRequest, PutSessionResponse]) error
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]) error
 	// ── Reads ─────────────────────────────────────────────────────────────────
 	GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error)
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
-	GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
@@ -451,20 +320,8 @@ type GridwellServer interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error)
 	SetTile(context.Context, *SetTileRequest) (*TileResponse, error)
-	MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error)
 	CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error)
-	ResizeTile(context.Context, *ResizeTileRequest) (*TileResponse, error)
-	UpdateText(context.Context, *UpdateTextRequest) (*TileResponse, error)
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
-	SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error)
-	// SetPaneLayout writes a pane tile's serialized workspace layout.
-	// Framing-class (never bumps version); path-free by id. See the request
-	// message for both rationales.
-	SetPaneLayout(context.Context, *SetPaneLayoutRequest) (*TileResponse, error)
-	// SetContentZoom persists the per-tile content scale (text font, terminal
-	// font, page zoom — issue #82). Framing: never bumps version. Refused for
-	// wells (their view_zoom is the grid viewport, a different concept).
-	SetContentZoom(context.Context, *SetContentZoomRequest) (*TileResponse, error)
 	// SetRootView persists the plugin root-grid framing (the portal-level
 	// analogue of SetTile for a well). Framing only — never bumps version.
 	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
@@ -491,12 +348,6 @@ func (UnimplementedGridwellServer) Probe(context.Context, *ProbeRequest) (*Probe
 func (UnimplementedGridwellServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
 }
-func (UnimplementedGridwellServer) GetSession(*GetSessionRequest, grpc.ServerStreamingServer[BlobChunk]) error {
-	return status.Error(codes.Unimplemented, "method GetSession not implemented")
-}
-func (UnimplementedGridwellServer) PutSession(grpc.ClientStreamingServer[PutSessionRequest, PutSessionResponse]) error {
-	return status.Error(codes.Unimplemented, "method PutSession not implemented")
-}
 func (UnimplementedGridwellServer) OpenShell(grpc.BidiStreamingServer[OpenShellRequest, OpenShellResponse]) error {
 	return status.Error(codes.Unimplemented, "method OpenShell not implemented")
 }
@@ -505,9 +356,6 @@ func (UnimplementedGridwellServer) GetGrid(context.Context, *GetGridRequest) (*G
 }
 func (UnimplementedGridwellServer) GetTile(context.Context, *GetTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTile not implemented")
-}
-func (UnimplementedGridwellServer) GetTileContent(context.Context, *GetTileContentRequest) (*GetTileContentResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetTileContent not implemented")
 }
 func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
@@ -527,29 +375,11 @@ func (UnimplementedGridwellServer) CreateTile(context.Context, *CreateTileReques
 func (UnimplementedGridwellServer) SetTile(context.Context, *SetTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTile not implemented")
 }
-func (UnimplementedGridwellServer) MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method MoveTile not implemented")
-}
 func (UnimplementedGridwellServer) CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CloneTile not implemented")
 }
-func (UnimplementedGridwellServer) ResizeTile(context.Context, *ResizeTileRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ResizeTile not implemented")
-}
-func (UnimplementedGridwellServer) UpdateText(context.Context, *UpdateTextRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateText not implemented")
-}
 func (UnimplementedGridwellServer) DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteTile not implemented")
-}
-func (UnimplementedGridwellServer) SetTileAlt(context.Context, *SetTileAltRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetTileAlt not implemented")
-}
-func (UnimplementedGridwellServer) SetPaneLayout(context.Context, *SetPaneLayoutRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetPaneLayout not implemented")
-}
-func (UnimplementedGridwellServer) SetContentZoom(context.Context, *SetContentZoomRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetContentZoom not implemented")
 }
 func (UnimplementedGridwellServer) SetRootView(context.Context, *SetRootViewRequest) (*SetRootViewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetRootView not implemented")
@@ -635,24 +465,6 @@ func _Gridwell_ListPlugins_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_GetSession_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetSessionRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(GridwellServer).GetSession(m, &grpc.GenericServerStream[GetSessionRequest, BlobChunk]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Gridwell_GetSessionServer = grpc.ServerStreamingServer[BlobChunk]
-
-func _Gridwell_PutSession_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(GridwellServer).PutSession(&grpc.GenericServerStream[PutSessionRequest, PutSessionResponse]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Gridwell_PutSessionServer = grpc.ClientStreamingServer[PutSessionRequest, PutSessionResponse]
-
 func _Gridwell_OpenShell_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(GridwellServer).OpenShell(&grpc.GenericServerStream[OpenShellRequest, OpenShellResponse]{ServerStream: stream})
 }
@@ -692,24 +504,6 @@ func _Gridwell_GetTile_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).GetTile(ctx, req.(*GetTileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_GetTileContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTileContentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).GetTileContent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_GetTileContent_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).GetTileContent(ctx, req.(*GetTileContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -804,24 +598,6 @@ func _Gridwell_SetTile_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_MoveTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MoveTileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).MoveTile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_MoveTile_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).MoveTile(ctx, req.(*MoveTileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Gridwell_CloneTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CloneTileRequest)
 	if err := dec(in); err != nil {
@@ -840,42 +616,6 @@ func _Gridwell_CloneTile_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_ResizeTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ResizeTileRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).ResizeTile(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_ResizeTile_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).ResizeTile(ctx, req.(*ResizeTileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_UpdateText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateTextRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).UpdateText(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_UpdateText_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).UpdateText(ctx, req.(*UpdateTextRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Gridwell_DeleteTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteTileRequest)
 	if err := dec(in); err != nil {
@@ -890,60 +630,6 @@ func _Gridwell_DeleteTile_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).DeleteTile(ctx, req.(*DeleteTileRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetTileAlt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetTileAltRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetTileAlt(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetTileAlt_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetTileAlt(ctx, req.(*SetTileAltRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetPaneLayout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetPaneLayoutRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetPaneLayout(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetPaneLayout_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetPaneLayout(ctx, req.(*SetPaneLayoutRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Gridwell_SetContentZoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetContentZoomRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GridwellServer).SetContentZoom(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Gridwell_SetContentZoom_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetContentZoom(ctx, req.(*SetContentZoomRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1023,10 +709,6 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_GetTile_Handler,
 		},
 		{
-			MethodName: "GetTileContent",
-			Handler:    _Gridwell_GetTileContent_Handler,
-		},
-		{
 			MethodName: "GetTilePreview",
 			Handler:    _Gridwell_GetTilePreview_Handler,
 		},
@@ -1043,36 +725,12 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_SetTile_Handler,
 		},
 		{
-			MethodName: "MoveTile",
-			Handler:    _Gridwell_MoveTile_Handler,
-		},
-		{
 			MethodName: "CloneTile",
 			Handler:    _Gridwell_CloneTile_Handler,
 		},
 		{
-			MethodName: "ResizeTile",
-			Handler:    _Gridwell_ResizeTile_Handler,
-		},
-		{
-			MethodName: "UpdateText",
-			Handler:    _Gridwell_UpdateText_Handler,
-		},
-		{
 			MethodName: "DeleteTile",
 			Handler:    _Gridwell_DeleteTile_Handler,
-		},
-		{
-			MethodName: "SetTileAlt",
-			Handler:    _Gridwell_SetTileAlt_Handler,
-		},
-		{
-			MethodName: "SetPaneLayout",
-			Handler:    _Gridwell_SetPaneLayout_Handler,
-		},
-		{
-			MethodName: "SetContentZoom",
-			Handler:    _Gridwell_SetContentZoom_Handler,
 		},
 		{
 			MethodName: "SetRootView",
@@ -1084,16 +742,6 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "GetSession",
-			Handler:       _Gridwell_GetSession_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "PutSession",
-			Handler:       _Gridwell_PutSession_Handler,
-			ClientStreams: true,
-		},
 		{
 			StreamName:    "OpenShell",
 			Handler:       _Gridwell_OpenShell_Handler,

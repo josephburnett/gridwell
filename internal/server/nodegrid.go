@@ -234,28 +234,12 @@ func (n *nodeGrid) SetRootView(_ context.Context, req *pb.SetRootViewRequest) (*
 func (n *nodeGrid) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }
-func (n *nodeGrid) MoveTile(context.Context, *pb.MoveTileRequest) (*pb.TileResponse, error) {
-	return nil, errNodeGridReadOnly
-}
 func (n *nodeGrid) CloneTile(context.Context, *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	return nil, errNodeGridReadOnly
-}
-func (n *nodeGrid) ResizeTile(context.Context, *pb.ResizeTileRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }
 func (n *nodeGrid) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }
-func (n *nodeGrid) UpdateText(context.Context, *pb.UpdateTextRequest) (*pb.TileResponse, error) {
-	return nil, errNodeGridReadOnly
-}
 func (n *nodeGrid) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
-	return nil, errNodeGridReadOnly
-}
-func (n *nodeGrid) SetTileAlt(context.Context, *pb.SetTileAltRequest) (*pb.TileResponse, error) {
-	return nil, errNodeGridReadOnly
-}
-
-func (n *nodeGrid) SetContentZoom(context.Context, *pb.SetContentZoomRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }

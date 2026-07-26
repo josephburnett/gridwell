@@ -121,7 +121,7 @@ func TestNodeGridDescentReachesThePlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create through node-grid child: %v", err)
 	}
-	body, _, err := cl.GetTileContent(ctx, txt.ID)
+	body, _, _, err := cl.ReadContent(ctx, txt.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,13 +29,13 @@ func TestCloneShellCarriesScreenshot(t *testing.T) {
 	ctx := context.Background()
 
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	framed, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		Path: rpc.Path{}, TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
+		TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +45,8 @@ func TestCloneShellCarriesScreenshot(t *testing.T) {
 	}
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: framed.ID, Version: framed.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 50, Y: 0,
+		TileID: framed.ID, Version: framed.Version,
+		DestGridID: root, X: 50, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -72,20 +72,19 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	ctx := context.Background()
 
 	well, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner := rpc.Path{WellIDs: []string{well.ID}}
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: inner, GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
+		GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		Path: inner, TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
+		TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -94,8 +93,8 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	// shell-with-preview. The copy shares the immutable preview blob, so its
 	// refcount must rise to 2 — the case cloneSubtree must get right.
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 50, Y: 0,
+		TileID: well.ID, Version: well.Version,
+		DestGridID: root, X: 50, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,21 +127,20 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	ctx := context.Background()
 
 	well, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner := rpc.Path{WellIDs: []string{well.ID}}
 
 	sh, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: inner, GridID: well.ChildGridID, X: 2, Y: 0, W: 1, H: 1,
+		GridID: well.ChildGridID, X: 2, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	framed, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		Path: inner, TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
+		TileID: sh.ID, Version: sh.Version, JPEG: []byte("frozen-shell"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +153,7 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	// Delete the only well pointing at the child grid → child grid GCs,
 	// cascading through the shell inside it.
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
+		TileID: well.ID, Version: well.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}

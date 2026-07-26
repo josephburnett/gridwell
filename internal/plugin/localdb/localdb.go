@@ -126,7 +126,6 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		SchemaVersion: int64(p.st.SchemaVersion()),
 		RootGridId:    id,
 		ScratchGridId: scratch,
-		HasSession:    true,
 		// Capabilities the server reads from this handshake (never from the
 		// kind string): localdb emits change events and accepts creates.
 		Watch:        true,
@@ -181,23 +180,6 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 		return nil, errToStatus(err)
 	}
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
-}
-
-// GetTileContent returns a text tile's stored body bytes (the markdown source)
-// paired with the tile row version they belong to — the client's save basis.
-func (p *Plugin) GetTileContent(ctx context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
-	tile, err := p.st.GetTile(ctx, req.TileId)
-	if err != nil {
-		return nil, errToStatus(err)
-	}
-	if tile.BlobID == 0 {
-		return &gridwellv1.GetTileContentResponse{Version: tile.Version}, nil
-	}
-	data, mediaType, err := p.st.GetBlobWithMedia(ctx, tile.BlobID)
-	if err != nil {
-		return nil, errToStatus(err)
-	}
-	return &gridwellv1.GetTileContentResponse{Data: data, MediaType: mediaType, Version: tile.Version}, nil
 }
 
 // GetTile reads a single tile's metadata.
@@ -275,45 +257,6 @@ func (p *Plugin) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.Write
 	return stream.SendAndClose(&gridwellv1.TileResponse{Tile: rpc.TileToProto(tile)})
 }
 
-// SetTileAlt stamps a tile's display label and returns the updated tile. The
-// wire RPC is the USER rename gesture (issue #61): it latches alt_user so the
-// automatic captures (url title, shell command) defer from then on. Text
-// tiles are refused — their alt derives from the first line (UpdateText owns
-// it), so a rename would be silently clobbered on the next edit.
-func (p *Plugin) SetTileAlt(ctx context.Context, req *gridwellv1.SetTileAltRequest) (*gridwellv1.TileResponse, error) {
-	id, err := strconv.ParseInt(req.TileId, 10, 64)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid tile_id")
-	}
-	if t, err := p.st.GetTile(ctx, req.TileId); err == nil && t.Kind == rpc.KindText {
-		return nil, status.Error(codes.InvalidArgument,
-			"a text tile's name derives from its first line; rename the content instead")
-	}
-	if err := p.st.SetTileAlt(ctx, id, req.Alt, true); err != nil {
-		return nil, errToStatus(err)
-	}
-	return tileResp(p.st.GetTile(ctx, req.TileId))
-}
-
-// SetPaneLayout writes a pane tile's serialized workspace layout — framing,
-// never a version bump (the whole layout is arrangement; owner decision
-// 2026-07-08). Path-free by id, like SetTileAlt.
-func (p *Plugin) SetPaneLayout(ctx context.Context, req *gridwellv1.SetPaneLayoutRequest) (*gridwellv1.TileResponse, error) {
-	id, err := strconv.ParseInt(req.TileId, 10, 64)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid tile_id")
-	}
-	return tileResp(p.st.SetPaneLayout(ctx, id, req.Version, req.Data))
-}
-
-// SetContentZoom persists the per-tile content scale (issue #82) — framing,
-// never a version bump.
-func (p *Plugin) SetContentZoom(ctx context.Context, req *gridwellv1.SetContentZoomRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
-		TileID: req.TileId, Version: req.Version, ContentZoom: req.ContentZoom,
-	}))
-}
-
 // ── Creates ──────────────────────────────────────────────────────────────────
 
 // CreateTile is the single create: tile.kind selects which typed store create
@@ -323,13 +266,12 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
 	}
-	path := rpc.PathFromProto(req.Path)
 	if t.LinkTargetId != "" {
 		// A LEAF LINK: any leaf kind whose content lives in another plugin's
 		// tile (the cross-plugin left-drag). One create for all four kinds;
 		// the store validates the kind set and the qualified-target shape.
 		// t.ObjectId carries provenance (the link names the same origin).
-		return tileResp(p.st.CreateLeafLink(ctx, path, req.GridId, t.X, t.Y, t.W, t.H,
+		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 			t.Kind, t.LinkTargetId, t.AltText, t.ObjectId))
 	}
 	switch t.Kind {
@@ -340,12 +282,12 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// the exit well's label. On an interior well, alt_text is the
 		// user-given grid name (the + palette's name field); empty = unnamed.
 		if t.ChildGridId != "" {
-			return tileResp(p.st.CreateExitWell(ctx, path, req.GridId, t.X, t.Y, t.W, t.H,
+			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom, t.ObjectId))
 		}
-		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
+		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
 	case rpc.KindText:
-		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Data: req.Data, ObjectID: t.ObjectId}))
+		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, ObjectID: t.ObjectId}))
 	case rpc.KindURL:
 		// A url create targeting this plugin's scratch grid is an EPHEMERAL
 		// visit ("descend into a url") — route it path-free (the off-grid
@@ -354,7 +296,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
 			return tileResp(p.st.CreateScratchURL(ctx, t.UrlString))
 		}
-		return tileResp(p.st.CreateURL(ctx, &rpc.CreateURLRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, URL: t.UrlString}))
+		return tileResp(p.st.CreateURL(ctx, &rpc.CreateURLRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, URL: t.UrlString}))
 	case rpc.KindShell:
 		// A shell create targeting the scratch grid is an EPHEMERAL shell
 		// (clicked, not dragged, from the + palette): off-grid, path-free,
@@ -362,12 +304,12 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
 			return tileResp(p.st.CreateScratchShell(ctx))
 		}
-		return tileResp(p.st.CreateShell(ctx, &rpc.CreateShellRequest{Path: path, GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
+		return tileResp(p.st.CreateShell(ctx, &rpc.CreateShellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}))
 	case rpc.KindPane:
-		// A durable workspace. req.Data is the optional initial layout blob
-		// (usually empty: NULL blob_id = never arranged); alt_text is the
-		// workspace name the bottom bar shows.
-		return tileResp(p.st.CreatePane(ctx, path, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Data, t.ObjectId))
+		// A durable workspace, created with no layout blob (NULL blob_id =
+		// never arranged; the first arrangement rides WriteContent); alt_text
+		// is the workspace name the bottom bar shows.
+		return tileResp(p.st.CreatePane(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, nil, t.ObjectId))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}
@@ -375,16 +317,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 
 // ── Mutations ────────────────────────────────────────────────────────────────
 
-func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.MoveTile(ctx, rpc.MoveTileFromProto(req)))
-}
-
 func (p *Plugin) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
 	return tileResp(p.st.CloneTile(ctx, rpc.CloneTileFromProto(req)))
-}
-
-func (p *Plugin) ResizeTile(ctx context.Context, req *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.ResizeTile(ctx, rpc.ResizeTileFromProto(req)))
 }
 
 // PlaceTile is the single placement writeback (2026-07-26 redesign): one verb
@@ -423,16 +357,15 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "set: nil tile")
 	}
-	path := rpc.PathFromProto(req.Path)
 	switch t.Kind {
 	case rpc.KindWell:
-		return tileResp(p.st.SetWellView(ctx, &rpc.SetWellViewRequest{Path: path, TileID: req.TileId, Version: req.Version, ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}))
+		return tileResp(p.st.SetWellView(ctx, &rpc.SetWellViewRequest{TileID: req.TileId, Version: req.Version, ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}))
 	case rpc.KindText:
-		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{Path: path, TileID: req.TileId, Version: req.Version, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
+		return tileResp(p.st.SetTextView(ctx, &rpc.SetTextViewRequest{TileID: req.TileId, Version: req.Version, TextX: t.TextX, TextY: t.TextY, TextW: t.TextW, TextH: t.TextH, TextMode: t.TextMode}))
 	case rpc.KindShell:
-		return tileResp(p.st.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{Path: path, TileID: req.TileId, Version: req.Version, JPEG: req.Preview}))
+		return tileResp(p.st.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{TileID: req.TileId, Version: req.Version, JPEG: req.Preview}))
 	case rpc.KindURL:
-		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{Path: path, TileID: req.TileId, Version: req.Version, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText, History: t.UrlHistory}))
+		return tileResp(p.st.SetURLState(ctx, &rpc.SetURLStateRequest{TileID: req.TileId, Version: req.Version, JPEG: req.Preview, URL: t.UrlString, Title: t.AltText, History: t.UrlHistory}))
 	case rpc.KindPane:
 		// Refused so the kind→operation mapping stays total: the layout blob
 		// rides its own verb (SetPaneLayout — path-free, framing-class).
@@ -550,50 +483,6 @@ func (p *Plugin) captureShellTitle(tileID string) {
 
 // sessionChunkSize bounds each streamed session fragment.
 const sessionChunkSize = 64 * 1024
-
-// GetSession streams this DB's Chromium session blob down (cookies + web
-// storage). The plugin is the session boundary: one session per DB, shared by
-// all its url tiles. Empty when none has been captured yet.
-func (p *Plugin) GetSession(_ *gridwellv1.GetSessionRequest, stream grpc.ServerStreamingServer[gridwellv1.BlobChunk]) error {
-	data, err := p.st.GetSession(stream.Context())
-	if err != nil {
-		return errToStatus(err)
-	}
-	for off := 0; off < len(data); off += sessionChunkSize {
-		end := off + sessionChunkSize
-		if end > len(data) {
-			end = len(data)
-		}
-		if err := stream.Send(&gridwellv1.BlobChunk{Data: data[off:end]}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// PutSession stores a session blob streamed up (checkout/checkin, last-writer-
-// wins). The first message's root_grid_id binds the stream; for localdb the
-// session is the DB's singleton, so it is advisory.
-func (p *Plugin) PutSession(stream grpc.ClientStreamingServer[gridwellv1.PutSessionRequest, gridwellv1.PutSessionResponse]) error {
-	var buf []byte
-	for {
-		msg, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			if err := p.st.PutSession(stream.Context(), buf); err != nil {
-				return errToStatus(err)
-			}
-			return stream.SendAndClose(&gridwellv1.PutSessionResponse{})
-		}
-		if err != nil {
-			return err
-		}
-		buf = append(buf, msg.Data...)
-	}
-}
-
-func (p *Plugin) UpdateText(ctx context.Context, req *gridwellv1.UpdateTextRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.UpdateText(ctx, rpc.UpdateTextFromProto(req)))
-}
 
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	tileID := req.TileId

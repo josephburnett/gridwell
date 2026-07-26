@@ -37,7 +37,7 @@ func TestSetTextViewIsFramingNoVersionBump(t *testing.T) {
 	v0 := tile.Version
 
 	out, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
-		Path: rpc.Path{}, TileID: tile.ID, Version: v0,
+		TileID: tile.ID, Version: v0,
 		TextX: 10, TextY: 20, TextW: 300, TextH: 400, TextMode: "rendered",
 	})
 	if err != nil {
@@ -75,7 +75,7 @@ func TestSetShellPreviewIgnoresVersionButBumps(t *testing.T) {
 	// A stale version (-1) would be a conflict for any normal mutation; the
 	// shell preview accepts it.
 	out, err := s.SetShellPreview(ctx, &rpc.SetShellPreviewRequest{
-		Path: rpc.Path{}, TileID: tile.ID, Version: -1, JPEG: []byte("jpegbytes"),
+		TileID: tile.ID, Version: -1, JPEG: []byte("jpegbytes"),
 	})
 	if err != nil {
 		t.Fatalf("SetShellPreview with stale version should be accepted, got %v", err)
@@ -154,7 +154,7 @@ func TestSetPaneLayoutIsFramingNoVersionBump(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	tile, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "ws", nil, "")
+	tile, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "ws", nil, "")
 	if err != nil {
 		t.Fatalf("CreatePane: %v", err)
 	}

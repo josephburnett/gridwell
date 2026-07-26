@@ -34,7 +34,7 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 	}
 	switch t.Kind {
 	case rpc.KindText:
-		return s.UpdateText(ctx, &rpc.UpdateTextRequest{TileID: tileID, Version: version, Data: data})
+		return s.writeTextContent(ctx, tileID, version, data)
 	case rpc.KindPane:
 		id, err := parseID(tileID)
 		if err != nil {

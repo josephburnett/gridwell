@@ -16,7 +16,7 @@ import (
 func placeText(t *testing.T, s *Store, gridID string, x, y int64) *rpc.Tile {
 	t.Helper()
 	tile, err := s.CreateText(context.Background(), &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: gridID, X: x, Y: y, W: 1, H: 1, Data: []byte("body"),
+		GridID: gridID, X: x, Y: y, W: 1, H: 1, Data: []byte("body"),
 	})
 	if err != nil {
 		t.Fatalf("create text: %v", err)
@@ -24,10 +24,10 @@ func placeText(t *testing.T, s *Store, gridID string, x, y int64) *rpc.Tile {
 	return tile
 }
 
-func placeWell(t *testing.T, s *Store, path rpc.Path, gridID string, x, y int64) *rpc.Tile {
+func placeWell(t *testing.T, s *Store, gridID string, x, y int64) *rpc.Tile {
 	t.Helper()
 	tile, err := s.CreateWell(context.Background(), &rpc.CreateWellRequest{
-		Path: path, GridID: gridID, X: x, Y: y, W: 1, H: 1,
+		GridID: gridID, X: x, Y: y, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatalf("create well: %v", err)
@@ -60,7 +60,7 @@ func TestPlaceTileMoveAndResizeAtOnce(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	well := placeWell(t, s, rpc.Path{}, root, 5, 5)
+	well := placeWell(t, s, root, 5, 5)
 	tile := placeText(t, s, root, 0, 0)
 
 	got, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
@@ -135,9 +135,9 @@ func TestPlaceTileCycleRefusedWithoutPath(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	wellA := placeWell(t, s, rpc.Path{}, root, 0, 0)
+	wellA := placeWell(t, s, root, 0, 0)
 	// wellB lives INSIDE wellA's child grid; its own child is a grandchild of A.
-	wellB := placeWell(t, s, rpc.Path{WellIDs: []string{wellA.ID}}, wellA.ChildGridID, 0, 0)
+	wellB := placeWell(t, s, wellA.ChildGridID, 0, 0)
 
 	// Into its own child grid: refused.
 	if _, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
@@ -166,8 +166,8 @@ func TestPlaceTileExitWellHasNoLocalSubtree(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	interior := placeWell(t, s, rpc.Path{}, root, 0, 0)
-	exit, err := s.CreateExitWell(ctx, rpc.Path{}, root, 3, 3, 1, 1,
+	interior := placeWell(t, s, root, 0, 0)
+	exit, err := s.CreateExitWell(ctx, root, 3, 3, 1, 1,
 		"aabbccddaabbccddaabbccddaabbccdd/7", "mounted", 0, 0, 0, "")
 	if err != nil {
 		t.Fatalf("create exit well: %v", err)

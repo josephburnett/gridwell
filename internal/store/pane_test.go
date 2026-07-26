@@ -17,7 +17,7 @@ func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	pt, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "workbench", nil, "")
+	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "workbench", nil, "")
 	if err != nil {
 		t.Fatalf("CreatePane: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	pt, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "", nil, "")
+	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	orig, err := s.CreatePane(ctx, rpc.Path{}, root, 0, 0, 2, 2, "ws",
+	orig, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "ws",
 		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`), "")
 	if err != nil {
 		t.Fatal(err)
@@ -101,8 +101,8 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 		t.Fatal("initial layout not stored")
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: orig.ID, Version: orig.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 10, Y: 0,
+		TileID: orig.ID, Version: orig.Version,
+		DestGridID: root, X: 10, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 	// without the pane arm the kind would silently own nothing and the blobs
 	// would leak forever).
 	for _, tile := range []*rpc.Tile{orig, edited} {
-		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: tile.ID, Version: tile.Version}); err != nil {
+		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
 			t.Fatalf("delete %s: %v", tile.ID, err)
 		}
 	}

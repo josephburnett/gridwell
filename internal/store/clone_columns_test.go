@@ -21,7 +21,7 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 	ctx := context.Background()
 
 	tile, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 1, URL: "https://example.com",
+		GridID: root, X: 0, Y: 0, W: 2, H: 1, URL: "https://example.com",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -53,8 +53,8 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: tile.ID, Version: src.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 5, Y: 0,
+		TileID: tile.ID, Version: src.Version,
+		DestGridID: root, X: 5, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("clone: %v", err)

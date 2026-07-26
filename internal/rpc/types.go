@@ -187,13 +187,8 @@ const (
 	TextModeText     = "text"
 )
 
-// Path is the sequence of well-tile IDs walked from the root grid to the
-// pane the request originates from. Mutations carry it so the store can
-// validate the editing pane really sits in this leaf grid (checkPathLeaf);
-// copy-on-clone keeps tiles unshared, so the edit writes in place — no fork.
-type Path struct {
-	WellIDs []string `json:"well_ids"`
-}
+// (The Path type is gone — 2026-07-26 contraction: every mutation is
+// id-addressed + version-claimed.)
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells point at
 // child grids. The root grid has no parent.
@@ -347,7 +342,6 @@ type PluginInfo struct {
 // CreateTile carrying a Tile; the Client exposes typed sugar (CreateWell, …)
 // over it and the localdb store keeps these as its internal create API.
 type CreateWellRequest struct {
-	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
@@ -376,7 +370,6 @@ type CreateWellRequest struct {
 // reference; Label is the link's local alt_text (usually the source's);
 // ObjectID carries provenance ("" = fresh).
 type CreateLeafLinkRequest struct {
-	Path         Path   `json:"path"`
 	GridID       string `json:"grid_id"`
 	X            int64  `json:"x"`
 	Y            int64  `json:"y"`
@@ -389,7 +382,6 @@ type CreateLeafLinkRequest struct {
 }
 
 type CreateTextRequest struct {
-	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
@@ -402,7 +394,6 @@ type CreateTextRequest struct {
 }
 
 type CreatePaneRequest struct {
-	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
@@ -419,7 +410,6 @@ type CreatePaneRequest struct {
 }
 
 type CreateURLRequest struct {
-	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
@@ -438,7 +428,6 @@ type CreateURLRequest struct {
 // tmux session keyed by tile id and persists across ascents until
 // the tile is deleted (or the machine reboots).
 type CreateShellRequest struct {
-	Path   Path   `json:"path"`
 	GridID string `json:"grid_id"`
 	X      int64  `json:"x"`
 	Y      int64  `json:"y"`
@@ -452,34 +441,12 @@ type CreateShellRequest struct {
 // Mutations: Version is the claimed current version of TileID.
 // Server returns 409 / ErrVersionConflict if it does not match.
 
-type MoveTileRequest struct {
-	Path       Path   `json:"path"`
-	TileID     string `json:"tile_id"`
-	Version    int64  `json:"version"`
-	DestGridID string `json:"dest_grid_id"`
-	DestPath   Path   `json:"dest_path"`
-	X          int64  `json:"x"`
-	Y          int64  `json:"y"`
-}
-
 type CloneTileRequest struct {
-	Path       Path   `json:"path"`
 	TileID     string `json:"tile_id"`
 	Version    int64  `json:"version"`
 	DestGridID string `json:"dest_grid_id"`
-	DestPath   Path   `json:"dest_path"`
 	X          int64  `json:"x"`
 	Y          int64  `json:"y"`
-}
-
-type ResizeTileRequest struct {
-	Path    Path   `json:"path"`
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
-	X       int64  `json:"x"`
-	Y       int64  `json:"y"`
-	W       int64  `json:"w"`
-	H       int64  `json:"h"`
 }
 
 // PlaceTileRequest is the single placement writeback (2026-07-26,
@@ -498,7 +465,6 @@ type PlaceTileRequest struct {
 }
 
 type SetWellViewRequest struct {
-	Path     Path    `json:"path"`
 	TileID   string  `json:"tile_id"`
 	Version  int64   `json:"version"`
 	ViewX    int64   `json:"view_x"`
@@ -507,7 +473,6 @@ type SetWellViewRequest struct {
 }
 
 type SetTextViewRequest struct {
-	Path     Path   `json:"path"`
 	TileID   string `json:"tile_id"`
 	Version  int64  `json:"version"`
 	TextX    int64  `json:"text_x"`
@@ -520,7 +485,6 @@ type SetTextViewRequest struct {
 // SetShellPreviewRequest stores the JPEG frame captured at ascent as
 // the frozen preview. Bytes are hash-deduped through the blobs table.
 type SetShellPreviewRequest struct {
-	Path    Path   `json:"path"`
 	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 	JPEG    []byte `json:"jpeg"`
@@ -556,7 +520,6 @@ type SetRootViewRequest struct {
 // write to this tile's row (copy-on-clone: clones are independent, so there
 // is no fork). Empty jpeg/url/title fields are skipped.
 type SetURLStateRequest struct {
-	Path    Path   `json:"path"`
 	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 	JPEG    []byte `json:"jpeg"`
@@ -567,13 +530,6 @@ type SetURLStateRequest struct {
 	History string `json:"history,omitempty"`
 }
 
-type UpdateTextRequest struct {
-	Path    Path   `json:"path"`
-	TileID  string `json:"tile_id"`
-	Version int64  `json:"version"`
-	Data    []byte `json:"data"`
-}
-
 // SetContentZoomRequest persists a tile's content scale (framing; no bump).
 type SetContentZoomRequest struct {
 	TileID      string  `json:"tile_id"`
@@ -582,7 +538,6 @@ type SetContentZoomRequest struct {
 }
 
 type DeleteTileRequest struct {
-	Path    Path   `json:"path"`
 	TileID  string `json:"tile_id"`
 	Version int64  `json:"version"`
 }

@@ -36,42 +36,12 @@ func checkLabelCol(labelCol string) error {
 	return nil
 }
 
-// ApplyMove repositions a tile to (x, y) and returns the updated tile.
-// Cross-grid moves (e.g. dragging a file into a different directory) would
-// require an on-disk side effect and are rejected here; only in-grid
-// repositioning is supported.
-func ApplyMove(db *sql.DB, labelCol string, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
-	tileID, err := parseTileID(req.TileId)
-	if err != nil {
-		return nil, err
-	}
-	if err := guardSameGrid(db, tileID, req.DestGridId); err != nil {
-		return nil, err
-	}
-	if err := exec(db, `UPDATE tiles SET x = ?, y = ? WHERE id = ?`, req.X, req.Y, tileID); err != nil {
-		return nil, err
-	}
-	return tileResp(db, labelCol, tileID)
-}
-
 // ApplyGetTile reads one tile row by id — the call the cross-plugin clone
 // router makes against the SOURCE plugin (issue #171); every griddb-backed
 // plugin must answer it or a right-drag out of its grid fails.
 func ApplyGetTile(db *sql.DB, labelCol string, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
 	tileID, err := parseTileID(req.TileId)
 	if err != nil {
-		return nil, err
-	}
-	return tileResp(db, labelCol, tileID)
-}
-
-// ApplyResize sets a tile's footprint (x, y, w, h) and returns the updated tile.
-func ApplyResize(db *sql.DB, labelCol string, req *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
-	tileID, err := parseTileID(req.TileId)
-	if err != nil {
-		return nil, err
-	}
-	if err := exec(db, `UPDATE tiles SET x = ?, y = ?, w = ?, h = ? WHERE id = ?`, req.X, req.Y, req.W, req.H, tileID); err != nil {
 		return nil, err
 	}
 	return tileResp(db, labelCol, tileID)

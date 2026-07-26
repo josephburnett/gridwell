@@ -31,15 +31,15 @@ func TestCloneExitWellSharesReferenceNoNewGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateExitWell(ctx, rpc.Path{}, root, 0, 0, 1, 1, remoteChild, "remote", 0, 0, 0, "")
+	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", 0, 0, 0, "")
 	if err != nil {
 		t.Fatalf("create exit well: %v", err)
 	}
 	before := gridRowCount(t, s)
 
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: ew.ID, Version: ew.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 2, Y: 0,
+		TileID: ew.ID, Version: ew.Version,
+		DestGridID: root, X: 2, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("clone exit well: %v", err)
@@ -65,17 +65,17 @@ func TestDeleteExitWellDropsReferenceOnly(t *testing.T) {
 
 	// An interior well alongside it, whose LOCAL child grid must survive the
 	// exit-well delete untouched.
-	interior, err := s.CreateWell(ctx, &rpc.CreateWellRequest{Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 1, H: 1})
+	interior, err := s.CreateWell(ctx, &rpc.CreateWellRequest{GridID: root, X: 5, Y: 5, W: 1, H: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ew, err := s.CreateExitWell(ctx, rpc.Path{}, root, 0, 0, 1, 1, remoteChild, "remote", 0, 0, 0, "")
+	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", 0, 0, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	before := gridRowCount(t, s)
 
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: ew.ID, Version: ew.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: ew.ID, Version: ew.Version}); err != nil {
 		t.Fatalf("delete exit well: %v", err)
 	}
 	// No local grid was torn down (the well's own grid count drops by one only
@@ -95,13 +95,13 @@ func TestMoveExitWellPreservesReference(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateExitWell(ctx, rpc.Path{}, root, 0, 0, 1, 1, remoteChild, "remote", 0, 0, 0, "")
+	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", 0, 0, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, TileID: ew.ID, Version: ew.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 3, Y: 3,
+	moved, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: ew.ID, Version: ew.Version,
+		GridID: root, X: 3, Y: 3, W: ew.W, H: ew.H,
 	})
 	if err != nil {
 		t.Fatalf("move exit well: %v", err)

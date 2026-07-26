@@ -44,9 +44,6 @@ func (p *Plugin) GetGrid(ctx context.Context, r *gridwellv1.GetGridRequest) (*gr
 func (p *Plugin) GetTile(ctx context.Context, r *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.GetTile(ctx, r)
 }
-func (p *Plugin) GetTileContent(ctx context.Context, r *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
-	return p.c.GetTileContent(ctx, r)
-}
 func (p *Plugin) GetTilePreview(ctx context.Context, r *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	return p.c.GetTilePreview(ctx, r)
 }
@@ -56,45 +53,17 @@ func (p *Plugin) CreateTile(ctx context.Context, r *gridwellv1.CreateTileRequest
 func (p *Plugin) SetTile(ctx context.Context, r *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.SetTile(ctx, r)
 }
-func (p *Plugin) MoveTile(ctx context.Context, r *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.MoveTile(ctx, r)
-}
 func (p *Plugin) CloneTile(ctx context.Context, r *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.CloneTile(ctx, r)
-}
-func (p *Plugin) ResizeTile(ctx context.Context, r *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.ResizeTile(ctx, r)
 }
 func (p *Plugin) PlaceTile(ctx context.Context, r *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.PlaceTile(ctx, r)
 }
-func (p *Plugin) UpdateText(ctx context.Context, r *gridwellv1.UpdateTextRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.UpdateText(ctx, r)
-}
 func (p *Plugin) DeleteTile(ctx context.Context, r *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	return p.c.DeleteTile(ctx, r)
 }
-func (p *Plugin) SetTileAlt(ctx context.Context, r *gridwellv1.SetTileAltRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.SetTileAlt(ctx, r)
-}
-
-func (p *Plugin) SetContentZoom(ctx context.Context, r *gridwellv1.SetContentZoomRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.SetContentZoom(ctx, r)
-}
-
-func (p *Plugin) SetPaneLayout(ctx context.Context, r *gridwellv1.SetPaneLayoutRequest) (*gridwellv1.TileResponse, error) {
-	return p.c.SetPaneLayout(ctx, r)
-}
 
 // ── server-stream forwards (downstream only) ─────────────────────────────────
-
-func (p *Plugin) GetSession(r *gridwellv1.GetSessionRequest, ss grpc.ServerStreamingServer[gridwellv1.BlobChunk]) error {
-	cs, err := p.c.GetSession(ss.Context(), r)
-	if err != nil {
-		return err
-	}
-	return relay(cs, ss)
-}
 
 func (p *Plugin) ReadContent(r *gridwellv1.ReadContentRequest, ss grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
 	cs, err := p.c.ReadContent(ss.Context(), r)
@@ -132,29 +101,6 @@ func relay[T any](from recvStream[T], to sendStream[T]) error {
 }
 
 // ── client-stream forward (upstream then one response) ───────────────────────
-
-func (p *Plugin) PutSession(ss grpc.ClientStreamingServer[gridwellv1.PutSessionRequest, gridwellv1.PutSessionResponse]) error {
-	cs, err := p.c.PutSession(ss.Context())
-	if err != nil {
-		return err
-	}
-	for {
-		msg, err := ss.Recv()
-		if errors.Is(err, io.EOF) {
-			resp, err := cs.CloseAndRecv()
-			if err != nil {
-				return err
-			}
-			return ss.SendAndClose(resp)
-		}
-		if err != nil {
-			return err
-		}
-		if err := cs.Send(msg); err != nil {
-			return err
-		}
-	}
-}
 
 // WriteContent forwards the content write with the same commit-at-close
 // contract it carries everywhere: bytes relay upstream as they arrive, and

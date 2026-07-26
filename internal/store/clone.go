@@ -11,97 +11,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// checkLeafGrid returns an error if the path's leaf grid doesn't match wantGridID.
-func checkLeafGrid(seq gridSequence, wantGridID int64) error {
-	got := seq.grids[len(seq.grids)-1]
-	if got != wantGridID {
-		return fmt.Errorf("%w: path leaf grid is %d not %d", ErrInvalidPath, got, wantGridID)
-	}
-	return nil
-}
-
-// gridSequence is the sequence of grid ids from the root down to the leaf
-// grid the editing pane is in. grids[0] is always the current root grid;
-// grids[len-1] is the leaf. wells[i] is the well in grids[i] that points at
-// grids[i+1], so len(wells) == len(grids)-1.
-type gridSequence struct {
-	grids []int64
-	wells []int64
-}
-
-// buildGridSequence validates the path and returns the sequence of grids and
-// path wells for it.
-func (s *Store) buildGridSequence(ctx context.Context, q gridReader, p rpc.Path) (gridSequence, error) {
-	root, err := rootGridID(ctx, q)
-	if err != nil {
-		return gridSequence{}, err
-	}
-	seq := gridSequence{grids: []int64{root}}
-	for _, wellIDStr := range p.WellIDs {
-		wellID, err := parseID(wellIDStr)
-		if err != nil {
-			return gridSequence{}, fmt.Errorf("%w: well %q: %v", ErrInvalidPath, wellIDStr, err)
-		}
-		w, err := s.loadTile(ctx, q, wellID)
-		if err != nil {
-			return gridSequence{}, fmt.Errorf("%w: well %d: %v", ErrInvalidPath, wellID, err)
-		}
-		if !isWellKind(w.Kind) {
-			return gridSequence{}, fmt.Errorf("%w: tile %d is not a well", ErrInvalidPath, wellID)
-		}
-		if w.GridID != strconv.FormatInt(seq.grids[len(seq.grids)-1], 10) {
-			return gridSequence{}, fmt.Errorf("%w: well %d not in grid %d", ErrInvalidPath, wellID, seq.grids[len(seq.grids)-1])
-		}
-		seq.wells = append(seq.wells, wellID)
-		childID, _ := strconv.ParseInt(w.ChildGridID, 10, 64)
-		seq.grids = append(seq.grids, childID)
-	}
-	return seq, nil
-}
-
 // isWellKind reports whether a tile kind has a child grid that can be
 // descended into (the "well" kind — interior or, by a cross-plugin
 // child_grid_id, an exit well). Thin alias for rpc.IsWellKind so the set lives
 // in one place; kept as a package-local name for the many store callsites.
 func isWellKind(kind string) bool {
 	return rpc.IsWellKind(kind)
-}
-
-// checkPathLeaf validates path and that `tile` lives in its leaf grid,
-// returning that leaf grid id. This is the in-place-edit replacement for the
-// old preWrite: with copy-on-clone nothing is ever shared, so a content edit
-// never forks — it writes the tile exactly where it sits. The path is still
-// validated (it's how the pane says where it is) and the tile must be in it.
-func (s *Store) checkPathLeaf(ctx context.Context, tx *sql.Tx, path rpc.Path, tile *rpc.Tile) (int64, error) {
-	// Off-grid (scratch) tiles have no descent path — the scratch grid hangs
-	// off no well, so no path can name it. It is its own leaf: an ephemeral
-	// visit's freeze and its delete-on-ascent (issue #85) both mutate the
-	// tile path-free. Without this, EVERY mutation on a scratch tile failed
-	// "descent path is invalid" (the ascent freeze surfaced that on the error
-	// strip on every ephemeral visit).
-	var scratch string
-	if err := tx.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`,
-		systemKeyScratchGridID).Scan(&scratch); err == nil && scratch != "" && tile.GridID == scratch {
-		return parseID(scratch)
-	}
-	// An EMPTY path addresses the tile by id alone — the same contract as
-	// GetTileContent. The tile's row already owns its location (GridID);
-	// requiring callers to re-supply it as a descent path made every new save
-	// path a chance to supply it wrong, and forced focus-independent flushes
-	// (the dirty-content sweep) to reconstruct state the server has. A
-	// non-empty path still validates against the tile as before.
-	if len(path.WellIDs) == 0 {
-		return parseID(tile.GridID)
-	}
-	seq, err := s.buildGridSequence(ctx, tx, path)
-	if err != nil {
-		return 0, err
-	}
-	leaf := seq.grids[len(seq.grids)-1]
-	if tile.GridID != strconv.FormatInt(leaf, 10) {
-		return 0, fmt.Errorf("%w: tile %s not in path leaf grid %d", ErrInvalidPath, tile.ID, leaf)
-	}
-	return leaf, nil
 }
 
 // cloneSubtree deep-copies a grid and everything beneath it into fresh rows,

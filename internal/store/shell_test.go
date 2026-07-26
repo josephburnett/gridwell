@@ -18,7 +18,7 @@ func TestCreateShellCreatesFrozenTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	tile, err := s.CreateShell(context.Background(), &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +42,7 @@ func TestSetShellPreviewStoresAndDedupes(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestSetShellPreviewIgnoresStaleVersion(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func TestSetShellPreviewClearsOnEmpty(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestDeleteShellDropsPreviewBlob(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestDeleteShellDropsPreviewBlob(t *testing.T) {
 		t.Errorf("refcount after SetShellPreview = %d, want 1", rc)
 	}
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		Path: rpc.Path{}, TileID: stamped.ID, Version: stamped.Version,
+		TileID: stamped.ID, Version: stamped.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -211,15 +211,13 @@ func TestUpdateTextRejectsShell(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	tile, err := s.CreateShell(ctx, &rpc.CreateShellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		TileID: tile.ID, Version: tile.Version, Data: []byte("nope"),
-	})
-	if !errors.Is(err, ErrNotTextTile) {
-		t.Errorf("got %v, want ErrNotTextTile", err)
+	_, err = s.WriteContent(ctx, tile.ID, tile.Version, []byte("nope"))
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("got %v, want ErrInvalidArgument (shell content is the frozen preview)", err)
 	}
 }

@@ -255,15 +255,6 @@ func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gr
 	return griddb.ApplyGetTile(p.db, procLabelCol, req)
 }
 
-func (p *Plugin) MoveTile(_ context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
-	return griddb.ApplyMove(p.db, procLabelCol, req)
-}
-
-// ResizeTile persists a new footprint for a process tile.
-func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
-	return griddb.ApplyResize(p.db, procLabelCol, req)
-}
-
 // PlaceTile is the single placement writeback: in-grid only (a process tile
 // cannot change parent).
 func (p *Plugin) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
@@ -279,50 +270,46 @@ func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gr
 	return griddb.ApplySetWellView(p.db, procLabelCol, req)
 }
 
-// GetTileContent returns the descent body for the @info tile: a markdown
+// ContentBody returns the descent body for the @info tile: a markdown
 // summary of the grid's root process metadata. Non-@info tiles and gone
 // processes return empty content rather than an error.
-func (p *Plugin) GetTileContent(_ context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
-	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, err error) {
+	tileID, err := strconv.ParseInt(tileIDStr, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("proc GetTileContent: invalid tile_id %q", req.TileId)
+		return nil, "", fmt.Errorf("proc ReadContent: invalid tile_id %q", tileIDStr)
 	}
 	var gridID int64
 	var key, kind string
 	err = p.db.QueryRow(`SELECT grid_id, key, kind FROM tiles WHERE id = ?`, tileID).Scan(&gridID, &key, &kind)
 	if err == sql.ErrNoRows {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if kind != "text" || key != infoKey {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return nil, "", nil
 	}
 	rootPID, err := p.gridPID(gridID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	info, err := procsource.Get(p.procRoot, rootPID)
 	if err != nil {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return nil, "", nil
 	}
-	return &gridwellv1.GetTileContentResponse{
-		Data:      []byte(procsource.MetadataMarkdown(info)),
-		MediaType: "text/markdown",
-	}, nil
+	return []byte(procsource.MetadataMarkdown(info)), "text/markdown", nil
 }
 
-// ReadContent streams the same descent body GetTileContent serves (one chunk;
-// proc bodies are small @info summaries, version 0 — not version-edited).
-// The unary verb dies at the Stage 9 contraction and this becomes the one
+// ReadContent streams a process tile's descent body (one chunk; proc bodies
+// are small @info summaries, version 0 — not version-edited). The one
 // content read.
 func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
-	resp, err := p.GetTileContent(stream.Context(), &gridwellv1.GetTileContentRequest{TileId: req.TileId})
+	data, mediaType, err := p.ContentBody(req.TileId)
 	if err != nil {
 		return err
 	}
-	return stream.Send(&gridwellv1.ContentChunk{Data: resp.Data, MediaType: resp.MediaType, Version: resp.Version})
+	return stream.Send(&gridwellv1.ContentChunk{Data: data, MediaType: mediaType})
 }
 
 // Probe checks whether the process backing tile_id still exists.

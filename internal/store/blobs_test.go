@@ -15,8 +15,8 @@ func TestGetBlobReturnsBytes(t *testing.T) {
 	ctx := context.Background()
 
 	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("payload"),
+		GridID: root,
+		X:      0, Y: 0, W: 1, H: 1, Data: []byte("payload"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestBlobSelfDescribing(t *testing.T) {
 	ctx := context.Background()
 
 	txt, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hi"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,13 +66,13 @@ func TestBlobSelfDescribing(t *testing.T) {
 	}
 
 	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root, X: 2, Y: 0, W: 1, H: 1, URL: "https://example.com",
+		GridID: root, X: 2, Y: 0, W: 1, H: 1, URL: "https://example.com",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	frozen, err := s.SetURLState(ctx, &rpc.SetURLStateRequest{
-		Path: rpc.Path{}, TileID: url.ID, Version: url.Version, JPEG: []byte{0xFF, 0xD8, 0xFF},
+		TileID: url.ID, Version: url.Version, JPEG: []byte{0xFF, 0xD8, 0xFF},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestGridUpdatedAtStamped(t *testing.T) {
 
 	s.SetClock(func() time.Time { return time.Unix(1000, 0) })
 	if _, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("a"),
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("a"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestSubscribeEventsReceivesPublish(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -16,15 +16,8 @@ package gridwell.v1;
 
 option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridwellv1";
 
-// Path is the sequence of well-tile IDs walked from the root grid down
-// to the pane the request originates from. Mutations carry it so the store
-// can validate that the request comes from a real descent and locate the
-// leaf grid the edit targets (buildGridSequence / checkPathLeaf). It is NOT a
-// copy-on-write spine: clone is an eager deep copy and nothing is ever shared,
-// so an in-place edit never forks — the path only says "where the pane is".
-message Path {
-  repeated string well_ids = 1;
-}
+// (The Path message is gone — 2026-07-26 contraction: every mutation is
+// id-addressed + version-claimed; the server derives location facts itself.)
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
 // point at child grids. The root grid has no parent.
@@ -154,7 +147,7 @@ message InfoResponse {
   // proc pid 1, localdb its singleton root). Click-enter descends here.
   string root_grid_id   = 5;
   reserved 6; // network (NetworkContext): removed 2026-07-26 — host network always
-  bool   has_session    = 7;   // GetSession/PutSession meaningful
+  reserved 7; // has_session: removed 2026-07-26 — the session is host-local
   // scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
   // ("descend into a url" without placing a tile). Never rendered, never
   // mounted; persists as visited-url history. Empty for plugins that don't
@@ -191,18 +184,8 @@ message ProbeResponse {
   Presence presence = 1;
 }
 
-// ─── Session streaming ────────────────────────────────────────────────────
-// GetSession / PutSession move the Chromium session blob (cookies + web
-// storage) associated with a plugin root.
-
-message GetSessionRequest { string root_grid_id = 1; }
-// BlobChunk is a streaming fragment for GetSession and future ReadBlob.
-message BlobChunk         { bytes data = 1; }
-
-// PutSessionRequest streams a session blob up; the first message carries
-// root_grid_id to bind the stream; subsequent messages carry only data.
-message PutSessionRequest  { string root_grid_id = 1; bytes data = 2; }
-message PutSessionResponse {}
+// (Session streaming is gone — 2026-07-26: the Chromium session is
+// host-local; no blob crosses the interface.)
 
 // ─── Shell streaming ──────────────────────────────────────────────────────
 // OpenShell replaces the WebSocket /rpc/ShellStream endpoint. Bidirectional:
@@ -230,24 +213,8 @@ message GetTilePreviewResponse {
   bytes jpeg = 1;
 }
 
-// GetTileContent fetches the body bytes of a text tile. Routable by tile_id,
-// so it works for tiles owned by a plugin (e.g. a file's contents read from
-// disk by the fs plugin) as well as local store tiles. media_type is the
-// stored content type (e.g. text/markdown).
-message GetTileContentRequest {
-  string tile_id = 1;
-}
-message GetTileContentResponse {
-  bytes data = 1;
-  string media_type = 2;
-  // The tile row version these bytes belong to, read by the owning plugin in
-  // the same call that read the bytes. The client's optimistic-concurrency
-  // basis: a later UpdateText claiming this version asserts "my edit is based
-  // on exactly these bytes" — pairing them here, at the owner, makes it
-  // impossible for a client to claim a version whose content it never saw.
-  // Plugins whose bodies are not version-edited (fs, proc) leave it 0.
-  int64 version = 3;
-}
+// (GetTileContentRequest/Response are gone — ReadContent is the one
+// content read.)
 
 // ─── Content streams (2026-07-26 redesign; interface-redesign-plan.md) ──────
 // ReadContent / WriteContent are the ONE way content bytes move: values —
@@ -310,46 +277,12 @@ message GetTileRequest {
   string tile_id = 1;
 }
 
-// SetTileAlt stamps a tile's display label. Used by the shell title-capture
-// path (the foreground command becomes the tile name on detach).
-//
-// Deliberate overlap with SetTile: a URL tile's title rides SetTile (part of
-// the versioned freeze — the capture claims the version it froze), while the
-// shell detach path has no version to claim (the PTY teardown is asynchronous
-// to any edit), so it stamps the label unversioned here. Two writers, one
-// column, distinguished by whether the caller holds a version. Fold this into
-// SetTile only if shell writes ever become versioned.
-message SetTileAltRequest {
-  string tile_id = 1;
-  string alt = 2;
-}
+// (SetTileAltRequest is gone — the versioned rename rides SetTile.rename.)
 
-// SetPaneLayout writes a pane tile's layout blob (the serialized split-pane
-// workspace: split tree, per-pane places and viewports — the LayoutV1 codec
-// in client/pane). Framing-class: the whole layout is arrangement of
-// references to other content — the SetWellView of workspaces — so it NEVER
-// bumps version (owner decision 2026-07-08: layout history is not preserved;
-// edit in place). Version is still claimed for the in-place-edit check like
-// every tile write.
-//
-// Path-free by tile id (the SetTileAlt shape, not the UpdateText shape):
-// after a reload the client is INSIDE the workspace and does not hold the
-// pane tile's containing descent path — persistence must not depend on
-// reconstructing a place that may have gone stale.
-message SetPaneLayoutRequest {
-  string tile_id = 1;
-  int64  version = 2;
-  bytes  data    = 3;
-}
+// (SetPaneLayoutRequest is gone — a pane layout is content bytes and rides
+// WriteContent; its framing-class version rule lives in the store's table.)
 
-// SetContentZoom persists the content scale of a text/shell/url tile.
-// Framing (no version bump); version is still claimed for the in-place-edit
-// check like every tile write.
-message SetContentZoomRequest {
-  string tile_id = 1;
-  int64  version = 2;
-  double content_zoom = 3;
-}
+// (SetContentZoomRequest is gone — content zoom rides SetTile.content_zoom.)
 
 // (The Mount RPC is gone: mounting is a CloneTile of the plugin's node-grid
 // link tile, and label agreement is owned by that tile's alt — the condition
@@ -405,10 +338,11 @@ message TileResponse {
 //   shell → no extra fields (the bash session starts only on refresh).
 // Only localdb accepts creates; fs/proc/ssh leave this unimplemented.
 message CreateTileRequest {
-  Path   path    = 1;
+  reserved 1; // path: removed 2026-07-26 (id-addressed; grid_id is authoritative)
   string grid_id = 2;
   Tile   tile    = 3;
-  bytes  data    = 4;   // text body / pane layout bytes; empty for other kinds
+  reserved 4; // data: removed 2026-07-26 — one way to write bytes (WriteContent);
+              // creation is metadata-only, text/pane bodies follow as a write
 }
 
 // ShellSessionAlive reports whether the tile's gridwell-private tmux
@@ -427,35 +361,17 @@ message ShellSessionAliveResponse {
 
 // Mutations: version is the claimed current version of tile_id; the
 // server returns a version-conflict error if it doesn't match.
-
-message MoveTileRequest {
-  Path path = 1;
-  string tile_id = 2;
-  int64 version = 3;
-  string dest_grid_id = 4;
-  Path dest_path = 5;
-  int64 x = 6;
-  int64 y = 7;
-}
+// (MoveTileRequest/ResizeTileRequest are gone — PlaceTile owns placement.)
 
 message CloneTileRequest {
-  Path path = 1;
+  reserved 1, 5; // path, dest_path: removed 2026-07-26 (id-addressed; the
+                 // subtree copy completes before the insert, so no cycle
+                 // can form and no client-supplied location is needed)
   string tile_id = 2;
   int64 version = 3;
   string dest_grid_id = 4;
-  Path dest_path = 5;
   int64 x = 6;
   int64 y = 7;
-}
-
-message ResizeTileRequest {
-  Path path = 1;
-  string tile_id = 2;
-  int64 version = 3;
-  int64 x = 4;
-  int64 y = 5;
-  int64 w = 6;
-  int64 h = 7;
 }
 
 // SetTileRequest is the single framing/preview writeback. It is dispatched on
@@ -470,7 +386,7 @@ message ResizeTileRequest {
 // never clobbers good state. path + version make a content write a proper
 // versioned, in-place edit.
 message SetTileRequest {
-  Path   path    = 1;
+  reserved 1; // path: removed 2026-07-26 (id-addressed)
   string tile_id = 2;
   int64  version = 3;
   Tile   tile    = 4;   // the fields to write for tile.kind
@@ -496,21 +412,11 @@ message SetTileRequest {
   optional double content_zoom = 7;
 }
 
-// UpdateText is deliberately the one content mutation with its own verb
-// (url/shell content — the frozen preview — rides SetTile). The text body is
-// an unbounded user document with its own size cap and alt-derivation
-// semantics; folding it into SetTile would turn the single writeback's
-// "empty fields are skipped" rule ambiguous for an intentionally-emptied
-// document. The asymmetry is a choice, not drift.
-message UpdateTextRequest {
-  Path path = 1;
-  string tile_id = 2;
-  int64 version = 3;
-  bytes data = 4;
-}
+// (UpdateTextRequest is gone — text bodies ride WriteContent, whose
+// kind-dispatched version rule keeps 'text bumps' in the store's one table.)
 
 message DeleteTileRequest {
-  Path path = 1;
+  reserved 1; // path: removed 2026-07-26 (id-addressed)
   string tile_id = 2;
   int64 version = 3;
 }
@@ -582,17 +488,12 @@ service Gridwell {
   rpc Probe(ProbeRequest)             returns (ProbeResponse);
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
 
-  // ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
-  rpc GetSession(GetSessionRequest)        returns (stream BlobChunk);
-  rpc PutSession(stream PutSessionRequest) returns (PutSessionResponse);
-
   // ── Shell (live PTY, both ways) ───────────────────────────────────────────
   rpc OpenShell(stream OpenShellRequest) returns (stream OpenShellResponse);
 
   // ── Reads ─────────────────────────────────────────────────────────────────
   rpc GetGrid(GetGridRequest)               returns (GetGridResponse);
   rpc GetTile(GetTileRequest)               returns (TileResponse);
-  rpc GetTileContent(GetTileContentRequest) returns (GetTileContentResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
 
   // ── Content streams (the one way content bytes move; see the messages) ────
@@ -605,22 +506,8 @@ service Gridwell {
   // ── Mutations (one create, one writeback, plus placement) ─────────────────
   rpc CreateTile(CreateTileRequest) returns (TileResponse);
   rpc SetTile(SetTileRequest)       returns (TileResponse);
-  rpc MoveTile(MoveTileRequest)     returns (TileResponse);
   rpc CloneTile(CloneTileRequest)   returns (TileResponse);
-  rpc ResizeTile(ResizeTileRequest) returns (TileResponse);
-  rpc UpdateText(UpdateTextRequest) returns (TileResponse);
   rpc DeleteTile(DeleteTileRequest) returns (DeleteTileResponse);
-  rpc SetTileAlt(SetTileAltRequest) returns (TileResponse);
-
-  // SetPaneLayout writes a pane tile's serialized workspace layout.
-  // Framing-class (never bumps version); path-free by id. See the request
-  // message for both rationales.
-  rpc SetPaneLayout(SetPaneLayoutRequest) returns (TileResponse);
-
-  // SetContentZoom persists the per-tile content scale (text font, terminal
-  // font, page zoom — issue #82). Framing: never bumps version. Refused for
-  // wells (their view_zoom is the grid viewport, a different concept).
-  rpc SetContentZoom(SetContentZoomRequest) returns (TileResponse);
 
   // SetRootView persists the plugin root-grid framing (the portal-level
   // analogue of SetTile for a well). Framing only — never bumps version.

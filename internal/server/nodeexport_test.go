@@ -101,7 +101,6 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: pluginRoot,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 2, H: 2},
-		Data:   []byte("# via export"),
 	})
 	if err != nil {
 		t.Fatalf("CreateTile via export: %v", err)
@@ -109,13 +108,34 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 	if got := created.Tile.Id; got[:4] != "ur1/" {
 		t.Errorf("created id = %q, want qualified ur1/<n>", got)
 	}
-	localID := created.Tile.Id[4:]
-	body, err := direct.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: localID})
+	// The body follows through the export's WriteContent; verify via the
+	// DIRECT plugin client — the export writes to the same plugin, ids
+	// peeled one segment per hop.
+	w, err := c.WriteContent(ctx)
 	if err != nil {
-		t.Fatalf("direct GetTileContent: %v", err)
+		t.Fatalf("WriteContent via export: %v", err)
 	}
-	if string(body.Data) != "# via export" {
-		t.Errorf("content = %q, want %q", body.Data, "# via export")
+	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# via export")}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if _, err := w.CloseAndRecv(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	localID := created.Tile.Id[4:]
+	r, err := direct.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: localID})
+	if err != nil {
+		t.Fatalf("direct ReadContent: %v", err)
+	}
+	var body []byte
+	for {
+		chunk, rerr := r.Recv()
+		if rerr != nil {
+			break
+		}
+		body = append(body, chunk.Data...)
+	}
+	if string(body) != "# via export" {
+		t.Errorf("content = %q, want %q", body, "# via export")
 	}
 }
 
@@ -145,7 +165,6 @@ func TestNodeExportSubscribeStreamsQualifiedEvents(t *testing.T) {
 	if _, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: ng.Tiles[0].ChildGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1},
-		Data:   []byte("x"),
 	}); err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}

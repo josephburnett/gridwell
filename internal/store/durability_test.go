@@ -36,18 +36,18 @@ func TestReopenRoundTrip(t *testing.T) {
 	root := rootID(t, s)
 
 	txt, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello world"),
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello world"),
 	})
 	if err != nil {
 		t.Fatalf("create text: %v", err)
 	}
 	if _, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		Path: rpc.Path{}, GridID: root, X: 2, Y: 0, W: 1, H: 1, URL: "https://example.com",
+		GridID: root, X: 2, Y: 0, W: 1, H: 1, URL: "https://example.com",
 	}); err != nil {
 		t.Fatalf("create url: %v", err)
 	}
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 4, Y: 0, W: 1, H: 1,
+		GridID: root, X: 4, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("create well: %v", err)
 	}

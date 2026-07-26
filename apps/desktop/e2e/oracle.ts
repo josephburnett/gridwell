@@ -49,18 +49,49 @@ export async function getGrid(origin: string, gridId: string): Promise<GridSnaps
   return (await res.json()) as GridSnapshot;
 }
 
-// getTileContent fetches a tile's body bytes (text markdown / url) from the
-// server, decoded from the proto-JSON base64 `data` field. Returns '' when the
-// tile has no body.
+// ── Connect streaming envelope (2026-07-26: content rides ReadContent /
+// WriteContent, Connect's enveloped streams — 1 flag byte + 4-byte BE length
+// per message; flag bit 0x02 marks the trailing EndStreamResponse). ──
+
+function envelope(flags: number, payload: Buffer): Buffer {
+  const head = Buffer.alloc(5);
+  head.writeUInt8(flags, 0);
+  head.writeUInt32BE(payload.length, 1);
+  return Buffer.concat([head, payload]);
+}
+
+function* deEnvelope(body: Buffer): Generator<{ flags: number; payload: Buffer }> {
+  let off = 0;
+  while (off + 5 <= body.length) {
+    const flags = body.readUInt8(off);
+    const len = body.readUInt32BE(off + 1);
+    yield { flags, payload: body.subarray(off + 5, off + 5 + len) };
+    off += 5 + len;
+  }
+}
+
+// getTileContent fetches a tile's body bytes through ReadContent (the one
+// content read), reassembling the enveloped JSON chunk stream. Returns ''
+// when the tile has no body. A leaf link resolves to its target server-side.
 export async function getTileContent(origin: string, tileId: string): Promise<string> {
-  const res = await fetch(`${origin}/${SERVICE}/GetTileContent`, {
+  const res = await fetch(`${origin}/${SERVICE}/ReadContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
-    body: JSON.stringify({ tileId }),
+    headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
+    body: envelope(0, Buffer.from(JSON.stringify({ tileId }))),
   });
-  if (!res.ok) throw new Error(`GetTileContent(${tileId}) failed: ${res.status} ${await res.text()}`);
-  const body = (await res.json()) as { data?: string };
-  return body.data ? Buffer.from(body.data, 'base64').toString('utf8') : '';
+  if (!res.ok) throw new Error(`ReadContent(${tileId}) failed: ${res.status} ${await res.text()}`);
+  const raw = Buffer.from(await res.arrayBuffer());
+  let out = '';
+  for (const { flags, payload } of deEnvelope(raw)) {
+    if (flags & 0x02) {
+      const end = JSON.parse(payload.toString() || '{}') as { error?: unknown };
+      if (end.error) throw new Error(`ReadContent(${tileId}) errored: ${JSON.stringify(end.error)}`);
+      break;
+    }
+    const msg = JSON.parse(payload.toString()) as { data?: string };
+    if (msg.data) out += Buffer.from(msg.data, 'base64').toString('utf8');
+  }
+  return out;
 }
 
 // updateText writes a text tile's body DIRECTLY through the server — a
@@ -73,16 +104,27 @@ export async function updateText(
   version: number,
   text: string,
 ): Promise<void> {
-  const res = await fetch(`${origin}/${SERVICE}/UpdateText`, {
+  const res = await fetch(`${origin}/${SERVICE}/WriteContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
-    body: JSON.stringify({
-      tileId,
-      version,
-      data: Buffer.from(text, 'utf8').toString('base64'),
-    }),
+    headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
+    body: envelope(
+      0,
+      Buffer.from(
+        JSON.stringify({ tileId, version, data: Buffer.from(text, 'utf8').toString('base64') }),
+      ),
+    ),
   });
-  if (!res.ok) throw new Error(`UpdateText(${tileId}@${version}) failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`WriteContent(${tileId}@${version}) failed: ${res.status} ${await res.text()}`);
+  // Client-stream responses are enveloped too: a message frame then the
+  // EndStreamResponse; an in-stream error (e.g. version conflict) rides the
+  // end frame with HTTP 200, so it must be surfaced here.
+  const raw = Buffer.from(await res.arrayBuffer());
+  for (const { flags, payload } of deEnvelope(raw)) {
+    if (flags & 0x02) {
+      const end = JSON.parse(payload.toString() || '{}') as { error?: unknown };
+      if (end.error) throw new Error(`WriteContent(${tileId}@${version}) errored: ${JSON.stringify(end.error)}`);
+    }
+  }
 }
 
 // tileAt returns the tile of the given kind at cell (x, y), or undefined.

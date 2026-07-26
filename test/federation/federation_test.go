@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -225,12 +224,18 @@ func TestFederationSpawn(t *testing.T) {
 	})["tile"].(map[string]any)
 	wellID := well["id"].(string)
 	wellChild := well["childGridId"].(string)
+	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
 	txt := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": wellChild,
-		"path":   map[string]any{"wellIds": []string{wellID}},
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
-		"data":   base64.StdEncoding.EncodeToString([]byte("# across the spawn gate")),
 	})["tile"].(map[string]any)
+	// Creation is metadata-only; the body follows through the ONE content
+	// write, routed through the chain by the qualified id.
+	txtRow, err := gwrpc.NewDefaultClient(localOrigin).WriteContent(context.Background(),
+		txt["id"].(string), num(txt["version"]), []byte("# across the spawn gate"))
+	if err != nil {
+		t.Fatalf("WriteContent through the chain: %v", err)
+	}
 
 	// 4. Link the remote well into the LOCAL home grid — the 2026-07-19
 	//    left-drag gesture, committed as a plain CreateTile carrying the
@@ -257,8 +262,10 @@ func TestFederationSpawn(t *testing.T) {
 	if link["objectId"] != well["objectId"] {
 		t.Fatalf("link provenance = %v, want the remote well's object id %v", link["objectId"], well["objectId"])
 	}
-	body := rpc(t, localOrigin, "GetTileContent", map[string]any{"tileId": txt["id"]})
-	got, _ := base64.StdEncoding.DecodeString(body["data"].(string))
+	got, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), txt["id"].(string))
+	if err != nil {
+		t.Fatalf("ReadContent through the chain: %v", err)
+	}
 	if string(got) != "# across the spawn gate" {
 		t.Fatalf("content through the chain = %q", got)
 	}
@@ -305,9 +312,8 @@ func TestFederationSpawn(t *testing.T) {
 	// The remote-direct ids are the chained ids with the ssh hop peeled.
 	peel := func(id string) string { return strings.SplitN(id, "/", 2)[1] }
 	// protojson omits zero fields, so a fresh tile's "version" key is absent.
-	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
 	txtID := txt["id"].(string)
-	version := num(txt["version"])
+	version := txtRow.Version
 
 	// Write on the remote until an event lands locally: the local fan-in dials
 	// the remote stream asynchronously, so the first write can race stream
@@ -322,13 +328,14 @@ func TestFederationSpawn(t *testing.T) {
 		select {
 		case <-writeTick.C:
 			body := fmt.Sprintf("# edited on the remote, take %d", wrote)
-			resp := rpc(t, remoteOrigin, "UpdateText", map[string]any{
-				"path":    map[string]any{"wellIds": []string{peel(wellID)}},
-				"tileId":  peel(txtID),
-				"version": version,
-				"data":    base64.StdEncoding.EncodeToString([]byte(body)),
-			})
-			version = num(resp["tile"].(map[string]any)["version"])
+			// The foreign writer speaks the one content write, directly
+			// against the REMOTE node (another device, not this mount).
+			wt, werr := gwrpc.NewDefaultClient(remoteOrigin).WriteContent(
+				context.Background(), peel(txtID), version, []byte(body))
+			if werr != nil {
+				t.Fatalf("remote WriteContent: %v", werr)
+			}
+			version = wt.Version
 			wrote++
 			continue
 		case ev, ok := <-gotEvents:

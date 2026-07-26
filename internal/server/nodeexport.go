@@ -133,14 +133,6 @@ func (n *nodeExport) GetTile(ctx context.Context, r *pb.GetTileRequest) (*pb.Til
 	return resp.Msg, nil
 }
 
-func (n *nodeExport) GetTileContent(ctx context.Context, r *pb.GetTileContentRequest) (*pb.GetTileContentResponse, error) {
-	resp, err := n.h.GetTileContent(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
 func (n *nodeExport) GetTilePreview(ctx context.Context, r *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	resp, err := n.h.GetTilePreview(ctx, connect.NewRequest(r))
 	if err != nil {
@@ -165,24 +157,8 @@ func (n *nodeExport) SetTile(ctx context.Context, r *pb.SetTileRequest) (*pb.Til
 	return resp.Msg, nil
 }
 
-func (n *nodeExport) MoveTile(ctx context.Context, r *pb.MoveTileRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.MoveTile(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
 func (n *nodeExport) CloneTile(ctx context.Context, r *pb.CloneTileRequest) (*pb.TileResponse, error) {
 	resp, err := n.h.CloneTile(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
-func (n *nodeExport) ResizeTile(ctx context.Context, r *pb.ResizeTileRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.ResizeTile(ctx, connect.NewRequest(r))
 	if err != nil {
 		return nil, statusErr(err)
 	}
@@ -197,40 +173,8 @@ func (n *nodeExport) PlaceTile(ctx context.Context, r *pb.PlaceTileRequest) (*pb
 	return resp.Msg, nil
 }
 
-func (n *nodeExport) UpdateText(ctx context.Context, r *pb.UpdateTextRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.UpdateText(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
 func (n *nodeExport) DeleteTile(ctx context.Context, r *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
 	resp, err := n.h.DeleteTile(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
-func (n *nodeExport) SetTileAlt(ctx context.Context, r *pb.SetTileAltRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.SetTileAlt(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
-func (n *nodeExport) SetPaneLayout(ctx context.Context, r *pb.SetPaneLayoutRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.SetPaneLayout(ctx, connect.NewRequest(r))
-	if err != nil {
-		return nil, statusErr(err)
-	}
-	return resp.Msg, nil
-}
-
-func (n *nodeExport) SetContentZoom(ctx context.Context, r *pb.SetContentZoomRequest) (*pb.TileResponse, error) {
-	resp, err := n.h.SetContentZoom(ctx, connect.NewRequest(r))
 	if err != nil {
 		return nil, statusErr(err)
 	}
@@ -259,17 +203,6 @@ func (n *nodeExport) ShellSessionAlive(ctx context.Context, r *pb.ShellSessionAl
 // stream serves — so a mounter hears every plugin on this node change.
 func (n *nodeExport) Subscribe(_ *pb.SubscribeRequest, stream pb.Gridwell_SubscribeServer) error {
 	return statusErr(n.h.subscribe(stream.Context(), stream.Send))
-}
-
-// sessionRoute resolves a session's plugin chain: "<uuid>" (this node's
-// plugin, rest "") or "<uuid>/<rest>" (forward rest through the mount).
-func (n *nodeExport) sessionRoute(chain string) (pb.GridwellClient, string, bool) {
-	uuid, rest, qualified := rpc.SplitID(chain)
-	if !qualified {
-		uuid, rest = chain, ""
-	}
-	c, ok := n.srv.routeClient(uuid)
-	return c, rest, ok
 }
 
 // OpenShell peeks the bind message for the tile id, routes to the owning
@@ -388,70 +321,6 @@ func (n *nodeExport) WriteContent(stream pb.Gridwell_WriteContentServer) error {
 				t = qualifyTilesFor(n.srv.pluginReg.Transit(uuid), uuid, []*pb.Tile{t})[0]
 			}
 			return stream.SendAndClose(&pb.TileResponse{Tile: t})
-		}
-		if err != nil {
-			return err
-		}
-		if err := up.Send(msg); err != nil {
-			return err
-		}
-	}
-}
-
-// GetSession routes by the request's plugin chain (root_grid_id): the FIRST
-// segment picks the plugin here, the REST forwards for the next hop — and a
-// slash-less value IS the plugin ("this plugin's session", rest empty). The
-// same peel-one-segment rule as every other id, applied to the session
-// boundary.
-func (n *nodeExport) GetSession(r *pb.GetSessionRequest, stream pb.Gridwell_GetSessionServer) error {
-	c, local, ok := n.sessionRoute(r.RootGridId)
-	if !ok {
-		return status.Errorf(gcodes.NotFound, "no plugin for session %q", r.RootGridId)
-	}
-	up, err := c.GetSession(stream.Context(), &pb.GetSessionRequest{RootGridId: local})
-	if err != nil {
-		return err
-	}
-	for {
-		chunk, err := up.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if err := stream.Send(chunk); err != nil {
-			return err
-		}
-	}
-}
-
-// PutSession peeks the bind chunk for the plugin chain and relays upstream
-// (same peel rule as GetSession).
-func (n *nodeExport) PutSession(stream pb.Gridwell_PutSessionServer) error {
-	first, err := stream.Recv()
-	if err != nil {
-		return err
-	}
-	c, local, ok := n.sessionRoute(first.RootGridId)
-	if !ok {
-		return status.Errorf(gcodes.NotFound, "no plugin for session %q", first.RootGridId)
-	}
-	up, err := c.PutSession(stream.Context())
-	if err != nil {
-		return err
-	}
-	if err := up.Send(&pb.PutSessionRequest{RootGridId: local, Data: first.Data}); err != nil {
-		return err
-	}
-	for {
-		msg, err := stream.Recv()
-		if err == io.EOF {
-			resp, cerr := up.CloseAndRecv()
-			if cerr != nil {
-				return cerr
-			}
-			return stream.SendAndClose(resp)
 		}
 		if err != nil {
 			return err

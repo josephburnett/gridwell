@@ -32,7 +32,7 @@ func TestCreateLeafLinkStoresQualifiedReference(t *testing.T) {
 	ctx := context.Background()
 
 	for i, kind := range []string{rpc.KindText, rpc.KindURL, rpc.KindShell, rpc.KindPane} {
-		ln, err := s.CreateLeafLink(ctx, rpc.Path{}, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind, "")
+		ln, err := s.CreateLeafLink(ctx, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind, "")
 		if err != nil {
 			t.Fatalf("create %s link: %v", kind, err)
 		}
@@ -53,12 +53,12 @@ func TestCreateLeafLinkRejectsWellAndBareTargets(t *testing.T) {
 
 	// The well kind links via child_grid_id (the exit well), never
 	// link_target_id — one link shape per kind, no second copy of the fact.
-	if _, err := s.CreateLeafLink(ctx, rpc.Path{}, root, 0, 0, 1, 1, rpc.KindWell, remoteTarget, "", ""); err == nil {
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindWell, remoteTarget, "", ""); err == nil {
 		t.Error("CreateLeafLink accepted kind=well; wells link via child_grid_id")
 	}
 	// A bare (unqualified) target would be ambiguous outside the allocating
 	// plugin — same rule as an exit well's qualified child.
-	if _, err := s.CreateLeafLink(ctx, rpc.Path{}, root, 0, 0, 1, 1, rpc.KindText, "42", "", ""); err == nil {
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", "", ""); err == nil {
 		t.Error("CreateLeafLink accepted a bare integer target")
 	}
 }
@@ -68,12 +68,12 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, rpc.Path{}, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", "")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	gridsBefore, blobsBefore := gridRowCount(t, s), blobRowCount(t, s)
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{Path: rpc.Path{}, TileID: ln.ID, Version: ln.Version}); err != nil {
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: ln.ID, Version: ln.Version}); err != nil {
 		t.Fatalf("delete leaf link: %v", err)
 	}
 	if g, b := gridRowCount(t, s), blobRowCount(t, s); g != gridsBefore || b != blobsBefore {
@@ -87,7 +87,7 @@ func TestCloneLeafLinkCopiesReferenceAndProvenance(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, rpc.Path{}, root, 0, 0, 1, 1, rpc.KindURL, remoteTarget, "linked", "prov-1234")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindURL, remoteTarget, "linked", "prov-1234")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,8 +95,8 @@ func TestCloneLeafLinkCopiesReferenceAndProvenance(t *testing.T) {
 		t.Errorf("provenance object_id not carried on create: %q", ln.ObjectID)
 	}
 	clone, err := s.CloneTile(ctx, &rpc.CloneTileRequest{
-		Path: rpc.Path{}, TileID: ln.ID, Version: ln.Version,
-		DestGridID: root, DestPath: rpc.Path{}, X: 2, Y: 0,
+		TileID: ln.ID, Version: ln.Version,
+		DestGridID: root, X: 2, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("clone leaf link: %v", err)
@@ -118,16 +118,14 @@ func TestContentMutationOnLeafLinkRejected(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, rpc.Path{}, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", "")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A link owns no bytes: writing content through the link's own id must be
 	// refused (the client routes content mutations by the TARGET id), or the
 	// link and the thing it names silently diverge.
-	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: ln.ID, Version: ln.Version, Data: []byte("smuggled"),
-	})
+	_, err = s.WriteContent(ctx, ln.ID, ln.Version, []byte("smuggled"))
 	if err == nil {
 		t.Fatal("UpdateText on a leaf link succeeded; content lives in the target")
 	}

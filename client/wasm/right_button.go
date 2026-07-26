@@ -617,18 +617,14 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		a.ghost.targetCellSize = t.cellSize
 	}
 	a.startSnap(targetX, targetY, snapMs)
-	srcPath := slices.Clone(d.srcPath)
-	dstPath := slices.Clone(t.path)
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
 	tileID := d.tileID
 	version := d.snapshotTile.Version
 	req := &rpc.CloneTileRequest{
-		Path:       rpc.Path{WellIDs: srcPath},
 		TileID:     tileID,
 		Version:    version,
 		DestGridID: dstGridID,
-		DestPath:   rpc.Path{WellIDs: dstPath},
 		X:          dropX,
 		Y:          dropY,
 	}
@@ -647,7 +643,6 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		dstGridID = t.gridID
 	}
 	req := &rpc.DeleteTileRequest{
-		Path:    rpc.Path{WellIDs: slices.Clone(d.srcPath)},
 		TileID:  d.tileID,
 		Version: d.snapshotTile.Version,
 	}

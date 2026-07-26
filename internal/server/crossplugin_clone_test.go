@@ -81,8 +81,8 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 		t.Fatalf("CreateWell: %v", err)
 	}
 	inner, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{WellIDs: []string{well.ID}}, GridID: well.ChildGridID,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# soup"),
+		GridID: well.ChildGridID,
+		X:      0, Y: 0, W: 1, H: 1, Data: []byte("# soup"),
 	})
 	if err != nil {
 		t.Fatalf("CreateText: %v", err)
@@ -92,7 +92,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	// gesture carries along. Descending the link must land exactly where
 	// descending the source would.
 	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
-		Path: rpc.Path{}, TileID: well.ID, Version: well.Version,
+		TileID: well.ID, Version: well.Version,
 		ViewX: 7, ViewY: -2, ViewZoom: 1.75,
 	})
 	if err != nil {
@@ -148,7 +148,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	if _, err := cl.GetTile(ctx, well.ID); err != nil {
 		t.Errorf("deleting the link destroyed the source well: %v", err)
 	}
-	if _, _, err := cl.GetTileContent(ctx, inner.ID); err != nil {
+	if _, _, _, err := cl.ReadContent(ctx, inner.ID); err != nil {
 		t.Errorf("deleting the link destroyed the source's content: %v", err)
 	}
 	_ = uuidA
@@ -215,7 +215,7 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	}
 
 	// One copy: content is read THROUGH the target id the link carries.
-	body, _, err := cl.GetTileContent(ctx, link.LinkTargetID)
+	body, _, _, err := cl.ReadContent(ctx, link.LinkTargetID)
 	if err != nil {
 		t.Fatalf("content through link target: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: link.ID, Version: link.Version}); err != nil {
 		t.Fatalf("delete leaf link: %v", err)
 	}
-	if body, _, err := cl.GetTileContent(ctx, txt.ID); err != nil || string(body) != "# the one copy" {
+	if body, _, _, err := cl.ReadContent(ctx, txt.ID); err != nil || string(body) != "# the one copy" {
 		t.Errorf("deleting the link touched the source: body=%q err=%v", body, err)
 	}
 }
@@ -256,7 +256,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 		t.Errorf("copy provenance = %q, want the source's object_id %q (lineage survives the boundary)",
 			copyT.ObjectID, txt.ObjectID)
 	}
-	body, _, err := cl.GetTileContent(ctx, copyT.ID)
+	body, _, _, err := cl.ReadContent(ctx, copyT.ID)
 	if err != nil {
 		t.Fatalf("copy content: %v", err)
 	}
@@ -265,12 +265,10 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	}
 
 	// The copies are independent: editing the copy leaves the source alone.
-	if _, err := cl.UpdateText(ctx, &rpc.UpdateTextRequest{
-		TileID: copyT.ID, Version: copyT.Version, Data: []byte("# changed"),
-	}); err != nil {
+	if _, err := cl.WriteContent(ctx, copyT.ID, copyT.Version, []byte("# changed")); err != nil {
 		t.Fatalf("edit copy: %v", err)
 	}
-	orig, _, err := cl.GetTileContent(ctx, txt.ID)
+	orig, _, _, err := cl.ReadContent(ctx, txt.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +344,7 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	if cp.Kind != rpc.KindPane || cp.AltText != "ws" {
 		t.Errorf("copy shape: %+v", cp)
 	}
-	body, _, err := cl.GetTileContent(ctx, cp.ID)
+	body, _, _, err := cl.ReadContent(ctx, cp.ID)
 	if err != nil {
 		t.Fatalf("copy content: %v", err)
 	}
@@ -355,11 +353,11 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	}
 
 	// Independence: rearranging the copy leaves the source's layout alone.
-	if _, err := cl.SetPaneLayout(ctx, cp.ID, cp.Version,
+	if _, err := cl.WriteContent(ctx, cp.ID, cp.Version,
 		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)); err != nil {
 		t.Fatalf("edit copy: %v", err)
 	}
-	orig, _, err := cl.GetTileContent(ctx, pt.ID)
+	orig, _, _, err := cl.ReadContent(ctx, pt.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,59 +52,49 @@ func TestProxy_UnaryForwards(t *testing.T) {
 		t.Fatalf("Info through proxy = %+v, want the remote's", info)
 	}
 
-	// A create + read round trip, end to end through the proxy.
+	// A create + write + read round trip, end to end through the proxy
+	// (creation is metadata-only; the body follows through WriteContent).
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: info.RootGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
-		Data:   []byte("# remote"),
 	})
 	if err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}
-	body, err := c.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: created.Tile.Id})
-	if err != nil {
-		t.Fatalf("GetTileContent: %v", err)
-	}
-	if string(body.Data) != "# remote" {
-		t.Errorf("content through proxy = %q, want %q", body.Data, "# remote")
+	got := writeThenRead(t, ctx, c, created.Tile.Id, created.Tile.Version, []byte("# remote"))
+	if string(got) != "# remote" {
+		t.Errorf("content through proxy = %q, want %q", got, "# remote")
 	}
 }
 
-func TestProxy_SessionRoundTrips(t *testing.T) {
-	c := proxied(t)
-	ctx := context.Background()
-
-	// PutSession (client-stream) through the proxy.
-	put, err := c.PutSession(ctx)
+// writeThenRead drives the contracted content surface: WriteContent commits
+// the bytes (version claimed from the created row), ReadContent streams them
+// back. The test helper for what CreateTile.data used to carry.
+func writeThenRead(t *testing.T, ctx context.Context, c gridwellv1.GridwellClient, tileID string, version int64, data []byte) []byte {
+	t.Helper()
+	w, err := c.WriteContent(ctx)
 	if err != nil {
-		t.Fatalf("PutSession: %v", err)
+		t.Fatalf("WriteContent open: %v", err)
 	}
-	if err := put.Send(&gridwellv1.PutSessionRequest{RootGridId: "r", Data: []byte("cookies")}); err != nil {
-		t.Fatalf("send: %v", err)
+	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tileID, Version: version, Data: data}); err != nil {
+		t.Fatalf("WriteContent send: %v", err)
 	}
-	if _, err := put.CloseAndRecv(); err != nil {
-		t.Fatalf("CloseAndRecv: %v", err)
+	if _, err := w.CloseAndRecv(); err != nil {
+		t.Fatalf("WriteContent close: %v", err)
 	}
-
-	// GetSession (server-stream) back through the proxy.
-	get, err := c.GetSession(ctx, &gridwellv1.GetSessionRequest{})
+	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: tileID})
 	if err != nil {
-		t.Fatalf("GetSession: %v", err)
+		t.Fatalf("ReadContent: %v", err)
 	}
-	var got []byte
+	var out []byte
 	for {
-		chunk, err := get.Recv()
-		if err == io.EOF {
+		chunk, err := r.Recv()
+		if err != nil {
 			break
 		}
-		if err != nil {
-			t.Fatalf("recv: %v", err)
-		}
-		got = append(got, chunk.Data...)
+		out = append(out, chunk.Data...)
 	}
-	if string(got) != "cookies" {
-		t.Errorf("session through proxy = %q, want %q", got, "cookies")
-	}
+	return out
 }
 
 func TestProxy_OpenShellBidiForwards(t *testing.T) {
@@ -149,7 +139,6 @@ func TestProxy_ContentStreamForwards(t *testing.T) {
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: info.RootGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
-		Data:   []byte("old"),
 	})
 	if err != nil {
 		t.Fatalf("CreateTile: %v", err)

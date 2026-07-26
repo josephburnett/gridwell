@@ -65,17 +65,12 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 	created, err := client.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: info.RootGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
-		Data:   []byte("# over the wire"),
 	})
 	if err != nil {
 		t.Fatalf("CreateTile: %v", err)
 	}
-	body, err := client.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: created.Tile.Id})
-	if err != nil {
-		t.Fatalf("GetTileContent: %v", err)
-	}
-	if string(body.Data) != "# over the wire" {
-		t.Errorf("content = %q, want %q", body.Data, "# over the wire")
+	if got := writeThenRead(t, ctx, client, created.Tile.Id, created.Tile.Version, []byte("# over the wire")); string(got) != "# over the wire" {
+		t.Errorf("content = %q, want %q", got, "# over the wire")
 	}
 
 	// The plugin's durable identity (id + kind) is intact in its own DB.
@@ -115,4 +110,34 @@ func TestSubprocessPlugin_IDMismatchRejected(t *testing.T) {
 		_ = client
 		t.Fatal("LoadPlugin should fail when the configured id diverges from the DB")
 	}
+}
+
+// writeThenRead drives the contracted content surface: WriteContent commits
+// the bytes (version claimed from the created row), ReadContent streams them
+// back. The test helper for what CreateTile.data used to carry.
+func writeThenRead(t *testing.T, ctx context.Context, c gridwellv1.GridwellClient, tileID string, version int64, data []byte) []byte {
+	t.Helper()
+	w, err := c.WriteContent(ctx)
+	if err != nil {
+		t.Fatalf("WriteContent open: %v", err)
+	}
+	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tileID, Version: version, Data: data}); err != nil {
+		t.Fatalf("WriteContent send: %v", err)
+	}
+	if _, err := w.CloseAndRecv(); err != nil {
+		t.Fatalf("WriteContent close: %v", err)
+	}
+	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: tileID})
+	if err != nil {
+		t.Fatalf("ReadContent: %v", err)
+	}
+	var out []byte
+	for {
+		chunk, err := r.Recv()
+		if err != nil {
+			break
+		}
+		out = append(out, chunk.Data...)
+	}
+	return out
 }

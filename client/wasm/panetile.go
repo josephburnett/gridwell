@@ -9,7 +9,6 @@ package main
 
 import (
 	"context"
-	"slices"
 
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -158,7 +157,6 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 func (a *App) createPaneAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreatePaneRequest{
-		Path:   rpc.Path{WellIDs: slices.Clone(p.Path)},
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
 	a.postTileMutate("CreatePane", gid, func(ctx context.Context) (*rpc.Tile, error) {

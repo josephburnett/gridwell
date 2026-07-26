@@ -355,7 +355,7 @@ func TestMoveTile_PersistsAndSurvivesReopen(t *testing.T) {
 		t.Fatalf("child tile %q not found in %+v", childKey, r.Tiles)
 	}
 
-	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: childTile.Id, X: 4, Y: 6}); err != nil {
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: childTile.Id, X: 4, Y: 6, W: 1, H: 1}); err != nil {
 		t.Fatalf("MoveTile: %v", err)
 	}
 	p.Close()

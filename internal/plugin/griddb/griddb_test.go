@@ -52,7 +52,7 @@ func TestApplyMoveRepositionsInGrid(t *testing.T) {
 	db := newTestDB(t, "name")
 	id := insertTile(t, db, "name", 1, "a.txt", "text", 0, 0)
 
-	resp, err := ApplyMove(db, "name", &gridwellv1.MoveTileRequest{TileId: id, X: 4, Y: 5})
+	resp, err := ApplyPlace(db, "name", &gridwellv1.PlaceTileRequest{TileId: id, X: 4, Y: 5, W: 1, H: 1})
 	if err != nil {
 		t.Fatalf("ApplyMove: %v", err)
 	}
@@ -71,18 +71,18 @@ func TestApplyMoveRejectsCrossGrid(t *testing.T) {
 	db := newTestDB(t, "name")
 	id := insertTile(t, db, "name", 1, "a.txt", "text", 0, 0)
 
-	if _, err := ApplyMove(db, "name", &gridwellv1.MoveTileRequest{TileId: id, DestGridId: "2", X: 1, Y: 1}); err == nil {
+	if _, err := ApplyPlace(db, "name", &gridwellv1.PlaceTileRequest{TileId: id, GridId: "2", X: 1, Y: 1, W: 1, H: 1}); err == nil {
 		t.Error("cross-grid move should be rejected")
 	}
 	// Same-grid (matching dest) is allowed.
-	if _, err := ApplyMove(db, "name", &gridwellv1.MoveTileRequest{TileId: id, DestGridId: "1", X: 1, Y: 1}); err != nil {
+	if _, err := ApplyPlace(db, "name", &gridwellv1.PlaceTileRequest{TileId: id, GridId: "1", X: 1, Y: 1, W: 1, H: 1}); err != nil {
 		t.Errorf("same-grid move should pass, got %v", err)
 	}
 }
 
 func TestApplyMoveNotFound(t *testing.T) {
 	db := newTestDB(t, "name")
-	if _, err := ApplyMove(db, "name", &gridwellv1.MoveTileRequest{TileId: "999", X: 1, Y: 1}); err != ErrNotFound {
+	if _, err := ApplyPlace(db, "name", &gridwellv1.PlaceTileRequest{TileId: "999", X: 1, Y: 1, W: 1, H: 1}); err != ErrNotFound {
 		t.Errorf("move of missing tile = %v, want ErrNotFound", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestApplyResizeSetsFootprint(t *testing.T) {
 	db := newTestDB(t, "key")
 	id := insertTile(t, db, "key", 1, "1234", "well", 0, 0)
 
-	resp, err := ApplyResize(db, "key", &gridwellv1.ResizeTileRequest{TileId: id, X: 2, Y: 3, W: 5, H: 6})
+	resp, err := ApplyPlace(db, "key", &gridwellv1.PlaceTileRequest{TileId: id, X: 2, Y: 3, W: 5, H: 6})
 	if err != nil {
 		t.Fatalf("ApplyResize: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestInvalidLabelColumnRejected(t *testing.T) {
 // TestParseTileIDInvalid: a non-numeric tile id is a clear error, not a panic.
 func TestApplyMoveInvalidTileID(t *testing.T) {
 	db := newTestDB(t, "name")
-	if _, err := ApplyMove(db, "name", &gridwellv1.MoveTileRequest{TileId: "not-a-number"}); err == nil {
+	if _, err := ApplyPlace(db, "name", &gridwellv1.PlaceTileRequest{TileId: "not-a-number", W: 1, H: 1}); err == nil {
 		t.Error("invalid tile id should error")
 	}
 }

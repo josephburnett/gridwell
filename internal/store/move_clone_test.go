@@ -13,15 +13,14 @@ func TestMoveNodeWithinGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, TileID: w.ID, Version: w.Version,
-		DestGridID: root, DestPath: rpc.Path{},
-		X: 5, Y: 5,
+	got, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: w.ID, Version: w.Version,
+		GridID: root, X: 5, Y: 5, W: w.W, H: w.H,
 	})
 	if err != nil {
 		t.Fatalf("move: %v", err)
@@ -36,20 +35,19 @@ func TestMoveNodeOverlapRefused(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 2, H: 2,
+		GridID: root, X: 0, Y: 0, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 2, H: 2,
+		GridID: root, X: 5, Y: 5, W: 2, H: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, TileID: a.ID, Version: a.Version,
-		DestGridID: root, DestPath: rpc.Path{},
-		X: 4, Y: 4,
+	_, err = s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: a.ID, Version: a.Version,
+		GridID: root, X: 4, Y: 4, W: a.W, H: a.H,
 	})
 	if !errors.Is(err, ErrOverlap) {
 		t.Errorf("got %v, want ErrOverlap", err)
@@ -61,21 +59,20 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	a, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	target, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 5, Y: 5, W: 1, H: 1,
+		GridID: root, X: 5, Y: 5, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved, err := s.MoveTile(ctx, &rpc.MoveTileRequest{
-		Path: rpc.Path{}, TileID: target.ID, Version: target.Version,
-		DestGridID: a.ChildGridID, DestPath: rpc.Path{WellIDs: []string{a.ID}},
-		X: 0, Y: 0,
+	moved, err := s.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: target.ID, Version: target.Version,
+		GridID: a.ChildGridID, X: 0, Y: 0, W: target.W, H: target.H,
 	})
 	if err != nil {
 		t.Fatalf("move across: %v", err)
@@ -96,16 +93,13 @@ func TestUpdateTextHappy(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	mdFile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
+		GridID: root,
+		X:      0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: mdFile.ID, Version: mdFile.Version,
-		Data: []byte("# updated"),
-	})
+	updated, err := s.WriteContent(ctx, mdFile.ID, mdFile.Version, []byte("# updated"))
 	if err != nil {
 		t.Fatalf("update md: %v", err)
 	}
@@ -126,14 +120,12 @@ func TestUpdateTextIdenticalContentNoOp(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	mdFile, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
+		GridID: root, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# hello"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	same, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: mdFile.ID, Version: mdFile.Version, Data: []byte("# hello"),
-	})
+	same, err := s.WriteContent(ctx, mdFile.ID, mdFile.Version, []byte("# hello"))
 	if err != nil {
 		t.Fatalf("no-op update: %v", err)
 	}
@@ -145,9 +137,7 @@ func TestUpdateTextIdenticalContentNoOp(t *testing.T) {
 	}
 	// The original version still validates (it was never bumped), and a real
 	// edit from it bumps exactly once.
-	changed, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: mdFile.ID, Version: mdFile.Version, Data: []byte("# changed"),
-	})
+	changed, err := s.WriteContent(ctx, mdFile.ID, mdFile.Version, []byte("# changed"))
 	if err != nil {
 		t.Fatalf("real edit after no-op: %v", err)
 	}
@@ -161,16 +151,14 @@ func TestUpdateTextRejectsNonText(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: w.ID, Version: w.Version, Data: []byte("x"),
-	})
-	if !errors.Is(err, ErrNotTextTile) {
-		t.Errorf("expected ErrNotTextTile, got %v", err)
+	_, err = s.WriteContent(ctx, w.ID, w.Version, []byte("x"))
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument (kind has no writable content), got %v", err)
 	}
 }
 
@@ -179,57 +167,44 @@ func TestUpdateTextVersionConflict(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 	f, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{}, GridID: root,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# v1"),
+		GridID: root,
+		X:      0, Y: 0, W: 1, H: 1, Data: []byte("# v1"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: f.ID, Version: f.Version + 1, Data: []byte("# v2"),
-	})
+	_, err = s.WriteContent(ctx, f.ID, f.Version+1, []byte("# v2"))
 	if !errors.Is(err, ErrVersionConflict) {
 		t.Errorf("got %v, want ErrVersionConflict", err)
 	}
 }
 
-// TestUpdateTextEmptyPathAddressesNestedTile: an empty path means "address the
-// tile by id alone" — the same contract as GetTileContent. The tile's row owns
-// its location; a save must not fail (or need client-side path reconstruction)
-// just because the writer isn't a descended pane. This is what lets the
-// dirty-content sweep post an edit after the editing pane moved elsewhere.
-func TestUpdateTextEmptyPathAddressesNestedTile(t *testing.T) {
+// TestWriteContentAddressesNestedTileByID: the write is id-addressed — the
+// tile's row owns its location, so a save works no matter where the writer
+// "is". This is what lets the dirty-content sweep post an edit after the
+// editing pane moved elsewhere.
+func TestWriteContentAddressesNestedTileByID(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	w, err := s.CreateWell(ctx, &rpc.CreateWellRequest{
-		Path: rpc.Path{}, GridID: root, X: 0, Y: 0, W: 1, H: 1,
+		GridID: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	nested, err := s.CreateText(ctx, &rpc.CreateTextRequest{
-		Path: rpc.Path{WellIDs: []string{w.ID}}, GridID: w.ChildGridID,
-		X: 0, Y: 0, W: 1, H: 1, Data: []byte("# nested"),
+		GridID: w.ChildGridID,
+		X:      0, Y: 0, W: 1, H: 1, Data: []byte("# nested"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{}, TileID: nested.ID, Version: nested.Version,
-		Data: []byte("# nested v2"),
-	})
+	updated, err := s.WriteContent(ctx, nested.ID, nested.Version, []byte("# nested v2"))
 	if err != nil {
 		t.Fatalf("empty-path update of a nested tile: %v", err)
 	}
 	if updated.Version != nested.Version+1 {
 		t.Errorf("version = %d, want %d", updated.Version, nested.Version+1)
-	}
-	// A WRONG path still fails — supplying a path means asserting it.
-	if _, err := s.UpdateText(ctx, &rpc.UpdateTextRequest{
-		Path: rpc.Path{WellIDs: []string{nested.ID}}, TileID: nested.ID,
-		Version: updated.Version, Data: []byte("# nope"),
-	}); err == nil {
-		t.Fatal("a bogus path must still be rejected")
 	}
 }

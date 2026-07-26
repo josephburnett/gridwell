@@ -282,17 +282,6 @@ func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gr
 	return griddb.ApplyGetTile(p.db, fsLabelCol, req)
 }
 
-// MoveTile repositions a tile within its directory grid and persists the new
-// position so it survives the next GetGrid and a restart.
-func (p *Plugin) MoveTile(_ context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
-	return griddb.ApplyMove(p.db, fsLabelCol, req)
-}
-
-// ResizeTile persists a new footprint for a file/dir tile.
-func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
-	return griddb.ApplyResize(p.db, fsLabelCol, req)
-}
-
 // PlaceTile is the single placement writeback: in-grid only (a cross-grid
 // placement would be an on-disk move, which fs does not perform).
 func (p *Plugin) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
@@ -309,51 +298,46 @@ func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gr
 	return griddb.ApplySetWellView(p.db, fsLabelCol, req)
 }
 
-// GetTileContent returns the descent body for a file tile: a small markdown
-// summary of the file's metadata (the same body the legacy source reconciler
-// produced). Directories and unreadable paths return empty content rather than
-// an error.
-func (p *Plugin) GetTileContent(_ context.Context, req *gridwellv1.GetTileContentRequest) (*gridwellv1.GetTileContentResponse, error) {
-	tileID, err := strconv.ParseInt(req.TileId, 10, 64)
+// ContentBody returns the descent body for a file tile: a small markdown
+// summary of the file's metadata. Directories, unreadable paths, and unknown
+// ids return empty content rather than an error.
+func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, err error) {
+	tileID, err := strconv.ParseInt(tileIDStr, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("fs GetTileContent: invalid tile_id %q", req.TileId)
+		return nil, "", fmt.Errorf("fs ReadContent: invalid tile_id %q", tileIDStr)
 	}
 	var gridID int64
 	var name, kind string
 	err = p.db.QueryRow(`SELECT grid_id, name, kind FROM tiles WHERE id = ?`, tileID).Scan(&gridID, &name, &kind)
 	if err == sql.ErrNoRows {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if kind != "text" {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return nil, "", nil
 	}
 	dirPath, err := p.gridPath(gridID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	entry, err := fssource.Stat(filepath.Join(dirPath, name))
 	if err != nil {
-		return &gridwellv1.GetTileContentResponse{}, nil
+		return nil, "", nil
 	}
-	return &gridwellv1.GetTileContentResponse{
-		Data:      []byte(fssource.MetadataMarkdown(entry)),
-		MediaType: "text/markdown",
-	}, nil
+	return []byte(fssource.MetadataMarkdown(entry)), "text/markdown", nil
 }
 
-// ReadContent streams the same descent body GetTileContent serves (one chunk;
-// fs bodies are small metadata summaries, version 0 — not version-edited).
-// The unary verb dies at the Stage 9 contraction and this becomes the one
-// content read.
+// ReadContent streams a file tile's descent body (one chunk; fs bodies are
+// small metadata summaries, version 0 — not version-edited). The one content
+// read.
 func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
-	resp, err := p.GetTileContent(stream.Context(), &gridwellv1.GetTileContentRequest{TileId: req.TileId})
+	data, mediaType, err := p.ContentBody(req.TileId)
 	if err != nil {
 		return err
 	}
-	return stream.Send(&gridwellv1.ContentChunk{Data: resp.Data, MediaType: resp.MediaType, Version: resp.Version})
+	return stream.Send(&gridwellv1.ContentChunk{Data: data, MediaType: mediaType})
 }
 
 // Probe checks whether the tile at tile_id still has its backing path on disk.

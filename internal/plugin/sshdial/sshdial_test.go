@@ -116,7 +116,6 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: ng.Tiles[0].ChildGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
-		Data:   []byte("# over ssh"),
 	})
 	if err != nil {
 		t.Fatalf("CreateTile through tunnel: %v", err)
@@ -124,13 +123,54 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	if !strings.HasPrefix(created.Tile.Id, "ur1/") {
 		t.Fatalf("created id = %q, want the remote's qualified ur1/<n>", created.Tile.Id)
 	}
-	body, err := direct.GetTileContent(ctx, &gridwellv1.GetTileContentRequest{TileId: strings.TrimPrefix(created.Tile.Id, "ur1/")})
+	// The body follows through the tunnel's WriteContent, then reads back
+	// DIRECTLY on the remote — the mount is the same plugin, hop peeled.
+	_ = writeThenRead(t, ctx, c, created.Tile.Id, created.Tile.Version, []byte("# over ssh"))
+	r, err := direct.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: strings.TrimPrefix(created.Tile.Id, "ur1/")})
 	if err != nil {
 		t.Fatalf("direct read: %v", err)
 	}
-	if string(body.Data) != "# over ssh" {
-		t.Errorf("content = %q, want %q", body.Data, "# over ssh")
+	var got []byte
+	for {
+		chunk, rerr := r.Recv()
+		if rerr != nil {
+			break
+		}
+		got = append(got, chunk.Data...)
 	}
+	if string(got) != "# over ssh" {
+		t.Errorf("content = %q, want %q", got, "# over ssh")
+	}
+}
+
+// writeThenRead drives the contracted content surface: WriteContent commits
+// the bytes (version claimed from the created row), ReadContent streams them
+// back. The test helper for what CreateTile.data used to carry.
+func writeThenRead(t *testing.T, ctx context.Context, c gridwellv1.GridwellClient, tileID string, version int64, data []byte) []byte {
+	t.Helper()
+	w, err := c.WriteContent(ctx)
+	if err != nil {
+		t.Fatalf("WriteContent open: %v", err)
+	}
+	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: tileID, Version: version, Data: data}); err != nil {
+		t.Fatalf("WriteContent send: %v", err)
+	}
+	if _, err := w.CloseAndRecv(); err != nil {
+		t.Fatalf("WriteContent close: %v", err)
+	}
+	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: tileID})
+	if err != nil {
+		t.Fatalf("ReadContent: %v", err)
+	}
+	var out []byte
+	for {
+		chunk, err := r.Recv()
+		if err != nil {
+			break
+		}
+		out = append(out, chunk.Data...)
+	}
+	return out
 }
 
 // TestTunnelRecoversAfterSSHDeath is the outage seam: the ssh session dies

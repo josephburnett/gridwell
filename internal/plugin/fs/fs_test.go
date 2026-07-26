@@ -482,7 +482,7 @@ func TestMoveTile_Persists(t *testing.T) {
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	note := tileByName(t, r.Tiles, "note.txt")
 
-	moved, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 5, Y: 7})
+	moved, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 5, Y: 7, W: 1, H: 1})
 	if err != nil {
 		t.Fatalf("MoveTile: %v", err)
 	}
@@ -509,7 +509,7 @@ func TestMoveTile_SurvivesReopen(t *testing.T) {
 	gridID := att.RootGridId
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
 	note := tileByName(t, r.Tiles, "note.txt")
-	if _, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, X: 3, Y: 4}); err != nil {
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 3, Y: 4, W: 1, H: 1}); err != nil {
 		t.Fatalf("MoveTile: %v", err)
 	}
 	p.Close()
@@ -537,7 +537,7 @@ func TestResizeTile_Persists(t *testing.T) {
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	sub := tileByName(t, r.Tiles, "sub")
 
-	if _, err := p.ResizeTile(context.Background(), &gridwellv1.ResizeTileRequest{TileId: sub.Id, X: 2, Y: 2, W: 3, H: 4}); err != nil {
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: sub.Id, X: 2, Y: 2, W: 3, H: 4}); err != nil {
 		t.Fatalf("ResizeTile: %v", err)
 	}
 	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
@@ -578,7 +578,7 @@ func TestMoveTile_CrossGridRejected(t *testing.T) {
 	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 	note := tileByName(t, r.Tiles, "note.txt")
-	_, err := p.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{TileId: note.Id, DestGridId: "999999", X: 1, Y: 1})
+	_, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, GridId: "999999", X: 1, Y: 1, W: 1, H: 1})
 	if err == nil {
 		t.Error("expected error for cross-grid move, got nil")
 	}
@@ -594,24 +594,24 @@ func TestGetTileContent_FileMetadata(t *testing.T) {
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
 
 	note := tileByName(t, r.Tiles, "note.txt")
-	resp, err := p.GetTileContent(context.Background(), &gridwellv1.GetTileContentRequest{TileId: note.Id})
+	data, mediaType, err := p.ContentBody(note.Id)
 	if err != nil {
-		t.Fatalf("GetTileContent: %v", err)
+		t.Fatalf("contentBody: %v", err)
 	}
-	if !strings.Contains(string(resp.Data), "note.txt") {
-		t.Errorf("content %q does not mention the file name", resp.Data)
+	if !strings.Contains(string(data), "note.txt") {
+		t.Errorf("content %q does not mention the file name", data)
 	}
-	if resp.MediaType != "text/markdown" {
-		t.Errorf("media_type = %q, want text/markdown", resp.MediaType)
+	if mediaType != "text/markdown" {
+		t.Errorf("media_type = %q, want text/markdown", mediaType)
 	}
 
 	sub := tileByName(t, r.Tiles, "sub")
-	dresp, err := p.GetTileContent(context.Background(), &gridwellv1.GetTileContentRequest{TileId: sub.Id})
+	ddata, _, err := p.ContentBody(sub.Id)
 	if err != nil {
-		t.Fatalf("GetTileContent dir: %v", err)
+		t.Fatalf("contentBody dir: %v", err)
 	}
-	if len(dresp.Data) != 0 {
-		t.Errorf("directory tile content = %q, want empty", dresp.Data)
+	if len(ddata) != 0 {
+		t.Errorf("directory tile content = %q, want empty", ddata)
 	}
 }
 

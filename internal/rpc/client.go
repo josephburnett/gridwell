@@ -55,20 +55,6 @@ func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Jpeg, nil
 }
 
-// GetTileContent fetches a text tile's descent body bytes paired with the
-// tile row version they belong to (0 for plugins whose bodies are not
-// version-edited — fs, proc). Routable by tile id, so it resolves content
-// for plugin-owned tiles (a file's metadata, a process's @info) as well as
-// local store tiles. The version is the caller's save basis: cache it WITH
-// the bytes, never apart from them.
-func (c *Client) GetTileContent(ctx context.Context, tileID string) ([]byte, int64, error) {
-	r, err := c.cl.GetTileContent(ctx, connect.NewRequest(&pb.GetTileContentRequest{TileId: tileID}))
-	if err != nil {
-		return nil, 0, err
-	}
-	return r.Msg.Data, r.Msg.Version, nil
-}
-
 // ListPlugins returns the node's configured plugins in config order, for the
 // node grid / + menu.
 // NodeIdentity returns the node's own uuid and the qualified id of its node
@@ -130,8 +116,17 @@ func tileResp(r *connect.Response[pb.TileResponse], err error) (*Tile, error) {
 func (c *Client) CreateWell(ctx context.Context, req *CreateWellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateWellToProto(req))))
 }
+
+// CreateText makes the metadata row and, when req.Data is set, follows with
+// the one content write (creation is metadata-only on the wire; this helper
+// composes the two so Go callers keep a one-call shape). A failure between
+// the two leaves an empty tile — visible and deletable, never silent.
 func (c *Client) CreateText(ctx context.Context, req *CreateTextRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateTextToProto(req))))
+	t, err := tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateTextToProto(req))))
+	if err != nil || len(req.Data) == 0 {
+		return t, err
+	}
+	return c.WriteContent(ctx, t.ID, t.Version, req.Data)
 }
 func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateURLToProto(req))))
@@ -139,8 +134,15 @@ func (c *Client) CreateURL(ctx context.Context, req *CreateURLRequest) (*Tile, e
 func (c *Client) CreateShell(ctx context.Context, req *CreateShellRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateShellToProto(req))))
 }
+
+// CreatePane composes create-then-write exactly like CreateText when an
+// initial layout rides req.Data.
 func (c *Client) CreatePane(ctx context.Context, req *CreatePaneRequest) (*Tile, error) {
-	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreatePaneToProto(req))))
+	t, err := tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreatePaneToProto(req))))
+	if err != nil || len(req.Data) == 0 {
+		return t, err
+	}
+	return c.WriteContent(ctx, t.ID, t.Version, req.Data)
 }
 func (c *Client) CreateLeafLink(ctx context.Context, req *CreateLeafLinkRequest) (*Tile, error) {
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(CreateLeafLinkToProto(req))))
@@ -238,14 +240,8 @@ func (c *Client) PlaceTile(ctx context.Context, req *PlaceTileRequest) (*Tile, e
 	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(PlaceTileToProto(req))))
 }
 
-func (c *Client) MoveTile(ctx context.Context, req *MoveTileRequest) (*Tile, error) {
-	return tileResp(c.cl.MoveTile(ctx, connect.NewRequest(MoveTileToProto(req))))
-}
 func (c *Client) CloneTile(ctx context.Context, req *CloneTileRequest) (*Tile, error) {
 	return tileResp(c.cl.CloneTile(ctx, connect.NewRequest(CloneTileToProto(req))))
-}
-func (c *Client) ResizeTile(ctx context.Context, req *ResizeTileRequest) (*Tile, error) {
-	return tileResp(c.cl.ResizeTile(ctx, connect.NewRequest(ResizeTileToProto(req))))
 }
 func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
 	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(ShellSessionAliveToProto(req)))
@@ -254,15 +250,6 @@ func (c *Client) ShellSessionAlive(ctx context.Context, req *ShellSessionAliveRe
 	}
 	return ShellSessionAliveResponseFromProto(r.Msg), nil
 }
-func (c *Client) UpdateText(ctx context.Context, req *UpdateTextRequest) (*Tile, error) {
-	return tileResp(c.cl.UpdateText(ctx, connect.NewRequest(UpdateTextToProto(req))))
-}
-
-// SetTileAlt is the rename gesture: it stamps a USER-owned display name on a
-// tile (the server latches ownership so automatic captures defer, issue #61).
-func (c *Client) SetTileAlt(ctx context.Context, tileID, alt string) (*Tile, error) {
-	return tileResp(c.cl.SetTileAlt(ctx, connect.NewRequest(&pb.SetTileAltRequest{TileId: tileID, Alt: alt})))
-}
 
 // RenameTile is the versioned rename (2026-07-26 redesign: the absorbed
 // SetTile rename arm) — a real user edit with an optimistic-concurrency
@@ -270,15 +257,6 @@ func (c *Client) SetTileAlt(ctx context.Context, tileID, alt string) (*Tile, err
 func (c *Client) RenameTile(ctx context.Context, tileID string, version int64, alt string) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
 		TileId: tileID, Version: version, Rename: alt,
-	})))
-}
-
-// SetPaneLayout writes a pane tile's serialized workspace layout (the
-// LayoutV1 blob). Framing-class: never bumps version; path-free by id (see
-// the proto rationale).
-func (c *Client) SetPaneLayout(ctx context.Context, tileID string, version int64, data []byte) (*Tile, error) {
-	return tileResp(c.cl.SetPaneLayout(ctx, connect.NewRequest(&pb.SetPaneLayoutRequest{
-		TileId: tileID, Version: version, Data: data,
 	})))
 }
 

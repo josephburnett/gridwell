@@ -168,7 +168,6 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 			}
 			go func() {
 				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
-					Path:    rpc.Path{WellIDs: path},
 					TileID:  tileID,
 					Version: version,
 					JPEG:    jpeg, URL: url, Title: title, History: history,

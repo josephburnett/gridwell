@@ -25,7 +25,7 @@ func (s *Store) SetURLState(ctx context.Context, req *rpc.SetURLStateRequest) (*
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, rpc.KindURL, ErrNotURLTile); err != nil {
+		if _, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, rpc.KindURL, ErrNotURLTile); err != nil {
 			return err
 		}
 

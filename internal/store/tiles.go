@@ -35,15 +35,13 @@ func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, clai
 }
 
 // loadForEdit is the shared preamble for a versioned single-tile mutation:
-// version-check the tile (optimistic concurrency), optionally guard its kind,
-// and validate it lives in the path's leaf grid (the in-place-edit check — no
-// fork). wantKind == "" skips the kind guard (callers with a multi-kind rule,
+// version-check the tile (optimistic concurrency) and optionally guard its
+// kind. wantKind == "" skips the kind guard (callers with a multi-kind rule,
 // e.g. any well, do their own check on the returned tile). Returns the loaded
-// tile plus its leaf grid id (the grid the overlap/insert checks run against).
-//
-// Folding these three steps into one call keeps the path-leaf validation from
-// being silently dropped by a new mutation that copies only the version check.
-func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, path rpc.Path, tileID, version int64, wantKind string, wrongKindErr error) (*rpc.Tile, int64, error) {
+// tile plus its own grid id (the grid the overlap/insert checks run against —
+// the row is the one owner of its location; 2026-07-26: the wire carries no
+// descent path).
+func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, tileID, version int64, wantKind string, wrongKindErr error) (*rpc.Tile, int64, error) {
 	n, err := s.checkTileVersion(ctx, tx, tileID, version)
 	if err != nil {
 		return nil, 0, err
@@ -51,11 +49,11 @@ func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, path rpc.Path, tile
 	if wantKind != "" && n.Kind != wantKind {
 		return nil, 0, wrongKindErr
 	}
-	leaf, err := s.checkPathLeaf(ctx, tx, path, n)
+	gid, err := parseID(n.GridID)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, n.GridID, err)
 	}
-	return n, leaf, nil
+	return n, gid, nil
 }
 
 // emitTileChanged reloads tileID and appends a TileChanged event for it. It is
@@ -99,7 +97,7 @@ func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64,
 // decision lives.
 func (s *Store) createTile(
 	ctx context.Context,
-	path rpc.Path, gridIDStr string, x, y, w, h int64,
+	gridIDStr string, x, y, w, h int64,
 	objectID string,
 	insert func(tx *sql.Tx, gridID, now int64, objID string) (tileID int64, err error),
 ) (*rpc.Tile, error) {
@@ -112,15 +110,11 @@ func (s *Store) createTile(
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		seq, err := s.buildGridSequence(ctx, tx, path)
-		if err != nil {
-			return err
+		// grid_id is authoritative (id-addressed; no descent path on the
+		// wire). The load refuses a create into a grid that doesn't exist.
+		if _, err := s.loadGrid(ctx, tx, gridID); err != nil {
+			return fmt.Errorf("%w: grid %d: %v", ErrInvalidArgument, gridID, err)
 		}
-		if err := checkLeafGrid(seq, gridID); err != nil {
-			return err
-		}
-		// The grid the pane is in IS where the tile lands — copy-on-clone
-		// never shares a grid, so creation writes in place.
 		gid := gridID
 
 		over, err := overlapsExisting(ctx, tx, gid, x, y, w, h)
@@ -154,7 +148,7 @@ func (s *Store) createTile(
 // alt_text — the user-given name of the grid (the + palette's name field).
 // Wells have no content to derive an alt from, so this is alt's only writer.
 func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
-	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H, "",
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, "",
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			childObj := s.newID()
 			res, err := tx.ExecContext(ctx,
@@ -189,11 +183,11 @@ func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rp
 // grid). viewX/viewY/viewZoom carry the source's framing when the exit well
 // is a cross-plugin CLONE of a framed well — the link must preview and
 // descend to exactly where the source did; zeros are the default view.
-func (s *Store) CreateExitWell(ctx context.Context, path rpc.Path, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64, objectID string) (*rpc.Tile, error) {
+func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64, objectID string) (*rpc.Tile, error) {
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, path, gridID, x, y, w, h, objectID,
+	return s.createTile(ctx, gridID, x, y, w, h, objectID,
 		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
@@ -215,7 +209,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 	}
 	hash := hashBytes(req.Data)
 	alt := markdown.AltFromSource(string(req.Data))
-	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			blobID, err := s.putBlob(ctx, tx, hash, req.Data, mediaMarkdown)
 			if err != nil {
@@ -261,7 +255,7 @@ func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.
 	if !urlSchemeAllowed(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, req.Path, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			return insertURLRow(ctx, tx, objID, gridID, req.X, req.Y, req.W, req.H, urlString, now)
 		})
@@ -342,40 +336,6 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*rpc.Tile, error) {
 	return out, err
 }
 
-// ResizeTile changes a tile's footprint to (X, Y, W, H).
-func (s *Store) ResizeTile(ctx context.Context, req *rpc.ResizeTileRequest) (*rpc.Tile, error) {
-	if req.W <= 0 || req.H <= 0 {
-		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
-	}
-	tileID, err := parseID(req.TileID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *rpc.Tile
-	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		_, gridID, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, "", nil)
-		if err != nil {
-			return err
-		}
-
-		over, err := overlapsExisting(ctx, tx, gridID, req.X, req.Y, req.W, req.H, tileID)
-		if err != nil {
-			return err
-		}
-		if over {
-			return ErrOverlap
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET x = ?, y = ?, w = ?, h = ?, updated_at = ? WHERE id = ?`,
-			req.X, req.Y, req.W, req.H, s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		out, err = s.finishContentEdit(ctx, tx, tileID, events)
-		return err
-	})
-	return out, err
-}
-
 // SetWellView updates a well tile's framing (view_x/view_y/view_zoom).
 //
 // Framing is not a content edit: re-framing does NOT bump the tile version.
@@ -389,7 +349,7 @@ func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		n, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, "", nil)
+		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}
@@ -417,7 +377,7 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, rpc.KindText, ErrNotTextTile); err != nil {
+		if _, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, rpc.KindText, ErrNotTextTile); err != nil {
 			return err
 		}
 		var textModeArg any
@@ -449,7 +409,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) erro
 		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		t, _, err := s.loadForEdit(ctx, tx, req.Path, tileID, req.Version, "", nil)
+		t, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
 		}

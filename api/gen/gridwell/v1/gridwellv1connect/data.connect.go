@@ -52,18 +52,12 @@ const (
 	GridwellProbeProcedure = "/gridwell.v1.Gridwell/Probe"
 	// GridwellListPluginsProcedure is the fully-qualified name of the Gridwell's ListPlugins RPC.
 	GridwellListPluginsProcedure = "/gridwell.v1.Gridwell/ListPlugins"
-	// GridwellGetSessionProcedure is the fully-qualified name of the Gridwell's GetSession RPC.
-	GridwellGetSessionProcedure = "/gridwell.v1.Gridwell/GetSession"
-	// GridwellPutSessionProcedure is the fully-qualified name of the Gridwell's PutSession RPC.
-	GridwellPutSessionProcedure = "/gridwell.v1.Gridwell/PutSession"
 	// GridwellOpenShellProcedure is the fully-qualified name of the Gridwell's OpenShell RPC.
 	GridwellOpenShellProcedure = "/gridwell.v1.Gridwell/OpenShell"
 	// GridwellGetGridProcedure is the fully-qualified name of the Gridwell's GetGrid RPC.
 	GridwellGetGridProcedure = "/gridwell.v1.Gridwell/GetGrid"
 	// GridwellGetTileProcedure is the fully-qualified name of the Gridwell's GetTile RPC.
 	GridwellGetTileProcedure = "/gridwell.v1.Gridwell/GetTile"
-	// GridwellGetTileContentProcedure is the fully-qualified name of the Gridwell's GetTileContent RPC.
-	GridwellGetTileContentProcedure = "/gridwell.v1.Gridwell/GetTileContent"
 	// GridwellGetTilePreviewProcedure is the fully-qualified name of the Gridwell's GetTilePreview RPC.
 	GridwellGetTilePreviewProcedure = "/gridwell.v1.Gridwell/GetTilePreview"
 	// GridwellReadContentProcedure is the fully-qualified name of the Gridwell's ReadContent RPC.
@@ -76,22 +70,10 @@ const (
 	GridwellCreateTileProcedure = "/gridwell.v1.Gridwell/CreateTile"
 	// GridwellSetTileProcedure is the fully-qualified name of the Gridwell's SetTile RPC.
 	GridwellSetTileProcedure = "/gridwell.v1.Gridwell/SetTile"
-	// GridwellMoveTileProcedure is the fully-qualified name of the Gridwell's MoveTile RPC.
-	GridwellMoveTileProcedure = "/gridwell.v1.Gridwell/MoveTile"
 	// GridwellCloneTileProcedure is the fully-qualified name of the Gridwell's CloneTile RPC.
 	GridwellCloneTileProcedure = "/gridwell.v1.Gridwell/CloneTile"
-	// GridwellResizeTileProcedure is the fully-qualified name of the Gridwell's ResizeTile RPC.
-	GridwellResizeTileProcedure = "/gridwell.v1.Gridwell/ResizeTile"
-	// GridwellUpdateTextProcedure is the fully-qualified name of the Gridwell's UpdateText RPC.
-	GridwellUpdateTextProcedure = "/gridwell.v1.Gridwell/UpdateText"
 	// GridwellDeleteTileProcedure is the fully-qualified name of the Gridwell's DeleteTile RPC.
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
-	// GridwellSetTileAltProcedure is the fully-qualified name of the Gridwell's SetTileAlt RPC.
-	GridwellSetTileAltProcedure = "/gridwell.v1.Gridwell/SetTileAlt"
-	// GridwellSetPaneLayoutProcedure is the fully-qualified name of the Gridwell's SetPaneLayout RPC.
-	GridwellSetPaneLayoutProcedure = "/gridwell.v1.Gridwell/SetPaneLayout"
-	// GridwellSetContentZoomProcedure is the fully-qualified name of the Gridwell's SetContentZoom RPC.
-	GridwellSetContentZoomProcedure = "/gridwell.v1.Gridwell/SetContentZoom"
 	// GridwellSetRootViewProcedure is the fully-qualified name of the Gridwell's SetRootView RPC.
 	GridwellSetRootViewProcedure = "/gridwell.v1.Gridwell/SetRootView"
 	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
@@ -110,15 +92,11 @@ type GridwellClient interface {
 	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
-	// ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
-	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.ServerStreamForClient[v1.BlobChunk], error)
-	PutSession(context.Context) *connect.ClientStreamForClient[v1.PutSessionRequest, v1.PutSessionResponse]
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(context.Context) *connect.BidiStreamForClient[v1.OpenShellRequest, v1.OpenShellResponse]
 	// ── Reads ─────────────────────────────────────────────────────────────────
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest]) (*connect.ServerStreamForClient[v1.ContentChunk], error)
@@ -128,20 +106,8 @@ type GridwellClient interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
-	ResizeTile(context.Context, *connect.Request[v1.ResizeTileRequest]) (*connect.Response[v1.TileResponse], error)
-	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
-	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
-	// SetPaneLayout writes a pane tile's serialized workspace layout.
-	// Framing-class (never bumps version); path-free by id. See the request
-	// message for both rationales.
-	SetPaneLayout(context.Context, *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error)
-	// SetContentZoom persists the per-tile content scale (text font, terminal
-	// font, page zoom — issue #82). Framing: never bumps version. Refused for
-	// wells (their view_zoom is the grid viewport, a different concept).
-	SetContentZoom(context.Context, *connect.Request[v1.SetContentZoomRequest]) (*connect.Response[v1.TileResponse], error)
 	// SetRootView persists the plugin root-grid framing (the portal-level
 	// analogue of SetTile for a well). Framing only — never bumps version.
 	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
@@ -180,18 +146,6 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("ListPlugins")),
 			connect.WithClientOptions(opts...),
 		),
-		getSession: connect.NewClient[v1.GetSessionRequest, v1.BlobChunk](
-			httpClient,
-			baseURL+GridwellGetSessionProcedure,
-			connect.WithSchema(gridwellMethods.ByName("GetSession")),
-			connect.WithClientOptions(opts...),
-		),
-		putSession: connect.NewClient[v1.PutSessionRequest, v1.PutSessionResponse](
-			httpClient,
-			baseURL+GridwellPutSessionProcedure,
-			connect.WithSchema(gridwellMethods.ByName("PutSession")),
-			connect.WithClientOptions(opts...),
-		),
 		openShell: connect.NewClient[v1.OpenShellRequest, v1.OpenShellResponse](
 			httpClient,
 			baseURL+GridwellOpenShellProcedure,
@@ -208,12 +162,6 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellGetTileProcedure,
 			connect.WithSchema(gridwellMethods.ByName("GetTile")),
-			connect.WithClientOptions(opts...),
-		),
-		getTileContent: connect.NewClient[v1.GetTileContentRequest, v1.GetTileContentResponse](
-			httpClient,
-			baseURL+GridwellGetTileContentProcedure,
-			connect.WithSchema(gridwellMethods.ByName("GetTileContent")),
 			connect.WithClientOptions(opts...),
 		),
 		getTilePreview: connect.NewClient[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse](
@@ -252,52 +200,16 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetTile")),
 			connect.WithClientOptions(opts...),
 		),
-		moveTile: connect.NewClient[v1.MoveTileRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellMoveTileProcedure,
-			connect.WithSchema(gridwellMethods.ByName("MoveTile")),
-			connect.WithClientOptions(opts...),
-		),
 		cloneTile: connect.NewClient[v1.CloneTileRequest, v1.TileResponse](
 			httpClient,
 			baseURL+GridwellCloneTileProcedure,
 			connect.WithSchema(gridwellMethods.ByName("CloneTile")),
 			connect.WithClientOptions(opts...),
 		),
-		resizeTile: connect.NewClient[v1.ResizeTileRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellResizeTileProcedure,
-			connect.WithSchema(gridwellMethods.ByName("ResizeTile")),
-			connect.WithClientOptions(opts...),
-		),
-		updateText: connect.NewClient[v1.UpdateTextRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellUpdateTextProcedure,
-			connect.WithSchema(gridwellMethods.ByName("UpdateText")),
-			connect.WithClientOptions(opts...),
-		),
 		deleteTile: connect.NewClient[v1.DeleteTileRequest, v1.DeleteTileResponse](
 			httpClient,
 			baseURL+GridwellDeleteTileProcedure,
 			connect.WithSchema(gridwellMethods.ByName("DeleteTile")),
-			connect.WithClientOptions(opts...),
-		),
-		setTileAlt: connect.NewClient[v1.SetTileAltRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellSetTileAltProcedure,
-			connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
-			connect.WithClientOptions(opts...),
-		),
-		setPaneLayout: connect.NewClient[v1.SetPaneLayoutRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellSetPaneLayoutProcedure,
-			connect.WithSchema(gridwellMethods.ByName("SetPaneLayout")),
-			connect.WithClientOptions(opts...),
-		),
-		setContentZoom: connect.NewClient[v1.SetContentZoomRequest, v1.TileResponse](
-			httpClient,
-			baseURL+GridwellSetContentZoomProcedure,
-			connect.WithSchema(gridwellMethods.ByName("SetContentZoom")),
 			connect.WithClientOptions(opts...),
 		),
 		setRootView: connect.NewClient[v1.SetRootViewRequest, v1.SetRootViewResponse](
@@ -326,26 +238,17 @@ type gridwellClient struct {
 	info              *connect.Client[v1.InfoRequest, v1.InfoResponse]
 	probe             *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
 	listPlugins       *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
-	getSession        *connect.Client[v1.GetSessionRequest, v1.BlobChunk]
-	putSession        *connect.Client[v1.PutSessionRequest, v1.PutSessionResponse]
 	openShell         *connect.Client[v1.OpenShellRequest, v1.OpenShellResponse]
 	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
 	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
-	getTileContent    *connect.Client[v1.GetTileContentRequest, v1.GetTileContentResponse]
 	getTilePreview    *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
 	readContent       *connect.Client[v1.ReadContentRequest, v1.ContentChunk]
 	writeContent      *connect.Client[v1.WriteContentRequest, v1.TileResponse]
 	placeTile         *connect.Client[v1.PlaceTileRequest, v1.TileResponse]
 	createTile        *connect.Client[v1.CreateTileRequest, v1.TileResponse]
 	setTile           *connect.Client[v1.SetTileRequest, v1.TileResponse]
-	moveTile          *connect.Client[v1.MoveTileRequest, v1.TileResponse]
 	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
-	resizeTile        *connect.Client[v1.ResizeTileRequest, v1.TileResponse]
-	updateText        *connect.Client[v1.UpdateTextRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
-	setTileAlt        *connect.Client[v1.SetTileAltRequest, v1.TileResponse]
-	setPaneLayout     *connect.Client[v1.SetPaneLayoutRequest, v1.TileResponse]
-	setContentZoom    *connect.Client[v1.SetContentZoomRequest, v1.TileResponse]
 	setRootView       *connect.Client[v1.SetRootViewRequest, v1.SetRootViewResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
@@ -366,16 +269,6 @@ func (c *gridwellClient) ListPlugins(ctx context.Context, req *connect.Request[v
 	return c.listPlugins.CallUnary(ctx, req)
 }
 
-// GetSession calls gridwell.v1.Gridwell.GetSession.
-func (c *gridwellClient) GetSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.ServerStreamForClient[v1.BlobChunk], error) {
-	return c.getSession.CallServerStream(ctx, req)
-}
-
-// PutSession calls gridwell.v1.Gridwell.PutSession.
-func (c *gridwellClient) PutSession(ctx context.Context) *connect.ClientStreamForClient[v1.PutSessionRequest, v1.PutSessionResponse] {
-	return c.putSession.CallClientStream(ctx)
-}
-
 // OpenShell calls gridwell.v1.Gridwell.OpenShell.
 func (c *gridwellClient) OpenShell(ctx context.Context) *connect.BidiStreamForClient[v1.OpenShellRequest, v1.OpenShellResponse] {
 	return c.openShell.CallBidiStream(ctx)
@@ -389,11 +282,6 @@ func (c *gridwellClient) GetGrid(ctx context.Context, req *connect.Request[v1.Ge
 // GetTile calls gridwell.v1.Gridwell.GetTile.
 func (c *gridwellClient) GetTile(ctx context.Context, req *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.getTile.CallUnary(ctx, req)
-}
-
-// GetTileContent calls gridwell.v1.Gridwell.GetTileContent.
-func (c *gridwellClient) GetTileContent(ctx context.Context, req *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error) {
-	return c.getTileContent.CallUnary(ctx, req)
 }
 
 // GetTilePreview calls gridwell.v1.Gridwell.GetTilePreview.
@@ -426,44 +314,14 @@ func (c *gridwellClient) SetTile(ctx context.Context, req *connect.Request[v1.Se
 	return c.setTile.CallUnary(ctx, req)
 }
 
-// MoveTile calls gridwell.v1.Gridwell.MoveTile.
-func (c *gridwellClient) MoveTile(ctx context.Context, req *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.moveTile.CallUnary(ctx, req)
-}
-
 // CloneTile calls gridwell.v1.Gridwell.CloneTile.
 func (c *gridwellClient) CloneTile(ctx context.Context, req *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error) {
 	return c.cloneTile.CallUnary(ctx, req)
 }
 
-// ResizeTile calls gridwell.v1.Gridwell.ResizeTile.
-func (c *gridwellClient) ResizeTile(ctx context.Context, req *connect.Request[v1.ResizeTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.resizeTile.CallUnary(ctx, req)
-}
-
-// UpdateText calls gridwell.v1.Gridwell.UpdateText.
-func (c *gridwellClient) UpdateText(ctx context.Context, req *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.updateText.CallUnary(ctx, req)
-}
-
 // DeleteTile calls gridwell.v1.Gridwell.DeleteTile.
 func (c *gridwellClient) DeleteTile(ctx context.Context, req *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error) {
 	return c.deleteTile.CallUnary(ctx, req)
-}
-
-// SetTileAlt calls gridwell.v1.Gridwell.SetTileAlt.
-func (c *gridwellClient) SetTileAlt(ctx context.Context, req *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.setTileAlt.CallUnary(ctx, req)
-}
-
-// SetPaneLayout calls gridwell.v1.Gridwell.SetPaneLayout.
-func (c *gridwellClient) SetPaneLayout(ctx context.Context, req *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.setPaneLayout.CallUnary(ctx, req)
-}
-
-// SetContentZoom calls gridwell.v1.Gridwell.SetContentZoom.
-func (c *gridwellClient) SetContentZoom(ctx context.Context, req *connect.Request[v1.SetContentZoomRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.setContentZoom.CallUnary(ctx, req)
 }
 
 // SetRootView calls gridwell.v1.Gridwell.SetRootView.
@@ -490,15 +348,11 @@ type GridwellHandler interface {
 	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
-	// ── Session (Chromium cookies + web storage; the plugin is the boundary) ──
-	GetSession(context.Context, *connect.Request[v1.GetSessionRequest], *connect.ServerStream[v1.BlobChunk]) error
-	PutSession(context.Context, *connect.ClientStream[v1.PutSessionRequest]) (*connect.Response[v1.PutSessionResponse], error)
 	// ── Shell (live PTY, both ways) ───────────────────────────────────────────
 	OpenShell(context.Context, *connect.BidiStream[v1.OpenShellRequest, v1.OpenShellResponse]) error
 	// ── Reads ─────────────────────────────────────────────────────────────────
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error
@@ -508,20 +362,8 @@ type GridwellHandler interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
-	ResizeTile(context.Context, *connect.Request[v1.ResizeTileRequest]) (*connect.Response[v1.TileResponse], error)
-	UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
-	SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error)
-	// SetPaneLayout writes a pane tile's serialized workspace layout.
-	// Framing-class (never bumps version); path-free by id. See the request
-	// message for both rationales.
-	SetPaneLayout(context.Context, *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error)
-	// SetContentZoom persists the per-tile content scale (text font, terminal
-	// font, page zoom — issue #82). Framing: never bumps version. Refused for
-	// wells (their view_zoom is the grid viewport, a different concept).
-	SetContentZoom(context.Context, *connect.Request[v1.SetContentZoomRequest]) (*connect.Response[v1.TileResponse], error)
 	// SetRootView persists the plugin root-grid framing (the portal-level
 	// analogue of SetTile for a well). Framing only — never bumps version.
 	// The server routes on root_grid_id; localdb stores; fs/proc are no-ops.
@@ -556,18 +398,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("ListPlugins")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellGetSessionHandler := connect.NewServerStreamHandler(
-		GridwellGetSessionProcedure,
-		svc.GetSession,
-		connect.WithSchema(gridwellMethods.ByName("GetSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellPutSessionHandler := connect.NewClientStreamHandler(
-		GridwellPutSessionProcedure,
-		svc.PutSession,
-		connect.WithSchema(gridwellMethods.ByName("PutSession")),
-		connect.WithHandlerOptions(opts...),
-	)
 	gridwellOpenShellHandler := connect.NewBidiStreamHandler(
 		GridwellOpenShellProcedure,
 		svc.OpenShell,
@@ -584,12 +414,6 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellGetTileProcedure,
 		svc.GetTile,
 		connect.WithSchema(gridwellMethods.ByName("GetTile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellGetTileContentHandler := connect.NewUnaryHandler(
-		GridwellGetTileContentProcedure,
-		svc.GetTileContent,
-		connect.WithSchema(gridwellMethods.ByName("GetTileContent")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellGetTilePreviewHandler := connect.NewUnaryHandler(
@@ -628,52 +452,16 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetTile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellMoveTileHandler := connect.NewUnaryHandler(
-		GridwellMoveTileProcedure,
-		svc.MoveTile,
-		connect.WithSchema(gridwellMethods.ByName("MoveTile")),
-		connect.WithHandlerOptions(opts...),
-	)
 	gridwellCloneTileHandler := connect.NewUnaryHandler(
 		GridwellCloneTileProcedure,
 		svc.CloneTile,
 		connect.WithSchema(gridwellMethods.ByName("CloneTile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellResizeTileHandler := connect.NewUnaryHandler(
-		GridwellResizeTileProcedure,
-		svc.ResizeTile,
-		connect.WithSchema(gridwellMethods.ByName("ResizeTile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellUpdateTextHandler := connect.NewUnaryHandler(
-		GridwellUpdateTextProcedure,
-		svc.UpdateText,
-		connect.WithSchema(gridwellMethods.ByName("UpdateText")),
-		connect.WithHandlerOptions(opts...),
-	)
 	gridwellDeleteTileHandler := connect.NewUnaryHandler(
 		GridwellDeleteTileProcedure,
 		svc.DeleteTile,
 		connect.WithSchema(gridwellMethods.ByName("DeleteTile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellSetTileAltHandler := connect.NewUnaryHandler(
-		GridwellSetTileAltProcedure,
-		svc.SetTileAlt,
-		connect.WithSchema(gridwellMethods.ByName("SetTileAlt")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellSetPaneLayoutHandler := connect.NewUnaryHandler(
-		GridwellSetPaneLayoutProcedure,
-		svc.SetPaneLayout,
-		connect.WithSchema(gridwellMethods.ByName("SetPaneLayout")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gridwellSetContentZoomHandler := connect.NewUnaryHandler(
-		GridwellSetContentZoomProcedure,
-		svc.SetContentZoom,
-		connect.WithSchema(gridwellMethods.ByName("SetContentZoom")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellSetRootViewHandler := connect.NewUnaryHandler(
@@ -702,18 +490,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellProbeHandler.ServeHTTP(w, r)
 		case GridwellListPluginsProcedure:
 			gridwellListPluginsHandler.ServeHTTP(w, r)
-		case GridwellGetSessionProcedure:
-			gridwellGetSessionHandler.ServeHTTP(w, r)
-		case GridwellPutSessionProcedure:
-			gridwellPutSessionHandler.ServeHTTP(w, r)
 		case GridwellOpenShellProcedure:
 			gridwellOpenShellHandler.ServeHTTP(w, r)
 		case GridwellGetGridProcedure:
 			gridwellGetGridHandler.ServeHTTP(w, r)
 		case GridwellGetTileProcedure:
 			gridwellGetTileHandler.ServeHTTP(w, r)
-		case GridwellGetTileContentProcedure:
-			gridwellGetTileContentHandler.ServeHTTP(w, r)
 		case GridwellGetTilePreviewProcedure:
 			gridwellGetTilePreviewHandler.ServeHTTP(w, r)
 		case GridwellReadContentProcedure:
@@ -726,22 +508,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellCreateTileHandler.ServeHTTP(w, r)
 		case GridwellSetTileProcedure:
 			gridwellSetTileHandler.ServeHTTP(w, r)
-		case GridwellMoveTileProcedure:
-			gridwellMoveTileHandler.ServeHTTP(w, r)
 		case GridwellCloneTileProcedure:
 			gridwellCloneTileHandler.ServeHTTP(w, r)
-		case GridwellResizeTileProcedure:
-			gridwellResizeTileHandler.ServeHTTP(w, r)
-		case GridwellUpdateTextProcedure:
-			gridwellUpdateTextHandler.ServeHTTP(w, r)
 		case GridwellDeleteTileProcedure:
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
-		case GridwellSetTileAltProcedure:
-			gridwellSetTileAltHandler.ServeHTTP(w, r)
-		case GridwellSetPaneLayoutProcedure:
-			gridwellSetPaneLayoutHandler.ServeHTTP(w, r)
-		case GridwellSetContentZoomProcedure:
-			gridwellSetContentZoomHandler.ServeHTTP(w, r)
 		case GridwellSetRootViewProcedure:
 			gridwellSetRootViewHandler.ServeHTTP(w, r)
 		case GridwellShellSessionAliveProcedure:
@@ -769,14 +539,6 @@ func (UnimplementedGridwellHandler) ListPlugins(context.Context, *connect.Reques
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ListPlugins is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest], *connect.ServerStream[v1.BlobChunk]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetSession is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) PutSession(context.Context, *connect.ClientStream[v1.PutSessionRequest]) (*connect.Response[v1.PutSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.PutSession is not implemented"))
-}
-
 func (UnimplementedGridwellHandler) OpenShell(context.Context, *connect.BidiStream[v1.OpenShellRequest, v1.OpenShellResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.OpenShell is not implemented"))
 }
@@ -787,10 +549,6 @@ func (UnimplementedGridwellHandler) GetGrid(context.Context, *connect.Request[v1
 
 func (UnimplementedGridwellHandler) GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTile is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) GetTileContent(context.Context, *connect.Request[v1.GetTileContentRequest]) (*connect.Response[v1.GetTileContentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTileContent is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error) {
@@ -817,36 +575,12 @@ func (UnimplementedGridwellHandler) SetTile(context.Context, *connect.Request[v1
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTile is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.MoveTile is not implemented"))
-}
-
 func (UnimplementedGridwellHandler) CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CloneTile is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) ResizeTile(context.Context, *connect.Request[v1.ResizeTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ResizeTile is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) UpdateText(context.Context, *connect.Request[v1.UpdateTextRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.UpdateText is not implemented"))
-}
-
 func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.DeleteTile is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) SetTileAlt(context.Context, *connect.Request[v1.SetTileAltRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTileAlt is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) SetPaneLayout(context.Context, *connect.Request[v1.SetPaneLayoutRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetPaneLayout is not implemented"))
-}
-
-func (UnimplementedGridwellHandler) SetContentZoom(context.Context, *connect.Request[v1.SetContentZoomRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetContentZoom is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) SetRootView(context.Context, *connect.Request[v1.SetRootViewRequest]) (*connect.Response[v1.SetRootViewResponse], error) {

@@ -814,7 +814,6 @@ func snapshotShellCanvas(container js.Value) []byte {
 // avoid a synchronous GetTile round-trip in the ascent path.
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
 	req := &rpc.SetShellPreviewRequest{
-		Path:    rpc.Path{WellIDs: path},
 		TileID:  tileID,
 		Version: a.tileVersionAt(anchor, path, tileID),
 		JPEG:    jpeg,
