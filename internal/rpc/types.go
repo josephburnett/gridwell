@@ -486,6 +486,21 @@ type ResizeTileRequest struct {
 	H       int64  `json:"h"`
 }
 
+// PlaceTileRequest is the single placement writeback (2026-07-26,
+// interface-redesign-plan.md): placement is one fact — (grid, x, y, w, h) —
+// and one verb owns it. GridID is the DESTINATION grid (the tile's current
+// grid for a pure resize). Id-addressed + version-claimed; no Path — the
+// well-into-own-subtree refusal is a server-side ancestor walk.
+type PlaceTileRequest struct {
+	TileID  string `json:"tile_id"`
+	Version int64  `json:"version"`
+	GridID  string `json:"grid_id"`
+	X       int64  `json:"x"`
+	Y       int64  `json:"y"`
+	W       int64  `json:"w"`
+	H       int64  `json:"h"`
+}
+
 type SetWellViewRequest struct {
 	Path     Path    `json:"path"`
 	TileID   string  `json:"tile_id"`

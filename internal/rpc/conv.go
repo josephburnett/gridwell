@@ -277,6 +277,14 @@ func CloneTileToProto(r *CloneTileRequest) *pb.CloneTileRequest {
 	return &pb.CloneTileRequest{Path: PathToProto(r.Path), TileId: r.TileID, Version: r.Version, DestGridId: r.DestGridID, DestPath: PathToProto(r.DestPath), X: r.X, Y: r.Y}
 }
 
+func PlaceTileFromProto(r *pb.PlaceTileRequest) *PlaceTileRequest {
+	return &PlaceTileRequest{TileID: r.TileId, Version: r.Version, GridID: r.GridId, X: r.X, Y: r.Y, W: r.W, H: r.H}
+}
+
+func PlaceTileToProto(r *PlaceTileRequest) *pb.PlaceTileRequest {
+	return &pb.PlaceTileRequest{TileId: r.TileID, Version: r.Version, GridId: r.GridID, X: r.X, Y: r.Y, W: r.W, H: r.H}
+}
+
 func ResizeTileFromProto(r *pb.ResizeTileRequest) *ResizeTileRequest {
 	return &ResizeTileRequest{Path: PathFromProto(r.Path), TileID: r.TileId, Version: r.Version, X: r.X, Y: r.Y, W: r.W, H: r.H}
 }
