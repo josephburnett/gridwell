@@ -140,3 +140,65 @@ func TestProxy_OpenShellBidiForwards(t *testing.T) {
 	}
 	_ = stream.CloseSend()
 }
+
+func TestProxy_ContentStreamForwards(t *testing.T) {
+	c := proxied(t)
+	ctx := context.Background()
+	info, _ := c.Info(ctx, &gridwellv1.InfoRequest{})
+
+	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: info.RootGridId,
+		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
+		Data:   []byte("old"),
+	})
+	if err != nil {
+		t.Fatalf("CreateTile: %v", err)
+	}
+
+	// WriteContent (client-stream) forwards with commit-at-close intact.
+	w, err := c.WriteContent(ctx)
+	if err != nil {
+		t.Fatalf("WriteContent: %v", err)
+	}
+	if err := w.Send(&gridwellv1.WriteContentRequest{
+		TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# through "),
+	}); err != nil {
+		t.Fatalf("send 1: %v", err)
+	}
+	if err := w.Send(&gridwellv1.WriteContentRequest{Data: []byte("the proxy")}); err != nil {
+		t.Fatalf("send 2: %v", err)
+	}
+	resp, err := w.CloseAndRecv()
+	if err != nil {
+		t.Fatalf("CloseAndRecv: %v", err)
+	}
+
+	// ReadContent (server-stream) back through the proxy, meta on chunk 1.
+	r, err := c.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: created.Tile.Id})
+	if err != nil {
+		t.Fatalf("ReadContent: %v", err)
+	}
+	var got []byte
+	var version int64
+	first := true
+	for {
+		chunk, err := r.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("recv: %v", err)
+		}
+		if first {
+			version = chunk.Version
+			first = false
+		}
+		got = append(got, chunk.Data...)
+	}
+	if string(got) != "# through the proxy" {
+		t.Errorf("content through proxy = %q", got)
+	}
+	if version != resp.Tile.Version {
+		t.Errorf("version %d through proxy, want %d — the basis must survive the hop", version, resp.Tile.Version)
+	}
+}

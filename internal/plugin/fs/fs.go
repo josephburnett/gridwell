@@ -21,6 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/trash"
+	"google.golang.org/grpc"
 	_ "modernc.org/sqlite"
 )
 
@@ -292,6 +293,12 @@ func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest
 	return griddb.ApplyResize(p.db, fsLabelCol, req)
 }
 
+// PlaceTile is the single placement writeback: in-grid only (a cross-grid
+// placement would be an on-disk move, which fs does not perform).
+func (p *Plugin) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplyPlace(p.db, fsLabelCol, req)
+}
+
 // SetTile persists a directory well's preview framing so descent and ascent
 // restore the same view. fs supports framing only on its directory wells;
 // other kinds/writebacks are not applicable.
@@ -335,6 +342,18 @@ func (p *Plugin) GetTileContent(_ context.Context, req *gridwellv1.GetTileConten
 		Data:      []byte(fssource.MetadataMarkdown(entry)),
 		MediaType: "text/markdown",
 	}, nil
+}
+
+// ReadContent streams the same descent body GetTileContent serves (one chunk;
+// fs bodies are small metadata summaries, version 0 — not version-edited).
+// The unary verb dies at the Stage 9 contraction and this becomes the one
+// content read.
+func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
+	resp, err := p.GetTileContent(stream.Context(), &gridwellv1.GetTileContentRequest{TileId: req.TileId})
+	if err != nil {
+		return err
+	}
+	return stream.Send(&gridwellv1.ContentChunk{Data: resp.Data, MediaType: resp.MediaType, Version: resp.Version})
 }
 
 // Probe checks whether the tile at tile_id still has its backing path on disk.

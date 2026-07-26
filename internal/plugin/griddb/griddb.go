@@ -77,6 +77,24 @@ func ApplyResize(db *sql.DB, labelCol string, req *gridwellv1.ResizeTileRequest)
 	return tileResp(db, labelCol, tileID)
 }
 
+// ApplyPlace is the single placement writeback for source-backed plugins
+// (2026-07-26 redesign): one verb owns (x, y, w, h). Cross-grid placement is
+// rejected like ApplyMove always did — for fs it would be an on-disk move,
+// for proc it is meaningless — so grid_id must name the tile's current grid.
+func ApplyPlace(db *sql.DB, labelCol string, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+	tileID, err := parseTileID(req.TileId)
+	if err != nil {
+		return nil, err
+	}
+	if err := guardSameGrid(db, tileID, req.GridId); err != nil {
+		return nil, err
+	}
+	if err := exec(db, `UPDATE tiles SET x = ?, y = ?, w = ?, h = ? WHERE id = ?`, req.X, req.Y, req.W, req.H, tileID); err != nil {
+		return nil, err
+	}
+	return tileResp(db, labelCol, tileID)
+}
+
 // ApplySetWellView persists a well tile's preview framing (view_x, view_y,
 // view_zoom). The framing *is* the well's preview and its descent target, so
 // storing it here is what makes descent/ascent idempotent for source-backed

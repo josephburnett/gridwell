@@ -21,6 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/procsource"
+	"google.golang.org/grpc"
 	_ "modernc.org/sqlite"
 )
 
@@ -263,6 +264,12 @@ func (p *Plugin) ResizeTile(_ context.Context, req *gridwellv1.ResizeTileRequest
 	return griddb.ApplyResize(p.db, procLabelCol, req)
 }
 
+// PlaceTile is the single placement writeback: in-grid only (a process tile
+// cannot change parent).
+func (p *Plugin) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+	return griddb.ApplyPlace(p.db, procLabelCol, req)
+}
+
 // SetTile persists a process well's preview framing so descent and ascent
 // restore the same view. proc supports framing only on its process wells.
 func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
@@ -304,6 +311,18 @@ func (p *Plugin) GetTileContent(_ context.Context, req *gridwellv1.GetTileConten
 		Data:      []byte(procsource.MetadataMarkdown(info)),
 		MediaType: "text/markdown",
 	}, nil
+}
+
+// ReadContent streams the same descent body GetTileContent serves (one chunk;
+// proc bodies are small @info summaries, version 0 — not version-edited).
+// The unary verb dies at the Stage 9 contraction and this becomes the one
+// content read.
+func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
+	resp, err := p.GetTileContent(stream.Context(), &gridwellv1.GetTileContentRequest{TileId: req.TileId})
+	if err != nil {
+		return err
+	}
+	return stream.Send(&gridwellv1.ContentChunk{Data: resp.Data, MediaType: resp.MediaType, Version: resp.Version})
 }
 
 // Probe checks whether the process backing tile_id still exists.

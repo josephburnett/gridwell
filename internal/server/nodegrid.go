@@ -243,6 +243,9 @@ func (n *nodeGrid) CloneTile(context.Context, *pb.CloneTileRequest) (*pb.TileRes
 func (n *nodeGrid) ResizeTile(context.Context, *pb.ResizeTileRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }
+func (n *nodeGrid) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+	return nil, errNodeGridReadOnly
+}
 func (n *nodeGrid) UpdateText(context.Context, *pb.UpdateTextRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }

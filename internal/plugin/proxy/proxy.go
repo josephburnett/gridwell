@@ -65,6 +65,9 @@ func (p *Plugin) CloneTile(ctx context.Context, r *gridwellv1.CloneTileRequest) 
 func (p *Plugin) ResizeTile(ctx context.Context, r *gridwellv1.ResizeTileRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.ResizeTile(ctx, r)
 }
+func (p *Plugin) PlaceTile(ctx context.Context, r *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+	return p.c.PlaceTile(ctx, r)
+}
 func (p *Plugin) UpdateText(ctx context.Context, r *gridwellv1.UpdateTextRequest) (*gridwellv1.TileResponse, error) {
 	return p.c.UpdateText(ctx, r)
 }
@@ -87,6 +90,14 @@ func (p *Plugin) SetPaneLayout(ctx context.Context, r *gridwellv1.SetPaneLayoutR
 
 func (p *Plugin) GetSession(r *gridwellv1.GetSessionRequest, ss grpc.ServerStreamingServer[gridwellv1.BlobChunk]) error {
 	cs, err := p.c.GetSession(ss.Context(), r)
+	if err != nil {
+		return err
+	}
+	return relay(cs, ss)
+}
+
+func (p *Plugin) ReadContent(r *gridwellv1.ReadContentRequest, ss grpc.ServerStreamingServer[gridwellv1.ContentChunk]) error {
+	cs, err := p.c.ReadContent(ss.Context(), r)
 	if err != nil {
 		return err
 	}
@@ -124,6 +135,32 @@ func relay[T any](from recvStream[T], to sendStream[T]) error {
 
 func (p *Plugin) PutSession(ss grpc.ClientStreamingServer[gridwellv1.PutSessionRequest, gridwellv1.PutSessionResponse]) error {
 	cs, err := p.c.PutSession(ss.Context())
+	if err != nil {
+		return err
+	}
+	for {
+		msg, err := ss.Recv()
+		if errors.Is(err, io.EOF) {
+			resp, err := cs.CloseAndRecv()
+			if err != nil {
+				return err
+			}
+			return ss.SendAndClose(resp)
+		}
+		if err != nil {
+			return err
+		}
+		if err := cs.Send(msg); err != nil {
+			return err
+		}
+	}
+}
+
+// WriteContent forwards the content write with the same commit-at-close
+// contract it carries everywhere: bytes relay upstream as they arrive, and
+// the remote commits only when the local close propagates.
+func (p *Plugin) WriteContent(ss grpc.ClientStreamingServer[gridwellv1.WriteContentRequest, gridwellv1.TileResponse]) error {
+	cs, err := p.c.WriteContent(ss.Context())
 	if err != nil {
 		return err
 	}
