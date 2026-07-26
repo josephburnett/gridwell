@@ -105,7 +105,7 @@ message Tile {
   // content_zoom scales the CONTENT rendered inside a text/shell/url tile —
   // the text font, the terminal font, the page zoom (issue #82). Framing,
   // not content: persisted per tile, never bumps version. 0 means unset
-  // (renders at 1.0). Written by SetContentZoom only.
+  // (renders at 1.0). Written by the SetTile content_zoom arm only.
   double content_zoom = 27;
 
   // url_history is a url tile's persisted navigation back-stack (JSON
@@ -154,7 +154,7 @@ message InfoResponse {
   // support ephemeral visits (fs/proc).
   string scratch_grid_id = 8;
   // writable reports that this plugin accepts CreateTile (new primitives can
-  // be dropped into its grids). Like watch and has_session, a capability the
+  // be dropped into its grids). Like watch, a capability the
   // plugin declares once here — the server must never re-derive it from the
   // kind string, or a remote plugin reached through a proxy (whose local kind
   // is "ssh") is wrongly presented read-only.
@@ -219,9 +219,9 @@ message GetTilePreviewResponse {
 // ─── Content streams (2026-07-26 redesign; interface-redesign-plan.md) ──────
 // ReadContent / WriteContent are the ONE way content bytes move: values —
 // finite, versioned, transactional — as opposed to OpenShell's live wire.
-// They replace GetTileContent, UpdateText, SetPaneLayout, and
-// CreateTileRequest.data (which coexist during the migration and are deleted
-// at contraction).
+// They replaced the unary content verbs and CreateTileRequest.data at the
+// 2026-07-26 contraction — creation is metadata-only; a body follows as a
+// write.
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
 // the tile row version the bytes belong to (the client's save basis — bytes

@@ -62,7 +62,8 @@ plugin, and a remote node reached over SSH. "Remote" adds no vocabulary — the
 (`nodeexport.go`: the same service over raw gRPC, routed by the qualified ids
 each request carries). Ids **chain** one segment per hop
 (`<ssh>/<plugin>/<id>`), so any depth of mounting routes generically. Every
-byte (live PTY, the Chromium session blob) crosses this one interface.
+byte — content streams and the live PTY included — crosses this one
+interface.
 
 **Every node exposes a node grid.** A node's plugin list is a real, read-only
 grid — `<node_id>/0`, served by `internal/server/nodegrid.go` — one dashed
@@ -364,16 +365,17 @@ documented bounds/clip/teardown bug source) is still not one of them.
   rule "controls show only on the focused pane." The same rule, expressed twice,
   in two languages — see §8.
 
-**Sessions.** One Chromium partition per plugin, `persist:plugin-<uuid>`
-(behind a mount the key is the full namespace chain, peeled per hop — PR #68).
-The Get/PutSession blob is a **v2 envelope** `{v:2, cookies, files}`: cookies
-plus the partition's on-disk session state under the `SESSION_STATE_ROOTS`
-allowlist (Local Storage, Session Storage, IndexedDB, WebStorage — never the
-Chromium caches, the 238MB lesson of #123). Restore hydrates **only a
-never-initialized partition** (dir-existence check) so a stale blob can never
-roll live logins back (#120's root cause). **Teardown** detaches
-both the view and its control even if the preview capture times out (a hard-won
-fix — capture-independent teardown).
+**Sessions.** ONE host-local Chromium partition, `persist:gridwell`
+(owner decision 2026-07-26, reversing per-plugin partitions and their
+hydrate/dehydrate blob choreography — GetSession/PutSession are gone from
+the interface). Chromium's own disk persistence is the session's system of
+record; the pre-close `flushStorageData` keeps lazily-written localStorage
+(autosaved drafts) from being dropped by an abrupt teardown. **Teardown**
+detaches both the view and its control even if the preview capture times
+out (a hard-won fix — capture-independent teardown). **Shell transport**
+lives beside it in main: `shellstreams.ts` relays gRPC `OpenShell` per pane
+over IPC (replace-on-open, at-most-once exit, no-op-after-close —
+unit-tested with a fake dialer).
 
 ---
 

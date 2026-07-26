@@ -116,17 +116,19 @@ through any number of hops.
 
 The principle has two consequences at this scale:
 
-- **Cross-plugin clone is a link, not a copy.** Identity never migrates
-  between id spaces, and deletes never propagate across a plugin boundary.
-- **The plugin is the session boundary.** Each plugin owns one Chromium
-  session (cookies, storage), stored in its DB and hydrated when you enter
-  its space. Copy the plugin's DB and you copy its logins.
+- **Cross-plugin left-drag is a link, right-drag is a copy.** Identity never
+  migrates between id spaces, and deletes never propagate across a plugin
+  boundary.
+- **Your session is yours everywhere.** Every live web tile — local or on
+  the far side of a mount — browses on your machine's one Chromium session,
+  from your machine's own network. Sessions and networks are host facts,
+  not plugin facts.
 
 One gRPC service (`api/gridwell/v1/data.proto`) is the whole interface —
 client to server, server to plugin, node to node. Every byte crosses it,
-including live shell PTYs and session blobs. And the storage format is
-frozen and additive-only: the data is meant to last forever, even as the
-application changes.
+including live shell PTYs. And the storage format is frozen and
+additive-only: the data is meant to last forever, even as the application
+changes.
 
 ## Running it
 

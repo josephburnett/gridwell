@@ -54,9 +54,10 @@ containment for untrusted URL-tile content, so prefer enabling user namespaces.
 
 A frozen URL tile is a JPEG drawn into the canvas. When you descend + refresh,
 the renderer calls `window.gridwell.placeWebview` and the main process floats a
-native `WebContentsView` over the pane's content box, on the owning plugin's
-persistent session partition (`persist:plugin-<uuid>` — the plugin is the
-session boundary; behind a mount the key is the namespace chain). `syncURLViews` tracks the view to its content box every frame and parks
+native `WebContentsView` over the pane's content box, on the ONE shared
+persistent session partition (`persist:gridwell` — the Chromium session is
+host-local, 2026-07-26; your logins everywhere, mounts included).
+`syncURLViews` tracks the view to its content box every frame and parks
 it off-screen during drag/palette gestures so canvas overlays paint on top. A
 `MirrorPump` captures live views on a modest cadence and pushes frames to the
 renderer so other panes showing the same tile mirror navigation. On ascend the

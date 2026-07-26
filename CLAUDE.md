@@ -372,8 +372,8 @@ plugin tunnels to a remote node's one HTTP/h2c port (its `bind:`) and dials
 the **node export** (`internal/server/nodeexport.go`): the full Gridwell
 service over raw gRPC, routed by the **qualified ids** each request carries —
 the same routing implementation the browser front door uses, plus the
-plugin-grade streams (`OpenShell`, `GetSession`, `PutSession`) routed by the
-id in their first message. There is no selector and no name-based routing.
+streams (`OpenShell`, `WriteContent`) routed by the id in their first
+message and the link-resolving `ReadContent`. There is no selector and no name-based routing.
 The mount's root is the remote's node grid, so descending into the ssh plugin
 shows the remote's own launcher; every remote plugin is a link tile there.
 Ids **chain**: each hop peels one segment from requests and prepends one to

@@ -239,7 +239,7 @@ type Tile struct {
 	// content_zoom scales the CONTENT rendered inside a text/shell/url tile —
 	// the text font, the terminal font, the page zoom (issue #82). Framing,
 	// not content: persisted per tile, never bumps version. 0 means unset
-	// (renders at 1.0). Written by SetContentZoom only.
+	// (renders at 1.0). Written by the SetTile content_zoom arm only.
 	ContentZoom float64 `protobuf:"fixed64,27,opt,name=content_zoom,json=contentZoom,proto3" json:"content_zoom,omitempty"`
 	// url_history is a url tile's persisted navigation back-stack (JSON
 	// {index, entries:[{url,title}]}, capped) captured at freeze so a revived
@@ -529,7 +529,7 @@ type InfoResponse struct {
 	// support ephemeral visits (fs/proc).
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// writable reports that this plugin accepts CreateTile (new primitives can
-	// be dropped into its grids). Like watch and has_session, a capability the
+	// be dropped into its grids). Like watch, a capability the
 	// plugin declares once here — the server must never re-derive it from the
 	// kind string, or a remote plugin reached through a proxy (whose local kind
 	// is "ssh") is wrongly presented read-only.
