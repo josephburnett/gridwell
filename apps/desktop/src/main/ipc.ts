@@ -220,7 +220,7 @@ export interface NameClickEvent {
 }
 
 // ErrorEvent is the one payload shape for EV.error: every main-process
-// failure site (webview lifecycle, session hydrate/dehydrate, sidecar boot/
+// failure site (webview lifecycle, shell stream, sidecar boot/
 // exit) reports through this same wire, never a bespoke one. `source` is a
 // stable key the wasm errsurface groups notices by (one row per source — see
 // client/errsurface): 'electron:webview' | 'electron:session' |

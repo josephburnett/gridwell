@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { tileAt } from './oracle';
+import { tileAt, writeContent } from './oracle';
 
 // Clone semantics for workspaces, driven through the real gesture: an
 // in-grid right-drag clone shares the layout blob by content address, and
@@ -92,16 +92,7 @@ test('an unreadable layout opens read-only and is never overwritten', async ({ g
   // A future-format blob, written directly (the server treats layout bytes
   // as opaque — only the client's codec versions them).
   const futureBlob = JSON.stringify({ v: 99, root: { exotic: true } });
-  const res = await fetch(`${gw.origin}/${SERVICE}/SetPaneLayout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
-    body: JSON.stringify({
-      tileId: pt!.id,
-      version: '0',
-      data: Buffer.from(futureBlob).toString('base64'),
-    }),
-  });
-  expect(res.ok).toBe(true);
+  await writeContent(gw.origin, pt!.id, 0, Buffer.from(futureBlob));
 
   // No echo-wait here, deliberately: the direct write races its own SSE
   // echo, and descending inside that window is exactly the trap this pins —

@@ -94,24 +94,25 @@ export async function getTileContent(origin: string, tileId: string): Promise<st
   return out;
 }
 
-// updateText writes a text tile's body DIRECTLY through the server — a
-// foreign writer, as far as the app under test is concerned (another device
-// editing the same tile). version is the optimistic-concurrency claim; throws
-// on any non-OK response including a version conflict.
-export async function updateText(
+// writeContent writes a tile's content bytes DIRECTLY through the server —
+// a foreign writer, as far as the app under test is concerned (another
+// device editing the same tile). The one content door: text bodies bump the
+// version; a pane layout is framing-class. version is the
+// optimistic-concurrency claim; throws on any non-OK response including a
+// version conflict riding the end-stream frame.
+export async function writeContent(
   origin: string,
   tileId: string,
   version: number,
-  text: string,
+  bytes: Buffer,
 ): Promise<void> {
+  const text = bytes; // (kept name below for the shared frame builder)
   const res = await fetch(`${origin}/${SERVICE}/WriteContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
     body: envelope(
       0,
-      Buffer.from(
-        JSON.stringify({ tileId, version, data: Buffer.from(text, 'utf8').toString('base64') }),
-      ),
+      Buffer.from(JSON.stringify({ tileId, version, data: text.toString('base64') })),
     ),
   });
   if (!res.ok) throw new Error(`WriteContent(${tileId}@${version}) failed: ${res.status} ${await res.text()}`);
@@ -125,6 +126,16 @@ export async function updateText(
       if (end.error) throw new Error(`WriteContent(${tileId}@${version}) errored: ${JSON.stringify(end.error)}`);
     }
   }
+}
+
+// updateText is writeContent for a text body (the foreign-writer specs' shape).
+export async function updateText(
+  origin: string,
+  tileId: string,
+  version: number,
+  text: string,
+): Promise<void> {
+  return writeContent(origin, tileId, version, Buffer.from(text, 'utf8'));
 }
 
 // tileAt returns the tile of the given kind at cell (x, y), or undefined.

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { tileAt } from './oracle';
+import { tileAt, writeContent } from './oracle';
 
 // The pane tile's client birth (stage 3 of the workspace primitive): the
 // palette carries a fifth "pane" swatch, drag-creating it persists a
@@ -12,16 +12,11 @@ import { tileAt } from './oracle';
 // CONTENT-bytes half of that echo (cache.Apply's blob-change drop) is
 // pinned separately by unit test in client/cache.
 
-const SERVICE = 'gridwell.v1.Gridwell';
-
+// The layout write rides the one content door (WriteContent — framing-class
+// for pane layouts, so the version stays put and the SSE echo is
+// same-version, exactly the seam this spec pins).
 async function setPaneLayout(origin: string, tileId: string, version: number, layout: unknown): Promise<void> {
-  const data = Buffer.from(JSON.stringify(layout)).toString('base64');
-  const res = await fetch(`${origin}/${SERVICE}/SetPaneLayout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
-    body: JSON.stringify({ tileId, version: String(version), data }),
-  });
-  if (!res.ok) throw new Error(`SetPaneLayout(${tileId}) failed: ${res.status} ${await res.text()}`);
+  await writeContent(origin, tileId, version, Buffer.from(JSON.stringify(layout)));
 }
 
 // sig reads one tile's preview signature from the focused pane's grid.

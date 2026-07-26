@@ -24,11 +24,19 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?h=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
+  // Poll for the NAVIGATED view, not a webContents count: the count grows at
+  // view creation, before loadURL lands (the old count-poll rode the
+  // session-hydrate await place() no longer performs — one local session,
+  // 2026-07-26).
   await expect
-    .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
-      timeout: 15_000,
-    })
-    .toBeGreaterThan(wcBefore);
+    .poll(
+      () =>
+        electronApp.evaluate(({ webContents }) =>
+          webContents.getAllWebContents().some((w) => w.getURL().includes('h=1')),
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 
   // Navigate twice INSIDE the live view — real navigations, real history.
   const navTo = async (marker: string) => {

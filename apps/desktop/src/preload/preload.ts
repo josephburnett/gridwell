@@ -154,7 +154,7 @@ const api = {
     return () => ipcRenderer.removeListener(EV.shellExit, h);
   },
   // onError fires for every main-process failure that must reach the user
-  // (webview lifecycle, session hydrate/dehydrate, sidecar boot/exit) — the
+  // (webview lifecycle, shell stream, sidecar boot/exit) — the
   // one channel the wasm client feeds into its error surface.
   onError(cb: (ev: ErrorEvent) => void): () => void {
     const h = (_e: unknown, ev: ErrorEvent) => cb(ev);
