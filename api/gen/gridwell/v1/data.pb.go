@@ -2843,12 +2843,30 @@ func (x *ResizeTileRequest) GetH() int64 {
 // never clobbers good state. path + version make a content write a proper
 // versioned, in-place edit.
 type SetTileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	Tile          *Tile                  `protobuf:"bytes,4,opt,name=tile,proto3" json:"tile,omitempty"`       // the fields to write for tile.kind
-	Preview       []byte                 `protobuf:"bytes,5,opt,name=preview,proto3" json:"preview,omitempty"` // jpeg to freeze (url/shell)
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Path    *Path                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	TileId  string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Tile    *Tile                  `protobuf:"bytes,4,opt,name=tile,proto3" json:"tile,omitempty"`       // the fields to write for tile.kind
+	Preview []byte                 `protobuf:"bytes,5,opt,name=preview,proto3" json:"preview,omitempty"` // jpeg to freeze (url/shell)
+	// 2026-07-26 (interface-redesign-plan.md): the absorbed scalar writebacks.
+	// Exactly ONE operation per call — rename, content_zoom, or the
+	// kind-dispatched tile writeback above; a request setting more than one is
+	// refused, so the "empty fields are skipped" rule never turns ambiguous.
+	//
+	// rename is the USER rename gesture (formerly SetTileAlt): sets alt_text
+	// and latches alt_user so automatic captures (url page title, shell
+	// foreground command) defer from then on. Distinct from tile.alt_text in
+	// the url arm, which is the AUTO title capture — two different facts, one
+	// column, arbitrated by the alt_user latch in exactly one place
+	// (store.SetTileAlt). Now VERSIONED like every user edit (the condition
+	// the old SetTileAlt comment set for this fold). Refused for text tiles
+	// (their name derives from the first line).
+	Rename string `protobuf:"bytes,6,opt,name=rename,proto3" json:"rename,omitempty"`
+	// content_zoom (formerly SetContentZoom): the per-tile content scale.
+	// Framing — never bumps version; refused for wells. optional so presence
+	// is explicit (0 is a meaningful "unset" stored value).
+	ContentZoom   *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2916,6 +2934,20 @@ func (x *SetTileRequest) GetPreview() []byte {
 		return x.Preview
 	}
 	return nil
+}
+
+func (x *SetTileRequest) GetRename() string {
+	if x != nil {
+		return x.Rename
+	}
+	return ""
+}
+
+func (x *SetTileRequest) GetContentZoom() float64 {
+	if x != nil && x.ContentZoom != nil {
+		return *x.ContentZoom
+	}
+	return 0
 }
 
 // UpdateText is deliberately the one content mutation with its own verb
@@ -3763,13 +3795,16 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x01x\x18\x04 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x05 \x01(\x03R\x01y\x12\f\n" +
 	"\x01w\x18\x06 \x01(\x03R\x01w\x12\f\n" +
-	"\x01h\x18\a \x01(\x03R\x01h\"\xab\x01\n" +
+	"\x01h\x18\a \x01(\x03R\x01h\"\xfc\x01\n" +
 	"\x0eSetTileRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12%\n" +
 	"\x04tile\x18\x04 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12\x18\n" +
-	"\apreview\x18\x05 \x01(\fR\apreview\"\x81\x01\n" +
+	"\apreview\x18\x05 \x01(\fR\apreview\x12\x16\n" +
+	"\x06rename\x18\x06 \x01(\tR\x06rename\x12&\n" +
+	"\fcontent_zoom\x18\a \x01(\x01H\x00R\vcontentZoom\x88\x01\x01B\x0f\n" +
+	"\r_content_zoom\"\x81\x01\n" +
 	"\x11UpdateTextRequest\x12%\n" +
 	"\x04path\x18\x01 \x01(\v2\x11.gridwell.v1.PathR\x04path\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
@@ -4004,6 +4039,7 @@ func file_gridwell_v1_data_proto_init() {
 		(*NetworkContext_Direct)(nil),
 		(*NetworkContext_Proxy)(nil),
 	}
+	file_gridwell_v1_data_proto_msgTypes[40].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[51].OneofWrappers = []any{
 		(*Event_GridChanged)(nil),
 		(*Event_TileChanged)(nil),

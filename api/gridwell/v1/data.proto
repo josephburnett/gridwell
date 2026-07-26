@@ -491,6 +491,25 @@ message SetTileRequest {
   int64  version = 3;
   Tile   tile    = 4;   // the fields to write for tile.kind
   bytes  preview = 5;   // jpeg to freeze (url/shell)
+
+  // 2026-07-26 (interface-redesign-plan.md): the absorbed scalar writebacks.
+  // Exactly ONE operation per call — rename, content_zoom, or the
+  // kind-dispatched tile writeback above; a request setting more than one is
+  // refused, so the "empty fields are skipped" rule never turns ambiguous.
+  //
+  // rename is the USER rename gesture (formerly SetTileAlt): sets alt_text
+  // and latches alt_user so automatic captures (url page title, shell
+  // foreground command) defer from then on. Distinct from tile.alt_text in
+  // the url arm, which is the AUTO title capture — two different facts, one
+  // column, arbitrated by the alt_user latch in exactly one place
+  // (store.SetTileAlt). Now VERSIONED like every user edit (the condition
+  // the old SetTileAlt comment set for this fold). Refused for text tiles
+  // (their name derives from the first line).
+  string rename = 6;
+  // content_zoom (formerly SetContentZoom): the per-tile content scale.
+  // Framing — never bumps version; refused for wells. optional so presence
+  // is explicit (0 is a meaningful "unset" stored value).
+  optional double content_zoom = 7;
 }
 
 // UpdateText is deliberately the one content mutation with its own verb
