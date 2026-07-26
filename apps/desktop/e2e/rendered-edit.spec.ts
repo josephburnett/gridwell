@@ -103,7 +103,7 @@ test('clicking rendered text places the caret where typing lands', async ({ gw }
 // flight the keystroke's save claimed the same version, lost the conflict,
 // and the reconcile reverted the typed character — the intermittent
 // "para onex → para one" flake. The saves now run through a per-tile serial
-// queue that reads the version at send time. Holding every UpdateText at the
+// queue that reads the version at send time. Holding every WriteContent at the
 // network for longer than the save debounce (600ms) turns that former race
 // into a deterministic sequence: this spec fails on the pre-queue code every
 // run, not one run in twenty.
@@ -114,7 +114,7 @@ test('a keystroke typed right after the mode toggle survives a slow save', async
   const tileID = await createAndDescendMarkdown(gw);
   await gw.typeText('para one');
 
-  await window.route('**/gridwell.v1.Gridwell/UpdateText', async (r: any) => {
+  await window.route('**/gridwell.v1.Gridwell/WriteContent', async (r: any) => {
     await new Promise((res) => setTimeout(res, 900));
     await r.continue();
   });
@@ -126,5 +126,5 @@ test('a keystroke typed right after the mode toggle survives a slow save', async
   await expect
     .poll(async () => gw.getTileContent(tileID), { timeout: 20_000 })
     .toBe('para onex');
-  await window.unroute('**/gridwell.v1.Gridwell/UpdateText');
+  await window.unroute('**/gridwell.v1.Gridwell/WriteContent');
 });

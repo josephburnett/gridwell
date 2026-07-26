@@ -23,15 +23,15 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();
 
-  // Sever MoveTile at the transport and drag the tile one cell.
-  await window.route('**/gridwell.v1.Gridwell/MoveTile', (r: any) => r.abort());
+  // Sever PlaceTile at the transport and drag the tile one cell.
+  await window.route('**/gridwell.v1.Gridwell/PlaceTile', (r: any) => r.abort());
   await gw.dragTileCell(cx, cy, cx + 1, cy);
 
   // The failure lands on the strip, as an error, attributed to the RPC.
   await expect
     .poll(async () => {
       const e = await errors(window);
-      return e.notices.find((n: any) => n.source === 'rpc:MoveTile')?.severity ?? null;
+      return e.notices.find((n: any) => n.source === 'rpc:PlaceTile')?.severity ?? null;
     }, { timeout: 10_000 })
     .toBe('error');
 
@@ -48,7 +48,7 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
   // Server state never moved (the optimistic ghost snapped back).
   expect(tileAt(await gw.getGrid(f.gridID), 'text', cx, cy), 'tile still at origin').toBeTruthy();
 
-  await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
+  await window.unroute('**/gridwell.v1.Gridwell/PlaceTile');
 
   // Clicking the row dismisses it and returns the layout to full height.
   await gw.clickScreen(200, e.stripTop + 5);
@@ -75,12 +75,12 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
 
   // One failed mutation, then the failure stops (unroute): the canonical
   // one-shot. E.g. equivalent to a URL that failed to load once.
-  await window.route('**/gridwell.v1.Gridwell/MoveTile', (r: any) => r.abort());
+  await window.route('**/gridwell.v1.Gridwell/PlaceTile', (r: any) => r.abort());
   await gw.dragTileCell(cx, cy, cx + 1, cy);
   await expect
-    .poll(async () => (await errors(window)).notices.some((n: any) => n.source === 'rpc:MoveTile'))
+    .poll(async () => (await errors(window)).notices.some((n: any) => n.source === 'rpc:PlaceTile'))
     .toBe(true);
-  await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
+  await window.unroute('**/gridwell.v1.Gridwell/PlaceTile');
 
   // No click, no dismiss: the strip must clear on its own and the panes get
   // their height back. ExpireAfter is 10s; poll well past it.
@@ -112,19 +112,19 @@ test('a rejected text save surfaces and reconciles instead of lingering as saved
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toContain('saved-content');
 
-  // Re-descend, sever UpdateText, and type. The debounced save must fail
+  // Re-descend, sever WriteContent, and type. The debounced save must fail
   // VISIBLY: before issue #45 this was the literal "it just disappeared"
   // mechanism — the rejected bytes kept rendering as saved with no signal.
   await gw.descendCell(cx, cy);
-  await window.route('**/gridwell.v1.Gridwell/UpdateText', (r: any) => r.abort());
+  await window.route('**/gridwell.v1.Gridwell/WriteContent', (r: any) => r.abort());
   await gw.typeText(' rejected-suffix');
   await expect
     .poll(async () => {
       const e = await errors(window);
-      return e.notices.some((n: any) => n.source === 'rpc:UpdateText');
+      return e.notices.some((n: any) => n.source === 'rpc:WriteContent');
     }, { timeout: 15_000 })
     .toBe(true);
-  await window.unroute('**/gridwell.v1.Gridwell/UpdateText');
+  await window.unroute('**/gridwell.v1.Gridwell/WriteContent');
 
   // Reconcile: the server's body is untouched — and the client did not keep
   // claiming otherwise (the strip said so; the cache dropped the bytes).
