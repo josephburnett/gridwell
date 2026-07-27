@@ -115,6 +115,45 @@ func (a *App) postPersist(label string, gid string, call tileCall) {
 	}()
 }
 
+// postOptimisticPersist is postPersist for a caller that ALREADY patched the
+// cache before the RPC (e.g. persistWellView's framing patch). The reaction
+// table differs: ANY failure refetches, because a rejected optimistic patch
+// left the cache ahead of server truth (clientsync.ClassifyOptimistic,
+// issue #156).
+func (a *App) postOptimisticPersist(label string, gid string, call tileCall) {
+	go func() {
+		_, err := call(context.Background())
+		r := clientsync.ClassifyOptimistic(err, isVersionConflict(err))
+		if r.Refetch {
+			a.refetchGridOnConflict(gid, label)
+		}
+		if r.Log {
+			a.surfaceRPCError(label, err)
+		}
+	}()
+}
+
+// doFreezeWrite runs a leaving-gesture freeze writeback (url page / shell
+// terminal preview) with the one retry rule: claim `version`; on a version
+// conflict re-claim ONCE via GetTile and retry — an automatic writer racing
+// the user's leaving gesture (the detach-time title capture, a foreign
+// framing write) must not cost the freeze. Any remaining error surfaces as
+// `source`/`failText` AND goes through the conflict-reconcile dispatcher so
+// the cache resyncs instead of drifting (issue #156 — these paths used to
+// bypass reactToErr). Blocking; callers run it from a goroutine.
+func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, failText string, write func(version int64) error) {
+	err := write(version)
+	if err != nil && isVersionConflict(err) {
+		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
+			err = write(fresh.Version)
+		}
+	}
+	if err != nil {
+		a.reportErr(errsurface.Error, source, failText+": "+rpcErrText(err))
+		a.reactToErr(label, gid, err)
+	}
+}
+
 // postVoidPersist is postPersist for RPCs that return no tile — used by
 // SetRootView, the plugin-root framing writeback of a + menu portal ascent.
 func (a *App) postVoidPersist(label string, gid string, call voidCall) {

@@ -819,26 +819,22 @@ func snapshotShellCanvas(container js.Value) []byte {
 // needed for optimistic concurrency; we look it up from the cache to
 // avoid a synchronous GetTile round-trip in the ascent path.
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
-	req := &rpc.SetShellPreviewRequest{
-		TileID:  tileID,
-		Version: a.tileVersionAt(anchor, path, tileID),
-		JPEG:    jpeg,
-	}
-	_, err := a.cl.SetShellPreview(context.Background(), req)
-	if err != nil && isVersionConflict(err) {
-		// The stream close racing this freeze triggers the plugin's
-		// detach-time title capture (a version bump). The freeze is the
-		// user's leaving gesture; retry once over the automatic writer with
-		// a fresh claim (same rule as deleteEphemeralTile).
-		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-			req.Version = fresh.Version
-			_, err = a.cl.SetShellPreview(context.Background(), req)
-		}
-	}
-	if err != nil {
-		shellLog("SetShellPreview tile=%s err=%v", tileID, err)
-		// The terminal frame the user just left is not persisted — the
-		// tile's preview will show an older state (charter §6).
-		a.reportErr(errsurface.Error, "shell", "shell preview save failed: "+rpcErrText(err))
-	}
+	// doFreezeWrite owns the leaving-gesture rule: a version conflict (the
+	// stream close racing this freeze triggers the plugin's detach-time
+	// title capture, a version bump) re-claims once and retries; a remaining
+	// failure surfaces AND resyncs the grid (issue #156 — the terminal frame
+	// the user just left is not persisted; the preview will show an older
+	// state, charter §6).
+	a.doFreezeWrite("SetShellPreview", a.gridIDForPathFrom(anchor, path), tileID,
+		a.tileVersionAt(anchor, path, tileID),
+		"shell", "shell preview save failed",
+		func(version int64) error {
+			_, err := a.cl.SetShellPreview(context.Background(), &rpc.SetShellPreviewRequest{
+				TileID: tileID, Version: version, JPEG: jpeg,
+			})
+			if err != nil {
+				shellLog("SetShellPreview tile=%s err=%v", tileID, err)
+			}
+			return err
+		})
 }

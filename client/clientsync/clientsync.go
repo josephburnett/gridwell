@@ -33,3 +33,20 @@ func Classify(err error, conflict bool) Reaction {
 	}
 	return Reaction{Log: true}
 }
+
+// ClassifyOptimistic is Classify for a mutation whose caller ALREADY patched
+// the local cache before the RPC (an optimistic write, e.g. the well-view
+// framing patched so the parent preview updates instantly). The difference
+// is the non-conflict arm: a rejected optimistic patch left the cache AHEAD
+// of server truth, so EVERY failure must refetch — otherwise the local
+// preview shows framing the server refused until an unrelated event
+// resyncs it, and the state silently snaps back on the next reload
+// (issue #156; charter §7 — the cache is a view of server truth, never an
+// authority). Conflicts stay silent (expected race); other errors also
+// surface.
+func ClassifyOptimistic(err error, conflict bool) Reaction {
+	if err == nil {
+		return Reaction{}
+	}
+	return Reaction{Refetch: true, Log: !conflict}
+}

@@ -8,7 +8,6 @@ import (
 	"slices"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -166,20 +165,26 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 			if version == 0 {
 				version = v.version
 			}
-			go func() {
-				_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
-					TileID:  tileID,
-					Version: version,
-					JPEG:    jpeg, URL: url, Title: title, History: history,
+			// doFreezeWrite owns the leaving-gesture rule: a version conflict
+			// (a foreign writer or auto title capture racing the close)
+			// re-claims once and retries; a remaining failure surfaces AND
+			// resyncs the grid — the freeze the user just saw is not
+			// persisted and the preview will revert on next load (charter
+			// §6; issue #156 — this path used to bypass the dispatcher).
+			gid := a.gridIDForPathFrom(anchor, path)
+			go a.doFreezeWrite("SetURLState", gid, tileID, version,
+				"urlfreeze", "page preview save failed",
+				func(version int64) error {
+					_, err := a.cl.SetURLState(context.Background(), &rpc.SetURLStateRequest{
+						TileID:  tileID,
+						Version: version,
+						JPEG:    jpeg, URL: url, Title: title, History: history,
+					})
+					if err != nil {
+						urlLog("SetURLState tile=%s err=%v", tileID, err)
+					}
+					return err
 				})
-				if err != nil {
-					urlLog("SetURLState tile=%s err=%v", tileID, err)
-					// The freeze the user just saw is not persisted — the
-					// preview will revert on next load (charter §6).
-					a.reportErr(errsurface.Error, "urlfreeze",
-						"page preview save failed: "+rpcErrText(err))
-				}
-			}()
 		}
 		if len(jpeg) > 0 {
 			// Reflect the just-frozen frame immediately so the pane (and

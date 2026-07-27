@@ -1928,7 +1928,9 @@ func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string,
 		ViewY:    newViewY,
 		ViewZoom: newViewZoom,
 	}
-	a.postPersist("SetWellView", parentGridID, func(ctx context.Context) (*rpc.Tile, error) {
+	// Optimistic dispatcher: the cache patch above must roll back on ANY
+	// failure, not just a conflict (issue #156).
+	a.postOptimisticPersist("SetWellView", parentGridID, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.SetWellView(ctx, req)
 	})
 }

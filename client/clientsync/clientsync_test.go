@@ -41,3 +41,30 @@ func TestClassifyMutuallyExclusive(t *testing.T) {
 		}
 	}
 }
+
+// TestClassifyOptimistic pins the optimistic-writer rule (issue #156): the
+// caller patched the cache BEFORE the RPC, so any failure must refetch —
+// leaving the rejected patch in place would show the user state the server
+// refused. Conflicts stay silent; real errors also surface.
+func TestClassifyOptimistic(t *testing.T) {
+	someErr := errors.New("boom")
+	cases := []struct {
+		name     string
+		err      error
+		conflict bool
+		want     Reaction
+	}{
+		{"success", nil, false, Reaction{}},
+		{"success ignores conflict flag", nil, true, Reaction{}},
+		{"conflict refetches silently", someErr, true, Reaction{Refetch: true}},
+		{"real error refetches AND surfaces", someErr, false, Reaction{Refetch: true, Log: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ClassifyOptimistic(c.err, c.conflict)
+			if got != c.want {
+				t.Errorf("ClassifyOptimistic(%v, %v) = %+v, want %+v", c.err, c.conflict, got, c.want)
+			}
+		})
+	}
+}

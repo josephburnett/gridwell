@@ -168,3 +168,67 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
   const notice = e.notices.find((n: any) => n.source === 'electron:webview');
   expect(notice.message).toContain('127.0.0.1:9');
 });
+
+test('a rejected framing writeback rolls the optimistic patch back (issue #156)', async ({
+  gw,
+  window,
+}) => {
+  // persistWellView patches the cache BEFORE posting SetWellView (so the
+  // parent preview updates instantly). If the server rejects the write for a
+  // NON-conflict reason, the patch must roll back — otherwise a sibling
+  // pane's well preview shows framing the server refused, silently snapping
+  // back on the next reload (charter §7). The observable seam is the
+  // MID-DESCENT settle persist: the ascent path refetches the parent anyway,
+  // but the 600ms settle persister patches and posts while you stay
+  // descended — so the sibling preview is where the rejected patch lives.
+  await gw.enterPlugin('localdb');
+  const parentGrid = (await gw.focused()).gridID;
+  const cx = Math.round((await gw.focused()).cx);
+  const cy = Math.round((await gw.focused()).cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+
+  // The parent grid's cached signatures before any reframe. Read via the
+  // gesture-free gridSigs hook: a focus click would REFETCH the grid it
+  // lands on, healing exactly the divergence this spec observes.
+  const sig0 = await window.evaluate(
+    (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
+    parentGrid,
+  );
+  const wellID = Object.keys(sig0)[0];
+  expect(wellID, 'the parent grid holds the well').toBeTruthy();
+
+  // Every framing writeback now fails (non-conflict).
+  await window.route('**/gridwell.v1.Gridwell/SetTile', (r: any) => r.abort());
+
+  // Reframe inside the well; the 600ms settle persister patches the parent
+  // cache, posts SetWellView, and is rejected.
+  await gw.wheelAtFocusedCenter(-300);
+  const zc = await gw.focused();
+  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+  await expect
+    .poll(async () => {
+      const e = await errors(window);
+      return (e.notices ?? []).some((n: any) => n.source === 'rpc:SetWellView');
+    }, { timeout: 10_000 })
+    .toBe(true);
+
+  // The rejected patch must not stick: the parent cache reconciles back to
+  // server truth (the original view_*). Pre-fix this never reconciles — the
+  // patched framing sits in the cache until an unrelated gesture refetches.
+  await expect
+    .poll(
+      async () => {
+        const sigs = await window.evaluate(
+          (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
+          parentGrid,
+        );
+        return sigs[wellID] === sig0[wellID];
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+  await window.unroute('**/gridwell.v1.Gridwell/SetTile');
+});

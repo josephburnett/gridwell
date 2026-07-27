@@ -43,6 +43,7 @@ func (a *App) installTestHook() {
 		"origin":        js.FuncOf(a.thOrigin),
 		"panes":         js.FuncOf(a.thPanes),
 		"previewSigs":   js.FuncOf(a.thPreviewSigs),
+		"gridSigs":      js.FuncOf(a.thGridSigs),
 		"transitioning": js.FuncOf(a.thTransitioning),
 		"embedHits":     js.FuncOf(a.thEmbedHits),
 		"setTransitionMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -315,6 +316,26 @@ func (a *App) thPreviewSigs(js.Value, []js.Value) any {
 		return map[string]any{}
 	}
 	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	for id, t := range g.Tiles {
+		out[id] = tileSig(&t) + a.childSig(t.ChildGridID)
+	}
+	return out
+}
+
+// thGridSigs is previewSigs for an EXPLICIT grid id: the same per-tile
+// signatures, read straight from the cache with no gesture. Exists because
+// observing the cache via clicks is self-defeating — a focus click refetches
+// the grid it lands on, healing exactly the divergence a spec wants to see
+// (the #156 rejected-optimistic-patch test needs the cache as it IS).
+func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return map[string]any{}
+	}
+	g, ok := a.c.Grid(args[0].String())
 	if !ok {
 		return map[string]any{}
 	}
