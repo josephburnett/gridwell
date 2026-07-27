@@ -89,16 +89,11 @@ func TestClassifyPriority(t *testing.T) {
 			want: Swap,
 		},
 		{
-			name: "resize region with a divider grabs it",
+			// Issue #203: the right button ALWAYS splits from a border —
+			// divider or screen edge alike; resize/close is the left button.
+			name: "resize region splits (divider resizing is the left button's)",
 			in: Input{
-				Region: resize, HasDividerOnSide: true,
-			},
-			want: Resize,
-		},
-		{
-			name: "resize region without a divider falls through to split",
-			in: Input{
-				Region: resize, HasDividerOnSide: false,
+				Region: resize,
 			},
 			want: Split,
 		},

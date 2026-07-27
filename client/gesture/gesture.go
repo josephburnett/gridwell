@@ -40,10 +40,10 @@ const (
 	// release.
 	Swap
 	// Split splits the pane along the armed side at the release ratio.
+	// Since 2026-07-26 (issue #203) the right button ALWAYS splits from a
+	// border — over a divider or at a screen edge alike; resizing (and
+	// closing, under pressure) is the LEFT button's job.
 	Split
-	// Resize drags a pane divider, collapsing a side that shrinks past the
-	// close threshold.
-	Resize
 )
 
 // Input is the set of resolved facts at right-button-down. Every field is
@@ -72,11 +72,8 @@ type Input struct {
 	InTileCenter bool
 
 	// Region is the pane sub-region under the cursor (resize band / split
-	// edge / swap center); HasDividerOnSide is true when an actual pane
-	// divider abuts Region.Side(). A resize band with no divider falls
-	// through to a split so the gesture stays useful at a screen edge.
-	Region           pane.Region
-	HasDividerOnSide bool
+	// edge / swap center).
+	Region pane.Region
 }
 
 // Classify maps the resolved facts to a gesture Kind. The two switches
@@ -97,11 +94,11 @@ func Classify(in Input) Kind {
 	}
 	switch {
 	case in.Region.IsResize():
-		// A resize band over an actual divider grabs it; a resize band at
-		// a screen edge (no divider) falls through to a split.
-		if in.HasDividerOnSide {
-			return Resize
-		}
+		// One behavior per button (issue #203): a border right-drag is a
+		// SPLIT wherever it starts — over a divider exactly like at a
+		// screen edge (the two cases used to diverge; now they unify).
+		// Divider resizing (and pressure-closing) belongs to the left
+		// button alone.
 		return Split
 	case in.Region.IsSwap():
 		return Swap

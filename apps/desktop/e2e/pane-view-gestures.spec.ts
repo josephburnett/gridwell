@@ -40,18 +40,49 @@ test('right-drag splits the focused pane into two — another view of the same g
   expect(other.anchor).toBe(before.anchor);
 });
 
-test('right-drag and left-drag on the divider resize the panes', async ({ gw }) => {
+// Issue #203: one behavior per button on a border. LEFT-drag owns the whole
+// resize job — including CLOSING a side crushed past the minimum wall at
+// release. RIGHT-drag from a border is the SPLIT gesture (a new pane),
+// exactly like right-drag from inside the pane; short of the minimum it
+// cancels silently.
+test('left-drag resizes the divider both ways; crushing past the wall closes the side', async ({
+  gw,
+}) => {
   await gw.enterPlugin('localdb');
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
-  // Right-drag the divider left → the left pane shrinks.
-  const r = await gw.resizeDivider('right', -150);
-  expect(r.after, 'right-drag shrank the left pane').toBeLessThan(r.before);
-
-  // Left-drag the divider right → the left pane grows again (clamped resize).
+  // Left-drag left → the left pane shrinks; right → grows (clamped resize).
+  const r = await gw.resizeDivider('left', -150);
+  expect(r.after, 'left-drag shrank the left pane').toBeLessThan(r.before);
   const l = await gw.resizeDivider('left', 150);
   expect(l.after, 'left-drag grew the left pane').toBeGreaterThan(l.before);
+
+  // Crush the left side past the minimum wall and release: it closes. The
+  // target stays INSIDE the viewport (10px from the pane's left edge) —
+  // CDP does not deliver events at off-viewport coordinates.
+  const ps = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  const g = await gw.resizeDivider('left', -(ps[0].w - 10));
+  expect(g.after, 'the crushed side collapsed at release').toBe(0);
+  expect((await gw.panes()).length, 'one pane remains').toBe(1);
+});
+
+test('right-drag from the divider splits (a new pane); short of the minimum it cancels', async ({
+  gw,
+}) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  expect((await gw.panes()).length).toBe(2);
+
+  // A short right-drag from the divider (under the minimum pane size)
+  // cancels silently — no new pane, and no resize either.
+  await gw.resizeDivider('right', -10);
+  expect((await gw.panes()).length, 'short drag cancels').toBe(2);
+
+  // A right-drag well past the minimum creates a pane — the same split
+  // gesture as from inside the pane.
+  await gw.resizeDivider('right', -200);
+  expect((await gw.panes()).length, 'border right-drag split a pane').toBe(3);
 });
 
 test('right-click on the corner circle ascends out of a descended well', async ({ gw }) => {

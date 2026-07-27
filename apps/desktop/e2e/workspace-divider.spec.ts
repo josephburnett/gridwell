@@ -26,7 +26,7 @@ async function barClick(gw: any, window: any): Promise<void> {
   await gw.waitIdle();
 }
 
-test('stacked-pane divider resizes inside a workspace (both buttons)', async ({ gw, window }) => {
+test('stacked-pane divider left-resizes inside a workspace; right-drag splits', async ({ gw, window }) => {
   await gw.enterPlugin('localdb');
   const f = await gw.focused();
   const rootGrid = f.gridID;
@@ -44,16 +44,23 @@ test('stacked-pane divider resizes inside a workspace (both buttons)', async ({ 
   await gw.splitFocusedPaneHorizontal();
   expect((await gw.panes()).length).toBe(2);
 
-  // Right-drag the boundary down: the top pane must GROW — and the gesture
-  // must be a RESIZE, not a misclassified edge split (pane count stays 2).
-  const r = await gw.resizeHDivider('right', 60);
-  expect((await gw.panes()).length, 'right-drag on the divider must resize, not split').toBe(2);
-  expect(r.after, 'right-drag must move the stacked boundary').toBeGreaterThan(r.before + 30);
+  // Left-drag the boundary down: the top pane must GROW — a RESIZE, not a
+  // misclassified edge split (pane count stays 2). (#203: the left button
+  // owns divider resizing; the right button splits from a border.)
+  const r = await gw.resizeHDivider('left', 60);
+  expect((await gw.panes()).length, 'left-drag on the divider must resize, not split').toBe(2);
+  expect(r.after, 'left-drag must move the stacked boundary').toBeGreaterThan(r.before + 30);
 
-  // Left-drag it back up: same divider, other button, same dividerOnSide.
+  // Left-drag it back up: same divider, same dividerOnSide resolution.
   const l = await gw.resizeHDivider('left', -60);
   expect((await gw.panes()).length, 'left-drag on the divider must resize, not split').toBe(2);
   expect(l.after, 'left-drag must move the stacked boundary').toBeLessThan(l.before - 30);
+
+  // Right-drag from the same divider SPLITS inside a workspace too (#203).
+  // The drag pulls AWAY from the border (up, into the top pane) — the new
+  // pane is drawn out of the edge; dragging toward the border cancels.
+  await gw.resizeHDivider('right', -80);
+  expect((await gw.panes()).length, 'border right-drag split a pane').toBe(3);
 
   // Leave the workspace so the shared session ends at the root.
   await barClick(gw, window);

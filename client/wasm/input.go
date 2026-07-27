@@ -492,9 +492,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// Left-button pane resize takes precedence over everything else.
 	if a.leftResize != nil {
 		if args[0].Get("buttons").Int()&1 == 0 {
-			// Left button released somewhere we didn't see — finish.
-			a.leftResize = nil
-			a.draw()
+			// Left button released somewhere we didn't see — finish, with
+			// the same collapse decision an on-canvas release makes (from
+			// the last applied cursor, never this stray re-entry point).
+			a.finishLeftResize()
 			return nil
 		}
 		a.onLeftResizeMove(sx, sy)
@@ -651,12 +652,11 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishRightDrag(sx, sy)
 		return nil
 	}
-	// Left-button release ends an in-flight pane-boundary resize. The ratio
-	// was applied live during the move; nothing to commit, just clear.
+	// Left-button release ends an in-flight pane-boundary resize: the ratio
+	// was applied live during the move; the release decides collapse
+	// (issue #203 — crush past the wall and let go to close the side).
 	if a.leftResize != nil && args[0].Get("button").Int() == 0 {
-		a.leftResize = nil
-		a.draw()
-		a.scheduleURLUpdate()
+		a.finishLeftResize()
 		return nil
 	}
 	// URL descent: the corner button and live content box are handled on

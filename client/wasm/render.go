@@ -323,6 +323,12 @@ func (a *App) draw() {
 	if a.rightDrag != nil {
 		a.drawRightDragPreview()
 	}
+	// In-flight left-button divider resize: the layout crushes live; this
+	// adds the divider hint + the red release-closes-this-side warning
+	// (issue #203 — the left drag owns closing now).
+	if a.leftResize != nil {
+		a.drawLeftResizePreview(a.leftResize)
+	}
 
 	// Reposition the textarea overlay (if any) so it tracks the focused
 	// pane through resizes and pane-tree edits.

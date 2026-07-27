@@ -31,12 +31,6 @@ const (
 // now.
 const resizeBandPx = 10.0
 
-// rightCloseThreshold is the minimum size (in screen px) a pane side
-// must have along the resize axis to *not* be closed at release: the
-// universal pane minimum (issue #167) — a right-drag crushing a side
-// below what any pane may legally be reads as "close it".
-const rightCloseThreshold = pane.MinPanePx
-
 // rightDragKind classifies an in-flight right-button gesture. Set on
 // mousedown; the tile-vs-pane fork is decided by where the cursor
 // landed (over a tile → tile gesture; otherwise → pane gesture). Never
@@ -47,7 +41,6 @@ const (
 	rightDragNone rightDragKind = iota
 	rightDragSwap
 	rightDragSplit
-	rightDragResize
 	// rightDragTileCenter is armed when right-down lands in the inner
 	// 1/3 × 1/3 of a tile (cell coords). It's the clone grab handle:
 	// dragging past the threshold materializes a clone ghost via the
@@ -165,12 +158,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 		}
 	}
 
-	var divider *pane.Divider
-	if in.Region.IsResize() {
-		divider = a.dividerOnSide(p, in.Region.Side())
-		in.HasDividerOnSide = divider != nil
-	}
-
 	switch gesture.Classify(in) {
 	case gesture.EmbedHint:
 		// No drag, no commit — the gesture exists only to surface the
@@ -199,18 +186,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 		// armTileGesture re-derives center-vs-resize via dragdrop and arms
 		// the matching state (and primes the clone ghost for the center).
 		a.armTileGesture(p, r, tile, sx, sy)
-	case gesture.Resize:
-		a.rightDrag = &rightDragState{
-			kind:         rightDragResize,
-			startX:       sx,
-			startY:       sy,
-			curX:         sx,
-			curY:         sy,
-			originPaneID: p.ID,
-			targetSplit:  divider.Split,
-			splitDir:     divider.Dir,
-			container:    pane.Rect{X: divider.ContainerRect.X, Y: divider.ContainerRect.Y, W: divider.ContainerRect.W, H: divider.ContainerRect.H},
-		}
 	case gesture.Swap:
 		a.rightDrag = &rightDragState{
 			kind:         rightDragSwap,
@@ -312,18 +287,6 @@ func (a *App) onRightMove(sx, sy float64) {
 	rd.curX = sx
 	rd.curY = sy
 	switch rd.kind {
-	case rightDragResize:
-		// Move only the grabbed border (issue #112): the same cascading
-		// resize the left drag uses (adjacent pane compresses first; nested
-		// borders stay put), min-walled at the collapse threshold so the
-		// adjacent pane visibly crushes toward "release closes it". The old
-		// single-ratio write scaled the whole opposite subtree, visibly
-		// sliding borders the user never grabbed.
-		cursor := sx
-		if rd.splitDir == pane.Horizontal {
-			cursor = sy
-		}
-		pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), rd.targetSplit, cursor, rightCloseThreshold)
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(&rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
 		a.advanceCloneDrag(sx, sy)
@@ -433,8 +396,6 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	rd.curY = sy
 
 	switch rd.kind {
-	case rightDragResize:
-		a.commitResize(rd, sx, sy)
 	case rightDragSwap:
 		a.commitSwap(rd, sx, sy)
 	case rightDragSplit:
@@ -693,31 +654,6 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	}, nil)
 }
 
-// commitResize applies the final ratio and, if either side is below
-// rightCloseThreshold, collapses that side.
-func (a *App) commitResize(rd *rightDragState, sx, sy float64) {
-	// The live layout was applied by onRightMove (pane.ResizeThrough, walled
-	// at the collapse threshold) — the release only decides COLLAPSE, from
-	// the raw cursor: dragging past the wall by enough means "close the
-	// side". Reassigning the raw proportional ratio here would undo the
-	// only-the-grabbed-border-moves behavior at the moment of release
-	// (issue #112).
-	_, collapse := gesture.ResizeOutcome(rd.container, rd.splitDir, sx, sy, rightCloseThreshold)
-	// Before a side is dropped, flush every leaf pane it holds: persist
-	// unsaved text edits and freeze any live URL/shell stream. Otherwise a
-	// collapsed pane's live view parks hidden (still running, never frozen)
-	// and recent edits are lost — the dropped pane never hit the ascent
-	// save path.
-	switch collapse {
-	case gesture.CollapseA:
-		a.flushDroppedSubtree(rd.targetSplit.A)
-		_ = a.tree.CollapseSplit(rd.targetSplit, true)
-	case gesture.CollapseB:
-		a.flushDroppedSubtree(rd.targetSplit.B)
-		_ = a.tree.CollapseSplit(rd.targetSplit, false)
-	}
-}
-
 // flushDroppedSubtree saves/freezes every leaf pane in a subtree that's
 // about to be removed by a split collapse.
 func (a *App) flushDroppedSubtree(n pane.TreeNode) {
@@ -751,10 +687,18 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 
 // leftResizeState carries the in-flight left-button pane-boundary resize.
 // The left button keeps its own state so the right-button routing (which
-// keys off button 2) stays untouched. Just the dragged split: the cascade
-// (pane.ResizeThrough) re-derives everything else from the live tree.
+// keys off button 2) stays untouched. The dragged split plus the collapse
+// facts (container + direction) the RELEASE decides from — since issue
+// #203 the left drag owns closing too: crush a side past the wall and
+// release, and that side collapses.
 type leftResizeState struct {
 	targetSplit *pane.Split
+	splitDir    pane.Direction
+	container   pane.Rect
+	// curX/curY is the last cursor the move applied — the preview and the
+	// release read the SAME point, so the red warning can never mark a
+	// different side than the release collapses.
+	curX, curY float64
 }
 
 // armLeftResize starts a left-button boundary resize if (sx, sy) sits in a
@@ -773,7 +717,11 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	if !arm {
 		return false
 	}
-	a.leftResize = &leftResizeState{targetSplit: d.Split}
+	a.leftResize = &leftResizeState{
+		targetSplit: d.Split,
+		splitDir:    d.Dir,
+		container:   pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
+	}
 	// Park live overlays NOW (liveOverlaysHidden consults leftResize): the
 	// grab band straddles the divider, so half of it can sit over a live
 	// WebContentsView that would otherwise eat the very next mousemove and
@@ -811,15 +759,47 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 	if lr == nil {
 		return
 	}
+	lr.curX, lr.curY = sx, sy
 	cursor := sx
 	if lr.targetSplit.Dir == pane.Horizontal {
 		cursor = sy
 	}
-	// The universal pane minimum (issue #167). Unlike the right-button
-	// resize (which collapses a side crushed below the same minimum), the
-	// left button clamps here so a minimized pane is always recoverable.
+	// Walled at the universal pane minimum (issue #167): the drag itself
+	// never collapses — the adjacent pane visibly crushes toward the wall,
+	// signaling "release now closes it" (the release decides, issue #203).
 	pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, cursor, pane.MinPanePx)
 	a.draw()
+}
+
+// finishLeftResize is the left release: the live layout was already applied
+// during the move (only-the-grabbed-border, issue #112), so the release only
+// decides COLLAPSE from the raw cursor — dragging a side past the minimum
+// wall by enough means "close it" (issue #203: the left drag owns resize AND
+// close; the right button splits). Every leaf in a dropped side is flushed
+// first — text saves, live stream freezes — exactly as the old right-path
+// collapse did.
+func (a *App) finishLeftResize() {
+	lr := a.leftResize
+	a.leftResize = nil
+	if lr == nil {
+		return
+	}
+	// Decide from the last APPLIED cursor (lr.cur*), not the release
+	// coordinates: it is exactly what the red warning previewed, and an
+	// off-canvas release (finished later by the buttons-empty guard on a
+	// stray re-entry move) can never collapse a side the drag never
+	// crushed.
+	_, collapse := gesture.ResizeOutcome(lr.container, lr.splitDir, lr.curX, lr.curY, pane.MinPanePx)
+	switch collapse {
+	case gesture.CollapseA:
+		a.flushDroppedSubtree(lr.targetSplit.A)
+		_ = a.tree.CollapseSplit(lr.targetSplit, true)
+	case gesture.CollapseB:
+		a.flushDroppedSubtree(lr.targetSplit.B)
+		_ = a.tree.CollapseSplit(lr.targetSplit, false)
+	}
+	a.draw()
+	a.scheduleURLUpdate()
 }
 
 // commitSwap exchanges the origin pane with whatever pane the cursor

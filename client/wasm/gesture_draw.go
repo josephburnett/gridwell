@@ -37,9 +37,6 @@ func (a *App) drawRightDragPreview() {
 	case rightDragSwap:
 		a.drawPaneHotspotOverlay(rd)
 		a.drawSwapPreview(rd)
-	case rightDragResize:
-		a.drawPaneHotspotOverlay(rd)
-		a.drawResizePreview(rd)
 	case rightDragTileCenter:
 		a.drawTileHotspotOverlay(rd)
 	case rightDragTileResize:
@@ -117,8 +114,6 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	case rightDragSplit:
 		paneID = rd.splitPaneID
 	case rightDragSwap:
-		paneID = rd.originPaneID
-	case rightDragResize:
 		paneID = rd.originPaneID
 	default:
 		return
@@ -538,32 +533,30 @@ func drawArrowHead(a *App, cx, cy, angle, size float64) {
 	a.cctx.Call("fill")
 }
 
-// drawResizePreview paints the resize affordance. Two layers:
-//   - Always: highlight the divider being grabbed in grey with an
-//     orthogonal double-headed arrow, so the user sees on right-down
-//     which divider this drag will move.
-//   - When the resulting ratio would collapse one child below the
-//     close threshold: paint a red border around that child, so the
-//     user knows they're about to close it (and can drag back before
-//     releasing if they didn't intend to).
-func (a *App) drawResizePreview(rd *rightDragState) {
-	r := rd.container
+// drawLeftResizePreview paints the LEFT resize affordance (issue #203: the
+// left drag owns resize AND close). Two layers:
+//   - Always: highlight the divider being dragged in grey with an
+//     orthogonal double-headed arrow.
+//   - When releasing HERE would collapse a side (crushed past the minimum
+//     wall): paint a red border around that side, so the user knows
+//     they're about to close it (and can drag back before releasing).
+func (a *App) drawLeftResizePreview(lr *leftResizeState) {
+	r := lr.container
 	// Derive BOTH the ratio and the collapse verdict from the same
-	// gesture.ResizeOutcome the commit (commitResize) uses, fed the same
-	// cursor onRightMove stored. Re-deriving close-A/close-B inline here was
-	// a preview/commit divergence waiting to happen: the red "about to
-	// close" border could mark a different side than the one release
-	// actually collapses. (rd.curX/curY == the sx,sy that last set
-	// rd.targetSplit.Ratio, so the ratio is identical to before.)
-	ratio, collapse := gesture.ResizeOutcome(r, rd.splitDir, rd.curX, rd.curY, rightCloseThreshold)
-	aRect, bRect := pane.SplitRect(r, rd.splitDir, ratio)
+	// gesture.ResizeOutcome the release (finishLeftResize) uses, fed the
+	// same cursor the move last applied. Re-deriving close-A/close-B inline
+	// here was a preview/commit divergence waiting to happen: the red
+	// "about to close" border could mark a different side than the one
+	// release actually collapses.
+	ratio, collapse := gesture.ResizeOutcome(r, lr.splitDir, lr.curX, lr.curY, pane.MinPanePx)
+	aRect, bRect := pane.SplitRect(r, lr.splitDir, ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.
 	a.cctx.Set("strokeStyle", colorMuted)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("setLineDash", jsArray(4, 4))
 	a.cctx.Call("beginPath")
-	if rd.splitDir == pane.Horizontal {
+	if lr.splitDir == pane.Horizontal {
 		dy := aRect.Y + aRect.H
 		a.cctx.Call("moveTo", r.X, dy)
 		a.cctx.Call("lineTo", r.X+r.W, dy)
