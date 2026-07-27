@@ -28,6 +28,58 @@ func DecodeJPEGDataURL(s string) ([]byte, bool) {
 	return out, true
 }
 
+// AutoLive is the verdict for what a DESCENT into a tile does about
+// liveness (owner decision 2026-07-26, issue #202: descending IS the
+// engagement gesture — reconnect the shell, reopen the URL; the frozen
+// preview is what a tile looks like from OUTSIDE).
+type AutoLive int
+
+const (
+	// AutoLiveNone: stay frozen — a text tile, a capability-gated host (a
+	// plain browser descends silently frozen; notices are for explicit
+	// gestures), or a shell whose session is known dead (nothing to
+	// reconnect; the refresh affordance is hidden for it too).
+	AutoLiveNone AutoLive = iota
+	// AutoLiveURL: open the native url view.
+	AutoLiveURL
+	// AutoLiveShell: open the PTY stream — attach to the live session, or
+	// create fresh for a never-opened tile (no preview blob), matching what
+	// the create-path descent always did.
+	AutoLiveShell
+	// AutoLiveProbeShell: the session's aliveness is unknown — probe first,
+	// then re-decide from the verdict (alive → open; dead → stay frozen).
+	AutoLiveProbeShell
+)
+
+// DecideAutoLive maps a descent's facts to its liveness action. kindURL /
+// kindShell classify the tile (both false = a text tile or other inert
+// kind); liveURL/liveShell are the host capabilities; hasPreview and the
+// aliveness pair are the shell tile's state (same inputs as
+// DecideShellRefreshVisible — the two decisions must agree about what a
+// dead session means, so they read the same facts).
+func DecideAutoLive(kindURL, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive bool) AutoLive {
+	switch {
+	case kindURL:
+		if liveURL {
+			return AutoLiveURL
+		}
+	case kindShell:
+		if !liveShell {
+			return AutoLiveNone
+		}
+		if !hasPreview {
+			return AutoLiveShell // fresh tile: create, as the create path does
+		}
+		if !aliveKnown {
+			return AutoLiveProbeShell
+		}
+		if alive {
+			return AutoLiveShell
+		}
+	}
+	return AutoLiveNone
+}
+
 // RefreshVisibility is the verdict for a frozen shell descent's refresh
 // button: whether it shows, and whether the caller must kick off a
 // liveness probe (because the tmux session's state is unknown).

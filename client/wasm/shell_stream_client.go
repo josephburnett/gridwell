@@ -112,15 +112,18 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 	v := shellconn.DecideShellRefreshVisible(
 		tile.Kind == rpc.KindShell, tile.PreviewBlobID != 0, known, alive)
 	if v.Probe {
-		a.probeShellSessionAlive(tile.ContentID())
+		a.probeShellSessionAlive(tile.ContentID(), nil)
 	}
 	return v.Show
 }
 
-// probeShellSessionAlive fires ShellSessionAlive RPC for tileID,
-// caches the result, and triggers a redraw on completion. Idempotent:
-// short-circuits if a probe is already in flight.
-func (a *App) probeShellSessionAlive(tileID string) {
+// probeShellSessionAlive fires ShellSessionAlive RPC for tileID, caches the
+// result, and triggers a redraw on completion. then, if non-nil, receives
+// the verdict (it is NOT called on probe failure — no verdict, no action).
+// Idempotent: short-circuits if a probe is already in flight (a coalesced
+// caller's continuation is dropped; the auto-live path re-decides from the
+// cache on the next descent, and the refresh button remains the retry).
+func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 	if a.shellAliveProbing[tileID] {
 		return
 	}
@@ -137,6 +140,9 @@ func (a *App) probeShellSessionAlive(tileID string) {
 			return
 		}
 		a.shellAlive[tileID] = res.Alive
+		if then != nil {
+			then(res.Alive)
+		}
 		a.draw()
 	}()
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -1610,6 +1611,10 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	}
 
 	fileID := file.ID
+	// Captured by value for the auto-live decision: an ephemeral (scratch-
+	// grid) tile is in no cached grid, so a cache lookup at transition end
+	// would miss it and silently skip going live.
+	fileCopy := *file
 	initialScroll := float64(file.TextY)
 	initialScrollX := float64(file.TextX)
 	// URL tiles have no text/rendered modes; mode is "" for them so
@@ -1660,16 +1665,73 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			pl := a.local(fp.ID)
 			pl.ClearCaret()
 			a.refreshFileOverlay()
-			// URL / shell descent show the frozen JPEG preview by
-			// default. afterDescend fires here so an auto-go-live
-			// path (fresh tile creation) can open the stream — the
-			// explicit-callback shape keeps the auto-spawn decision
-			// at the call site instead of mixing it into the descent.
+			// Descending IS the engagement gesture (owner decision
+			// 2026-07-26, issue #202): a url reopens, a shell reconnects
+			// (or creates, when fresh). The decision lives HERE, once —
+			// call sites no longer hand-roll go-live callbacks, so every
+			// door into a descent behaves identically. afterDescend
+			// remains for the callers that need something ELSE to run
+			// after the swap (none currently go live by hand).
+			a.autoLiveOnDescent(fp.ID, &fileCopy)
 			if afterDescend != nil {
 				afterDescend()
 			}
 		},
 	})
+}
+
+// autoLiveOnRestore is autoLiveOnDescent for the RESTORE paths — reload
+// (applyURLState), workspace install, an ascent landing back on a stashed
+// descent (restoreEmbedReturn). The tile row is not necessarily cached at
+// restore time, so it is fetched first; the pane is re-resolved when the
+// read lands (the user may have moved on — never override where they went).
+func (a *App) autoLiveOnRestore(paneID, tileID string) {
+	go func() {
+		tile, err := a.cl.GetTile(context.Background(), tileID)
+		if err != nil {
+			return // a leaf whose reference no longer resolves stays frozen
+		}
+		a.c.UpdateTile(tile.GridID, *tile)
+		a.autoLiveOnDescent(paneID, tile)
+		a.draw()
+	}()
+}
+
+// autoLiveOnDescent applies the shellconn.DecideAutoLive verdict for the
+// just-descended tile: open the url view, attach/create the shell PTY, probe
+// an unknown shell session first, or stay frozen (text, browser hosts, dead
+// sessions). The one auto-live owner — the refresh affordances remain as the
+// RETRY for the cases this stays frozen on. tile is the descent-time row,
+// passed by value: an ephemeral (scratch) tile is in no cached grid.
+func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
+	tileID := tile.ID
+	fp := a.tree.FindPane(paneID)
+	if fp == nil || fp.TextFocus != tileID {
+		return
+	}
+	// The shell facts key by the CONTENT id (a link attaches its target's
+	// session) — the same reads shellRefreshButtonVisible does, so the two
+	// decisions can never disagree about a dead session.
+	cid := tile.ContentID()
+	alive, known := a.shellAlive[cid]
+	verdict := shellconn.DecideAutoLive(
+		tile.Kind == rpc.KindURL, tile.Kind == rpc.KindShell,
+		a.caps.LiveURL, a.caps.LiveShell,
+		tile.PreviewBlobID != 0, known, alive)
+	switch verdict {
+	case shellconn.AutoLiveURL:
+		a.openURLStream(fp, tileID)
+	case shellconn.AutoLiveShell:
+		a.openShellStream(fp, tileID)
+	case shellconn.AutoLiveProbeShell:
+		a.probeShellSessionAlive(cid, func(nowAlive bool) {
+			// Re-check the pane is still in THIS descent when the verdict
+			// lands — the probe is async and the user may have moved on.
+			if p := a.tree.FindPane(paneID); nowAlive && p != nil && p.TextFocus == tileID {
+				a.openShellStream(p, tileID)
+			}
+		})
+	}
 }
 
 // startTextAscent reverses the text tile descent: animate zoom-out from the
@@ -1694,6 +1756,9 @@ func (a *App) restoreEmbedReturn(fp *pane.Pane, saved *paneState) {
 	fp.TextScrollY = saved.TextScrollY
 	fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
 	a.refreshFileOverlay()
+	// Landing back on a stashed url/shell descent re-engages it (issue
+	// #202) — the same one-owner decision every descent applies.
+	a.autoLiveOnRestore(fp.ID, fp.TextFocus)
 }
 
 func (a *App) startTextAscent(p *pane.Pane) {
@@ -2172,11 +2237,9 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 }
 
 // createURLAtCell fires CreateURL at the given cell with the given URL.
-// Footprint is 1×1. After creation succeeds, the focused pane descends
-// into the new tile and immediately goes live — typing a URL + Enter is
-// an explicit "load this" gesture, so auto-live is the right behavior.
-// This is the only auto-go-live path; all other descents into URL tiles
-// start frozen and require an explicit refresh gesture.
+// Footprint is 1×1. After creation succeeds, the focused pane descends into
+// the new tile; EVERY descent goes live now (issue #202 — descending is the
+// engagement gesture), so the create path needs no special go-live handling.
 func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	paneID := p.ID
@@ -2187,23 +2250,14 @@ func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
 	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateURL(ctx, req)
 	}, func(tile rpc.Tile) {
-		// Auto-descend + auto-go-live: the user just typed a URL and
-		// confirmed, which is an unambiguous "load this now" intent.
-		// Find the focused pane and descend into the new tile, then
-		// open the live stream once the transition completes.
+		// Auto-descend: the user just typed a URL and confirmed. The
+		// descent itself goes live (autoLiveOnDescent — one owner).
 		fp := a.tree.FindPane(paneID)
 		if fp == nil || fp.TextFocus != "" {
 			// Pane is gone or already descended — skip.
 			return
 		}
-		a.startTextDescent(fp, &tile, func() {
-			// afterDescend: open the URL stream so the pane goes live.
-			ffp := a.tree.FindPane(paneID)
-			if ffp == nil || ffp.TextFocus == "" {
-				return
-			}
-			a.openURLStream(ffp, tile.ID)
-		})
+		a.startTextDescent(fp, &tile, nil)
 	})
 }
 
@@ -2267,18 +2321,8 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 	// Place change: flush framing still inside the settle window (issue
 	// #190). A no-op when fp is already descended (TextFocus set).
 	a.flushFramingSave()
-	paneID := fp.ID
-	openLive := func() {
-		if ffp := a.tree.FindPane(paneID); ffp != nil && ffp.TextFocus != "" {
-			if tile.Kind == rpc.KindShell {
-				a.openShellStream(ffp, tile.ID)
-			} else {
-				a.openURLStream(ffp, tile.ID)
-			}
-		}
-	}
 	if fp.TextFocus == "" {
-		a.startTextDescent(fp, tile, openLive)
+		a.startTextDescent(fp, tile, nil)
 		return
 	}
 	// Stash the current descent (shell): restoreEmbedReturn lands back on it.
@@ -2291,7 +2335,7 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 	fp.TextFocus = ""
 	fp.TextMode = ""
 	a.refreshFileOverlay()
-	a.startTextDescent(fp, tile, openLive)
+	a.startTextDescent(fp, tile, nil)
 	if top := a.local(fp.ID).PeekAscent(); top != nil {
 		top.Anchor = savedAnchor
 		top.Path = savedPath
@@ -2451,18 +2495,9 @@ func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 		if fp == nil || fp.TextFocus != "" {
 			return
 		}
-		// Mirror createURLAtCell: descend, and once the transition
-		// completes, open the PTY. afterDescend runs on the main loop
-		// after onComplete sets TextFocus, so the new tile is in the
-		// cache and the pane is in file-focus mode by the time
-		// openShellStream looks for it.
-		a.startTextDescent(fp, &tile, func() {
-			ffp := a.tree.FindPane(paneID)
-			if ffp == nil || ffp.TextFocus == "" {
-				return
-			}
-			a.openShellStream(ffp, tile.ID)
-		})
+		// Mirror createURLAtCell: descend; the descent goes live itself
+		// (a fresh shell auto-creates its session — autoLiveOnDescent).
+		a.startTextDescent(fp, &tile, nil)
 	})
 }
 

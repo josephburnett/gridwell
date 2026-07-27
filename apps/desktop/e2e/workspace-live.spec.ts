@@ -6,14 +6,14 @@ import { tileAt } from './oracle';
 // and torn down (the same flush the pane-collapse path uses — a native
 // WebContentsView cannot float over a workspace that replaced its pane),
 // and ascending must restore the outer pane still descended into its url,
-// frozen, ready to revive. This is the seam make check cannot see (native
+// re-engaged live on ascent (#202). This is the seam make check cannot see (native
 // views live off the main page), hence a real-stack spec.
 
 async function workspaceState(window: any): Promise<{ depth: number }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
 }
 
-test('workspace descent freezes an outer live url; ascent restores the frozen descent', async ({ electronApp, gw, window }) => {
+test('workspace descent freezes an outer live url; ascent revives the descent', async ({ electronApp, gw, window }) => {
   await gw.enterPlugin('localdb');
   const f = await gw.focused();
   const rootGrid = f.gridID;
@@ -59,8 +59,8 @@ test('workspace descent freezes an outer live url; ascent restores the frozen de
     .toBe(wcBefore);
 
   // Ascend: the outer arrangement returns — the url pane is still descended
-  // into its url tile (TextFocus preserved), frozen (no live view), ready
-  // for an explicit revive.
+  // into its url tile (TextFocus preserved) and RE-ENGAGES automatically
+  // (issue #202): the restore is a re-entry, so the view comes back live.
   const panes = await gw.panes();
   const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
   await window.mouse.click(30, barTop + 13, { button: 'right' });
@@ -69,12 +69,14 @@ test('workspace descent freezes an outer live url; ascent restores the frozen de
   const restored = (await gw.panes()).find((p: any) => p.textFocus !== '');
   expect(restored, 'the url descent must survive the round trip').toBeTruthy();
   expect(restored!.textFocus).toBe(urlPane!.textFocus);
-  expect(
-    await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length),
-    'the view stays frozen until an explicit revive',
-  ).toBe(wcBefore);
+  await expect
+    .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
+      message: 'the restored descent revives its live view (issue #202)',
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(wcBefore);
 
-  // Teardown: ascend the frozen ephemeral url so the session ends clean
+  // Teardown: ascend the (revived) ephemeral url so the session ends clean
   // (ascent deletes the scratch tile, issue #85).
   const rp = restored!;
   await window.mouse.click(rp.x + rp.w / 2, rp.y + rp.h / 2, { button: 'middle' });

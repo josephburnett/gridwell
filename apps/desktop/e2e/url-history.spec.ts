@@ -69,12 +69,10 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
     })
     .toContain('h=2');
 
-  // Revive: descend (frozen) — the auto-go-live only fires on creation, so
-  // click the corner circle to go live — and the restored view can go BACK.
+  // Revive: descend — EVERY descent goes live now (issue #202), so the
+  // restored view appears without a refresh click, and it can go BACK.
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
-  const pal = await gw.palette();
-  await window.mouse.click(pal.plusX, pal.plusY); // frozen url corner = go live
   await expect
     .poll(() => electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), {
       timeout: 15_000,

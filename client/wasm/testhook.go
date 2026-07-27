@@ -66,7 +66,31 @@ func (a *App) installTestHook() {
 		"errors":        js.FuncOf(a.thErrors),
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
+		"shellText":     js.FuncOf(a.thShellText),
 	}))
+}
+
+// thShellText returns the focused pane's live terminal buffer as text
+// (every line, trimmed of trailing blanks). The WebGL renderer paints to a
+// canvas — the DOM carries no terminal text — so specs that assert PTY
+// state (issue #202's same-session reconnect) read it through the buffer
+// API, the same read the link provider uses per line. "" = no live shell.
+func (a *App) thShellText(js.Value, []js.Value) any {
+	conn := a.shellConnFor(a.tree.Focus)
+	if conn == nil || !conn.term.Truthy() {
+		return ""
+	}
+	buf := conn.term.Get("buffer").Get("active")
+	n := buf.Get("length").Int()
+	out := ""
+	for i := 0; i < n; i++ {
+		line := buf.Call("getLine", i)
+		if !line.Truthy() {
+			continue
+		}
+		out += line.Call("translateToString", true).String() + "\n"
+	}
+	return out
 }
 
 // thShellRenderer returns which renderer the focused pane's live shell

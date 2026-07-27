@@ -45,6 +45,20 @@ Exceptions are deliberate and few: the menu appears only on the focused pane (to
 show focus), and processes/files outside Gridwell may come and go outside our
 control (though their *placement* stays stable while they exist).
 
+**Descent goes live (owner decision 2026-07-26, issue #202 — refining, not
+breaking, the rule):** the frozen preview is what a tile looks like from
+OUTSIDE — previews, siblings, embeds stay byte-identical, and going live
+never mutates the row (the version moves only at the ascent freeze). But
+DESCENDING is the engagement gesture: entering a url tile reopens the page,
+entering a shell reconnects the still-running tmux session (a fresh tile
+creates one; a dead session stays frozen), and every path that re-enters a
+descent — reload restore, workspace swap and return, an ascent landing on a
+stashed descent — applies the same rule. ONE owner decides:
+`shellconn.DecideAutoLive`, applied by `autoLiveOnDescent` /
+`autoLiveOnRestore`; call sites never hand-roll go-live. Browsers (no live
+capability) descend silently frozen; the refresh affordances remain as the
+retry.
+
 **Session-ephemeral by decision (issue #13, owner call 2026-07-08; pane
 tiles added 2026-07-09):** the SESSION split-pane layout (splits, ratios,
 pane zoom — the `pane.Tree` at the root of a session), the rendered-mode

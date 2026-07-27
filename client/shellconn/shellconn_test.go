@@ -51,3 +51,31 @@ func TestDecodeJPEGDataURL(t *testing.T) {
 		}
 	}
 }
+
+// The auto-live descent decision (issue #202): descending engages — url
+// opens, an alive or fresh shell opens, a dead shell stays frozen, a
+// capability-gated host stays silently frozen, unknown aliveness probes.
+func TestDecideAutoLive(t *testing.T) {
+	cases := []struct {
+		name                                                             string
+		kindURL, kindShell, liveURL, liveShell, hasPreview, known, alive bool
+		want                                                             AutoLive
+	}{
+		{"url on Electron opens", true, false, true, true, true, false, false, AutoLiveURL},
+		{"url in a browser stays frozen", true, false, false, false, true, false, false, AutoLiveNone},
+		{"fresh shell creates", false, true, true, true, false, false, false, AutoLiveShell},
+		{"alive shell reconnects", false, true, true, true, true, true, true, AutoLiveShell},
+		{"dead shell stays frozen", false, true, true, true, true, true, false, AutoLiveNone},
+		{"unknown shell probes", false, true, true, true, true, false, false, AutoLiveProbeShell},
+		{"shell in a browser stays frozen", false, true, false, false, true, true, true, AutoLiveNone},
+		{"text does nothing", false, false, true, true, true, true, true, AutoLiveNone},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := DecideAutoLive(c.kindURL, c.kindShell, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive)
+			if got != c.want {
+				t.Errorf("DecideAutoLive = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

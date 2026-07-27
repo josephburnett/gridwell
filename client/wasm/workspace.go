@@ -308,57 +308,9 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 		}
 		a.fetchGrid(a.gridIDForPane(p))
 		if p.TextFocus != "" {
-			a.reattachWorkspaceEphemeral(p.ID, p.TextFocus)
+			a.autoLiveOnRestore(p.ID, p.TextFocus)
 		}
 	})
-}
-
-// reattachWorkspaceEphemeral revives a leaf's EPHEMERAL live surface on
-// workspace descent (issue #174 part 3): an ephemeral shell/url opened
-// inside the workspace kept running across ascent (the boundary detaches,
-// never kills — and the boot sweep now spares it), so re-entering the
-// workspace reconnects it — the pane "exists" as long as the workspace
-// holds it. Non-ephemeral leaves stay frozen exactly like ordinary descents
-// (reconnect is one refresh away; owner decision). Async: neither the tile
-// row nor its grid meta is necessarily cached at install time, and "is this
-// ephemeral" is read off the tile's OWN grid (an ephemeral's grid IS the
-// plugin's scratch grid — the server stamps the fact on every grid), so a
-// cold cache can't misclassify. A leaf whose reference no longer resolves
-// stays frozen — the loose-restore rule.
-func (a *App) reattachWorkspaceEphemeral(paneID, tileID string) {
-	go func() {
-		ctx := context.Background()
-		tile, err := a.cl.GetTile(ctx, tileID)
-		if err != nil {
-			return
-		}
-		if tile.Kind != rpc.KindShell && tile.Kind != rpc.KindURL {
-			return
-		}
-		g, err := a.cl.GetGrid(ctx, tile.GridID)
-		if err != nil || g.Grid.ScratchGridID == "" || g.Grid.ScratchGridID != tile.GridID {
-			return // not an ephemeral — ordinary content, stays frozen
-		}
-		// Re-resolve: the user may have rearranged or ascended while the
-		// reads were in flight — never override where they went (the same
-		// cede rule as fallbackTreeFor).
-		p := a.tree.FindPane(paneID)
-		if p == nil || p.TextFocus != tileID {
-			return
-		}
-		a.c.UpdateTile(tile.GridID, *tile)
-		switch tile.Kind {
-		case rpc.KindShell:
-			if !a.hasShellStream(paneID) {
-				a.openShellStream(p, tileID)
-			}
-		case rpc.KindURL:
-			if pl, ok := a.localIf(paneID); !ok || pl.urlView == nil {
-				a.openURLStream(p, tileID)
-			}
-		}
-		a.draw()
-	}()
 }
 
 // ascendWorkspaceLevels leaves `count` workspaces: for each, flush the
@@ -394,6 +346,15 @@ func (a *App) ascendWorkspaceLevels(count int) {
 	// Same rebind as installWorkspace: the restored outer tree's focused pane
 	// may itself be text-descended, and the singleton must follow the swap.
 	a.refreshFileOverlay()
+	// The restored outer leaves re-engage their descents (issue #202): the
+	// boundary froze them; landing back is a re-entry, so the shell
+	// reconnects and the url reopens — the same one-owner decision every
+	// descent applies (restoreWorkspaceLeaves does this for the inward swap).
+	a.tree.Walk(func(p *pane.Pane) {
+		if p.TextFocus != "" {
+			a.autoLiveOnRestore(p.ID, p.TextFocus)
+		}
+	})
 	a.scheduleURLUpdate()
 	a.draw()
 }

@@ -385,6 +385,10 @@ func (a *App) applyURLState(raw string) {
 		a.fetchBlobAndSetCursor(textTileID, state)
 		// Refresh overlay so the textarea (text mode) appears.
 		a.refreshFileOverlay()
+		// A reload lands back INSIDE the descent — re-engage it (issue
+		// #202): the shell reconnects, the url reopens, through the same
+		// one-owner decision every descent applies.
+		a.autoLiveOnRestore(p.ID, textTileID)
 	} else {
 		p.Cx = state.X
 		p.Cy = state.Y
