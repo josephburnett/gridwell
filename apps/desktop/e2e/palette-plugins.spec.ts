@@ -49,6 +49,23 @@ test('a plugin anchor rides in the URL path and survives a reload (issue #193)',
   await window.waitForFunction(() => (window as any).__gridwellTest !== undefined, null, {
     timeout: 45_000,
   });
+  // Boot isn't done at hook-install: the anchor resolves asynchronously
+  // (the fixture's ready-wait covers first boot; a mid-test reload re-runs
+  // boot without it — same race, same wait).
+  await window.waitForFunction(
+    () => {
+      const t = (window as any).__gridwellTest;
+      try {
+        return (t.panes() as Array<{ focused: boolean; anchor: string }>).some(
+          (p) => p.focused && p.anchor !== '',
+        );
+      } catch {
+        return false;
+      }
+    },
+    null,
+    { timeout: 45_000 },
+  );
   await gw.waitIdle();
   const after = await gw.focused();
   expect(after.anchor, 'reload decoded the path anchor').toBe(before.anchor);
