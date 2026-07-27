@@ -388,14 +388,34 @@ service over raw gRPC, routed by the **qualified ids** each request carries —
 the same routing implementation the browser front door uses, plus the
 streams (`OpenShell`, `WriteContent`) routed by the id in their first
 message and the link-resolving `ReadContent`. There is no selector and no name-based routing.
-The mount's root is the remote's node grid, so descending into the ssh plugin
-shows the remote's own launcher; every remote plugin is a link tile there.
 Ids **chain**: each hop peels one segment from requests and prepends one to
-responses (`ssh` is a *transit* plugin — `Registry.Transit`), so
-`<ssh>/<plugin>/<id>` routes through any number of hops, and the ssh binary
-itself stays a dumb pipe (`internal/plugin/proxy`). The dial path (key auth,
+responses (`ssh` is a *transit* plugin — `Registry.Transit`; the one prepend
+rule lives beside the id codec as `rpc.TransitQualifyTiles`), so
+`<ssh>/…/<id>` routes through any number of hops. The dial path (key auth,
 mandatory known_hosts, tunnel, gRPC-over-h2c) is `internal/plugin/sshdial`,
 seam-tested against a real in-process ssh server fronting a two-plugin node.
+
+**Connections are DATA, not config (#199, 2026-07-26).** The default mode of
+`gridwell-ssh` (no `host:` key) is the multi-connection plugin
+(`internal/plugin/sshhost`): server.yaml keeps ONE ssh entry and each remote
+node is a **connection well** dropped on the plugin's root grid. The #198
+schema prompts for host/user/port/key-path; the params commit as the well's
+CONTENT (WriteContent — authoritative validation, version bumps); the well's
+child appears when the plugin learns the remote's root from its Info (until
+then it is a childless dashed link, inert with a notice, retried on every
+list). Each connection gets a minted letter-leading short id as a
+**sub-namespace segment** — `<ssh>/<conn>/<remote-plugin>/<id>` — peeled and
+prepended by the plugin exactly as a node peels a plugin segment: namespaces
+recurse, same transit rule, one level down. Deleting a connection well
+UNLINKS (tombstone: the segment stays reserved forever and answers gone —
+only a tombstone probes GONE; an unreachable remote stays an error, so a
+failed read can never sweep). Secrets stay host-local file PATHS (~/.ssh
+defaults resolved where the plugin runs); key material never rides tile
+content or the wire. The mount's root is the remote's node grid, so
+descending into a connection shows the remote's own launcher; every remote
+plugin is a link tile there. A `host:`-configured entry (the pre-#199 shape)
+still runs the transparent single-mount proxy (`internal/plugin/proxy`),
+unchanged.
 
 **Cross-plugin link is the left-drag; clone is the right-drag (2026-07-19).**
 Left-dragging any tile into another plugin's grid creates a LINK in the

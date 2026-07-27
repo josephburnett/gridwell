@@ -44,7 +44,7 @@ explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  go-plugin gRPC  (the SAME Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Plugins        internal/plugin/{localdb,fs,proc,ssh,proxy}            │
+│ Plugins        internal/plugin/{localdb,fs,proc,sshhost,proxy}            │
 │   each is a separate binary owning one SQLite DB + one id space        │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
@@ -189,11 +189,20 @@ Each plugin owns exactly one SQLite DB and one id space.
   verbatim, so positions and ids survive until the source is readable again.
   Tested from both sides (`fs_stability_test.go` via the `SetReadDir` seam:
   permission error keeps rows, ENOENT sweeps).
-- **`ssh`** is a transparent `proxy` of a whole remote node: it dials the
-  remote's export through the tunnel (`internal/plugin/sshdial`, seam-tested
-  against a real in-process sshd) and forwards the full service verbatim. Its
-  Info is the remote node's (root = the remote node grid), and the host marks
-  it TRANSIT so response ids gain exactly one segment per hop.
+- **`ssh`** has two modes. Default (no `host:` config, #199): the
+  **multi-connection plugin** (`internal/plugin/sshhost`) — its root grid is
+  a connection list, each remote node a well whose params are its CONTENT
+  and whose minted letter-leading short id is a SUB-NAMESPACE segment
+  (`<ssh>/<conn>/<remote-plugin>/<id>`); the plugin peels/prepends that
+  segment with the same shared transit rule the server applies one level up
+  (`rpc.TransitQualifyTiles` — deliberately ONE implementation), lazily
+  dials each connection (`sshdial`, self-healing), and fans each
+  connection's remote events in with the segment prepended. Delete
+  tombstones (the segment stays reserved; only a tombstone probes GONE — an
+  unreachable remote is an error, never a sweep). Config-pinned (`host:`
+  present): the transparent `proxy` of one whole remote node — Info is the
+  remote node's (root = the remote node grid). Both modes are TRANSIT to
+  the host, so response ids gain exactly one segment per hop.
 
 ### 4.1 The best-enforced invariant in the codebase: framing ≠ content
 

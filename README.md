@@ -157,20 +157,23 @@ can read and write every tile and open shells on your machine. Bind loopback
 or a VPN-only address (Tailscale is the intended transport), never an open
 interface. `gridwell serve` warns loudly when the bind is not loopback.
 
-To mount a remote node, the remote just runs `gridwell serve` on loopback —
+To mount remote nodes, the remote just runs `gridwell serve` on loopback —
 the same one port that serves browsers answers the tunnel, so nothing new is
-exposed. On the mounting machine:
+exposed. On the mounting machine, register the ssh plugin once:
 
 ```sh
-gridwell init --kind ssh --name work \
-  --config host=myserver.example:22 \
-  --config user=joe \
-  --config key=/home/joe/.ssh/id_ed25519 \
-  --config known_hosts=/home/joe/.ssh/known_hosts \
-  --config addr=127.0.0.1:8080
+gridwell init --kind ssh --name connections
 ```
 
-`known_hosts` is required — the plugin refuses to trust an unverified host.
+then drop a **connection well** on its grid from inside Gridwell: the
+creation form asks for host and user (port, key path, known_hosts, and the
+remote's bind address default to the usual places), and the well's child is
+the remote node. Connections are data — add a machine without touching
+config or restarting. Key and known_hosts stay files on your machine; an
+unverified host is refused, and key material never rides tile content.
+
+A config-pinned single mount still works too (`--config host=… user=… key=…
+known_hosts=… addr=…` pins one remote in server.yaml).
 
 The CLI is three commands: `gridwell init` (register a plugin), `gridwell
 serve` (run the node), and `gridwell backup` (snapshot every plugin DB, safe
