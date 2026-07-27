@@ -484,6 +484,18 @@ export class GridwellDriver {
 
   // ── View gestures ─────────────────────────────────────────────────────────
 
+  // middleClickPane middle-clicks the CENTER of the focused pane's rect —
+  // the universal ascend, which is position-independent. Prefer this over
+  // middleClickCell for bare ascents: a computed cell center can land
+  // OUTSIDE the pane at high zoom (one cell below center is off-pane once
+  // cells exceed the half-pane — the stack-hygiene silent no-op, #195),
+  // and an off-pane click is swallowed without a trace.
+  async middleClickPane(): Promise<void> {
+    const f = await this.focused();
+    await this.win.mouse.click(f.x + f.w / 2, f.y + f.h / 2, { button: 'middle' });
+    await this.waitIdle();
+  }
+
   // middleClickCell middle-clicks the center of a cell — the universal ascend
   // shortcut when done over a descended pane.
   async middleClickCell(cx: number, cy: number): Promise<void> {

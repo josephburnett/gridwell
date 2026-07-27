@@ -177,10 +177,11 @@ test.describe('stack hygiene', () => {
     expect(cur.frameDepth, 'one portal frame while inside the plugin').toBe(1);
     expect(cur.ascentDepth, 'one well level saved').toBe(1);
 
-    await gw.middleClickCell(Math.round(cur.cx), Math.round(cur.cy) + 1); // well ascent
-    await gw.waitIdle();
-    await gw.middleClickCell(cx, cy + 2); // portal ascent back home
-    await gw.waitIdle();
+    // Pane-center clicks: the ascend is position-independent, and a
+    // computed cell center can be OFF-PANE at the child grid's high zoom
+    // (the silent no-op behind this spec's long flake history, #195).
+    await gw.middleClickPane(); // well ascent
+    await gw.middleClickPane(); // portal ascent back home
 
     cur = (await gw.panes()).find((p) => p.id === f.id)!;
     expect(cur.anchor, 'back home (the boot anchor)').toBe(home);
