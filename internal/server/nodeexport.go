@@ -5,9 +5,9 @@ package server
 // mounter (the ssh plugin's tunnel) dials. Every request is routed by the
 // QUALIFIED ids it carries, exactly like the Connect front door (the unary
 // methods literally delegate to the same connectHandler, so the two surfaces
-// cannot drift), plus the three plugin-grade streams Connect doesn't carry
-// for browsers: OpenShell, GetSession, PutSession — each routed by the id in
-// its (first) message.
+// cannot drift), plus the streams: OpenShell (bidi PTY), ReadContent /
+// WriteContent, Subscribe — each routed by the id in its (first) message.
+// (GetSession/PutSession are gone — 2026-07-26, the session is host-local.)
 //
 // Ids compose across hops by construction: this node peels exactly one
 // segment per request and prepends exactly one segment per response
