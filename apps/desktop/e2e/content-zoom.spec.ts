@@ -137,10 +137,17 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
       wc.sendInputEvent({ type: 'keyDown', keyCode: '=', modifiers: ['control'] });
       wc.sendInputEvent({ type: 'keyUp', keyCode: '=', modifiers: ['control'] });
     });
-  for (let i = 0; i < 3; i++) await sendChord();
-
-  // The view zoom moves (composed atop the min-width layout zoom)…
-  await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(base * 1.25);
+  // One chord at a time, each VERIFIED before the next: the property under
+  // test (#170) is that the intercepted chord reaches the wasm owner and
+  // persists — not that three synthetic events survive rapid fire, which
+  // xvfb under load drops nondeterministically (the #195 flake half of
+  // this spec). A real keyboard's repeat rides the genuine input pipeline
+  // synthetic events can only approximate.
+  for (let i = 1; i <= 3; i++) {
+    await sendChord();
+    const want = base * Math.pow(1.1, i);
+    await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(want * 0.97);
+  }
 
   // …and the zoom is PERSISTED as framing on the (scratch) tile — proof the
   // forward ran through the wasm owner, not a main-side setZoomFactor.
