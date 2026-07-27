@@ -137,3 +137,43 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 		t.Error("layout blobs leaked after both tiles were deleted")
 	}
 }
+
+// TestWorkspaceRefsMatchTheInjectedIdentity is the production shape of issue
+// #196: the plugin identity is the CONFIG id, injected post-verify
+// (SetPluginID) — NOT the bootstrap-minted system.plugin_uuid. Workspace
+// layout blobs qualify their references with the config id, so the
+// ephemeral-refs matcher must speak it too; before the fix it compared
+// against the mint, never matched, and the boot scratch sweep reaped
+// workspace-owned shells (killing their tmux sessions). The older
+// self-consistent tests couldn't catch this: they built the blob FROM
+// PluginUUID, matching whatever it returned.
+func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+
+	// The production identity: a config id DIFFERENT from the minted uuid.
+	s.SetPluginID("k3x9m2q")
+
+	pt, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil, "")
+	if err != nil {
+		t.Fatalf("create pane: %v", err)
+	}
+	// A layout blob referencing scratch tile 41, qualified by the CONFIG id
+	// — exactly what the client persister writes.
+	layout := `{"v":1,"root":{"pane":{"id":"p1","anchor":"k3x9m2q/` + root + `","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"k3x9m2q/41"}},"focus":"p1"}`
+	if _, err := s.WriteContent(ctx, pt.ID, pt.Version, []byte(layout)); err != nil {
+		t.Fatalf("write layout: %v", err)
+	}
+
+	refs, unreadable, err := s.WorkspaceEphemeralRefs(ctx)
+	if err != nil {
+		t.Fatalf("refs: %v", err)
+	}
+	if unreadable {
+		t.Fatal("blob unexpectedly unreadable")
+	}
+	if !refs["41"] {
+		t.Fatalf("the config-id-qualified reference was not recognized (refs=%v) — the sweep would reap a workspace-owned shell (issue #196)", refs)
+	}
+}

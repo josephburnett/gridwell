@@ -45,6 +45,10 @@ type Store struct {
 	newID func() string    // overridden in tests
 	mu    sync.Mutex       // protects subscriber list
 	subs  map[*subscriber]struct{}
+	// pluginID is THE plugin identity, injected post-verify (SetPluginID,
+	// issue #196). "" = a bare test store; PluginUUID then falls back to
+	// the bootstrap mint.
+	pluginID string
 }
 
 const (
@@ -226,9 +230,23 @@ func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 // could silently drift from the stored one.
 func (s *Store) SchemaVersion() int { return schemaVersion }
 
-// PluginUUID returns the stable UUID that identifies this store as a plugin.
-// Generated once on first bootstrap; stable across restarts.
+// SetPluginID injects THE plugin identity — the config id the binary
+// verified against its DB at spawn (pluginmeta.Verify). Issue #196: the
+// system.plugin_uuid row is a SECOND, independently-minted identity that
+// nothing outside this store ever saw — qualified references (workspace
+// layout blobs, every wire id) carry the CONFIG id, so any comparison
+// against the mint could never match. Identity flows in from the one
+// verified source; the mint survives only as the fallback for bare test
+// stores that never had a config.
+func (s *Store) SetPluginID(id string) { s.pluginID = id }
+
+// PluginUUID returns the plugin identity this store's qualified ids carry:
+// the injected config id (production — see SetPluginID), else the
+// bootstrap-minted system.plugin_uuid (bare test stores).
 func (s *Store) PluginUUID(ctx context.Context) (string, error) {
+	if s.pluginID != "" {
+		return s.pluginID, nil
+	}
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM system WHERE key = ?`, systemKeyPluginUUID).Scan(&v)
 	return v, err
