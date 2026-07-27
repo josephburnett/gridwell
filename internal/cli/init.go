@@ -56,12 +56,15 @@ func RunInit(args []string) int {
 		return 2
 	}
 	// Kind-specific config validation, BEFORE anything is minted or written.
-	// An ssh plugin with missing keys would otherwise register fine and then
+	// An ssh plugin with broken keys would otherwise register fine and then
 	// die at first spawn as a cryptic subprocess exit; the required-key rule
 	// has one owner (sshdial.FromPluginConfig) — init just asks it early.
+	// Since #199 the no-config form is CONNECTIONS MODE (remotes are wells
+	// the user drops, params as content), so validation applies only when a
+	// config-pinned mount is being described (any of its keys present).
 	// (fs is deliberately not gated: no config.root is the valid Rootless
 	// state, visible on the node grid, fixable later.)
-	if *kind == "ssh" {
+	if *kind == "ssh" && sshConfigPinned(conf) {
 		if _, err := sshdial.FromPluginConfig(conf); err != nil {
 			fmt.Fprintf(os.Stderr, "init: %v\n", err)
 			return 2
@@ -112,4 +115,17 @@ func RunInit(args []string) int {
 	fmt.Printf("gridwell: initialized %s plugin %q (id %s)\n  db:     %s\n  config: %s\n",
 		*kind, *name, id, dbFile, filepath.Join(home, "server.yaml"))
 	return 0
+}
+
+// sshConfigPinned reports whether an ssh plugin's config describes a
+// config-pinned single-host mount (the pre-#199 shape). Any of the mount
+// keys present selects it — a PARTIAL set is then a validation error, not a
+// silent fall-through to connections mode that would strand the typo'd keys.
+func sshConfigPinned(conf map[string]string) bool {
+	for _, k := range []string{"host", "user", "key", "known_hosts", "addr", "remote_plugin"} {
+		if conf[k] != "" {
+			return true
+		}
+	}
+	return false
 }
