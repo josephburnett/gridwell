@@ -141,11 +141,26 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
 
-  cellCenter(paneID: string, cx: number, cy: number): Promise<{ x: number; y: number }> {
-    return this.win.evaluate(
+  // cellCenter maps a grid cell to screen coordinates — and REFUSES a point
+  // outside the pane's rect. An off-pane (or off-viewport) point is always a
+  // spec bug (the cell isn't where the viewport shows at this zoom), and CDP
+  // silently drops events dispatched outside the window: the gesture half
+  // fires, dragging never clears, and waitIdle hangs with no clue (the #195 /
+  // #203 off-viewport class). Fail loudly with the numbers instead.
+  async cellCenter(paneID: string, cx: number, cy: number): Promise<{ x: number; y: number }> {
+    const pt = await this.win.evaluate(
       ([id, x, y]) => (window as any).__gridwellTest.cellCenter(id, x, y),
       [paneID, cx, cy] as [string, number, number],
     );
+    const panes = await this.panes();
+    const p = panes.find((pn) => pn.id === paneID);
+    if (p && (pt.x < p.x || pt.x >= p.x + p.w || pt.y < p.y || pt.y >= p.y + p.h)) {
+      throw new Error(
+        `cellCenter(${cx},${cy}) = (${pt.x},${pt.y}) lies outside pane ${paneID} ` +
+          `(${p.x},${p.y} ${p.w}x${p.h}) — pick a cell inside the current viewport`,
+      );
+    }
+    return pt;
   }
 
   // waitIdle blocks until the renderer reports no transition, drag, or in-flight

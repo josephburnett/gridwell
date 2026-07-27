@@ -39,6 +39,7 @@ func (a *App) installTestHook() {
 	}
 	js.Global().Set("__gridwellTest", js.ValueOf(map[string]any{
 		"idle":          js.FuncOf(a.thIdle),
+		"idleDetail":    js.FuncOf(a.thIdleDetail),
 		"origin":        js.FuncOf(a.thOrigin),
 		"panes":         js.FuncOf(a.thPanes),
 		"previewSigs":   js.FuncOf(a.thPreviewSigs),
@@ -238,6 +239,27 @@ func (a *App) thIdle(js.Value, []js.Value) any {
 		a.dragging == nil &&
 		len(a.gridInflight) == 0 &&
 		len(a.tileInflight) == 0
+}
+
+// thIdleDetail names each idle() component so a stalled waitIdle in a spec
+// reports WHICH state is stuck (a hung fetch reads very differently from a
+// stuck transition) instead of a bare timeout.
+func (a *App) thIdleDetail(js.Value, []js.Value) any {
+	grids := make([]any, 0, len(a.gridInflight))
+	for id := range a.gridInflight {
+		grids = append(grids, id)
+	}
+	tiles := make([]any, 0, len(a.tileInflight))
+	for id := range a.tileInflight {
+		tiles = append(tiles, id)
+	}
+	return map[string]any{
+		"transition":   a.transition != nil,
+		"wsPending":    a.wsPending != nil,
+		"dragging":     a.dragging != nil,
+		"gridInflight": grids,
+		"tileInflight": tiles,
+	}
 }
 
 // thOrigin returns the loopback origin the window is served from, so the test
