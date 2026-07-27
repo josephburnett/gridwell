@@ -176,6 +176,25 @@ export const test = base.extend<Fixtures>({
     // The sidecar must report ready before the window opens, and the wasm must
     // boot and install the hook. Give the whole chain a generous budget.
     await win.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+    // Boot isn't DONE at hook-install: the focused pane's anchor resolves
+    // asynchronously (ListPlugins → HomeGrid), and a spec's first focused()
+    // read can catch anchor="" on a slow boot — the load-sensitive half of
+    // the #195 stack-hygiene flake (its captured "home" was empty, so the
+    // round-trip assertion compared against nothing). Ready means anchored.
+    await win.waitForFunction(
+      () => {
+        const t = (window as any).__gridwellTest;
+        try {
+          return (t.panes() as Array<{ focused: boolean; anchor: string }>).some(
+            (p) => p.focused && p.anchor !== '',
+          );
+        } catch {
+          return false;
+        }
+      },
+      null,
+      { timeout: 30_000 },
+    );
     await use(win);
   },
 
