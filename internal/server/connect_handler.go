@@ -346,15 +346,39 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		create.Tile.ViewY = st.ViewY
 		create.Tile.ViewZoom = st.ViewZoom
 	case st.Kind == "well":
-		// A SOLID well's cross-plugin CLONE is a deep copy of its subtree
-		// into the destination plugin — bulk grid/tile/blob transfer the
-		// plugin surface has no primitive for yet. Refuse loudly rather than
-		// silently substituting a link: the link is the LEFT-drag's meaning,
-		// and a gesture that returns something other than what it names is
-		// the silent-divergence bug class. (Owner decision 2026-07-19; the
-		// old behavior — right-drag well = link — moved to left-drag.)
-		return nil, connect.NewError(connect.CodeUnimplemented,
-			fmt.Errorf("cross-plugin clone of a well is not implemented yet; left-drag creates a link"))
+		// A SOLID well's cross-plugin CLONE is the deep copy (issue #200,
+		// unblocked by the content streams): walk the source subtree and
+		// materialize it in the destination — top-down by necessity (a
+		// child grid is allocated by its well's create), so the copy
+		// appears and fills in; a mid-walk failure leaves a visible,
+		// deletable partial with the error surfaced. Right-drag = COPY
+		// everywhere, at last (owner decision 2026-07-19, completed).
+		dst, dstLocal, dstUUID, err := h.route(m.DestGridId)
+		if err != nil {
+			return nil, err
+		}
+		srcLocalTile := resp.GetTile()
+		// A SOURCE-BACKED subtree (fs directory, proc table) is refused
+		// BEFORE anything is created: its "content" is host metadata stubs
+		// — the copy would be a forest of summaries, not the files, and a
+		// gesture that returns something other than what it names is the
+		// silent-divergence class. Copying host files is its own feature.
+		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetSourceKind() != "" {
+			return nil, connect.NewError(connect.CodeUnimplemented,
+				fmt.Errorf("deep copy of a %s-backed well is not implemented (the copy would be metadata stubs, not the %s content); left-drag creates a link",
+					sg.GetGrid().GetSourceKind(), sg.GetGrid().GetSourceKind()))
+		}
+		out, err := h.deepCopyWell(ctx, src, h.srv.pluginReg.Transit(srcUUID), srcUUID,
+			srcLocalTile, dst, dstLocal, m.X, m.Y)
+		if err != nil {
+			if out != nil {
+				// The partial is real and visible; say what stopped the walk.
+				return nil, connect.NewError(connect.CodeAborted,
+					fmt.Errorf("deep copy incomplete (the partial copy remains, delete it if unwanted): %w", err))
+			}
+			return nil, asConnectError(err)
+		}
+		return h.tileResp(dstUUID, out, nil)
 	case st.LinkTargetId != "":
 		// A leaf LINK clones as another link to the same target (the tile
 		// being copied is a reference; copying it copies the reference).

@@ -389,18 +389,16 @@ func TestMoveForbidden(t *testing.T) {
 	}
 }
 
-// TestCloneForbidden pins the right-drag policy: only a SOLID well is blocked
-// from crossing a namespace (its deep copy is unimplemented; the server
-// refuses, so the UI must show no-entry instead of inviting the drop). A tile
-// that is itself a link clones anywhere — copying a link copies the
-// reference — and nothing is forbidden within one namespace.
+// TestCloneForbidden pins the right-drag policy: since issue #200 NOTHING is
+// forbidden — a solid well deep-copies across plugins, a link copies as a
+// link, a leaf copies bytes, and within one namespace clones always worked.
 func TestCloneForbidden(t *testing.T) {
 	cases := []struct {
 		name                             string
 		crossPlugin, isWell, isReference bool
 		want                             bool
 	}{
-		{"solid well across namespaces", true, true, false, true},
+		{"solid well across namespaces (deep copy, #200)", true, true, false, false},
 		{"link well across namespaces (mount, exit well)", true, true, true, false},
 		{"leaf across namespaces (byte copy)", true, false, false, false},
 		{"leaf link across namespaces (link copy)", true, false, true, false},

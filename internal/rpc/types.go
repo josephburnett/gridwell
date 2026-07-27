@@ -363,8 +363,9 @@ type CreateWellRequest struct {
 	ViewX    int64   `json:"view_x,omitempty"`
 	ViewY    int64   `json:"view_y,omitempty"`
 	ViewZoom float64 `json:"view_zoom,omitempty"`
-	// ObjectID carries the source's provenance marker when this exit well is
-	// a cross-plugin LINK to an existing well ("" = mint fresh).
+	// ObjectID carries the source's provenance marker — a cross-plugin LINK
+	// to an existing well, or a deep-copied interior well (#200) — "" = mint
+	// fresh.
 	ObjectID string `json:"object_id,omitempty"`
 }
 

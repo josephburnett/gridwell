@@ -97,7 +97,7 @@ test('left-drag links a well across plugins; the source stays; deleting the link
   expect(srcAfter.childGridId).toBe(src.childGridId);
 });
 
-test('right-drag of a solid well across plugins is refused; a text left-drag links and edits through', async ({ gw }) => {
+test('right-drag deep-copies a solid well across plugins; a text left-drag links and edits through', async ({ gw }) => {
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
   // Pane A: a solid well and a text tile side by side.
@@ -110,17 +110,23 @@ test('right-drag of a solid well across plugins is refused; a text left-drag lin
   const srcText = tileAt(await gw.getGrid(a.gridID), 'text', cx - 1, cy)!;
   expect(srcWell && srcText, 'sources created').toBeTruthy();
 
-  // RIGHT-drag (clone) of the SOLID well across the boundary: refused —
-  // its deep copy is unimplemented; the ghost showed no-entry and no RPC
-  // fired. Nothing lands, nothing moves.
+  // RIGHT-drag (clone) of the SOLID well across the boundary DEEP-COPIES
+  // (#200): the destination gains an independent SOLID well (not dashed —
+  // a copy, not a link) carrying the source's provenance; the source is
+  // untouched.
   await gw.cloneDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
-  expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'no well appeared in the destination').toBeUndefined();
+  const copied = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
+  expect(copied, 'the deep copy landed in the destination plugin').toBeTruthy();
+  expect(copied.reference ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
+  expect(copied.objectId, 'provenance carried').toBe(srcWell.objectId);
+  expect(copied.childGridId, 'an independent subtree, not the shared grid').not.toBe(srcWell.childGridId);
   expect(tileAt(await gw.getGrid(a.gridID), 'well', cx, cy), 'source well untouched').toBeTruthy();
 
   // LEFT-drag the TEXT tile across: a leaf LINK — dashed, naming the source
-  // tile as its content target; the source stays put.
-  await gw.leftDragAcrossPanes(a.id, cx - 1, cy, b.id, tx, ty);
-  const link = tileAt(await gw.getGrid(b.gridID), 'text', tx, ty)!;
+  // tile as its content target; the source stays put. (One cell over: the
+  // deep copy above now occupies (tx, ty).)
+  await gw.leftDragAcrossPanes(a.id, cx - 1, cy, b.id, tx - 1, ty);
+  const link = tileAt(await gw.getGrid(b.gridID), 'text', tx - 1, ty)!;
   expect(link, 'leaf link created in the destination plugin').toBeTruthy();
   expect(link.reference, 'the leaf link renders dashed').toBe(true);
   expect(link.linkTargetId, 'the link names the source tile as content owner').toBe(srcText.id);
@@ -129,7 +135,7 @@ test('right-drag of a solid well across plugins is refused; a text left-drag lin
   // Editing THROUGH the link lands on the one shared copy: descend into the
   // LINK in pane B, type, ascend — the SOURCE tile's stored body carries it.
   await gw.clickScreen(b.x + 20, b.y + 20);
-  await gw.descendCell(tx, ty);
+  await gw.descendCell(tx - 1, ty);
   const marker = 'edited-through-the-link';
   await gw.typeText(marker);
   await gw.rightClickPlus();

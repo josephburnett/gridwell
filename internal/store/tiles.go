@@ -148,7 +148,7 @@ func (s *Store) createTile(
 // alt_text — the user-given name of the grid (the + palette's name field).
 // Wells have no content to derive an alt from, so this is alt's only writer.
 func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
-	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, "",
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			childObj := s.newID()
 			res, err := tx.ExecContext(ctx,

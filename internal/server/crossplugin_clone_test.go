@@ -154,12 +154,14 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	_ = uuidA
 }
 
-// TestCloneWellAcrossPluginsRefusedLoudly: right-drag = COPY, and a well's
-// deep cross-plugin copy is not implemented yet — the server must refuse with
-// a visible error, never silently substitute a link (a gesture that returns
-// something other than what it names is the silent-divergence class).
-func TestCloneWellAcrossPluginsRefusedLoudly(t *testing.T) {
-	cl, _, rootA, _, rootB := twoPluginServer(t)
+// TestCloneWellAcrossPluginsDeepCopies (issue #200, completing the
+// 2026-07-19 right-drag-copies decision): a solid well right-dragged across
+// a plugin boundary DEEP-COPIES — the destination gains an independent
+// subtree, byte-identical bodies, framing preserved, provenance carried,
+// references inside copied as references — and editing the copy never
+// touches the source (no structural sharing across the boundary).
+func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
+	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
 	well, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
@@ -168,15 +170,104 @@ func TestCloneWellAcrossPluginsRefusedLoudly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWell: %v", err)
 	}
-	_, err = cl.CloneTile(ctx, &rpc.CloneTileRequest{
-		TileID: well.ID, Version: well.Version, DestGridID: rootB, X: 3, Y: 3,
+	// Contents: a text body, a NESTED well with its own text, and a leaf
+	// LINK (which must copy as a reference, not as bytes).
+	inner, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# soup"),
 	})
-	if err == nil {
-		t.Fatal("cross-plugin CloneTile of a well succeeded; deep well copy is unimplemented and must refuse")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Errorf("refusal code = %v, want unimplemented (a designed refusal, not a routing accident)", connect.CodeOf(err))
+	nested, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: well.ChildGridID, X: 2, Y: 0, W: 1, H: 1, Label: "drafts",
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	if _, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
+		GridID: nested.ChildGridID, X: 0, Y: 0, W: 1, H: 1, Data: []byte("# stock"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.CreateLeafLink(ctx, &rpc.CreateLeafLinkRequest{
+		GridID: well.ChildGridID, X: 4, Y: 0, W: 1, H: 1, Kind: rpc.KindText,
+		LinkTargetID: inner.ID, Label: "soup-link",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Framing on the well (preview = descent = ascent).
+	framed, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
+		TileID: well.ID, Version: well.Version, ViewX: 7, ViewY: 8, ViewZoom: 2.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	copyTop, err := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: well.ID, Version: framed.Version, DestGridID: rootB, X: 3, Y: 3,
+	})
+	if err != nil {
+		t.Fatalf("deep copy: %v", err)
+	}
+	if got := uuidOfTest(copyTop.ID); got != uuidB {
+		t.Fatalf("copy landed in %s, want plugin B (%s)", got, uuidB)
+	}
+	if copyTop.ObjectID != well.ObjectID {
+		t.Error("provenance object_id not carried")
+	}
+	if copyTop.ViewX != 7 || copyTop.ViewY != 8 || copyTop.ViewZoom != 2.5 {
+		t.Errorf("framing lost: %+v", copyTop)
+	}
+	if copyTop.Reference {
+		t.Fatal("the copy must be a SOLID well (a copy, not a link)")
+	}
+
+	// The copied child grid: text bytes, the nested subtree, the reference.
+	cg, err := cl.GetGrid(ctx, copyTop.ChildGridID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var copiedText, copiedLink, copiedNested *rpc.Tile
+	for i := range cg.Tiles {
+		tl := &cg.Tiles[i]
+		switch {
+		case tl.Kind == rpc.KindText && tl.LinkTargetID == "":
+			copiedText = tl
+		case tl.LinkTargetID != "":
+			copiedLink = tl
+		case tl.Kind == rpc.KindWell:
+			copiedNested = tl
+		}
+	}
+	if copiedText == nil || copiedLink == nil || copiedNested == nil {
+		t.Fatalf("copied grid incomplete: %+v", cg.Tiles)
+	}
+	body, _, _, err := cl.ReadContent(ctx, copiedText.ID)
+	if err != nil || string(body) != "# soup" {
+		t.Fatalf("copied body = %q (%v)", body, err)
+	}
+	if copiedLink.LinkTargetID != inner.ID {
+		t.Errorf("the leaf link must copy as a reference to the ORIGINAL target: %q", copiedLink.LinkTargetID)
+	}
+	ng, err := cl.GetGrid(ctx, copiedNested.ChildGridID)
+	if err != nil || len(ng.Tiles) != 1 {
+		t.Fatalf("nested subtree not copied: %v %v", ng, err)
+	}
+
+	// Independence: editing the copy leaves the source byte-identical.
+	if _, err := cl.WriteContent(ctx, copiedText.ID, copiedText.Version, []byte("# changed")); err != nil {
+		t.Fatal(err)
+	}
+	orig, _, _, err := cl.ReadContent(ctx, inner.ID)
+	if err != nil || string(orig) != "# soup" {
+		t.Fatalf("editing the copy changed the source: %q (%v)", orig, err)
+	}
+}
+
+// uuidOfTest returns the namespace of a qualified id (test-local twin of
+// rpc.UUIDOf, avoiding the import juggling in this file).
+func uuidOfTest(id string) string {
+	return rpc.UUIDOf(id)
 }
 
 // TestLinkLeafAcrossPlugins: the leaf face of the left-drag — the destination

@@ -240,13 +240,29 @@ func TestFederationSpawn(t *testing.T) {
 	// 4. Link the remote well into the LOCAL home grid — the 2026-07-19
 	//    left-drag gesture, committed as a plain CreateTile carrying the
 	//    qualified child (the chain id routes it) — and read the content
-	//    back through the link. The old gesture (cross-plugin CloneTile of
-	//    a solid well) is now refused loudly; pin that too.
-	cloneStatus, cloneBody := rpcRaw(t, localOrigin, "CloneTile", map[string]any{
-		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 0, "y": 0,
-	})
-	if cloneStatus/100 == 2 {
-		t.Fatalf("cross-plugin CloneTile of a solid well succeeded through the chain; want unimplemented refusal: %s", cloneBody)
+	//    back through the link. A right-drag DEEP-COPIES through the chain
+	//    (#200): the local home gains an independent solid well whose text
+	//    body matches the remote's, walked over the real spawn + ssh seam.
+	deepCopy := rpc(t, localOrigin, "CloneTile", map[string]any{
+		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
+	})["tile"].(map[string]any)
+	if deepCopy["reference"] == true {
+		t.Fatal("the deep copy must be SOLID (a copy), not a link")
+	}
+	copiedGrid := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": deepCopy["childGridId"]})
+	var copiedTextID string
+	for _, ti := range copiedGrid["tiles"].([]any) {
+		tm := ti.(map[string]any)
+		if tm["kind"] == "text" {
+			copiedTextID, _ = tm["id"].(string)
+		}
+	}
+	if copiedTextID == "" {
+		t.Fatalf("deep copy through the chain missing the text tile: %v", copiedGrid["tiles"])
+	}
+	copiedBody, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), copiedTextID)
+	if err != nil || string(copiedBody) != "# across the spawn gate" {
+		t.Fatalf("deep-copied body through the chain = %q (%v)", copiedBody, err)
 	}
 	link := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": homeRoot,

@@ -285,7 +285,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom, t.ObjectId))
 		}
-		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText}))
+		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText, ObjectID: t.ObjectId}))
 	case rpc.KindText:
 		return tileResp(p.st.CreateText(ctx, &rpc.CreateTextRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, ObjectID: t.ObjectId}))
 	case rpc.KindURL:

@@ -248,14 +248,14 @@ func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 	return srcKind != "" || dstKind != ""
 }
 
-// CloneForbidden reports whether a right-drag (clone) is rejected up front: a
-// SOLID (owned, non-reference) well cannot deep-copy across an id namespace —
-// the bulk subtree transfer is unimplemented and the server refuses it — so
-// the UI shows the no-entry badge instead of inviting a doomed drop. A tile
-// that is itself a link (exit well, leaf link) clones fine anywhere: copying
-// a link copies the reference. Within one namespace nothing is forbidden.
+// CloneForbidden reports whether a right-drag (clone) is rejected up front.
+// Since issue #200 nothing is: a solid well deep-copies across plugins (the
+// server walks the subtree over the content streams), a link copies as a
+// link, and within one namespace clones always worked. Kept as the named
+// decision point so a future forbidden case has its one home; the e2e pins
+// the deep copy end to end.
 func CloneForbidden(crossPlugin, isWell, isReference bool) bool {
-	return crossPlugin && isWell && !isReference
+	return false
 }
 
 // DropAction is the single verdict for a drag release (and the matching
