@@ -2211,16 +2211,39 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
 // label, when non-empty, names the new grid (stored as the well's alt_text).
+// If the destination grid's plugin declares a creation schema for wells
+// (Grid.CreateSchemas, issue #198 — e.g. an ssh connection's user/host), the
+// gesture opens the parameter form first; the params become the created
+// well's CONTENT, committed through the one write after the metadata create.
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	// Wells are created UNNAMED: naming happens from inside, via the name
-	// bubble (issue #118 — the + menu's name field is gone).
-	req := &rpc.CreateWellRequest{
-		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+	form, ok := a.createSchemaFor(gid, rpc.KindWell)
+	if !ok {
+		return // unrenderable schema: surfaced, never create half-configured
 	}
-	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CreateWell(ctx, req)
-	}, nil)
+	commit := func(params []byte) {
+		// Wells are created UNNAMED: naming happens from inside, via the
+		// name bubble (issue #118 — the + menu's name field is gone).
+		req := &rpc.CreateWellRequest{
+			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
+		}
+		a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+			return a.cl.CreateWell(ctx, req)
+		}, func(tile rpc.Tile) {
+			if len(params) == 0 {
+				return
+			}
+			// The params document follows as the tile's content — the plugin
+			// validates authoritatively; a refusal surfaces and the empty
+			// well stays visible and deletable, never silent.
+			go a.postWriteContent(gid, tile.ID, tile.Version, params)
+		})
+	}
+	if form == nil {
+		commit(nil)
+		return
+	}
+	a.openSchemaModal("new connection", form, commit, nil)
 }
 
 // createTextAtCell fires CreateText at the given cell with the given

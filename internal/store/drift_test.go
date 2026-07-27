@@ -32,7 +32,7 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// writable is stamped by the serving node from the owning
 			// plugin's Info — wire-only, per-grid capability, never persisted.
 			storageOnly: []string{"created_at", "updated_at"},
-			protoOnly:   []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint"},
+			protoOnly:   []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "create_schemas"},
 		},
 		{
 			table:   "tiles",

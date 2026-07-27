@@ -212,6 +212,10 @@ type Grid struct {
 	// qualified for this receiver (chained through mounts); "" = none.
 	// Same stamping rule as Writable — the fact rides ON the grid.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
+	// CreateSchemas maps a tile kind to the owning plugin's JSON Schema for
+	// that kind's creation parameters (issue #198). Same stamping rule as
+	// Writable; verbatim through transit. Empty = no parameters needed.
+	CreateSchemas map[string]string `json:"create_schemas,omitempty"`
 }
 
 // Tile is the persistent unit of content in a grid. Kind selects which subset

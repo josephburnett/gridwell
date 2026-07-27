@@ -129,11 +129,14 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 			if g.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, g.ScratchGridId)
 			}
+			// create_schemas rides verbatim: the remote node stamped its
+			// owning plugin's declaration; a chain adds nothing (#198).
 		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
 			g.Writable = info.Writable
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			}
+			g.CreateSchemas = info.CreateSchemas
 		}
 	}
 	return connect.NewResponse(&pb.GetGridResponse{

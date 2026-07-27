@@ -10,9 +10,15 @@ import (
 
 	"connectrpc.com/connect"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/plugin/localdb"
+	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/internal/store"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // buildPluginInfo is the pure assembly behind ListPlugins. These tests pin the
@@ -302,4 +308,98 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	if !strings.Contains(p.InfoError, "plugin exploded") {
 		t.Errorf("InfoError = %q, want it to mention the underlying failure", p.InfoError)
 	}
+}
+
+// The create_schemas stamping seam (issue #198): the owning plugin's per-kind
+// creation schemas ride ON the grid — stamped from Info by the serving node
+// for a leaf plugin, and passed VERBATIM through a transit hop, so the schema
+// a client sees is always the plugin that owns the grid it is dropping into,
+// at any chain depth.
+func TestCreateSchemasStampAndTransit(t *testing.T) {
+	ctx := context.Background()
+
+	// A "remote" node whose one plugin declares a schema for well creation.
+	remoteStore, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = remoteStore.Close() })
+	remotePlugin := &schemaPlugin{
+		Plugin: localdb.New(remoteStore, nil),
+		schemas: map[string]string{
+			"well": `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`,
+		},
+	}
+	remoteClient, remoteCloser, err := plugin.ServeInProcess(remotePlugin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(remoteCloser)
+	remoteReg := plugin.NewRegistry()
+	remoteReg.Register("rp1", "localdb", remoteClient, nil)
+	remoteSrv := New(remoteReg, Config{NodeID: "rnode"})
+	remoteHTTP := httptest.NewUnstartedServer(nil)
+	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
+	remoteHTTP.EnableHTTP2 = true
+	remoteHTTP.Start()
+	t.Cleanup(remoteHTTP.Close)
+
+	// LEAF stamping: the remote's own front door carries the schema on the
+	// plugin's grid.
+	remoteCl := rpc.NewClient(remoteHTTP.Client(), remoteHTTP.URL, connect.WithProtoJSON())
+	rootBare, err := remoteStore.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := remoteCl.GetGrid(ctx, "rp1/"+rootBare)
+	if err != nil {
+		t.Fatalf("remote GetGrid: %v", err)
+	}
+	if got := g.Grid.CreateSchemas["well"]; !strings.Contains(got, `"query"`) {
+		t.Fatalf("leaf stamp missing: create_schemas = %v", g.Grid.CreateSchemas)
+	}
+
+	// TRANSIT: a local node mounts the remote via the pure proxy (the ssh
+	// topology minus the tunnel); the schema arrives verbatim through the
+	// chain — the local node adds nothing.
+	grpcConn, err := grpc.NewClient(strings.TrimPrefix(remoteHTTP.URL, "http://"),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = grpcConn.Close() })
+	mountClient, mountCloser, err := plugin.ServeInProcess(proxy.New(gridwellv1.NewGridwellClient(grpcConn)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(mountCloser)
+	localReg := plugin.NewRegistry()
+	localReg.Register("sshm", "ssh", mountClient, nil) // kind ssh = transit
+	localSrv := New(localReg, Config{NodeID: "lnode"})
+	localHTTP := httptest.NewServer(localSrv.Handler())
+	t.Cleanup(localHTTP.Close)
+	localCl := rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
+
+	chained, err := localCl.GetGrid(ctx, "sshm/rp1/"+rootBare)
+	if err != nil {
+		t.Fatalf("chained GetGrid: %v", err)
+	}
+	if got := chained.Grid.CreateSchemas["well"]; !strings.Contains(got, `"query"`) {
+		t.Fatalf("transit dropped the schema: create_schemas = %v", chained.Grid.CreateSchemas)
+	}
+}
+
+// schemaPlugin wraps a localdb with a create_schemas declaration.
+type schemaPlugin struct {
+	*localdb.Plugin
+	schemas map[string]string
+}
+
+func (p *schemaPlugin) Info(ctx context.Context, req *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+	info, err := p.Plugin.Info(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	info.CreateSchemas = p.schemas
+	return info, nil
 }

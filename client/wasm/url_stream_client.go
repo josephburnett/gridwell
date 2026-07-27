@@ -240,7 +240,7 @@ func (a *App) syncURLViews() {
 func (a *App) liveOverlaysHidden() bool {
 	// The url modal is DOM — a live WebContentsView would paint OVER it,
 	// hiding what you type (issue #131) — so it parks the views too.
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.renameEditing || a.urlModalOpen
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.renameEditing || a.urlModalOpen || a.schemaModalOpen
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL

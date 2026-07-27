@@ -144,6 +144,11 @@ type App struct {
 	// bridgeAvailable() to make a behavior decision.
 	caps caps.Caps
 
+	// schemaModal is the lazily-created creation-parameter form container
+	// (issue #198); schemaModalOpen parks live views while it shows.
+	schemaModal     js.Value
+	schemaModalOpen bool
+
 	// touch is the touch→mouse gesture classifier (client/touchgest);
 	// touchTimerCb is its retained long-press timer callback;
 	// touchDownTarget is the element the current gesture started on — where

@@ -44,6 +44,18 @@ message Grid {
   // 8 (proxy_endpoint): removed 2026-07-26 with the network-context surface
   // (live url tiles always browse from the host's own network).
   reserved 8;
+  // create_schemas maps a tile kind to the JSON Schema (a small subset —
+  // string/number/enum/required, plus a "secret" format hint that masks
+  // INPUT only) describing the parameters a creation of that kind needs in
+  // THIS grid's plugin (issue #198). Stamped by the serving node from the
+  // owning plugin's Info exactly like writable; a transit hop passes it
+  // VERBATIM, so through any chain the schema is always the plugin that
+  // owns the grid you're dropping into. Empty/absent kind = no parameters
+  // (today's flow). The params themselves are the created tile's CONTENT —
+  // a JSON document committed through WriteContent; the plugin validates
+  // authoritatively at commit (the client's form is UX, never authority).
+  // Wire-only, never persisted.
+  map<string, string> create_schemas = 9;
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -148,6 +160,9 @@ message InfoResponse {
   string root_grid_id   = 5;
   reserved 6; // network (NetworkContext): removed 2026-07-26 — host network always
   reserved 7; // has_session: removed 2026-07-26 — the session is host-local
+  // create_schemas: per-kind creation-parameter schemas (see
+  // Grid.create_schemas — this is the declaration the grid stamp reads).
+  map<string, string> create_schemas = 13;
   // scratch_grid_id is the plugin's off-grid grid for EPHEMERAL url tiles
   // ("descend into a url" without placing a tile). Never rendered, never
   // mounted; persists as visited-url history. Empty for plugins that don't
