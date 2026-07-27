@@ -14,11 +14,67 @@ package pane
 // Perpendicular subtrees ride along whole: their cross-size changes, their
 // internal ratios never do. Pure; unit-tested without a canvas.
 
+// CorridorWalls returns the [lo, hi] cursor bounds of target's boundary
+// drag: the positions where everything between the boundary and the
+// corridor's start (lo) or end (hi) sits at its minimum. This is THE wall —
+// the same bounds ResizeThrough clamps the live drag to, and the bounds the
+// release compares the cursor against to decide a collapse (crushing PAST
+// the wall is the close gesture). One owner: the release verdict reading a
+// different geometry (the grabbed split's own container) is exactly the bug
+// that closed panes on a legal mid-corridor release.
+func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (lo, hi float64, ok bool) {
+	top, topRect, ok := corridorTop(root, rootRect, target)
+	if !ok {
+		return 0, 0, false
+	}
+	topNode := TreeNode{Split: top}
+	segs := flattenCorridor(topNode, target.Dir)
+	start, total := axisSpan(topRect, target.Dir)
+	bIdx := boundaryIndex(segs, target)
+	if bIdx < 0 || bIdx+1 >= len(segs) {
+		return 0, 0, false
+	}
+	lo = start
+	for _, s := range segs[:bIdx+1] {
+		lo += minSize(s, target.Dir, minPx)
+	}
+	hi = start + total
+	for _, s := range segs[bIdx+1:] {
+		hi -= minSize(s, target.Dir, minPx)
+	}
+	return lo, hi, true
+}
+
+// LocateSplit returns target's CURRENT laid-out container rect within the
+// tree. The live geometry — a drag preview reading a rect captured at arm
+// time goes stale the moment a cascade moves an ancestor ratio.
+func LocateSplit(root TreeNode, rootRect Rect, target *Split) (Rect, bool) {
+	var locate func(n TreeNode, r Rect) (Rect, bool)
+	locate = func(n TreeNode, r Rect) (Rect, bool) {
+		if n.Split == nil {
+			return Rect{}, false
+		}
+		if n.Split == target {
+			return r, true
+		}
+		a, b := SplitRect(r, n.Split.Dir, n.Split.Ratio)
+		if rr, ok := locate(n.Split.A, a); ok {
+			return rr, true
+		}
+		return locate(n.Split.B, b)
+	}
+	return locate(root, rootRect)
+}
+
 // ResizeThrough moves target's divider toward cursorPx (a coordinate along
 // target.Dir's axis), cascading compression through the corridor with each
 // leaf pane clamped to minPx. root/rootRect are the whole tree, so the
 // corridor can cross target's same-axis ancestors.
 func ResizeThrough(root TreeNode, rootRect Rect, target *Split, cursorPx, minPx float64) {
+	lo, hi, ok := CorridorWalls(root, rootRect, target, minPx)
+	if !ok {
+		return
+	}
 	top, topRect, ok := corridorTop(root, rootRect, target)
 	if !ok {
 		return
@@ -30,16 +86,6 @@ func ResizeThrough(root TreeNode, rootRect Rect, target *Split, cursorPx, minPx 
 	bIdx := boundaryIndex(segs, target)
 	if bIdx < 0 || bIdx+1 >= len(segs) {
 		return
-	}
-
-	// The min-size walls on each side of the boundary.
-	lo := start
-	for _, s := range segs[:bIdx+1] {
-		lo += minSize(s, target.Dir, minPx)
-	}
-	hi := start + total
-	for _, s := range segs[bIdx+1:] {
-		hi -= minSize(s, target.Dir, minPx)
 	}
 	pos := cursorPx
 	if pos < lo {

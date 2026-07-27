@@ -196,3 +196,60 @@ func TestZoomUnknownPaneIsNoOp(t *testing.T) {
 		t.Errorf("layout with stale zoom = %d panes, want the normal 1", len(l))
 	}
 }
+
+// TestCorridorWalls pins the one wall (issue: the 2026-07-27 stale-container
+// close). For the INNER divider of stack3 (middle/bottom boundary), the
+// corridor spans the WHOLE 300px column: lo must clear top+middle at min
+// (2×32 from the corridor start), not the inner split's own container edge
+// (y=100) — the difference is exactly where the false mid-corridor collapse
+// lived. And the walls must equal what ResizeThrough actually clamps to.
+func TestCorridorWalls(t *testing.T) {
+	outer, inner := stack3()
+	root := TreeNode{Split: outer}
+	container := Rect{X: 0, Y: 0, W: 100, H: 300}
+
+	lo, hi, ok := CorridorWalls(root, container, inner, 32)
+	if !ok {
+		t.Fatal("walls not found for the inner divider")
+	}
+	if !near(lo, 64) {
+		t.Errorf("lo = %v, want 64 (top+middle at min from the CORRIDOR start, not the inner container's y=100)", lo)
+	}
+	if !near(hi, 268) {
+		t.Errorf("hi = %v, want 268 (bottom at min from the corridor end)", hi)
+	}
+
+	// The walls ARE the clamp: dragging beyond them applies exactly the wall.
+	ResizeThrough(root, container, inner, 10, 32) // far past lo
+	h := paneHeights(root, container)
+	if !near(h["top"], 32) || !near(h["middle"], 32) {
+		t.Errorf("clamped drag: top=%v middle=%v, want both at the 32 wall", h["top"], h["middle"])
+	}
+
+	// The outer divider's corridor is the same column; only the boundary
+	// index moves: lo clears just top, hi clears middle+bottom.
+	outer2, _ := stack3()
+	lo2, hi2, ok := CorridorWalls(TreeNode{Split: outer2}, container, outer2, 32)
+	if !ok || !near(lo2, 32) || !near(hi2, 236) {
+		t.Errorf("outer walls = %v..%v (ok=%v), want 32..236", lo2, hi2, ok)
+	}
+}
+
+// TestLocateSplit pins the live-geometry read the drag preview uses: the
+// inner split's rect must reflect CURRENT ratios, not any captured copy.
+func TestLocateSplit(t *testing.T) {
+	outer, inner := stack3()
+	root := TreeNode{Split: outer}
+	container := Rect{X: 0, Y: 0, W: 100, H: 300}
+
+	r, ok := LocateSplit(root, container, inner)
+	if !ok || !near(r.Y, 100) || !near(r.H, 200) {
+		t.Fatalf("inner rect = %+v (ok=%v), want y=100 h=200", r, ok)
+	}
+	// A cascade moves the outer ratio; the located rect must follow.
+	ResizeThrough(root, container, inner, 64, 32)
+	r, ok = LocateSplit(root, container, inner)
+	if !ok || !near(r.Y, 32) {
+		t.Fatalf("after cascade: inner rect = %+v (ok=%v), want y=32 (top crushed to min)", r, ok)
+	}
+}

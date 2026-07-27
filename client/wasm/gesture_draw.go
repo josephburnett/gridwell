@@ -541,15 +541,26 @@ func drawArrowHead(a *App, cx, cy, angle, size float64) {
 //     wall): paint a red border around that side, so the user knows
 //     they're about to close it (and can drag back before releasing).
 func (a *App) drawLeftResizePreview(lr *leftResizeState) {
-	r := lr.container
-	// Derive BOTH the ratio and the collapse verdict from the same
-	// gesture.ResizeOutcome the release (finishLeftResize) uses, fed the
-	// same cursor the move last applied. Re-deriving close-A/close-B inline
-	// here was a preview/commit divergence waiting to happen: the red
-	// "about to close" border could mark a different side than the one
-	// release actually collapses.
-	ratio, collapse := gesture.ResizeOutcome(r, lr.splitDir, lr.curX, lr.curY, pane.MinPanePx)
-	aRect, bRect := pane.SplitRect(r, lr.splitDir, ratio)
+	// LIVE geometry, every frame: the cascade moves ancestor ratios, so the
+	// grabbed split's container and its boundary are wherever the applied
+	// layout says they are — an arm-time copy goes stale mid-drag (the
+	// stale-container bug closed panes on a legal mid-corridor release).
+	root := a.tree.Root
+	rootRect := a.rootLayoutRect()
+	r, ok := pane.LocateSplit(root, rootRect, lr.targetSplit)
+	if !ok {
+		return
+	}
+	// The collapse verdict comes from the SAME walls the drag clamps to
+	// (pane.CorridorWalls) and the SAME cursor the move last applied — the
+	// release (finishLeftResize) reads the identical inputs, so the red
+	// "about to close" border can never mark a side the release won't drop.
+	lo, hi, ok := pane.CorridorWalls(root, rootRect, lr.targetSplit, pane.MinPanePx)
+	if !ok {
+		return
+	}
+	collapse := gesture.ResizeOutcome(lr.splitDir, lr.curX, lr.curY, lo, hi)
+	aRect, bRect := pane.SplitRect(r, lr.splitDir, lr.targetSplit.Ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.
 	a.cctx.Set("strokeStyle", colorMuted)

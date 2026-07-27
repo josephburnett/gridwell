@@ -694,10 +694,13 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 type leftResizeState struct {
 	targetSplit *pane.Split
 	splitDir    pane.Direction
-	container   pane.Rect
 	// curX/curY is the last cursor the move applied — the preview and the
 	// release read the SAME point, so the red warning can never mark a
-	// different side than the release collapses.
+	// different side than the release collapses. There is deliberately NO
+	// captured container rect: the cascade moves ancestor ratios mid-drag,
+	// and a stale copy of the split's geometry is what used to close panes
+	// on a legal mid-corridor release — everything derives live from the
+	// tree (pane.CorridorWalls / pane.LocateSplit).
 	curX, curY float64
 }
 
@@ -720,7 +723,6 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	a.leftResize = &leftResizeState{
 		targetSplit: d.Split,
 		splitDir:    d.Dir,
-		container:   pane.Rect{X: d.ContainerRect.X, Y: d.ContainerRect.Y, W: d.ContainerRect.W, H: d.ContainerRect.H},
 	}
 	// Park live overlays NOW (liveOverlaysHidden consults leftResize): the
 	// grab band straddles the divider, so half of it can sit over a live
@@ -788,8 +790,17 @@ func (a *App) finishLeftResize() {
 	// coordinates: it is exactly what the red warning previewed, and an
 	// off-canvas release (finished later by the buttons-empty guard on a
 	// stray re-entry move) can never collapse a side the drag never
-	// crushed.
-	_, collapse := gesture.ResizeOutcome(lr.container, lr.splitDir, lr.curX, lr.curY, pane.MinPanePx)
+	// crushed. The wall is the CORRIDOR's (pane.CorridorWalls — the same
+	// bounds the live drag clamps to), never the grabbed split's own
+	// container: a cascade legally travels past that container through a
+	// same-axis ancestor, and comparing against its stale copy is what
+	// closed panes on a mid-corridor release.
+	lo, hi, ok := pane.CorridorWalls(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, pane.MinPanePx)
+	if !ok {
+		a.draw()
+		return
+	}
+	collapse := gesture.ResizeOutcome(lr.splitDir, lr.curX, lr.curY, lo, hi)
 	switch collapse {
 	case gesture.CollapseA:
 		a.flushDroppedSubtree(lr.targetSplit.A)

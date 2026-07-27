@@ -136,27 +136,26 @@ const (
 	CollapseB
 )
 
-// ResizeOutcome resolves the release of a Resize gesture into the final
-// divider ratio plus which child (if any) shrank past closeThreshold and
-// should collapse. The ratio comes from the cursor; the collapse decision
-// compares each child's resulting size along the split axis.
-func ResizeOutcome(container pane.Rect, dir pane.Direction, sx, sy, closeThreshold float64) (ratio float64, collapse Collapse) {
-	ratio = pane.RatioFromCursor(container, dir, sx, sy)
-	var aSize, bSize float64
+// ResizeOutcome resolves the release of a Resize gesture: which side (if
+// any) the cursor crushed past the corridor wall and should collapse.
+// lo/hi are pane.CorridorWalls' bounds — the SAME wall the live drag clamps
+// to, so "the drag can reach it" and "releasing there resizes, not closes"
+// can never disagree. Crushing past lo closes the A side of the grabbed
+// split; past hi, the B side. (The old signature derived the wall from the
+// grabbed split's own container — stale the moment the cascade crossed a
+// same-axis ancestor, which closed panes on a legal mid-corridor release.)
+func ResizeOutcome(dir pane.Direction, sx, sy, lo, hi float64) Collapse {
+	cursor := sx
 	if dir == pane.Horizontal {
-		aSize = container.H * ratio
-		bSize = container.H * (1 - ratio)
-	} else {
-		aSize = container.W * ratio
-		bSize = container.W * (1 - ratio)
+		cursor = sy
 	}
 	switch {
-	case aSize < closeThreshold:
-		return ratio, CollapseA
-	case bSize < closeThreshold:
-		return ratio, CollapseB
+	case cursor < lo:
+		return CollapseA
+	case cursor > hi:
+		return CollapseB
 	}
-	return ratio, CollapseNone
+	return CollapseNone
 }
 
 // ResizeAffordance is the shared decision behind a left-button pane-boundary

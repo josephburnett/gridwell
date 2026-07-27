@@ -141,8 +141,9 @@ func TestSplitOutcome(t *testing.T) {
 }
 
 func TestResizeOutcome(t *testing.T) {
-	container := pane.Rect{X: 0, Y: 0, W: 200, H: 200}
-	const closeThreshold = 20.0
+	// Walls as pane.CorridorWalls would report them for a corridor spanning
+	// [0, 600] with one min-size pane on each side of the boundary.
+	const lo, hi = 20.0, 580.0
 
 	tests := []struct {
 		name         string
@@ -150,21 +151,23 @@ func TestResizeOutcome(t *testing.T) {
 		sx, sy       float64
 		wantCollapse Collapse
 	}{
-		{"vertical mid — no collapse", pane.Vertical, 100, 100, CollapseNone},
-		{"vertical far left — A collapses", pane.Vertical, 5, 100, CollapseA},
-		{"vertical far right — B collapses", pane.Vertical, 195, 100, CollapseB},
-		{"horizontal mid — no collapse", pane.Horizontal, 100, 100, CollapseNone},
-		{"horizontal far top — A collapses", pane.Horizontal, 100, 5, CollapseA},
-		{"horizontal far bottom — B collapses", pane.Horizontal, 100, 195, CollapseB},
+		{"vertical mid — no collapse", pane.Vertical, 300, 100, CollapseNone},
+		{"vertical past lo — A collapses", pane.Vertical, 5, 100, CollapseA},
+		{"vertical past hi — B collapses", pane.Vertical, 595, 100, CollapseB},
+		{"vertical AT the wall — clamped drag, no collapse", pane.Vertical, 20, 100, CollapseNone},
+		{"horizontal mid — no collapse", pane.Horizontal, 100, 300, CollapseNone},
+		{"horizontal past lo — A collapses", pane.Horizontal, 100, 5, CollapseA},
+		{"horizontal past hi — B collapses", pane.Horizontal, 100, 595, CollapseB},
+		// The stale-container regression (2026-07-27): a nested split's own
+		// container might start at 300 — but the corridor wall, not the
+		// container edge, decides. A cursor at 250 is a legal cascade
+		// position (between lo and hi) and must never collapse.
+		{"mid-corridor beyond the nested container — no collapse", pane.Vertical, 250, 100, CollapseNone},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ratio, collapse := ResizeOutcome(container, tt.dir, tt.sx, tt.sy, closeThreshold)
-			if collapse != tt.wantCollapse {
-				t.Errorf("collapse = %v, want %v (ratio %v)", collapse, tt.wantCollapse, ratio)
-			}
-			if ratio < 0 || ratio > 1 {
-				t.Errorf("ratio = %v, want in [0,1]", ratio)
+			if got := ResizeOutcome(tt.dir, tt.sx, tt.sy, lo, hi); got != tt.wantCollapse {
+				t.Errorf("collapse = %v, want %v", got, tt.wantCollapse)
 			}
 		})
 	}
