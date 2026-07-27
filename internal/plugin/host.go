@@ -18,6 +18,15 @@ import (
 // Attach config map anymore; a plugin is configured at spawn.
 const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
 
+// HostPIDEnvVar carries the spawning host's pid to the guest, which watches
+// it and exits when the host dies (guest.Serve's watchdog). go-plugin v1.8
+// gives a guest NO host-death detection in our configuration — the guest
+// inherits the host's os.Stdin (never closes) and a dead host just looks
+// like a disconnected gRPC client while the guest keeps listening — so a
+// SIGKILLed or crashed host orphaned every plugin subprocess (issue #197;
+// the graceful SIGTERM path reaps via Registry.Close and never needed this).
+const HostPIDEnvVar = "GRIDWELL_HOST_PID"
+
 // LoadPlugin spawns the plugin binary at binaryPath, hands it cfg via the
 // environment, and performs the go-plugin handshake. It returns a client and a
 // closer; call closer() on shutdown.
@@ -37,6 +46,8 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (gridwellv1.GridwellCl
 		}
 		cmd.Env = append(cmd.Env, ConfigEnvVar+"="+string(blob))
 	}
+	// The guest's host-death watchdog watches THIS pid (see HostPIDEnvVar).
+	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%d", HostPIDEnvVar, os.Getpid()))
 
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: HandshakeConfig,

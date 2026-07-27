@@ -11,6 +11,9 @@ package guest
 import (
 	"encoding/json"
 	"os"
+	"strconv"
+	"syscall"
+	"time"
 
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
@@ -33,11 +36,39 @@ func Config() map[string]string {
 	return out
 }
 
+// watchHost exits the guest when the spawning host dies (issue #197).
+// go-plugin v1.8 gives a guest NO host-death detection in our configuration:
+// the guest inherits the host's stdin (never closes), and a crashed or
+// SIGKILLed host just looks like a disconnected gRPC client while the guest
+// keeps listening forever — nine generations of orphaned plugins were found
+// reparented to init. The host hands its pid in the environment (spawn-time
+// fact, so a pre-watchdog race cannot capture a post-death parent); the
+// guest probes it with signal 0 — robust against subreaper reparenting,
+// where a Getppid comparison can lie. A vanished env var (a hand-launched
+// guest, a test harness) disables the watchdog rather than guessing.
+func watchHost() {
+	pid, err := strconv.Atoi(os.Getenv(gplug.HostPIDEnvVar))
+	if err != nil || pid <= 0 {
+		return
+	}
+	go func() {
+		for {
+			time.Sleep(2 * time.Second)
+			// Signal 0 probes existence; EPERM still means alive. Only
+			// ESRCH — no such process — is the host-death verdict.
+			if err := syscall.Kill(pid, 0); err == syscall.ESRCH {
+				os.Exit(0)
+			}
+		}
+	}()
+}
+
 // Serve runs the plugin event loop. It blocks until the host process closes
 // the connection or the process is killed. impl must implement
 // gridwellv1.GridwellServer; embed gridwellv1.UnimplementedGridwellServer and
 // override the methods your plugin supports.
 func Serve(impl gridwellv1.GridwellServer) {
+	watchHost()
 	logger := hclog.New(&hclog.LoggerOptions{
 		Level:      hclog.Error,
 		Output:     os.Stderr,
