@@ -39,20 +39,20 @@ test('a border drag compresses the middle pane to its min, then the third', asyn
   }
 });
 
-// Issue #112: the RIGHT-drag resize must also move only the grabbed border —
-// it used to write one proportional ratio, visibly sliding nested borders the
-// user never touched — while keeping its crush-to-collapse release semantics.
-test('a right-button border drag moves only the grabbed border', async ({ gw }) => {
+// Issue #112 (property carried to the LEFT button by #203): a border drag
+// must move only the grabbed border — the old single-ratio write visibly
+// slid nested borders the user never touched.
+test('a left-button border drag moves only the grabbed border', async ({ gw }) => {
   await gw.enterPlugin('localdb');
   await gw.splitFocusedPaneVertical();
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   const [p1, p2, p3] = before;
 
-  // Right-drag the FIRST divider right by 60px — well within pane 2's slack.
+  // Left-drag the FIRST divider right by 60px — well within pane 2's slack.
   const gx = p1.x + p1.w;
   const gy = p1.y + p1.h / 2;
-  await gw.rightDragScreen(gx - 2, gy, gx + 60, gy);
+  await gw.leftDragScreen(gx - 2, gy, gx + 60, gy);
 
   const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   const [q1, q2, q3] = after;
@@ -61,16 +61,16 @@ test('a right-button border drag moves only the grabbed border', async ({ gw }) 
   expect(q3.w, 'the untouched border did not move').toBeCloseTo(p3.w, 0);
 });
 
-test('a right-button drag far past the wall still collapses on release', async ({ gw }) => {
+test('a left-button drag far past the wall collapses on release (#203)', async ({ gw }) => {
   await gw.enterPlugin('localdb');
   await gw.splitFocusedPaneVertical();
   const before = await gw.panes();
   expect(before).toHaveLength(2);
   const left = before.slice().sort((a, b) => a.x - b.x)[0];
 
-  // Drag the divider almost to the left edge: the raw cursor puts the left
-  // side under the close threshold → release collapses it.
+  // Drag the divider almost to the left edge: the applied cursor puts the
+  // left side under the close threshold → release collapses it.
   const gx = left.x + left.w;
-  await gw.rightDragScreen(gx - 2, left.y + left.h / 2, left.x + 4, left.y + left.h / 2);
+  await gw.leftDragScreen(gx - 2, left.y + left.h / 2, left.x + 4, left.y + left.h / 2);
   await expect.poll(async () => (await gw.panes()).length).toBe(1);
 });

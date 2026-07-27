@@ -82,7 +82,7 @@ test('collapsing a text-descended pane never saves another tile\'s buffer into i
   // edge collapses the left side (gesture.CollapseA).
   const [leftPane, rightPane] = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   const midY = rightPane.y + rightPane.h / 2;
-  await gw.rightDragScreen(rightPane.x + 3, midY, leftPane.x + 6, midY);
+  await gw.leftDragScreen(rightPane.x + 3, midY, leftPane.x + 6, midY); // #203: left owns crush-to-close
   expect((await gw.panes()).length, 'collapsed back to one pane').toBe(1);
 
   // Server truth: both tiles keep their own words.

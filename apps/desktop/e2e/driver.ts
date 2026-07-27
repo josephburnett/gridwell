@@ -127,12 +127,14 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.localPaneIds());
   }
 
-  // collapseLeftPane right-drags the divider of a two-pane split hard to the left
-  // edge, pushing the left pane below the close threshold so it collapses away.
+  // collapseLeftPane LEFT-drags the divider of a two-pane split hard to the
+  // left edge, crushing the left pane below the close threshold so the
+  // release collapses it (#203).
   async collapseLeftPane(): Promise<void> {
     const [left] = (await this.panes()).slice().sort((a, b) => a.x - b.x);
     const y = left.y + left.h / 2;
-    await this.rightDragScreen(left.x + left.w - 2, y, left.x + 6, y);
+    // #203: crush-to-close is the LEFT button's release semantics now.
+    await this.leftDragScreen(left.x + left.w - 2, y, left.x + 6, y);
   }
 
   palette(): Promise<PaletteInfo> {
