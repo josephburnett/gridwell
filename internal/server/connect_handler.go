@@ -77,34 +77,13 @@ func (h *connectHandler) tileResp(uuid string, resp *pb.TileResponse, err error)
 
 // qualifyEvent re-applies a plugin's uuid to the ids in a change event.
 // transit selects the node-mount tile rule (chain prepend, Reference trusted).
-// GridId/TileId are plain prepends either way — chains compose by concat.
+// The walk and the plain prepends live in internal/rpc (QualifyEventIDs) —
+// shared with the ssh plugin's per-connection prepend — and only the tile
+// rule is chosen here.
 func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
-	switch p := ev.Payload.(type) {
-	case *pb.Event_GridChanged:
-		return &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{
-			GridId: rpc.QualifyID(uuid, p.GridChanged.GridId),
-		}}}
-	case *pb.Event_TileChanged:
-		return &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{
-			Tile: qualifyTilesFor(transit, uuid, []*pb.Tile{p.TileChanged.Tile})[0],
-		}}}
-	case *pb.Event_TileRemoved:
-		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{
-			GridId: rpc.QualifyID(uuid, p.TileRemoved.GridId),
-			TileId: rpc.QualifyID(uuid, p.TileRemoved.TileId),
-		}}}
-	case *pb.Event_PluginHealth:
-		// The plugin uuid is an id like any other: one segment prepended per
-		// hop. A mounted node's fan-in re-serves its own plugins' health
-		// transitions; unqualified, they arrive addressed by a bare remote
-		// uuid that names nothing on this side of the mount.
-		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-			PluginUuid: rpc.QualifyID(uuid, p.PluginHealth.PluginUuid),
-			Healthy:    p.PluginHealth.Healthy,
-			Detail:     p.PluginHealth.Detail,
-		}}}
-	}
-	return ev
+	return rpc.QualifyEventIDs(uuid, ev, func(t *pb.Tile) *pb.Tile {
+		return qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
+	})
 }
 
 // ── reads ──────────────────────────────────────────────────────────────────────

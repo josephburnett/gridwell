@@ -60,32 +60,12 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 }
 
 // qualifyTilesTransit rewrites ids from a TRANSIT plugin (a node mount — the
-// ssh plugin proxying a whole remote gridwell). A transit plugin speaks ids
-// already qualified from the REMOTE node's perspective (chains), so every id
-// gets this hop's uuid prepended — including an already-qualified child, which
-// is a reference within the remote's namespace reachable only through this
-// connection. The wire Reference bit is trusted verbatim: the remote node
-// already decided what is a link and what is owned content, and a remote
-// plugin's interior well must stay solid (owned) even though its child id
-// contains "/". Chains compose: each hop prepends exactly one segment.
+// ssh plugin proxying a whole remote gridwell). The rule itself lives in
+// internal/rpc (rpc.TransitQualifyTiles) because the ssh plugin's
+// per-connection sub-namespace applies the SAME prepend one level down —
+// one implementation, so the hops can never disagree about chain shape.
 func qualifyTilesTransit(uuid string, tiles []*pb.Tile) []*pb.Tile {
-	out := make([]*pb.Tile, len(tiles))
-	for i, t := range tiles {
-		qt := *t
-		qt.Id = rpc.QualifyID(uuid, t.Id)
-		qt.GridId = rpc.QualifyID(uuid, t.GridId)
-		if t.ChildGridId != "" {
-			qt.ChildGridId = rpc.QualifyID(uuid, t.ChildGridId)
-		}
-		if t.LinkTargetId != "" {
-			// A leaf link's target chains exactly like a qualified child: the
-			// remote's "<uuid>/<tile>" is reachable only through this hop, so
-			// prepend one segment. The wire Reference bit rides verbatim.
-			qt.LinkTargetId = rpc.QualifyID(uuid, t.LinkTargetId)
-		}
-		out[i] = &qt
-	}
-	return out
+	return rpc.TransitQualifyTiles(uuid, tiles)
 }
 
 // qualifyTilesFor picks the per-plugin qualification rule: transit plugins
