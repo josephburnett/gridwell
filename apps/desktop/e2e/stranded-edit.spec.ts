@@ -52,3 +52,39 @@ test('a rendered-mode edit typed right before an embed jump still persists', asy
     .poll(async () => gw.getTileContent(doc.id), { timeout: 10_000 })
     .toContain('EDIT');
 });
+
+test('a text-mode edit survives focus-away to a plain grid pane (issue #155)', async ({ gw, window }) => {
+  // The pre-rework debounce timer DECLINED to save when focus had moved
+  // away, delegating to a rebind flush that never ran when the newly
+  // focused pane was a plain grid pane — the last edit window vanished
+  // with no notice (issue #155). Since the 2026-07-18 content-ownership
+  // rework the timer sweeps every dirty tile-keyed entry regardless of
+  // focus; this spec pins that: type within the debounce window, click a
+  // sibling GRID pane (no text descent anywhere), and the edit must still
+  // reach the server.
+  await gw.enterPlugin('localdb');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  const doc = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+
+  // Pane A stays a grid pane; pane B descends into the doc and types.
+  await gw.splitFocusedPaneVertical();
+  await gw.waitIdle();
+  const panes = await gw.panes();
+  const paneA = panes.find((p) => !p.focused)!;
+  await gw.descendCell(cx, cy);
+  await gw.typeText('first line saved');
+  await gw.waitIdle();
+
+  // Type INSIDE the debounce window, then immediately focus the grid pane —
+  // no waitIdle between, the save must still be pending when focus leaves.
+  await window.keyboard.type(' STRANDED?');
+  await gw.focusPane(paneA);
+
+  await expect
+    .poll(async () => gw.getTileContent(doc.id), { timeout: 10_000 })
+    .toContain('STRANDED?');
+});
