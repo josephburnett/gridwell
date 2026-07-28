@@ -65,10 +65,11 @@ test('url descent reopens the page live; a sibling preview stays frozen', async 
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // Create a live url tile (create path descends + goes live), then ascend
-  // to freeze it.
+  // Create a live url tile — drop lands it bare (#209), the first descent
+  // prompts for the address and goes live — then ascend to freeze it.
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
+  await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?al=1`);
   await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());

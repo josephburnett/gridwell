@@ -16,12 +16,14 @@ test('the native bubble over a live url pane renames and zooms', async ({
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  // A placed url tile, auto-descended and live.
+  // A placed url tile: dropped bare (#209), addressed at the first descent,
+  // live after submit.
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
+  await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?pill=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

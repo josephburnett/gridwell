@@ -33,8 +33,11 @@ test('a frozen url tile shows the no-live corner button and it explains on tap',
 
   // Drag-create still works in a browser: a url tile is a real, useful,
   // persisted thing (the desktop can visit it later); it just stays frozen.
+  // The drop lands it bare (#209); the first descent prompts for the
+  // address and, with no live capability, lands on the frozen descent.
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
+  await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', 'https://example.com/');
   await window.locator('#gw-url-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
@@ -42,10 +45,10 @@ test('a frozen url tile shows the no-live corner button and it explains on tap',
   const t = tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)!;
   expect(t, 'url tile created (frozen) from a plain browser').toBeTruthy();
 
-  // Descend; the corner button is the slashed no-live affordance. Tapping it
-  // must post the explanatory notice, not silently no-op (and certainly not
-  // try to place a native view).
-  await gw.descendCell(cx, cy);
+  // The submit descended; the corner button is the slashed no-live
+  // affordance. Tapping it must post the explanatory notice, not silently
+  // no-op (and certainly not try to place a native view).
+  await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
   const pal = await gw.palette();
   await window.mouse.click(pal.plusX, pal.plusY);
   await expect.poll(async () => livecapMessage(window)).toContain('desktop');

@@ -22,12 +22,14 @@ test('a url embed strokes a dashed (link) border', async ({ gw, window, electron
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) - 1;
 
-  // A placed url tile (the embed target).
+  // A placed url tile (the embed target): dropped bare (#209), addressed at
+  // the first descent.
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
   await gw.openPalette();
   await gw.dragCreate('url', cx + 1, cy);
+  await gw.descendCell(cx + 1, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?embedborder=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
