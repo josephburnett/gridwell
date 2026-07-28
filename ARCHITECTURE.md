@@ -306,8 +306,18 @@ consequences:
   removed. `textedit.CanvasHiddenByOverlay` is the single-owner predicate for
   "canvas paints vs overlay covers" — it is never called in the preview path and
   requires `textareaReady=true` in the descended path (prevents the loading-race
-  blank). Locked by `TestPreviewNotAffectedByFocusedPaneWidth` and
-  `text-pane-split.spec.ts`.
+  blank). Locked by `text-pane-split.spec.ts`.
+  **Redesigned 2026-07-27 (issue #205, owner decision reversing the framed-window
+  cover-scale):** the preview now renders at a CONSTANT scale
+  (`markdown.PreviewWindowFrame` — `textFixedScale × content_zoom`), wrapped to
+  the tile's own width and clipped to its height, so grid zoom reveals more
+  lines instead of magnifying the type; below one body line of room the tile
+  shows its alt-text banner alone (`PreviewContentVisible`, the LOD gate). The
+  stored `text_x/text_y` scroll still places the window (and still restores the
+  descent), but `text_w/text_h` no longer set the preview's scale — "make the
+  text big" is `content_zoom`'s job. The frame takes only the tile's own facts,
+  so the I8 cross-pane re-wrap class is unrepresentable by signature
+  (`TestPreviewFrameHasNoCrossPaneInputs`).
 
 - **SSE during animation (I11) — framing is safe by construction; only data
   fans out.** Verified: every write to pane framing (`Cx/Cy/Zoom/Path/Anchor`)

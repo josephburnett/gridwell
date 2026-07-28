@@ -7,133 +7,76 @@ import (
 
 func almost(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
-func TestCoverScale(t *testing.T) {
-	cases := []struct {
-		name             string
-		w, h, boxW, boxH float64
-		want             float64
-	}{
-		{"wider dest -> width binds", 200, 100, 100, 100, 2},
-		{"taller dest -> height binds", 100, 200, 100, 100, 2},
-		{"square 1:1", 100, 100, 50, 50, 2},
-		{"degenerate width -> 0", 100, 100, 0, 50, 0},
-		{"degenerate height -> 0", 100, 100, 50, 0, 0},
-		{"negative box -> 0", 100, 100, -5, 50, 0},
-	}
-	for _, c := range cases {
-		if got := CoverScale(c.w, c.h, c.boxW, c.boxH); !almost(got, c.want) {
-			t.Errorf("%s: CoverScale=%v want %v", c.name, got, c.want)
+// Issue #205 (owner decision, reversing the 2026-05-27 framed-window
+// design): a text preview renders at a CONSTANT scale — the type size never
+// follows grid zoom or the stored framing; the tile is a window that
+// reveals more as it grows.
+func TestPreviewWindowFrame(t *testing.T) {
+	const fixed = 1.0
+
+	// The scale is footprint-independent: the SAME frame scale at wildly
+	// different tile sizes (this is the whole point — zoom changes the tile
+	// px, never the type size).
+	for _, innerW := range []float64{40, 160, 640} {
+		f := PreviewWindowFrame(innerW, fixed, 1.0, 0, 0)
+		if !almost(f.Scale, fixed) {
+			t.Errorf("innerW %v: Scale = %v, want the constant %v", innerW, f.Scale, fixed)
 		}
+		// The doc wraps to the tile: layout width IS the inner width (at
+		// scale 1) — a bigger tile shows more, same-size type.
+		if !almost(f.ContentW, innerW/fixed) {
+			t.Errorf("innerW %v: ContentW = %v, want %v (wrap to the tile)", innerW, f.ContentW, innerW/fixed)
+		}
+	}
+
+	// content_zoom is the one owner of "make the text big" now: it scales
+	// the type and narrows the logical wrap width to match.
+	f := PreviewWindowFrame(200, fixed, 2.0, 0, 0)
+	if !almost(f.Scale, 2.0) || !almost(f.ContentW, 100) {
+		t.Errorf("contentZoom 2: frame = %+v, want scale 2 contentW 100", f)
+	}
+
+	// The stored scroll still places the window — the preview keeps showing
+	// the PLACE you left (guiding rule), just not its magnification.
+	f = PreviewWindowFrame(200, fixed, 1.0, 3, 47)
+	if f.ScrollX != 3 || f.ScrollY != 47 {
+		t.Errorf("scroll = (%v, %v), want (3, 47)", f.ScrollX, f.ScrollY)
+	}
+
+	// A degenerate content zoom can't zero the scale.
+	f = PreviewWindowFrame(200, fixed, 0, 0, 0)
+	if !almost(f.Scale, fixed) {
+		t.Errorf("zero zoom: Scale = %v, want fallback %v", f.Scale, fixed)
 	}
 }
 
-func TestPreviewScaleScroll(t *testing.T) {
-	const natural, fixed, minS = 400.0, 1.0, 0.02
-
-	// Focused: cover-crop the inner box, scroll from the live pane. ContentW is
-	// the inner width — the preview lays out at the SAME width the live pane did,
-	// so it's a scaled copy, not a re-wrap.
-	f := PreviewScaleScroll(200, 100, true, 100, 100, 7, 9, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, 2) || f.ScrollX != 7 || f.ScrollY != 9 || !almost(f.ContentW, 100) {
-		t.Errorf("focused = %+v, want scale 2 scroll (7,9) contentW 100", f)
+// The level-of-detail gate (issue #205): with the type size constant, a
+// small tile shows the alt-text banner alone — content only paints when at
+// least one body line fits.
+func TestPreviewContentVisible(t *testing.T) {
+	if PreviewContentVisible(PreviewBodyLinePx-1, 1.0) {
+		t.Error("below one line: content must not paint")
 	}
-	// Focused but degenerate inner box -> fixed scale, natural width, scroll honored.
-	f = PreviewScaleScroll(200, 100, true, 0, 0, 7, 9, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, fixed) || f.ScrollX != 7 || f.ScrollY != 9 || !almost(f.ContentW, natural) {
-		t.Errorf("focused degenerate = %+v, want scale %v scroll (7,9) contentW %v", f, fixed, natural)
+	if !PreviewContentVisible(PreviewBodyLinePx, 1.0) {
+		t.Error("exactly one line: content paints")
 	}
-	// Stored framing (not focused): cover-crop the saved window; ContentW is the
-	// saved width, so the preview reflows exactly as it did at ascent.
-	f = PreviewScaleScroll(200, 100, false, 0, 0, 0, 0, 100, 50, 3, 4, natural, fixed, minS)
-	if !almost(f.Scale, 2) || f.ScrollX != 3 || f.ScrollY != 4 || !almost(f.ContentW, 100) {
-		t.Errorf("stored = %+v, want scale 2 scroll (3,4) contentW 100", f)
-	}
-	// Stored takes the larger of the two ratios (cover).
-	f = PreviewScaleScroll(100, 300, false, 0, 0, 0, 0, 100, 100, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, 3) || !almost(f.ContentW, 100) {
-		t.Errorf("stored cover = %+v, want scale 3 contentW 100", f)
-	}
-	// Neither: natural-width fit, laid out at the natural width.
-	f = PreviewScaleScroll(200, 100, false, 0, 0, 0, 0, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, 0.5) || f.ScrollX != 0 || f.ScrollY != 0 || !almost(f.ContentW, natural) {
-		t.Errorf("natural = %+v, want scale 0.5 scroll (0,0) contentW %v", f, natural)
-	}
-	// Neither, huge document: clamped to minScale (shows its "shape").
-	f = PreviewScaleScroll(4, 100, false, 0, 0, 0, 0, 0, 0, 0, 0, natural, fixed, minS)
-	if !almost(f.Scale, minS) || !almost(f.ContentW, natural) {
-		t.Errorf("clamped = %+v, want scale %v contentW %v", f, minS, natural)
+	// The gate scales with content zoom: bigger type needs more room.
+	if PreviewContentVisible(PreviewBodyLinePx, 2.0) {
+		t.Error("zoomed type in one un-zoomed line of room: must not paint")
 	}
 }
 
-// The I8 invariant, stated precisely: for a FIXED framing, the preview's layout
-// width (ContentW) must not depend on the preview tile's footprint (w, h) — the
-// tile's size on the parent grid only changes the cover Scale. If ContentW
-// tracked the footprint, a tile shown at a different size would RE-WRAP its
-// markdown to its own width instead of showing a scaled copy of what was framed
-// — exactly the "preview ≠ what I left" / "preview goes wonky" report. The doc
-// must reflow only when re-descended into a real pane, never per preview size.
-func TestPreviewContentWidthInvariantToFootprint(t *testing.T) {
-	const natural, fixed, minS = 400.0, 1.0, 0.02
-
-	// Stored framing (the unfocused preview / ascent-return case): the saved
-	// window is 120 wide. Render it at three very different footprints.
-	const storedW = 120
-	footprints := [][2]float64{{60, 40}, {240, 160}, {37, 211}}
-	for _, fp := range footprints {
-		f := PreviewScaleScroll(fp[0], fp[1], false, 0, 0, 0, 0, storedW, 80, 0, 0, natural, fixed, minS)
-		if !almost(f.ContentW, storedW) {
-			t.Errorf("footprint %vx%v: ContentW = %v, want the framing width %v (no re-wrap)",
-				fp[0], fp[1], f.ContentW, storedW)
-		}
-	}
-
-	// Focused (a live mirror in another pane): ContentW tracks the focused pane's
-	// inner width, again independent of the mirror's own footprint.
-	const innerW = 95
-	for _, fp := range footprints {
-		f := PreviewScaleScroll(fp[0], fp[1], true, innerW, 70, 0, 0, 0, 0, 0, 0, natural, fixed, minS)
-		if !almost(f.ContentW, innerW) {
-			t.Errorf("focused footprint %vx%v: ContentW = %v, want inner width %v (no re-wrap)",
-				fp[0], fp[1], f.ContentW, innerW)
-		}
-	}
-}
-
-// TestPreviewNotAffectedByFocusedPaneWidth is the structural guard for
-// issue #35 Mechanism A: a text tile's preview layout width (ContentW) must
-// not depend on the width of any OTHER pane that happens to be descended into
-// the same tile. Before the fix, drawMarkdownNode called paneFocusedOnFile and
-// fed the OTHER pane's innerW as focused=true to PreviewScaleScroll, so a
-// sibling pane of different width would RE-WRAP the preview (wrong-size).
-//
-// The fix: drawMarkdownNode always passes focused=false. The test verifies that
-// with focused=false and stored framing, ContentW is always the stored width
-// regardless of what innerW is passed (which is what a sibling pane would have
-// been feeding in the old code).
-func TestPreviewNotAffectedByFocusedPaneWidth(t *testing.T) {
-	const natural, fixed, minS = 400.0, 1.0, 0.02
-	const storedW, storedH int64 = 200, 150
-
-	// focused=false (the post-fix path): ContentW is always the stored width,
-	// regardless of innerW (a sibling pane's geometry is irrelevant).
-	siblingWidths := []float64{50, 100, 200, 300, 400, 800}
-	for _, sw := range siblingWidths {
-		f := PreviewScaleScroll(100, 80, false, sw, 60, 0, 0, storedW, storedH, 0, 0, natural, fixed, minS)
-		if !almost(f.ContentW, float64(storedW)) {
-			t.Errorf("sibling width %v, focused=false: ContentW=%v, want stored %v (no cross-pane re-wrap)",
-				sw, f.ContentW, storedW)
-		}
-	}
-
-	// Document the pre-fix bug: focused=true with a sibling's innerW caused the
-	// preview to re-wrap at that width. Each sibling width produced a different
-	// ContentW — the bug: tile T1's preview in pane B would reflow to pane A's width.
-	for _, sw := range siblingWidths {
-		f := PreviewScaleScroll(100, 80, true, sw, 60, 0, 0, storedW, storedH, 0, 0, natural, fixed, minS)
-		if !almost(f.ContentW, sw) {
-			t.Errorf("focused=true (pre-fix bug path): ContentW=%v, expected %v (sibling width dominated)",
-				f.ContentW, sw)
-		}
+// The issue #35 guard, restated for the #205 design: the preview frame is a
+// pure function of the tile's OWN facts (inner width, content zoom, stored
+// scroll) — no other pane's geometry appears in the signature at all, so
+// the cross-pane re-wrap bug (a sibling pane's width leaking into a
+// preview) is unrepresentable rather than merely tested against.
+func TestPreviewFrameHasNoCrossPaneInputs(t *testing.T) {
+	// Same tile facts → identical frame, whatever any other pane is doing.
+	a := PreviewWindowFrame(160, 1.0, 1.5, 2, 9)
+	b := PreviewWindowFrame(160, 1.0, 1.5, 2, 9)
+	if a != b {
+		t.Errorf("frame is not a pure function of the tile's facts: %+v vs %+v", a, b)
 	}
 }
 

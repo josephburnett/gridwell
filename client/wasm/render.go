@@ -924,6 +924,27 @@ func tileBannerLabel(n *rpc.Tile) string {
 	return n.AltText
 }
 
+// bannerGeom is the ONE formula for the alt-text banner's font and strip
+// height at tile height h / inner height ih: clamped screen px (9–16), so
+// the label reads as constant-size across zoom. Issue #205 gave it a second
+// reader — the text preview starts its content below the banner strip — so
+// the formula lives once. shown=false when the tile can't fit the label.
+func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
+	const minFontPx = 9.0
+	const maxFontPx = 16.0
+	fontPx = h * 0.14
+	if fontPx < minFontPx {
+		fontPx = minFontPx
+	}
+	if fontPx > maxFontPx {
+		fontPx = maxFontPx
+	}
+	if fontPx*1.4 > ih {
+		return fontPx, 0, false
+	}
+	return fontPx, fontPx + 4, true
+}
+
 // drawTileBannerLabel paints tileBannerLabel(n) inside a small translucent
 // banner at the top of the tile. Clipped to the tile rect so an over-long
 // label can't bleed past the cell. When outside is true, the text uses
@@ -943,23 +964,12 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 	if iw <= 0 || ih <= 0 {
 		return
 	}
-	// Scale font with cell size so the label stays legible across zooms
-	// without overwhelming small tiles.
-	const minFontPx = 9.0
-	const maxFontPx = 16.0
-	fontPx := h * 0.14
-	if fontPx < minFontPx {
-		fontPx = minFontPx
-	}
-	if fontPx > maxFontPx {
-		fontPx = maxFontPx
-	}
-	if fontPx*1.4 > ih {
+	fontPx, bannerH, shown := bannerGeom(h, ih)
+	if !shown {
 		// Tile too small to bother — outline alone has to carry the
 		// signal.
 		return
 	}
-	bannerH := fontPx + 4
 	a.cctx.Call("save")
 	a.cctx.Call("beginPath")
 	a.cctx.Call("rect", ix, iy, iw, ih)
@@ -1005,8 +1015,9 @@ func bannerTextColor(n *rpc.Tile, outside bool) string {
 // a given file tile, so drawMarkdownNode could preview at the live pane's width.
 // That cross-pane reach-through was the root cause of two bugs: wrong-size
 // preview (A, layout width used sibling pane's inner width) and blank preview
-// (B, hideForTextarea suppressed canvas in every pane showing the tile). The
-// fix always passes focused=false to PreviewScaleScroll, using stored framing.
+// (B, hideForTextarea suppressed canvas in every pane showing the tile). Since
+// issue #205 the preview frame (markdown.PreviewWindowFrame) takes only the
+// tile's own facts, so the class is unrepresentable by signature.
 
 // fetchTileContent issues ReadContent for a plugin tile (file / proc @info)
 // and caches the body by tile id. Idempotent: a successful previous fetch

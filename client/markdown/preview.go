@@ -8,73 +8,50 @@ package markdown
 // <textarea> to the pixel. That math was previously inline in build-tagged
 // wasm (never executed by `go test`); here it is testable.
 
-// CoverScale returns the scale that makes a boxW×boxH source region cover a
-// w×h destination (CSS object-fit: cover): max(w/boxW, h/boxH). It returns 0
-// for a degenerate box (≤0 on either side) so the caller can fall back to a
-// fixed scale instead of dividing by zero.
-func CoverScale(w, h, boxW, boxH float64) float64 {
-	if boxW <= 0 || boxH <= 0 {
-		return 0
-	}
-	s := w / boxW
-	if sy := h / boxH; sy > s {
-		s = sy
-	}
-	return s
-}
-
 // PreviewFrame is the scale + scroll offset a markdown tile preview renders
 // with.
 type PreviewFrame struct {
 	Scale            float64
 	ScrollX, ScrollY float64
 	// ContentW is the LOGICAL width the markdown must be laid out at for this
-	// frame. It is the same box Scale was derived against — the focused pane's
-	// inner width, the stored framing width, or the natural fallback — so the
-	// painter lays out at ContentW and merely SCALES by Scale. That makes a
-	// preview a true scaled copy of the live/ascent view (a cover-crop), never
-	// a re-wrap at the tile's own width: an unfocused pane shows exactly what
-	// the focused pane showed, only smaller.
+	// frame — the tile's own inner width divided by Scale, so the doc wraps to
+	// the tile like a window and the painter merely scales the ops back up.
 	ContentW float64
 }
 
-// PreviewScaleScroll picks how a markdown tile preview is scaled and scrolled
-// so it cover-crops identically to the live descended pane. Exactly one
-// source applies, in priority order:
-//
-//   - focused: the tile is open in a focused pane — cover-crop that pane's
-//     inner box (innerW × innerH), scrolled to the pane's live scroll. If the
-//     inner box is degenerate, fall back to fixedScale (scroll still honored).
-//   - stored framing (storedW>0 && storedH>0): cover-crop the saved window
-//     (the preview = ascent return), scrolled to the saved offset.
-//   - neither: scale the natural content width to fit, clamped to minScale so
-//     a huge document still shows its "shape" rather than collapsing to 0.
-func PreviewScaleScroll(w, h float64,
-	focused bool, innerW, innerH, focusScrollX, focusScrollY float64,
-	storedW, storedH, storedX, storedY int64,
-	naturalPx, fixedScale, minScale float64) PreviewFrame {
-	if focused {
-		s := CoverScale(w, h, innerW, innerH)
-		if s == 0 {
-			// Degenerate inner box (a collapsed pane): fall back to a fixed
-			// scale and the natural layout width — there's no real box to copy.
-			return PreviewFrame{Scale: fixedScale, ScrollX: focusScrollX, ScrollY: focusScrollY, ContentW: naturalPx}
-		}
-		return PreviewFrame{Scale: s, ScrollX: focusScrollX, ScrollY: focusScrollY, ContentW: innerW}
+// PreviewBodyLinePx is one body-text line's height at scale 1 (14px body ×
+// 1.35 line spacing, rounded up) — the unit PreviewContentVisible gates on.
+const PreviewBodyLinePx = 19.0
+
+// PreviewWindowFrame is how a text tile preview is scaled (issue #205,
+// reversing the 2026-05-27 framed-window cover-scale): CONSTANT type size —
+// like the alt-text banner, the font never follows grid zoom — wrapped to
+// the tile's inner width and clipped to its height, so the tile is a window
+// that reveals more of the document as it grows. fixedScale × contentZoom
+// is the whole scale: "make the text big" is content_zoom's job now, not a
+// one-line ascent framing. Scroll still comes from the stored framing —
+// the preview keeps showing the PLACE you left, just no longer at the
+// framed window's magnification.
+func PreviewWindowFrame(innerW, fixedScale, contentZoom float64, storedX, storedY int64) PreviewFrame {
+	s := fixedScale * contentZoom
+	if s <= 0 {
+		s = fixedScale
 	}
-	if storedW > 0 && storedH > 0 {
-		return PreviewFrame{
-			Scale:    CoverScale(w, h, float64(storedW), float64(storedH)),
-			ScrollX:  float64(storedX),
-			ScrollY:  float64(storedY),
-			ContentW: float64(storedW),
-		}
+	return PreviewFrame{
+		Scale:    s,
+		ScrollX:  float64(storedX),
+		ScrollY:  float64(storedY),
+		ContentW: innerW / s,
 	}
-	s := w / naturalPx
-	if s < minScale {
-		s = minScale
-	}
-	return PreviewFrame{Scale: s, ContentW: naturalPx}
+}
+
+// PreviewContentVisible gates the content paint (issue #205): with the type
+// size constant, a small tile can't show a legible line — below one body
+// line of room the preview is the alt-text banner alone (mirroring the
+// well's previewCell >= 0.5 level-of-detail gate). availH is the tile's
+// inner height minus whatever the banner occupies.
+func PreviewContentVisible(availH, scale float64) bool {
+	return availH >= PreviewBodyLinePx*scale
 }
 
 // RawTextSlot holds the per-line placement for monospace raw-text rendering,

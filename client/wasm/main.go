@@ -36,19 +36,13 @@ const (
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
-	// textFixedScale is the constant render scale for text-file content
-	// when descended. There is no zoom: the descended pane is a plain
-	// window onto the document at this scale, scrolled vertically. The
-	// parent-grid preview re-renders at this same scale and crops the
-	// last-framed window into the tile footprint.
+	// textFixedScale is the constant render scale for text-file content —
+	// descended AND previewed (issue #205: the preview renders at this same
+	// constant scale × the tile's content_zoom, wrapped to the tile, so
+	// grid zoom reveals more lines instead of magnifying the type). The
+	// descended pane is a plain window onto the document at this scale,
+	// scrolled vertically.
 	textFixedScale = 1.0
-
-	// textNaturalContentPx is the FALLBACK logical wrap width for a markdown
-	// preview that has no framing yet (a tile never descended into / ascended
-	// from). A live or previously-framed doc instead wraps at its own width —
-	// the pane's inner box (textContentWidth) or the stored framing width — so
-	// it reflows to the pane and the preview stays a scaled copy of it.
-	textNaturalContentPx = 800.0
 )
 
 // app is the running client. Held in a package-level var so JS callbacks can

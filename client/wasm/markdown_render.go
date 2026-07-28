@@ -91,23 +91,21 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 }
 
 // drawMarkdownNode renders a markdown file tile at (x, y, w, h) as a preview.
-// The scale/scroll comes from the tile's own stored framing (TextW/TextH/TextX/
-// TextY) — never from another pane's live state. Per the guiding rule: preview
-// = descent target = ascent return; the stored framing IS the preview. Before
-// fix #35 this called paneFocusedOnFile and used the other pane's live inner
-// width (focused=true), causing two bugs: wrong-size preview (A) because the
-// layout width tracked the sibling pane's width, and blank preview (B) because
-// hideForTextarea suppressed canvas paint for every preview of a tile being
-// edited elsewhere.
+// Constant-scale window (issue #205, reversing the 2026-05-27 framed-window
+// cover-scale): the type size never follows grid zoom — like the alt-text
+// banner, it stays readable-constant (scaled only by the tile's own
+// content_zoom), the doc wraps to the tile's width, and zooming in reveals
+// more lines. The stored scroll (TextX/TextY) still places the window —
+// the preview shows the PLACE you left — and too-small tiles show the
+// banner alone (markdown.PreviewContentVisible, the LOD gate). The frame is
+// a pure function of the tile's own facts — no other pane's geometry can
+// appear (the fix-#35 bug class stays unrepresentable).
 func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected, outside, dashed bool) {
 	mode := n.TextMode
 	if mode == "" {
 		mode = rpc.TextModeText
 	}
-	// Always pass focused=false: the preview uses the tile's own stored framing.
-	// Never reach into another pane's live width/scroll (paneFocusedOnFile).
-	frame := markdown.PreviewScaleScroll(w, h, false, 0, 0, 0, 0,
-		n.TextW, n.TextH, n.TextX, n.TextY, textNaturalContentPx, textFixedScale, 0.02)
+	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentZoomOf(n), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	a.cctx.Call("save")
@@ -118,18 +116,25 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
+	// Content starts below the banner strip (drawTileBannerLabel paints over
+	// the same box afterwards; bannerGeom is the shared formula) so the alt
+	// text never overprints the first line.
+	topInset := 0.0
+	if tileBannerLabel(n) != "" {
+		if _, bannerH, shown := bannerGeom(h, h-2*tileBorderPx); shown {
+			topInset = bannerH
+		}
+	}
 	// No hideForTextarea in the preview path: the single textarea overlay covers
 	// only the focused descended pane, never a preview node. Suppressing canvas
 	// here caused blank previews when another pane was editing in text mode (Bug B).
-	if body, ok := a.tileBody(n); ok {
-		// Lay out at the framing width the cover-crop was computed against
-		// (frame.ContentW = stored TextW / natural fallback) and merely SCALE by
-		// frame.Scale, so the preview is a true scaled copy of what the descended
-		// pane showed at its last ascent — never re-wrapped to the tile's footprint.
-		a.drawMarkdownInRect(string(body),
-			x-scrollX*scale, y-scrollY*scale,
-			frame.ContentW*scale, h+scrollY*scale,
-			scale, mode, a.makePreviewEmbedDrawer(uuidOf(n.GridID)))
+	if markdown.PreviewContentVisible(h-topInset, scale) {
+		if body, ok := a.tileBody(n); ok {
+			a.drawMarkdownInRect(string(body),
+				x-scrollX*scale, y+topInset-scrollY*scale,
+				frame.ContentW*scale, h-topInset+scrollY*scale,
+				scale, mode, a.makePreviewEmbedDrawer(uuidOf(n.GridID)))
+		}
 	}
 
 	a.cctx.Call("restore")
