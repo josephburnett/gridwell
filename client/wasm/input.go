@@ -2449,13 +2449,14 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 	})
 }
 
-// openLinkBelow handles a link a live view tried to open in a NEW WINDOW
-// (target=_blank, window.open, ctrl/cmd-click — issue #111): split the pane
-// horizontally and open the url as an EPHEMERAL visit in the new lower half.
-// The link renders next to the page it came from, on the same plugin session,
-// and dies on ascent like every ephemeral visit (#85). If the split fails
-// (degenerate pane) the visit opens in place instead — the link must never be
-// silently dropped.
+// openLinkBelow handles a link opened OUT of a live tile — a new-window
+// intent from a live url view (target=_blank, window.open, ctrl/cmd-click —
+// issue #111) and a url activated in a live shell (issue #207): split the
+// pane horizontally and open the url as an EPHEMERAL visit in the new lower
+// half. The link renders next to the page/terminal it came from, on the
+// same plugin session, and dies on ascent like every ephemeral visit (#85).
+// If the split fails (degenerate pane) the visit opens in place instead —
+// the link must never be silently dropped.
 func (a *App) openLinkBelow(paneID, url string) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
@@ -2493,11 +2494,14 @@ func (a *App) openLinkBelow(paneID, url string) {
 }
 
 // shellURLActivate handles a click on an http(s) url in a live shell (the xterm
-// link provider's activate): descend into it as an ephemeral visit. A no-op if
-// the shell is no longer the pane's active descent.
+// link provider's activate): open it below, exactly like a link a live url
+// view pops (issue #207 — one behavior for links out of live tiles; the old
+// in-place descent stacked the shell on the session-only ascent stash, which
+// any place-restore dropped — the issue #208 double-ascend). A no-op if the
+// shell is no longer the pane's active descent.
 func (a *App) shellURLActivate(paneID, url string) {
 	if p := a.tree.FindPane(paneID); p != nil && p.TextFocus != "" {
-		a.visitEphemeralURL(p, url)
+		a.openLinkBelow(paneID, url)
 	}
 }
 
