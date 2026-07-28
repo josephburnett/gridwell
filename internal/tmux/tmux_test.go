@@ -157,6 +157,11 @@ func TestConfigFileWrittenWithExpectedDirectives(t *testing.T) {
 		"history-limit 50000",
 		`default-terminal "xterm-256color"`,
 		"escape-time 0",
+		// issue #206: without mouse on, the outer terminal (xterm.js, alt
+		// buffer) turns wheel into arrow keys and the 50k-line history is
+		// unreachable except by C-b [. Mouse on makes wheel-up enter
+		// copy-mode and scroll history — the tmux behavior the user knows.
+		"mouse on",
 	} {
 		if !strings.Contains(string(b), must) {
 			t.Errorf("config missing directive %q. full content:\n%s", must, string(b))

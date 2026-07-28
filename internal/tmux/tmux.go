@@ -40,11 +40,18 @@ import (
 //   - allow-passthrough on: the gridwell-open browser shim (issue #90)
 //     emits its OSC 5522 url sequence through tmux's DCS passthrough,
 //     which is off by default.
+//   - mouse on: the outer terminal (xterm.js) keeps the tmux client in
+//     the alternate buffer, where a wheel becomes arrow keys and the
+//     history above is unreachable except by C-b [. With mouse on,
+//     wheel-up enters copy-mode and scrolls the 50k-line history;
+//     wheel-down at the bottom drops back to live (issue #206). Apps
+//     that request mouse reporting still receive it via passthrough.
 const gridwellConfig = `set-option -g status off
 set-option -g history-limit 50000
 set-option -g default-terminal "xterm-256color"
 set-option -g escape-time 0
 set-option -g allow-passthrough on
+set-option -g mouse on
 `
 
 // browserShimScript is the $BROWSER target injected into every new shell
