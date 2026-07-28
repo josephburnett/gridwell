@@ -68,18 +68,68 @@ func TestWriteContentRefusesKindsWithoutContent(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	well := placeWell(t, s, root, 0, 0)
-	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{
-		GridID: root, X: 3, Y: 0, W: 1, H: 1, URL: "https://example.com",
-	})
-	if err != nil {
-		t.Fatalf("create url: %v", err)
-	}
 
 	if _, err := s.WriteContent(ctx, well.ID, well.Version, []byte("x")); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("well: got %v, want ErrInvalidArgument", err)
 	}
-	if _, err := s.WriteContent(ctx, url.ID, url.Version, []byte("x")); !errors.Is(err, ErrInvalidArgument) {
-		t.Errorf("url (content is the frozen preview, rides SetTile): got %v, want ErrInvalidArgument", err)
+}
+
+// Issue #209 (drop first, prompt on first descent): a url tile's ADDRESS is
+// its content — the tile is created empty at drop and the address arrives as
+// a versioned WriteContent at the first-descent prompt. Changing where a
+// tile points is a content edit and bumps.
+func TestWriteContentURLSetsAddress(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+
+	// An address-less url tile is the legal unconfigured state.
+	url, err := s.CreateURL(ctx, &rpc.CreateURLRequest{GridID: root, X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("create empty url: %v", err)
+	}
+	if url.URLString != "" {
+		t.Errorf("unconfigured url tile: URLString = %q, want empty", url.URLString)
+	}
+
+	got, err := s.WriteContent(ctx, url.ID, url.Version, []byte("https://example.com"))
+	if err != nil {
+		t.Fatalf("write address: %v", err)
+	}
+	if got.Version <= url.Version {
+		t.Errorf("the address write is a content edit — version %d must bump past %d", got.Version, url.Version)
+	}
+	if got.URLString != "https://example.com" {
+		t.Errorf("URLString = %q", got.URLString)
+	}
+
+	// Read pairs the address with the row version (the save-basis contract).
+	data, _, version, err := s.ReadContent(ctx, url.ID)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(data) != "https://example.com" || version != got.Version {
+		t.Errorf("read = (%q, v%d), want the address at v%d", data, version, got.Version)
+	}
+
+	// Garbage refused loudly; the old address stays byte-for-byte intact.
+	if _, err := s.WriteContent(ctx, got.ID, got.Version, []byte("javascript:alert(1)")); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("non-http scheme: got %v, want ErrInvalidArgument", err)
+	}
+	// So is an EMPTY write — configuring must produce a real address.
+	if _, err := s.WriteContent(ctx, got.ID, got.Version, nil); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("empty address write: got %v, want ErrInvalidArgument", err)
+	}
+	// Stale claim refused.
+	if _, err := s.WriteContent(ctx, got.ID, got.Version+7, []byte("https://other.example")); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale claim: got %v, want ErrVersionConflict", err)
+	}
+	after, err := s.GetTile(ctx, got.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.URLString != "https://example.com" || after.Version != got.Version {
+		t.Errorf("refused writes mutated the row: %q v%d", after.URLString, after.Version)
 	}
 }
 

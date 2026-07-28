@@ -216,11 +216,12 @@ func (a *App) openSchemaModal(title string, form *schemaform.Form, onSubmit func
 	}
 }
 
-// createSchemaFor returns the destination grid's parsed creation form for
-// kind, or nil when the plugin declares none (today's flow — create
-// immediately). A schema that fails to parse surfaces (charter §6: a plugin
-// declared parameters we cannot render — creating WITHOUT them would commit
-// a tile the plugin will refuse or misconfigure) and blocks the create.
+// createSchemaFor returns the grid's parsed creation form for kind, or nil
+// when the plugin declares none. Since issue #209 the form opens on the
+// FIRST DESCENT into a still-unconfigured tile (openConfigureTile) — the
+// drop itself never prompts. A schema that fails to parse surfaces
+// (charter §6: the plugin declared parameters we cannot render) and the
+// tile stays inert until the plugin or schema is fixed.
 func (a *App) createSchemaFor(gridID, kind string) (*schemaform.Form, bool) {
 	g, ok := a.c.Grid(gridID)
 	if !ok {

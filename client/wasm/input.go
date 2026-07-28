@@ -1076,6 +1076,13 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 		a.startDescent(p, hit)
 		return true
 	case rpc.IsContentDescentKind(hit.Kind):
+		// An address-less url tile (dropped bare — issue #209): the first
+		// descent is where the address gets asked for. A url LINK resolves
+		// its address through the target and never prompts.
+		if hit.Kind == rpc.KindURL && hit.URLString == "" && hit.LinkTargetID == "" {
+			a.openConfigureURL(p, hit)
+			return true
+		}
 		a.startTextDescent(p, hit, nil)
 		return true
 	case rpc.IsWorkspaceKind(hit.Kind):
@@ -1459,6 +1466,12 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 				a.reportErr(sev, source, message)
 				return
 			}
+		}
+		// A still-unconfigured schema-kind tile (a connection well dropped
+		// bare — issue #209): the first descent is where the parameters get
+		// asked for.
+		if a.openConfigureTile(p, well) {
+			return
 		}
 		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
 		return
@@ -2144,32 +2157,10 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// URL still needs a URL up front; without one the tile is inert.
-	// Every other template commits immediately with the snap-and-
-	// create gesture wells use.
-	if d.item.primitive == tplURL {
-		a.ghost = nil
-		a.draw()
-		dp := destPane
-		dx, dy := dropX, dropY
-		candidates := a.urlSuggestCandidates(uuidOf(a.gridIDForPane(destPane)))
-		a.openURLModal(
-			candidates,
-			func(url string) {
-				a.createURLAtCell(dp, url, dx, dy)
-				a.menu.Close()
-				a.draw()
-			},
-			func() {
-				a.draw()
-			},
-		)
-		return
-	}
-
-	// Wells + markdown commit immediately. Animate the ghost to the
-	// snap target for a tactile landing. Markdown content is empty at
-	// creation; the user descends and types.
+	// EVERY template commits immediately with the snap-and-create gesture
+	// (issue #209: drop first — the drop never prompts; whatever a kind
+	// needs to be useful is asked for on the first DESCENT, so create is
+	// one experience everywhere: drop, descend, fill in).
 	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
 	if a.ghost != nil {
 		a.ghost.paneID = destPane.ID
@@ -2178,11 +2169,11 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 
 	switch d.item.primitive {
 	case tplWell:
-		// The palette's name field labels the new grid; read it before
-		// menu.Close hides and clears the input.
 		a.createWellAtCell(destPane, dropX, dropY)
 	case tplMarkdown:
 		a.createTextAtCell(destPane, []byte{}, dropX, dropY)
+	case tplURL:
+		a.createURLAtCell(destPane, dropX, dropY)
 	case tplShell:
 		a.createShellAtCell(destPane, dropX, dropY)
 	case tplPane:
@@ -2212,40 +2203,47 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 }
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
-// label, when non-empty, names the new grid (stored as the well's alt_text).
-// If the destination grid's plugin declares a creation schema for wells
-// (Grid.CreateSchemas, issue #198 — e.g. an ssh connection's user/host), the
-// gesture opens the parameter form first; the params become the created
-// well's CONTENT, committed through the one write after the metadata create.
+// Wells are created UNNAMED (naming happens from inside, via the name
+// bubble — issue #118) and UNCONFIGURED: even on a grid whose plugin
+// declares a creation schema (Grid.CreateSchemas, issue #198 — an ssh
+// connection's user/host), the drop commits immediately and the parameter
+// form opens on the first DESCENT instead (issue #209; a param-less
+// connection well is a legal, inert state — dashed and childless until its
+// params commit).
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	form, ok := a.createSchemaFor(gid, rpc.KindWell)
-	if !ok {
-		return // unrenderable schema: surfaced, never create half-configured
+	req := &rpc.CreateWellRequest{
+		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
-	commit := func(params []byte) {
-		// Wells are created UNNAMED: naming happens from inside, via the
-		// name bubble (issue #118 — the + menu's name field is gone).
-		req := &rpc.CreateWellRequest{
-			GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		}
-		a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
-			return a.cl.CreateWell(ctx, req)
-		}, func(tile rpc.Tile) {
-			if len(params) == 0 {
-				return
-			}
-			// The params document follows as the tile's content — the plugin
-			// validates authoritatively; a refusal surfaces and the empty
-			// well stays visible and deletable, never silent.
-			go a.postWriteContent(gid, tile.ID, tile.Version, params)
-		})
+	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateWell(ctx, req)
+	}, nil)
+}
+
+// openConfigureTile opens the creation-schema form for a still-unconfigured
+// tile on its first descent (issue #209: drop first, prompt on descent).
+// Submit commits the params as the tile's CONTENT — the plugin validates
+// authoritatively; a refusal surfaces and the empty tile stays visible and
+// deletable, never silent. Returns false when the tile's grid declares no
+// schema for its kind (the caller falls through to its generic notice);
+// true when the prompt opened or an unrenderable schema was surfaced.
+func (a *App) openConfigureTile(p *pane.Pane, t *rpc.Tile) bool {
+	gid := a.gridIDForPane(p)
+	form, ok := a.createSchemaFor(gid, t.Kind)
+	if !ok {
+		return true // unrenderable schema: already surfaced loudly
 	}
 	if form == nil {
-		commit(nil)
-		return
+		return false
 	}
-	a.openSchemaModal("new connection", form, commit, nil)
+	id, version := t.ID, t.Version
+	a.openSchemaModal("configure", form, func(params []byte) {
+		if len(params) == 0 {
+			return
+		}
+		go a.postWriteContent(gid, id, version, params)
+	}, nil)
+	return true
 }
 
 // createTextAtCell fires CreateText at the given cell with the given
@@ -2261,28 +2259,44 @@ func (a *App) createTextAtCell(p *pane.Pane, data []byte, cellX, cellY int64) {
 	}, nil)
 }
 
-// createURLAtCell fires CreateURL at the given cell with the given URL.
-// Footprint is 1×1. After creation succeeds, the focused pane descends into
-// the new tile; EVERY descent goes live now (issue #202 — descending is the
-// engagement gesture), so the create path needs no special go-live handling.
-func (a *App) createURLAtCell(p *pane.Pane, url string, cellX, cellY int64) {
+// createURLAtCell fires CreateURL at the given cell — ADDRESS-LESS (issue
+// #209: drop first). The tile lands inert; the first descent prompts for
+// the address (openConfigureURL) and writes it as the tile's content.
+func (a *App) createURLAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	paneID := p.ID
 	req := &rpc.CreateURLRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		URL: url,
 	}
 	a.postTileMutate("CreateURL", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateURL(ctx, req)
-	}, func(tile rpc.Tile) {
-		// Auto-descend: the user just typed a URL and confirmed. The
-		// descent itself goes live (autoLiveOnDescent — one owner).
-		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.TextFocus != "" {
-			// Pane is gone or already descended — skip.
-			return
-		}
-		a.startTextDescent(fp, &tile, nil)
+	}, nil)
+}
+
+// openConfigureURL prompts for a bare url tile's address on its first
+// descent (issue #209) — the url twin of openConfigureTile, reusing the
+// url modal with its visited-url suggestions. Submit writes the address as
+// the tile's content (the store's url arm: versioned, validated, bumps) and
+// then descends, so the fill-in flows straight into the page. EVERY descent
+// goes live (issue #202), so no special go-live handling.
+func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
+	gid := a.gridIDForPane(p)
+	paneID, id, version := p.ID, t.ID, t.Version
+	candidates := a.urlSuggestCandidates(uuidOf(gid))
+	a.openURLModal(candidates, func(url string) {
+		go func() {
+			tile, ok := a.postWriteContent(gid, id, version, []byte(url))
+			if !ok {
+				return
+			}
+			fp := a.tree.FindPane(paneID)
+			if fp == nil || fp.TextFocus != "" {
+				return
+			}
+			a.startTextDescent(fp, &tile, nil)
+			a.draw()
+		}()
+	}, func() {
+		a.draw()
 	})
 }
 

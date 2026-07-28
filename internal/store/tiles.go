@@ -249,10 +249,13 @@ func insertURLRow(ctx context.Context, tx *sql.Tx, objID string, gridID, x, y, w
 	return res.LastInsertId()
 }
 
-// CreateURL creates a URL tile pointing at the given URL.
+// CreateURL creates a URL tile pointing at the given URL. An EMPTY url is
+// the legal unconfigured state (issue #209: drop first, prompt on first
+// descent) — the address arrives later as the tile's content, through
+// WriteContent's url arm.
 func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.Tile, error) {
 	urlString := strings.TrimSpace(req.URL)
-	if !urlSchemeAllowed(urlString) {
+	if urlString != "" && !urlSchemeAllowed(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
 	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
