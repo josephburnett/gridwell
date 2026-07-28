@@ -13,13 +13,15 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  // A PLACED url tile (drag-create prompts for the url), which auto-descends
-  // and goes live on the local origin.
+  // A PLACED url tile: drag-create lands it bare (issue #209 — the drop
+  // never prompts); the first DESCENT opens the address prompt, and submit
+  // descends into the live page on the local origin.
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
+  await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?h=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
