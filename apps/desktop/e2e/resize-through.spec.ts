@@ -108,3 +108,52 @@ test('a cascade drag released mid-corridor resizes — it never closes (stale-co
   expect(q2.w, 'the adjacent pane crushed to its minimum, still open').toBeLessThan(40);
   expect(q1.w, 'the cascade bit into the first pane').toBeLessThan(p1.w - 40);
 });
+
+// Issue #204: the one-click close. armLeftResize never initialized the
+// gesture cursor, so a bare divider click evaluated the collapse verdict at
+// (0,0) — always past the wall — and released into a close. Closing is now
+// the corridor-EDGE gesture: the cursor must travel all the way across to
+// the corridor's own edge (within the close band); the minimum wall is a
+// resize clamp, never a close threshold.
+test('a bare click on a divider closes nothing (#204)', async ({ gw, window }) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(before).toHaveLength(2);
+  const [left] = before;
+  await window.mouse.click(left.x + left.w - 2, left.y + left.h / 2);
+  await gw.waitIdle();
+  expect((await gw.panes()).length, 'a click can never close a pane').toBe(2);
+});
+
+test('a drag past the minimum wall but short of the pane edge resizes, never closes (#204)', async ({
+  gw,
+}) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(before).toHaveLength(2);
+  const [left] = before;
+  const gy = left.y + left.h / 2;
+  // Past the 32px minimum wall (cursor at +20) but outside the close band at
+  // the corridor edge: the pane crushes to its minimum and STAYS OPEN.
+  await gw.leftDragScreen(left.x + left.w - 2, gy, left.x + 20, gy);
+  const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(after, 'short of the edge, release resizes').toHaveLength(2);
+  expect(after[0].w, 'the left pane sits at its minimum, still open').toBeLessThan(40);
+});
+
+test('the same divider closes either side by drag direction (#204)', async ({ gw }) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(before).toHaveLength(2);
+  const [left, right] = before;
+  const gy = left.y + left.h / 2;
+  // Drag the divider RIGHT, all the way across the right pane to its far
+  // edge: the RIGHT side closes.
+  await gw.leftDragScreen(left.x + left.w - 2, gy, right.x + right.w - 4, gy);
+  await expect.poll(async () => (await gw.panes()).length).toBe(1);
+  const [survivor] = await gw.panes();
+  expect(survivor.w, 'the left pane survived and owns the width').toBeGreaterThan(left.w);
+});

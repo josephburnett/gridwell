@@ -45,6 +45,23 @@ func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (
 	return lo, hi, true
 }
 
+// CorridorSpan returns the [start, end] extent of target's corridor along
+// the drag axis — the span the boundary can never leave. Unlike the walls,
+// the span is INVARIANT during the drag: it is fixed by the perpendicular
+// ancestors' ratios, which a same-axis cascade never touches. The close
+// verdict reads it (issue #204): collapsing a side requires the cursor to
+// travel all the way across to the corridor's edge, and since the walls sit
+// at least one pane-minimum inside the span, a close can never overlap a
+// legal resize position.
+func CorridorSpan(root TreeNode, rootRect Rect, target *Split) (start, end float64, ok bool) {
+	_, topRect, ok := corridorTop(root, rootRect, target)
+	if !ok {
+		return 0, 0, false
+	}
+	s, total := axisSpan(topRect, target.Dir)
+	return s, s + total, true
+}
+
 // LocateSplit returns target's CURRENT laid-out container rect within the
 // tree. The live geometry — a drag preview reading a rect captured at arm
 // time goes stale the moment a cascade moves an ancestor ratio.

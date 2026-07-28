@@ -136,23 +136,32 @@ const (
 	CollapseB
 )
 
+// CloseBandPx is how close to the corridor's edge the cursor must land for
+// a release to close a side — "all the way across" with a small tolerance
+// so a pane flush against the screen edge stays closable. Always strictly
+// inside the resize range: the minimum wall sits at least pane.MinPanePx
+// from the corridor edge, so a legal resize release can never read as a
+// close.
+const CloseBandPx = 8.0
+
 // ResizeOutcome resolves the release of a Resize gesture: which side (if
-// any) the cursor crushed past the corridor wall and should collapse.
-// lo/hi are pane.CorridorWalls' bounds — the SAME wall the live drag clamps
-// to, so "the drag can reach it" and "releasing there resizes, not closes"
-// can never disagree. Crushing past lo closes the A side of the grabbed
-// split; past hi, the B side. (The old signature derived the wall from the
-// grabbed split's own container — stale the moment the cascade crossed a
-// same-axis ancestor, which closed panes on a legal mid-corridor release.)
-func ResizeOutcome(dir pane.Direction, sx, sy, lo, hi float64) Collapse {
+// any) closes. corStart/corEnd are pane.CorridorSpan's bounds — the fixed
+// extent of the corridor, invariant during the drag. Closing is the
+// corridor-EDGE gesture (issue #204): the cursor must travel all the way
+// across, to within CloseBandPx of the span's edge — reaching the start
+// edge closes the A side of the grabbed split, the end edge the B side.
+// The minimum walls are a resize clamp only. (Crushing past the wall used
+// to close, which put the close threshold where a legal drag clamps — one
+// wobble past it and a resize became an accidental close.)
+func ResizeOutcome(dir pane.Direction, sx, sy, corStart, corEnd float64) Collapse {
 	cursor := sx
 	if dir == pane.Horizontal {
 		cursor = sy
 	}
 	switch {
-	case cursor < lo:
+	case cursor <= corStart+CloseBandPx:
 		return CollapseA
-	case cursor > hi:
+	case cursor >= corEnd-CloseBandPx:
 		return CollapseB
 	}
 	return CollapseNone

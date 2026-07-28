@@ -141,9 +141,11 @@ func TestSplitOutcome(t *testing.T) {
 }
 
 func TestResizeOutcome(t *testing.T) {
-	// Walls as pane.CorridorWalls would report them for a corridor spanning
-	// [0, 600] with one min-size pane on each side of the boundary.
-	const lo, hi = 20.0, 580.0
+	// A corridor spanning [0, 600] as pane.CorridorSpan reports it. Closing
+	// is the corridor-EDGE gesture (issue #204): only the CloseBandPx at the
+	// span's own edges closes — the minimum walls (one pane-minimum in, where
+	// a legal drag clamps) are a resize clamp, never a close threshold.
+	const start, end = 0.0, 600.0
 
 	tests := []struct {
 		name         string
@@ -152,21 +154,24 @@ func TestResizeOutcome(t *testing.T) {
 		wantCollapse Collapse
 	}{
 		{"vertical mid — no collapse", pane.Vertical, 300, 100, CollapseNone},
-		{"vertical past lo — A collapses", pane.Vertical, 5, 100, CollapseA},
-		{"vertical past hi — B collapses", pane.Vertical, 595, 100, CollapseB},
-		{"vertical AT the wall — clamped drag, no collapse", pane.Vertical, 20, 100, CollapseNone},
+		{"vertical at the minimum wall — resize, not close (#204)", pane.Vertical, 32, 100, CollapseNone},
+		{"vertical past the wall, short of the edge — still resize (#204)", pane.Vertical, 20, 100, CollapseNone},
+		{"vertical in the edge band — A closes", pane.Vertical, 4, 100, CollapseA},
+		{"vertical at the band boundary — A closes (inclusive)", pane.Vertical, start + CloseBandPx, 100, CollapseA},
+		{"vertical in the far band — B closes", pane.Vertical, 596, 100, CollapseB},
+		{"vertical just inside the far band boundary — no collapse", pane.Vertical, end - CloseBandPx - 1, 100, CollapseNone},
 		{"horizontal mid — no collapse", pane.Horizontal, 100, 300, CollapseNone},
-		{"horizontal past lo — A collapses", pane.Horizontal, 100, 5, CollapseA},
-		{"horizontal past hi — B collapses", pane.Horizontal, 100, 595, CollapseB},
-		// The stale-container regression (2026-07-27): a nested split's own
-		// container might start at 300 — but the corridor wall, not the
-		// container edge, decides. A cursor at 250 is a legal cascade
-		// position (between lo and hi) and must never collapse.
-		{"mid-corridor beyond the nested container — no collapse", pane.Vertical, 250, 100, CollapseNone},
+		{"horizontal in the edge band — A closes", pane.Horizontal, 100, 4, CollapseA},
+		{"horizontal in the far band — B closes", pane.Horizontal, 100, 596, CollapseB},
+		// A bare click (issue #204): the verdict cursor is the arm point,
+		// which sits within the grab band of a divider — and a divider is
+		// always at least a pane-minimum from the corridor edge, so a click
+		// can never land in a close band.
+		{"cursor at a divider near the wall — never a close", pane.Vertical, 34, 100, CollapseNone},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ResizeOutcome(tt.dir, tt.sx, tt.sy, lo, hi); got != tt.wantCollapse {
+			if got := ResizeOutcome(tt.dir, tt.sx, tt.sy, start, end); got != tt.wantCollapse {
 				t.Errorf("collapse = %v, want %v", got, tt.wantCollapse)
 			}
 		})

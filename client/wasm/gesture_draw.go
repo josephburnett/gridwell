@@ -551,15 +551,17 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	if !ok {
 		return
 	}
-	// The collapse verdict comes from the SAME walls the drag clamps to
-	// (pane.CorridorWalls) and the SAME cursor the move last applied — the
-	// release (finishLeftResize) reads the identical inputs, so the red
-	// "about to close" border can never mark a side the release won't drop.
-	lo, hi, ok := pane.CorridorWalls(root, rootRect, lr.targetSplit, pane.MinPanePx)
+	// The collapse verdict comes from the SAME corridor edges the release
+	// reads (pane.CorridorSpan, issue #204) and the SAME cursor the move
+	// last applied — finishLeftResize reads the identical inputs, so the
+	// red "about to close" border can never mark a side the release won't
+	// drop, and it only lights once the cursor has traveled all the way
+	// across to the corridor's edge.
+	corStart, corEnd, ok := pane.CorridorSpan(root, rootRect, lr.targetSplit)
 	if !ok {
 		return
 	}
-	collapse := gesture.ResizeOutcome(lr.splitDir, lr.curX, lr.curY, lo, hi)
+	collapse := gesture.ResizeOutcome(lr.splitDir, lr.curX, lr.curY, corStart, corEnd)
 	aRect, bRect := pane.SplitRect(r, lr.splitDir, lr.targetSplit.Ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.

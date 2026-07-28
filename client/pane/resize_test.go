@@ -203,6 +203,29 @@ func TestZoomUnknownPaneIsNoOp(t *testing.T) {
 // (2×32 from the corridor start), not the inner split's own container edge
 // (y=100) — the difference is exactly where the false mid-corridor collapse
 // lived. And the walls must equal what ResizeThrough actually clamps to.
+func TestCorridorSpan(t *testing.T) {
+	outer, inner := stack3()
+	root := TreeNode{Split: outer}
+	container := Rect{X: 0, Y: 0, W: 100, H: 300}
+
+	start, end, ok := CorridorSpan(root, container, inner)
+	if !ok {
+		t.Fatal("span not found for the inner divider")
+	}
+	if !near(start, 0) || !near(end, 300) {
+		t.Errorf("span = [%v, %v], want [0, 300] (the whole same-axis column, not the inner container)", start, end)
+	}
+
+	// The span is invariant under the drag itself: the cascade moves
+	// same-axis ratios, never the perpendicular ancestors that fix the span
+	// — so the close threshold (issue #204) cannot go stale mid-drag.
+	ResizeThrough(root, container, inner, 10, 32)
+	s2, e2, ok := CorridorSpan(root, container, inner)
+	if !ok || !near(s2, start) || !near(e2, end) {
+		t.Errorf("span moved under the drag: [%v, %v] -> [%v, %v]", start, end, s2, e2)
+	}
+}
+
 func TestCorridorWalls(t *testing.T) {
 	outer, inner := stack3()
 	root := TreeNode{Split: outer}
