@@ -54,6 +54,16 @@ type shellStreamConn struct {
 	closed bool
 
 	lastCols, lastRows uint16
+
+	// lastFit* are the inputs the last fit() derived from — the container
+	// box and the font size (content zoom changes the font without touching
+	// the box). The per-frame overlay sync only re-fits when one of them
+	// changed: an unconditional per-frame fit() forces a style read (layout)
+	// every frame and lets sub-pixel box wobble churn resizes — each one a
+	// render-service clear + SIGWINCH + full tmux redraw interleaved with
+	// in-flight output (issue #211).
+	lastFitW, lastFitH float64
+	lastFitFont        int
 }
 
 // shellLog writes a tagged debug message to the browser console.
@@ -257,7 +267,12 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		fontSize = int(shellBaseFontPx*contentZoomOf(t) + 0.5)
 	}
 	opts.Set("fontSize", fontSize)
-	opts.Set("convertEol", true)
+	// NO convertEol: the PTY line discipline (ONLCR) already delivers CRLF.
+	// With it set, xterm snaps the cursor to column 0 on every BARE LF too —
+	// and TUI output that positions with index/LF (scroll-region feeds; how
+	// Claude Code paints rows) lost its column, scattering text down the
+	// left margin (issue #211). It had been set since the first shell commit,
+	// for no recoverable reason.
 	opts.Set("cursorBlink", true)
 	// Dark theme tuned to the shell-fill / markdown-body backgrounds.
 	theme := js.Global().Get("Object").New()
@@ -779,10 +794,18 @@ func (a *App) syncShellOverlayPosition() {
 			}
 			conn.circle.Get("style").Set("display", vis)
 		}
-		// Ask xterm to re-fit. The FitAddon emits an onResize event if
-		// the new dimensions differ from the previous, which we forward
-		// via the registered onResize callback.
-		if conn.fitAddon.Truthy() {
+		// Ask xterm to re-fit — only when an input the fit depends on
+		// changed (the container box, or the font size content zoom sets).
+		// The FitAddon emits an onResize event if the cell grid changed,
+		// which we forward via the registered onResize callback. See
+		// lastFit* on the struct for why this is guarded (issue #211).
+		fontPx := 0
+		if fs := conn.term.Get("options").Get("fontSize"); fs.Truthy() {
+			fontPx = fs.Int()
+		}
+		if conn.fitAddon.Truthy() &&
+			(cb.W != conn.lastFitW || cb.H != conn.lastFitH || fontPx != conn.lastFitFont) {
+			conn.lastFitW, conn.lastFitH, conn.lastFitFont = cb.W, cb.H, fontPx
 			conn.fitAddon.Call("fit")
 		}
 	}

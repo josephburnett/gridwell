@@ -69,6 +69,7 @@ func (a *App) installTestHook() {
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
 		"shellText":     js.FuncOf(a.thShellText),
+		"shellFeed":     js.FuncOf(a.thShellFeed),
 	}))
 }
 
@@ -93,6 +94,21 @@ func (a *App) thShellText(js.Value, []js.Value) any {
 		out += line.Call("translateToString", true).String() + "\n"
 	}
 	return out
+}
+
+// thShellFeed writes a raw string into the focused pane's live terminal —
+// directly, NOT through the PTY. It exists to pin terminal-level contracts
+// the PTY path re-encodes away (issue #211: tmux paints with bare LF as a
+// keep-the-column index, and convertEol silently snapped it to column 0 —
+// unreachable through a shell command, whose LFs the inner PTY's ONLCR
+// rewrites to CRLF before tmux ever re-encodes them).
+func (a *App) thShellFeed(_ js.Value, args []js.Value) any {
+	conn := a.shellConnFor(a.tree.Focus)
+	if conn == nil || !conn.term.Truthy() {
+		return false
+	}
+	conn.term.Call("write", args[0].String())
+	return true
 }
 
 // thShellRenderer returns which renderer the focused pane's live shell
