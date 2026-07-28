@@ -41,11 +41,12 @@ test('right-drag splits the focused pane into two — another view of the same g
 });
 
 // Issue #203: one behavior per button on a border. LEFT-drag owns the whole
-// resize job — including CLOSING a side crushed past the minimum wall at
-// release. RIGHT-drag from a border is the SPLIT gesture (a new pane),
-// exactly like right-drag from inside the pane; short of the minimum it
-// cancels silently.
-test('left-drag resizes the divider both ways; crushing past the wall closes the side', async ({
+// resize job — including CLOSING a side dragged all the way across to the
+// corridor's edge at release (issue #204: the minimum wall is a resize
+// clamp, not a close threshold). RIGHT-drag from a border is the SPLIT
+// gesture (a new pane), exactly like right-drag from inside the pane; short
+// of the minimum it cancels silently.
+test('left-drag resizes the divider both ways; dragging to the edge closes the side', async ({
   gw,
 }) => {
   await gw.enterPlugin('localdb');
@@ -58,12 +59,13 @@ test('left-drag resizes the divider both ways; crushing past the wall closes the
   const l = await gw.resizeDivider('left', 150);
   expect(l.after, 'left-drag grew the left pane').toBeGreaterThan(l.before);
 
-  // Crush the left side past the minimum wall and release: it closes. The
-  // target stays INSIDE the viewport (10px from the pane's left edge) —
-  // CDP does not deliver events at off-viewport coordinates.
+  // Drag ALL THE WAY across the left pane — into the close band at the
+  // corridor's edge (within gesture.CloseBandPx = 8) — and release: it
+  // closes. The target stays INSIDE the viewport (4px from the pane's left
+  // edge) — CDP does not deliver events at off-viewport coordinates.
   const ps = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
-  const g = await gw.resizeDivider('left', -(ps[0].w - 10));
-  expect(g.after, 'the crushed side collapsed at release').toBe(0);
+  const g = await gw.resizeDivider('left', -(ps[0].w - 4));
+  expect(g.after, 'the side dragged to the edge collapsed at release').toBe(0);
   expect((await gw.panes()).length, 'one pane remains').toBe(1);
 });
 
