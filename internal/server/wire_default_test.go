@@ -62,15 +62,25 @@ func TestCreateTextNilData(t *testing.T) {
 	}
 }
 
-// TestCreateURLEmptyString asserts that a missing/empty URL fails
-// loudly with InvalidArgument — not silently with Internal.
+// TestCreateURLEmptyString: an EMPTY url is the legal unconfigured state
+// (issue #209 — drop first, prompt on first descent); a GARBAGE scheme
+// still fails loudly with InvalidArgument, not silently with Internal.
 func TestCreateURLEmptyString(t *testing.T) {
 	_, cl, root := newTestServer(t)
-	_, err := cl.CreateURL(context.Background(), &rpc.CreateURLRequest{
+	tile, err := cl.CreateURL(context.Background(), &rpc.CreateURLRequest{
 		GridID: root, X: 0, Y: 0, W: 1, H: 1, URL: "",
 	})
+	if err != nil {
+		t.Fatalf("empty URL is the unconfigured state, must create: %v", err)
+	}
+	if tile.URLString != "" {
+		t.Errorf("unconfigured tile URLString = %q, want empty", tile.URLString)
+	}
+	_, err = cl.CreateURL(context.Background(), &rpc.CreateURLRequest{
+		GridID: root, X: 2, Y: 0, W: 1, H: 1, URL: "javascript:alert(1)",
+	})
 	if got := errCode(err); got != connect.CodeInvalidArgument {
-		t.Errorf("empty URL: code %v, want InvalidArgument", got)
+		t.Errorf("garbage scheme: code %v, want InvalidArgument", got)
 	}
 }
 

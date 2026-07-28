@@ -52,6 +52,33 @@ func (a *App) flushFramingSave() {
 		return
 	}
 	a.tree.Walk(func(p *pane.Pane) { a.persistPaneFraming(p) })
+	a.flushWellWheelSaves()
+}
+
+// flushWellWheelSaves posts the settled hover-wheel well zooms (issue
+// #210): one SetWellView per touched tile, from the CACHED row — the same
+// values the per-notch patches accumulated and the renderer already shows.
+func (a *App) flushWellWheelSaves() {
+	for id, gid := range a.wellWheelPending {
+		delete(a.wellWheelPending, id)
+		g, ok := a.c.Grid(gid)
+		if !ok {
+			continue
+		}
+		t, ok := g.Tiles[id]
+		if !ok {
+			continue
+		}
+		req := &rpc.SetWellViewRequest{
+			TileID: t.ID, Version: t.Version,
+			ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom,
+		}
+		// Optimistic dispatcher (issue #156): the per-notch cache patches
+		// must reconcile back to server truth on ANY failure.
+		a.postOptimisticPersist("SetWellView", gid, func(ctx context.Context) (*rpc.Tile, error) {
+			return a.cl.SetWellView(ctx, req)
+		})
+	}
 }
 
 // persistPaneFraming writes pane p's current place framing — the same

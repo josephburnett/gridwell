@@ -107,6 +107,34 @@ func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax flo
 	return z, cellX - (cellX-cx)*ratio, cellY - (cellY-cy)*ratio
 }
 
+// WellWheelView applies a wheel step to a WELL's stored view (issue #210:
+// hovering a well and wheeling zooms the grid IN the well, not the grid
+// you're in): the same cursor-anchored kernel as the pane wheel
+// (WheelZoom), operating on the intrinsic ratio and the stored view origin
+// in child-cell space. parentCell is the well's parent-grid cell size in
+// px; (cursorDxPx, cursorDyPx) the cursor's offset from the WELL CENTER —
+// the preview's anchor point (origin = wellCenter − viewCenter×previewCell,
+// the renderer's formula). The origin quantizes through
+// ViewOriginFromCenter — the one owner of that rounding. changed=false when
+// the clamp pinned the ratio or the preview is degenerate; a no-op wheel
+// never mutates.
+func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, factorBase, rMin, rMax float64) (viewX, viewY int64, ratio float64, changed bool) {
+	r0 := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
+	previewCell := parentCell * r0
+	if previewCell <= 0 {
+		return w.ViewX, w.ViewY, w.ViewZoom, false
+	}
+	cx0 := float64(w.ViewX) + float64(w.W)/2
+	cy0 := float64(w.ViewY) + float64(w.H)/2
+	px := cx0 + cursorDxPx/previewCell
+	py := cy0 + cursorDyPx/previewCell
+	r1, cx1, cy1 := WheelZoom(deltaY, r0, cx0, cy0, px, py, factorBase, rMin, rMax)
+	if r1 == r0 {
+		return w.ViewX, w.ViewY, w.ViewZoom, false
+	}
+	return ViewOriginFromCenter(cx1, w.W), ViewOriginFromCenter(cy1, w.H), r1, true
+}
+
 // Overtake returns the zoom at which a (footprintW × footprintH) cell
 // footprint exceeds both dimensions of a (refW × refH) px reference
 // rectangle — the "footprint has fully consumed the reference area, its

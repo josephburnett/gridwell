@@ -36,6 +36,14 @@ const (
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
+	// wellZoomRatio* clamp the hover-wheel well zoom (issue #210) in the
+	// INTRINSIC ratio's units (previewCell = parentCell × ratio; the
+	// unvisited default is 1/PreviewFactor = 0.125). Min keeps the preview
+	// above the renderer's 0.5px visibility floor at ordinary cell sizes;
+	// max 1.0 renders child cells at full parent-cell size.
+	wellZoomRatioMin = 1.0 / 64.0
+	wellZoomRatioMax = 1.0
+
 	// textFixedScale is the constant render scale for text-file content —
 	// descended AND previewed (issue #205: the preview renders at this same
 	// constant scale × the tile's content_zoom, wrapped to the tile, so
@@ -238,6 +246,13 @@ type App struct {
 	// kicks off a probe and hides the button until the result lands.
 	shellAlive        map[string]bool
 	shellAliveProbing map[string]bool
+
+	// wellWheelPending holds well tiles whose preview framing the hover
+	// wheel changed (issue #210) but hasn't persisted yet: tile id → the
+	// grid the tile sits in. The cache is patched per notch (the renderer
+	// reads it live); the settle persister's flush posts ONE SetWellView
+	// per tile from the cached row, so a scroll burst is one write.
+	wellWheelPending map[string]string
 
 	// traces holds the per-pane ascent-trace highlight (the fading "you just
 	// came from HERE" outline, issue #83). Armed by completeTransition when
@@ -636,6 +651,7 @@ func main() {
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},
+		wellWheelPending:  map[string]string{},
 		traces:            map[string]traceState{},
 		paneLayouts:       map[string]*paneLayoutEntry{},
 	}

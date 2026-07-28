@@ -166,14 +166,21 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		return nil
 	}
 	// Routing is the pure gesture.ClassifyWheel: this handler only resolves
-	// the impure facts (live view attached? cursor in the content box?) and
-	// executes the verdict.
+	// the impure facts (live view attached? cursor in the content box? an
+	// enterable well under the cursor?) and executes the verdict.
+	var hoverWell *rpc.Tile
+	if p.TextFocus == "" {
+		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsWellKind(t.Kind) && t.ChildGridID != "" {
+			hoverWell = t
+		}
+	}
 	switch gesture.ClassifyWheel(gesture.WheelInput{
-		TextFocused:      p.TextFocus != "",
-		URLDescent:       a.isURLDescent(p),
-		LiveURLView:      a.urlViewFor(p.ID) != nil,
-		InContentBox:     pointInPaneContent(r, sx, sy),
-		TextModeRendered: p.TextMode == rpc.TextModeRendered,
+		TextFocused:       p.TextFocus != "",
+		URLDescent:        a.isURLDescent(p),
+		LiveURLView:       a.urlViewFor(p.ID) != nil,
+		InContentBox:      pointInPaneContent(r, sx, sy),
+		TextModeRendered:  p.TextMode == rpc.TextModeRendered,
+		OverEnterableWell: hoverWell != nil,
 	}) {
 	case gesture.WheelSwallow:
 		// A live URL view owns the content box and scrolls itself; a stray
@@ -192,6 +199,34 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		a.scheduleURLUpdate()
 		return nil
 	case gesture.WheelIgnore:
+		return nil
+	case gesture.WheelZoomWell:
+		// Issue #210: the wheel zooms the grid IN the hovered well — its
+		// stored view_* preview framing, the one owner the renderer reads
+		// per frame — not the grid the pane shows. Pure math in
+		// zoomtrans.WellWheelView (the same cursor-anchored kernel as the
+		// pane zoom, in preview space); the cache is patched per notch and
+		// the settle persister posts one SetWellView per tile at flush.
+		ps := paneToDragdrop(p, r)
+		x0, y0 := ps.CellToScreen(float64(hoverWell.X), float64(hoverWell.Y))
+		x1, _ := ps.CellToScreen(float64(hoverWell.X)+1, float64(hoverWell.Y))
+		parentCell := x1 - x0
+		wpx := float64(hoverWell.W) * parentCell
+		hpx := float64(hoverWell.H) * parentCell
+		zw := zoomtrans.Well{
+			X: hoverWell.X, Y: hoverWell.Y, W: hoverWell.W, H: hoverWell.H,
+			ViewX: hoverWell.ViewX, ViewY: hoverWell.ViewY, ViewZoom: hoverWell.ViewZoom,
+		}
+		vx, vy, ratio, changed := zoomtrans.WellWheelView(dy, zw, parentCell,
+			sx-(x0+wpx/2), sy-(y0+hpx/2), zoomFactor, wellZoomRatioMin, wellZoomRatioMax)
+		if !changed {
+			return nil
+		}
+		updated := *hoverWell
+		updated.ViewX, updated.ViewY, updated.ViewZoom = vx, vy, ratio
+		a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
+		a.wellWheelPending[hoverWell.ID] = a.gridIDForPane(p)
+		a.draw()
 		return nil
 	}
 	// WheelZoomPane — smooth zoom centered on the cursor: amount scales with

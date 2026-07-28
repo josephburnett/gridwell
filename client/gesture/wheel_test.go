@@ -10,6 +10,10 @@ func TestClassifyWheel(t *testing.T) {
 	}{
 		{"grid view zooms", WheelInput{}, WheelZoomPane},
 		{"grid view zooms even with live view flags", WheelInput{LiveURLView: true, InContentBox: true}, WheelZoomPane},
+		// Issue #210: hovering an enterable well zooms the WELL's preview;
+		// empty space (no well under the cursor) is the pane-zoom escape.
+		{"over an enterable well zooms the well", WheelInput{OverEnterableWell: true}, WheelZoomWell},
+		{"a well under a content descent never claims the wheel", WheelInput{TextFocused: true, OverEnterableWell: true}, WheelIgnore},
 		{"live url over content box swallows", WheelInput{TextFocused: true, URLDescent: true, LiveURLView: true, InContentBox: true}, WheelSwallow},
 		{"live url outside content box ignored", WheelInput{TextFocused: true, URLDescent: true, LiveURLView: true}, WheelIgnore},
 		{"frozen url descent ignored", WheelInput{TextFocused: true, URLDescent: true, InContentBox: true}, WheelIgnore},

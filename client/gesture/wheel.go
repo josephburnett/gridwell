@@ -9,6 +9,11 @@ type WheelAction int
 const (
 	// WheelZoomPane: pane-wide cursor-anchored zoom (zoomtrans.WheelZoom).
 	WheelZoomPane WheelAction = iota
+	// WheelZoomWell: the cursor hovers an enterable well in a grid view —
+	// the wheel zooms the grid IN the well (its stored view_zoom preview
+	// framing), not the grid the pane shows (issue #210). Empty space is
+	// the escape hatch back to the pane zoom.
+	WheelZoomWell
 	// WheelScrollDoc: scroll a rendered-mode text descent vertically.
 	WheelScrollDoc
 	// WheelSwallow: a live URL view owns the content box; a stray wheel that
@@ -32,14 +37,23 @@ type WheelInput struct {
 	InContentBox bool
 	// TextModeRendered: the text descent is in rendered mode.
 	TextModeRendered bool
+	// OverEnterableWell: in a grid view, the cursor is over a well tile
+	// with a resolvable child grid (the same predicate a drop's
+	// PromoteToWell uses).
+	OverEnterableWell bool
 }
 
 // ClassifyWheel routes a wheel event. Outside any content descent the wheel
-// zooms the pane. Inside one: a live URL view over the content box swallows
-// strays (the view scrolls itself); rendered mode scrolls the document;
-// anything else (text mode, a frozen url) is ignored by the canvas.
+// zooms the pane — unless the cursor hovers an enterable well, whose OWN
+// preview zooms instead (issue #210; empty space still zooms the pane).
+// Inside a descent: a live URL view over the content box swallows strays
+// (the view scrolls itself); rendered mode scrolls the document; anything
+// else (text mode, a frozen url) is ignored by the canvas.
 func ClassifyWheel(in WheelInput) WheelAction {
 	if !in.TextFocused {
+		if in.OverEnterableWell {
+			return WheelZoomWell
+		}
 		return WheelZoomPane
 	}
 	if in.URLDescent && in.LiveURLView && in.InContentBox {
