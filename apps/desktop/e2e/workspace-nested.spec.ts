@@ -15,13 +15,12 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
 }
 
 async function barClickCrumb(gw: any, window: any, level: number): Promise<void> {
-  const panes = await gw.panes();
-  const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  const width = Math.max(...panes.map((p: any) => p.x + p.w));
-  const state = await workspaceState(window);
-  // Crumbs divide the width evenly (capped at 240px) — click crumb k's center.
-  const crumbW = Math.min(width / Math.max(state.depth, 1), 240);
-  await window.mouse.click((level - 1) * crumbW + crumbW / 2, barTop + 13, { button: 'right' });
+  // The bar hook reports the exact rects the renderer drew (issue #212) —
+  // click the workspace crumb's center, no spec-side geometry restatement.
+  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+  const seg = bar.segments.find((s: any) => s.kind === 'workspace' && s.index === level);
+  expect(seg, `workspace crumb ${level} must be in the bar`).toBeTruthy();
+  await window.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2, { button: 'right' });
   await gw.waitIdle();
 }
 

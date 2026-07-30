@@ -2,42 +2,94 @@ package wsbar
 
 import "testing"
 
-func TestHeightOnlyInsideAWorkspace(t *testing.T) {
-	if Height(0) != 0 {
-		t.Fatal("the session tree / landing page must have no bar")
-	}
-	if Height(1) != RowH || Height(3) != RowH {
-		t.Fatal("one band regardless of depth (breadcrumbs, not stacked bars)")
+func TestHeightAlwaysReserved(t *testing.T) {
+	if Height() != RowH {
+		t.Fatal("the bar is permanent chrome (issue #212): one band, always")
 	}
 }
 
-// TestSegmentsAndHitTestAgree: render and input read the same rects, so the
-// crumb drawn at a point is the crumb a click there resolves to.
-func TestSegmentsAndHitTestAgree(t *testing.T) {
-	segs := Segments(3, 900)
-	if len(segs) != 3 {
-		t.Fatalf("segments = %d, want 3", len(segs))
+// Render and input read the same rects, so the crumb drawn at a point is
+// the crumb a click there resolves to.
+func TestLayoutAndHitTestAgree(t *testing.T) {
+	segs := Layout(3, 4, 900)
+	if len(segs) != 7 {
+		t.Fatalf("segments = %d, want 7", len(segs))
 	}
 	for _, s := range segs {
-		if got := SegmentAt(segs, s.X+s.W/2); got != s.Level {
-			t.Errorf("center of crumb %d hit-tests as %d", s.Level, got)
+		got, ok := At(segs, s.X+s.W/2)
+		if !ok || got.Kind != s.Kind || got.Index != s.Index {
+			t.Errorf("center of segment %+v hit-tests as %+v (ok=%v)", s, got, ok)
 		}
 	}
-	if SegmentAt(segs, segs[2].X+segs[2].W+50) != 0 {
+	last := segs[len(segs)-1]
+	if _, ok := At(segs, last.X+last.W+50); ok {
 		t.Error("beyond the last crumb must hit nothing")
 	}
-	if SegmentAt(nil, 10) != 0 {
+	if _, ok := At(nil, 10); ok {
 		t.Error("empty bar must hit nothing")
 	}
 }
 
-func TestSegmentsCapWidth(t *testing.T) {
-	segs := Segments(1, 2000)
-	if segs[0].W != maxCrumbW {
-		t.Fatalf("single crumb w = %v, want capped %v", segs[0].W, maxCrumbW)
+func TestLayoutOrdersWorkspaceThenChain(t *testing.T) {
+	segs := Layout(2, 3, 1000)
+	wantKinds := []Kind{KindWorkspace, KindWorkspace, KindChain, KindChain, KindChain}
+	wantIndex := []int{1, 2, 0, 1, 2}
+	for i, s := range segs {
+		if s.Kind != wantKinds[i] || s.Index != wantIndex[i] {
+			t.Errorf("segment %d = %+v, want kind %v index %d", i, s, wantKinds[i], wantIndex[i])
+		}
+		if i > 0 && s.X != segs[i-1].X+segs[i-1].W {
+			t.Errorf("segment %d does not abut its neighbor", i)
+		}
 	}
-	segs = Segments(10, 1000)
+}
+
+func TestWorkspaceCrumbWidthCapped(t *testing.T) {
+	segs := Layout(1, 0, 2000)
+	if segs[0].W != maxCrumbW {
+		t.Fatalf("single workspace crumb w = %v, want capped %v", segs[0].W, maxCrumbW)
+	}
+	segs = Layout(10, 0, 1000)
 	if segs[0].W != 100 {
 		t.Fatalf("deep nesting divides evenly: w = %v, want 100", segs[0].W)
+	}
+}
+
+func TestChainSquares(t *testing.T) {
+	segs := Layout(0, 3, 1000)
+	for _, s := range segs {
+		if s.W != RowH {
+			t.Fatalf("chain crumb w = %v, want square %v", s.W, RowH)
+		}
+	}
+	// Workspace crumbs yield width to the chain before capping.
+	segs = Layout(2, 2, 400)
+	ws, _ := WorkspaceSegment(segs, 1)
+	if ws.W != (400-2*RowH)/2 {
+		t.Fatalf("workspace crumb w = %v, want %v", ws.W, (400-2*RowH)/2)
+	}
+}
+
+// A too-narrow bar shrinks the chain squares, never the workspace labels,
+// and everything stays inside the width.
+func TestOverflowShrinksChain(t *testing.T) {
+	segs := Layout(0, 100, 320)
+	last := segs[len(segs)-1]
+	if last.X+last.W > 320.0001 {
+		t.Fatalf("chain overflows the bar: ends at %v", last.X+last.W)
+	}
+	if segs[0].W >= RowH {
+		t.Fatalf("squares did not shrink: w = %v", segs[0].W)
+	}
+}
+
+func TestWorkspaceSegmentLookup(t *testing.T) {
+	segs := Layout(3, 2, 900)
+	s, ok := WorkspaceSegment(segs, 2)
+	if !ok || s.Index != 2 || s.Kind != KindWorkspace {
+		t.Fatalf("WorkspaceSegment(2) = %+v ok=%v", s, ok)
+	}
+	if _, ok := WorkspaceSegment(segs, 4); ok {
+		t.Fatal("missing level must not resolve")
 	}
 }

@@ -88,9 +88,11 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
     .poll(async () => (await errors(window)).stripH, { timeout: 20_000, intervals: [1_000] })
     .toBe(0);
   const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
-  const height = await window.evaluate(() => window.innerHeight);
+  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
   const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
-  expect(bottom, 'panes reclaim the reserved strip height').toBeGreaterThan(height - 24 - 0.5);
+  // Panes end at the always-on bottom bar (issue #212) — the strip's band
+  // below it is reclaimed.
+  expect(bottom, 'panes reclaim the reserved strip height').toBe(bar.top);
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {

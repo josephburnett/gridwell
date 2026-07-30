@@ -262,7 +262,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// the pane name bubble: LEFT-click renames that workspace inline;
 	// RIGHT-click LEAVES it (and everything deeper) — the one gesture that
 	// crosses the workspace boundary; in-pane ascent never does.
-	if a.workspaceBarClick(sx, sy, args[0].Get("button").Int()) {
+	if a.bottomBarClick(sx, sy, args[0].Get("button").Int()) {
 		args[0].Call("preventDefault")
 		return nil
 	}
@@ -1897,12 +1897,28 @@ func (a *App) startTextAscent(p *pane.Pane) {
 // cached or the text tile row vanished while we were focused on it. We just
 // clear TextFocus and reset the viewport to whatever was saved.
 func (a *App) exitFileFocusInstant(p *pane.Pane) {
+	a.exitTextInstant(p, true)
+	a.draw()
+	a.scheduleURLUpdate()
+}
+
+// exitTextInstant pops a text/url/shell descent with no animation,
+// performing the same saves and stream teardown the animated ascent does.
+// restoreEmbed controls whether a saved embed-origin descent is restored
+// (a single ascent lands back on the doc) or consumed and discarded (a
+// multi-level crumb jump is heading ABOVE the embed origin — bottombar.go).
+func (a *App) exitTextInstant(p *pane.Pane, restoreEmbed bool) {
 	// The freeze is kept here (streams may be live) except for an ephemeral
 	// tile, which is deleted instead — same rule as startTextAscent.
 	ephemeral := false
-	if t, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &t) && !a.otherPaneShowsTile(p.ID, t.ID) {
-		ephemeral = true
-		defer a.deleteEphemeralTile(t.ID, t.Version)
+	if t, ok := a.descendedTile(p); ok {
+		// The buffer/framing save the animated path performs — resolvable
+		// rows get it here too, so an instant pop never loses an edit.
+		a.saveTextBeforeAscent(p, t)
+		if a.isEphemeralTile(p, &t) && !a.otherPaneShowsTile(p.ID, t.ID) {
+			ephemeral = true
+			defer a.deleteEphemeralTile(t.ID, t.Version)
+		}
 	}
 	a.closeURLStream(p.ID, !ephemeral)   // no-op if not a URL descent
 	a.closeShellStream(p.ID, !ephemeral) // no-op if not a shell descent
@@ -1913,11 +1929,11 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 		// If the saved state captured a text descent (embed click), restore it
 		// (and its anchor/path for a cross-grid follow) so a single ascent
 		// lands on the doc, not the grid behind it.
-		a.restoreEmbedReturn(p, saved)
+		if restoreEmbed {
+			a.restoreEmbedReturn(p, saved)
+		}
 	}
 	a.refreshFileOverlay()
-	a.draw()
-	a.scheduleURLUpdate()
 }
 
 // saveWellViewBeforeAscent is persistWellView under the pane's own anchor —

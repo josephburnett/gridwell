@@ -343,8 +343,9 @@ func (a *App) draw() {
 	a.syncRenamePill()
 
 	// The reserved bottom bands, drawn last so nothing paints over them:
-	// the workspace bar (when inside a pane tile), then the notice strip.
-	a.drawWorkspaceBar()
+	// the bottom bar (workspace crumbs + descent chain), then the notice
+	// strip.
+	a.drawBottomBar()
 	a.drawErrStrip()
 
 	// Inside a workspace, every repaint arms the debounced layout persister:
@@ -371,11 +372,11 @@ func (a *App) layoutPanes() map[string]pane.Rect {
 // minus the reserved notice strip. One owner — the cascading divider resize
 // (pane.ResizeThrough) must see the exact rect the layout uses.
 func (a *App) rootLayoutRect() pane.Rect {
-	// Two reserved bands, bottom-up: the notice strip, then the workspace
-	// bar (visible only inside a pane tile). Panes fill what's left, so
-	// neither band can be painted over — by canvas or native views.
+	// Two reserved bands, bottom-up: the notice strip, then the always-on
+	// bottom bar (issue #212). Panes fill what's left, so neither band can
+	// be painted over — by canvas or native views.
 	return pane.Rect{X: 0, Y: 0, W: a.width,
-		H: a.height - errsurface.StripHeight(a.errs.Len()) - wsbar.Height(a.ws.Depth())}
+		H: a.height - errsurface.StripHeight(a.errs.Len()) - wsbar.Height()}
 }
 
 // drawErrStrip paints the notice strip in the reserved band at the bottom of

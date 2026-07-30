@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -55,6 +56,7 @@ func (a *App) installTestHook() {
 			return nil
 		}),
 		"workspace":     js.FuncOf(a.thWorkspace),
+		"bar":           js.FuncOf(a.thBar),
 		"launcher":      js.FuncOf(a.thLauncher),
 		"plugins":       js.FuncOf(a.thPlugins),
 		"nodeGrid":      js.FuncOf(func(js.Value, []js.Value) any { return a.nodeGrid }),
@@ -620,6 +622,38 @@ func stringsToAny(ss []string) []any {
 		out[i] = s
 	}
 	return out
+}
+
+// thBar exposes the bottom bar (issue #212): the band's top edge and every
+// segment's rect + identity — workspace crumbs by level, chain crumbs by
+// index with the tile/anchor they stand for. Read-only over the exact
+// layout drawBottomBar renders and bottomBarClick hit-tests, so a spec's
+// click at a segment center is the click the user would make.
+func (a *App) thBar(js.Value, []js.Value) any {
+	_, chain := a.bottomBarChain()
+	segs := a.bottomBarSegments(chain)
+	out := make([]any, 0, len(segs))
+	for _, s := range segs {
+		e := map[string]any{
+			"x": s.X, "w": s.W, "index": s.Index,
+		}
+		switch s.Kind {
+		case wsbar.KindWorkspace:
+			e["kind"] = "workspace"
+		case wsbar.KindChain:
+			e["kind"] = "chain"
+			c := chain[s.Index]
+			e["anchor"] = c.Anchor
+			e["tileID"] = c.TileID
+			e["text"] = c.Text
+		}
+		out = append(out, e)
+	}
+	return map[string]any{
+		"top":      a.bottomBarTop(),
+		"height":   wsbar.RowH,
+		"segments": out,
+	}
 }
 
 // thWorkspace exposes the workspace stack: nesting depth, crumb names, and

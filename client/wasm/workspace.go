@@ -26,7 +26,6 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/workspace"
-	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -395,101 +394,8 @@ func (a *App) animateWorkspaceReturn(f workspace.Frame) {
 	})
 }
 
-// ── the bar ────────────────────────────────────────────────────────────────
-
-// workspaceBarTop returns the bar band's top edge: the bar sits directly
-// above the notice strip (which keeps the very bottom).
-func (a *App) workspaceBarTop() float64 {
-	return a.height - errsurface.StripHeight(a.errs.Len()) - wsbar.Height(a.ws.Depth())
-}
-
-// drawWorkspaceBar paints the breadcrumb band. Geometry comes from wsbar so
-// the click hit-test (workspaceBarClick) reads the identical layout — render
-// and input cannot disagree.
-func (a *App) drawWorkspaceBar() {
-	depth := a.ws.Depth()
-	if depth == 0 {
-		return
-	}
-	c := a.cctx
-	top := a.workspaceBarTop()
-	c.Set("fillStyle", colorPaneTileFill)
-	c.Call("fillRect", 0, top, a.width, wsbar.RowH)
-	names := a.ws.Names()
-	segs := wsbar.Segments(len(names), a.width)
-	c.Set("font", "12px system-ui, sans-serif")
-	c.Set("textBaseline", "middle")
-	for i, s := range segs {
-		// Crumb face: the current (rightmost) workspace reads brightest.
-		if s.Level == depth {
-			c.Set("fillStyle", colorPaneTileBorder)
-		} else {
-			c.Set("fillStyle", "#1d4a4a")
-		}
-		c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
-		c.Set("fillStyle", "#dff4f4")
-		label := names[i]
-		if label == "" {
-			label = "workspace"
-		}
-		c.Call("save")
-		c.Call("beginPath")
-		c.Call("rect", s.X+2, top, s.W-4, wsbar.RowH)
-		c.Call("clip")
-		c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
-		c.Call("restore")
-	}
-	c.Call("fillRect", 0, top, a.width, 1) // hairline above the band
-}
-
-// workspaceBarClick consumes a click in the bar band. The crumb is the
-// workspace's universal handle, mirroring the pane name bubble: LEFT-click
-// renames that workspace inline; RIGHT-click LEAVES workspace k and
-// everything deeper (the rightmost crumb leaves just the current one).
-// Returns true when the click was in the band, whether or not it hit a
-// crumb, so the click never falls through to a pane below.
-func (a *App) workspaceBarClick(sx, sy float64, button int) bool {
-	depth := a.ws.Depth()
-	if depth == 0 {
-		return false
-	}
-	top := a.workspaceBarTop()
-	if sy < top || sy >= top+wsbar.RowH {
-		return false
-	}
-	segs := wsbar.Segments(depth, a.width)
-	if level := wsbar.SegmentAt(segs, sx); level > 0 {
-		switch button {
-		case 0:
-			a.openWorkspaceRenameInput(level)
-		case 2:
-			a.ascendWorkspaceLevels(a.ws.PopCountForCrumb(level))
-		}
-	}
-	return true
-}
-
-// openWorkspaceRenameInput opens the shared inline rename input over crumb
-// `level` — the same input the pane name bubble uses, committing via the
-// same user-owned versioned rename.
-func (a *App) openWorkspaceRenameInput(level int) {
-	f := a.ws.At(level)
-	if f == nil {
-		return
-	}
-	segs := wsbar.Segments(a.ws.Depth(), a.width)
-	if level > len(segs) {
-		return
-	}
-	seg := segs[level-1]
-	top := a.workspaceBarTop()
-	a.openNameInputAt(f.Name, seg.W-28, func(st js.Value) {
-		st.Set("left", pxOf(seg.X+2))
-		st.Set("top", pxOf(top+1))
-	}, func(val string) {
-		a.commitWorkspaceRename(level, val)
-	})
-}
+// The bar itself — always-on, carrying the workspace crumbs AND the focused
+// pane's descent chain — lives in bottombar.go (issue #212).
 
 // commitWorkspaceRename posts the user-owned name for the workspace at
 // `level` and updates its crumb + version claim from the response (a rename
