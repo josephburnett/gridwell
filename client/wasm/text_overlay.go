@@ -105,6 +105,7 @@ func (a *App) ensureFileTextarea() {
 		return
 	}
 	ta := a.doc.Call("createElement", "textarea")
+	ta.Set("id", "gw-text-editor") // stable hook for e2e (wrap parity, #216)
 	style := ta.Get("style")
 	style.Set("position", "absolute")
 	style.Set("display", "none")

@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/wsbar"
@@ -72,6 +73,7 @@ func (a *App) installTestHook() {
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
 		"shellText":     js.FuncOf(a.thShellText),
 		"shellFeed":     js.FuncOf(a.thShellFeed),
+		"rawRows":       js.FuncOf(a.thRawRows),
 	}))
 }
 
@@ -662,6 +664,25 @@ func (a *App) thBar(js.Value, []js.Value) any {
 		}
 	}
 	return res
+}
+
+// thRawRows returns how many visual rows the CANVAS painter would produce
+// for the focused text descent's current textarea content — the wrap-parity
+// oracle (issue #216). A spec compares this against the textarea's own
+// scrollHeight-derived row count, crossing the browser-soft-wrap vs
+// canvas-wrap seam with the SAME bytes on both sides.
+func (a *App) thRawRows(js.Value, []js.Value) any {
+	p := a.tree.FocusedPane()
+	if p == nil || p.TextFocus == "" || !a.textTextarea.Truthy() {
+		return -1
+	}
+	src := a.textTextarea.Get("value").String()
+	st := defaultMarkdownStyle()
+	scale := a.textScaleFor(p)
+	setFont(a.cctx, st.codePx*scale, st.monospace, false, false)
+	m := a.cctx.Call("measureText", "M")
+	w := a.textContentWidth(p)
+	return len(markdown.WrapRawText(src, rawWrapCols(m, w, scale, st.pad)))
 }
 
 // thWorkspace exposes the workspace stack: nesting depth, crumb names, and

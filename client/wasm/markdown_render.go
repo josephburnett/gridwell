@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"hash/fnv"
-	"strings"
 	"syscall/js"
 
 	embedpkg "github.com/josephburnett/gridwell/client/embed"
@@ -624,7 +623,9 @@ func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
 
 // drawMarkdownText paints src as raw monospace text at the given scale. Used
 // for source-mode preview and as a faint backdrop behind the textarea overlay.
-// Text mode does not soft-wrap; long lines are clipped by the caller's clip.
+// Text mode soft-wraps to the SAME columns the editing textarea shows
+// (markdown.WrapRawText, issue #216) — the face is monospace, so the budget
+// is a pure column count and the text cannot reflow when focus moves.
 // rawTextLineHeight is the line-advance multiple for raw monospace markdown
 // source. Shared by the canvas painter (drawMarkdownText) and the editing
 // <textarea> (file_overlay.go) so a focused pane's textarea and its blurred
@@ -632,7 +633,7 @@ func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
 // same size, the same place, whether or not the pane has focus.
 const rawTextLineHeight = 1.35
 
-func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY float64) {
+func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
 	setFont(c, fontPx*scale, st.monospace, false, false)
@@ -654,10 +655,22 @@ func drawMarkdownText(c js.Value, src string, x, y, _ /* w */, h, scale, scrollY
 	// font above.
 	slotted := markdown.RawTextLineSlot(fontPx, rawTextLineHeight, scale, st.pad, scrollY, asc, desc)
 	slotTop := slotted.Top0
-	for ln := range strings.SplitSeq(src, "\n") {
+	for _, ln := range markdown.WrapRawText(src, rawWrapCols(m, w, scale, st.pad)) {
 		if markdown.RawTextLineVisible(slotTop, slotted.Slot, h) {
 			c.Call("fillText", ln, x+st.pad*scale, y+slotTop+slotted.Baseline)
 		}
 		slotTop += slotted.Slot
 	}
+}
+
+// rawWrapCols is the soft-wrap column budget for raw text painted into a
+// box w LOGICAL units wide at scale: the pixel content width (minus the
+// pad the painter insets by) over one monospace advance. m is the already-
+// scaled measureText result the painter took for its slot math.
+func rawWrapCols(m js.Value, w, scale, pad float64) int {
+	adv := m.Get("width").Float()
+	if adv <= 0 {
+		return 0
+	}
+	return int(((w - 2*pad) * scale) / adv)
 }
