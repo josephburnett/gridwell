@@ -112,7 +112,6 @@ type rightDragState struct {
 	// rendered tile-embed under the cursor; the chain-link glyph paints
 	// centered inside it.
 	embedRect [4]float64
-
 }
 
 // onRightDown classifies the right-down and arms the matching gesture
