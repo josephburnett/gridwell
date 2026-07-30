@@ -27,7 +27,7 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
 async function barClick(gw: any, window: any): Promise<void> {
   const panes = await gw.panes();
   const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13, { button: 'right' });
+  await window.mouse.click(30, barTop + 13);
   await gw.waitIdle();
 }
 

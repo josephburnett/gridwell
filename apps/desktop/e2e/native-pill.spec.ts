@@ -50,7 +50,7 @@ test('the bar crumb renames and zooms a live url pane; no native pill exists', a
   // and the rename input works directly over the live pane: the bar is
   // outside the view's rect, no parking, no native forwarding.
   await expect.poll(async () => (await gw.barName()).label, { timeout: 10_000 }).toBe('unnamed');
-  await gw.clickBarName();
+  await gw.clickBarName('right');
   const input = window.locator('#gw-rename-input');
   await expect(input).toBeVisible();
   await input.fill('cloud-console');
@@ -60,7 +60,7 @@ test('the bar crumb renames and zooms a live url pane; no native pill exists', a
     .toBe('cloud-console');
   await expect.poll(async () => (await gw.barName()).label).toBe('cloud-console');
 
-  // RIGHT-click the crumb: the pane zooms (split first so it is observable).
+  // LEFT-click the title: the pane zooms (split first so it is observable).
   await gw.splitFocusedPaneVertical();
   const twoPanes = await gw.panes();
   expect(twoPanes).toHaveLength(2);
@@ -68,8 +68,8 @@ test('the bar crumb renames and zooms a live url pane; no native pill exists', a
   const urlPane = twoPanes.slice().sort((a, b) => a.x - b.x)[0];
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
   await expect.poll(async () => (await gw.focused()).id).toBe(urlPane.id);
-  await gw.clickBarName('right');
+  await gw.clickBarName();
   await expect.poll(async () => (await gw.panes()).length, { timeout: 5_000 }).toBe(1);
-  await gw.clickBarName('right');
+  await gw.clickBarName();
   await expect.poll(async () => (await gw.panes()).length, { timeout: 5_000 }).toBe(2);
 });

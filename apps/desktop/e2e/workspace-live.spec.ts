@@ -63,7 +63,7 @@ test('workspace descent freezes an outer live url; ascent revives the descent', 
   // (issue #202): the restore is a re-entry, so the view comes back live.
   const panes = await gw.panes();
   const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13, { button: 'right' });
+  await window.mouse.click(30, barTop + 13);
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const restored = (await gw.panes()).find((p: any) => p.textFocus !== '');

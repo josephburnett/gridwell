@@ -37,7 +37,7 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   // #118's audit gap): "ephemeral" — and left-click must NOT open the
   // rename input.
   await expect.poll(async () => (await gw.barName()).label).toBe('ephemeral');
-  await gw.clickBarName();
+  await gw.clickBarName('right');
   await expect(window.locator('#gw-rename-input')).toHaveCount(0);
 
   // The terminal runs on the WEBGL renderer — never the canvas fallback,

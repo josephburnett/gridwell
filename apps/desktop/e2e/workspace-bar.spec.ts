@@ -7,8 +7,9 @@ import { tileAt } from './oracle';
 // The workspace boundary itself still belongs to the bar alone:
 //   - the IN-PANE ascent gesture (middle click) on a fully-ascended pane
 //     does NOT leave the workspace — the two ascent vocabularies never blur;
-//   - the workspace crumb mirrors the pane name bubble: LEFT-click renames
-//     the workspace inline (user-owned), RIGHT-click leaves.
+//   - the workspace crumb: LEFT-click leaves (ascend, like every crumb),
+//     RIGHT-click renames the workspace inline (user-owned) —
+//     the 2026-07-30 button swap.
 
 async function workspaceState(window: any): Promise<{ depth: number; names: string[] }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
@@ -61,10 +62,10 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await gw.waitIdle();
   expect((await workspaceState(window)).depth, 'in-pane ascent crossed the workspace boundary').toBe(1);
 
-  // LEFT-click the crumb: the shared inline rename input (the name-bubble
-  // gesture, aimed at the workspace). Enter commits a user-owned name; the
-  // crumb and the tile's alt both update.
-  await window.mouse.click(crumb.x + 20, inside.top + inside.height / 2);
+  // RIGHT-click the crumb: the shared inline rename input, aimed at the
+  // workspace. Enter commits a user-owned name; the crumb and the tile's
+  // alt both update.
+  await window.mouse.click(crumb.x + 20, inside.top + inside.height / 2, { button: 'right' });
   await window.locator('#gw-rename-input').waitFor({ timeout: 5_000 });
   await window.fill('#gw-rename-input', 'ops board');
   await window.keyboard.press('Enter');
@@ -77,8 +78,8 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   }, { message: 'the rename must persist as the tile alt' }).toBe('ops board');
   expect((await workspaceState(window)).depth, 'renaming must not ascend').toBe(1);
 
-  // RIGHT-click the crumb leaves (the ascent gesture); the band stays.
-  await window.mouse.click(crumb.x + 20, inside.top + inside.height / 2, { button: 'right' });
+  // LEFT-click the crumb leaves (the ascent gesture); the band stays.
+  await window.mouse.click(crumb.x + 20, inside.top + inside.height / 2);
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   expect(await panesBottom(gw)).toBe(outside.top);

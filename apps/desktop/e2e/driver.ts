@@ -141,12 +141,12 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
 
-  // barName returns the bottom bar's CURRENT crumb (issue #213): the segment
-  // carrying the focused pane's name text, with the bar band's geometry.
+  // barName returns the bottom bar's centered current-pane TITLE (issue
+  // #213, 2026-07-30 tweak): the focused pane's name, with the bar band's
+  // geometry.
   async barName(): Promise<{
     x: number;
     w: number;
-    squareW: number;
     top: number;
     height: number;
     label: string;
@@ -154,19 +154,19 @@ export class GridwellDriver {
     muted: boolean;
   }> {
     const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
-    const cur = (bar.segments as any[]).filter((s) => s.kind === 'chain').pop();
-    if (!cur || cur.label === undefined) {
-      throw new Error('bar has no current-pane crumb (boot-blank pane?)');
+    if (!bar.title) {
+      throw new Error('bar has no current-pane title (boot-blank pane?)');
     }
-    return { x: cur.x, w: cur.w, squareW: cur.squareW, top: bar.top, height: bar.height, label: cur.label, editable: cur.editable, muted: cur.muted };
+    const t = bar.title;
+    return { x: t.x, w: t.w, top: bar.top, height: bar.height, label: t.label, editable: t.editable, muted: t.muted };
   }
 
-  // clickBarName clicks the current crumb's NAME area (right of its preview
-  // square): left opens the rename input when editable, right toggles the
-  // pane zoom — the old name-bubble contract, now living in the bar.
+  // clickBarName clicks the centered title: LEFT toggles the tmux-style
+  // pane zoom, RIGHT opens the rename input when editable — the old
+  // name-bubble contract, now living in the bar (2026-07-30 buttons).
   async clickBarName(button: 'left' | 'right' = 'left'): Promise<void> {
     const b = await this.barName();
-    await this.win.mouse.click(b.x + b.squareW + 12, b.top + b.height / 2, { button });
+    await this.win.mouse.click(b.x + b.w / 2, b.top + b.height / 2, { button });
   }
 
   // cellCenter maps a grid cell to screen coordinates — and REFUSES a point

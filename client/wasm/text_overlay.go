@@ -321,9 +321,11 @@ func (a *App) ensureFileToggle() {
 	style.Set("width", strconv.Itoa(2*plusButtonRadius)+"px")
 	style.Set("height", strconv.Itoa(2*plusButtonRadius)+"px")
 	style.Set("borderRadius", "50%")
-	style.Set("background", colorPlusBg)
-	style.Set("border", "1px solid "+colorPaneBorder)
-	style.Set("color", colorPlusFg)
+	// The pane-tile teal, matching the bar-slot circle it sits on
+	// (2026-07-30 tweak).
+	style.Set("background", colorPaneTileBorder)
+	style.Set("border", "1px solid #dff4f4")
+	style.Set("color", colorPaneTileFill)
 	style.Set("cursor", "pointer")
 	style.Set("alignItems", "center")
 	style.Set("justifyContent", "center")

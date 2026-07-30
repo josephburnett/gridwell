@@ -20,7 +20,7 @@ async function barClickCrumb(gw: any, window: any, level: number): Promise<void>
   const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
   const seg = bar.segments.find((s: any) => s.kind === 'workspace' && s.index === level);
   expect(seg, `workspace crumb ${level} must be in the bar`).toBeTruthy();
-  await window.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2, { button: 'right' });
+  await window.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);
   await gw.waitIdle();
 }
 

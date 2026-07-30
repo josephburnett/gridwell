@@ -561,11 +561,12 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 // stay muscle-memory-compatible with the + button. The caller then draws its
 // glyph on top at (cx, cy).
 func (a *App) drawCircleButtonChrome(cx, cy float64) {
-	a.cctx.Set("fillStyle", colorPlusBg)
+	// The pane-tile teal, matching the + button (2026-07-30 tweak).
+	a.cctx.Set("fillStyle", colorPaneTileBorder)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
 	a.cctx.Call("fill")
-	a.cctx.Set("strokeStyle", colorPaneBorder)
+	a.cctx.Set("strokeStyle", "#dff4f4")
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("stroke")
 }
@@ -578,7 +579,7 @@ func (a *App) drawURLBackButton() {
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
-	a.cctx.Set("strokeStyle", colorPlusFg)
+	a.cctx.Set("strokeStyle", colorPaneTileFill)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Set("lineCap", "round")
 	a.cctx.Set("lineJoin", "round")
@@ -603,7 +604,7 @@ func (a *App) drawURLRefreshButton() {
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
-	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPlusFg)
+	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPaneTileFill)
 }
 
 // drawURLNoLiveButton paints the bar-slot button on a frozen URL-tile descent
@@ -615,10 +616,10 @@ func (a *App) drawURLNoLiveButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
-	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorNoLiveFg)
+	drawRefreshIcon(a.cctx, cx, cy, 7.0, "#1d4a4a")
 	// The slash: corner-to-corner over the glyph, same dim color, so the
 	// shape reads as "refresh — crossed out" at a glance.
-	a.cctx.Set("strokeStyle", colorNoLiveFg)
+	a.cctx.Set("strokeStyle", "#1d4a4a")
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Set("lineCap", "round")
 	a.cctx.Call("beginPath")

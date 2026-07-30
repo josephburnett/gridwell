@@ -22,11 +22,11 @@ test('the bar crumb names the grid you are in', async ({ gw, window }) => {
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
-  // The crumb shows "unnamed"; click its text and type the room's name.
+  // The title shows "unnamed"; RIGHT-click it and type the room's name.
   await expect.poll(async () => (await gw.barName()).label).toBe('unnamed');
   // REAL mouse click — a synthetic dispatchEvent has no default actions and
   // masked the blur-to-body bug that made real renames "do nothing" (#130).
-  await gw.clickBarName();
+  await gw.clickBarName('right');
   const input = window.locator('#gw-rename-input');
   await expect(input).toBeVisible();
   await input.fill('kitchen');
@@ -51,7 +51,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // Rename it while inside — the tmux-pane-rename case.
-  await gw.clickBarName(); // real mouse (see above)
+  await gw.clickBarName('right'); // real mouse (see above)
   const input = window.locator('#gw-rename-input');
   await input.fill('my-work');
   await input.press('Enter');

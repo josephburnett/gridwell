@@ -63,7 +63,7 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
   // descent), then edit Routine OUTSIDE it — the singleton is now bound to
   // Routine.
   const barTop = Math.max(...(await gw.panes()).map((p) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13, { button: 'right' });
+  await window.mouse.click(30, barTop + 13);
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   await expect
