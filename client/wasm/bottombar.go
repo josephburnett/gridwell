@@ -341,6 +341,11 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	p, chain := a.bottomBarChain()
 	seg, ok := wsbar.At(a.bottomBarSegments(chain), sx)
 	if !ok {
+		// EMPTY bar space: right-click is the ascend gesture (issue #215) —
+		// the slot's gesture, reachable from anywhere along the band.
+		if button == 2 {
+			a.barSlotClick(2)
+		}
 		return true
 	}
 	// LEFT-click ascends on every crumb kind alike (2026-07-30 tweak: one

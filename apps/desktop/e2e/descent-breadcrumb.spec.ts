@@ -110,6 +110,18 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   expect(landed.ascentDepth, 'every saved viewport consumed — none orphaned').toBe(0);
   expect((await chainSegs(window)).length).toBe(1);
 
+  // Right-click on EMPTY bar space ascends one level (issue #215): descend
+  // W1 again, then right-click midway between the crumbs and the title —
+  // a spot no crumb, title, or slot owns.
+  await gw.descendCell(cx, cy);
+  await expect.poll(async () => (await gw.focused()).gridID).toBe(g1);
+  const b2 = await bar(window);
+  const chainEnd = b2.segments.filter((s: any) => s.kind === 'chain').pop()!;
+  const emptyX = chainEnd.x + chainEnd.w + 20;
+  await window.mouse.click(emptyX, b2.top + b2.height / 2, { button: 'right' });
+  await gw.waitIdle();
+  await expect.poll(async () => (await gw.focused()).gridID, { timeout: 10_000 }).toBe(rootGrid);
+
   // The intermediate framing persisted: re-descending lands W2's grid where
   // the jump left it (preview = descent target = ascent return, across an
   // instant multi-level pop). Zoom round-trips exactly; the center is
