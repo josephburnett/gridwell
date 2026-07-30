@@ -21,7 +21,6 @@ export const CH = {
   setBounds: 'gw:setBounds', // SetBoundsArgs → void
   setHidden: 'gw:setHidden', // SetHiddenArgs → void
   setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom, issue #82)
-  setNameLabel: 'gw:setNameLabel', // {paneId,label} → void (native bubble text, issue #118)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
   reload: 'gw:reload',     // PaneRef → void
@@ -38,7 +37,6 @@ export const CH = {
 // Payload is the mouse button (0 = left → back, else → ascend).
 export const CTRL = {
   click: 'gw:control-click',
-  nameClick: 'gw:name-click', // native name-bubble mousedown (button number)
 } as const;
 
 // Live URL view's injected preload → main (send, fire-and-forget). The view
@@ -64,7 +62,6 @@ export const EV = {
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus (issue #170)
-  nameClick: 'gw:name-click-ev', // NameClickEvent — the native bubble was clicked (issue #118)
                       // (webview, session, sidecar) that must reach the user.
                       // Charter §1/§6: one owner, no second "silent" path for
                       // a main-process failure.
@@ -138,9 +135,6 @@ export interface PlaceArgs {
   // history is the tile's persisted navigation back-stack; when valid the
   // view restores it instead of a bare loadURL (issue #113).
   history?: string;
-  // nameLabel seeds the native name bubble (issue #118): born with the entry
-  // so no post-place push can race entry creation.
-  nameLabel?: string;
 }
 
 export interface SetZoomArgs {
@@ -209,14 +203,6 @@ export interface OpenBelowEvent {
 export interface ZoomKeyEvent {
   paneId: string;
   key: string;
-}
-
-// NameClickEvent: the native name bubble over a live url pane was clicked.
-// button 0 = open the rename input (the renderer parks the view first);
-// button 2 = toggle the pane zoom (issue #118).
-export interface NameClickEvent {
-  paneId: string;
-  button: number;
 }
 
 // ErrorEvent is the one payload shape for EV.error: every main-process

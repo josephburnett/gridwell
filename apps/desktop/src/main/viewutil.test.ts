@@ -7,7 +7,6 @@ import {
   controlVisible,
   controlBounds,
   parkedBounds,
-  namePillBounds,
   cookieDomainMatches,
   storageOriginsFor,
   zoomChordKey,
@@ -294,14 +293,6 @@ test('classifyRightPress: a fast flick past the far threshold is a drag (#119)',
   assert.equal(classifyRightPress(24, 0, 50, dist, time), false);
 });
 
-test('namePillBounds centers the bubble at the top, shrinking into narrow views', () => {
-  const b = { x: 100, y: 50, width: 400, height: 300 };
-  assert.deepEqual(namePillBounds(b, 240, 24, 4), { x: 180, y: 54, width: 240, height: 24 });
-  // Narrower than the pill: it shrinks to fit inside the margins.
-  const narrow = namePillBounds({ x: 0, y: 0, width: 100, height: 300 }, 240, 24, 4);
-  assert.equal(narrow.width, 92);
-  assert.equal(narrow.x, 4);
-});
 
 // Issue #136 / #177: the site-clearing cookie match — one SITE (registrable
 // domain), which includes SIBLING subdomains: Google's login state lives on

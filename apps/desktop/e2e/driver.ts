@@ -141,6 +141,34 @@ export class GridwellDriver {
     return this.win.evaluate(() => (window as any).__gridwellTest.palette());
   }
 
+  // barName returns the bottom bar's CURRENT crumb (issue #213): the segment
+  // carrying the focused pane's name text, with the bar band's geometry.
+  async barName(): Promise<{
+    x: number;
+    w: number;
+    squareW: number;
+    top: number;
+    height: number;
+    label: string;
+    editable: boolean;
+    muted: boolean;
+  }> {
+    const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
+    const cur = (bar.segments as any[]).filter((s) => s.kind === 'chain').pop();
+    if (!cur || cur.label === undefined) {
+      throw new Error('bar has no current-pane crumb (boot-blank pane?)');
+    }
+    return { x: cur.x, w: cur.w, squareW: cur.squareW, top: bar.top, height: bar.height, label: cur.label, editable: cur.editable, muted: cur.muted };
+  }
+
+  // clickBarName clicks the current crumb's NAME area (right of its preview
+  // square): left opens the rename input when editable, right toggles the
+  // pane zoom — the old name-bubble contract, now living in the bar.
+  async clickBarName(button: 'left' | 'right' = 'left'): Promise<void> {
+    const b = await this.barName();
+    await this.win.mouse.click(b.x + b.squareW + 12, b.top + b.height / 2, { button });
+  }
+
   // cellCenter maps a grid cell to screen coordinates — and REFUSES a point
   // outside the pane's rect. An off-pane (or off-viewport) point is always a
   // spec bug (the cell isn't where the viewport shows at this zoom), and CDP

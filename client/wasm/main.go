@@ -272,16 +272,9 @@ type App struct {
 	textTextareaInputCb  js.Func
 	textTextareaScrollCb js.Func
 
-	// renamePill / renameEditing back the rename-while-descended affordance
-	// (issue #61): one shared DOM pill at the focused pane's top-center (see
-	// rename_overlay.go). renameEditing hides the pill while its input twin
-	// is open.
-	renamePill        js.Value
-	renamePillClickCb js.Func
-	renameEditing     bool
-	// lastNativePill dedupes label pushes to a live pane's native bubble
-	// twin (paneID + NUL + label) so the per-draw sync doesn't spam IPC.
-	lastNativePill string
+	// renameEditing marks the shared inline rename input as open (the bar's
+	// current crumb hides its name text underneath it — bottombar.go).
+	renameEditing bool
 
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above

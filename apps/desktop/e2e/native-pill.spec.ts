@@ -1,12 +1,15 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Issue #118: over a LIVE url pane the name bubble is a NATIVE view (DOM
-// cannot paint above a WebContentsView). It shows the bubble label, LEFT-click
-// opens the rename input (the view parks so the DOM input is usable), and
-// RIGHT-click toggles the pane zoom — same contract as the DOM pill.
+// Issue #213 (superseding #118): the pane name lives in the bottom bar's
+// CURRENT crumb — reserved layout OUTSIDE every WebContentsView's rect — so
+// renaming and pane-zooming a LIVE url pane work through the plain DOM
+// input with NO native pill view. This spec is the deletion's pin: the
+// whole rename/zoom contract over a live pane, plus the assertion that no
+// pill webContents exists anymore (exactly two data: pages per live pane:
+// the content view's preload chrome aside, only the corner control).
 
-test('the native bubble over a live url pane renames and zooms', async ({
+test('the bar crumb renames and zooms a live url pane; no native pill exists', async ({
   electronApp,
   window,
   gw,
@@ -33,31 +36,21 @@ test('the native bubble over a live url pane renames and zooms', async ({
       timeout: 15_000,
     })
     .toBeGreaterThan(wcBefore);
-  await window.waitForTimeout(800); // let the label push land
 
-  // The native pill exists and carries the bubble label ("unnamed" — the
-  // tile has no user name yet).
-  const pillText = () =>
-    electronApp.evaluate(async ({ webContents }) => {
-      const pill = webContents
-        .getAllWebContents()
-        .find((w) => w.getURL().startsWith('data:text/html') && w.getURL().includes('setLabel'));
-      if (!pill) return null;
-      return (await pill.executeJavaScript('document.getElementById("p").textContent')) as string;
-    });
-  await expect.poll(pillText, { timeout: 10_000 }).toBe('unnamed');
+  // The native pill subsystem is GONE: no data: page carrying setLabel.
+  const pillCount = await electronApp.evaluate(({ webContents }) =>
+    webContents
+      .getAllWebContents()
+      .filter((w) => w.getURL().startsWith('data:text/html') && w.getURL().includes('setLabel'))
+      .length,
+  );
+  expect(pillCount, 'no native name-pill view may exist').toBe(0);
 
-  // LEFT-click the pill: the view parks and the DOM rename input opens.
-  const clickPill = (button: 'left' | 'right') =>
-    electronApp.evaluate(async ({ webContents }, btn: string) => {
-      const pill = webContents
-        .getAllWebContents()
-        .find((w) => w.getURL().startsWith('data:text/html') && w.getURL().includes('setLabel'));
-      if (!pill) throw new Error('native pill not found');
-      pill.sendInputEvent({ type: 'mouseDown', x: 120, y: 12, button: btn, clickCount: 1 } as never);
-      pill.sendInputEvent({ type: 'mouseUp', x: 120, y: 12, button: btn, clickCount: 1 } as never);
-    }, button);
-  await clickPill('left');
+  // The bar's current crumb carries the name ("unnamed" — no user name yet)
+  // and the rename input works directly over the live pane: the bar is
+  // outside the view's rect, no parking, no native forwarding.
+  await expect.poll(async () => (await gw.barName()).label, { timeout: 10_000 }).toBe('unnamed');
+  await gw.clickBarName();
   const input = window.locator('#gw-rename-input');
   await expect(input).toBeVisible();
   await input.fill('cloud-console');
@@ -65,9 +58,9 @@ test('the native bubble over a live url pane renames and zooms', async ({
   await expect
     .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'url', cx, cy)?.altText ?? ''))
     .toBe('cloud-console');
-  await expect.poll(pillText, { timeout: 10_000 }).toBe('cloud-console');
+  await expect.poll(async () => (await gw.barName()).label).toBe('cloud-console');
 
-  // RIGHT-click the pill: the pane zooms (split first so it is observable).
+  // RIGHT-click the crumb: the pane zooms (split first so it is observable).
   await gw.splitFocusedPaneVertical();
   const twoPanes = await gw.panes();
   expect(twoPanes).toHaveLength(2);
@@ -75,8 +68,8 @@ test('the native bubble over a live url pane renames and zooms', async ({
   const urlPane = twoPanes.slice().sort((a, b) => a.x - b.x)[0];
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
   await expect.poll(async () => (await gw.focused()).id).toBe(urlPane.id);
-  await clickPill('right');
+  await gw.clickBarName('right');
   await expect.poll(async () => (await gw.panes()).length, { timeout: 5_000 }).toBe(1);
-  await clickPill('right');
+  await gw.clickBarName('right');
   await expect.poll(async () => (await gw.panes()).length, { timeout: 5_000 }).toBe(2);
 });

@@ -20,6 +20,11 @@ const RowH = 32.0
 // when the nesting is shallow; deep nesting divides the width evenly.
 const maxCrumbW = 240.0
 
+// NameW is the extra width the LAST chain crumb carries for the current
+// pane's name text (issue #213): the name is part of the crumb, not a
+// bubble floating over pane content.
+const NameW = 140.0
+
 // Height returns the band height to reserve. Always RowH: the bar is
 // permanent chrome now, not workspace-only.
 func Height() float64 { return RowH }
@@ -45,10 +50,12 @@ type Segment struct {
 }
 
 // Layout lays the bar left-to-right: wsCount workspace crumbs (even
-// division capped at maxCrumbW), then chainCount squares of side RowH.
-// When the width can't fit everything, the chain squares shrink evenly
-// (never the workspace crumbs — their labels are the harder thing to
-// lose) so the whole location always stays visible and clickable.
+// division capped at maxCrumbW), then chainCount chain crumbs — squares of
+// side RowH, except the LAST, which is NameW wider to carry the current
+// pane's name text (issue #213). When the width can't fit everything, the
+// name extension gives way first, then the chain squares shrink evenly
+// (never the workspace crumbs — their labels are the harder thing to lose)
+// so the whole location always stays visible and clickable.
 func Layout(wsCount, chainCount int, width float64) []Segment {
 	if wsCount < 0 {
 		wsCount = 0
@@ -60,9 +67,13 @@ func Layout(wsCount, chainCount int, width float64) []Segment {
 		return nil
 	}
 	square := RowH
+	nameW := NameW
+	if chainCount == 0 {
+		nameW = 0
+	}
 	wsW := 0.0
 	if wsCount > 0 {
-		wsW = (width - float64(chainCount)*square) / float64(wsCount)
+		wsW = (width - float64(chainCount)*square - nameW) / float64(wsCount)
 		if wsW > maxCrumbW {
 			wsW = maxCrumbW
 		}
@@ -72,8 +83,14 @@ func Layout(wsCount, chainCount int, width float64) []Segment {
 	}
 	if chainCount > 0 {
 		avail := width - float64(wsCount)*wsW
-		if float64(chainCount)*square > avail {
-			square = avail / float64(chainCount)
+		if float64(chainCount)*square+nameW > avail {
+			nameW = avail - float64(chainCount)*square
+			if nameW < 0 {
+				nameW = 0
+			}
+		}
+		if float64(chainCount)*square+nameW > avail {
+			square = (avail - nameW) / float64(chainCount)
 			if square < 0 {
 				square = 0
 			}
@@ -86,8 +103,12 @@ func Layout(wsCount, chainCount int, width float64) []Segment {
 		x += wsW
 	}
 	for i := 0; i < chainCount; i++ {
-		out = append(out, Segment{Kind: KindChain, Index: i, X: x, W: square})
-		x += square
+		w := square
+		if i == chainCount-1 {
+			w += nameW
+		}
+		out = append(out, Segment{Kind: KindChain, Index: i, X: x, W: w})
+		x += w
 	}
 	return out
 }

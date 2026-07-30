@@ -1,14 +1,15 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Issue #61: rename while descended — "name the room you're in". A pill at
-// the focused pane's top-center shows the current name; clicking it opens an
-// input; Enter commits a USER-owned name via SetTileAlt. The server latches
+// Issue #61: rename while descended — "name the room you're in". The bottom
+// bar's CURRENT crumb shows the name (issue #213 — part of the bar, never
+// floating over pane content); clicking its text opens an input; Enter
+// commits a USER-owned name via the versioned rename. The server latches
 // ownership (alt_user), so the automatic captures — a shell's foreground
 // command baked in on detach, a url's page title on freeze — never overwrite
 // a name the user chose.
 
-test('the rename pill names the grid you are in', async ({ gw, window }) => {
+test('the bar crumb names the grid you are in', async ({ gw, window }) => {
   await gw.enterPlugin('localdb');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
@@ -21,23 +22,21 @@ test('the rename pill names the grid you are in', async ({ gw, window }) => {
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
-  // The pill shows "unnamed"; click it and type the room's name.
-  const pill = window.locator('#gw-rename-pill');
-  await expect(pill).toBeVisible();
-  await expect(pill).toHaveText('unnamed');
+  // The crumb shows "unnamed"; click its text and type the room's name.
+  await expect.poll(async () => (await gw.barName()).label).toBe('unnamed');
   // REAL mouse click — a synthetic dispatchEvent has no default actions and
   // masked the blur-to-body bug that made real renames "do nothing" (#130).
-  await pill.click();
+  await gw.clickBarName();
   const input = window.locator('#gw-rename-input');
   await expect(input).toBeVisible();
   await input.fill('kitchen');
   await input.press('Enter');
 
-  // The name landed server-side on the CONTAINING well, and the pill agrees.
+  // The name landed server-side on the CONTAINING well, and the crumb agrees.
   await expect
     .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? ''))
     .toBe('kitchen');
-  await expect(pill).toHaveText('kitchen');
+  await expect.poll(async () => (await gw.barName()).label).toBe('kitchen');
 });
 
 test('a user-set shell name survives the detach command capture', async ({ gw, window }) => {
@@ -52,9 +51,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // Rename it while inside — the tmux-pane-rename case.
-  const pill = window.locator('#gw-rename-pill');
-  await expect(pill).toBeVisible();
-  await pill.click(); // real mouse (see above)
+  await gw.clickBarName(); // real mouse (see above)
   const input = window.locator('#gw-rename-input');
   await input.fill('my-work');
   await input.press('Enter');

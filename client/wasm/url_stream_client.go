@@ -131,10 +131,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	b := contentViewBounds(r)
 	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, t.URLString)
-	// The native name bubble is born with its label — a post-place push can
-	// race entry creation and be dropped (issue #118).
-	label, _, _ := a.bubbleLabel(p)
-	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, contentZoomOf(&t), t.URLHistory, a.bubbleDecorate(p, label))
+	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, contentZoomOf(&t), t.URLHistory)
 	a.draw()
 }
 
@@ -244,8 +241,10 @@ func (a *App) syncURLViews() {
 // them first, else the overlay eats the move/up events and the gesture stalls.
 func (a *App) liveOverlaysHidden() bool {
 	// The url modal is DOM — a live WebContentsView would paint OVER it,
-	// hiding what you type (issue #131) — so it parks the views too.
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.renameEditing || a.urlModalOpen || a.schemaModalOpen
+	// hiding what you type (issue #131) — so it parks the views too. The
+	// rename input does NOT park anymore: it opens in the bottom bar (issue
+	// #213), outside every live view's rect.
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.urlModalOpen || a.schemaModalOpen
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL

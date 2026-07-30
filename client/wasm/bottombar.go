@@ -86,14 +86,17 @@ func (a *App) drawBottomBar() {
 // drawChainCrumb paints one descent-chain square: the tile's own preview
 // (the same drawer the parent grid and markdown embeds use), or the plugin
 // identity glyph for a root crumb. The current (rightmost) crumb gets the
-// bright border the workspace crumbs use for "you are here".
+// bright border the workspace crumbs use for "you are here" — and carries
+// the pane's name text beside its square (issue #213): the bubbleLabel /
+// bubbleDecorate owners render here now, not in a pill over pane content.
 func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, current bool) {
 	c := a.cctx
-	side := min(s.W, wsbar.RowH) - 8
+	square := min(s.W, wsbar.RowH)
+	side := square - 8
 	if side < 4 {
 		return
 	}
-	x := s.X + (s.W-side)/2
+	x := s.X + (square-side)/2
 	y := top + (wsbar.RowH-side)/2
 
 	c.Call("save")
@@ -121,11 +124,31 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, curren
 		c.Call("strokeRect", x+1, y+1, side-2, side-2)
 	}
 	c.Call("restore")
-	if current {
-		c.Set("strokeStyle", colorPaneTileBorder)
-		c.Set("lineWidth", 2.0)
-		c.Call("strokeRect", x-1, y-1, side+2, side+2)
+	if !current {
+		return
 	}
+	c.Set("strokeStyle", colorPaneTileBorder)
+	c.Set("lineWidth", 2.0)
+	c.Call("strokeRect", x-1, y-1, side+2, side+2)
+	// The current pane's name, part of the crumb (issue #213). Hidden while
+	// the rename input replaces it in place.
+	p := a.tree.FocusedPane()
+	if p == nil || a.renameEditing || s.W < square+24 {
+		return
+	}
+	label, _, muted := a.bubbleLabel(p)
+	label = a.bubbleDecorate(p, label)
+	color := "#dff4f4"
+	if muted {
+		color = colorMuted
+	}
+	c.Set("fillStyle", color)
+	c.Call("save")
+	c.Call("beginPath")
+	c.Call("rect", s.X+square, top, s.W-square-4, wsbar.RowH)
+	c.Call("clip")
+	c.Call("fillText", label, s.X+square+4, top+wsbar.RowH/2)
+	c.Call("restore")
 }
 
 // chainCrumbTile resolves a tile crumb's row from the cache, kicking a
@@ -172,7 +195,22 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 			a.ascendWorkspaceLevels(a.ws.PopCountForCrumb(seg.Index))
 		}
 	case wsbar.KindChain:
-		if button == 0 && p != nil {
+		if p == nil {
+			return true
+		}
+		if seg.Index == len(chain)-1 {
+			// The current crumb is the pane's universal handle (the old name
+			// bubble's contract, issue #213): LEFT-click renames what's here,
+			// RIGHT-click toggles the tmux-style pane zoom.
+			switch button {
+			case 0:
+				a.openRenameInput()
+			case 2:
+				a.togglePaneZoom()
+			}
+			return true
+		}
+		if button == 0 {
 			a.ascendToChainCrumb(p, chain[seg.Index])
 		}
 	}
@@ -198,6 +236,42 @@ func (a *App) openWorkspaceRenameInput(level int) {
 		st.Set("top", pxOf(top+4))
 	}, func(val string) {
 		a.commitWorkspaceRename(level, val)
+	})
+}
+
+// openRenameInput swaps the current crumb's name text for the shared
+// inline input (issue #213 — the name lives in the bar, not a pill over
+// pane content, so this works identically over live views with no native
+// help). Enter commits the versioned rename; Escape or blur cancels. A
+// no-op on read-only contexts.
+func (a *App) openRenameInput() {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	target, ok := a.renameTarget(p)
+	if !ok {
+		return
+	}
+	_, chain := a.bottomBarChain()
+	segs := a.bottomBarSegments(chain)
+	var seg *wsbar.Segment
+	for i := range segs {
+		if segs[i].Kind == wsbar.KindChain && segs[i].Index == len(chain)-1 {
+			seg = &segs[i]
+		}
+	}
+	if seg == nil {
+		return
+	}
+	square := min(seg.W, wsbar.RowH)
+	top := a.bottomBarTop()
+	tileID := target.ID
+	a.openNameInputAt(target.AltText, seg.W-square-28, func(st js.Value) {
+		st.Set("left", pxOf(seg.X+square))
+		st.Set("top", pxOf(top+4))
+	}, func(val string) {
+		a.commitRename(tileID, val)
 	})
 }
 

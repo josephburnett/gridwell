@@ -55,25 +55,39 @@ func TestWorkspaceCrumbWidthCapped(t *testing.T) {
 	}
 }
 
-func TestChainSquares(t *testing.T) {
+func TestChainSquaresAndTheNamedCurrent(t *testing.T) {
 	segs := Layout(0, 3, 1000)
-	for _, s := range segs {
+	for _, s := range segs[:len(segs)-1] {
 		if s.W != RowH {
 			t.Fatalf("chain crumb w = %v, want square %v", s.W, RowH)
 		}
 	}
-	// Workspace crumbs yield width to the chain before capping.
-	segs = Layout(2, 2, 400)
+	// The last (current) crumb carries the name extension (issue #213).
+	if last := segs[len(segs)-1]; last.W != RowH+NameW {
+		t.Fatalf("current crumb w = %v, want %v", last.W, RowH+NameW)
+	}
+	// Workspace crumbs yield width to the chain + name before capping.
+	segs = Layout(2, 2, 500)
 	ws, _ := WorkspaceSegment(segs, 1)
-	if ws.W != (400-2*RowH)/2 {
-		t.Fatalf("workspace crumb w = %v, want %v", ws.W, (400-2*RowH)/2)
+	if ws.W != (500-2*RowH-NameW)/2 {
+		t.Fatalf("workspace crumb w = %v, want %v", ws.W, (500-2*RowH-NameW)/2)
 	}
 }
 
-// A too-narrow bar shrinks the chain squares, never the workspace labels,
-// and everything stays inside the width.
+// A too-narrow bar drops the name extension first, then shrinks the chain
+// squares — never the workspace labels — and everything stays inside the
+// width.
 func TestOverflowShrinksChain(t *testing.T) {
-	segs := Layout(0, 100, 320)
+	// Tight but square-fitting: the name extension gives way, squares hold.
+	segs := Layout(0, 10, 10*RowH+20)
+	if last := segs[len(segs)-1]; last.W != RowH+20 {
+		t.Fatalf("name extension must absorb the shortfall: last w = %v", last.W)
+	}
+	if segs[0].W != RowH {
+		t.Fatalf("squares must hold while the name absorbs: w = %v", segs[0].W)
+	}
+	// Truly narrow: the squares shrink too, and nothing overflows.
+	segs = Layout(0, 100, 320)
 	last := segs[len(segs)-1]
 	if last.X+last.W > 320.0001 {
 		t.Fatalf("chain overflows the bar: ends at %v", last.X+last.W)

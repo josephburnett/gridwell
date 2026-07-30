@@ -630,7 +630,7 @@ func stringsToAny(ss []string) []any {
 // layout drawBottomBar renders and bottomBarClick hit-tests, so a spec's
 // click at a segment center is the click the user would make.
 func (a *App) thBar(js.Value, []js.Value) any {
-	_, chain := a.bottomBarChain()
+	p, chain := a.bottomBarChain()
 	segs := a.bottomBarSegments(chain)
 	out := make([]any, 0, len(segs))
 	for _, s := range segs {
@@ -646,6 +646,15 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			e["anchor"] = c.Anchor
 			e["tileID"] = c.TileID
 			e["text"] = c.Text
+			if p != nil && s.Index == len(chain)-1 {
+				// The current crumb carries the pane's name (issue #213) —
+				// expose the same bubbleLabel/bubbleDecorate output it draws.
+				label, editable, muted := a.bubbleLabel(p)
+				e["label"] = a.bubbleDecorate(p, label)
+				e["editable"] = editable
+				e["muted"] = muted
+				e["squareW"] = min(s.W, wsbar.RowH)
+			}
 		}
 		out = append(out, e)
 	}

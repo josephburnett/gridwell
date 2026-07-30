@@ -41,9 +41,9 @@ export async function longPressDrag(page: Page, from: Pt, to: Pt, holdMs = 550):
 
 // longPressInPlace holds one finger still past the HoldMs threshold and lifts
 // without moving — the touch form of a bare right CLICK (ascend on the corner
-// circle, pane zoom on the name pill). Distinct from longPressDrag: the DOM
-// overlay buttons act on the right mousedown the hold synthesizes, so the
-// press must land on the element and stay put.
+// circle, pane zoom on the bar's current crumb). Distinct from longPressDrag:
+// the targets act on the right mousedown the hold synthesizes, so the press
+// must land on the element and stay put.
 export async function longPressInPlace(page: Page, at: Pt, holdMs = 550): Promise<void> {
   const s = await session(page);
   await s.send('Input.dispatchTouchEvent', {
