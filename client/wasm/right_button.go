@@ -57,14 +57,11 @@ const (
 	// nothing. The sole purpose is to surface the chain-link icon so the
 	// user discovers that "this is a reference, not a tile."
 	rightDragEmbedHint
-	// rightDragAscend is armed when right-down lands on the corner circle
-	// (the +/refresh/back button) of a pane that has somewhere to ascend
-	// to. Release inside the circle ascends; dragging out of the circle
-	// cancels (cursorInCircle tracks this so the preview can show the
-	// armed/cancel state). This is the discoverable ascent gesture; the
-	// middle button is the shortcut.
-	rightDragAscend
 )
+
+// The corner-circle rightDragAscend gesture is gone (issue #214): the
+// circle lives in the bottom bar, where a plain right CLICK ascends
+// (barSlotClick) — bar clicks never reach this gesture layer.
 
 // rightDragState carries everything the move and up handlers need to
 // finish (or cancel) the gesture. One discriminated struct keeps the
@@ -116,11 +113,6 @@ type rightDragState struct {
 	// centered inside it.
 	embedRect [4]float64
 
-	// rightDragAscend-only. ascendPaneID is the pane to ascend; the
-	// release ascends only if cursorInCircle is still true (the cursor is
-	// inside the corner circle), otherwise the gesture is cancelled.
-	ascendPaneID   string
-	cursorInCircle bool
 }
 
 // onRightDown classifies the right-down and arms the matching gesture
@@ -137,10 +129,8 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	// them instead of recomputing. Every lookup here is a pure read; the
 	// state edits happen only in the arming switch below.
 	in := gesture.Input{
-		OnCornerCircle: pointInPlus(p, r, sx, sy),
-		CanAscend:      a.canAscend(p),
-		InGridView:     p.TextFocus == "",
-		Region:         pane.ClassifyRegion(r, resizeBandPx, sx, sy),
+		InGridView: p.TextFocus == "",
+		Region:     pane.ClassifyRegion(r, resizeBandPx, sx, sy),
 	}
 
 	var hit *embedHit
@@ -169,17 +159,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 			curX:      sx,
 			curY:      sy,
 			embedRect: [4]float64{hit.x, hit.y, hit.w, hit.h},
-		}
-		a.draw()
-	case gesture.Ascend:
-		a.rightDrag = &rightDragState{
-			kind:           rightDragAscend,
-			startX:         sx,
-			startY:         sy,
-			curX:           sx,
-			curY:           sy,
-			ascendPaneID:   p.ID,
-			cursorInCircle: true,
 		}
 		a.draw()
 	case gesture.TileCenter, gesture.TileResize:
@@ -292,12 +271,6 @@ func (a *App) onRightMove(sx, sy float64) {
 		a.advanceCloneDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
-	case rightDragAscend:
-		// Track whether the cursor is still over the circle so the
-		// preview can show armed-vs-cancel, and release knows what to do.
-		ap := a.tree.FindPane(rd.ascendPaneID)
-		pr := a.paneRectByID(rd.ascendPaneID)
-		rd.cursorInCircle = ap != nil && pr.W > 0 && pointInPlus(ap, pr, sx, sy)
 	}
 	a.draw()
 }
@@ -407,14 +380,6 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	case rightDragEmbedHint:
 		// No-op: the gesture only existed to surface the chain-link glyph
 		// while the button was held. Release just clears it.
-	case rightDragAscend:
-		// Commit only if the cursor is still inside the circle; dragging
-		// out of it cancels.
-		if rd.cursorInCircle {
-			if p := a.tree.FindPane(rd.ascendPaneID); p != nil {
-				a.ascendPane(p)
-			}
-		}
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -715,10 +680,10 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	if region.IsResize() {
 		d = a.dividerOnSide(p, region.Side())
 	}
-	// gesture.ResizeAffordance owns the gating (corner-circle beats band beats
-	// missing divider); dividerResizeCursor shares it so the hover cursor can't
+	// gesture.ResizeAffordance owns the gating (band beats a missing
+	// divider); dividerResizeCursor shares it so the hover cursor can't
 	// disagree with where a drag actually arms. When arm is true, d is non-nil.
-	arm, _ := gesture.ResizeAffordance(pointInPlus(p, r, sx, sy), region, d != nil)
+	arm, _ := gesture.ResizeAffordance(region, d != nil)
 	if !arm {
 		return false
 	}
@@ -751,7 +716,7 @@ func (a *App) dividerResizeCursor(sx, sy float64) string {
 	region := pane.ClassifyRegion(r, resizeBandPx, sx, sy)
 	hasDivider := region.IsResize() && a.dividerOnSide(p, region.Side()) != nil
 	// Same gating as armLeftResize, via the shared gesture.ResizeAffordance.
-	_, cursor := gesture.ResizeAffordance(pointInPlus(p, r, sx, sy), region, hasDivider)
+	_, cursor := gesture.ResizeAffordance(region, hasDivider)
 	return cursor
 }
 

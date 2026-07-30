@@ -8,8 +8,8 @@ import (
 func makeLayout() Layout {
 	return Layout{
 		Cfg:      Default(),
-		Pane:     Rect{X: 0, Y: 0, W: 1000, H: 800},
-		PaneZoom: 1.0,
+		PlusX:    976,
+		PlusY:    776,
 		NumTiles: 4,
 	}
 }
@@ -18,7 +18,7 @@ func TestPlusCenter(t *testing.T) {
 	l := makeLayout()
 	cx, cy := l.PlusCenter()
 	if cx != 976 || cy != 776 {
-		t.Errorf("PlusCenter = (%v,%v), want (976,776)", cx, cy)
+		t.Errorf("PlusCenter = (%v,%v), want the caller's (976,776) verbatim", cx, cy)
 	}
 }
 
@@ -45,15 +45,11 @@ func TestPointInPlus(t *testing.T) {
 	}
 }
 
-func TestTilePxFixedAcrossZoom(t *testing.T) {
-	l := makeLayout()
-
-	// Fixed at 3/4 of a default cell (CellPx 64 -> 48), regardless of zoom.
-	for _, z := range []float64{1, 0.5, 10.0, 0} {
-		l.PaneZoom = z
-		if got := l.TilePx(); got != 48 {
-			t.Errorf("zoom %v: TilePx = %v, want 48 (fixed)", z, got)
-		}
+func TestTilePxFixed(t *testing.T) {
+	// Fixed at 3/4 of a default cell (CellPx 64 -> 48): the creation menu is
+	// a constant-size affordance.
+	if got := makeLayout().TilePx(); got != 48 {
+		t.Errorf("TilePx = %v, want 48 (fixed)", got)
 	}
 }
 
@@ -118,15 +114,16 @@ func TestPointInPopover(t *testing.T) {
 	}
 }
 
-func TestTrackingPaneSize(t *testing.T) {
-	// + button stays anchored to bottom-right as pane grows.
+func TestPopoverTracksCenter(t *testing.T) {
+	// The popover is anchored to the + center: moving the center (a window
+	// resize moves the bar slot) translates the popover 1:1.
 	l := makeLayout()
-	cx1, cy1 := l.PlusCenter()
-	l.Pane.W += 500
-	l.Pane.H += 500
-	cx2, cy2 := l.PlusCenter()
-	if cx2-cx1 != 500 || cy2-cy1 != 500 {
-		t.Errorf("PlusCenter delta = (%v,%v), want (500,500)", cx2-cx1, cy2-cy1)
+	r1 := l.PopoverRect()
+	l.PlusX += 500
+	l.PlusY += 300
+	r2 := l.PopoverRect()
+	if r2.X-r1.X != 500 || r2.Y-r1.Y != 300 {
+		t.Errorf("PopoverRect delta = (%v,%v), want (500,300)", r2.X-r1.X, r2.Y-r1.Y)
 	}
 }
 

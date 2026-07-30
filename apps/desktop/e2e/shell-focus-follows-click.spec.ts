@@ -38,24 +38,16 @@ test('left-click into a live shell transfers pane focus and shows the ascend cir
   await gw.waitIdle();
   expect((await gw.focused()).id, 'focus moved off the shell pane').toBe(right.id);
 
-  // The circle hides on the unfocused shell pane (the focused-pane-only rule).
-  const circleDisplay = () =>
-    window.evaluate(() => {
-      const el = document.querySelector('.gw-shell-ascend') as HTMLElement | null;
-      return el ? getComputedStyle(el).display : 'none'; // absent = hidden
-    });
-  await expect.poll(circleDisplay).toBe('none');
-
   // LEFT-CLICK back into the terminal: Gridwell focus must follow the click
   // (the overlay swallows the mousedown, so the overlay itself must transfer
-  // it), and the ascend circle must reappear.
+  // it). (The per-pane ascend circle is gone — issue #214: the ascend handle
+  // is the bottom bar's slot, one for the whole window.)
   await window.mouse.click(left.x + left.w / 2, left.y + left.h / 2);
   await expect
     .poll(async () => (await gw.focused()).id, { timeout: 5_000 })
     .toBe(shellPaneId);
-  await expect.poll(circleDisplay).toBe('flex');
 
-  // Leave clean: ascend via the corner circle and delete the shell tile so
+  // Leave clean: ascend via the bar slot and delete the shell tile so
   // its tmux session dies before teardown.
   await gw.rightClickPlus();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');

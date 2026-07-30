@@ -8,6 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -15,11 +16,12 @@ import (
 // over the pure client/palette package, the floating "+" button, and the
 // popover drawing (one swatch per templateKind, with its identity glyph).
 
-func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
+func (a *App) paletteLayoutFor(p *pane.Pane, _ pane.Rect) palette.Layout {
+	cx, cy := a.plusButtonCenter()
 	return palette.Layout{
 		Cfg:      palette.Default(),
-		Pane:     palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
-		PaneZoom: p.Zoom,
+		PlusX:    cx,
+		PlusY:    cy,
 		NumTiles: len(a.paletteItems(p)),
 		// Plugins fill the top row; the primitives (if any) drop to a second
 		// row below. paletteItems always lists the plugins first.
@@ -27,39 +29,30 @@ func (a *App) paletteLayoutFor(p *pane.Pane, r pane.Rect) palette.Layout {
 	}
 }
 
-// plusLayout builds the minimal Layout needed to place the + button for pane
-// p — just the pane rect. The pane's zoom does
-// not influence the + button.
-// plusLayout builds the layout for a pane's lower-right + button. The node grid
-// has no + button at all (it shows its plugin tiles directly), so the button
-// is always in the same corner home — no special-casing.
-func plusLayout(_ *pane.Pane, r pane.Rect) palette.Layout {
-	return palette.Layout{
-		Cfg:  palette.Default(),
-		Pane: palette.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H},
-	}
+// plusButtonCenter returns the screen-space center of the circle button:
+// the bottom bar's right-end slot (issue #214) — one fixed home for the
+// whole window, no longer a pane corner.
+func (a *App) plusButtonCenter() (float64, float64) {
+	return a.width - wsbar.SlotW/2, a.bottomBarTop() + wsbar.RowH/2
 }
 
-// plusButtonCenter returns the screen-space center of the + button for pane p.
-func plusButtonCenter(p *pane.Pane, r pane.Rect) (float64, float64) {
-	return plusLayout(p, r).PlusCenter()
+// pointInPlus reports whether (x, y) lies within the circle button.
+func (a *App) pointInPlus(x, y float64) bool {
+	cx, cy := a.plusButtonCenter()
+	dx, dy := x-cx, y-cy
+	rr := palette.Default().PlusRadius
+	return dx*dx+dy*dy <= rr*rr
 }
 
-// pointInPlus reports whether (x, y) lies within the + button for pane p.
-func pointInPlus(p *pane.Pane, r pane.Rect, x, y float64) bool {
-	return plusLayout(p, r).PointInPlus(x, y)
-}
-
-// drawPlusButton paints the floating circular + button in the pane's lower
-// right. During a tile drag whose source is this pane, the same round button
-// becomes the delete target: it shows a trashcan instead of a +, and its
-// circle goes danger-red while the dragged ghost hovers over it ("release
-// here deletes"). The round chrome is identical either way so the position is
-// muscle-memory-stable.
-func (a *App) drawPlusButton(p *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(p, r)
-	deleting := a.tileDragInFlight() && a.dragging.originPaneID == p.ID
-	hot := deleting && pointInPlus(p, r, a.dragging.curScreenX, a.dragging.curScreenY)
+// drawPlusButton paints the circular + button in the bar's slot. During a
+// tile drag, the same round button becomes the delete target: it shows a
+// trashcan instead of a +, and its circle goes danger-red while the dragged
+// ghost hovers over it ("release here deletes"). The round chrome is
+// identical either way so the position is muscle-memory-stable.
+func (a *App) drawPlusButton(p *pane.Pane) {
+	cx, cy := a.plusButtonCenter()
+	deleting := a.tileDragInFlight()
+	hot := deleting && a.pointInPlus(a.dragging.curScreenX, a.dragging.curScreenY)
 	bg := colorPlusBg
 	switch {
 	case hot:

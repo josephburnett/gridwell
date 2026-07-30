@@ -33,12 +33,6 @@ export const CH = {
   shellClose: 'gw:shell-close',   // PaneRef → void
 } as const;
 
-// Control overlay (the corner-button view) → main (send, fire-and-forget).
-// Payload is the mouse button (0 = left → back, else → ascend).
-export const CTRL = {
-  click: 'gw:control-click',
-} as const;
-
 // Live URL view's injected preload → main (send, fire-and-forget). The view
 // swallows the renderer's own mouse events, so its preload forwards button
 // presses here. Left button (focus intent only — the click still reaches the
@@ -53,7 +47,6 @@ export const VIEW = {
 export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
-  controlAscend: 'gw:control-ascend', // PaneRef — corner button right-clicked
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live URL view
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live URL view (ascend)
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live URL view (focus intent)
@@ -153,7 +146,7 @@ export interface SetHiddenArgs {
   // focused is whether this pane is the focused pane. Drives the corner
   // control's visibility independently of `hidden`: an unfocused live pane
   // keeps its web content on screen but hides its corner circle, so exactly
-  // one pane shows the control at a time (see webviews.ts controlVisible).
+  // one pane shows the control at a time.
   focused: boolean;
 }
 

@@ -49,9 +49,9 @@ func TestWorkspaceCrumbWidthCapped(t *testing.T) {
 	if segs[0].W != maxCrumbW {
 		t.Fatalf("single workspace crumb w = %v, want capped %v", segs[0].W, maxCrumbW)
 	}
-	segs = Layout(10, 0, 1000)
+	segs = Layout(10, 0, 1000+SlotW)
 	if segs[0].W != 100 {
-		t.Fatalf("deep nesting divides evenly: w = %v, want 100", segs[0].W)
+		t.Fatalf("deep nesting divides evenly over the non-slot width: w = %v, want 100", segs[0].W)
 	}
 }
 
@@ -66,11 +66,12 @@ func TestChainSquaresAndTheNamedCurrent(t *testing.T) {
 	if last := segs[len(segs)-1]; last.W != RowH+NameW {
 		t.Fatalf("current crumb w = %v, want %v", last.W, RowH+NameW)
 	}
-	// Workspace crumbs yield width to the chain + name before capping.
+	// Workspace crumbs yield width to the chain + name before capping; the
+	// right-end circle slot is reserved off the top (issue #214).
 	segs = Layout(2, 2, 500)
 	ws, _ := WorkspaceSegment(segs, 1)
-	if ws.W != (500-2*RowH-NameW)/2 {
-		t.Fatalf("workspace crumb w = %v, want %v", ws.W, (500-2*RowH-NameW)/2)
+	if ws.W != (500-SlotW-2*RowH-NameW)/2 {
+		t.Fatalf("workspace crumb w = %v, want %v", ws.W, (500-SlotW-2*RowH-NameW)/2)
 	}
 }
 
@@ -79,7 +80,7 @@ func TestChainSquaresAndTheNamedCurrent(t *testing.T) {
 // width.
 func TestOverflowShrinksChain(t *testing.T) {
 	// Tight but square-fitting: the name extension gives way, squares hold.
-	segs := Layout(0, 10, 10*RowH+20)
+	segs := Layout(0, 10, 10*RowH+SlotW+20)
 	if last := segs[len(segs)-1]; last.W != RowH+20 {
 		t.Fatalf("name extension must absorb the shortfall: last w = %v", last.W)
 	}

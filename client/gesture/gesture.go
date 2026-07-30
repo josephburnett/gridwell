@@ -56,13 +56,6 @@ type Input struct {
 	// over everything so the chain-link is always discoverable.
 	OverEmbed bool
 
-	// OnCornerCircle is true when the cursor is in the pane's corner
-	// circle; CanAscend is true when the pane has somewhere to ascend to.
-	// Together they arm Ascend (at root CanAscend is false and the circle
-	// is just the creation +, handled elsewhere).
-	OnCornerCircle bool
-	CanAscend      bool
-
 	// InGridView is true when the pane shows a grid (p.TextFocus == 0) —
 	// tile gestures are only valid there. OverTile is true when the cursor
 	// is over a tile; InTileCenter is true when it's in that tile's inner
@@ -77,15 +70,15 @@ type Input struct {
 }
 
 // Classify maps the resolved facts to a gesture Kind. The two switches
-// mirror onRightDown exactly: the special targets (embed, corner circle,
-// URL center, tile) take priority in that order; only if none of them
-// claim the down does the pane sub-region decide.
+// mirror onRightDown exactly: the special targets (embed, tile) take
+// priority in that order; only if none of them claim the down does the
+// pane sub-region decide. (The corner-circle Ascend arm is gone: the
+// circle lives in the bottom bar since issue #214, where a right CLICK
+// ascends — bar clicks never reach the pane gesture layer.)
 func Classify(in Input) Kind {
 	switch {
 	case in.OverEmbed:
 		return EmbedHint
-	case in.OnCornerCircle && in.CanAscend:
-		return Ascend
 	case in.InGridView && in.OverTile:
 		if in.InTileCenter {
 			return TileCenter
@@ -174,12 +167,12 @@ func ResizeOutcome(dir pane.Direction, sx, sy, corStart, corEnd float64) Collaps
 // — so both route through this one function instead of each re-deriving the
 // gating (the two used to be hand-mirrored copies that could drift).
 //
-// Inputs: inPlus (cursor over the corner circle, whose left-click always
-// wins), the region the cursor classifies into, and whether a grabbable
-// divider exists on that region's side. Precedence: corner circle beats the
-// resize band beats a missing divider.
-func ResizeAffordance(inPlus bool, region pane.Region, hasDivider bool) (arm bool, cursor string) {
-	if inPlus || !region.IsResize() || !hasDivider {
+// Inputs: the region the cursor classifies into, and whether a grabbable
+// divider exists on that region's side. (The corner circle no longer sits
+// inside any pane's resize band — it moved to the bottom bar, issue #214 —
+// so there is no precedence to arbitrate.)
+func ResizeAffordance(region pane.Region, hasDivider bool) (arm bool, cursor string) {
+	if !region.IsResize() || !hasDivider {
 		return false, ""
 	}
 	switch region {

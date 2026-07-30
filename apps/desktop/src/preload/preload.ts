@@ -81,13 +81,6 @@ const api = {
     ipcRenderer.on(EV.nav, h);
     return () => ipcRenderer.removeListener(EV.nav, h);
   },
-  // onControlAscend fires when a live tile's corner button is right/middle
-  // clicked — the ascent runs in the renderer.
-  onControlAscend(cb: (ev: PaneRef) => void): () => void {
-    const h = (_e: unknown, ev: PaneRef) => cb(ev);
-    ipcRenderer.on(EV.controlAscend, h);
-    return () => ipcRenderer.removeListener(EV.controlAscend, h);
-  },
   // onRightForward fires when a right-button press lands on a LIVE URL view;
   // main relays it here in canvas coords so the renderer can begin the pane
   // gesture (and then park the view).

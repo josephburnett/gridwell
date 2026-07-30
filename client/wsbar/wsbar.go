@@ -25,6 +25,12 @@ const maxCrumbW = 240.0
 // bubble floating over pane content.
 const NameW = 140.0
 
+// SlotW is the width reserved at the bar's RIGHT end for the circle
+// button slot (issue #214): the + menu / back / refresh / ascend handle,
+// moved off the pane corner so it never obscures content and needs no
+// native overlay over live views. Layout never places a crumb inside it.
+const SlotW = 48.0
+
 // Height returns the band height to reserve. Always RowH: the bar is
 // permanent chrome now, not workspace-only.
 func Height() float64 { return RowH }
@@ -64,6 +70,10 @@ func Layout(wsCount, chainCount int, width float64) []Segment {
 		chainCount = 0
 	}
 	if wsCount+chainCount == 0 || width <= 0 {
+		return nil
+	}
+	width -= SlotW // the right-end circle slot is reserved (issue #214)
+	if width <= 0 {
 		return nil
 	}
 	square := RowH

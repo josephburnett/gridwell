@@ -6,6 +6,7 @@ import (
 	"slices"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/wsbar"
@@ -81,6 +82,101 @@ func (a *App) drawBottomBar() {
 	}
 	c.Set("fillStyle", "#dff4f4")
 	c.Call("fillRect", 0, top, a.width, 1) // hairline above the band
+	a.drawBarSlot()
+}
+
+// drawBarSlot paints the bar's right-end circle for the FOCUSED pane's
+// mode (issue #214, the corner circle's new home): URL descent shows back
+// (live) / refresh (frozen) / the slashed no-live button; a frozen shell
+// shows refresh; a grid shows the + menu button (and the trashcan during a
+// tile drag). The node grid and a markdown descent draw nothing — the
+// first is read-only (and must offer no drag-delete target), the second's
+// slot is occupied by the DOM text-mode toggle at the same center.
+func (a *App) drawBarSlot() {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	if p.TextFocus != "" {
+		switch {
+		case a.isURLDescent(p):
+			if a.urlViewFor(p.ID) != nil {
+				a.drawURLBackButton()
+			} else if a.caps.LiveURL {
+				a.drawURLRefreshButton()
+			} else {
+				a.drawURLNoLiveButton()
+			}
+		case a.isShellDescent(p) && !a.hasShellStream(p.ID):
+			// Frozen shell descent: refresh either creates a fresh tmux
+			// session (no snapshot yet) or attaches to the existing one.
+			// Hidden when the session is gone — the JPEG is all that
+			// remains. shellRefreshButtonVisible decides (and kicks off the
+			// ShellSessionAlive probe if the answer isn't cached yet).
+			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+				if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
+					a.drawURLRefreshButton()
+				}
+			}
+		}
+		return
+	}
+	if !a.isNodeGridPane(p) || a.tileDragInFlight() {
+		a.drawPlusButton(p)
+	}
+}
+
+// barSlotClick dispatches a click on the bar's circle slot, always acting
+// on the FOCUSED pane (the slot never transfers focus, so the old
+// prevFocus gating is unnecessary). RIGHT (or middle) click ascends one
+// level — the corner circle's ascent gesture, now a plain click.
+func (a *App) barSlotClick(button int) {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	if button == 1 || button == 2 {
+		a.menu.Close()
+		if a.canAscend(p) {
+			a.ascendPane(p)
+		}
+		a.draw()
+		return
+	}
+	if button != 0 {
+		return
+	}
+	switch {
+	case a.isShellDescent(p):
+		if !a.hasShellStream(p.ID) {
+			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+				if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
+					a.openShellStream(p, tile.ID)
+				}
+			}
+		}
+	case a.isURLDescent(p):
+		if a.urlViewFor(p.ID) != nil {
+			bridgeGoBack(p.ID)
+		} else if !a.caps.LiveURL {
+			// The slashed button: this host can't place a live view.
+			// Explain instead of a silent dead tap (charter §6).
+			a.reportErr(caps.GoLiveNotice())
+		} else {
+			// Frozen: go live (place the native view).
+			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+				if tile, ok := g.Tiles[p.TextFocus]; ok {
+					a.openURLStream(p, tile.ID)
+				}
+			}
+		}
+	case p.TextFocus != "":
+		// A markdown descent's slot is the DOM toggle button, which handles
+		// its own clicks; a canvas click reaching here just missed it.
+	case !a.isNodeGridPane(p):
+		a.menu.Toggle(p.ID)
+		a.draw()
+	}
 }
 
 // drawChainCrumb paints one descent-chain square: the tile's own preview
@@ -180,6 +276,10 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	top := a.bottomBarTop()
 	if sy < top || sy >= top+wsbar.RowH {
 		return false
+	}
+	if sx >= a.width-wsbar.SlotW {
+		a.barSlotClick(button)
+		return true
 	}
 	p, chain := a.bottomBarChain()
 	seg, ok := wsbar.At(a.bottomBarSegments(chain), sx)

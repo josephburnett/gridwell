@@ -44,45 +44,7 @@ func (a *App) drawRightDragPreview() {
 		a.drawTileResizePreview(rd)
 	case rightDragEmbedHint:
 		a.drawEmbedHintOverlay(rd)
-	case rightDragAscend:
-		a.drawAscendPreview(rd)
 	}
-}
-
-// drawAscendPreview paints the ascent hint over the corner circle while a
-// right-click-to-ascend gesture is in flight: a highlighted circle with
-// an upward chevron when armed (cursor still inside the circle), dimmed
-// grey when the cursor has dragged out and release would cancel.
-func (a *App) drawAscendPreview(rd *rightDragState) {
-	p := a.tree.FindPane(rd.ascendPaneID)
-	pr := a.paneRectByID(rd.ascendPaneID)
-	if p == nil || pr.W <= 0 || pr.H <= 0 {
-		return
-	}
-	c := a.cctx
-	cx, cy := plusButtonCenter(p, pr)
-	rad := float64(plusButtonRadius)
-
-	fill := colorSwapArrow // blue == armed (same "active gesture" blue)
-	if !rd.cursorInCircle {
-		fill = colorSplitInactive // grey == release-to-cancel
-	}
-	c.Set("fillStyle", fill)
-	c.Call("beginPath")
-	c.Call("arc", cx, cy, rad, 0, 2*math.Pi)
-	c.Call("fill")
-
-	// Upward chevron == ascend.
-	c.Set("strokeStyle", "#ffffff")
-	c.Set("lineWidth", 2.5)
-	c.Set("lineCap", "round")
-	c.Call("beginPath")
-	c.Call("moveTo", cx-7, cy+4)
-	c.Call("lineTo", cx, cy-5)
-	c.Call("lineTo", cx+7, cy+4)
-	c.Call("stroke")
-	c.Set("lineCap", "butt")
-	c.Set("lineWidth", 1.0)
 }
 
 // drawEmbedHintOverlay paints the chain-link glyph centered inside the

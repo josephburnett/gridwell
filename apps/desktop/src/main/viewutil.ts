@@ -46,20 +46,6 @@ export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
-// controlBounds places a corner control (the back/ascend circle) of the given
-// size at the bottom-right of a view's content box, inset by margin. Pure
-// geometry, extracted from webviews.ts so the corner placement is unit-testable
-// (it's native chrome the canvas can't draw, and a wrong rect here puts the
-// control off the pane — exactly the kind of bounds bug make check can't see).
-export function controlBounds(b: Bounds, size: number, margin: number): Bounds {
-  return {
-    x: b.x + b.width - size - margin,
-    y: b.y + b.height - size - margin,
-    width: size,
-    height: size,
-  };
-}
-
 // cookieDomainMatches decides whether a stored cookie belongs to the SITE the
 // user is clearing (issue #136): the same registrable domain (public-suffix
 // list via tldts), which spans ancestors AND siblings — Google keeps its
@@ -244,17 +230,6 @@ export function classifyRightPress(
   const d2 = dx * dx + dy * dy;
   if (d2 > farThreshold * farThreshold) return true;
   return d2 > distThreshold * distThreshold && durationMs >= timeThresholdMs;
-}
-
-// controlVisible decides whether a live URL view's corner control (the
-// back/ascend circle) should be on screen. The control is the one piece of
-// pane chrome that a focused pane shows and an unfocused pane must not — it
-// mirrors the canvas rule "per-pane controls belong to the active pane only"
-// (render.go drawPane), which a canvas-drawn circle can't enforce here because
-// the native view paints on top of the canvas. So: visible only on the focused
-// pane, and never while the whole view is parked for a gesture (hidden).
-export function controlVisible(hidden: boolean, focused: boolean): boolean {
-  return !hidden && focused;
 }
 
 // ERR_ABORTED is Chromium's net error code for a navigation the page/user

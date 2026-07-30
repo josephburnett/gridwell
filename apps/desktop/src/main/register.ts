@@ -1,7 +1,6 @@
 import { ipcMain, BaseWindow, WebContents } from 'electron';
 import {
   CH,
-  CTRL,
   EV,
   VIEW,
   PlaceArgs,
@@ -68,19 +67,6 @@ export function registerWebviewIpc(
   rootWC: WebContents,
   win: BaseWindow,
 ): void {
-  // Corner-button overlay click: resolve the sender view back to its pane,
-  // then route left→back (handled natively) and right/middle→ascend (the
-  // ascent animation lives in the renderer, so forward it there).
-  ipcMain.on(CTRL.click, (event, button: number): void => {
-    const paneId = registry.controlPaneFor(event.sender.id);
-    if (!paneId) return;
-    if (button === 0) {
-      registry.goBack(paneId);
-    } else {
-      safeSend(rootWC, EV.controlAscend, { paneId });
-    }
-  });
-
   // A live URL view's preload forwards a right-button press here so the
   // renderer can begin a pane gesture over live content. The press arrives in
   // physical screen coords; subtract the window's content origin to get

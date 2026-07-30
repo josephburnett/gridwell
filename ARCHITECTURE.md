@@ -509,14 +509,25 @@ all fixed. What remains (verified July 2026):
   forgetPane), push a `client/workspace` frame (outer tree + origin pane +
   tile id/version), decode the layout blob (`client/pane` LayoutV1; ids are
   owner-frame-relative, the reader prepends its transit chain), swap
-  `App.tree`. The bar (`client/wsbar`, reserved band like the notice strip)
-  names the nesting and owns the way out: crumb k leaves workspace k and
-  deeper. While inside, `draw()` arms a debounced persister that encodes the
+  `App.tree`. The bottom bar (`client/wsbar`, ALWAYS-reserved band like the
+  notice strip — issues #212–#214) names the nesting and owns the way out
+  (crumb k leaves workspace k and deeper); it also carries the focused
+  pane's descent chain as clickable square previews (derived per frame from
+  `pane.DescentChain` — never stored), the current pane's NAME in the last
+  crumb (the old floating pill and its native live-pane twin are deleted),
+  and the circle-button slot at its right end (the old per-pane corner
+  circle: + menu / url back / refresh / ascend; the native corner-control
+  view and the shell DOM circle are deleted — the bar sits outside every
+  live view's rect). While inside, `draw()` arms a debounced persister that encodes the
   live tree, hash-diffs, and posts the layout `WriteContent` (framing-class —
   never bumps version) only on change; the URL is `?w=<tile id>` and nothing
   else.
 - **Show the menu.** `menu.Open(paneID)` on the focused pane (the one owner —
-  `client/menu`); native overlays park; canvas paints the menu on top. Closing
+  `client/menu`), toggled from the bar slot (`barSlotClick`); native overlays
+  park; canvas paints the popover anchored up-and-left from the slot, above
+  every pane. A click inside the open popover is routed BEFORE pane
+  resolution (the popover floats over whatever pane is under it; resolving
+  that pane first would transfer focus and SyncFocus-close the menu). Closing
   goes through the same owner's transitions (focus change, ascent, gesture end).
 - **Render an embed.** `ResolveEmbedTileID` → `fetchTileByID` →
   `PlanEmbedDescent`, possibly re-anchoring across a plugin boundary.

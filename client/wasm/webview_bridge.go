@@ -81,10 +81,8 @@ func bridgeSetBounds(paneID string, b viewBounds) {
 
 // bridgeSetHidden parks/unparks the view so canvas overlays (palette, drag
 // ghosts, modals) can paint where the native view would otherwise occlude.
-// focused additionally drives the corner control's visibility: only the
-// focused pane shows its back/ascend circle, so the menu handle is on exactly
-// one pane at a time (the native control can't honor the canvas focused-only
-// rule, since it paints above the canvas).
+// focused is bookkeeping for main's focus-steal guard (the per-pane corner
+// control it used to show/hide is gone — issue #214).
 func bridgeSetHidden(paneID string, hidden, focused bool) {
 	g := bridge()
 	if !g.Truthy() {
@@ -145,7 +143,6 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 	promise.Call("then", then).Call("catch", catch)
 }
 
-// bridgeGoBack navigates the view for paneID back in its history.
 // ── shell transport (2026-07-26: PTY bytes ride main's gRPC OpenShell
 // stream over IPC; the WS bridge is gone) ───────────────────────────────────
 
@@ -220,6 +217,8 @@ func promiseThen(p js.Value, fn func()) {
 	p.Call("then", cb)
 }
 
+// bridgeGoBack navigates the view for paneID back in its history — the bar
+// slot's back button (issue #214; the native corner control is gone).
 func bridgeGoBack(paneID string) {
 	g := bridge()
 	if !g.Truthy() {
@@ -255,16 +254,6 @@ func (a *App) installWebviewListeners() {
 		if url != "" {
 			a.updateCachedTileURL(tileID, url)
 			a.draw()
-		}
-		return nil
-	})
-	// The live URL tile's corner button is a native overlay view; a
-	// right/middle click on it routes here so the ascent (which freezes the
-	// tile + tears the view down) runs in the renderer like any other ascend.
-	onControlAscend := js.FuncOf(func(_ js.Value, p []js.Value) any {
-		paneID := jsString(p[0].Get("paneId"))
-		if fp := a.tree.FindPane(paneID); fp != nil {
-			a.ascendPane(fp)
 		}
 		return nil
 	})
@@ -339,7 +328,6 @@ func (a *App) installWebviewListeners() {
 	g.Call("onShellExit", onShellExit)
 	g.Call("onFrame", onFrame)
 	g.Call("onNav", onNav)
-	g.Call("onControlAscend", onControlAscend)
 	g.Call("onRightForward", onRightForward)
 	g.Call("onMiddleForward", onMiddleForward)
 	g.Call("onLeftForward", onLeftForward)

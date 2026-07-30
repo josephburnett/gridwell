@@ -266,6 +266,23 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		return nil
 	}
+	// A left-click inside the open palette belongs to the palette — routed
+	// BEFORE pane resolution, because the popover (anchored to the bar slot,
+	// issue #214) floats over whatever pane happens to be under it, and
+	// resolving that pane first would transfer focus and close (SyncFocus)
+	// the very menu being used. Landing on a swatch starts a template drag;
+	// missing one swallows the click so the popover stays open.
+	if a.menu.IsOpen() && args[0].Get("button").Int() == 0 {
+		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
+			mr := paneRectFor(a, mp)
+			if a.pointInPalette(mp, mr, sx, sy) {
+				if idx := a.paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
+					a.startPaletteDrag(mp, mr, idx, sx, sy)
+				}
+				return nil
+			}
+		}
+	}
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil
@@ -295,22 +312,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// The creation palette floats above every pane, so a click in its
-	// popover wins — even where it overflows a neighbouring pane (which
-	// would otherwise pan/grab). Resolve against the MENU pane, not the
-	// pane under the cursor, so grabbing a swatch from the overflow region
-	// starts a template drag instead of scrolling the pane beneath.
-	if a.menu.IsOpen() {
-		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
-			mr := paneRectFor(a, mp)
-			if a.pointInPalette(mp, mr, sx, sy) {
-				if idx := a.paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
-					a.startPaletteDrag(mp, mr, idx, sx, sy)
-				}
-				return nil // swallow; missing a swatch keeps the palette open
-			}
-		}
-	}
+	// (A left-click inside the open palette was already claimed before pane
+	// resolution — see the top of this handler.)
 
 	// Left-drag on a pane boundary resizes the divider — same divider math
 	// as the right-button resize, but it never closes a pane (clamped to a
@@ -335,18 +338,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// itself (the DOM element absorbs them), so this path only
 		// fires for clicks on the pane chrome.
 		if a.isShellDescent(p) {
-			// The corner refresh button only acts on the already-focused
-			// pane (it's hidden otherwise). A click here on a just-focused
-			// pane falls through to the content/xterm path below.
-			if prevFocus == p.ID && pointInPlus(p, r, sx, sy) && !a.hasShellStream(p.ID) {
-				gid := a.gridIDForPane(p)
-				if g, ok := a.c.Grid(gid); ok {
-					if tile, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&tile) {
-						a.openShellStream(p, tile.ID)
-					}
-				}
-				return nil
-			}
+			// The refresh/back button lives in the bar slot now (issue #214);
+			// barSlotClick handles it before this path is reached.
 			if !pointInPaneContent(r, sx, sy) {
 				// Outer margin: ascent moved to the middle button / a
 				// right-click on the corner circle. Swallow so a margin
@@ -364,28 +357,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// pane-border band. The outer margin ascends; the corner button goes
 		// live (frozen) or navigates back (live, if a stray click reaches us).
 		if a.isURLDescent(p) {
-			// The corner back/refresh button only acts on the already-focused
-			// pane (it's hidden otherwise); a click on a just-focused pane
-			// falls through to the pan/native-view path below.
-			if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
-				if a.urlViewFor(p.ID) != nil {
-					bridgeGoBack(p.ID)
-				} else if !a.caps.LiveURL {
-					// The slashed button: this host can't place a live view.
-					// Explain instead of a silent dead tap (charter §6).
-					a.reportErr(caps.GoLiveNotice())
-				} else {
-					// Frozen: go live (place the native view), same as
-					// right-drag-down.
-					gid := a.gridIDForPane(p)
-					if g, ok := a.c.Grid(gid); ok {
-						if tile, ok := g.Tiles[p.TextFocus]; ok {
-							a.openURLStream(p, tile.ID)
-						}
-					}
-				}
-				return nil
-			}
+			// The back / go-live / no-live button lives in the bar slot now
+			// (issue #214); barSlotClick handles it before this path.
 			if !pointInPaneContent(r, sx, sy) {
 				// Outer margin: ascent moved to the middle button / a
 				// right-click on the corner circle. Swallow it.
@@ -441,15 +414,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// Click on the + button toggles the menu for this pane. The button is
-	// only drawn on the focused pane, so it only acts when the pane was
-	// already focused before this click; a click that merely focuses the
-	// pane falls through to normal grid interaction (pan / palette).
-	if prevFocus == p.ID && pointInPlus(p, r, sx, sy) {
-		a.menu.Toggle(p.ID)
-		a.draw()
-		return nil
-	}
+	// The + button lives in the bar slot now (issue #214); barSlotClick
+	// toggles the menu before a click ever reaches a pane.
 	// Mousedown inside the palette: starting a template drag if it
 	// landed on a tile, or swallowing the click (keeps the popover
 	// open) if it landed in the gutter. Click outside the popover
@@ -543,13 +509,6 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// URL pane without the page seeing it.
 	if a.rightDrag == nil && a.dragging == nil {
 		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-			// Don't broadcast moves into the back-button area; the
-			// page would see phantom cursor activity over an empty
-			// region of its viewport.
-			if pointInPlus(p, r, sx, sy) {
-				a.canvas.Get("style").Set("cursor", "")
-				return nil
-			}
 			if pointInPaneContent(r, sx, sy) {
 				// Live pane: the native view owns the cursor (the canvas
 				// won't get moves over it anyway). Frozen pane: grab cursor.
@@ -694,14 +653,11 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishLeftResize()
 		return nil
 	}
-	// URL descent: the corner button and live content box are handled on
-	// mousedown / by the native view; swallow the matching mouseup over them
-	// so it doesn't leak into a gridwell gesture.
+	// URL descent: the live content box is handled by the native view;
+	// swallow the matching mouseup over it so it doesn't leak into a
+	// gridwell gesture.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		if pointInPlus(p, r, sx, sy) && args[0].Get("button").Int() == 0 {
-			return nil
-		}
 		if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
@@ -1057,31 +1013,26 @@ func (a *App) tileDragInFlight() bool {
 }
 
 // overDeleteButton reports whether (sx, sy) is over the delete target for the
-// in-flight drag d: the + (trashcan) button of the pane the drag STARTED from.
+// in-flight drag d: the bar slot's trashcan (issue #214 — one global
+// target, no longer the origin pane's corner).
 //
 // It takes the drag EXPLICITLY rather than reading a.dragging, because the
 // commit path clears a.dragging before deciding what the drop means
 // (onMouseUp / commitTileCenter both do `d := a.dragging; a.dragging = nil`).
 // Reading the field here returned false at release — the tile fell through to a
 // normal move and was placed under the trashcan instead of deleted — even
-// though the live-drag preview looked correct. Keyed off the origin pane (not
-// focus) so it works for both the left-drag move and the right-drag clone; a
-// descended pane has no + button, so it's never a delete target.
+// though the live-drag preview looked correct.
 func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 	if d == nil || !d.started || d.tileID == "" {
 		return false
 	}
-	p := a.tree.FindPane(d.originPaneID)
-	if p == nil || p.TextFocus != "" {
-		return false
-	}
-	return pointInPlus(p, paneRectFor(a, p), sx, sy)
+	return a.pointInPlus(sx, sy)
 }
 
 // attemptDescentOrAscent routes a bare left-click (no drag) at (sx, sy)
 // inside pane p to the right navigation gesture. Left-click only ever
-// descends now; ascent is the middle button or a right-click on the
-// corner circle (see ascendPane).
+// descends now; ascent is the middle button or a right-click on the bar
+// slot (see ascendPane).
 //
 //   - On a well: descend into the well.
 //   - On a markdown file: descend into the file.

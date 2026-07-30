@@ -4,9 +4,9 @@
 // plugins on a top row (click to enter, drag to drop a link), the
 // tile primitives (well, markdown, url, shell, pane) on a row below.
 //
-// All layout is pure: it depends only on the pane's screen rect, the
-// pane's current zoom, and the tile counts. The wasm renderer reads
-// the rects out and paints into them.
+// All layout is pure: it depends only on the + button's center (the
+// bottom bar's right-end slot since issue #214), and the tile counts.
+// The wasm renderer reads the rects out and paints into them.
 package palette
 
 import "github.com/josephburnett/gridwell/client/pane"
@@ -18,10 +18,8 @@ type Rect = pane.Rect
 // Defaults match the renderer's current constants; callers can change
 // them in tests.
 type Config struct {
-	// PlusInset is the distance in screen pixels from the pane's
-	// bottom-right corner to the center of the + button.
-	PlusInset float64
 	// PlusRadius is the + button's hit-test radius (and visual radius).
+	// Sized to fit inside the bottom bar's band (wsbar.RowH) with margin.
 	PlusRadius float64
 	// TileMinPx, TileMaxPx are the clamp limits on the per-tile size
 	// in the popover, in screen pixels.
@@ -40,8 +38,7 @@ type Config struct {
 // values the user sees.
 func Default() Config {
 	return Config{
-		PlusInset:  24,
-		PlusRadius: 18,
+		PlusRadius: 14,
 		TileMinPx:  48,
 		TileMaxPx:  128,
 		GapPx:      8,
@@ -52,10 +49,11 @@ func Default() Config {
 // Layout snapshots one palette's input. All methods are pure and
 // don't allocate.
 type Layout struct {
-	Cfg      Config
-	Pane     Rect
-	PaneZoom float64
-	NumTiles int
+	Cfg Config
+	// PlusX, PlusY are the + button's center: the bottom bar's right-end
+	// slot (issue #214) — a fixed home, no longer a pane's corner.
+	PlusX, PlusY float64
+	NumTiles     int
 	// TopRow is how many of NumTiles sit in the popover's first row (the
 	// plugins); the rest (the primitives) go in a second row below. When
 	// TopRow is unset (<=0) or covers every tile, the popover is a single
@@ -86,10 +84,9 @@ func (l Layout) rowWidthPx(n int) float64 {
 	return float64(n)*l.TilePx() + float64(n+1)*l.Cfg.GapPx
 }
 
-// PlusCenter returns the screen-space center of the + button (the pane's
-// lower-right corner, inset by PlusInset).
+// PlusCenter returns the screen-space center of the + button.
 func (l Layout) PlusCenter() (cx, cy float64) {
-	return l.Pane.X + l.Pane.W - l.Cfg.PlusInset, l.Pane.Y + l.Pane.H - l.Cfg.PlusInset
+	return l.PlusX, l.PlusY
 }
 
 // PointInPlus reports whether (x, y) lies inside the + button's hit

@@ -539,7 +539,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 	if !ok {
 		return map[string]any{"open": false}
 	}
-	px, py := plusButtonCenter(p, r)
+	px, py := a.plusButtonCenter()
 	items := a.paletteItems(p)
 	entries := make([]any, 0, len(items))
 	for i, item := range items {

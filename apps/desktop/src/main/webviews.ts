@@ -6,8 +6,6 @@ import {
   SESSION_PARTITION,
   roundBounds,
   boundsEqual,
-  controlVisible,
-  controlBounds,
   parkedBounds,
   minWidthZoomFactor,
   composeZoom,
@@ -31,18 +29,12 @@ const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js
 
 interface Entry {
   view: WebContentsView;
-  // control is a small native button view floated on TOP of `view` at the
-  // corner. A canvas-drawn button can't paint above a native WebContentsView,
-  // so the corner control (back / ascend) is itself a tiny native view.
-  control: WebContentsView;
   tileId: number;
   objectId: string;
   bounds: Bounds;
   hidden: boolean;
-  // focused is whether this pane is the focused pane. The corner control shows
-  // only on the focused pane (controlVisible) — unfocused live panes keep their
-  // content but drop the circle, so the menu/ascend handle is on exactly one
-  // pane at a time.
+  // focused is whether this pane is the focused pane, as the renderer last
+  // reported it (setHidden) — kept for the focus-steal guard's bookkeeping.
   focused: boolean;
   // userZoom is the tile's persisted content zoom (issue #82); composed with
   // the min-width layout zoom in applyMinWidthZoom. 0 = unset (1.0).
@@ -52,10 +44,6 @@ interface Entry {
   // guard treats a grab inside this grace window as user intent.
   lastUserClickMs: number;
 }
-
-// CONTROL_SIZE / CONTROL_MARGIN place the corner button at the bottom-right
-// of the URL view, matching the canvas circle's position on frozen panes.
-const CONTROL_SIZE = 36;
 
 // USER_CLICK_FOCUS_GRACE_MS is how long after a forwarded left press a view
 // may legitimately acquire OS focus (issue #172): the native focus lands
@@ -68,33 +56,10 @@ const USER_CLICK_FOCUS_GRACE_MS = 1500;
 // long enough for an in-flight widget-focus commit to land, short enough
 // that leaked keystrokes stay negligible.
 const FOCUS_RECHECK_MS = 120;
-const CONTROL_MARGIN = 6;
 
-// CONTROL_HTML is the corner button's page: a circular back-arrow chip. Its
-// inline script (nodeIntegration — first-party data: URL only) forwards
-// left/right mousedown to main, which routes left→back and right→ascend.
-const CONTROL_HTML =
-  'data:text/html,' +
-  encodeURIComponent(
-    `<!doctype html><meta charset=utf8><style>
-     html,body{margin:0;height:100%;overflow:hidden;-webkit-user-select:none;
-       background:transparent;display:flex;align-items:center;justify-content:center}
-     #b{width:30px;height:30px;border-radius:50%;background:#1b1f29;
-       border:1px solid #3a4150;color:#cdd2dd;display:flex;align-items:center;
-       justify-content:center;font:18px/1 sans-serif;cursor:pointer}
-     #b:hover{background:#252b38}</style>
-     <div id=b>‹</div>
-     <script>
-     const {ipcRenderer}=require('electron');
-     addEventListener('mousedown',e=>{e.preventDefault();
-       ipcRenderer.send('gw:control-click',e.button)});
-     addEventListener('contextmenu',e=>e.preventDefault());
-     </script>`,
-  );
-
-// The corner control's geometry and the min-layout width are view config; the
-// pure placement/park/zoom math lives in viewutil (controlBounds, parkedBounds,
-// minWidthZoomFactor) where it is unit-tested.
+// The corner control views are GONE (issue #214): the circle button lives in
+// the renderer's bottom bar, outside every view's rect. The pure park/zoom
+// math stays in viewutil (parkedBounds, minWidthZoomFactor), unit-tested.
 
 export interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation (URL/title change),
@@ -212,18 +177,6 @@ export class WebviewRegistry {
     return [...this.entries.keys()];
   }
 
-  // controlStateFor is a test-only read of a pane's corner-control state: the
-  // focused/hidden flags the renderer fed in, and whether the control is
-  // therefore on screen (controlVisible). Lets an e2e prove the focused-pane rule
-  // (I9) end to end — that a live URL pane's corner control hides when its pane
-  // loses focus (the owner's "the circle is still visible on url panes when not
-  // focused" report) — by reading the actual fed state, not just the predicate.
-  controlStateFor(paneId: string): { focused: boolean; hidden: boolean; visible: boolean } | undefined {
-    const e = this.entries.get(paneId);
-    if (!e) return undefined;
-    return { focused: e.focused, hidden: e.hidden, visible: controlVisible(e.hidden, e.focused) };
-  }
-
   // tileIdFor returns the tile id hosted in paneId, or undefined.
   tileIdFor(paneId: string): number | undefined {
     return this.entries.get(paneId)?.tileId;
@@ -272,12 +225,6 @@ export class WebviewRegistry {
           // for button 2 and uses ipcRenderer, nothing else.
           preload: urlViewPreload,
         },
-      });
-      // The corner button is its own tiny native view layered ON TOP of the
-      // URL view (added after it). First-party data: URL, so nodeIntegration
-      // is acceptable for its inline IPC forwarder.
-      const control = new WebContentsView({
-        webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false },
       });
       // target=_blank / window.open / ctrl-click: everything Chromium would
       // open as a new window or tab arrives here. Never spawn a detached
@@ -328,14 +275,10 @@ export class WebviewRegistry {
       // of the canvas overlay. syncURLViews will call setHidden for this pane on
       // the next draw() and reaffirm the correct state.
       const startHidden = this._globalHidden;
-      e = { view, control, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0 };
+      e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0 };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
-      this.win.contentView.addChildView(control);
-      control.setBackgroundColor('#00000000');
-      this.applyControlBounds(e);
-      void control.webContents.loadURL(CONTROL_HTML);
       this.wireNav(paneId, e);
       this.applyMinWidthZoom(e);
       // A persisted back-stack revives with its history (issue #113); absent
@@ -364,7 +307,6 @@ export class WebviewRegistry {
       e.bounds = rounded;
       if (!e.hidden) {
         e.view.setBounds(rounded);
-        this.applyControlBounds(e);
       }
     }
     const current = e.view.webContents.getURL();
@@ -381,21 +323,8 @@ export class WebviewRegistry {
     e.bounds = rounded;
     if (!e.hidden) {
       e.view.setBounds(rounded);
-      this.applyControlBounds(e);
     }
     this.applyMinWidthZoom(e);
-  }
-
-  // applyControlBounds places the corner control at the view's bottom-right, or
-  // parks it off-screen when it shouldn't show (unfocused pane, or the whole
-  // view parked for a gesture). One source of truth so the control's on-screen
-  // state can't drift from controlVisible.
-  private applyControlBounds(e: Entry): void {
-    if (controlVisible(e.hidden, e.focused)) {
-      e.control.setBounds(roundBounds(controlBounds(e.bounds, CONTROL_SIZE, CONTROL_MARGIN)));
-    } else {
-      e.control.setBounds(parkedBounds(CONTROL_SIZE, CONTROL_SIZE));
-    }
   }
 
   // clearSiteData wipes the current SITE from the view's partition (issue
@@ -452,15 +381,6 @@ export class WebviewRegistry {
     if (e) await this.clearSiteData(e.view.webContents);
   }
 
-  // controlPaneFor resolves a control view's webContents id back to its pane,
-  // so the IPC handler knows which tile a corner-button click came from.
-  controlPaneFor(webContentsId: number): string | undefined {
-    for (const [paneId, e] of this.entries) {
-      if (e.control.webContents.id === webContentsId) return paneId;
-    }
-    return undefined;
-  }
-
   // applyMinWidthZoom keeps a narrow URL pane from reflowing the page to a
   // cramped (mobile) layout: below URL_MIN_LAYOUT_WIDTH we zoom the page out
   // so it still lays out at the min width and scales to fit, instead of
@@ -511,7 +431,6 @@ export class WebviewRegistry {
         e.view.setBounds(e.bounds);
       }
     }
-    this.applyControlBounds(e);
   }
 
   // remove captures a final frame + the page's URL/title, detaches and
@@ -570,8 +489,6 @@ export class WebviewRegistry {
       try {
         this.win.contentView.removeChildView(e.view);
         e.view.webContents.close();
-        this.win.contentView.removeChildView(e.control);
-        e.control.webContents.close();
       } catch {
         // ignore
       }

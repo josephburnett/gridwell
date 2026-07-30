@@ -192,24 +192,12 @@ func (a *App) installTextareaTouch(ta js.Value) {
 }
 
 // shellTouchClaim builds the xterm container's claim: multi-finger gestures
-// (pinch, two-finger-tap ascend), plus a single finger starting on the
-// VISIBLE corner ascend circle — the menu button — so a long-press there
-// arms the same right-button ascend a mouse gets. Everything else stays
-// native to the terminal (tap-to-focus, xterm's own touch scrolling).
-func shellTouchClaim(circle js.Value) func(pts []touchgest.Point) bool {
+// (pinch, two-finger-tap ascend) route to the shared translation; single
+// fingers stay native to the terminal (tap-to-focus, xterm's own touch
+// scrolling). The ascend handle lives in the bottom bar now (issue #214),
+// outside the container, so no single-finger claim remains.
+func shellTouchClaim() func(pts []touchgest.Point) bool {
 	return func(pts []touchgest.Point) bool {
-		if len(pts) >= 2 {
-			return true
-		}
-		if len(pts) != 1 {
-			return false
-		}
-		if circle.Get("style").Get("display").String() == "none" {
-			return false
-		}
-		r := circle.Call("getBoundingClientRect")
-		x, y := pts[0].X, pts[0].Y
-		return x >= r.Get("left").Float() && x <= r.Get("right").Float() &&
-			y >= r.Get("top").Float() && y <= r.Get("bottom").Float()
+		return len(pts) >= 2
 	}
 }

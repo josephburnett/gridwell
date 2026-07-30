@@ -208,7 +208,7 @@ func drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
 // canvas drawing code (which arcs and fills the + button) can keep
 // using a typed numeric literal rather than reaching into the
 // palette.Config every time.
-const plusButtonRadius = 18
+const plusButtonRadius = 14
 
 // templateKind identifies one built-in tile primitive in the creation
 // palette. Order matters: primitiveKinds determines layout in the popover
@@ -550,49 +550,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	half := paneBorderPx / 2
 	a.cctx.Call("strokeRect", r.X+half, r.Y+half, r.W-paneBorderPx, r.H-paneBorderPx)
 
-	// Per-pane controls belong to the active pane only: the focused pane
-	// shows its corner button (URL back/refresh, shell refresh) or, on a
-	// grid, the + creation menu; an unfocused pane is chrome-free so you
-	// see only the content you placed there. This matches the rendered/raw
-	// toggle, which is already a focused-only DOM overlay
-	// (refreshFileToggle). The matching click hit-tests in onMouseDown are
-	// gated on the pre-click focus, so clicking an unfocused pane's (hidden)
-	// corner just focuses it rather than silently firing the button.
-	if p.TextFocus != "" {
-		if focused && a.isURLDescent(p) {
-			if a.urlViewFor(p.ID) != nil {
-				a.drawURLBackButton(p, r)
-			} else if a.caps.LiveURL {
-				a.drawURLRefreshButton(p, r)
-			} else {
-				a.drawURLNoLiveButton(p, r)
-			}
-		} else if focused && a.isShellDescent(p) && !a.hasShellStream(p.ID) {
-			// Frozen shell descent: lower-right refresh button either
-			// creates a fresh tmux session (no snapshot yet) or
-			// attaches to the existing one. Hidden when the tile has
-			// a snapshot but its tmux session is gone — the JPEG is
-			// all that remains. shellRefreshButtonVisible decides and
-			// kicks off the ShellSessionAlive probe if the answer
-			// isn't cached yet.
-			if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
-				a.drawURLRefreshButton(p, r)
-			}
-		}
-	} else if !a.isNodeGridPane(p) && (focused || (a.tileDragInFlight() && a.dragging.originPaneID == p.ID)) {
-		// + button: the focused grid's entry point for creating tiles (and a
-		// visible handle even when the grid is unreachable — you can still
-		// ascend). It also appears on a tile-drag's SOURCE pane even when that
-		// pane isn't focused, because during a drag it becomes the trashcan
-		// delete target ("drag a tile back to the menu it came from").
-		// drawPlusButton paints a trashcan instead of a + in that state. The
-		// palette popover itself is drawn after every pane (see draw) so it
-		// floats above neighbouring panes it overflows into. The node grid
-		// (the landing page) has no + button — it is read-only, and hiding
-		// the button also removes the drag-delete target so a plugin tile
-		// can never be dropped on a trashcan.
-		a.drawPlusButton(p, r)
-	}
+	// The per-mode circle button (URL back/refresh, shell refresh, the +
+	// menu) lives in the bottom bar's right-end slot now (issue #214) and is
+	// drawn by drawBarSlot for the focused pane — panes carry no corner
+	// chrome at all.
 }
 
 // drawCircleButtonChrome paints the filled, bordered circle shared by the
@@ -609,11 +570,11 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	a.cctx.Call("stroke")
 }
 
-// drawURLBackButton paints the lower-right button on a URL-tile descent.
+// drawURLBackButton paints the bar-slot button on a URL-tile descent.
 // Click → history.back() on the descended Chromium tab. Same circular
 // chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(p, r)
+func (a *App) drawURLBackButton() {
+	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
@@ -633,25 +594,25 @@ func (a *App) drawURLBackButton(p *pane.Pane, r pane.Rect) {
 	a.cctx.Set("lineJoin", "miter")
 }
 
-// drawURLRefreshButton paints the lower-right button on a frozen URL-tile
+// drawURLRefreshButton paints the bar-slot button on a frozen URL-tile
 // descent. Click → open URL stream (same action as the right-drag-down
 // refresh gesture). Same circular chrome as drawURLBackButton so the
 // position is muscle-memory-compatible.
-func (a *App) drawURLRefreshButton(p *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(p, r)
+func (a *App) drawURLRefreshButton() {
+	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPlusFg)
 }
 
-// drawURLNoLiveButton paints the corner button on a frozen URL-tile descent
+// drawURLNoLiveButton paints the bar-slot button on a frozen URL-tile descent
 // when this host cannot go live (caps.LiveURL false — a plain browser, no
 // Electron bridge): the refresh glyph, dimmed, with a slash through it.
 // Click → an Info notice explaining why (caps.GoLiveNotice), never a silent
 // dead tap.
-func (a *App) drawURLNoLiveButton(p *pane.Pane, r pane.Rect) {
-	cx, cy := plusButtonCenter(p, r)
+func (a *App) drawURLNoLiveButton() {
+	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorNoLiveFg)

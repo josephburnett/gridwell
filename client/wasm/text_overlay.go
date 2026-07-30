@@ -405,7 +405,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	cx, cy := plusButtonCenter(p, r)
+	cx, cy := a.plusButtonCenter()
 	style.Set("left", pxf(cx-plusButtonRadius))
 	style.Set("top", pxf(cy-plusButtonRadius))
 	// Glyph hints at the TARGET mode: an italic serif "a" means clicking

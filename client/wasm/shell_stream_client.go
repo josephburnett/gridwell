@@ -31,7 +31,6 @@ type shellStreamConn struct {
 	renderAddon  js.Value // renderer addon: WebglAddon, or zero (DOM fallback)
 	rendererKind string   // "webgl" or "dom" — which renderer actually attached (issue #128)
 	container    js.Value // host <div> in the DOM
-	circle       js.Value // corner ascend handle painted above the terminal
 
 	tileID string
 	paneID string
@@ -299,18 +298,10 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	term.Call("open", container)
 	renderAddon, rendererKind := attachShellRenderer(term)
 
-	// Corner ascend handle, appended after the terminal so it paints on top of
-	// the opaque xterm canvas (a canvas-drawn circle can't, hence the URL tile's
-	// native control and this DOM twin). syncShellOverlayPosition shows it only
-	// on the focused pane.
-	circle := newShellCircle(doc)
-	container.Call("appendChild", circle)
-	// Touch: multi-finger gestures plus a single finger on the visible
-	// ascend circle feed the shared translation — a long-press on the
-	// corner circle becomes the right mousedown the capture listener
-	// forwards into the canvas ascend gesture (issue #191). Everything
-	// else stays native to the terminal.
-	a.installOverlayTouch(container, shellTouchClaim(circle))
+	// Touch: multi-finger gestures feed the shared translation (issue #191);
+	// single fingers stay native to the terminal. The ascend handle is the
+	// bottom bar's slot (issue #214) — the canvas touch layer covers it.
+	a.installOverlayTouch(container, shellTouchClaim())
 
 	// Initial size — the fit addon will overwrite it, but the bind message
 	// lets the plugin start the PTY at the right dimensions.
@@ -324,7 +315,6 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		renderAddon:  renderAddon,
 		rendererKind: rendererKind,
 		container:    container,
-		circle:       circle,
 		tileID:       tileID,
 		paneID:       p.ID,
 		anchor:       p.Anchor,
@@ -436,43 +426,6 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	a.syncShellOverlayPosition()
 	// Focus so keystrokes land in the terminal rather than the canvas.
 	term.Call("focus")
-}
-
-// newShellCircle builds the corner ascend handle for a live shell overlay: a
-// small circle painted above the terminal at the same lower-right spot as the
-// canvas + / refresh button. Geometry: the canvas button centers PlusInset (24)
-// from the pane's bottom-right with PlusRadius (18); the shell container is
-// inset by the 1px pane border, so a 36px box pinned right/bottom 5px lands the
-// circle exactly over the geometric pointInPlus hit region.
-//
-// It is purely visual (pointer-events: none): the right-button press that arms
-// the ascend gesture is forwarded by the container's capture-phase listener and
-// the hit-test is geometric, so the circle adds no event handling — it just
-// makes the always-present ascend handle visible over the opaque terminal,
-// which a canvas-drawn circle (occluded by the xterm overlay) can't.
-func newShellCircle(doc js.Value) js.Value {
-	c := doc.Call("createElement", "div")
-	c.Set("className", "gw-shell-ascend") // stable hook for e2e visibility asserts
-	s := c.Get("style")
-	s.Set("position", "absolute")
-	s.Set("right", "5px")
-	s.Set("bottom", "5px")
-	s.Set("width", "36px")
-	s.Set("height", "36px")
-	s.Set("boxSizing", "border-box")
-	s.Set("borderRadius", "50%")
-	s.Set("background", colorPlusBg)
-	s.Set("border", "1px solid "+colorPaneBorder)
-	s.Set("color", colorPlusFg)
-	s.Set("display", "none") // shown by syncShellOverlayPosition when focused
-	s.Set("alignItems", "center")
-	s.Set("justifyContent", "center")
-	s.Set("font", "16px/1 sans-serif")
-	s.Set("pointerEvents", "none")
-	s.Set("zIndex", "6")
-	// Up chevron: the corner is the "go up / out" (ascend) handle.
-	c.Set("textContent", "⌃")
-	return c
 }
 
 // attachShellRenderer gives the opened terminal a GPU renderer: the WebGL
@@ -761,15 +714,12 @@ func (a *App) syncShellOverlayPosition() {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
-		// Hide the shell overlay (and its ascend handle) when the pane isn't
-		// currently descended in THIS shell — e.g. it descended further into an
-		// ephemeral url from a shell link. The stream stays alive (the session
-		// persists); only the overlay parks, reappearing when the pane returns.
+		// Hide the shell overlay when the pane isn't currently descended in
+		// THIS shell — e.g. it descended further into an ephemeral url from a
+		// shell link. The stream stays alive (the session persists); only the
+		// overlay parks, reappearing when the pane returns.
 		if p := a.tree.FindPane(paneID); p == nil || p.TextFocus != conn.tileID {
 			conn.container.Get("style").Set("display", "none")
-			if conn.circle.Truthy() {
-				conn.circle.Get("style").Set("display", "none")
-			}
 			continue
 		}
 		// Inset by the pane border so the overlay sits flush inside
@@ -784,16 +734,6 @@ func (a *App) syncShellOverlayPosition() {
 		style := conn.container.Get("style")
 		style.Set("display", "block")
 		setBoundsPx(style, cb.X, cb.Y, cb.W, cb.H)
-		// The ascend handle belongs to the focused pane only — same rule the
-		// canvas applies to every other per-pane control (render.go drawPane)
-		// and the live-URL corner control (controlVisible).
-		if conn.circle.Truthy() {
-			vis := "none"
-			if paneID == a.tree.Focus {
-				vis = "flex"
-			}
-			conn.circle.Get("style").Set("display", vis)
-		}
 		// Ask xterm to re-fit — only when an input the fit depends on
 		// changed (the container box, or the font size content zoom sets).
 		// The FitAddon emits an onResize event if the cell grid changed,

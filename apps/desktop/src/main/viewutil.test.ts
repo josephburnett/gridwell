@@ -4,8 +4,6 @@ import {
   SESSION_PARTITION,
   roundBounds,
   boundsEqual,
-  controlVisible,
-  controlBounds,
   parkedBounds,
   cookieDomainMatches,
   storageOriginsFor,
@@ -96,27 +94,7 @@ test('sanitizeUserAgent is idempotent and tolerates a missing app name', () => {
   assert.ok(!/Electron\//.test(sanitizeUserAgent(`${clean} Electron/28.0.0`, '')));
 });
 
-test('controlVisible shows the corner circle only on the focused, unparked pane', () => {
-  // The whole point of the bug fix: exactly one pane (the focused one) shows
-  // its corner control at a time.
-  assert.ok(controlVisible(false, true)); // focused, not parked → visible
-  assert.ok(!controlVisible(false, false)); // unfocused → hidden (the bug)
-  assert.ok(!controlVisible(true, true)); // focused but parked for a gesture → hidden
-  assert.ok(!controlVisible(true, false)); // unfocused and parked → hidden
-});
 
-test('controlBounds sits the corner control inside the view bottom-right', () => {
-  // A 200x100 view at (10,20) with a 36px control inset 6px: the control's
-  // far edge lines up with the view's far edge minus the margin.
-  const b = controlBounds({ x: 10, y: 20, width: 200, height: 100 }, 36, 6);
-  assert.equal(b.width, 36);
-  assert.equal(b.height, 36);
-  assert.equal(b.x, 10 + 200 - 36 - 6); // 168
-  assert.equal(b.y, 20 + 100 - 36 - 6); // 78
-  // It stays within the view's content box on both axes.
-  assert.ok(b.x + b.width <= 10 + 200);
-  assert.ok(b.y + b.height <= 20 + 100);
-});
 
 test('parkedBounds moves a view far off-screen but keeps its size', () => {
   const p = parkedBounds(200, 100);

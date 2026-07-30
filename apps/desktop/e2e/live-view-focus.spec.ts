@@ -43,31 +43,11 @@ test('left-clicking a live URL pane transfers focus when the palette is closed',
 
   const urlPaneId = (await gw.focused()).id;
 
-  // Helper: read the native corner-control state for a pane from the registry.
-  const controlState = (paneId: string) =>
-    electronApp.evaluate(
-      (_e, id) => (globalThis as any).__gwRegistry?.controlStateFor(id),
-      paneId,
-    );
-
-  // The URL pane is focused: corner control must be visible.
-  await expect
-    .poll(() => controlState(urlPaneId).then((s) => s?.visible), { timeout: 5_000 })
-    .toBe(true);
-
   // Split the URL pane — focus moves to the new right pane, the URL pane keeps
   // its live view on the left and loses focus.
   await gw.splitFocusedPaneVertical();
   const textPaneId = (await gw.focused()).id;
   expect(textPaneId, 'split moved focus off the URL pane').not.toBe(urlPaneId);
-
-  // After the split the URL pane's corner control must be hidden (it lost focus).
-  await expect
-    .poll(() => controlState(urlPaneId).then((s) => s?.focused), { timeout: 5_000 })
-    .toBe(false);
-  await expect
-    .poll(() => controlState(urlPaneId).then((s) => s?.visible), { timeout: 5_000 })
-    .toBe(false);
 
   // LEFT-CLICK the URL pane. The live view is NOT parked (no gesture, no open
   // palette) so the click goes to the native WebContentsView — Chromium swallows
@@ -78,17 +58,11 @@ test('left-clicking a live URL pane transfers focus when the palette is closed',
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
 
   // Focus must now be on the URL pane — this is the primary regression assertion.
+  // (The per-pane native corner control this spec used to poll is GONE —
+  // issue #214: the circle lives in the bottom bar, outside every view.)
   await expect
     .poll(() => gw.focused().then((f) => f.id), { timeout: 5_000 })
     .toBe(urlPaneId);
-
-  // The URL pane's corner control must now be visible (focus arrived there).
-  await expect
-    .poll(() => controlState(urlPaneId).then((s) => s?.focused), { timeout: 5_000 })
-    .toBe(true);
-  await expect
-    .poll(() => controlState(urlPaneId).then((s) => s?.visible), { timeout: 5_000 })
-    .toBe(true);
 });
 
 test('left-clicking a live URL pane closes the + menu on the previously-focused pane', async ({
