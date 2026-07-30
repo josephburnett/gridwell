@@ -7,7 +7,9 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.8.0
-	github.com/yuin/goldmark v1.8.2
+	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/niklasfasching/go-org v1.9.1
+	github.com/yuin/goldmark v1.8.5
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.55.0
 	google.golang.org/grpc v1.71.1
@@ -17,10 +19,12 @@ require (
 )
 
 require (
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
