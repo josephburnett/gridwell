@@ -74,10 +74,11 @@ type rightDragState struct {
 	// Swap-only.
 	originPaneID string
 
-	// Split-only.
-	splitPaneID string
-	splitPane   pane.Rect
-	splitSide   pane.Side
+	// Split-only. The AXIS is fixed by the grabbed border; the SIDE (and
+	// the host pane) follow the drag and are resolved at release (issue
+	// #217 — either side of a border behaves identically, and the
+	// direction can flip mid-gesture).
+	splitAxis pane.Direction
 
 	// Resize-only.
 	targetSplit *pane.Split
@@ -175,14 +176,12 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 		}
 	case gesture.Split:
 		a.rightDrag = &rightDragState{
-			kind:        rightDragSplit,
-			startX:      sx,
-			startY:      sy,
-			curX:        sx,
-			curY:        sy,
-			splitPaneID: p.ID,
-			splitPane:   r,
-			splitSide:   in.Region.Side(),
+			kind:      rightDragSplit,
+			startX:    sx,
+			startY:    sy,
+			curX:      sx,
+			curY:      sy,
+			splitAxis: in.Region.Side().Direction(),
 		}
 	}
 }
@@ -658,6 +657,13 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 type leftResizeState struct {
 	targetSplit *pane.Split
 	splitDir    pane.Direction
+	// crush is the ARM-TIME bump plan (issue #217): the cursor positions at
+	// which each corridor segment outward from the boundary has been
+	// pressed to its minimum. The red preview and the release both read
+	// crush.Red(cursor) — one verdict. Arm-time sizes are the point:
+	// "pressed past the bump" is defined against where the borders were
+	// when you grabbed.
+	crush pane.CrushPlan
 	// curX/curY is the last cursor the move applied — the preview and the
 	// release read the SAME point, so the red warning can never mark a
 	// different side than the release collapses. Initialized to the ARM
@@ -686,9 +692,14 @@ func (a *App) armLeftResize(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	if !arm {
 		return false
 	}
+	crush, ok := pane.PlanCrush(a.tree.Root, a.rootLayoutRect(), d.Split, pane.MinPanePx)
+	if !ok {
+		return false
+	}
 	a.leftResize = &leftResizeState{
 		targetSplit: d.Split,
 		splitDir:    d.Dir,
+		crush:       crush,
 		curX:        sx,
 		curY:        sy,
 	}
@@ -742,39 +753,26 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 }
 
 // finishLeftResize is the left release: the live layout was already applied
-// during the move (only-the-grabbed-border, issue #112), so the release only
-// decides COLLAPSE from the raw cursor — dragging a side past the minimum
-// wall by enough means "close it" (issue #203: the left drag owns resize AND
-// close; the right button splits). Every leaf in a dropped side is flushed
-// first — text saves, live stream freezes — exactly as the old right-path
-// collapse did.
+// during the move (only-the-grabbed-border, issue #112), so the release
+// only closes what the drag PRESSED (issue #217): every corridor segment
+// the cursor pushed past its bump — red in the preview — is flushed and
+// removed, adjacent-first. Deciding from the last APPLIED cursor (lr.cur*)
+// keeps the verdict byte-identical to the red warning the user saw.
 func (a *App) finishLeftResize() {
 	lr := a.leftResize
 	a.leftResize = nil
 	if lr == nil {
 		return
 	}
-	// Decide from the last APPLIED cursor (lr.cur*), not the release
-	// coordinates: it is exactly what the red warning previewed, and an
-	// off-canvas release (finished later by the buttons-empty guard on a
-	// stray re-entry move) can never collapse a side the drag never
-	// crushed. The threshold is the CORRIDOR's edge (pane.CorridorSpan —
-	// fixed for the whole drag; issue #204): closing requires traveling all
-	// the way across, so the minimum wall — where a legal drag clamps —
-	// never doubles as a close threshold.
-	corStart, corEnd, ok := pane.CorridorSpan(a.tree.Root, a.rootLayoutRect(), lr.targetSplit)
-	if !ok {
-		a.draw()
-		return
+	cursor := lr.curX
+	if lr.splitDir == pane.Horizontal {
+		cursor = lr.curY
 	}
-	collapse := gesture.ResizeOutcome(lr.splitDir, lr.curX, lr.curY, corStart, corEnd)
-	switch collapse {
-	case gesture.CollapseA:
-		a.flushDroppedSubtree(lr.targetSplit.A)
-		_ = a.tree.CollapseSplit(lr.targetSplit, true)
-	case gesture.CollapseB:
-		a.flushDroppedSubtree(lr.targetSplit.B)
-		_ = a.tree.CollapseSplit(lr.targetSplit, false)
+	for _, seg := range lr.crush.Red(cursor) {
+		a.flushDroppedSubtree(seg)
+		if !a.tree.RemoveSegment(seg) {
+			break
+		}
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -792,25 +790,27 @@ func (a *App) commitSwap(rd *rightDragState, sx, sy float64) {
 	_ = a.tree.SetFocus(rd.originPaneID)
 }
 
-// commitSplit converts the in-flight preview into a real split. The
-// gesture is committed iff the cursor:
-//  1. is past the start point in the *expected* direction (away from
-//     the chosen edge), and
-//  2. the resulting split position is in the valid range — both child
-//     panes get at least 2*resizeBandPx of the relevant dimension.
-//
-// Anything else is cancelled silently.
+// commitSplit converts the in-flight preview into a real split. The side
+// and the HOST pane follow the drag (issue #217): the new pane opens on
+// whichever side of the border the cursor traveled to, in the pane the
+// cursor is in at release — between the grabbed border and the cursor. A
+// sub-threshold drag, an off-pane release, or a position that can't leave
+// both children pane.MinPanePx cancels silently.
 func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
-	ratio, ok := gesture.SplitOutcome(rd.splitSide, rd.splitPane, rd.startX, rd.startY, sx, sy)
+	side, active := gesture.SplitSideFromDrag(rd.splitAxis, rd.startX, rd.startY, sx, sy)
+	if !active {
+		return
+	}
+	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return
 	}
-	p := a.tree.FindPane(rd.splitPaneID)
-	if p == nil {
+	ratio, ok := gesture.SplitOutcome(side, r, sx, sy)
+	if !ok {
 		return
 	}
 	_ = a.tree.SetFocus(p.ID)
-	np, err := a.tree.SplitOnSideAt(rd.splitSide, ratio)
+	np, err := a.tree.SplitOnSideAt(side, ratio)
 	if err != nil {
 		return
 	}

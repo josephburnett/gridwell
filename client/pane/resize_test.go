@@ -203,26 +203,115 @@ func TestZoomUnknownPaneIsNoOp(t *testing.T) {
 // (2×32 from the corridor start), not the inner split's own container edge
 // (y=100) — the difference is exactly where the false mid-corridor collapse
 // lived. And the walls must equal what ResizeThrough actually clamps to.
-func TestCorridorSpan(t *testing.T) {
+// The crush model (issue #217, superseding #204's corridor-edge band):
+// bump thresholds are captured at ARM, the red verdict is pressed-past.
+func TestPlanCrushThresholds(t *testing.T) {
 	outer, inner := stack3()
 	root := TreeNode{Split: outer}
 	container := Rect{X: 0, Y: 0, W: 100, H: 300}
 
-	start, end, ok := CorridorSpan(root, container, inner)
+	// Inner divider (middle|bottom boundary at y=200): pressing up bumps
+	// middle at 200-68=132, then top at 132-68=64; pressing down bumps
+	// bottom at 200+68=268.
+	plan, ok := PlanCrush(root, container, inner, 32)
 	if !ok {
-		t.Fatal("span not found for the inner divider")
+		t.Fatal("no crush plan for the inner divider")
 	}
-	if !near(start, 0) || !near(end, 300) {
-		t.Errorf("span = [%v, %v], want [0, 300] (the whole same-axis column, not the inner container)", start, end)
+	if len(plan.AThresh) != 2 || !near(plan.AThresh[0], 132) || !near(plan.AThresh[1], 64) {
+		t.Fatalf("A thresholds = %v, want [132 64]", plan.AThresh)
+	}
+	if len(plan.BThresh) != 1 || !near(plan.BThresh[0], 268) {
+		t.Fatalf("B thresholds = %v, want [268]", plan.BThresh)
 	}
 
-	// The span is invariant under the drag itself: the cascade moves
-	// same-axis ratios, never the perpendicular ancestors that fix the span
-	// — so the close threshold (issue #204) cannot go stale mid-drag.
-	ResizeThrough(root, container, inner, 10, 32)
-	s2, e2, ok := CorridorSpan(root, container, inner)
-	if !ok || !near(s2, start) || !near(e2, end) {
-		t.Errorf("span moved under the drag: [%v, %v] -> [%v, %v]", start, end, s2, e2)
+	red := func(cursor float64) []string {
+		var ids []string
+		for _, n := range plan.Red(cursor) {
+			ids = append(ids, n.Pane.ID)
+		}
+		return ids
+	}
+	if r := red(150); r != nil {
+		t.Errorf("mid-resize cursor reds %v, want none", r)
+	}
+	if r := red(131); len(r) != 1 || r[0] != "middle" {
+		t.Errorf("past the first bump: %v, want [middle]", r)
+	}
+	if r := red(63); len(r) != 2 || r[0] != "middle" || r[1] != "top" {
+		t.Errorf("pressed to the corridor start: %v, want [middle top]", r)
+	}
+	// Backing off un-reds one by one: the verdict is pure in the cursor.
+	if r := red(70); len(r) != 1 || r[0] != "middle" {
+		t.Errorf("backed off to 70: %v, want [middle]", r)
+	}
+	if r := red(269); len(r) != 1 || r[0] != "bottom" {
+		t.Errorf("past the B bump: %v, want [bottom]", r)
+	}
+	if r := red(200); r != nil {
+		t.Errorf("bare click reds %v, want none", r)
+	}
+}
+
+// A neighbor already sitting at its minimum: its bump is the arm boundary
+// itself, so a bare click must red NOTHING (the #204 one-click-close class)
+// while any real press past it reds immediately ("pressure builds as soon
+// as you hit another border").
+func TestPlanCrushPreCrushedNeighbor(t *testing.T) {
+	outer, inner := stack3()
+	root := TreeNode{Split: outer}
+	container := Rect{X: 0, Y: 0, W: 100, H: 300}
+	ResizeThrough(root, container, inner, 132, 32) // middle to its min
+	plan, ok := PlanCrush(root, container, inner, 32)
+	if !ok {
+		t.Fatal("no crush plan")
+	}
+	if !near(plan.AThresh[0], 132) {
+		t.Fatalf("pre-crushed neighbor bump = %v, want the arm boundary 132", plan.AThresh[0])
+	}
+	if r := plan.Red(132); r != nil {
+		t.Fatalf("bare click on a pre-crushed border reds %v, want none", r)
+	}
+	if r := plan.Red(130); len(r) != 1 || r[0].Pane.ID != "middle" {
+		t.Fatalf("first press past a pre-crushed border: %v, want [middle]", r)
+	}
+}
+
+// SegmentRects tracks the LIVE crush — the red overlay strokes where the
+// segment is now, not where it was at arm.
+func TestSegmentRectsLive(t *testing.T) {
+	outer, inner := stack3()
+	root := TreeNode{Split: outer}
+	container := Rect{X: 0, Y: 0, W: 100, H: 300}
+	plan, _ := PlanCrush(root, container, inner, 32)
+	ResizeThrough(root, container, inner, 100, 32) // crush middle to min
+	rects := SegmentRects(root, container, inner, plan.Red(100))
+	if len(rects) != 1 {
+		t.Fatalf("rects = %v, want the one red segment", rects)
+	}
+	if !near(rects[0].H, 32) || !near(rects[0].Y, 68) {
+		t.Fatalf("red rect = %+v, want the crushed middle at y=68 h=32", rects[0])
+	}
+}
+
+// RemoveSegment closes an arbitrary corridor segment: the sibling hoists,
+// focus survives, the last segment cannot be removed.
+func TestRemoveSegment(t *testing.T) {
+	outer, inner := stack3()
+	tr := &Tree{Root: TreeNode{Split: outer}, Focus: "middle"}
+	if !tr.RemoveSegment(inner.A) { // the middle pane
+		t.Fatal("remove failed")
+	}
+	if tr.Count() != 2 {
+		t.Fatalf("panes = %d, want 2", tr.Count())
+	}
+	if tr.FindPane("middle") != nil {
+		t.Fatal("middle still in the tree")
+	}
+	if tr.FindPane(tr.Focus) == nil {
+		t.Fatal("focus points at a removed pane")
+	}
+	if tr.RemoveSegment(tr.Root) {
+		t.Fatal("removing the whole tree must be refused")
 	}
 }
 

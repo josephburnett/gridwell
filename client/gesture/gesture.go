@@ -102,16 +102,13 @@ func Classify(in Input) Kind {
 }
 
 // SplitOutcome resolves the release of a Split gesture into the final
-// child-A ratio, composing the already-tested pane helpers: the gesture
-// must be dragged away from its edge (SplitGestureActive), land in a
+// ratio for the HOST pane (the pane the cursor is in at release), with the
+// side already resolved by SplitSideFromDrag: the cursor must land in a
 // position that leaves both children at least pane.MinPanePx
 // (SplitClampedPosition — the universal minimum, issue #167), and that
 // position maps to a ratio (SplitRatioFromPos). ok is false for a silent
 // cancel.
-func SplitOutcome(side pane.Side, paneRect pane.Rect, startX, startY, curX, curY float64) (ratio float64, ok bool) {
-	if !pane.SplitGestureActive(side, startX, startY, curX, curY) {
-		return 0, false
-	}
+func SplitOutcome(side pane.Side, paneRect pane.Rect, curX, curY float64) (ratio float64, ok bool) {
 	pos, ok := pane.SplitClampedPosition(side, paneRect, curX, curY)
 	if !ok {
 		return 0, false
@@ -119,46 +116,36 @@ func SplitOutcome(side pane.Side, paneRect pane.Rect, startX, startY, curX, curY
 	return pane.SplitRatioFromPos(side, paneRect, pos), true
 }
 
-// Collapse names which side of a resize-divider gesture collapses on
-// release, or neither.
-type Collapse int
-
-const (
-	CollapseNone Collapse = iota
-	CollapseA
-	CollapseB
-)
-
-// CloseBandPx is how close to the corridor's edge the cursor must land for
-// a release to close a side — "all the way across" with a small tolerance
-// so a pane flush against the screen edge stays closable. Always strictly
-// inside the resize range: the minimum wall sits at least pane.MinPanePx
-// from the corridor edge, so a legal resize release can never read as a
-// close.
-const CloseBandPx = 8.0
-
-// ResizeOutcome resolves the release of a Resize gesture: which side (if
-// any) closes. corStart/corEnd are pane.CorridorSpan's bounds — the fixed
-// extent of the corridor, invariant during the drag. Closing is the
-// corridor-EDGE gesture (issue #204): the cursor must travel all the way
-// across, to within CloseBandPx of the span's edge — reaching the start
-// edge closes the A side of the grabbed split, the end edge the B side.
-// The minimum walls are a resize clamp only. (Crushing past the wall used
-// to close, which put the close threshold where a legal drag clamps — one
-// wobble past it and a resize became an accidental close.)
-func ResizeOutcome(dir pane.Direction, sx, sy, corStart, corEnd float64) Collapse {
-	cursor := sx
-	if dir == pane.Horizontal {
-		cursor = sy
+// SplitSideFromDrag resolves a right-drag split's side from the DRAG, not
+// the grab (issue #217): dragging toward the axis-positive direction opens
+// the new pane on the leading side of whatever pane the cursor is in (the
+// space between the grabbed border and the cursor), so either side of a
+// border behaves identically and the direction can flip mid-gesture.
+// active is false until the drag clears SplitArmPx — a bare click or jitter
+// commits nothing.
+func SplitSideFromDrag(axis pane.Direction, startX, startY, curX, curY float64) (side pane.Side, active bool) {
+	d := curX - startX
+	if axis == pane.Horizontal {
+		d = curY - startY
 	}
-	switch {
-	case cursor <= corStart+CloseBandPx:
-		return CollapseA
-	case cursor >= corEnd-CloseBandPx:
-		return CollapseB
+	if d > SplitArmPx {
+		if axis == pane.Horizontal {
+			return pane.SideTop, true
+		}
+		return pane.SideLeft, true
 	}
-	return CollapseNone
+	if d < -SplitArmPx {
+		if axis == pane.Horizontal {
+			return pane.SideBottom, true
+		}
+		return pane.SideRight, true
+	}
+	return 0, false
 }
+
+// SplitArmPx is the drag distance that arms a split: below it a release is
+// a silent cancel, so a bare right-click on a border never splits.
+const SplitArmPx = 8.0
 
 // ResizeAffordance is the shared decision behind a left-button pane-boundary
 // resize: whether a drag would arm a resize at the cursor, and the CSS cursor

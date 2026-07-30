@@ -74,7 +74,11 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	var paneID string
 	switch rd.kind {
 	case rightDragSplit:
-		paneID = rd.splitPaneID
+		// The host follows the cursor (issue #217): highlight the pane the
+		// split would land in right now.
+		if hp, _, ok := a.paneAtScreen(rd.curX, rd.curY); ok {
+			paneID = hp.ID
+		}
 	case rightDragSwap:
 		paneID = rd.originPaneID
 	default:
@@ -303,48 +307,49 @@ func jsArray(vals ...float64) js.Value {
 	return js.ValueOf(arr)
 }
 
-// drawSplitPreview draws the partition line and a grey "split zone"
-// hint behind it so the user sees the gesture identity immediately on
-// right-button-down — before any drag motion. The line renders blue
-// when a release here would commit (past start, in valid range) and
-// grey otherwise.
+// drawSplitPreview draws the partition line where the split would land
+// RIGHT NOW: the side and host pane follow the drag (issue #217), so the
+// line lives in the pane under the cursor, flipping across the grabbed
+// border as the cursor does. Blue when a release here would commit, grey
+// while the drag is below the arm threshold or outside a valid position.
 func (a *App) drawSplitPreview(rd *rightDragState) {
-	a.drawSplitZoneHint(rd)
-	pos, valid := pane.SplitClampedPosition(rd.splitSide, rd.splitPane, rd.curX, rd.curY)
-	active := valid && pane.SplitGestureActive(rd.splitSide, rd.startX, rd.startY, rd.curX, rd.curY)
+	host, r, ok := a.paneAtScreen(rd.curX, rd.curY)
+	if !ok {
+		return
+	}
+	a.drawSplitAxisHint(r, rd)
+	side, armed := gesture.SplitSideFromDrag(rd.splitAxis, rd.startX, rd.startY, rd.curX, rd.curY)
+	pos := rd.curX
+	if rd.splitAxis == pane.Horizontal {
+		pos = rd.curY
+	}
+	active := false
+	if armed {
+		var valid bool
+		pos, valid = pane.SplitClampedPosition(side, r, rd.curX, rd.curY)
+		active = valid
+	}
 
-	// Find the pane being split for color resolution.
-	p := a.tree.FindPane(rd.splitPaneID)
 	var g *cache.Grid
-	gridOK := false
-	if p != nil {
-		gid := a.gridIDForPane(p)
-		g, gridOK = a.c.Grid(gid)
-	}
-	urlLive := false
-	if p != nil {
-		urlLive = a.urlViewFor(p.ID) != nil
-	}
+	gid := a.gridIDForPane(host)
+	g, gridOK := a.c.Grid(gid)
+	urlLive := a.urlViewFor(host.ID) != nil
 
 	color := colorSplitInactive
 	if active {
-		color = a.paneBorderColorFor(p, g, gridOK, true /* focused */, urlLive)
+		color = a.paneBorderColorFor(host, g, gridOK, true /* focused */, urlLive)
 	}
 	a.cctx.Call("beginPath")
-	r := rd.splitPane
-	switch rd.splitSide {
-	case pane.SideTop, pane.SideBottom:
-		// Horizontal divider line at y=pos, full pane width.
+	if rd.splitAxis == pane.Horizontal {
 		a.cctx.Call("moveTo", r.X, pos)
 		a.cctx.Call("lineTo", r.X+r.W, pos)
-	case pane.SideLeft, pane.SideRight:
-		// Vertical divider at x=pos, full pane height.
+	} else {
 		a.cctx.Call("moveTo", pos, r.Y)
 		a.cctx.Call("lineTo", pos, r.Y+r.H)
 	}
-	// Dark casing under the line so it stays visible against the lightened
-	// split-zone hint and the grey markdown-preview background, where the
-	// inactive grey line would otherwise blend in. Same path, stroked twice.
+	// Dark casing under the line so it stays visible against the grey
+	// markdown-preview background, where the inactive grey line would
+	// otherwise blend in. Same path, stroked twice.
 	a.cctx.Set("strokeStyle", "rgba(0,0,0,0.55)")
 	a.cctx.Set("lineWidth", 4.5)
 	a.cctx.Call("stroke")
@@ -354,53 +359,21 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 	a.cctx.Set("lineWidth", 1.0)
 }
 
-// drawSplitZoneHint paints the trapezoidal split sector for the side
-// the gesture was armed on (top/bottom/left/right) plus a "drag away
-// from the edge to split" hint arrow. Faint grey so the underlying
-// pane content stays legible.
-func (a *App) drawSplitZoneHint(rd *rightDragState) {
-	r := rd.splitPane
-	tl := pointXY{r.X, r.Y}
-	tr := pointXY{r.X + r.W, r.Y}
-	bl := pointXY{r.X, r.Y + r.H}
-	br := pointXY{r.X + r.W, r.Y + r.H}
-	cx := r.X + r.W/2
-	cy := r.Y + r.H/2
-	var poly []pointXY
-	var arrowX, arrowY, dx, dy float64
-	switch rd.splitSide {
-	case pane.SideTop:
-		poly = []pointXY{tl, tr, {cx, cy}}
-		arrowX, arrowY = cx, r.Y+r.H*0.18
-		dx, dy = 0, r.H*0.18
-	case pane.SideBottom:
-		poly = []pointXY{bl, br, {cx, cy}}
-		arrowX, arrowY = cx, r.Y+r.H*0.82
-		dx, dy = 0, -r.H*0.18
-	case pane.SideLeft:
-		poly = []pointXY{tl, bl, {cx, cy}}
-		arrowX, arrowY = r.X+r.W*0.18, cy
-		dx, dy = r.W*0.18, 0
-	case pane.SideRight:
-		poly = []pointXY{tr, br, {cx, cy}}
-		arrowX, arrowY = r.X+r.W*0.82, cy
-		dx, dy = -r.W*0.18, 0
-	default:
-		return
-	}
-	a.cctx.Set("fillStyle", colorPlusBg)
-	a.cctx.Set("globalAlpha", 0.45)
-	a.cctx.Call("beginPath")
-	a.cctx.Call("moveTo", poly[0].x, poly[0].y)
-	for _, p := range poly[1:] {
-		a.cctx.Call("lineTo", p.x, p.y)
-	}
-	a.cctx.Call("closePath")
-	a.cctx.Call("fill")
-	a.cctx.Set("globalAlpha", 1.0)
+// drawSplitAxisHint paints the gesture identity at the grab point: two
+// opposing arrows along the split's axis — "drag EITHER way to open a new
+// pane on that side" (issue #217; the old one-sided sector hard-committed a
+// direction the gesture no longer has).
+func (a *App) drawSplitAxisHint(r pane.Rect, rd *rightDragState) {
 	a.cctx.Set("strokeStyle", colorMuted)
 	a.cctx.Set("lineWidth", 1.0)
-	drawHotspotArrow(a.cctx, arrowX, arrowY, dx, dy)
+	arm := math.Min(r.W, r.H) * 0.12
+	if rd.splitAxis == pane.Horizontal {
+		drawHotspotArrow(a.cctx, rd.startX, rd.startY-8, 0, -arm)
+		drawHotspotArrow(a.cctx, rd.startX, rd.startY+8, 0, arm)
+	} else {
+		drawHotspotArrow(a.cctx, rd.startX-8, rd.startY, -arm, 0)
+		drawHotspotArrow(a.cctx, rd.startX+8, rd.startY, arm, 0)
+	}
 }
 
 type pointXY struct{ x, y float64 }
@@ -499,9 +472,9 @@ func drawArrowHead(a *App, cx, cy, angle, size float64) {
 // left drag owns resize AND close). Two layers:
 //   - Always: highlight the divider being dragged in grey with an
 //     orthogonal double-headed arrow.
-//   - When releasing HERE would collapse a side (crushed past the minimum
-//     wall): paint a red border around that side, so the user knows
-//     they're about to close it (and can drag back before releasing).
+//   - Every corridor segment the drag has pressed past its bump (issue
+//     #217) gets a red border: release closes ALL of them; backing off
+//     un-reds them one by one.
 func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	// LIVE geometry, every frame: the cascade moves ancestor ratios, so the
 	// grabbed split's container and its boundary are wherever the applied
@@ -513,18 +486,7 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	if !ok {
 		return
 	}
-	// The collapse verdict comes from the SAME corridor edges the release
-	// reads (pane.CorridorSpan, issue #204) and the SAME cursor the move
-	// last applied — finishLeftResize reads the identical inputs, so the
-	// red "about to close" border can never mark a side the release won't
-	// drop, and it only lights once the cursor has traveled all the way
-	// across to the corridor's edge.
-	corStart, corEnd, ok := pane.CorridorSpan(root, rootRect, lr.targetSplit)
-	if !ok {
-		return
-	}
-	collapse := gesture.ResizeOutcome(lr.splitDir, lr.curX, lr.curY, corStart, corEnd)
-	aRect, bRect := pane.SplitRect(r, lr.splitDir, lr.targetSplit.Ratio)
+	aRect, _ := pane.SplitRect(r, lr.splitDir, lr.targetSplit.Ratio)
 	// Divider hint: a thin grey band along the shared edge between
 	// aRect and bRect, plus a double-headed arrow centered on it.
 	a.cctx.Set("strokeStyle", colorMuted)
@@ -552,16 +514,23 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	}
 	a.cctx.Set("lineWidth", 1.0)
 
-	if collapse == gesture.CollapseNone {
-		return
+	// The crush verdict (issue #217): every corridor segment the drag has
+	// pressed past its bump reds — the release reads the IDENTICAL
+	// lr.crush.Red(cursor), so the red set and the closed set cannot
+	// diverge. Rects are live (SegmentRects), tracking the crush.
+	cursor := lr.curX
+	if lr.splitDir == pane.Horizontal {
+		cursor = lr.curY
 	}
-	target := bRect
-	if collapse == gesture.CollapseA {
-		target = aRect
+	red := lr.crush.Red(cursor)
+	if len(red) == 0 {
+		return
 	}
 	a.cctx.Set("strokeStyle", colorCloseWarn)
 	a.cctx.Set("lineWidth", paneBorderPx)
 	half := paneBorderPx / 2
-	a.cctx.Call("strokeRect", target.X+half, target.Y+half, target.W-paneBorderPx, target.H-paneBorderPx)
+	for _, rr := range pane.SegmentRects(root, rootRect, lr.targetSplit, red) {
+		a.cctx.Call("strokeRect", rr.X+half, rr.Y+half, rr.W-paneBorderPx, rr.H-paneBorderPx)
+	}
 	a.cctx.Set("lineWidth", 1.0)
 }

@@ -100,63 +100,51 @@ func TestClassifyPriority(t *testing.T) {
 }
 
 func TestSplitOutcome(t *testing.T) {
-	// A 200x200 pane; split off the top.
+	// A 200x200 pane; the side was already resolved by SplitSideFromDrag.
 	r := pane.Rect{X: 0, Y: 0, W: 200, H: 200}
-
-	// No drag away from the top edge → cancel.
-	if _, ok := SplitOutcome(pane.SideTop, r, 100, 5, 100, 5); ok {
-		t.Errorf("SplitOutcome with no drag = ok, want cancel")
-	}
-
-	// Drag down well into the pane → active, ratio in (0,1).
-	ratio, ok := SplitOutcome(pane.SideTop, r, 100, 5, 100, 100)
+	ratio, ok := SplitOutcome(pane.SideTop, r, 100, 100)
 	if !ok {
-		t.Fatalf("SplitOutcome with a real drag = cancel, want ok")
-	}
-	if ratio <= 0 || ratio >= 1 {
-		t.Errorf("ratio = %v, want in (0,1)", ratio)
+		t.Fatalf("SplitOutcome mid-pane = cancel, want ok")
 	}
 	// Cursor at y=100 in a 200-tall pane splitting off the top → ~0.5.
 	if ratio < 0.4 || ratio > 0.6 {
 		t.Errorf("ratio = %v, want ~0.5 for a mid-pane release", ratio)
 	}
+	// A release outside the min-pane clamp range cancels.
+	if _, ok := SplitOutcome(pane.SideTop, r, 100, 500); ok {
+		t.Errorf("far-outside release = ok, want cancel")
+	}
 }
 
-func TestResizeOutcome(t *testing.T) {
-	// A corridor spanning [0, 600] as pane.CorridorSpan reports it. Closing
-	// is the corridor-EDGE gesture (issue #204): only the CloseBandPx at the
-	// span's own edges closes — the minimum walls (one pane-minimum in, where
-	// a legal drag clamps) are a resize clamp, never a close threshold.
-	const start, end = 0.0, 600.0
-
-	tests := []struct {
-		name         string
-		dir          pane.Direction
-		sx, sy       float64
-		wantCollapse Collapse
+// The side follows the DRAG (issue #217): either side of a border behaves
+// identically, the direction can flip mid-gesture, and a sub-threshold drag
+// is inactive (a bare right-click on a border never splits).
+func TestSplitSideFromDrag(t *testing.T) {
+	cases := []struct {
+		name       string
+		axis       pane.Direction
+		dx, dy     float64
+		want       pane.Side
+		wantActive bool
 	}{
-		{"vertical mid — no collapse", pane.Vertical, 300, 100, CollapseNone},
-		{"vertical at the minimum wall — resize, not close (#204)", pane.Vertical, 32, 100, CollapseNone},
-		{"vertical past the wall, short of the edge — still resize (#204)", pane.Vertical, 20, 100, CollapseNone},
-		{"vertical in the edge band — A closes", pane.Vertical, 4, 100, CollapseA},
-		{"vertical at the band boundary — A closes (inclusive)", pane.Vertical, start + CloseBandPx, 100, CollapseA},
-		{"vertical in the far band — B closes", pane.Vertical, 596, 100, CollapseB},
-		{"vertical just inside the far band boundary — no collapse", pane.Vertical, end - CloseBandPx - 1, 100, CollapseNone},
-		{"horizontal mid — no collapse", pane.Horizontal, 100, 300, CollapseNone},
-		{"horizontal in the edge band — A closes", pane.Horizontal, 100, 4, CollapseA},
-		{"horizontal in the far band — B closes", pane.Horizontal, 100, 596, CollapseB},
-		// A bare click (issue #204): the verdict cursor is the arm point,
-		// which sits within the grab band of a divider — and a divider is
-		// always at least a pane-minimum from the corridor edge, so a click
-		// can never land in a close band.
-		{"cursor at a divider near the wall — never a close", pane.Vertical, 34, 100, CollapseNone},
+		{"right drag opens on the left of the host", pane.Vertical, 40, 0, pane.SideLeft, true},
+		{"left drag opens on the right of the host", pane.Vertical, -40, 0, pane.SideRight, true},
+		{"down drag opens on the top of the host", pane.Horizontal, 0, 40, pane.SideTop, true},
+		{"up drag opens on the bottom of the host", pane.Horizontal, 0, -40, pane.SideBottom, true},
+		{"sub-threshold jitter is inactive", pane.Vertical, 4, 0, 0, false},
+		{"bare click is inactive", pane.Vertical, 0, 0, 0, false},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := ResizeOutcome(tt.dir, tt.sx, tt.sy, start, end); got != tt.wantCollapse {
-				t.Errorf("collapse = %v, want %v", got, tt.wantCollapse)
-			}
-		})
+	for _, c := range cases {
+		side, active := SplitSideFromDrag(c.axis, 100, 100, 100+c.dx, 100+c.dy)
+		if active != c.wantActive || (active && side != c.want) {
+			t.Errorf("%s: = (%v, %v), want (%v, %v)", c.name, side, active, c.want, c.wantActive)
+		}
+	}
+	// Flip mid-gesture: same start, opposite cursor — opposite side.
+	s1, _ := SplitSideFromDrag(pane.Vertical, 100, 0, 160, 0)
+	s2, _ := SplitSideFromDrag(pane.Vertical, 100, 0, 40, 0)
+	if s1 == s2 {
+		t.Errorf("flip: both directions gave %v", s1)
 	}
 }
 

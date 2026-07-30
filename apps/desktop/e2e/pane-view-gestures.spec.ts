@@ -87,6 +87,39 @@ test('right-drag from the divider splits (a new pane); short of the minimum it c
   expect((await gw.panes()).length, 'border right-drag split a pane').toBe(3);
 });
 
+// Issue #217: the split's side follows the DRAG, not the grab — the same
+// border press can travel one way, cross back, and commit on the other
+// side; the new pane opens in whatever pane the cursor released in.
+test('a border right-drag flips direction mid-gesture and splits where it releases', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(before).toHaveLength(2);
+  const [left, right] = before;
+
+  // Press on the shared border, drag LEFT into the left pane, then cross
+  // back and release INSIDE the right pane: the new pane opens between the
+  // border and the release point — in the right pane's territory.
+  const gx = left.x + left.w;
+  const gy = left.y + left.h / 2;
+  await window.mouse.move(gx - 2, gy);
+  await window.mouse.down({ button: 'right' });
+  await window.mouse.move(gx - 120, gy, { steps: 6 });
+  await window.mouse.move(gx + 150, gy, { steps: 8 });
+  await window.mouse.up({ button: 'right' });
+  await gw.waitIdle();
+
+  const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(after, 'the flipped drag still split').toHaveLength(3);
+  // The new pane sits between the old border and the release point: the
+  // middle pane of the three starts at the border.
+  expect(Math.abs(after[1].x - gx)).toBeLessThan(12);
+  expect(after[1].w, 'the new pane spans border→release').toBeLessThan(right.w / 2 + 40);
+});
+
 test('right-click on the corner circle ascends out of a descended well', async ({ gw }) => {
   await gw.enterPlugin('localdb');
   const root = (await gw.focused()).gridID;

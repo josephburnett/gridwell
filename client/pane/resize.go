@@ -45,21 +45,152 @@ func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (
 	return lo, hi, true
 }
 
-// CorridorSpan returns the [start, end] extent of target's corridor along
-// the drag axis — the span the boundary can never leave. Unlike the walls,
-// the span is INVARIANT during the drag: it is fixed by the perpendicular
-// ancestors' ratios, which a same-axis cascade never touches. The close
-// verdict reads it (issue #204): collapsing a side requires the cursor to
-// travel all the way across to the corridor's edge, and since the walls sit
-// at least one pane-minimum inside the span, a close can never overlap a
-// legal resize position.
-func CorridorSpan(root TreeNode, rootRect Rect, target *Split) (start, end float64, ok bool) {
-	_, topRect, ok := corridorTop(root, rootRect, target)
+// crushEps absorbs float ratio noise in the pressed-past-the-bump compare:
+// a segment reads as crushed only when the cursor is strictly past the
+// position where it reached its minimum, so a bare click (cursor at the
+// bump of an already-minimal neighbor) never closes anything.
+const crushEps = 0.5
+
+// CrushPlan is the progressive close model (issue #217, superseding #204's
+// corridor-edge band), captured at ARM time: for each corridor segment
+// outward from the grabbed boundary, the bump threshold — the cursor
+// position at which that segment has been pressed to its minimum. Bumps are
+// defined against the sizes AT GRAB (pressing past where a segment's border
+// was reachable), so a drag that merely returns to a pre-crushed segment's
+// border reds nothing until it presses beyond it.
+type CrushPlan struct {
+	// ASegs/AThresh: segments before the boundary, adjacent-first, with the
+	// cursor position that presses each to its minimum (strictly toward the
+	// corridor start). BSegs/BThresh mirror after the boundary.
+	ASegs, BSegs     []TreeNode
+	AThresh, BThresh []float64
+}
+
+// PlanCrush captures the crush thresholds for target's boundary at arm.
+func PlanCrush(root TreeNode, rootRect Rect, target *Split, minPx float64) (CrushPlan, bool) {
+	top, topRect, ok := corridorTop(root, rootRect, target)
 	if !ok {
-		return 0, 0, false
+		return CrushPlan{}, false
 	}
-	s, total := axisSpan(topRect, target.Dir)
-	return s, s + total, true
+	topNode := TreeNode{Split: top}
+	all := flattenCorridor(topNode, target.Dir)
+	start, total := axisSpan(topRect, target.Dir)
+	sizes := segmentSizes(topNode, target.Dir, total)
+	bIdx := boundaryIndex(all, target)
+	if bIdx < 0 || bIdx+1 >= len(all) {
+		return CrushPlan{}, false
+	}
+	boundary := start
+	for _, sz := range sizes[:bIdx+1] {
+		boundary += sz
+	}
+	var plan CrushPlan
+	th := boundary
+	for i := bIdx; i >= 0; i-- {
+		th -= sizes[i] - minSize(all[i], target.Dir, minPx)
+		plan.ASegs = append(plan.ASegs, all[i])
+		plan.AThresh = append(plan.AThresh, th)
+	}
+	th = boundary
+	for i := bIdx + 1; i < len(all); i++ {
+		th += sizes[i] - minSize(all[i], target.Dir, minPx)
+		plan.BSegs = append(plan.BSegs, all[i])
+		plan.BThresh = append(plan.BThresh, th)
+	}
+	return plan, true
+}
+
+// Red returns the segments the cursor has pressed to close — the contiguous
+// boundary-adjacent run whose bumps the cursor is strictly past, on the side
+// it is pressing. Backing off shrinks the run in reverse; the preview and
+// the release both read this one verdict, so they cannot disagree.
+func (cp CrushPlan) Red(cursorPx float64) []TreeNode {
+	var out []TreeNode
+	for k, t := range cp.AThresh {
+		if cursorPx < t-crushEps {
+			out = append(out, cp.ASegs[k])
+		} else {
+			break
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for k, t := range cp.BThresh {
+		if cursorPx > t+crushEps {
+			out = append(out, cp.BSegs[k])
+		} else {
+			break
+		}
+	}
+	return out
+}
+
+// SegmentRects returns the LIVE rects of the given corridor segments (for
+// the red close overlay) — recomputed from current sizes so the overlay
+// tracks the crush, never a stale arm-time copy.
+func SegmentRects(root TreeNode, rootRect Rect, target *Split, want []TreeNode) []Rect {
+	top, topRect, ok := corridorTop(root, rootRect, target)
+	if !ok {
+		return nil
+	}
+	topNode := TreeNode{Split: top}
+	all := flattenCorridor(topNode, target.Dir)
+	_, total := axisSpan(topRect, target.Dir)
+	sizes := segmentSizes(topNode, target.Dir, total)
+	start, _ := axisSpan(topRect, target.Dir)
+	out := make([]Rect, 0, len(want))
+	for _, w := range want {
+		off := start
+		for i, s := range all {
+			if s == w {
+				r := topRect
+				if target.Dir == Horizontal {
+					r.Y, r.H = off, sizes[i]
+				} else {
+					r.X, r.W = off, sizes[i]
+				}
+				out = append(out, r)
+				break
+			}
+			off += sizes[i]
+		}
+	}
+	return out
+}
+
+// RemoveSegment removes a corridor segment (an arbitrary subtree) from the
+// tree, hoisting its sibling — the close half of the crush gesture. The
+// caller flushes the subtree's leaves first. Removing the whole tree is
+// refused; focus moves to a surviving leaf when it was inside the removed
+// subtree.
+func (t *Tree) RemoveSegment(seg TreeNode) bool {
+	if t.Root == seg {
+		return false
+	}
+	var rec func(n *TreeNode) bool
+	rec = func(n *TreeNode) bool {
+		if n.Split == nil {
+			return false
+		}
+		if n.Split.A == seg {
+			*n = n.Split.B
+			return true
+		}
+		if n.Split.B == seg {
+			*n = n.Split.A
+			return true
+		}
+		return rec(&n.Split.A) || rec(&n.Split.B)
+	}
+	if !rec(&t.Root) {
+		return false
+	}
+	t.Zoomed = "" // structural edit, same rule as CollapseSplit
+	if t.FindPane(t.Focus) == nil {
+		t.Focus = anyLeafID(t.Root)
+	}
+	return true
 }
 
 // LocateSplit returns target's CURRENT laid-out container rect within the
