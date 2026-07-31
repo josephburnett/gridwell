@@ -54,9 +54,8 @@ func (a *App) scheduleFileSave() {
 // aspect (e.g., a 1×1 file in a landscape pane): the binding dim is
 // what limits user content in live mode, so calibrating ViewZoom
 // against it makes the preview text fill the file cell at the same
-// fraction as live text fills the inner-box.
-// textFitZoom is a thin adapter over panebox.FitZoom that
-// bundles the wasm-renderer's constants (textSideInset + cellPx).
+// fraction as live text fills the inner-box. Thin adapter over
+// panebox.FitZoom bundling the wasm renderer's constants.
 func textFitZoom(r pane.Rect, fileW, fileH int64) float64 {
 	return panebox.FitZoom(r, fileW, fileH, textSideInset, cellPx)
 }
@@ -71,7 +70,7 @@ func textFitZoom(r pane.Rect, fileW, fileH int64) float64 {
 // URL tiles use the full pane content area (paneContentBox) instead
 // of this narrower textarea-shaped box — see drawURLTileInPane and
 // the mouse/wheel handlers' isURLDescent branches.
-func textInnerBox(_ *pane.Pane, r pane.Rect) (x, y, w, h float64) {
+func textInnerBox(r pane.Rect) (x, y, w, h float64) {
 	b := panebox.InnerBox(r, textSideInset)
 	return b.X, b.Y, b.W, b.H
 }
@@ -100,7 +99,7 @@ func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
 	return panebox.PointInContent(r, paneBorderPx, sx, sy)
 }
 
-func pointInFileInner(_ *pane.Pane, r pane.Rect, sx, sy float64) bool {
+func pointInFileInner(r pane.Rect, sx, sy float64) bool {
 	return panebox.PointInInner(r, textSideInset, sx, sy)
 }
 
@@ -257,7 +256,7 @@ func (a *App) ensureFileTextarea() {
 			return nil
 		}
 		r := paneRectFor(a, p)
-		if !pointInFileInner(p, r, sx, sy) {
+		if !pointInFileInner(r, sx, sy) {
 			ev.Call("preventDefault")
 			a.startTextAscent(p)
 		}

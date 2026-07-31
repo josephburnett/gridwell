@@ -338,7 +338,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	case rightDragSplit:
 		a.commitSplit(rd, sx, sy)
 	case rightDragTileCenter:
-		a.commitTileCenter(rd, sx, sy)
+		a.commitTileCenter(sx, sy)
 	case rightDragTileResize:
 		a.commitTileResize(rd)
 	}
@@ -399,17 +399,17 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 	cellSize := cellPx * p.Zoom
 	a.dragging = &dragState{
-		originPaneID:   p.ID,
-		originFocused:  true, // right-down focused the pane before arming
-		tileID:         n.ID,
-		clone:          true,
-		startScreenX:   sx,
-		startScreenY:   sy,
-		curScreenX:     sx,
-		curScreenY:     sy,
-		cellOffsetX:    cxF - float64(n.X),
-		cellOffsetY:    cyF - float64(n.Y),
-		snapshotTile:   *n,
+		originPaneID:  p.ID,
+		originFocused: true, // right-down focused the pane before arming
+		tileID:        n.ID,
+		clone:         true,
+		startScreenX:  sx,
+		startScreenY:  sy,
+		curScreenX:    sx,
+		curScreenY:    sy,
+		cellOffsetX:   cxF - float64(n.X),
+		cellOffsetY:   cyF - float64(n.Y),
+		snapshotTile:  *n,
 		originScreenX: tlX,
 		originScreenY: tlY,
 		srcGridID:     a.gridIDForPane(p),
@@ -423,7 +423,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 // the threshold. If a.dragging was promoted to "started" by motion,
 // commit it as a CloneTile drop; otherwise just clear the priming
 // state so subsequent clicks aren't affected.
-func (a *App) commitTileCenter(_ *rightDragState, sx, sy float64) {
+func (a *App) commitTileCenter(sx, sy float64) {
 	d := a.dragging
 	a.dragging = nil
 	if d == nil || !d.started {

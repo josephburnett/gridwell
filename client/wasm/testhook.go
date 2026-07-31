@@ -206,7 +206,7 @@ func (a *App) thTextInnerBox(js.Value, []js.Value) any {
 	if !ok || p.TextFocus == "" {
 		return nil
 	}
-	x, y, w, h := textInnerBox(p, r)
+	x, y, w, h := textInnerBox(r)
 	return map[string]any{"x": x, "y": y, "w": w, "h": h}
 }
 
@@ -502,7 +502,7 @@ func pluginStatusName(pl rpc.PluginInfo) string {
 // identity. The rects are the SAME ones paletteTileIndexAt hit-tests, so a click
 // at an entry's center lands on that swatch.
 func (a *App) thPalette(js.Value, []js.Value) any {
-	p, r, ok := a.focusedPaneRect()
+	p, _, ok := a.focusedPaneRect()
 	if !ok {
 		return map[string]any{"open": false}
 	}
@@ -510,7 +510,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 	items := a.paletteItems(p)
 	entries := make([]any, 0, len(items))
 	for i, item := range items {
-		tx, ty, tw, th := a.paletteTileRect(p, r, i)
+		tx, ty, tw, th := a.paletteTileRect(p, i)
 		e := map[string]any{
 			"index":    i,
 			"isPlugin": item.isPlugin,

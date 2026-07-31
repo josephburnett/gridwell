@@ -299,8 +299,8 @@ func (a *App) draw() {
 	// panes, so it isn't painted over by a neighbour it overflows into.
 	if a.menu.IsOpen() {
 		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
-			if mr, ok := rects[mp.ID]; ok {
-				a.drawPalette(mp, mr)
+			if _, ok := rects[mp.ID]; ok {
+				a.drawPalette(mp)
 			}
 		}
 	}
@@ -432,7 +432,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", r.X, r.Y, r.W, r.H)
 	} else {
-		a.drawGridLines(paneGridLineColor(p, g, gridOK), pscreen, r)
+		a.drawGridLines(colorGridLineInterior, pscreen, r)
 	}
 
 	if gridOK {
@@ -450,18 +450,18 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			if file, ok := a.descendedTile(p); ok {
 				switch file.Kind {
 				case rpc.KindText:
-					ix, iy, iw, ih := textInnerBox(p, r)
+					ix, iy, iw, ih := textInnerBox(r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
 					a.cctx.Call("fillRect", ix, iy, iw, ih)
 					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
 				case rpc.KindURL:
 					ix, iy, iw, ih := paneContentBox(r)
-					a.drawURLTileInPane(p, &file, ix, iy, iw, ih)
+					a.drawURLTileInPane(&file, ix, iy, iw, ih)
 				case rpc.KindShell:
 					ix, iy, iw, ih := paneContentBox(r)
 					a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
 				default:
-					ix, iy, iw, ih := textInnerBox(p, r)
+					ix, iy, iw, ih := textInnerBox(r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
 					a.cctx.Call("fillRect", ix, iy, iw, ih)
 				}
@@ -481,7 +481,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				nn := n
 				outside := tileOutside(&nn, inSource)
 				dashed := !inSource && isLinkTile(&nn)
-				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, r, n.ID == selected, outside, dashed, p.ID)
+				a.drawNodeWithPreview(&nn, left, top, w, h, cellSize, n.ID == selected, outside, dashed, p.ID)
 				a.drawPluginHealthTint(&nn, left, top, w, h)
 			}
 			// Ascent trace: the fading "you just came from HERE" outline on the
@@ -690,10 +690,10 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 // child-preview hide scopes to the drag's SOURCE pane only ("" for contexts
 // with no pane — embeds in previews, ghosts). Formerly the previewPaneID
 // App scratch field, now passed down (issue #25).
-func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, selected, outside, dashed bool, paintPaneID string) {
+func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
 	case rpc.KindText:
-		a.drawMarkdownNode(n, x, y, w, h, r, selected, outside, dashed)
+		a.drawMarkdownNode(n, x, y, w, h, selected, outside, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
 	case rpc.KindURL:
@@ -756,11 +756,10 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		wellCenterY := y + h/2
 		originX := wellCenterX - viewCenterX*previewCell
 		originY := wellCenterY - viewCenterY*previewCell
-		drawGridLinesIn(a.cctx, wellGridLineColor(n), x, y, w, h, previewCell, originX, originY)
+		drawGridLinesIn(a.cctx, colorGridLineInterior, x, y, w, h, previewCell, originX, originY)
 
 		if showPreview {
-			// The hide scopes to the pane being painted: paneR is the pane
-			// rect drawNodeWithPreview received from drawPane's tile loop.
+			// The hide scopes to the pane being painted (paintPaneID).
 			var hide string
 			if a.ghost != nil && a.ghost.hiddenPaneID == paintPaneID {
 				hide = a.ghost.hiddenTileID
@@ -779,7 +778,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	if dashed {
 		setTileDash(a.cctx)
 	}
-	strokeTileBorder(a.cctx, x, y, w, h, wellOutlineColor(n), tileBorderPx)
+	strokeTileBorder(a.cctx, x, y, w, h, colorFocusBorder, tileBorderPx)
 	if dashed {
 		clearTileDash(a.cctx)
 	}
@@ -790,26 +789,6 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	// non-root sub-wells. Regular Gridwell wells (KindWell) get no banner
 	// — tileBannerLabel returns "" for them.
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
-}
-
-// wellOutlineColor picks the well-tile outline color: blue for every well,
-// interior or cross-plugin. A cross-plugin (exit) well is distinguished not by
-// hue but by a DASHED border (see isLinkTile / drawNodeWithPreview) — same
-// blue, dashed, signalling "a link you can unlink".
-func wellOutlineColor(*rpc.Tile) string {
-	return colorFocusBorder
-}
-
-// wellGridLineColor / paneGridLineColor pick the grid-line color drawn inside
-// a well's preview region and a pane's leaf grid. Every grid the user
-// navigates is uniformly blue, whichever plugin owns it (the launcher home,
-// which is gridless, never draws grid lines).
-func wellGridLineColor(*rpc.Tile) string {
-	return colorGridLineInterior
-}
-
-func paneGridLineColor(*pane.Pane, *cache.Grid, bool) string {
-	return colorGridLineInterior
 }
 
 // tileReadOnly reports whether the user is allowed to edit n's text
@@ -1076,7 +1055,7 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 	case rpc.KindWell:
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, w, h)
-		strokeTileBorder(c, x, y, w, h, wellOutlineColor(n), borderPx)
+		strokeTileBorder(c, x, y, w, h, colorFocusBorder, borderPx)
 	case rpc.KindURL:
 		c.Set("fillStyle", colorURLFill)
 		c.Call("fillRect", x, y, w, h)
@@ -1127,7 +1106,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// dashed always means "this is/becomes a reference".
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed, "")
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
@@ -1143,7 +1122,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 	// Cross-fade: tile fades out as frag grows; trashcan fades in.
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, r, false, outside, dashed, "")
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)

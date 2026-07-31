@@ -16,7 +16,7 @@ import (
 // over the pure client/palette package, the floating "+" button, and the
 // popover drawing (one swatch per templateKind, with its identity glyph).
 
-func (a *App) paletteLayoutFor(p *pane.Pane, _ pane.Rect) palette.Layout {
+func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
 	cx, cy := a.plusButtonCenter()
 	return palette.Layout{
 		Cfg:      palette.Default(),
@@ -95,29 +95,29 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 }
 
 // paletteRect is the wasm-side adapter for palette.Layout.PopoverRect.
-func (a *App) paletteRect(p *pane.Pane, r pane.Rect) (x, y, w, h float64) {
-	pop := a.paletteLayoutFor(p, r).PopoverRect()
+func (a *App) paletteRect(p *pane.Pane) (x, y, w, h float64) {
+	pop := a.paletteLayoutFor(p).PopoverRect()
 	return pop.X, pop.Y, pop.W, pop.H
 }
 
 // paletteTileRect is the wasm-side adapter for palette.Layout.TileRect.
-func (a *App) paletteTileRect(p *pane.Pane, r pane.Rect, i int) (x, y, w, h float64) {
-	tr := a.paletteLayoutFor(p, r).TileRect(i)
+func (a *App) paletteTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
+	tr := a.paletteLayoutFor(p).TileRect(i)
 	return tr.X, tr.Y, tr.W, tr.H
 }
 
 // drawPalette paints the creation popover: a background container and
 // a row of preview tiles per palette item group — plugins on top, then
 // the tile primitives in writable grids.
-func (a *App) drawPalette(p *pane.Pane, r pane.Rect) {
-	mx, my, mw, mh := a.paletteRect(p, r)
+func (a *App) drawPalette(p *pane.Pane) {
+	mx, my, mw, mh := a.paletteRect(p)
 	a.cctx.Set("fillStyle", colorMenuBg)
 	a.cctx.Call("fillRect", mx, my, mw, mh)
 	a.cctx.Set("strokeStyle", colorPaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
 	for i, item := range a.paletteItems(p) {
-		tx, ty, tw, th := a.paletteTileRect(p, r, i)
+		tx, ty, tw, th := a.paletteTileRect(p, i)
 		hovered := a.menu.Hover() == i
 		a.drawPaletteItem(item, tx, ty, tw, th, hovered)
 	}
@@ -209,11 +209,11 @@ func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
 }
 
 // paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.
-func (a *App) paletteTileIndexAt(p *pane.Pane, r pane.Rect, x, y float64) int {
-	return a.paletteLayoutFor(p, r).TileIndexAt(x, y)
+func (a *App) paletteTileIndexAt(p *pane.Pane, x, y float64) int {
+	return a.paletteLayoutFor(p).TileIndexAt(x, y)
 }
 
 // pointInPalette is the wasm-side adapter for palette.Layout.PointInPopover.
-func (a *App) pointInPalette(p *pane.Pane, r pane.Rect, x, y float64) bool {
-	return a.paletteLayoutFor(p, r).PointInPopover(x, y)
+func (a *App) pointInPalette(p *pane.Pane, x, y float64) bool {
+	return a.paletteLayoutFor(p).PointInPopover(x, y)
 }

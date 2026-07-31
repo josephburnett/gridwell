@@ -3,7 +3,6 @@
 package main
 
 import (
-
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"

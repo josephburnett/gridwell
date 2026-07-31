@@ -52,27 +52,18 @@ func (a *App) installCanvasInput() {
 		args[0].Call("preventDefault")
 		return nil
 	}))
-	// Window-level keyboard listeners forward every keystroke to the
-	// remote URL stream whenever the focused pane is descended into a
-	// URL tile. Window-level (not canvas-level) so we catch keys
+	// Window-level (not canvas-level) so the content-zoom chord is caught
 	// regardless of where in the document focus happens to sit.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
-	a.win.Call("addEventListener", "keyup", js.FuncOf(a.onKeyUp))
 	// Touch screens: translate single-finger touch into the same mouse
 	// gestures (see touch.go).
 	a.installTouchInput()
 }
 
-// onKeyDown / onKeyUp are no-ops. When a pane is descended into a live URL
-// tile, the native WebContentsView floated over the content box has OS
-// keyboard focus and handles its own input — the gridwell canvas never sees
-// those keystrokes. The handlers remain registered (and harmlessly inert) so
-// the listener wiring in installCanvasInput is unchanged.
-// onKeyDown is the canvas-level keyboard handler. Its one job today is
-// rendered-mode markdown editing: when the focused pane is editing a text tile
-// in rendered mode, keystrokes edit the source at the caret (the raw-text mode
-// is handled by its own DOM textarea, which owns its keys). Everything else
-// falls through untouched.
+// onKeyDown handles the one window-level chord the canvas owns: Ctrl/Cmd
+// +/-/0 content zoom. Everything else belongs to whichever DOM overlay or
+// native view has focus (textarea, xterm, WebContentsView) — the canvas
+// never sees those keystrokes.
 func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -82,8 +73,6 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	a.handleContentZoomKey(args[0])
 	return nil
 }
-
-func (a *App) onKeyUp(this js.Value, args []js.Value) any { return nil }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
 // or (nil, pane.Rect{}, false) if no pane covers the point.
@@ -286,8 +275,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if a.menu.IsOpen() && args[0].Get("button").Int() == 0 {
 		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
 			mr := paneRectFor(a, mp)
-			if a.pointInPalette(mp, mr, sx, sy) {
-				if idx := a.paletteTileIndexAt(mp, mr, sx, sy); idx >= 0 {
+			if a.pointInPalette(mp, sx, sy) {
+				if idx := a.paletteTileIndexAt(mp, sx, sy); idx >= 0 {
 					a.startPaletteDrag(mp, mr, idx, sx, sy)
 				}
 				return nil
@@ -357,8 +346,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// open) if it landed in the gutter. Click outside the popover
 	// dismisses it and falls through to normal interaction.
 	if a.menu.OpenOn(p.ID) {
-		if a.pointInPalette(p, r, sx, sy) {
-			idx := a.paletteTileIndexAt(p, r, sx, sy)
+		if a.pointInPalette(p, sx, sy) {
+			idx := a.paletteTileIndexAt(p, sx, sy)
 			if idx >= 0 {
 				a.startPaletteDrag(p, r, idx, sx, sy)
 				return nil
@@ -468,10 +457,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	}
 	// Track palette hover regardless of drag state.
 	if a.menu.IsOpen() {
-		p, r, ok := a.paneAtScreen(sx, sy)
+		p, _, ok := a.paneAtScreen(sx, sy)
 		hover := -1
 		if ok && a.menu.OpenOn(p.ID) {
-			hover = a.paletteTileIndexAt(p, r, sx, sy)
+			hover = a.paletteTileIndexAt(p, sx, sy)
 		}
 		if a.menu.SetHover(hover) {
 			a.draw()
@@ -1863,7 +1852,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// The framed window in doc px: scroll position + the inner box size
 	// (= screen px, since scale is fixed at 1.0). The parent-grid preview
 	// crops this rectangle out of the re-rendered doc.
-	_, _, iw, ih := textInnerBox(p, r)
+	_, _, iw, ih := textInnerBox(r)
 	viewW := int64(iw + 0.5)
 	viewH := int64(ih + 0.5)
 
@@ -1948,19 +1937,19 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 		return
 	}
 	item := items[idx]
-	tx, ty, tw, _ := a.paletteTileRect(p, r, idx)
+	tx, ty, tw, _ := a.paletteTileRect(p, idx)
 	a.dragging = &dragState{
-		originPaneID:   p.ID,
-		originFocused:  true, // the palette only opens on the focused pane
-		isTemplate:     true,
-		item:           item,
-		startScreenX:   sx,
-		startScreenY:   sy,
-		curScreenX:     sx,
-		curScreenY:     sy,
-		cellOffsetX:    0.5,
-		cellOffsetY:    0.5,
-		snapshotTile:   paletteItemGhostNode(item),
+		originPaneID:  p.ID,
+		originFocused: true, // the palette only opens on the focused pane
+		isTemplate:    true,
+		item:          item,
+		startScreenX:  sx,
+		startScreenY:  sy,
+		curScreenX:    sx,
+		curScreenY:    sy,
+		cellOffsetX:   0.5,
+		cellOffsetY:   0.5,
+		snapshotTile:  paletteItemGhostNode(item),
 		originScreenX: tx,
 		originScreenY: ty,
 		// Start the ghost at the (fixed, zoom-independent) swatch size; the

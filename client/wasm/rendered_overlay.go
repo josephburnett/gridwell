@@ -121,7 +121,7 @@ func (a *App) refreshRenderedOverlay() {
 		hide()
 		return
 	}
-	x, y, w, h := textInnerBox(p, r)
+	x, y, w, h := textInnerBox(r)
 	s := div.Get("style")
 	setBoundsPx(s, x, y, w, h)
 	// Content zoom rides the base font size (the CSS is em-relative).

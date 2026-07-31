@@ -45,7 +45,7 @@ func drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
 // this draw call automatically reflects them. (The old frozen-descent
 // cover-crop pan is gone with cover mode itself — under fit there is no
 // overflow to pan into.)
-func (a *App) drawURLTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) {
+func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 	// When live, the native WebContentsView paints over this content box;
 	// the JPEG drawn here is the fallback shown while the view is parked
 	// during a gesture, and the frozen preview otherwise. Its bounds are

@@ -29,7 +29,7 @@ import (
 // copy of the focused one, not a re-wrap. (Scale is fixed at 1.0 in a descended
 // file pane, so screen px and logical px coincide here.)
 func (a *App) textContentWidth(p *pane.Pane) float64 {
-	_, _, w, _ := textInnerBox(p, paneRectFor(a, p))
+	_, _, w, _ := textInnerBox(paneRectFor(a, p))
 	// LOGICAL width: the wrap width the layout runs at, which the render
 	// transform (textScaleFor) blows back up — so zooming re-wraps lines to
 	// keep filling the pane, browser-style (issue #82).
@@ -85,7 +85,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 // ALWAYS the raw source — the styled canvas engine is gone (canvas cannot
 // host the rendered HTML), and at grid zoom a handful of monospace lines
 // reads as well as styled text.
-func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, selected, outside, dashed bool) {
+func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentZoomOf(n), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 

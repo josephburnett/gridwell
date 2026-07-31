@@ -303,8 +303,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		if cells < 1 {
 			cells = 1
 		}
-		r := pane.Rect{X: x, Y: y, W: side, H: side}
-		a.drawNodeWithPreview(t, x, y, side, side, side/cells, r, false, false, isLinkTile(t), "")
+		a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, false, isLinkTile(t), "")
 	} else {
 		// Row not cached (a stale portal level, a fetch in flight): a muted
 		// placeholder square; the fetch kicked by chainCrumbTile fills it in.

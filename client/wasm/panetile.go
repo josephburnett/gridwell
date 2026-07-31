@@ -163,4 +163,3 @@ func (a *App) createPaneAtCell(p *pane.Pane, cellX, cellY int64) {
 		return a.cl.CreatePane(ctx, req)
 	}, nil)
 }
-
