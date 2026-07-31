@@ -521,9 +521,13 @@ export class GridwellDriver {
   async rightClickPlus(): Promise<void> {
     const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
     const chain = (bar.segments as any[]).filter((s) => s.kind === 'chain');
-    if (chain.length < 2) throw new Error('nothing to ascend to (chain has one crumb)');
+    if (chain.length < 2) return; // nothing to ascend to — a graceful no-op, like the old gesture
     const seg = chain[chain.length - 2];
     await this.win.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);
+    // The ascent animates and input is blocked until it settles; callers
+    // historically follow this helper with an immediate next gesture, so
+    // settle here rather than in 27 call sites.
+    await this.waitIdle();
   }
 
   // ── View gestures ─────────────────────────────────────────────────────────
