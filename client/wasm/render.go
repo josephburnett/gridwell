@@ -1060,49 +1060,12 @@ func (a *App) drawChildPreview(child *cache.Grid,
 			continue
 		}
 		nn := n
+		// EVERY child is the flat kind-colored box (owner decision
+		// 2026-07-30, issue #221): url/shell children no longer overlay
+		// their frozen JPEGs here, so a well's interior reads uniformly —
+		// one visual grammar for looking one level down.
 		drawNode(c, &nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileOutside(&nn, childInSource), borderPx, false)
-		// A url/shell tile shown inside a well preview must carry the same
-		// cached frame the parent-grid renderer paints — otherwise a tile that
-		// is live in another pane stays a flat colored box here while its live
-		// twin updates (breaks "the preview is what you were looking at",
-		// mirror edition). drawNode is the flat fill; overlay the JPEG on top.
-		a.overlayChildPreview(&nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, borderPx)
 	}
-}
-
-// overlayChildPreview paints the cached preview JPEG for a url/shell tile over
-// the flat fill drawNode already laid down, clipped to the tile rect, then
-// re-strokes the border so the image doesn't bleed across it. Non-url/shell
-// tiles (and tiles with no cached frame yet) are left as drawNode drew them; a
-// missing-but-expected preview kicks off the same fetch the parent-grid
-// renderer uses, so the cache fills in and the next frame shows it.
-func (a *App) overlayChildPreview(n *rpc.Tile, x, y, w, h, borderPx float64) {
-	if n.Kind != rpc.KindURL && n.Kind != rpc.KindShell {
-		return
-	}
-	cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID)
-	if !ok {
-		if n.PreviewBlobID != 0 {
-			a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
-		}
-		return
-	}
-	img, ok := previewImage(cached)
-	if !ok {
-		return
-	}
-	c := a.cctx
-	c.Call("save")
-	c.Call("beginPath")
-	c.Call("rect", x, y, w, h)
-	c.Call("clip")
-	drawImageContain(c, img, x, y, w, h)
-	c.Call("restore")
-	line := colorURLLine
-	if n.Kind == rpc.KindShell {
-		line = colorShellBorder
-	}
-	strokeTileBorder(c, x, y, w, h, line, borderPx)
 }
 
 // drawNode renders one tile into the canvas at the given screen rectangle.
