@@ -335,6 +335,14 @@ func (a *App) draw() {
 	// strip.
 	a.drawBottomBar()
 	a.drawErrStrip()
+	// Inside a workspace, a thin pane-tile-teal line wraps the whole
+	// window (issue #225) — a second hint you're in a pane tile, alongside
+	// the named crumb in the bar. Drawn last so nothing covers it.
+	if a.ws.Depth() > 0 {
+		a.cctx.Set("strokeStyle", colorPaneTileBorder)
+		a.cctx.Set("lineWidth", 1.0)
+		a.cctx.Call("strokeRect", 0.5, 0.5, a.width-1, a.height-1)
+	}
 
 	// Inside a workspace, every repaint arms the debounced layout persister:
 	// the blob is DERIVED from the live tree (encode + hash-diff), so there
