@@ -1,5 +1,5 @@
 import { test as base, _electron as electron, ElectronApplication, Page } from '@playwright/test';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';

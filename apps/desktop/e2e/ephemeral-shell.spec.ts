@@ -53,9 +53,8 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   await window.keyboard.press('Enter');
   await window.waitForTimeout(400);
 
-  // Ascend (corner circle — the shell overlay forwards only the right
-  // button): the tile is DELETED, tmux session included.
-  await gw.rightClickPlus();
+  // Ascend (bar crumb click): the tile is DELETED, tmux session included.
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await expect
     .poll(async () => (await gw.getGrid(scratchGridID)).tiles?.length ?? 0, { timeout: 10_000 })

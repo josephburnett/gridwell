@@ -46,9 +46,9 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   await window.keyboard.press('Enter');
   await window.waitForTimeout(500);
 
-  // Ascend from the live shell (corner circle — its overlay forwards only the
-  // right button). The freeze capture + SetShellPreview run on this path.
-  await gw.rightClickPlus();
+  // Ascend from the live shell (bar crumb click). The freeze capture +
+  // SetShellPreview run on this path.
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
 
   // The preview must land on the server: the tile in the SUB-grid gains a

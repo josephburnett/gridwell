@@ -8,62 +8,14 @@ import { test, expect } from './fixtures';
 // index.ts exposes under GRIDWELL_E2E, send genuine mouse events into that
 // view's webContents, intercept Menu.popup, and assert the menu items.
 
-// Shared HTML and locator for both tests: a full-bleed anchor so a click
-// anywhere in the view lands on the link.
-const LINK_MARKER = 'gwe2ectxtarget';
-const LINK_URL = `https://example.com/${LINK_MARKER}?q=1`;
-const LINK_HTML =
-  `<!doctype html><meta charset=utf8>` +
-  `<style>html,body{margin:0;height:100%}a{display:block;width:100vw;height:100vh}</style>` +
-  `<a href="${LINK_URL}">link</a>`;
-const DATA_URL = 'data:text/html,' + encodeURIComponent(LINK_HTML);
-
-// Helper: place a live URL view in the registry, wait for it to load, run fn,
-// then remove it. Runs inside electronApp.evaluate so everything touches the
-// real Electron main process.
-async function withLiveView(
-  reg: any,
-  webContents: any,
-  Menu: any,
-  clipboard: any,
-  paneId: string,
-  dataURL: string,
-  marker: string,
-  fn: (wc: any) => Promise<{ labels: string[]; clipboard: string }>,
-): Promise<{ labels: string[]; clipboard: string }> {
-  await reg.place(paneId, 1, `obj-${paneId}`, dataURL, { x: 0, y: 0, width: 800, height: 600 }, '');
-
-  let wc: any = null;
-  const deadline = Date.now() + 8_000;
-  while (!wc && Date.now() < deadline) {
-    wc = webContents.getAllWebContents().find((w: any) => w.getURL().includes(marker));
-    if (!wc) await new Promise<void>((res) => setTimeout(res, 50));
-  }
-  if (!wc) throw new Error('live view webContents not found');
-  if (wc.isLoadingMainFrame()) {
-    await new Promise<void>((res) => wc.once('did-stop-loading', () => res()));
-  }
-
-  const origPopup = (Menu.prototype as any).popup;
-  let captured: any = null;
-  (Menu.prototype as any).popup = function (this: any) { captured = this; };
-
-  try {
-    return await fn(wc);
-  } finally {
-    (Menu.prototype as any).popup = origPopup;
-    await reg.remove(paneId);
-  }
-}
 
 test('right-clicking a link in a live url view offers Copy Link Address', async ({ electronApp, window }) => {
   // `window` ensures the app finished booting (so the registry is exposed).
   await window.title();
 
   // The link's path slug doubles as a unique, URL-safe locator: it survives
-  // encodeURIComponent verbatim, so we can find this exact view's webContents by
-  // matching getURL().includes(marker) without colliding with the corner-control
-  // view (also a data: URL, but without this slug).
+  // encodeURIComponent verbatim, so we can find this exact view's webContents
+  // by matching getURL().includes(marker).
   const marker = 'gwe2ectxtarget';
   const linkURL = `https://example.com/${marker}?q=1`;
   // A full-bleed anchor so a click anywhere in the view lands on the link.

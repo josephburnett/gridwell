@@ -26,6 +26,10 @@ export interface PaneInfo {
   cx: number;
   cy: number;
   zoom: number;
+  // Depth of the portal Up stack / the saved-ascent stack — the wasm hook
+  // emits both and specs assert on them.
+  frameDepth: number;
+  ascentDepth: number;
   // The ids of the tiles this pane renders (its cache contents). A tile present
   // on the server (the getGrid oracle) but missing here is the "disappeared" bug.
   tileIds: string[];
@@ -327,9 +331,9 @@ export class GridwellDriver {
 
   // ── Tile gestures (left/right button drags over the canvas) ───────────────
 
-  // DRAG_THRESHOLD mirrors the canvas + preload threshold (client/wasm,
-  // viewutil.ts): a press must move this far to become a drag rather than a click.
-  private static readonly NUDGE = 8; // > the 4px threshold
+  // NUDGE is the first move of every synthetic drag: comfortably past the
+  // 4px canvas/preload drag threshold so the press reads as a drag.
+  private static readonly NUDGE = 8;
 
   // dragTileCell left-drags the tile at cell (fromCx,fromCy) to (toCx,toCy) in
   // the focused pane — the move gesture. Server-observable: the tile's X/Y change.
@@ -521,13 +525,13 @@ export class GridwellDriver {
     return { before: g.leftPaneW, after: after ? after.w : 0 };
   }
 
-  // rightClickPlus right-presses-and-releases on the focused pane's corner
-  // circle (the +/back button) without dragging — the discoverable ascend
-  // gesture (release inside the circle ascends).
-  async rightClickPlus(): Promise<void> {
+  // ascendViaCrumb left-clicks the previous chain crumb in the focused
+  // pane's bottom bar — THE bar ascent gesture since #222 (the old
+  // right-click-the-circle ascend is gone).
+  async ascendViaCrumb(): Promise<void> {
     const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
     const chain = (bar.segments as any[]).filter((s) => s.kind === 'chain');
-    if (chain.length < 2) return; // nothing to ascend to — a graceful no-op, like the old gesture
+    if (chain.length < 2) return; // nothing to ascend to — a graceful no-op
     const seg = chain[chain.length - 2];
     await this.win.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);
     // The ascent animates and input is blocked until it settles; callers
@@ -591,34 +595,22 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
-  // pressKey sends one named key (e.g. 'Enter') to whatever has keyboard focus.
-  async pressKey(key: string): Promise<void> {
-    await this.win.keyboard.press(key);
-    await this.waitIdle();
-  }
 
-  // clickScreen single-left-clicks a raw screen coordinate (e.g. a point inside
-  // a descended text tile's inner box, from textInnerBox()).
+  // clickScreen single-left-clicks a raw screen coordinate.
   async clickScreen(x: number, y: number): Promise<void> {
     await this.win.mouse.click(x, y);
     await this.waitIdle();
   }
 
-  // toggleTextMode left-clicks the corner circle of a file descent — the DOM
-  // toggle button that flips the focused pane between raw text and rendered
-  // markdown (the same spot the + button occupies on a grid pane).
+  // toggleTextMode left-clicks the bar-slot toggle of a file descent — the
+  // DOM button that flips the focused pane between raw text and rendered
+  // markdown (the same slot the + button occupies on a grid pane).
   async toggleTextMode(): Promise<void> {
     const pal = await this.palette();
     await this.win.mouse.click(pal.plusX, pal.plusY);
     await this.waitIdle();
   }
 
-  // textInnerBox returns the screen rect the focused pane's file content is
-  // rendered into (null when not descended into a file) — where to click to
-  // hit the rendered text.
-  textInnerBox(): Promise<{ x: number; y: number; w: number; h: number } | null> {
-    return this.win.evaluate(() => (window as any).__gridwellTest.textInnerBox());
-  }
 
   // textareaInfo returns the current textarea overlay binding: the pane it
   // covers, the tile it's bound to, and whether it has content (textareaReady).
@@ -634,7 +626,7 @@ export class GridwellDriver {
   // textarea overlay exists.
   textareaValue(): Promise<string | null> {
     return this.win.evaluate(() => {
-      const ta = document.querySelector('textarea');
+      const ta = document.querySelector<HTMLTextAreaElement>('#gw-text-editor');
       return ta ? ta.value : null;
     });
   }

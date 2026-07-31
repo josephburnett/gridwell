@@ -100,7 +100,7 @@ test('clicking a plugin swatch descends; ascent returns to where the menu was', 
   expect(inside.frameDepth, 'one portal frame for the return trip').toBe(1);
 
   // Ascend: back exactly where the menu was opened.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   const back = await gw.focused();
   expect(back.gridID, 'ascent returns to the origin grid').toBe(before.gridID);
   expect(back.frameDepth, 'the frame was consumed').toBe(0);

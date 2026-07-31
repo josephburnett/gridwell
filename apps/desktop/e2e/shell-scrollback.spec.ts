@@ -53,7 +53,7 @@ test('wheel over a live shell scrolls back through tmux history (#206)', async (
 
   // Leave clean: ascend and delete the shell tile so its tmux session dies
   // and teardown doesn't hang on a live PTY.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(sx, sy);
 });

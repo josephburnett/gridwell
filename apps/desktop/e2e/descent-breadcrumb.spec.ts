@@ -120,7 +120,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   await window.mouse.click(emptyX, b2.top + b2.height / 2, { button: 'right' });
   await gw.waitIdle();
   expect((await gw.focused()).gridID, 'empty-bar right-click must not ascend').toBe(g1);
-  await gw.rightClickPlus(); // the crumb-click ascent helper
+  await gw.ascendViaCrumb(); // the crumb-click ascent helper
   await expect.poll(async () => (await gw.focused()).gridID, { timeout: 10_000 }).toBe(rootGrid);
   await gw.waitIdle(); // the ascent animates; input is blocked until it settles
 

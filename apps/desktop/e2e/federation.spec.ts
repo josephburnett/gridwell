@@ -138,7 +138,7 @@ test('right-drag deep-copies a solid well across plugins; a text left-drag links
   await gw.descendCell(tx - 1, ty);
   const marker = 'edited-through-the-link';
   await gw.typeText(marker);
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect
     .poll(async () => gw.getTileContent(srcText.id), { timeout: 10_000 })
     .toContain(marker);

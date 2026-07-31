@@ -47,8 +47,8 @@ test('live tiles in different plugins share the one local session', async ({
 
   // Ascend out (freezes + tears the view down), portal home, then enter the
   // SECOND plugin and go live there.
-  await gw.rightClickPlus(); // ascend the url descent
-  await gw.rightClickPlus(); // ascend the plugin portal
+  await gw.ascendViaCrumb(); // ascend the url descent
+  await gw.ascendViaCrumb(); // ascend the plugin portal
   await gw.enterPlugin('second');
   await goLiveURL('plug=two');
 

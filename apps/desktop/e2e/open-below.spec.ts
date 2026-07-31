@@ -17,9 +17,8 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   const panesBefore = (await gw.panes()).length;
 
   // A live ephemeral visit to the local origin. Poll for the NAVIGATED
-  // view, not a webContents count: the count grows at view creation, before
-  // loadURL lands (the old count-poll rode the session-hydrate await that
-  // place() no longer performs — one local session, 2026-07-26).
+  // view, not a webContents count: the count grows at view creation,
+  // before loadURL lands.
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?src=page`);

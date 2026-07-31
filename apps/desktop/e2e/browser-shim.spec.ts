@@ -40,7 +40,7 @@ async function shimCleanup(
   const up = (await gw.panes()).find((p: any) => p.id === shellPaneID)!;
   await window.mouse.click(up.x + up.w / 2, up.y + up.h / 2);
   await expect.poll(async () => (await gw.focused()).id).toBe(shellPaneID);
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);
 }

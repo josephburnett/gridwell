@@ -22,8 +22,8 @@ test('typing into a descended text tile persists to the server', async ({ gw }) 
   const marker = 'gridwell-e2e-typed';
   await gw.typeText(marker);
 
-  // Ascend back out (corner right-click), flushing the edit.
-  await gw.rightClickPlus();
+  // Ascend back out (bar crumb click), flushing the edit.
+  await gw.ascendViaCrumb();
 
   // The server's stored body now contains what we typed.
   await expect

@@ -18,7 +18,7 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
 
   await gw.descendCell(cx, cy);
   await gw.typeText('written from a plain browser');
-  await gw.rightClickPlus(); // ascend flushes the text save
+  await gw.ascendViaCrumb(); // ascend flushes the text save
   await expect
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toContain('written from a plain browser');

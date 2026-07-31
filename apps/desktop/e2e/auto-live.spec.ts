@@ -28,7 +28,7 @@ test('shell descent reconnects the running session with its state', async ({ gw,
   // Type state into the PTY, then ascend (freeze + detach; tmux keeps it).
   await window.keyboard.type('marker=auto-live-202');
   await window.waitForTimeout(300);
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
 
   // Re-descend: the SAME session must come back live with no refresh click.
@@ -50,7 +50,7 @@ test('shell descent reconnects the running session with its state', async ({ gw,
     .toContain('marker=auto-live-202');
 
   // Teardown: delete the shell tile so tmux doesn't hang the harness close.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);
 });

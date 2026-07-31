@@ -34,7 +34,7 @@ async function seedTile(
   expect(created, `markdown tile created at (${cx},${cy})`).toBeTruthy();
   await gw.descendCell(cx, cy);
   await gw.typeText(seed);
-  await gw.rightClickPlus(); // corner-circle ascent out of the text descent
+  await gw.ascendViaCrumb(); // bar-crumb ascent out of the text descent
   await expect
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toBe(seed);

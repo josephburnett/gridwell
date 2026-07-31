@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { EV } from '../src/main/ipc';
 
 // Issue #81: a LEFT border-drag whose grab point lands on a live URL
 // WebContentsView must still resize the divider. The 10px grab band straddles
@@ -55,10 +56,10 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
   // past the 5px inset, i.e. a point that on real hardware belongs to the
   // live view. This is the exact payload main relays for such a press.
   await electronApp.evaluate(
-    ({ BrowserWindow }, pt) => {
-      BrowserWindow.getAllWindows()[0].webContents.send('gw:left-forward', pt);
+    ({ BrowserWindow }, { ch, pt }) => {
+      BrowserWindow.getAllWindows()[0].webContents.send(ch, pt);
     },
-    { x: gx - 8, y: gy },
+    { ch: EV.leftForward, pt: { x: gx - 8, y: gy } },
   );
 
   // Continue the drag on the canvas (post-park, that is where the real events

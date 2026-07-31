@@ -138,7 +138,7 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
   expect((await gw.focused()).gridID, 'slot right-click must not ascend').not.toBe(root);
 
   // The ascent gesture: click the previous crumb.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   expect((await gw.focused()).gridID, 'crumb click ascended to root').toBe(root);
 });
 
@@ -164,7 +164,7 @@ test('middle-click ascends out of a descended well', async ({ gw }) => {
 // Focus-first click (issue #28): clicking a pane that was NOT focused at
 // press time only moves focus — even when the click lands on a tile. Acting
 // (descent) requires the pane to have been focused before the press, the
-// same rule the + button and corner circle follow. Without this, "click the
+// same rule the bar slot follows. Without this, "click the
 // other pane to focus it" could descend into whatever tile sat under the
 // cursor — the old launcher ambiguity, generalized and closed.
 test('clicking an unfocused pane focuses without descending; the second click descends', async ({ gw }) => {

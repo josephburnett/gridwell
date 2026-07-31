@@ -21,12 +21,12 @@ test('an edit typed right before leaving the doc still persists', async ({ gw, w
   const docA = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   await gw.descendCell(cx, cy);
   await gw.typeText('the doc');
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await gw.openPalette();
   await gw.dragCreate('markdown', cx + 1, cy);
   await gw.descendCell(cx + 1, cy);
   await gw.typeText('the other doc');
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
 
   // Type the edit and leave INSIDE the save-debounce window: no waitIdle
   // between — the whole point is to leave with the save still pending.

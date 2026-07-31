@@ -36,7 +36,7 @@ async function createTextTile(
   expect(created, 'markdown tile created').toBeTruthy();
   await gw.descendCell(cx, cy);
   await gw.typeText(seed);
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toBe(seed);
@@ -67,7 +67,7 @@ test('a foreign edit becomes visible on re-descent', async ({ gw }) => {
   await expect
     .poll(async () => gw.textareaValue(), { timeout: 10_000 })
     .toBe('written elsewhere');
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
 });
 
 test('opening and closing the tile never stomps a foreign edit', async ({ gw }) => {
@@ -88,7 +88,7 @@ test('opening and closing the tile never stomps a foreign edit', async ({ gw }) 
   // Merely close the tile. The ascent flush saves the (stale) buffer; its
   // claim must be the version the buffer derives from, so the server rejects
   // it and the phone's words survive.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
 
   // Poll long enough to catch a late stomp, then require the foreign words.
   for (let i = 0; i < 6; i++) {

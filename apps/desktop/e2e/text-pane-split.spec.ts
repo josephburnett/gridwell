@@ -112,7 +112,7 @@ test('split pane text tiles: overlay covers only focused pane, not preview', asy
   }, { timeout: 10_000 }).toBe(true);
 
   // Ascend from the text descent to flush the edit.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
 
   // Server must have the typed marker.
   await expect
@@ -183,10 +183,10 @@ test('split pane: focus switch between two text descents preserves both tiles', 
   }, { timeout: 10_000 }).toBe(true);
 
   // Ascend both panes and check server truth.
-  await gw.rightClickPlus(); // ascend left pane
+  await gw.ascendViaCrumb(); // ascend left pane
   await gw.focusPane(rightPane);
   await gw.waitIdle();
-  await gw.rightClickPlus(); // ascend right pane
+  await gw.ascendViaCrumb(); // ascend right pane
 
   await expect
     .poll(async () => gw.getTileContent(t1.id), { timeout: 10_000 })

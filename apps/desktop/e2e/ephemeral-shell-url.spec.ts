@@ -101,13 +101,13 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
     .toBe(0);
 
   // Leave clean: focus the shell pane (click its overlay), ascend out of the
-  // shell (corner circle — the overlay forwards only the right button), then
+  // shell (bar crumb click), then
   // delete the shell tile so its tmux session is killed and teardown doesn't
   // hang on a live PTY.
   const up = (await gw.panes()).find((p) => p.id === shellPane.id)!;
   await window.mouse.click(up.x + up.w / 2, up.y + up.h / 2);
   await expect.poll(async () => (await gw.focused()).id).toBe(shellPane.id);
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(shellCx, shellCy);
 });

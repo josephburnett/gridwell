@@ -10,7 +10,7 @@ import { test, expect } from './fixtures';
 // circle stayed hidden over exactly the shell they were using. Same bug class
 // as the live-URL view's missing VIEW_LEFTDOWN forward (live-view-focus.spec).
 
-test('left-click into a live shell transfers pane focus and shows the ascend circle', async ({
+test('left-click into a live shell transfers pane focus', async ({
   window,
   gw,
 }) => {
@@ -40,8 +40,8 @@ test('left-click into a live shell transfers pane focus and shows the ascend cir
 
   // LEFT-CLICK back into the terminal: Gridwell focus must follow the click
   // (the overlay swallows the mousedown, so the overlay itself must transfer
-  // it). (The per-pane ascend circle is gone — issue #214: the ascend handle
-  // is the bottom bar's slot, one for the whole window.)
+  // it). (The per-pane ascend circle is gone — #214/#220/#222: ascent is
+  // the focused pane's bar crumb click.)
   await window.mouse.click(left.x + left.w / 2, left.y + left.h / 2);
   await expect
     .poll(async () => (await gw.focused()).id, { timeout: 5_000 })
@@ -49,7 +49,7 @@ test('left-click into a live shell transfers pane focus and shows the ascend cir
 
   // Leave clean: ascend via the bar slot and delete the shell tile so
   // its tmux session dies before teardown.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);
 });

@@ -42,7 +42,7 @@ test('a bare LF keeps the cursor column (#211)', async ({ gw, window }) => {
 
   // Leave clean: ascend and delete the shell tile so its tmux session dies
   // and teardown doesn't hang on a live PTY.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(sx, sy);
 });

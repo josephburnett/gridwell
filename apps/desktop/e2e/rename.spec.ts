@@ -61,7 +61,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
 
   // Ascend: the detach path captures the foreground command and calls
   // SetTileAlt as a NON-user write — it must defer to the user's name.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await window.waitForTimeout(1000); // the capture is async fire-and-forget
   expect(

@@ -106,13 +106,12 @@ export async function writeContent(
   version: number,
   bytes: Buffer,
 ): Promise<void> {
-  const text = bytes; // (kept name below for the shared frame builder)
   const res = await fetch(`${origin}/${SERVICE}/WriteContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
     body: envelope(
       0,
-      Buffer.from(JSON.stringify({ tileId, version, data: text.toString('base64') })),
+      Buffer.from(JSON.stringify({ tileId, version, data: bytes.toString('base64') })),
     ),
   });
   if (!res.ok) throw new Error(`WriteContent(${tileId}@${version}) failed: ${res.status} ${await res.text()}`);

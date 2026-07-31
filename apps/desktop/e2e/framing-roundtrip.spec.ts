@@ -70,7 +70,7 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
 
   // Ascend back home. The menu portal has no containing link tile, so the
   // framing writeback goes straight to the plugin's root view.
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   const home = await gw.focused();
   expect(home.gridID, 'ascended back home').not.toBe(pluginGrid);
 

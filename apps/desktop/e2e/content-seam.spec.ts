@@ -19,7 +19,7 @@ test('a newly created text tile is empty, not the previously edited content', as
   expect(a, 'first text tile created').toBeTruthy();
   await gw.descendCell(cx, cy);
   await gw.typeText('first-tile-content');
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect
     .poll(async () => gw.getTileContent(a.id), { timeout: 10_000 })
     .toContain('first-tile-content');

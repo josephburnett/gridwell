@@ -17,7 +17,7 @@ async function seedTile(
   expect(created, `markdown tile created at (${cx},${cy})`).toBeTruthy();
   await gw.descendCell(cx, cy);
   await gw.typeText(seed);
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toBe(seed);
@@ -80,7 +80,7 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
   await expect
     .poll(async () => gw.textareaValue(), { timeout: 10_000 })
     .toBe('routine routine');
-  await gw.rightClickPlus(); // ascend out of Routine
+  await gw.ascendViaCrumb(); // ascend out of Routine
 
   // Re-enter the workspace: the restored leaf is descended into Today and
   // MUST show Today's words, not the singleton's leftover Routine buffer.

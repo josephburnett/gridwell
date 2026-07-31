@@ -109,7 +109,7 @@ test('a rejected text save surfaces and reconciles instead of lingering as saved
   // Establish server truth: type, ascend (flushes), verify persisted.
   await gw.descendCell(cx, cy);
   await gw.typeText('saved-content');
-  await gw.rightClickPlus();
+  await gw.ascendViaCrumb();
   await expect
     .poll(async () => gw.getTileContent(created.id), { timeout: 10_000 })
     .toContain('saved-content');

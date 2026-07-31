@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from '../e2e/oracle';
-import { longPressDrag, longPressInPlace, pinch, twoFingerTap } from './touch';
+import { longPressDrag, pinch, twoFingerTap } from './touch';
 
 // Crosses the touch seam (client/touchgest → synthetic mouse/wheel events →
 // the untouched gesture engine): REAL TouchEvents injected over CDP must

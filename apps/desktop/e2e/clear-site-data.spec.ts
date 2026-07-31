@@ -18,10 +18,8 @@ test('clear site data wipes this site and spares others', async ({
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?site=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
   await gw.waitIdle();
-  // Poll for the NAVIGATED view, not a webContents count: the count grows at
-  // view creation, before loadURL lands, and the old count-poll only stayed
-  // ahead of that race by riding the session-hydrate await that place() no
-  // longer performs (one host-local session, 2026-07-26).
+  // Poll for the NAVIGATED view, not a webContents count: the count grows
+  // at view creation, before loadURL lands.
   await expect
     .poll(
       () =>
