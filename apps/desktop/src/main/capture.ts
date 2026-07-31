@@ -39,10 +39,9 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   });
 }
 
-// MirrorPump periodically captures a set of live panes and pushes frames to
-// a sink. The renderer asks for mirroring only when a tile is visible in
-// more than one pane (the live pane itself renders natively and needs no
-// capture), so this stays cheap. Cadence is intentionally modest — mirrored
+// MirrorPump periodically captures every live pane and pushes frames to a
+// sink (index.ts sweeps reg.paneIds() each tick), so a tile mirrored in a
+// second pane stays fresh. Cadence is intentionally modest — mirrored
 // previews don't need 60fps.
 export class MirrorPump {
   private timer: NodeJS.Timeout | null = null;

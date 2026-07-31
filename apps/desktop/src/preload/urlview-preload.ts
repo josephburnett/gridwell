@@ -19,7 +19,7 @@
 // (nodeIntegration:false, contextIsolation:true). A sandboxed/isolated preload
 // may use electron's ipcRenderer but may NOT require local modules, so the
 // channel names and the threshold are duplicated from ../main/ipc.ts and
-// ../main/viewutil.ts (dragExceeded) rather than imported.
+// ../main/viewutil.ts (classifyRightPress) rather than imported.
 import { ipcRenderer } from 'electron';
 
 // Keep in sync with VIEW.rightdown / VIEW.middledown / VIEW.leftdown in ../main/ipc.ts.
@@ -27,7 +27,7 @@ const VIEW_RIGHTDOWN = 'gw:view-rightdown';
 const VIEW_MIDDLEDOWN = 'gw:view-middledown';
 const VIEW_LEFTDOWN = 'gw:view-leftdown';
 // Keep in sync with RIGHT_DRAG_THRESHOLD in ../main/viewutil.ts (and the canvas
-// dragThreshold). dragExceeded's logic is inlined below (can't import here).
+// dragThreshold). classifyRightPress's logic is inlined below (can't import here).
 const RIGHT_DRAG_THRESHOLD = 4;
 // Keep in sync with RIGHT_DRAG_TIME_MS in ../main/viewutil.ts.
 // A right-button press must be held for at least this many ms AND exceed the

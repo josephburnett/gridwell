@@ -23,7 +23,6 @@ export const CH = {
   setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom, issue #82)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
-  reload: 'gw:reload',     // PaneRef → void
 
   // Shell transport (2026-07-26: the WS bridge is gone; PTY bytes ride a
   // main-process gRPC OpenShell stream, relayed here per pane).
@@ -143,10 +142,9 @@ export interface SetBoundsArgs {
 export interface SetHiddenArgs {
   paneId: string;
   hidden: boolean;
-  // focused is whether this pane is the focused pane. Drives the corner
-  // control's visibility independently of `hidden`: an unfocused live pane
-  // keeps its web content on screen but hides its corner circle, so exactly
-  // one pane shows the control at a time.
+  // focused is whether this pane is the focused pane. Feeds the registry's
+  // focus-steal guard: only the focused pane's view may hold OS keyboard
+  // focus (issue #172).
   focused: boolean;
 }
 
@@ -202,7 +200,7 @@ export interface ZoomKeyEvent {
 // failure site (webview lifecycle, shell stream, sidecar boot/
 // exit) reports through this same wire, never a bespoke one. `source` is a
 // stable key the wasm errsurface groups notices by (one row per source — see
-// client/errsurface): 'electron:webview' | 'electron:session' |
+// client/errsurface): 'electron:webview' | 'electron:shell' |
 // 'electron:backend'. `message` is the human-readable text shown verbatim.
 export interface ErrorEvent {
   source: string;

@@ -1,6 +1,6 @@
 // Preload bridge: the renderer's only door to the native URL-tile machinery
-// in main. Exposed under window.gridwell. The WASM client calls these in
-// Phase 3 in place of the old URLStream WebSocket.
+// in main. Exposed under window.gridwell; the WASM client calls these
+// (client/wasm/webview_bridge.go).
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   CH,
@@ -48,9 +48,6 @@ const api = {
   },
   goBack(args: PaneRef): Promise<void> {
     return ipcRenderer.invoke(CH.goBack, args);
-  },
-  reload(args: PaneRef): Promise<void> {
-    return ipcRenderer.invoke(CH.reload, args);
   },
 
   // Shell transport (2026-07-26): the renderer's xterm speaks to the

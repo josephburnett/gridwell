@@ -47,7 +47,7 @@ export interface ContextActions {
   forward(): void;
   reload(): void;
   // clearSiteData wipes the current site's cookies (domain-suffix matched)
-  // and the page origin's storage from THIS plugin's partition, then reloads
+  // and the page origin's storage from the shared partition, then reloads
   // (issue #136).
   clearSiteData(): void;
 }

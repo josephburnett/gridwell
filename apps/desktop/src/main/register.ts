@@ -122,9 +122,6 @@ export function registerWebviewIpc(
     registry.goBack(a.paneId);
   });
 
-  ipcMain.handle(CH.reload, (_e, a: PaneRef): void => {
-    registry.reload(a.paneId);
-  });
 }
 
 // makeNavForwarder returns a registry onNav callback that ships nav events
@@ -154,7 +151,7 @@ export function sendFrame(rootWC: WebContents, paneId: string, tileId: number, j
 }
 
 // sendError is the ONE main-process entry point onto EV.error (issue #46):
-// every failure site — webview lifecycle, session hydrate/dehydrate, sidecar
+// every failure site — webview lifecycle, shell stream, sidecar
 // boot/exit — calls this instead of console.error-and-return, so the wasm
 // errsurface (client/errsurface) is the single place failures become visible.
 export function sendError(rootWC: WebContents, source: string, message: string): void {

@@ -38,7 +38,7 @@ async function waitForNonEmptyCapture(
 app.whenReady().then(async () => {
   const navEvents: NavEvent[] = [];
   const win = new BaseWindow({ width: 800, height: 600, show: true });
-  const registry = new WebviewRegistry(win, '', { onNav: (ev) => navEvents.push(ev) });
+  const registry = new WebviewRegistry(win, { onNav: (ev) => navEvents.push(ev) });
 
   registry.place('pane1', 42, 'obj-harness', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
 
@@ -69,7 +69,7 @@ app.whenReady().then(async () => {
   // (The session-dehydrate half of this scenario died 2026-07-26: the
   // Chromium session is host-local now — Chromium's own disk persistence is
   // the system of record, so a crashed view no longer risks losing logins.)
-  const reg2 = new WebviewRegistry(win, '', {});
+  const reg2 = new WebviewRegistry(win, {});
   await reg2.place('pane2', 43, 'obj-dead', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
     fail('dead-view scenario: view produced no frame within 6s');

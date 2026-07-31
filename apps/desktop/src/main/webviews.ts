@@ -65,9 +65,9 @@ export interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation (URL/title change),
   // so the renderer can update the cached tile address.
   onNav?: (ev: NavEvent) => void;
-  // onError fires for every webview/session failure the registry detects —
-  // did-fail-load, render-process-gone, a crash during remove(), a session
-  // hydrate/dehydrate failure. index.ts wires this to sendError(rootWC, ...),
+  // onError fires for every webview failure the registry detects —
+  // did-fail-load, render-process-gone, a crash during remove().
+  // index.ts wires this to sendError(rootWC, ...),
   // which is the ONE path onto EV.error (issue #46). The registry itself
   // stays free of IPC knowledge — it only reports; index.ts decides how the
   // report reaches the renderer.
@@ -89,16 +89,14 @@ export interface RegistryCallbacks {
 }
 
 // WebviewRegistry owns the live URL-tile WebContentsViews parented to the
-// root window. One view per paneId; each view is bound to its owning plugin's
-// persistent partition (persist:plugin-<uuid>), so a plugin's url tiles act
-// like tabs of one browser (shared cookies/logins and DOM storage) isolated
-// from other plugins'. The registry is deliberately free of IPC
+// root window. One view per paneId; every view browses on the ONE
+// host-local persistent partition (SESSION_PARTITION, owner decision
+// 2026-07-26). The registry is deliberately free of IPC
 // and store knowledge — ipc.ts wires Electron handlers to these methods, and
 // the renderer remains the only thing that talks to the Go backend.
 export class WebviewRegistry {
   private readonly win: BaseWindow;
   private readonly cb: RegistryCallbacks;
-  private readonly origin: string;
   private readonly entries = new Map<string, Entry>();
   // _globalHidden is the registry's single copy of "are all views currently
   // parked for a gesture/modal" — the last value seen by setHidden. A new view
@@ -108,9 +106,8 @@ export class WebviewRegistry {
   // view could occlude a canvas overlay.
   private _globalHidden = false;
 
-  constructor(win: BaseWindow, origin: string, cb: RegistryCallbacks = {}) {
+  constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
     this.win = win;
-    this.origin = origin;
     this.cb = cb;
   }
 
@@ -332,9 +329,8 @@ export class WebviewRegistry {
   // subdomains, so clearing from mail.google.com reaches the login state on
   // accounts.google.com (issue #177) — plus storage (localStorage, IndexedDB,
   // service workers, caches) for the page origin and every matched cookie
-  // host, then reloads so the site sees the cleared state. The next ascent
-  // dehydrates the cleaned partition into the plugin DB, so the reset
-  // persists.
+  // host, then reloads so the site sees the cleared state. The partition's
+  // own disk persistence carries the reset forward.
   async clearSiteData(wc: WebContents): Promise<void> {
     let u: URL;
     try {
@@ -409,9 +405,9 @@ export class WebviewRegistry {
   // setHidden hides/shows the view without destroying it, and tracks whether
   // the pane is focused. `hidden` parks the whole view off-screen during drag
   // gestures and modals so canvas-drawn overlays (palette, ghosts) can paint
-  // where the native view would otherwise sit on top. `focused` drives only the
-  // corner control: an unfocused live pane keeps its content on screen but
-  // hides its circle, so exactly one pane shows the control at a time. Called
+  // where the native view would otherwise sit on top. `focused` feeds the
+  // focus-steal guard: only the focused pane's view may keep OS keyboard
+  // focus (issue #172). Called
   // every frame from syncURLViews, so it no-ops when nothing changed.
   setHidden(paneId: string, hidden: boolean, focused: boolean): void {
     // Track the registry-level hidden state so place() can initialize new
@@ -521,10 +517,6 @@ export class WebviewRegistry {
     }
   }
 
-  reload(paneId: string): void {
-    this.entries.get(paneId)?.view.webContents.reload();
-  }
-
   // removeAll tears everything down (app quit / window close).
   async removeAll(): Promise<void> {
     await Promise.all(this.paneIds().map((id) => this.remove(id)));
@@ -606,9 +598,3 @@ export class WebviewRegistry {
   }
 }
 
-// clearSharedSession wipes the shared cookies/storage for ALL tiles. Not
-// used yet (a future "sign out" gesture); since the session is shared, this
-// logs every tile out at once — there is no per-tile session to clear.
-export async function clearSharedSession(): Promise<void> {
-  await session.fromPartition(SESSION_PARTITION).clearStorageData();
-}

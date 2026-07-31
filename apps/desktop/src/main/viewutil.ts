@@ -2,11 +2,11 @@ import { getDomain } from 'tldts';
 
 import type { Bounds } from './ipc';
 
-// SESSION_PARTITION is the fallback Electron partition for url tiles with no
-// owning plugin (a bare id). The real session boundary is per-plugin —
-// partitionFor(pluginUuid) — so each plugin's url tiles share one durable
-// cookie jar / DOM-storage area (logins, drafts) isolated from other plugins.
-// The `persist:` prefix makes it durable on disk across app restarts.
+// SESSION_PARTITION is THE Electron partition for live url tiles (owner
+// decision 2026-07-26: the Chromium session is host-local): every live url
+// tile, local or through a mount, shares this one durable cookie jar /
+// DOM-storage area — your logins are your logins everywhere. The
+// `persist:` prefix makes it durable on disk across app restarts.
 export const SESSION_PARTITION = 'persist:gridwell';
 
 
@@ -102,9 +102,9 @@ export function zoomChordKey(input: { key: string; control?: boolean; meta?: boo
 // visible; the registry parks rather than destroys so the page keeps running.
 export const PARK_COORD = -100000;
 
-// parkedBounds is the off-screen rect a view or control is moved to while it is
+// parkedBounds is the off-screen rect a view is moved to while it is
 // "hidden" — during a drag/gesture/modal so canvas overlays can paint where the
-// native view sits, or for an unfocused pane's corner control. Width/height are
+// native view sits. Width/height are
 // preserved (some platforms reject a 0-sized view) so un-parking is a pure move.
 export function parkedBounds(width: number, height: number): Bounds {
   return { x: PARK_COORD, y: PARK_COORD, width, height };
@@ -205,13 +205,6 @@ export const RIGHT_DRAG_TIME_MS = 200;
 // gesture (issue #119).
 export const RIGHT_DRAG_FAR_THRESHOLD = 24;
 
-// dragExceeded reports whether a pointer that started at the press point has
-// moved far enough to count as a drag (not a click). Used to tell a right-click
-// — which must reach the page's own context menu — apart from a right-drag,
-// which arms a pane gesture. dx/dy are the cursor's displacement from the press.
-export function dragExceeded(dx: number, dy: number, threshold: number): boolean {
-  return dx * dx + dy * dy > threshold * threshold;
-}
 
 // classifyRightPress returns true (= drag) when the distance and time
 // thresholds are BOTH exceeded — or when the distance alone is past the far

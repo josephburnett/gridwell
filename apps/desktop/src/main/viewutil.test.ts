@@ -14,7 +14,6 @@ import {
   parseHistory,
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
-  dragExceeded,
   classifyRightPress,
   sanitizeUserAgent,
   RIGHT_DRAG_THRESHOLD,
@@ -53,18 +52,6 @@ test('boundsEqual compares all four fields', () => {
   assert.ok(boundsEqual(a, { ...a }));
   assert.ok(!boundsEqual(a, { ...a, x: 9 }));
   assert.ok(!boundsEqual(a, { ...a, height: 9 }));
-});
-
-test('dragExceeded tells a right-click apart from a right-drag at the threshold', () => {
-  const t = RIGHT_DRAG_THRESHOLD;
-  // A still / barely-moved press is a click — passes through to the page menu.
-  assert.ok(!dragExceeded(0, 0, t));
-  assert.ok(!dragExceeded(t, 0, t)); // exactly threshold is still a click
-  assert.ok(!dragExceeded(2, 2, t)); // 2.83px < 4
-  // Past the threshold in any direction is a drag — arms the pane gesture.
-  assert.ok(dragExceeded(t + 1, 0, t));
-  assert.ok(dragExceeded(0, -(t + 1), t));
-  assert.ok(dragExceeded(4, 4, t)); // 5.66px > 4
 });
 
 test('sanitizeUserAgent drops the Electron and app tokens, keeps Chrome', () => {

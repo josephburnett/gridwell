@@ -49,7 +49,7 @@ app.whenReady().then(() => {
   win.contentView.addChildView(root);
   root.setBounds({ x: 0, y: 0, width: 800, height: 600 });
 
-  const registry = new WebviewRegistry(win, '');
+  const registry = new WebviewRegistry(win);
   registerWebviewIpc(registry, root.webContents, win);
 
   root.webContents.on('console-message', (_e, _level, message) => {

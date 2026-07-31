@@ -32,7 +32,7 @@ export interface StartOptions {
   staticPath?: string;
 }
 
-// startSidecar spawns the Go backend (HTTP/SSE/WS) and resolves once it
+// startSidecar spawns the Go backend (Connect-RPC + static files) and resolves once it
 // announces its actual bound address ("gridwell: serving on ..."). Rejects if
 // the process exits first or the timeout elapses. The returned stop()
 // terminates the child.

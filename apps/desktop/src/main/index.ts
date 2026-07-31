@@ -77,7 +77,7 @@ async function boot(): Promise<void> {
   }
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;
-  const reg = new WebviewRegistry(win, sidecar.origin, {
+  const reg = new WebviewRegistry(win, {
     onNav: makeNavForwarder(rootWC),
     onError: (ev) => sendError(rootWC, ev.source, ev.message),
     onOpenBelow: makeOpenBelowForwarder(rootWC),
