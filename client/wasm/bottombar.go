@@ -345,20 +345,33 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
 		return false
 	}
+	if button == 2 {
+		// RIGHT-clicks: only the two rename surfaces own them (the title
+		// and a workspace crumb); everything else falls THROUGH to the pane
+		// gesture layer, so the focused pane's bottom-edge border gestures
+		// (right-drag split, divider grab) stay reachable under the band
+		// (issue #220 — the band covers the pane's bottom resize band).
+		if tx, tw, _, _, _, tOK := a.barTitleGeom(); tOK && sx >= tx && sx < tx+tw {
+			a.openRenameInput()
+			return true
+		}
+		_, chain := a.bottomBarChain()
+		if seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx); segOK && seg.Kind == wsbar.KindWorkspace {
+			a.openWorkspaceRenameInput(seg.Index)
+			return true
+		}
+		return false
+	}
 	if sx >= bx+bw-wsbar.SlotW {
 		a.barSlotClick(button)
 		return true
 	}
 	// The centered title is the pane's universal handle (the old name
-	// bubble's contract, issues #118/#213; buttons per the 2026-07-30
-	// tweak): LEFT-click toggles the tmux-style pane zoom, RIGHT-click
-	// renames what's here.
+	// bubble's contract, issues #118/#213): LEFT-click toggles the
+	// tmux-style pane zoom (right-click rename was handled above).
 	if tx, tw, _, _, _, ok := a.barTitleGeom(); ok && sx >= tx && sx < tx+tw {
-		switch button {
-		case 0:
+		if button == 0 {
 			a.togglePaneZoom()
-		case 2:
-			a.openRenameInput()
 		}
 		return true
 	}
@@ -368,14 +381,11 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		return true // empty band space swallows clicks (no gesture, #222)
 	}
 	// LEFT-click ascends on every crumb kind alike (2026-07-30 tweak: one
-	// gesture for "go there"); RIGHT-click renames a workspace crumb.
+	// gesture for "go there"); workspace-crumb rename was handled above.
 	switch seg.Kind {
 	case wsbar.KindWorkspace:
-		switch button {
-		case 0:
+		if button == 0 {
 			a.ascendWorkspaceLevels(a.ws.PopCountForCrumb(seg.Index))
-		case 2:
-			a.openWorkspaceRenameInput(seg.Index)
 		}
 	case wsbar.KindChain:
 		if p != nil && button == 0 {

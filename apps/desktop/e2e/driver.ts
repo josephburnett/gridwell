@@ -451,7 +451,10 @@ export class GridwellDriver {
   // bottom edge band, splitting it into two stacked panes.
   async splitFocusedPaneHorizontal(): Promise<void> {
     const p = await this.focused();
-    const x = p.x + p.w / 2;
+    // 30% across: the bottom edge band is under the bar (issue #220), and a
+    // right-down there falls through to the split gesture EXCEPT on the
+    // centered title (rename) — so grab between the crumbs and the title.
+    const x = p.x + p.w * 0.3;
     await this.rightDragScreen(x, p.y + p.h - 5, x, p.y + p.h * 0.45);
   }
 
@@ -471,10 +474,13 @@ export class GridwellDriver {
     dy: number,
   ): Promise<{ before: number; after: number }> {
     const g = await this.hDividerGeom();
+    // Grab from BELOW the boundary (the lower pane's top band): the upper
+    // side can be the focused pane's bar band (issue #220), which owns
+    // left-clicks. #217 made the two sides of a border equivalent.
     if (button === 'right') {
-      await this.rightDragScreen(g.x, g.y - 2, g.x, g.y + dy);
+      await this.rightDragScreen(g.x, g.y + 2, g.x, g.y + dy);
     } else {
-      await this.leftDragScreen(g.x, g.y - 2, g.x, g.y + dy);
+      await this.leftDragScreen(g.x, g.y + 2, g.x, g.y + dy);
     }
     const after = (await this.panes()).find((p) => p.id === g.topId);
     return { before: g.topPaneH, after: after ? after.h : 0 };
