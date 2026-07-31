@@ -89,10 +89,13 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
     .toBe(0);
   const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
   const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+  const winH = await window.evaluate(() => window.innerHeight);
   const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
-  // Panes end at the always-on bottom bar (issue #212) — the strip's band
-  // below it is reclaimed.
-  expect(bottom, 'panes reclaim the reserved strip height').toBe(bar.top);
+  // Panes reclaim the full window height — no strip, and no reserved bar
+  // band either: since #220 the bar rides INSIDE the focused pane, flush
+  // with its bottom edge.
+  expect(bottom, 'panes reclaim the reserved strip height').toBe(winH);
+  expect(bar.top, 'the bar band rides the focused pane bottom').toBe(bottom - bar.height);
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {
