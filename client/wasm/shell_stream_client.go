@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/urlnorm"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -726,7 +727,7 @@ func (a *App) syncShellOverlayPosition() {
 		// the chrome. Routes through panebox.ContentBox — same path as
 		// the URL live view (url_stream_client.go contentViewBounds) so
 		// both live-tile kinds always use the same inset (LiveViewInsetPx).
-		cb := panebox.ContentBox(r, paneBorderPx)
+		cb := panebox.ContentBox(panebox.BarInset(r, paneID == a.tree.Focus, wsbar.RowH), paneBorderPx)
 		if cb.W < 1 || cb.H < 1 {
 			conn.container.Get("style").Set("display", "none")
 			continue

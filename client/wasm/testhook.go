@@ -597,14 +597,22 @@ func stringsToAny(ss []string) []any {
 // layout drawBottomBar renders and bottomBarClick hit-tests, so a spec's
 // click at a segment center is the click the user would make.
 func (a *App) thBar(js.Value, []js.Value) any {
+	bx, top, bw, ok := a.bottomBarRect()
+	if !ok {
+		return map[string]any{"top": 0.0, "height": wsbar.RowH, "segments": []any{}}
+	}
 	_, chain := a.bottomBarChain()
 	segs := a.bottomBarSegments(chain)
 	out := make([]any, 0, len(segs))
 	for _, s := range segs {
+		// Segment X is emitted ABSOLUTE (the band lives inside the focused
+		// pane since #220), so specs click hook coordinates verbatim.
 		e := map[string]any{
-			"x": s.X, "w": s.W, "index": s.Index,
+			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
 		switch s.Kind {
+		case wsbar.KindAnchor:
+			e["kind"] = "anchor"
 		case wsbar.KindWorkspace:
 			e["kind"] = "workspace"
 		case wsbar.KindChain:
@@ -617,7 +625,9 @@ func (a *App) thBar(js.Value, []js.Value) any {
 		out = append(out, e)
 	}
 	res := map[string]any{
-		"top":      a.bottomBarTop(),
+		"top":      top,
+		"left":     bx,
+		"width":    bw,
 		"height":   wsbar.RowH,
 		"segments": out,
 	}

@@ -31,13 +31,15 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  // Outside a workspace: the band is still there — panes end exactly at its
-  // top edge (reserved layout, not an overlay) — with no workspace crumb,
-  // just the chain (root inclusive).
+  // The band lives INSIDE the focused pane (issue #220): its top edge is
+  // one row above the pane's bottom. Outside a workspace there is no
+  // workspace crumb — the teal anchor block fronts the chain instead.
   const outside = await bar(window);
   expect((await workspaceState(window)).depth).toBe(0);
-  expect(await panesBottom(gw), 'panes must end at the bar, always').toBe(outside.top);
+  const fp0 = await gw.focused();
+  expect(outside.top, 'the band is the focused pane\'s bottom strip').toBeCloseTo(fp0.y + fp0.h - outside.height, 1);
   expect(outside.segments.some((s: any) => s.kind === 'workspace')).toBe(false);
+  expect(outside.segments[0].kind, 'the anchor block fronts the cookies').toBe('anchor');
   expect(outside.segments.some((s: any) => s.kind === 'chain'), 'the chain shows even at depth 0').toBe(true);
 
   await gw.openPalette();
@@ -47,12 +49,11 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 
-  // Inside: same band, same reservation, plus the workspace crumb.
+  // Inside: the workspace crumb replaces the anchor block.
   const inside = await bar(window);
-  expect(inside.top).toBe(outside.top);
-  expect(await panesBottom(gw)).toBe(inside.top);
   const crumb = inside.segments.find((s: any) => s.kind === 'workspace' && s.index === 1);
   expect(crumb, 'the workspace crumb must appear').toBeTruthy();
+  expect(inside.segments.some((s: any) => s.kind === 'anchor')).toBe(false);
 
   // The workspace's default pane frames the containing grid with nothing
   // to pop in-pane (no path, no portal frames). Middle-click (the universal
@@ -82,5 +83,12 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await window.mouse.click(crumb.x + 20, inside.top + inside.height / 2);
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
-  expect(await panesBottom(gw)).toBe(outside.top);
+
+  // Wheel over the band zooms the CURRENT pane, centered (issue #220) —
+  // the escape hatch for well-tiled grids.
+  const zBefore = (await gw.focused()).zoom;
+  const b3 = await bar(window);
+  await window.mouse.move(b3.left + b3.width / 2, b3.top + b3.height / 2);
+  await window.mouse.wheel(0, -120);
+  await expect.poll(async () => (await gw.focused()).zoom).not.toBeCloseTo(zBefore, 5);
 });

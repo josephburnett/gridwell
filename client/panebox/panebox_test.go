@@ -157,3 +157,18 @@ func TestLiveViewContentBoxDegeneratePane(t *testing.T) {
 		t.Errorf("ContentBox on tiny pane = W:%v H:%v, want W:0 H:0", b.W, b.H)
 	}
 }
+
+func TestBarInset(t *testing.T) {
+	r := pane.Rect{X: 10, Y: 20, W: 300, H: 200}
+	got := BarInset(r, true, 32)
+	if got.H != 168 || got.X != 10 || got.Y != 20 || got.W != 300 {
+		t.Fatalf("focused inset = %+v, want H=168 only", got)
+	}
+	if BarInset(r, false, 32) != r {
+		t.Fatal("unfocused pane must keep its full rect")
+	}
+	tiny := pane.Rect{H: 20}
+	if BarInset(tiny, true, 32) != tiny {
+		t.Fatal("degenerate rect must not go negative")
+	}
+}

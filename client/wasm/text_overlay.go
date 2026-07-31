@@ -10,6 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -73,6 +74,13 @@ func textFitZoom(r pane.Rect, fileW, fileH int64) float64 {
 func textInnerBox(_ *pane.Pane, r pane.Rect) (x, y, w, h float64) {
 	b := panebox.InnerBox(r, textSideInset)
 	return b.X, b.Y, b.W, b.H
+}
+
+// barAwarePaneRect is pane p's rect with the focused pane's bar band
+// carved out (issue #220) — the rect every overlay/native surface sizes
+// from, so none can occlude the band.
+func (a *App) barAwarePaneRect(p *pane.Pane) pane.Rect {
+	return panebox.BarInset(paneRectFor(a, p), p.ID == a.tree.Focus, wsbar.RowH)
 }
 
 // paneContentBox returns the rectangle a URL tile renders into when
@@ -450,7 +458,7 @@ func (a *App) refreshFileOverlay() {
 			return
 		}
 	}
-	r := paneRectFor(a, p)
+	r := a.barAwarePaneRect(p)
 	if r.W <= 0 || r.H <= 0 {
 		ta.Get("style").Set("display", "none")
 		return
@@ -527,7 +535,7 @@ func (a *App) syncTextOverlayPosition() {
 		a.textTextarea.Get("style").Set("display", "none")
 		return
 	}
-	r := paneRectFor(a, p)
+	r := a.barAwarePaneRect(p)
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}

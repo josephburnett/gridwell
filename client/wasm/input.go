@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/shellconn"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -158,6 +159,18 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
 	sx, sy := mouseXY(args[0], a.canvas)
+	// Wheel over the BAR band zooms the current pane as if the cursor were
+	// at the pane's center (issue #220): the escape hatch for a grid tiled
+	// wall-to-wall with wells, where every content position claims the
+	// well-zoom (#210) and no empty spot remains.
+	if bx, top, bw, barOK := a.bottomBarRect(); barOK &&
+		sy >= top && sy < top+wsbar.RowH && sx >= bx && sx < bx+bw {
+		if p := a.tree.FocusedPane(); p != nil && p.TextFocus == "" {
+			r := a.paneRectByID(p.ID)
+			a.wheelZoomPaneAt(p, r, dy, r.X+r.W/2, r.Y+r.H/2)
+		}
+		return nil
+	}
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil
@@ -236,17 +249,21 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		a.draw()
 		return nil
 	}
-	// WheelZoomPane — smooth zoom centered on the cursor: amount scales with
-	// deltaY so a fast scroll covers more range, but capped per event. The
-	// pane's (Cx, Cy) shifts so the world point under the cursor stays under
-	// the cursor after the zoom — like every map app.
+	// WheelZoomPane — smooth zoom centered on the cursor.
+	a.wheelZoomPaneAt(p, r, dy, sx, sy)
+	return nil
+}
+
+// wheelZoomPaneAt zooms pane p anchored at screen point (sx, sy): the world
+// point under the anchor stays under it after the zoom — like every map
+// app. The bar-band wheel (issue #220) calls this with the pane's center.
+func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
 	ps := paneToDragdrop(p, r)
 	cellX, cellY := ps.ScreenToCell(sx, sy)
 	// Step clamp + cursor-anchored re-center is the pure zoomtrans.WheelZoom.
 	p.Zoom, p.Cx, p.Cy = zoomtrans.WheelZoom(dy, p.Zoom, p.Cx, p.Cy, cellX, cellY, zoomFactor, zoomMin, zoomMax)
 	a.draw()
 	a.scheduleURLUpdate()
-	return nil
 }
 
 func (a *App) onMouseDown(this js.Value, args []js.Value) any {

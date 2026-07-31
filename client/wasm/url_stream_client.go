@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -127,7 +128,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	if p == nil {
 		return
 	}
-	r := a.paneRectByID(p.ID)
+	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
 	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, t.URLString)
@@ -225,7 +226,9 @@ func (a *App) syncURLViews() {
 			bridgeSetHidden(paneID, true, false)
 			continue
 		}
-		b := contentViewBounds(r)
+		// The focused pane's band is bar territory (issue #220): the live
+		// view's content box carves it out so it can never occlude the bar.
+		b := contentViewBounds(panebox.BarInset(r, paneID == a.tree.Focus, wsbar.RowH))
 		v.bounds = b
 		bridgeSetBounds(paneID, b)
 		// The corner control belongs to the focused pane only — same rule the

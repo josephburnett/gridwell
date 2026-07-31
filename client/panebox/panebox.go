@@ -90,3 +90,16 @@ func FitZoom(r pane.Rect, fileW, fileH int64, sideInset, cellPx float64) float64
 	}
 	return zoomtrans.Fit(fileW, fileH, inner.W, inner.H, cellPx)
 }
+
+// BarInset carves the bottom-bar band (issue #220: the bar lives inside
+// the ACTIVE pane) out of a pane rect before content boxes are computed
+// from it — so no native surface (live view, shell overlay, textarea,
+// rendered div) can occlude the band. A no-op for unfocused panes and
+// degenerate rects.
+func BarInset(r pane.Rect, focused bool, barH float64) pane.Rect {
+	if !focused || r.H <= barH {
+		return r
+	}
+	r.H -= barH
+	return r
+}

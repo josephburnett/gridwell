@@ -13,7 +13,7 @@ func TestHeightAlwaysReserved(t *testing.T) {
 func TestLayoutAndHitTestAgree(t *testing.T) {
 	segs := Layout(3, 4, 900)
 	if len(segs) != 7 {
-		t.Fatalf("segments = %d, want 7", len(segs))
+		t.Fatalf("segments = %d, want 7 (no anchor when workspace crumbs front the chain)", len(segs))
 	}
 	for _, s := range segs {
 		got, ok := At(segs, s.X+s.W/2)
@@ -53,21 +53,31 @@ func TestWorkspaceCrumbWidthCapped(t *testing.T) {
 	if segs[0].W != 100 {
 		t.Fatalf("deep nesting divides evenly over the non-slot width: w = %v, want 100", segs[0].W)
 	}
+	if segs[0].Kind != KindWorkspace {
+		t.Fatalf("no anchor block inside a workspace: %+v", segs[0])
+	}
 }
 
 func TestChainSquares(t *testing.T) {
 	segs := Layout(0, 3, 1000)
-	for _, s := range segs {
+	// Outside a workspace an anchor block fronts the chain (issue #220).
+	if segs[0].Kind != KindAnchor || segs[0].W != AnchorW || segs[0].X != 0 {
+		t.Fatalf("segment 0 = %+v, want the anchor block at x=0 w=%v", segs[0], AnchorW)
+	}
+	for _, s := range segs[1:] {
 		if s.W != RowH {
 			t.Fatalf("chain crumb w = %v, want square %v", s.W, RowH)
 		}
+		if s.Kind != KindChain {
+			t.Fatalf("segment after the anchor = %+v, want a chain crumb", s)
+		}
 	}
-	// Workspace crumbs yield width to the chain before capping; the
-	// right-end circle slot is reserved off the top (issue #214).
+	// Workspace crumbs cap at the (deliberately narrow, issue #220)
+	// maxCrumbW even when there is room.
 	segs = Layout(2, 2, 500)
 	ws, _ := WorkspaceSegment(segs, 1)
-	if ws.W != (500-SlotW-2*RowH)/2 {
-		t.Fatalf("workspace crumb w = %v, want %v", ws.W, (500-SlotW-2*RowH)/2)
+	if ws.W != maxCrumbW {
+		t.Fatalf("workspace crumb w = %v, want the %v cap", ws.W, maxCrumbW)
 	}
 }
 
@@ -76,6 +86,7 @@ func TestChainSquares(t *testing.T) {
 func TestOverflowShrinksChain(t *testing.T) {
 	segs := Layout(0, 100, 320)
 	last := segs[len(segs)-1]
+	_ = last
 	if last.X+last.W > 320.0001 {
 		t.Fatalf("chain overflows the bar: ends at %v", last.X+last.W)
 	}

@@ -59,9 +59,11 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
 
   // Post-reload the stack has no outer tree: the bar falls back to the pane
   // tile's containing grid.
-  const panes = await gw.panes();
-  const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13);
+  // The bar lives inside the FOCUSED pane (issue #220): click the
+  // workspace crumb where the hook says it is.
+  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+  const seg = bar.segments.find((s: any) => s.kind === 'workspace');
+  await window.mouse.click(seg.x + 20, bar.top + bar.height / 2);
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   // The re-anchor fetches the tile asynchronously (a click handler cannot

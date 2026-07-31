@@ -30,10 +30,14 @@ func (a *App) paletteLayoutFor(p *pane.Pane, _ pane.Rect) palette.Layout {
 }
 
 // plusButtonCenter returns the screen-space center of the circle button:
-// the bottom bar's right-end slot (issue #214) — one fixed home for the
-// whole window, no longer a pane corner.
+// the right end of the ACTIVE pane's bar band (issues #214/#220). Falls
+// back to the window corner only when no pane is focused (boot frame).
 func (a *App) plusButtonCenter() (float64, float64) {
-	return a.width - wsbar.SlotW/2, a.bottomBarTop() + wsbar.RowH/2
+	bx, top, bw, ok := a.bottomBarRect()
+	if !ok {
+		return a.width - wsbar.SlotW/2, a.height - wsbar.RowH/2
+	}
+	return bx + bw - wsbar.SlotW/2, top + wsbar.RowH/2
 }
 
 // pointInPlus reports whether (x, y) lies within the circle button.

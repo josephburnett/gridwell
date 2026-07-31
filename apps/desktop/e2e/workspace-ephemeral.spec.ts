@@ -13,9 +13,11 @@ async function workspaceState(window: any): Promise<{ depth: number }> {
 }
 
 async function barAscend(gw: any, window: any): Promise<void> {
-  const panes = await gw.panes();
-  const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13);
+  // The bar lives inside the FOCUSED pane (issue #220): click the
+  // workspace crumb where the hook says it is.
+  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+  const seg = bar.segments.find((s: any) => s.kind === 'workspace');
+  await window.mouse.click(seg.x + 20, bar.top + bar.height / 2);
   await gw.waitIdle();
 }
 

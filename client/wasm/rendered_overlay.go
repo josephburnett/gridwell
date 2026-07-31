@@ -116,7 +116,7 @@ func (a *App) refreshRenderedOverlay() {
 		hide() // canvas paints raw source until the fetch lands (issue #35 guard)
 		return
 	}
-	r := paneRectFor(a, p)
+	r := a.barAwarePaneRect(p)
 	if r.W <= 0 || r.H <= 0 {
 		hide()
 		return

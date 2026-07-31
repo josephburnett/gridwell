@@ -15,7 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
-	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -370,11 +369,11 @@ func (a *App) layoutPanes() map[string]pane.Rect {
 // minus the reserved notice strip. One owner — the cascading divider resize
 // (pane.ResizeThrough) must see the exact rect the layout uses.
 func (a *App) rootLayoutRect() pane.Rect {
-	// Two reserved bands, bottom-up: the notice strip, then the always-on
-	// bottom bar (issue #212). Panes fill what's left, so neither band can
-	// be painted over — by canvas or native views.
+	// One reserved band: the notice strip. The bottom bar lives INSIDE the
+	// focused pane now (issue #220 — bottomBarRect), so panes fill
+	// everything above the strip.
 	return pane.Rect{X: 0, Y: 0, W: a.width,
-		H: a.height - errsurface.StripHeight(a.errs.Len()) - wsbar.Height()}
+		H: a.height - errsurface.StripHeight(a.errs.Len())}
 }
 
 // drawErrStrip paints the notice strip in the reserved band at the bottom of

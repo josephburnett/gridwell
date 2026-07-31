@@ -61,9 +61,11 @@ test('workspace descent freezes an outer live url; ascent revives the descent', 
   // Ascend: the outer arrangement returns — the url pane is still descended
   // into its url tile (TextFocus preserved) and RE-ENGAGES automatically
   // (issue #202): the restore is a re-entry, so the view comes back live.
-  const panes = await gw.panes();
-  const barTop = Math.max(...panes.map((p: any) => p.y + p.h));
-  await window.mouse.click(30, barTop + 13);
+  // The bar lives inside the FOCUSED pane (issue #220): click the
+  // workspace crumb where the hook says it is.
+  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+  const seg = bar.segments.find((s: any) => s.kind === 'workspace');
+  await window.mouse.click(seg.x + 20, bar.top + bar.height / 2);
   await gw.waitIdle();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const restored = (await gw.panes()).find((p: any) => p.textFocus !== '');

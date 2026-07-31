@@ -7,24 +7,36 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/caps"
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// The bottom bar (issue #212): the always-reserved band above the notice
-// strip. It carries the workspace crumbs (named rectangles, outermost
-// first) and the focused pane's descent chain (square tile previews, root
-// inclusive). Geometry comes from wsbar so the click hit-test reads the
-// identical layout — render and input cannot disagree. The chain is
+// The bottom bar (issues #212/#220): the band at the bottom of the ACTIVE
+// pane — its contents are per-pane facts, so it rides the focused pane and
+// unfocused panes keep their full height. It carries the workspace crumbs
+// (narrow named rectangles), the anchor block, the focused pane's descent
+// chain (square tile previews, root inclusive), the centered title, and
+// the circle slot. Geometry comes from wsbar so the click hit-test reads
+// the identical layout — render and input cannot disagree. The chain is
 // DERIVED per frame from the focused pane's own facts (pane.DescentChain);
 // nothing here stores a second copy of where the pane is.
 
-// bottomBarTop returns the bar band's top edge: the bar sits directly
-// above the notice strip (which keeps the very bottom).
-func (a *App) bottomBarTop() float64 {
-	return a.height - errsurface.StripHeight(a.errs.Len()) - wsbar.Height()
+// bottomBarRect returns the bar band: the focused pane's bottom RowH
+// strip (issue #220). ok=false with no pane or a degenerate rect. Native
+// surfaces on the focused pane carve this band out of their content boxes
+// (panebox.BarInset) so they can never occlude it; canvas content may
+// paint under — the bar paints last.
+func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return 0, 0, 0, false
+	}
+	r := a.paneRectByID(p.ID)
+	if r.W <= 0 || r.H <= wsbar.RowH {
+		return 0, 0, 0, false
+	}
+	return r.X, r.Y + r.H - wsbar.RowH, r.W, true
 }
 
 // bottomBarChain returns the focused pane and its descent chain (nil chain
@@ -37,17 +49,25 @@ func (a *App) bottomBarChain() (*pane.Pane, []pane.Crumb) {
 	return p, pane.DescentChain(p)
 }
 
-// bottomBarSegments lays out the bar for the current stack + chain.
+// bottomBarSegments lays out the bar for the current stack + chain,
+// relative to the band's left edge (bottomBarRect's x translates).
 func (a *App) bottomBarSegments(chain []pane.Crumb) []wsbar.Segment {
-	return wsbar.Layout(a.ws.Depth(), len(chain), a.width)
+	_, _, w, ok := a.bottomBarRect()
+	if !ok {
+		return nil
+	}
+	return wsbar.Layout(a.ws.Depth(), len(chain), w)
 }
 
 // drawBottomBar paints the band: workspace crumbs, then the chain squares.
 func (a *App) drawBottomBar() {
+	bx, top, bw, ok := a.bottomBarRect()
+	if !ok {
+		return
+	}
 	c := a.cctx
-	top := a.bottomBarTop()
 	c.Set("fillStyle", colorPaneTileFill)
-	c.Call("fillRect", 0, top, a.width, wsbar.RowH)
+	c.Call("fillRect", bx, top, bw, wsbar.RowH)
 
 	_, chain := a.bottomBarChain()
 	segs := a.bottomBarSegments(chain)
@@ -57,6 +77,10 @@ func (a *App) drawBottomBar() {
 	c.Set("textBaseline", "middle")
 	for _, s := range segs {
 		switch s.Kind {
+		case wsbar.KindAnchor:
+			// The nameless teal block fronting the cookies (issue #220).
+			c.Set("fillStyle", colorPaneTileBorder)
+			c.Call("fillRect", bx+s.X+2, top+3, s.W-3, wsbar.RowH-6)
 		case wsbar.KindWorkspace:
 			// Crumb face: the current (innermost) workspace reads brightest.
 			if s.Index == depth {
@@ -64,7 +88,7 @@ func (a *App) drawBottomBar() {
 			} else {
 				c.Set("fillStyle", "#1d4a4a")
 			}
-			c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
+			c.Call("fillRect", bx+s.X+2, top+3, s.W-4, wsbar.RowH-6)
 			c.Set("fillStyle", "#dff4f4")
 			label := names[s.Index-1]
 			if label == "" {
@@ -72,16 +96,18 @@ func (a *App) drawBottomBar() {
 			}
 			c.Call("save")
 			c.Call("beginPath")
-			c.Call("rect", s.X+2, top, s.W-4, wsbar.RowH)
+			c.Call("rect", bx+s.X+2, top, s.W-4, wsbar.RowH)
 			c.Call("clip")
-			c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
+			c.Call("fillText", label, bx+s.X+10, top+wsbar.RowH/2)
 			c.Call("restore")
 		case wsbar.KindChain:
-			a.drawChainCrumb(chain[s.Index], s, top)
+			shifted := s
+			shifted.X += bx
+			a.drawChainCrumb(chain[s.Index], shifted, top)
 		}
 	}
 	c.Set("fillStyle", "#dff4f4")
-	c.Call("fillRect", 0, top, a.width, 1) // hairline above the band
+	c.Call("fillRect", bx, top, bw, 1) // hairline above the band
 	a.drawBarTitle(top)
 	a.drawBarSlot()
 }
@@ -100,19 +126,23 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 	if label == "" {
 		return
 	}
+	bx, _, bw, rectOK := a.bottomBarRect()
+	if !rectOK {
+		return
+	}
 	a.cctx.Set("font", "12px system-ui, sans-serif")
 	w = a.cctx.Call("measureText", label).Get("width").Float() + 24
-	x = (a.width - w) / 2
+	x = bx + (bw-w)/2
 	_, chain := a.bottomBarChain()
 	segs := a.bottomBarSegments(chain)
-	crumbsEnd := 0.0
+	crumbsEnd := bx
 	if n := len(segs); n > 0 {
-		crumbsEnd = segs[n-1].X + segs[n-1].W
+		crumbsEnd = bx + segs[n-1].X + segs[n-1].W
 	}
 	if x < crumbsEnd+8 {
 		x = crumbsEnd + 8
 	}
-	if maxW := a.width - wsbar.SlotW - 8 - x; w > maxW {
+	if maxW := bx + bw - wsbar.SlotW - 8 - x; w > maxW {
 		w = maxW
 	}
 	if w < 24 {
@@ -311,11 +341,11 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 // level (issue #212). Returns true when the click was in the band, whether
 // or not it hit a crumb, so the click never falls through to a pane below.
 func (a *App) bottomBarClick(sx, sy float64, button int) bool {
-	top := a.bottomBarTop()
-	if sy < top || sy >= top+wsbar.RowH {
+	bx, top, bw, ok := a.bottomBarRect()
+	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
 		return false
 	}
-	if sx >= a.width-wsbar.SlotW {
+	if sx >= bx+bw-wsbar.SlotW {
 		a.barSlotClick(button)
 		return true
 	}
@@ -333,8 +363,8 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		return true
 	}
 	p, chain := a.bottomBarChain()
-	seg, ok := wsbar.At(a.bottomBarSegments(chain), sx)
-	if !ok {
+	seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx)
+	if !segOK {
 		return true // empty band space swallows clicks (no gesture, #222)
 	}
 	// LEFT-click ascends on every crumb kind alike (2026-07-30 tweak: one
@@ -368,9 +398,12 @@ func (a *App) openWorkspaceRenameInput(level int) {
 	if !ok {
 		return
 	}
-	top := a.bottomBarTop()
+	bx, top, _, rectOK := a.bottomBarRect()
+	if !rectOK {
+		return
+	}
 	a.openNameInputAt(f.Name, seg.W-28, func(st js.Value) {
-		st.Set("left", pxOf(seg.X+2))
+		st.Set("left", pxOf(bx+seg.X+2))
 		st.Set("top", pxOf(top+4))
 	}, func(val string) {
 		a.commitWorkspaceRename(level, val)
@@ -395,17 +428,20 @@ func (a *App) openRenameInput() {
 	if !geomOK {
 		return
 	}
+	bx, top, bw, rectOK := a.bottomBarRect()
+	if !rectOK {
+		return
+	}
 	if w < 160 {
 		// The input needs typing room; grow around the title's center but
 		// stay off the slot.
 		grown := 160.0
 		x = x + w/2 - grown/2
-		if max := a.width - wsbar.SlotW - 8; x+grown > max {
+		if max := bx + bw - wsbar.SlotW - 8; x+grown > max {
 			x = max - grown
 		}
 		w = grown
 	}
-	top := a.bottomBarTop()
 	tileID := target.ID
 	a.openNameInputAt(target.AltText, w-24, func(st js.Value) {
 		st.Set("left", pxOf(x))
