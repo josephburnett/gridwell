@@ -89,14 +89,6 @@ func (l Layout) PlusCenter() (cx, cy float64) {
 	return l.PlusX, l.PlusY
 }
 
-// PointInPlus reports whether (x, y) lies inside the + button's hit
-// circle.
-func (l Layout) PointInPlus(x, y float64) bool {
-	cx, cy := l.PlusCenter()
-	dx, dy := x-cx, y-cy
-	return dx*dx+dy*dy <= l.Cfg.PlusRadius*l.Cfg.PlusRadius
-}
-
 // TilePx returns the per-tile size in screen pixels for the palette.
 // Fixed at half a default cell and independent of pane zoom: the creation
 // menu is a constant-size affordance — a row of icons, not a literal

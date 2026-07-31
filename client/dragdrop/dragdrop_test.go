@@ -264,21 +264,6 @@ func TestResizeAnchorsAndCursor(t *testing.T) {
 	}
 }
 
-func TestNearPx(t *testing.T) {
-	if !NearPx(10.0, 10.4) {
-		t.Error("0.4 px apart should be near")
-	}
-	if NearPx(10.0, 10.6) {
-		t.Error("0.6 px apart should not be near")
-	}
-	if !NearPx(10.0, 9.51) {
-		t.Error("0.49 px apart should be near")
-	}
-	if !NearPx(0, 0) {
-		t.Error("identical should be near")
-	}
-}
-
 func TestPaneCellAt(t *testing.T) {
 	// 1000x800 pane centered on cell (0,0), 64 px cells, zoom 1.
 	p := Pane{

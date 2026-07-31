@@ -6,14 +6,6 @@ import (
 
 func pt(x, y float64) Point { return Point{X: x, Y: y} }
 
-func kinds(as []Action) []Kind {
-	out := make([]Kind, len(as))
-	for i, a := range as {
-		out[i] = a.Kind
-	}
-	return out
-}
-
 func wantActions(t *testing.T, got []Action, want ...Action) {
 	t.Helper()
 	if len(got) != len(want) {

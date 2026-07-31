@@ -32,10 +32,6 @@ const AnchorW = RowH / 3
 // native overlay over live views. Layout never places a crumb inside it.
 const SlotW = 48.0
 
-// Height returns the band height to reserve. Always RowH: the bar is
-// permanent chrome now, not workspace-only.
-func Height() float64 { return RowH }
-
 // Kind distinguishes the two crumb families sharing the bar.
 type Kind int
 

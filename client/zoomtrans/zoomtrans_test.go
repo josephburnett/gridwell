@@ -517,24 +517,6 @@ func TestWheelZoom(t *testing.T) {
 	}
 }
 
-func TestPortalWellRoundsAndFloors(t *testing.T) {
-	// Rounds the float cell rect to integer cells.
-	w := PortalWell(2.4, 3.6, 1.0, 1.0)
-	if w.ID != "portal" {
-		t.Errorf("ID = %q, want portal", w.ID)
-	}
-	if w.X != 2 || w.Y != 4 {
-		t.Errorf("rounded pos = (%d,%d), want (2,4)", w.X, w.Y)
-	}
-	if w.W != 1 || w.H != 1 {
-		t.Errorf("size = (%d,%d), want (1,1)", w.W, w.H)
-	}
-	// A sub-cell footprint floors to at least 1×1 so the well is never empty.
-	if w := PortalWell(0, 0, 0.2, 0.0); w.W != 1 || w.H != 1 {
-		t.Errorf("degenerate size = (%d,%d), want (1,1)", w.W, w.H)
-	}
-}
-
 // TestViewOriginFromCenterRoundTrip: the descend→ascend quantization is
 // idempotent — reconstructing the origin from the center it produces returns
 // the same origin, for every origin and tile size. The old round(center)-w/2

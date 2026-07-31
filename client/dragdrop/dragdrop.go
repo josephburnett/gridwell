@@ -436,17 +436,6 @@ func GhostPlanForDrop(action DropAction, forbidden, clone bool,
 	}
 }
 
-// NearPx reports whether two pixel coordinates are within half a pixel.
-// Used for "is this divider line at the same place as that one?" checks
-// where exact float equality is too brittle.
-func NearPx(a, b float64) bool {
-	d := a - b
-	if d < 0 {
-		d = -d
-	}
-	return d < 0.5
-}
-
 // PromoteToWell reports whether the tile under the cursor promotes a drop
 // target to the tile's child grid: an enterable well (well kind with a child
 // grid) that is not the dragged tile itself — dropping a well into its own

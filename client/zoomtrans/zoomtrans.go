@@ -301,19 +301,6 @@ func Ascent(from Endpoints, w Well, parentPath []string, paneW, paneH, cellPx fl
 	return
 }
 
-// PortalWell builds the synthetic "portal" well that animates a plugin jump:
-// a portal link tile's float cell rect rounded to
-// integer cells, ID "portal", with W/H at least 1. Shared by the descent into
-// a link (zoom in) and the portal ascent back onto its tile (zoom out) so
-// the two motions are exact inverses of one another.
-func PortalWell(x, y, w, h float64) Well {
-	return Well{
-		ID: "portal",
-		X:  int64(math.Round(x)), Y: int64(math.Round(y)),
-		W: int64(max(1.0, math.Round(w))), H: int64(max(1.0, math.Round(h))),
-	}
-}
-
 // PanDist returns the pan motion distance in screen pixels for a (dx,
 // dy) delta given in cell units, at the provided zoom level and base
 // cell size. Used by the descent / ascent animation timing math.

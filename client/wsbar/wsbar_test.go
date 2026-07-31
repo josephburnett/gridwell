@@ -2,12 +2,6 @@ package wsbar
 
 import "testing"
 
-func TestHeightAlwaysReserved(t *testing.T) {
-	if Height() != RowH {
-		t.Fatal("the bar is permanent chrome (issue #212): one band, always")
-	}
-}
-
 // Render and input read the same rects, so the crumb drawn at a point is
 // the crumb a click there resolves to.
 func TestLayoutAndHitTestAgree(t *testing.T) {

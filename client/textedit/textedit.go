@@ -4,16 +4,6 @@
 // itself lives in client/wasm, build-tag-excluded from host tests).
 package textedit
 
-func clamp(off, n int) int {
-	if off < 0 {
-		return 0
-	}
-	if off > n {
-		return n
-	}
-	return off
-}
-
 // CanvasHiddenByOverlay reports whether a text pane's canvas render should be
 // suppressed because a DOM overlay is actively covering it with content —
 // the editing textarea in text mode, the rendered-HTML div in rendered mode

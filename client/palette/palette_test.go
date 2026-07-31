@@ -1,7 +1,6 @@
 package palette
 
 import (
-	"math"
 	"testing"
 )
 
@@ -19,29 +18,6 @@ func TestPlusCenter(t *testing.T) {
 	cx, cy := l.PlusCenter()
 	if cx != 976 || cy != 776 {
 		t.Errorf("PlusCenter = (%v,%v), want the caller's (976,776) verbatim", cx, cy)
-	}
-}
-
-func TestPointInPlus(t *testing.T) {
-	l := makeLayout()
-	cx, cy := l.PlusCenter()
-	cases := []struct {
-		x, y float64
-		want bool
-	}{
-		{cx, cy, true},                           // dead center
-		{cx + l.Cfg.PlusRadius - 0.1, cy, true},  // just inside
-		{cx + l.Cfg.PlusRadius + 0.1, cy, false}, // just outside
-		{cx, cy + l.Cfg.PlusRadius, true},        // edge
-		{cx + 100, cy + 100, false},              // far
-		{cx - l.Cfg.PlusRadius/math.Sqrt2 + 0.1,
-			cy - l.Cfg.PlusRadius/math.Sqrt2 + 0.1, true}, // diagonal inside
-	}
-	for _, c := range cases {
-		got := l.PointInPlus(c.x, c.y)
-		if got != c.want {
-			t.Errorf("PointInPlus(%v,%v) = %v, want %v", c.x, c.y, got, c.want)
-		}
 	}
 }
 
