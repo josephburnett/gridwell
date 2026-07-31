@@ -87,8 +87,8 @@ func (c *Cache) PutFetchedContent(tileID string, data []byte, base int64) {
 	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base}
 }
 
-// PutEditedContent stores an optimistic, not-yet-saved local edit (rendered-
-// mode keystrokes, raw textarea input, embed drops) so the renderer reflects
+// PutEditedContent stores an optimistic, not-yet-saved local edit (textarea
+// input) so the renderer reflects
 // it immediately. The entry keeps its existing Base — the edit is based on
 // the bytes already here — and turns dirty so reconciliation never discards
 // it. An edit with no prior entry keeps Base 0: its save claims a version the

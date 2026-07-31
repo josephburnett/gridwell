@@ -142,8 +142,8 @@ func (s *Store) createTile(
 	return out, err
 }
 
-// CreateWell creates a new well at (x,y) with footprint (w,h) inside the leaf
-// grid of req.Path. The child grid is created empty with no framing on the
+// CreateWell creates a new well at (x,y) with footprint (w,h) inside
+// req.GridID. The child grid is created empty with no framing on the
 // well (view_x/y/zoom all zero). Label, when set, is stored as the well's
 // alt_text — the user-given name of the grid (the + palette's name field).
 // Wells have no content to derive an alt from, so this is alt's only writer.

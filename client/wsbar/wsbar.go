@@ -1,15 +1,15 @@
-// Package wsbar owns the bottom bar's geometry: the always-reserved band at
-// the bottom of the window that carries the workspace crumbs (tmux-style
-// named rectangles, outermost first), the focused pane's descent chain
-// (square tile previews, root inclusive — issue #212), and their ascent
-// gestures. Pure Go (no js): render and input read the SAME segment rects,
-// so the crumb you see is exactly the crumb you hit — the errsurface
-// strip's reserved-band pattern, applied again.
+// Package wsbar owns the bottom bar's geometry: the band at the bottom of
+// the ACTIVE pane (issue #220) that carries the workspace crumbs
+// (tmux-style named rectangles, outermost first), the anchor block, the
+// focused pane's descent chain (square tile previews, root inclusive —
+// issue #212), and the circle slot. Pure Go (no js): render and input read
+// the SAME segment rects, so the crumb you see is exactly the crumb you
+// hit — the errsurface strip's reserved-band pattern, applied again.
 //
 // The band is always present (owner decision 2026-07-30, issue #212): the
-// bar is the one home for "where am I", so it never comes and goes.
-// Height() is subtracted inside rootLayoutRect, so panes and native views
-// can never paint over the bar, exactly as with the error strip.
+// bar is the one home for "where am I", so it never comes and goes. Native
+// surfaces on the focused pane carve the band out of their rects
+// (panebox.BarInset), so they can never paint over it.
 package wsbar
 
 // RowH is the bar's height in CSS px. 32 keeps the band thin while a

@@ -9,7 +9,7 @@
 // wire_test.go pins it).
 //
 // What is NOT in the layout, by design (issue #13 + URL-place semantics): the
-// Up portal frames, the in-namespace ascent stack, selection, caret, and
+// Up portal frames, the in-namespace ascent stack, selection, and
 // native handles. A leaf persists a *place* — anchor + path + viewport —
 // exactly the URL vocabulary; the return stacks stay session-scoped.
 //

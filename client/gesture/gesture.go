@@ -62,11 +62,12 @@ type Input struct {
 }
 
 // Classify maps the resolved facts to a gesture Kind. The two switches
-// mirror onRightDown exactly: the special targets (embed, tile) take
-// priority in that order; only if none of them claim the down does the
+// mirror onRightDown exactly: the special target (a tile under the
+// cursor) takes priority; only if it doesn't claim the down does the
 // pane sub-region decide. (The corner-circle Ascend arm is gone: the
-// circle lives in the bottom bar since issue #214, where a right CLICK
-// ascends — bar clicks never reach the pane gesture layer.)
+// circle lives in the bottom bar since issue #214, and the bar's ascent
+// is the crumb LEFT-click, #222 — bar left-clicks never reach the pane
+// gesture layer.)
 func Classify(in Input) Kind {
 	switch {
 	case in.InGridView && in.OverTile:

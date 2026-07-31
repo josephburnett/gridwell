@@ -36,8 +36,8 @@ const shortIDLen = 7
 //     on case-insensitive filesystems and a tmux socket;
 //   - no '/' so the qualified-id codec (rpc.SplitID) stays delimiter-clean;
 //   - the leading letter guarantees the id can never be purely numeric, which
-//     is how URL paths and markdown embed hrefs tell a namespace segment from
-//     a tile id (config.Load enforces the same rule on hand-edited ids).
+//     is how URL paths tell a namespace segment from a tile id (config.Load
+//     enforces the same rule on hand-edited ids).
 //
 // Existing plugins keep their 32-hex ids forever — an id is immutable once
 // minted (it lives in other plugins' stored references, Electron session

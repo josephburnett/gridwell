@@ -1,7 +1,7 @@
-// Package rpc declares the wire-format types for the Gridwell RPC service.
-//
-// The server transports them as JSON over HTTP under /rpc/<MethodName>; the
-// client uses the same encoding.
+// Package rpc declares the Go-side types for the Gridwell RPC service and
+// their conversions to the proto wire form (conv.go). The wire itself is
+// Connect/gRPC on /gridwell.v1.Gridwell/<Method> — data.proto is the
+// source of truth for the encoding.
 package rpc
 
 import "strings"
@@ -512,8 +512,8 @@ type SetRootViewRequest struct {
 }
 
 // SetURLStateRequest freezes a live URL tile (preview JPEG + address +
-// title) when its Electron WebContentsView is torn down on ascend. Path +
-// Version make the freeze a proper versioned content edit — an in-place
+// title) when its Electron WebContentsView is torn down on ascend. The
+// Version claim makes the freeze a proper versioned content edit — an in-place
 // write to this tile's row (copy-on-clone: clones are independent, so there
 // is no fork). Empty jpeg/url/title fields are skipped.
 type SetURLStateRequest struct {

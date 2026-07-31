@@ -187,9 +187,8 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		}
 	}
 
-	// /rpc/ paths not registered by the server (URLStream / WebSocket
-	// is the only /rpc/ route left after the Connect cutover) must 404
-	// rather than fall through to index.html.
+	// /rpc/ paths — the pre-Connect RPC namespace, no longer registered at
+	// all — must 404 rather than fall through to index.html.
 	resp, err := http.Get(hs.URL + "/rpc/Bogus")
 	if err != nil {
 		t.Fatal(err)

@@ -138,8 +138,8 @@ func Load(path string) (*ServerConfig, error) {
 // validateIDs enforces the identity-shape contract on every id the file
 // declares. Ids are otherwise opaque strings, but two properties are
 // load-bearing everywhere they travel: no '/' (the qualified-id codec's
-// delimiter — rpc.SplitID) and never purely numeric (URL paths and markdown
-// embed hrefs tell a namespace segment from a tile id by exactly this).
+// delimiter — rpc.SplitID) and never purely numeric (URL paths tell a
+// namespace segment from a tile id by exactly this).
 // `gridwell init` mints conforming ids (store.NewShortID); this is the one
 // door that catches a hand-edited server.yaml before a bad id gets stored
 // into cross-plugin references it can never be removed from.

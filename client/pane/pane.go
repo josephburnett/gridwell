@@ -49,7 +49,7 @@ func (s Side) Direction() Direction {
 // the pane still sits in the parent grid (Path is unchanged), but the
 // chrome and input semantics switch to text-editing mode. TextMode picks
 // between "text" (raw markdown in a textarea overlay) and "rendered" (the
-// markdown layout rendered into the canvas). TextScrollY is the vertical
+// sanitized-HTML overlay div, issue #218). TextScrollY is the vertical
 // scroll inside the text's interior in logical pixels; mirrored to the
 // text tile's view_y on save.
 type Pane struct {

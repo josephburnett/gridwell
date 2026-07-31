@@ -15,8 +15,8 @@ import (
 // (owner decision 8, 2026-07-26): if the tile is a leaf link, the route
 // follows link_target_id at the serving node, so every caller — our client,
 // a CLI, a remote mounter — inherits the resolution instead of
-// reimplementing it. Every content-serving door (Connect ReadContent, the
-// node export, the /preview/tile/ endpoint) resolves through here.
+// reimplementing it. Every content-serving door (Connect ReadContent and
+// the node export) resolves through here.
 //
 // Two structural facts keep this a single step:
 //   - resolution happens only where the link row LIVES: a transit-owned id
