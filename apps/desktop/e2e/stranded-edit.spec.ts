@@ -33,7 +33,10 @@ test('an edit typed right before leaving the doc still persists', async ({ gw, w
   await gw.descendCell(cx, cy);
   await window.keyboard.type(' EDIT');
   const p = await gw.focused();
-  await window.mouse.click(p.x + p.w / 2, p.y + p.h / 2, { button: 'middle' }); // ascend, no settle
+  await window.mouse.click(p.x + p.w / 2, p.y + p.h / 2, { button: 'middle' }); // leave: the edit is stranded NOW
+  // The race that matters is typing→leaving; the ascent may settle (its
+  // animation must, or the next descend computes cells mid-transition).
+  await gw.waitIdle();
   await gw.descendCell(cx + 1, cy);
   await gw.waitIdle();
   expect((await gw.focused()).textFocus, 'the pane moved to the other doc').not.toBe(docA.id);
