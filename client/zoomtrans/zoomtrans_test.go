@@ -562,48 +562,55 @@ func TestViewOriginFromCenterRoundTrip(t *testing.T) {
 func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 	w := Well{X: 0, Y: 0, W: 2, H: 2, ViewX: 4, ViewY: 6, ViewZoom: 0.25}
 	const parentCell = 64.0
+	cx0 := float64(w.ViewX) + float64(w.W)/2
+	cy0 := float64(w.ViewY) + float64(w.H)/2
 
 	// Cursor at the well CENTER: zoom in; the view center must not move
 	// (the anchor is the point under the cursor).
-	vx, vy, r1, changed := WellWheelView(-120, w, parentCell, 0, 0, 1.1, 1.0/64, 1.0)
+	cx1, cy1, r1, changed := WellWheelView(-120, w, parentCell, 0, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
 	if !changed || r1 <= 0.25 {
 		t.Fatalf("wheel-in: ratio = %v changed=%v, want a larger ratio", r1, changed)
 	}
-	if vx != w.ViewX || vy != w.ViewY {
-		t.Errorf("center-anchored zoom moved the origin: (%d, %d) -> (%d, %d)", w.ViewX, w.ViewY, vx, vy)
+	if cx1 != cx0 || cy1 != cy0 {
+		t.Errorf("center-anchored zoom moved the center: (%v, %v) -> (%v, %v)", cx0, cy0, cx1, cy1)
 	}
 
-	// Cursor OFF-center: the child cell under the cursor stays under the
-	// cursor — (px − viewCenter′)·parentCell·r′ ≈ cursorDx (within the
-	// origin's one-cell quantization).
+	// Cursor OFF-center: the child point under the cursor stays EXACTLY
+	// under the cursor — float in, float out; no per-notch quantization to
+	// eat the drift (issue #219).
 	const dx = 40.0
-	vx, vy, r1, changed = WellWheelView(-120, w, parentCell, dx, 0, 1.1, 1.0/64, 1.0)
+	cx1, cy1, r1, changed = WellWheelView(-120, w, parentCell, dx, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
 	if !changed {
 		t.Fatal("off-center wheel-in: no change")
 	}
-	r0 := w.ViewZoom
-	px := float64(w.ViewX) + float64(w.W)/2 + dx/(parentCell*r0)
-	c1 := float64(vx) + float64(w.W)/2
-	got := (px - c1) * parentCell * r1
-	if math.Abs(got-dx) > parentCell*r1 { // one quantized cell of slack
-		t.Errorf("anchor drifted: cursor cell now at %vpx from center, want ~%v", got, dx)
+	r0 := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
+	px := cx0 + dx/(parentCell*r0)
+	got := (px - cx1) * parentCell * r1
+	if math.Abs(got-dx) > 0.001 {
+		t.Errorf("anchor drifted: cursor point now at %vpx from center, want exactly %v", got, dx)
+	}
+	if cx1 <= cx0 {
+		t.Errorf("zooming toward a rightward cursor must drift the center right: %v -> %v", cx0, cx1)
+	}
+	if cy1 != cy0 {
+		t.Errorf("no vertical cursor offset, but the center moved: %v -> %v", cy0, cy1)
 	}
 
-	// An unvisited well (ViewZoom 0) steps from the default ratio.
-	u := Well{W: 2, H: 2}
-	_, _, r1, changed = WellWheelView(-120, u, parentCell, 0, 0, 1.1, 1.0/64, 1.0)
-	if !changed || r1 <= DefaultWellViewZoom {
-		t.Errorf("unvisited: ratio = %v changed=%v, want a step up from the default %v", r1, changed, DefaultWellViewZoom)
+	// Drift COMPOUNDS across a burst (the #219 repro): each notch feeds the
+	// previous float center back in; N notches toward a corner must keep
+	// moving the center — the old per-notch integer quantization rounded
+	// every step back to the start.
+	ww := w
+	ccx, ccy := cx0, cy0
+	for i := 0; i < 4; i++ {
+		var r float64
+		ccx, ccy, r, changed = WellWheelView(-120, ww, parentCell, dx, dx, ccx, ccy, 1.1, 1.0/64, 1.0)
+		if !changed {
+			t.Fatalf("notch %d: no change", i)
+		}
+		ww.ViewZoom = r
 	}
-
-	// The clamp pins: at rMax a further zoom-in reports no change, so a
-	// pinned wheel never writes.
-	m := Well{W: 2, H: 2, ViewZoom: 1.0}
-	if _, _, _, changed := WellWheelView(-120, m, parentCell, 0, 0, 1.1, 1.0/64, 1.0); changed {
-		t.Error("pinned at rMax: must report no change")
-	}
-	// Degenerate parent cell: no change.
-	if _, _, _, changed := WellWheelView(-120, w, 0, 0, 0, 1.1, 1.0/64, 1.0); changed {
-		t.Error("degenerate parentCell: must report no change")
+	if ccx-cx0 < 0.3 || ccy-cy0 < 0.3 {
+		t.Errorf("burst drift too small: center moved (%v, %v) cells; the drift must compound", ccx-cx0, ccy-cy0)
 	}
 }

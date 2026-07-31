@@ -59,7 +59,8 @@ func (a *App) flushFramingSave() {
 // #210): one SetWellView per touched tile, from the CACHED row — the same
 // values the per-notch patches accumulated and the renderer already shows.
 func (a *App) flushWellWheelSaves() {
-	for id, gid := range a.wellWheelPending {
+	for id, st := range a.wellWheelPending {
+		gid := st.gridID
 		delete(a.wellWheelPending, id)
 		g, ok := a.c.Grid(gid)
 		if !ok {

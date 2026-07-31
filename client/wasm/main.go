@@ -241,7 +241,7 @@ type App struct {
 	// grid the tile sits in. The cache is patched per notch (the renderer
 	// reads it live); the settle persister's flush posts ONE SetWellView
 	// per tile from the cached row, so a scroll burst is one write.
-	wellWheelPending map[string]string
+	wellWheelPending map[string]wellWheelDrift
 
 	// traces holds the per-pane ascent-trace highlight (the fading "you just
 	// came from HERE" outline, issue #83). Armed by completeTransition when
@@ -362,6 +362,15 @@ type scheduler struct {
 // (panestate.Saved) so the per-pane state lives in one tested place. Aliased here
 // to keep the many `paneState{...}` construction sites unchanged.
 type paneState = panestate.Saved
+
+// wellWheelDrift is one well's in-flight hover-wheel state: the grid to
+// persist under, and the FLOAT view center accumulated across the wheel
+// burst (issue #219 — per-notch integer quantization rounded the cursor-
+// anchor drift away; the quantization happens once, at cache-patch/flush).
+type wellWheelDrift struct {
+	gridID string
+	cx, cy float64
+}
 
 // paneLocal is the single owner of one pane's session-local client state: the
 // plain-data part (panestate.State, embedded — selection, ascent stack, caret,
@@ -629,7 +638,7 @@ func main() {
 		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
 		shellAlive:        map[string]bool{},
 		shellAliveProbing: map[string]bool{},
-		wellWheelPending:  map[string]string{},
+		wellWheelPending:  map[string]wellWheelDrift{},
 		traces:            map[string]traceState{},
 		paneLayouts:       map[string]*paneLayoutEntry{},
 	}

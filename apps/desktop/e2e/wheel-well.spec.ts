@@ -58,3 +58,44 @@ test('wheel over a well zooms the well; over empty space, the pane (#210)', asyn
     5,
   );
 });
+
+// Issue #219: the well wheel-zoom is cursor-ANCHORED — the child point
+// under the cursor stays under the cursor, so a burst of notches with the
+// cursor off-center DRIFTS the stored view toward the cursor (zooming as
+// small navigation). Before the fix each notch quantized the origin to
+// integer cells, the sub-cell drift rounded away, and the persisted origin
+// never moved.
+test('an off-center wheel burst drifts the well view toward the cursor (#219)', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  const before = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  expect(before, 'well created').toBeTruthy();
+  const vx0 = Number(before.viewX ?? 0);
+  const vy0 = Number(before.viewY ?? 0);
+
+  // Cursor near the well's bottom-right corner (inside the tile), then a
+  // long zoom-in burst: the view center must chase the cursor's child
+  // point, moving the persisted origin down-right.
+  const pt = await gw.cellCenter((await gw.focused()).id, cx, cy);
+  await window.mouse.move(pt.x + 18, pt.y + 18);
+  for (let i = 0; i < 10; i++) {
+    await window.mouse.wheel(0, -120);
+  }
+  await expect
+    .poll(
+      async () => {
+        const t = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy);
+        return Number(t?.viewX ?? 0) + Number(t?.viewY ?? 0);
+      },
+      { message: 'the stored origin must drift toward the cursor', timeout: 10_000 },
+    )
+    .toBeGreaterThan(vx0 + vy0);
+});

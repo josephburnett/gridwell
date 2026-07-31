@@ -107,32 +107,29 @@ func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax flo
 	return z, cellX - (cellX-cx)*ratio, cellY - (cellY-cy)*ratio
 }
 
-// WellWheelView applies a wheel step to a WELL's stored view (issue #210:
-// hovering a well and wheeling zooms the grid IN the well, not the grid
-// you're in): the same cursor-anchored kernel as the pane wheel
-// (WheelZoom), operating on the intrinsic ratio and the stored view origin
-// in child-cell space. parentCell is the well's parent-grid cell size in
-// px; (cursorDxPx, cursorDyPx) the cursor's offset from the WELL CENTER —
-// the preview's anchor point (origin = wellCenter − viewCenter×previewCell,
-// the renderer's formula). The origin quantizes through
-// ViewOriginFromCenter — the one owner of that rounding. changed=false when
-// the clamp pinned the ratio or the preview is degenerate; a no-op wheel
-// never mutates.
-func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, factorBase, rMin, rMax float64) (viewX, viewY int64, ratio float64, changed bool) {
+// WellWheelView advances a hover-wheel zoom of a well's stored preview
+// framing (issue #210) by one notch, cursor-anchored: the child-grid point
+// under the cursor stays under the cursor, so zooming drifts the view
+// toward the cursor (issue #219 — small navigation by zooming). The center
+// is FLOAT in and out: the caller accumulates it across the wheel burst
+// and quantizes ONCE at flush (ViewOriginFromCenter) — quantizing per
+// notch rounded the sub-cell drift away every time, which is exactly the
+// #219 bug. cx0/cy0 <= 0 sentinel is not used; pass the well's stored
+// center for the first notch. changed=false when the clamp pinned the
+// ratio or the preview is degenerate; a no-op wheel never mutates.
+func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, cx0, cy0, factorBase, rMin, rMax float64) (cx1, cy1, ratio float64, changed bool) {
 	r0 := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
 	previewCell := parentCell * r0
 	if previewCell <= 0 {
-		return w.ViewX, w.ViewY, w.ViewZoom, false
+		return cx0, cy0, w.ViewZoom, false
 	}
-	cx0 := float64(w.ViewX) + float64(w.W)/2
-	cy0 := float64(w.ViewY) + float64(w.H)/2
 	px := cx0 + cursorDxPx/previewCell
 	py := cy0 + cursorDyPx/previewCell
-	r1, cx1, cy1 := WheelZoom(deltaY, r0, cx0, cy0, px, py, factorBase, rMin, rMax)
+	r1, c1x, c1y := WheelZoom(deltaY, r0, cx0, cy0, px, py, factorBase, rMin, rMax)
 	if r1 == r0 {
-		return w.ViewX, w.ViewY, w.ViewZoom, false
+		return cx0, cy0, w.ViewZoom, false
 	}
-	return ViewOriginFromCenter(cx1, w.W), ViewOriginFromCenter(cy1, w.H), r1, true
+	return c1x, c1y, r1, true
 }
 
 // Overtake returns the zoom at which a (footprintW × footprintH) cell

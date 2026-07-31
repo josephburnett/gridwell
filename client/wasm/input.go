@@ -214,15 +214,25 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 			X: hoverWell.X, Y: hoverWell.Y, W: hoverWell.W, H: hoverWell.H,
 			ViewX: hoverWell.ViewX, ViewY: hoverWell.ViewY, ViewZoom: hoverWell.ViewZoom,
 		}
-		vx, vy, ratio, changed := zoomtrans.WellWheelView(dy, zw, parentCell,
-			sx-(x0+wpx/2), sy-(y0+hpx/2), zoomFactor, wellZoomRatioMin, wellZoomRatioMax)
+		// The float center accumulates across the burst (issue #219): first
+		// notch seeds from the stored origin; later notches feed the drift
+		// back in, so cursor-anchored zoom actually travels.
+		cx0 := float64(hoverWell.ViewX) + float64(hoverWell.W)/2
+		cy0 := float64(hoverWell.ViewY) + float64(hoverWell.H)/2
+		if st, ok := a.wellWheelPending[hoverWell.ID]; ok {
+			cx0, cy0 = st.cx, st.cy
+		}
+		cx1, cy1, ratio, changed := zoomtrans.WellWheelView(dy, zw, parentCell,
+			sx-(x0+wpx/2), sy-(y0+hpx/2), cx0, cy0, zoomFactor, wellZoomRatioMin, wellZoomRatioMax)
 		if !changed {
 			return nil
 		}
 		updated := *hoverWell
-		updated.ViewX, updated.ViewY, updated.ViewZoom = vx, vy, ratio
+		updated.ViewX = zoomtrans.ViewOriginFromCenter(cx1, hoverWell.W)
+		updated.ViewY = zoomtrans.ViewOriginFromCenter(cy1, hoverWell.H)
+		updated.ViewZoom = ratio
 		a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
-		a.wellWheelPending[hoverWell.ID] = a.gridIDForPane(p)
+		a.wellWheelPending[hoverWell.ID] = wellWheelDrift{gridID: a.gridIDForPane(p), cx: cx1, cy: cy1}
 		a.draw()
 		return nil
 	}
