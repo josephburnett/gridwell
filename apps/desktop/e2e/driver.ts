@@ -519,12 +519,11 @@ export class GridwellDriver {
   // circle (the +/back button) without dragging — the discoverable ascend
   // gesture (release inside the circle ascends).
   async rightClickPlus(): Promise<void> {
-    const pal = await this.palette();
-    const m = this.win.mouse;
-    await m.move(pal.plusX, pal.plusY);
-    await m.down({ button: 'right' });
-    await m.up({ button: 'right' });
-    await this.waitIdle();
+    const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
+    const chain = (bar.segments as any[]).filter((s) => s.kind === 'chain');
+    if (chain.length < 2) throw new Error('nothing to ascend to (chain has one crumb)');
+    const seg = chain[chain.length - 2];
+    await this.win.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);
   }
 
   // ── View gestures ─────────────────────────────────────────────────────────

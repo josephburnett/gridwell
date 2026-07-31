@@ -194,19 +194,13 @@ func (a *App) drawBarSlot() {
 
 // barSlotClick dispatches a click on the bar's circle slot, always acting
 // on the FOCUSED pane (the slot never transfers focus, so the old
-// prevFocus gating is unnecessary). RIGHT (or middle) click ascends one
-// level — the corner circle's ascent gesture, now a plain click.
+// prevFocus gating is unnecessary). LEFT-click only: the ascent gesture is
+// clicking the previous crumb (owner decision 2026-07-30, issue #222 —
+// the old right-click-to-ascend on the slot and on empty bar space are
+// gone; middle-click on a pane remains the in-pane shortcut).
 func (a *App) barSlotClick(button int) {
 	p := a.tree.FocusedPane()
 	if p == nil {
-		return
-	}
-	if button == 1 || button == 2 {
-		a.menu.Close()
-		if a.canAscend(p) {
-			a.ascendPane(p)
-		}
-		a.draw()
 		return
 	}
 	if button != 0 {
@@ -341,12 +335,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	p, chain := a.bottomBarChain()
 	seg, ok := wsbar.At(a.bottomBarSegments(chain), sx)
 	if !ok {
-		// EMPTY bar space: right-click is the ascend gesture (issue #215) —
-		// the slot's gesture, reachable from anywhere along the band.
-		if button == 2 {
-			a.barSlotClick(2)
-		}
-		return true
+		return true // empty band space swallows clicks (no gesture, #222)
 	}
 	// LEFT-click ascends on every crumb kind alike (2026-07-30 tweak: one
 	// gesture for "go there"); RIGHT-click renames a workspace crumb.

@@ -120,7 +120,7 @@ test('a border right-drag flips direction mid-gesture and splits where it releas
   expect(after[1].w, 'the new pane spans border→release').toBeLessThan(right.w / 2 + 40);
 });
 
-test('right-click on the corner circle ascends out of a descended well', async ({ gw }) => {
+test('crumb click ascends; a right-click on the slot no longer does (#222)', async ({ gw, window }) => {
   await gw.enterPlugin('localdb');
   const root = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
@@ -131,8 +131,15 @@ test('right-click on the corner circle ascends out of a descended well', async (
   await gw.descendCell(cx, cy);
   expect((await gw.focused()).gridID, 'descended').not.toBe(root);
 
+  // The removed gesture: right-clicking the slot must do nothing now.
+  const pal = await gw.palette();
+  await window.mouse.click(pal.plusX, pal.plusY, { button: 'right' });
+  await gw.waitIdle();
+  expect((await gw.focused()).gridID, 'slot right-click must not ascend').not.toBe(root);
+
+  // The ascent gesture: click the previous crumb.
   await gw.rightClickPlus();
-  expect((await gw.focused()).gridID, 'corner right-click ascended to root').toBe(root);
+  expect((await gw.focused()).gridID, 'crumb click ascended to root').toBe(root);
 });
 
 test('middle-click ascends out of a descended well', async ({ gw }) => {

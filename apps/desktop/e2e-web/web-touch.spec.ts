@@ -59,12 +59,10 @@ test('touch: long-press-drag from the right edge splits the pane', async ({ gw, 
   expect((await gw.panes()).length, 'long-press-drag split the pane').toBe(before + 1);
 });
 
-test('touch: long-press on the corner circle ascends a text descent (issue #191)', async ({ gw, window }) => {
-  // Inside a text descent the corner circle is a DOM overlay stacked above
-  // the canvas — a real finger targets the div, not the canvas. The shared
-  // overlay translation must classify the hold as a right mousedown AT the
-  // button (its listener ascends); before the fix the canvas-only install
-  // meant the press never reached touchgest and long-press did nothing.
+test('touch: tapping the previous crumb ascends a text descent (#222)', async ({ gw, window }) => {
+  // The ascent gesture is the crumb click (issue #222); on touch that is a
+  // plain TAP on the second-to-last chain crumb — the canvas translation
+  // routes it as the left mousedown the bar hit-test acts on.
   await gw.enterPlugin('e2e');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -77,13 +75,13 @@ test('touch: long-press on the corner circle ascends a text descent (issue #191)
   let p = await gw.focused();
   expect(p.textFocus, 'tap descended into the text tile').not.toBe('');
 
-  // The corner circle sits at the geometric plus center; the palette hook
-  // reports it for the focused pane in any mode.
-  const pal = await gw.palette();
-  await longPressInPlace(window, { x: pal.plusX, y: pal.plusY });
+  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+  const chain = bar.segments.filter((s: any) => s.kind === 'chain');
+  const seg = chain[chain.length - 2];
+  await window.touchscreen.tap(seg.x + seg.w / 2, bar.top + bar.height / 2);
   await gw.waitIdle();
   p = await gw.focused();
-  expect(p.textFocus, 'long-press on the menu button ascended').toBe('');
+  expect(p.textFocus, 'crumb tap ascended').toBe('');
 });
 
 test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, window }) => {

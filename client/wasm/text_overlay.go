@@ -346,10 +346,9 @@ func (a *App) ensureFileToggle() {
 		if p == nil || p.TextFocus == "" {
 			return nil
 		}
-		// Right-click on the round button ascends, like every other corner
-		// circle. Left-click toggles rendered/raw.
-		if ev.Get("button").Int() == 2 {
-			a.ascendPane(p)
+		// LEFT-click toggles rendered/raw; right-click does nothing — the
+		// ascent gesture is clicking the previous crumb (issue #222).
+		if ev.Get("button").Int() != 0 {
 			return nil
 		}
 		a.onToggleFileMode(p)

@@ -110,9 +110,8 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   expect(landed.ascentDepth, 'every saved viewport consumed — none orphaned').toBe(0);
   expect((await chainSegs(window)).length).toBe(1);
 
-  // Right-click on EMPTY bar space ascends one level (issue #215): descend
-  // W1 again, then right-click midway between the crumbs and the title —
-  // a spot no crumb, title, or slot owns.
+  // EMPTY bar space owns no gesture anymore (issue #222, reversing #215):
+  // a right-click there must do nothing; the crumb click is the ascent.
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).gridID).toBe(g1);
   const b2 = await bar(window);
@@ -120,7 +119,10 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   const emptyX = chainEnd.x + chainEnd.w + 20;
   await window.mouse.click(emptyX, b2.top + b2.height / 2, { button: 'right' });
   await gw.waitIdle();
+  expect((await gw.focused()).gridID, 'empty-bar right-click must not ascend').toBe(g1);
+  await gw.rightClickPlus(); // the crumb-click ascent helper
   await expect.poll(async () => (await gw.focused()).gridID, { timeout: 10_000 }).toBe(rootGrid);
+  await gw.waitIdle(); // the ascent animates; input is blocked until it settles
 
   // The intermediate framing persisted: re-descending lands W2's grid where
   // the jump left it (preview = descent target = ascent return, across an
