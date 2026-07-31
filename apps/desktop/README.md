@@ -28,8 +28,8 @@ helper for it. The app spawns `<repo>/gridwell serve` with an ephemeral
 loopback port as `--bind-default`, waits for the server to announce its actual
 bound address, and loads the renderer from that origin. An explicit `bind:` in
 `~/.gridwell/server.yaml` overrides the ephemeral default — that is how one
-server instance serves both the desktop window and a phone browser (see the
-repo README's "Browser client / phone access"). `serve`
+server instance serves both the desktop window and a phone browser (see
+"Running it" in the repo README). `serve`
 requires `~/.gridwell/server.yaml`; each plugin's SQLite DB lives at
 `~/.gridwell/db/<id>/store.db`, derived from its id — there is no fallback DB.
 
@@ -52,8 +52,9 @@ containment for untrusted URL-tile content, so prefer enabling user namespaces.
 
 ## How live URL tiles work
 
-A frozen URL tile is a JPEG drawn into the canvas. When you descend + refresh,
-the renderer calls `window.gridwell.placeWebview` and the main process floats a
+A frozen URL tile is a JPEG drawn into the canvas. Descending goes live
+(owner decision 2026-07-26, #202): the renderer calls
+`window.gridwell.placeWebview` and the main process floats a
 native `WebContentsView` over the pane's content box, on the ONE shared
 persistent session partition (`persist:gridwell` — the Chromium session is
 host-local, 2026-07-26; your logins everywhere, mounts included).
