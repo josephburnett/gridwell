@@ -1,63 +1,31 @@
-// Package markdown is the Gridwell client's markdown engine. It parses GFM
-// (via goldmark — see parse_goldmark.go), lowers the AST into a document model
-// (model.go), and lays it out into positioned draw ops (layout.go) that the
-// wasm canvas renderer paints. This file holds the shared inline types, the
-// alt-text derivation, and the embed-size helper.
+// Package markdown is the Gridwell client's markdown engine: alt-text
+// derivation (this file), the read-only rendered view (render.go), raw
+// soft-wrap (wrap.go), and the preview framing helpers (preview.go).
 //
-// The package is pure Go; nothing here touches syscall/js, so the parse →
-// lower → layout pipeline is exercised entirely by `go test`.
+// The package is pure Go; nothing here touches syscall/js, so everything is
+// exercised entirely by `go test`.
 package markdown
 
-import "strings"
+import (
+	"strings"
 
-// SpanStyle bits combine for inline formatting. StyleLink / StyleEmbed describe
-// link/image semantics rather than text styling but share the inline span type.
-type SpanStyle uint8
-
-const (
-	StyleNone   SpanStyle = 0
-	StyleBold   SpanStyle = 1 << 0
-	StyleItalic SpanStyle = 1 << 1
-	StyleCode   SpanStyle = 1 << 2
-	StyleLink   SpanStyle = 1 << 3
-	StyleEmbed  SpanStyle = 1 << 4
-	StyleStrike SpanStyle = 1 << 5
+	"github.com/yuin/goldmark/ast"
+	gmtext "github.com/yuin/goldmark/text"
 )
-
-// Span is one styled run of inline text. For link spans Href is set; for embed
-// (image / tile-link) spans Src/Alt/Href are set and W/H carry the declared
-// embed pixel size (from the src URL's ?w=&h=, if any).
-type Span struct {
-	Text  string
-	Style SpanStyle
-	Href  string
-	Src   string
-	Alt   string
-	W, H  int
-
-	// SrcStart is the byte offset in the document source where this span's
-	// rendered Text begins; SrcLen is the source length it covers. When SrcLen
-	// == len(Text) the rendered text is a verbatim source slice (plain text,
-	// including the text inside bold/italic/links, whose markers goldmark
-	// consumes), so a rendered-mode caret maps into it linearly. SrcLen == 0
-	// marks a span with no usable source mapping — a soft/hard-break sentinel,
-	// inline code, an autolink — which the caret treats as opaque. Only
-	// rendered-mode editing reads these; rendering ignores them.
-	SrcStart, SrcLen int
-}
 
 // AltFromSource derives a short, one-line alt-text from a markdown document:
 // the plain text of the first block, with markdown markers stripped (so
 // "# Heading" becomes "Heading"), all whitespace runs (newlines included)
 // collapsed to single spaces, clamped to altMaxLen runes. Returns "" for empty
-// or content-free input. Used to label tile-embed links.
+// or content-free input. The store uses it to auto-title text tiles.
 //
-// Collapsing to one line matters: a code-block-first doc would otherwise yield
-// a multi-line alt, and a newline in alt text breaks the generated
-// [alt](href) embed link.
+// Collapsing to one line matters: a code-block-first doc would otherwise
+// yield a multi-line alt.
 func AltFromSource(src string) string {
-	for _, b := range Lower([]byte(src)).Children {
-		s := strings.Join(strings.Fields(blockText(b)), " ")
+	source := []byte(src)
+	root := gmRenderer.Parser().Parse(gmtext.NewReader(source))
+	for b := root.FirstChild(); b != nil; b = b.NextSibling() {
+		s := strings.Join(strings.Fields(blockPlainText(b, source)), " ")
 		if s == "" {
 			continue
 		}
@@ -66,19 +34,36 @@ func AltFromSource(src string) string {
 	return ""
 }
 
-// blockText is the concatenated plain text of a block (embeds skipped),
-// recursing into child blocks.
-func blockText(n Node) string {
+// blockPlainText is the concatenated plain text of one block-level AST node:
+// inline text and code-span text verbatim, code-block lines raw, images (and
+// everything inside them) skipped.
+func blockPlainText(n ast.Node, src []byte) string {
 	var b strings.Builder
-	for _, sp := range n.Spans {
-		if sp.Style&StyleEmbed != 0 {
-			continue
+	_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		b.WriteString(sp.Text)
-	}
-	for _, c := range n.Children {
-		b.WriteString(blockText(c))
-	}
+		switch t := c.(type) {
+		case *ast.Image:
+			return ast.WalkSkipChildren, nil
+		case *ast.Text:
+			b.Write(t.Segment.Value(src))
+			if t.SoftLineBreak() || t.HardLineBreak() {
+				b.WriteByte(' ')
+			}
+		case *ast.String:
+			b.Write(t.Value)
+		case *ast.AutoLink:
+			b.Write(t.Label(src))
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			lines := c.Lines()
+			for i := 0; i < lines.Len(); i++ {
+				seg := lines.At(i)
+				b.Write(seg.Value(src))
+			}
+		}
+		return ast.WalkContinue, nil
+	})
 	return b.String()
 }
 
