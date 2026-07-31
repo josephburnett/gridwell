@@ -69,6 +69,7 @@ func (a *App) installTestHook() {
 		"errors":        js.FuncOf(a.thErrors),
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
+		"shellStandin":  js.FuncOf(a.thShellStandin),
 		"shellText":     js.FuncOf(a.thShellText),
 		"shellFeed":     js.FuncOf(a.thShellFeed),
 		"rawRows":       js.FuncOf(a.thRawRows),
@@ -123,6 +124,41 @@ func (a *App) thShellRenderer(js.Value, []js.Value) any {
 		return conn.rendererKind
 	}
 	return ""
+}
+
+// thShellStandin returns the rect a pane's shell snapshot would draw at
+// right now — the SAME shellStandinRect the renderer uses (issue #224) —
+// or null when no cached preview exists. args[0] names the pane (default:
+// the focused pane). Lets a spec assert the parked stand-in sits exactly
+// where the live xterm canvas was.
+func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
+	p := a.tree.FocusedPane()
+	if len(args) > 0 && args[0].Truthy() {
+		p = a.tree.FindPane(args[0].String())
+	}
+	if p == nil || p.TextFocus == "" {
+		return nil
+	}
+	file, ok := a.descendedTile(p)
+	if !ok || file.Kind != rpc.KindShell {
+		return nil
+	}
+	// The same box the in-pane draw uses (render.go's KindShell arm).
+	r := a.paneRectByID(p.ID)
+	x, y, _, _ := paneContentBox(r)
+	cached, ok := a.urlPreview.Get(file.ContentID(), file.PreviewBlobID)
+	if !ok {
+		return nil
+	}
+	img, ok := previewImage(cached)
+	if !ok {
+		return nil
+	}
+	dx, dy, dw, dh, ok := a.shellStandinRect(img, x, y)
+	if !ok {
+		return nil
+	}
+	return map[string]any{"x": dx, "y": dy, "w": dw, "h": dh}
 }
 
 // thTraces returns the armed ascent-trace highlights as

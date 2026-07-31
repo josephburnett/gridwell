@@ -188,6 +188,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 
 	doc := js.Global().Get("document")
 	container := doc.Call("createElement", "div")
+	container.Set("className", "gw-shell-host")
 	style := container.Get("style")
 	style.Set("position", "absolute")
 	style.Set("display", "block")

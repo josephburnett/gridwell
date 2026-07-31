@@ -62,3 +62,22 @@ func TestContainDstRectDegenerate(t *testing.T) {
 		t.Error("zero-width dest reported ok")
 	}
 }
+
+// TestStandinDstRect: the snapshot goes back exactly where the live canvas
+// was — top-left of the box, intrinsic CSS size, no scaling, no centering
+// (issue #224: contain-fit shifted terminal pixels on every overlay park).
+func TestStandinDstRect(t *testing.T) {
+	// A 2528×1432 device-pixel snapshot at dpr 2 is a 1264×716 CSS canvas.
+	dx, dy, dw, dh, ok := StandinDstRect(2528, 1432, 2, 10, 20)
+	if !ok || !almost(dx, 10) || !almost(dy, 20) || !almost(dw, 1264) || !almost(dh, 716) {
+		t.Errorf("dpr 2: (%v,%v,%v,%v) ok=%v", dx, dy, dw, dh, ok)
+	}
+	// dpr 1 (and a degenerate dpr falls back to 1): intrinsic size verbatim.
+	if _, _, dw, dh, _ := StandinDstRect(1264, 716, 0, 0, 0); !almost(dw, 1264) || !almost(dh, 716) {
+		t.Errorf("dpr fallback: (%v,%v)", dw, dh)
+	}
+	// A degenerate image is not ok — the caller falls back.
+	if _, _, _, _, ok := StandinDstRect(0, 716, 1, 0, 0); ok {
+		t.Error("degenerate image should not be ok")
+	}
+}

@@ -92,7 +92,15 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64)
 
 	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
 		if img, ok := previewImage(cached); ok {
-			drawImageContain(a.cctx, img, x, y, w, h)
+			// Stand-in geometry, not letterbox: the live xterm canvas sits
+			// top-left at integer-cell size, so the snapshot must go back
+			// exactly there — contain-fit centered and scaled it by the
+			// leftover cell fraction, visibly shifting the terminal every
+			// time the overlay parked (issue #224). shellStandinRect is the
+			// one owner of this rect; the e2e hook reads the same function.
+			if dx, dy, dw, dh, ok := a.shellStandinRect(img, x, y); ok {
+				a.cctx.Call("drawImage", img, dx, dy, dw, dh)
+			}
 		}
 	} else if n.PreviewBlobID != 0 {
 		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
@@ -232,4 +240,15 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		}
 		a.urlPreview.Put(tileID, blobID, jpeg, func() { a.draw() })
 	}()
+}
+
+// shellStandinRect is the ONE owner of where a shell snapshot draws inside a
+// pane: preview.StandinDstRect at the current device pixel ratio. The
+// in-pane draw and the e2e testhook (thShellStandin) both read it, so the
+// spec asserts the exact rect the renderer uses.
+func (a *App) shellStandinRect(img js.Value, x, y float64) (dx, dy, dw, dh float64, ok bool) {
+	dpr := a.win.Get("devicePixelRatio").Float()
+	return preview.StandinDstRect(
+		img.Get("naturalWidth").Float(), img.Get("naturalHeight").Float(),
+		dpr, x, y)
 }
