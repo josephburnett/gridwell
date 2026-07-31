@@ -95,10 +95,9 @@ type App struct {
 
 	dragging *dragState
 
-	// locals is the per-pane session-local client state, one entry per live pane,
-	// keyed by pane id. It replaces the former sprawl of parallel per-pane maps
-	// (selection, ascent stack, caret, dirty, frozen-URL pan, and — later — the
-	// live URL/shell handles). Created on demand by a.local; removed atomically on
+	// locals is the per-pane session-local client state, one entry per live
+	// pane, keyed by pane id: selection, the ascent stack, and the live
+	// URL/shell handles. Created on demand by a.local; removed atomically on
 	// pane drop by a.forgetPane. See paneLocal / client/panestate.
 	locals map[string]*paneLocal
 
@@ -179,16 +178,15 @@ type App struct {
 	// PutFetchedContent version guard is the backstop).
 	contentInflight map[string]bool
 
-	// tileInflight tracks qualified tile ids with a pending GetTile request.
-	// An embed names a globally-routable tile id whose grid may never have been
-	// visited (so it isn't cached); resolving it locates the tile's grid and
-	// fetches it. Deduped like gridInflight: the embed drawer fires this on
-	// every cache miss every frame.
+	// tileInflight tracks qualified tile ids with a pending GetTile request
+	// (findTileByID misses). A globally-routable id may name a tile whose
+	// grid was never visited (so it isn't cached); resolving it locates the
+	// tile's grid and fetches it. Deduped like gridInflight.
 	tileInflight map[string]bool
-	// tileLoadFailed records tile ids whose GetTile failed (a broken embed: the
-	// tile was deleted, or its plugin isn't mounted). Without it a "missing"
-	// embed re-fires GetTile every frame forever — the same dogpile gridLoadFailed
-	// prevents for grids. Cleared only by a reload.
+	// tileLoadFailed records tile ids whose GetTile failed (the tile was
+	// deleted, or its plugin isn't mounted). Without it a missing id
+	// re-fires GetTile every frame forever — the same dogpile
+	// gridLoadFailed prevents for grids. Cleared only by a reload.
 	tileLoadFailed map[string]bool
 
 	// ghost is the in-flight visual representation of a node being dragged
@@ -288,9 +286,7 @@ type App struct {
 	// value). "" means "bound to nothing" (textarea is hidden or never
 	// seeded). refreshFileOverlay uses this to decide whether to re-seed
 	// from the cached blob on a focus shift: same tile → preserve typing,
-	// different tile → fresh content. Embed drops also consult it to
-	// push new content into the textarea when it's already bound to the
-	// drop target.
+	// different tile → fresh content.
 	lastTextareaTileID string
 
 	// textareaReady tracks whether the single textarea currently holds the
@@ -341,18 +337,9 @@ type scheduler struct {
 	errExpireCb        js.Func
 }
 
-// paneState is a captured pane viewport plus, when the descent
-// originated from inside a text-tile, the text descent context to
-// restore on matching ascent.
-//
-// TextFocus == "" means "the parent was a plain grid view" — the common
-// case. A non-empty TextFocus is set when descending out of a text tile
-// (e.g. clicking a tile-embed); on ascent the saved TextMode and scroll
-// are reinstalled so a single ascent lands back in the doc rather than
-// in the grid behind it.
-// paneState is the saved-ascent stack entry, now owned by client/panestate
-// (panestate.Saved) so the per-pane state lives in one tested place. Aliased here
-// to keep the many `paneState{...}` construction sites unchanged.
+// paneState is the saved-ascent stack entry, owned by client/panestate
+// (panestate.Saved) so the per-pane state lives in one tested place. Aliased
+// here to keep the many `paneState{...}` construction sites unchanged.
 type paneState = panestate.Saved
 
 // wellWheelDrift is one well's in-flight hover-wheel state: the grid to
@@ -364,10 +351,10 @@ type wellWheelDrift struct {
 	cx, cy float64
 }
 
-// paneLocal is the single owner of one pane's session-local client state: the
-// plain-data part (panestate.State, embedded — selection, ascent stack, caret,
-// dirty, frozen-URL pan) plus, added in later commits, the native live URL/shell
-// handles. One per live pane in App.locals, created on demand by App.local and
+// paneLocal is the single owner of one pane's session-local client state:
+// the plain-data part (panestate.State, embedded — selection and the ascent
+// stack) plus the native live URL/shell handles. One per live pane in
+// App.locals, created on demand by App.local and
 // removed atomically when the pane is dropped (App.forgetPane), so none of this
 // state can outlive or be orphaned from its pane.
 type paneLocal struct {
@@ -560,8 +547,8 @@ type dragState struct {
 	originPaneID string
 	// originFocused records whether the origin pane was ALREADY focused when
 	// the press landed. A bare click on an unfocused pane is focus-only: it
-	// must not also navigate or select — the same rule the + button and the
-	// corner circle follow (act only when prevFocus == pane). Without this, a
+	// must not also navigate or select — the same rule the bar slot follows
+	// (act only when prevFocus == pane). Without this, a
 	// click meant to focus a pane descends if it happens to hit a tile.
 	originFocused bool
 	tileID        string
@@ -818,12 +805,11 @@ func (a *App) fetchGrid(id string) {
 	}()
 }
 
-// fetchTileByID resolves an embed's globally-routable target whose grid isn't
-// cached: GetTile locates the tile (the server resolves a qualified id directly,
-// no descent path needed), then fetchGrid pulls in its grid so findTileByID then
-// hits and the embed both previews and descends. Deduped per tile id; a no-op
-// once the tile's grid is cached. Background, like fetchGrid — the embed paints
-// the missing placeholder until the grid lands, then resolves on the next frame.
+// fetchTileByID resolves a globally-routable tile id whose grid isn't
+// cached: GetTile locates the tile (the server resolves a qualified id
+// directly, no descent path needed), then fetchGrid pulls in its grid so
+// findTileByID then hits. Deduped per tile id; a no-op once the tile's grid
+// is cached. Background, like fetchGrid.
 func (a *App) fetchTileByID(tileID string) {
 	if tileID == "" || a.tileInflight[tileID] || a.tileLoadFailed[tileID] {
 		return
@@ -833,8 +819,9 @@ func (a *App) fetchTileByID(tileID string) {
 		defer delete(a.tileInflight, tileID)
 		tile, err := a.cl.GetTile(context.Background(), tileID)
 		if err != nil || tile == nil {
-			// Broken embed (deleted tile / unmounted plugin): stop re-firing so
-			// the per-frame draw doesn't dogpile the server. Cleared by a reload.
+			// Broken reference (deleted tile / unmounted plugin): stop
+			// re-firing so the per-frame draw doesn't dogpile the server.
+			// Cleared by a reload.
 			a.tileLoadFailed[tileID] = true
 			return
 		}

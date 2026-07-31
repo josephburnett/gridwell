@@ -16,6 +16,9 @@ import (
 // over the pure client/palette package, the floating "+" button, and the
 // popover drawing (one swatch per templateKind, with its identity glyph).
 
+// paletteLayoutFor builds the pure-go palette.Layout snapshot for a
+// given pane. The palette package owns the geometry; wasm only has to
+// pour the inputs in.
 func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
 	cx, cy := a.plusButtonCenter()
 	return palette.Layout{

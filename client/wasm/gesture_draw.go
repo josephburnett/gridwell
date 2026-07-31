@@ -13,9 +13,10 @@ import (
 )
 
 // This file holds every in-flight gesture preview the right-button state
-// machine paints (split / swap / resize / tile-resize / ascend / URL-refresh
-// hints) plus their small canvas helpers. Pure drawing off rightDragState —
-// the classification and commit logic stay in right_button.go.
+// machine paints (split / swap / tile-resize) plus their small canvas
+// helpers. Pure drawing off rightDragState — the classification and commit
+// logic stay in right_button.go. (The left-resize crush preview draws in
+// drawLeftResizePreview.)
 
 // drawRightDragPreview paints the in-flight gesture's visual hint:
 //   - Split: a horizontal/vertical line at the clamped cursor projection.
@@ -23,8 +24,6 @@ import (
 //     valid range), grey otherwise.
 //   - Swap: a double-headed arrow from origin pane center to either
 //     the cursor or the destination pane center.
-//   - Resize: a red border on the side that would close on release,
-//     so the user can drag back before letting go.
 func (a *App) drawRightDragPreview() {
 	rd := a.rightDrag
 	if rd == nil {
@@ -121,7 +120,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	drawHotspotArrow(a.cctx, r.X+w-w/6, r.Y+h/2, arrow, 0) // right
 
 	// Center glyph: swap, the same on every pane (a URL descent is no
-	// longer special — go-live lives on the corner circle).
+	// longer special — go-live lives in the bar slot, #214).
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
 	drawSwapGlyph(a.cctx, cx, cy, 16, colorMuted)
@@ -554,8 +553,8 @@ func drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
 }
 
 // drawGhostLinkBadge paints the chain-link glyph over the dragged ghost
-// when it's sitting over a doc drop target. Same chain-link visual as
-// the right-click-stationary hint on a rendered embed.
+// when the drop would create a cross-plugin LINK (2026-07-19): the
+// in-flight ghost teaches that a left-drag links, never copies.
 func drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
 	stroke := size * 0.10
 	if stroke < 2 {

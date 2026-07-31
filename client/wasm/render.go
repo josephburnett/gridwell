@@ -687,8 +687,8 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 // at the path-switch moment, the well's preview grid is exactly the
 // child grid the user is about to see directly.
 // paintPaneID names the pane whose contents are being painted, so the
-// child-preview hide scopes to the drag's SOURCE pane only ("" for contexts
-// with no pane — embeds in previews, ghosts). Formerly the previewPaneID
+// child-preview hide scopes to the drag's SOURCE pane only ("" for
+// contexts with no pane — ghosts, bar crumbs). Formerly the previewPaneID
 // App scratch field, now passed down (issue #25).
 func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
@@ -770,11 +770,9 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		a.cctx.Call("restore")
 	}
 
-	// Outline: blue for interior wells, red for exit-wells (whose child grid
-	// lives in another plugin). The child-grid uuid drives the color so the
-	// grammar is consistent whether the user sees the tile as a preview or
-	// descends into it (where the same distinction drives the pane border).
-	// Dashed when this well is a link in a regular grid (see isLinkTile).
+	// Outline: every well is blue; a cross-plugin (exit) well differs by
+	// the DASHED border, not hue — dashed always means link (isLinkTile),
+	// "a reference you can unlink".
 	if dashed {
 		setTileDash(a.cctx)
 	}
@@ -1045,8 +1043,8 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 	// Fill + per-kind outline color in one pass; strokeTileBorder draws
 	// the inset border for all kinds that have one. borderPx lets the
 	// caller scale the outline down for distant previews. dashed marks a
-	// LINK (an embed or a dragged reference) — every kind must honor it,
-	// or that kind lies about ownership (issue #169).
+	// LINK (a tile whose content lives elsewhere) — every kind must honor
+	// it, or that kind lies about ownership (issue #169).
 	if dashed {
 		setTileDash(c)
 		defer clearTileDash(c)
@@ -1270,7 +1268,3 @@ func (a *App) drawTriangle(cx, cy, angle, size float64) {
 	a.cctx.Call("closePath")
 	a.cctx.Call("fill")
 }
-
-// paletteLayoutFor builds the pure-go palette.Layout snapshot for a
-// given pane. The palette package owns the geometry; wasm only has to
-// pour the inputs in.

@@ -151,7 +151,7 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 }
 
 // createPaneAtCell fires CreatePane at the given cell. Footprint is 1×1;
-// created UNNAMED like wells (naming happens via the name bubble) and with
+// created UNNAMED like wells (naming happens via the bar-title rename) and with
 // no layout blob (never arranged — first descent installs the default
 // single pane).
 func (a *App) createPaneAtCell(p *pane.Pane, cellX, cellY int64) {

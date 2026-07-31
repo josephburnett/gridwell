@@ -14,22 +14,22 @@ import (
 )
 
 // Naming — "name the room you're in" (issues #61, #118, #213). The focused
-// pane's name renders in the bottom bar's CURRENT crumb (bottombar.go), not
-// in a pill floating over pane content: the bar is reserved layout outside
-// every live view's rect, so the label and the inline rename input work
-// identically over canvas, shells, and live url panes with no native twin.
-// LEFT-click on the crumb opens the rename input when the name is
+// pane's name renders as the bottom bar's centered TITLE (bottombar.go),
+// not in a pill floating over pane content: the band is carved out of
+// every native surface's rect (panebox.BarInset), so the label and the
+// inline rename input work identically over canvas, shells, and live url
+// panes with no native twin.
+// RIGHT-click on the title opens the rename input when the name is
 // user-editable (Enter commits the versioned SetTile rename — a USER-owned
 // name the automatic captures never overwrite; Escape/blur cancels);
 // read-only contexts (the node grid, a plugin root, an ephemeral visit, a
-// text tile's derived name) just show their label. RIGHT-click toggles the
-// tmux-style pane zoom (Tree.ToggleZoom) — the crumb is the pane's one
-// universal handle, as the bubble was before it.
+// text tile's derived name) just show their label. LEFT-click on the title
+// toggles the tmux-style pane zoom (Tree.ToggleZoom).
 //
 // This file owns the DECISIONS: what the name is (bubbleLabel), what it
 // edits (renameTarget), the shared inline input, and the one rename door.
 
-// renameTarget returns the tile the focused pane's rename pill edits, or
+// renameTarget returns the tile the focused pane's rename input edits, or
 // ok=false when nothing here is renamable:
 //   - descended into a url/shell tile → that tile ("rename the tmux pane").
 //     Text tiles derive their name from their first line (refused server-side
@@ -63,15 +63,14 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 	return t, true
 }
 
-// bubbleLabel is what the focused pane's bubble shows and whether it is
-// user-editable: the renameTarget's name when one exists; otherwise a
+// bubbleLabel is what the bar title shows for the focused pane and whether
+// it is user-editable: the renameTarget's name when one exists; otherwise a
 // read-only context label ("home" on the node grid, the plugin's config
 // label at its root, "ephemeral" inside a dying visit, a text tile's derived
 // first-line name).
-// bubbleDecorate applies pane-state markers to the bubble text — currently
-// the zoom indicator (issue #124). ONE owner: both the DOM pill and the
-// native live-url pill render bubbleLabel's output, so they can never
-// disagree about whether the pane reads as zoomed.
+// bubbleDecorate applies pane-state markers to the title text — currently
+// the zoom indicator (issue #124). ONE owner: everything that shows the
+// name renders bubbleLabel's output.
 func (a *App) bubbleDecorate(p *pane.Pane, label string) string {
 	if a.tree.Zoomed == p.ID {
 		return "⛶ " + label
@@ -111,7 +110,7 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 }
 
 // togglePaneZoom zooms the focused pane to the full layout, or back —
-// right-click on the bar's current crumb (issues #118, #213).
+// left-click on the bar's centered title (issues #118, #213, #220).
 func (a *App) togglePaneZoom() {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -186,7 +185,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	doc.Get("body").Call("appendChild", in)
 	in.Call("focus")
 	in.Call("select")
-	a.draw() // hides the pill while editing
+	a.draw() // hides the title while editing
 }
 
 // commitRename posts the user-owned name and patches the cache so the pill

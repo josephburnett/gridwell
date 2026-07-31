@@ -43,7 +43,7 @@ type dropTarget struct {
 // optimistic about placement (it shows the snap-to-cell even over an
 // occupied cell, matching the pre-unification behavior); the commit does
 // the authoritative overlap check and snaps back. The unification covers
-// the action CLASS (delete/embed/place/reject) — where the bug lived.
+// the action CLASS (delete/link/place/reject) — where the bug lived.
 func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	if a.ghost == nil {
 		return

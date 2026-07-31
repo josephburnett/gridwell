@@ -12,10 +12,8 @@ import (
 )
 
 // Live-tab presence is no longer modeled as tile state. A URL tile in
-// the grid view always shows its cached preview JPEG; that preview is
-// written when a descended client disconnects (see server/url_stream.go
-// closeSession). Right-click on a URL tile means fork-on-drag-release,
-// nothing else.
+// the grid view always shows its cached preview JPEG, written back at the
+// ascent freeze.
 
 // drawImageContain draws img into the (x,y,w,h) rect using object-fit:
 // contain semantics: black bars fill the rect, then the image is uniformly

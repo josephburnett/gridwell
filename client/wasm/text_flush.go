@@ -9,10 +9,9 @@ import (
 
 // This file is the ONE way text content reaches the server.
 //
-// The content-store entry ({bytes, base, dirty}, keyed by tile id) owns a text
-// tile's current body: raw-mode keystrokes mirror into it (the textarea input
-// listener), rendered-mode keystrokes write it directly, embed drops splice
-// into it. Every flush below reads bytes out of the store BY TILE ID and posts
+// The content-store entry ({bytes, base, dirty}, keyed by tile id) owns a
+// text tile's current body: textarea keystrokes mirror into it (the input
+// listener). Every flush below reads bytes out of the store BY TILE ID and posts
 // them only when the entry is dirty. No flush ever reads the DOM.
 //
 // That is the fix for the 2026-07-18 cross-tile stomp, stated as a structural

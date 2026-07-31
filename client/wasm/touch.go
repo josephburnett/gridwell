@@ -15,9 +15,9 @@ import (
 // returns, so the input handlers need no touch-specific branches and the whole
 // policy is unit-tested without a browser.
 //
-// ONE install (installOverlayTouch) serves every surface — the canvas AND the
-// DOM overlays that implement right-button semantics (the corner toggle
-// circle, the name pill, the xterm container, the file textarea). Real mouse
+// ONE install (installOverlayTouch) serves every surface — the canvas AND
+// the DOM overlays that implement button semantics (the text-mode toggle,
+// the xterm container, the file textarea). Real mouse
 // events reach those overlays by browser hit-testing; the touch translation
 // must follow the same routing or a long-press right-click never reaches them
 // (issue #191: the canvas-only install was exactly that gap — long-press on

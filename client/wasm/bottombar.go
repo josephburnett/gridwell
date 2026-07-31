@@ -270,7 +270,7 @@ func (a *App) barSlotClick(button int) {
 }
 
 // drawChainCrumb paints one descent-chain square: the tile's own preview
-// via the same drawer the parent grid and markdown embeds use — so each
+// via the same drawer the parent grid uses — so each
 // crumb carries its GRID appearance, kind border included (blue wells,
 // text green, url purple…; 2026-07-30 tweak). A 1px margin is the only
 // chrome: the rightmost crumb is always the current one, so it needs no
@@ -334,11 +334,13 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 }
 
 // bottomBarClick consumes a click in the bar band. A workspace crumb is
-// the workspace's universal handle: LEFT-click renames it inline,
-// RIGHT-click LEAVES workspace k and everything deeper. A chain crumb is a
+// the workspace's universal handle: LEFT-click LEAVES workspace k and
+// everything deeper, RIGHT-click renames it inline. A chain crumb is a
 // place: LEFT-click ascends the focused pane all the way back to that
-// level (issue #212). Returns true when the click was in the band, whether
-// or not it hit a crumb, so the click never falls through to a pane below.
+// level (issue #212) — the one bar ascent gesture (#222). Left clicks in
+// the band never fall through to a pane below; right clicks outside the
+// title/workspace crumbs DO fall through, so the pane border gestures
+// under the band stay reachable (#220).
 func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
@@ -464,8 +466,8 @@ func (a *App) openRenameInput() {
 // single-level ascents — each performing the SAME writebacks its animated
 // twin does (text/framing saves, well-view persistence, portal root views,
 // panestate pops) — until one ordinary ascent remains, which runs through
-// ascendPane so the final landing keeps the familiar animation and embed
-// restore. Clicking the crumb you are already on is a no-op.
+// ascendPane so the final landing keeps the familiar animation and any
+// stashed-descent restore. Clicking the crumb you are already on is a no-op.
 func (a *App) ascendToChainCrumb(p *pane.Pane, c pane.Crumb) {
 	if !pane.DeeperThan(p, c) {
 		return
@@ -486,8 +488,8 @@ func (a *App) ascendToChainCrumb(p *pane.Pane, c pane.Crumb) {
 
 // ascendOneLevelInstant pops exactly one descent level with no animation:
 // the intermediate step of a multi-level crumb jump. Each arm mirrors its
-// animated twin's writebacks; embed-return restores are deliberately
-// skipped — the user asked for a level ABOVE the embed origin, so the
+// animated twin's writebacks; stashed-descent restores are deliberately
+// skipped — the user asked for a level ABOVE the stash origin, so the
 // stashed return is consumed and discarded, not re-descended into.
 func (a *App) ascendOneLevelInstant(p *pane.Pane) {
 	switch {

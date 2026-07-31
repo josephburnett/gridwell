@@ -258,10 +258,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		}
 		return nil
 	}
-	// Workspace bar: the reserved band above the strip. The crumb mirrors
-	// the pane name bubble: LEFT-click renames that workspace inline;
-	// RIGHT-click LEAVES it (and everything deeper) — the one gesture that
-	// crosses the workspace boundary; in-pane ascent never does.
+	// The bottom bar: the focused pane's bottom band (#220). LEFT-click a
+	// workspace crumb LEAVES it (and everything deeper) — the one gesture
+	// that crosses the workspace boundary; RIGHT-click renames. Chain-crumb
+	// left-clicks ascend (#222).
 	if a.bottomBarClick(sx, sy, args[0].Get("button").Int()) {
 		args[0].Call("preventDefault")
 		return nil
@@ -299,9 +299,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 	if button == 1 {
-		// Middle (third) button ascends the pane under the cursor. The
-		// edge band no longer ascends; this is one of the two new ascent
-		// gestures (the other is right-click on the corner circle).
+		// Middle (third) button ascends the pane under the cursor — the
+		// in-pane shortcut for the bar's crumb-click ascent (#222).
 		// preventDefault suppresses the browser's middle-click autoscroll.
 		args[0].Call("preventDefault")
 		a.menu.Close()
@@ -931,8 +930,7 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) bool {
 	if p.TextFocus != "" {
 		// Inside a text/url/shell descent, a bare click isn't navigation:
-		// ascent moved to the middle button / a right-click on the corner
-		// circle. Pan-drag (rendered mode) is handled in mousemove.
+		// ascent lives on the middle button and the bar's crumb click.
 		return false
 	}
 	cellX, cellY := cellAtScreen(p, r, sx, sy)
@@ -960,7 +958,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64) 
 		return true
 	case rpc.IsWorkspaceKind(hit.Kind):
 		// The third descent verb: swap the whole pane tree for the stored
-		// workspace. The way back out is the bar, not the corner circle.
+		// workspace. The way back out is the bar.
 		a.startWorkspaceDescent(p, hit)
 		return true
 	}
@@ -999,8 +997,8 @@ func zoomDist(z1, z2 float64) float64 {
 // when it's descended into a text/url/shell tile, a well ascent when it's
 // in a child grid, a portal ascent (pop the + menu entry stack) when it
 // entered a plugin at its root, nothing at the launcher. This is the single
-// entry point for every ascent gesture (middle button, right-click on the
-// corner circle).
+// entry point for every ascent gesture (the middle button, the bar's
+// crumb click).
 func (a *App) ascendPane(p *pane.Pane) {
 	switch {
 	case p.TextFocus != "":
@@ -1526,10 +1524,9 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextScrollY = initialScroll
 			fp.TextScrollX = initialScrollX
 			fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
-			// Reset the per-pane caret on each new descent — it's view state,
-			// Unsaved-edit state is NOT touched
-			// here: it lives tile-scoped in the content store, so descending
-			// this pane elsewhere can't strand a previous document's typing.
+			// Unsaved-edit state is NOT touched here: it lives tile-scoped
+			// in the content store, so descending this pane elsewhere can't
+			// strand a previous document's typing.
 			a.refreshFileOverlay()
 			// Descending IS the engagement gesture (owner decision
 			// 2026-07-26, issue #202): a url reopens, a shell reconnects
@@ -1606,8 +1603,7 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 // (descendEphemeral: a url opened over a live shell descent). One ascent
 // lands back on the stashed descent — and, for a cross-grid stash, its
 // anchor + path — rather than in the grid behind it. No-op when the saved
-// state carries no focus (an ordinary ascent). (The embed-click descents
-// that shared this mechanism died with issue #218.)
+// state carries no focus (an ordinary ascent).
 func (a *App) restoreStashedDescent(fp *pane.Pane, saved *paneState) {
 	if saved == nil || saved.TextFocus == "" {
 		return
@@ -1688,9 +1684,9 @@ func (a *App) startTextAscent(p *pane.Pane) {
 	p.TextFocus = ""
 	a.refreshFileOverlay()
 
-	// If the saved state had a TextFocus, the descent originated from inside
-	// another text tile (an embed click) — restore that doc (and, for a
-	// cross-grid follow, its anchor + path) as the ascent landing on complete.
+	// If the saved state had a TextFocus, a deeper ephemeral visit was
+	// stacked over that descent — restore it (and, for a cross-grid
+	// follow, its anchor + path) as the ascent landing on complete.
 	a.startTransition(&paneTransition{
 		paneID:      p.ID,
 		traceTileID: file.ID,
@@ -1722,10 +1718,10 @@ func (a *App) exitFileFocusInstant(p *pane.Pane) {
 
 // exitTextInstant pops a text/url/shell descent with no animation,
 // performing the same saves and stream teardown the animated ascent does.
-// restoreEmbed controls whether a saved embed-origin descent is restored
-// (a single ascent lands back on the doc) or consumed and discarded (a
-// multi-level crumb jump is heading ABOVE the embed origin — bottombar.go).
-func (a *App) exitTextInstant(p *pane.Pane, restoreEmbed bool) {
+// restoreStash controls whether a stashed descent is restored (a single
+// ascent lands back on it) or consumed and discarded (a multi-level crumb
+// jump is heading ABOVE the stash origin — bottombar.go).
+func (a *App) exitTextInstant(p *pane.Pane, restoreStash bool) {
 	// The freeze is kept here (streams may be live) except for an ephemeral
 	// tile, which is deleted instead — same rule as startTextAscent.
 	ephemeral := false
@@ -1744,10 +1740,10 @@ func (a *App) exitTextInstant(p *pane.Pane, restoreEmbed bool) {
 	p.TextFocus = ""
 	if saved != nil {
 		p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
-		// If the saved state captured a text descent (embed click), restore it
+		// If the saved state captured a stacked text descent, restore it
 		// (and its anchor/path for a cross-grid follow) so a single ascent
-		// lands on the doc, not the grid behind it.
-		if restoreEmbed {
+		// lands on it, not the grid behind it.
+		if restoreStash {
 			a.restoreStashedDescent(p, saved)
 		}
 	}

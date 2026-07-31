@@ -198,7 +198,7 @@ func (a *App) thErrors(js.Value, []js.Value) any {
 
 // thTextInnerBox returns the focused pane's file inner reading box (the rect
 // rendered markdown is laid out and clipped to) as {x, y, w, h} in screen
-// pixels — the same textInnerBox the painter and caret hit-tests use, so an
+// pixels — the same textInnerBox the painter uses, so an
 // e2e can click a known position inside the rendered text. Empty when the
 // focused pane is not descended into a file.
 func (a *App) thTextInnerBox(js.Value, []js.Value) any {

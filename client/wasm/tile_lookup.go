@@ -12,10 +12,10 @@ import (
 // pane's grid, so the renderer, the url stream, and the ascent still
 // need the cache-wide walk.
 
-// findTileByID walks the client tile cache for any cached row with the given
-// id. Used to resolve embed hrefs. On a miss it kicks a background fetch
-// (fetchTileByID) to pull in the target's grid — an embed names a tile whose
-// grid may never have been visited — so a later frame resolves it.
+// findTileByID walks the client tile cache for any cached row with the
+// given id (ephemeral url visits and urlsync read it). On a miss it kicks a
+// background fetch (fetchTileByID) to pull in the target's grid — the id
+// may name a tile whose grid was never visited — so a later frame resolves.
 func (a *App) findTileByID(id string) *rpc.Tile {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)

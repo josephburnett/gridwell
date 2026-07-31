@@ -22,8 +22,8 @@ import (
 // the pane's inner reading-box width. Using the pane's own width (not a fixed
 // 800px constant) is what reflows the doc to the pane — a split pane is narrower
 // than 800px, so the old fixed width laid the doc out at 800 and the pane clip
-// chopped the right edge ("cut off"). The painter, both caret hit-tests, and
-// caret movement all read this one width so they stay in agreement; the preview
+// chopped the right edge ("cut off"). The painter and the textarea sizing
+// read this one width so they stay in agreement; the preview
 // lays out at the framing width it cover-crops (PreviewFrame.ContentW), which
 // for a focused tile is this same value — so an unfocused pane is a true scaled
 // copy of the focused one, not a re-wrap. (Scale is fixed at 1.0 in a descended
@@ -164,25 +164,25 @@ func setFont(c js.Value, sizePx float64, family string, bold bool) {
 	c.Set("font", fmt.Sprintf("normal %s %.2fpx %s", weight, sizePx, family))
 }
 
+// rawTextLineHeight is the line-advance multiple for raw monospace markdown
+// source. Shared by the canvas painter (drawMarkdownText) and the editing
+// <textarea> (text_overlay.go) so a focused pane's textarea and its blurred
+// canvas preview render line-for-line identically — the same content, the
+// same size, the same place, whether or not the pane has focus.
+const rawTextLineHeight = 1.35
+
 // drawMarkdownText paints src as raw monospace text at the given scale. Used
 // for source-mode preview and as a faint backdrop behind the textarea overlay.
 // Text mode soft-wraps to the SAME columns the editing textarea shows
 // (markdown.WrapRawText, issue #216) — the face is monospace, so the budget
 // is a pure column count and the text cannot reflow when focus moves.
-// rawTextLineHeight is the line-advance multiple for raw monospace markdown
-// source. Shared by the canvas painter (drawMarkdownText) and the editing
-// <textarea> (file_overlay.go) so a focused pane's textarea and its blurred
-// canvas preview render line-for-line identically — the same content, the
-// same size, the same place, whether or not the pane has focus.
-const rawTextLineHeight = 1.35
-
 func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
 	setFont(c, fontPx*scale, st.monospace, false)
 	c.Set("fillStyle", st.textColor)
 	// Place each line's baseline exactly where a CSS line box would, so this
-	// matches the editing <textarea> (file_overlay.go) to the pixel and the
+	// matches the editing <textarea> (text_overlay.go) to the pixel and the
 	// raw text doesn't shift when focus enters or leaves the pane. A line box
 	// is lineHeight tall; the font's content area (fontBoundingBox asc+desc,
 	// for whatever font Chromium actually resolved) is centered in it with

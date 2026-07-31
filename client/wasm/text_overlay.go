@@ -362,17 +362,16 @@ func (a *App) ensureFileToggle() {
 		return nil
 	})
 	btn.Call("addEventListener", "mousedown", a.textToggleCb)
-	// Suppress the browser context menu so right-click reads purely as the
-	// ascend gesture above.
+	// Suppress the browser context menu so a right-click on the toggle
+	// stays inert (#222) instead of popping a menu.
 	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 {
 			args[0].Call("preventDefault")
 		}
 		return nil
 	}))
-	// Touch: the shared translation routes a long-press here as a right
-	// mousedown (ascend) and a tap as a left one (toggle) — without this
-	// the button was mouse-only and long-press did nothing (issue #191).
+	// Touch: the shared translation routes a tap here as a left mousedown
+	// (toggle) — without this the button was mouse-only (issue #191).
 	a.installOverlayTouch(btn, nil)
 	a.doc.Get("body").Call("appendChild", btn)
 	a.textToggleBtn = btn

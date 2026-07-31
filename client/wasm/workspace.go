@@ -10,9 +10,9 @@ package main
 // the write decision) and client/wsbar (the bar geometry) — this file is
 // the glue: gestures in, RPCs out, draw calls between.
 //
-// Bar gestures mirror the pane name bubble (issue #118): LEFT-click a crumb
-// renames that workspace inline; RIGHT-click a crumb LEAVES workspace k and
-// everything deeper. Descent and ascent animate like every other tile: the
+// Bar gestures: LEFT-click a workspace crumb LEAVES workspace k and
+// everything deeper; RIGHT-click renames it inline (issues #212, #220).
+// Descent and ascent animate like every other tile: the
 // zoom rides through the pane tile's footprint, and because the preview is
 // the live layout under one uniform scale (client/panepreview's tested
 // property), the swap lands on exactly what the preview showed.

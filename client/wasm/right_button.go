@@ -53,10 +53,6 @@ const (
 	rightDragTileResize
 )
 
-// The corner-circle rightDragAscend gesture is gone (issue #214): the
-// circle lives in the bottom bar, where a plain right CLICK ascends
-// (barSlotClick) — bar clicks never reach this gesture layer.
-
 // rightDragState carries everything the move and up handlers need to
 // finish (or cancel) the gesture. One discriminated struct keeps the
 // frame-tick bookkeeping in one place.
@@ -109,8 +105,8 @@ type rightDragState struct {
 // (sx, sy) is over pane p with screen rect r.
 func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	// Resolve the facts gesture.Classify orders, holding onto the lookups
-	// (embed hit, tile, divider, region) so the arming switch can reuse
-	// them instead of recomputing. Every lookup here is a pure read; the
+	// (tile, divider, region) so the arming switch can reuse them instead
+	// of recomputing. Every lookup here is a pure read; the
 	// state edits happen only in the arming switch below.
 	in := gesture.Input{
 		InGridView: p.TextFocus == "",

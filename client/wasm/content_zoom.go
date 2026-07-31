@@ -45,7 +45,7 @@ func clampContentZoom(z float64) float64 {
 }
 
 // textScaleFor is the render transform for a descended text pane: the fixed
-// base scale times the tile's content zoom. The painter, the caret hit-test,
+// base scale times the tile's content zoom. The painter,
 // the logical wrap width, and the textarea box all derive from this ONE
 // helper, so they can never disagree about how big the text is.
 func (a *App) textScaleFor(p *pane.Pane) float64 {
