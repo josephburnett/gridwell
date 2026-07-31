@@ -340,8 +340,9 @@ func (a *App) draw() {
 	// the named crumb in the bar. Drawn last so nothing covers it.
 	if a.ws.Depth() > 0 {
 		a.cctx.Set("strokeStyle", colorPaneTileBorder)
+		a.cctx.Set("lineWidth", 2.0)
+		a.cctx.Call("strokeRect", 1, 1, a.width-2, a.height-2)
 		a.cctx.Set("lineWidth", 1.0)
-		a.cctx.Call("strokeRect", 0.5, 0.5, a.width-1, a.height-1)
 	}
 
 	// Inside a workspace, every repaint arms the debounced layout persister:
