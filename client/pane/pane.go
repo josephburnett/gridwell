@@ -372,54 +372,6 @@ func replacePane(n TreeNode, targetID string, replacement TreeNode) (TreeNode, b
 	return n, false
 }
 
-// Close removes the focused pane. The focused pane's sibling is hoisted up
-// to take the parent's place. If only one pane remains, Close returns an
-// error per spec ("the last pane cannot be closed").
-func (t *Tree) Close() error {
-	if t.Count() == 1 {
-		return errors.New("cannot close the last pane")
-	}
-	id := t.Focus
-	newRoot, sibling, ok := dropPane(t.Root, id)
-	if !ok {
-		return errors.New("focus not in tree")
-	}
-	t.Root = newRoot
-	// Move focus to the surviving sibling (or whatever leaf is closest).
-	if sibling != "" {
-		t.Focus = sibling
-	} else {
-		// Should not happen: dropPane always reports a sibling unless the
-		// drop targeted root, which Count==1 would already have caught.
-		t.Walk(func(p *Pane) { t.Focus = p.ID })
-	}
-	return nil
-}
-
-// dropPane returns the modified tree, the id of a pane to focus next (the
-// surviving sibling), and ok=true if the target was found.
-func dropPane(n TreeNode, targetID string) (TreeNode, string, bool) {
-	if n.IsLeaf() {
-		return n, "", false
-	}
-	// If A is the target leaf, B replaces this split.
-	if n.Split.A.IsLeaf() && n.Split.A.Pane.ID == targetID {
-		return n.Split.B, anyLeafID(n.Split.B), true
-	}
-	if n.Split.B.IsLeaf() && n.Split.B.Pane.ID == targetID {
-		return n.Split.A, anyLeafID(n.Split.A), true
-	}
-	if a, sib, ok := dropPane(n.Split.A, targetID); ok {
-		n.Split.A = a
-		return n, sib, true
-	}
-	if b, sib, ok := dropPane(n.Split.B, targetID); ok {
-		n.Split.B = b
-		return n, sib, true
-	}
-	return n, "", false
-}
-
 func anyLeafID(n TreeNode) string {
 	if n.IsLeaf() {
 		return n.Pane.ID
@@ -428,46 +380,6 @@ func anyLeafID(n TreeNode) string {
 		return id
 	}
 	return anyLeafID(n.Split.B)
-}
-
-// CollapseSplit removes one child of the given split, hoisting the
-// surviving child into the split's slot. If dropA is true, the A child
-// (and its subtree) is dropped and B replaces the split; otherwise A
-// replaces it. Returns an error if the split is not in the tree.
-//
-// After collapse, focus moves to some leaf inside the surviving
-// subtree (the previously-focused pane may have been the one removed).
-//
-// Used by the input layer when a right-drag squeezes one side of a
-// divider to zero.
-func (t *Tree) CollapseSplit(s *Split, dropA bool) error {
-	t.Zoomed = "" // structural edits unzoom first (issue #80)
-	holder := findSplitHolder(&t.Root, s)
-	if holder == nil {
-		return errors.New("split not in tree")
-	}
-	if dropA {
-		*holder = s.B
-	} else {
-		*holder = s.A
-	}
-	t.Focus = anyLeafID(*holder)
-	return nil
-}
-
-// findSplitHolder returns a pointer to the *TreeNode slot whose Split ==
-// target, or nil if not found.
-func findSplitHolder(n *TreeNode, target *Split) *TreeNode {
-	if n.IsLeaf() {
-		return nil
-	}
-	if n.Split == target {
-		return n
-	}
-	if h := findSplitHolder(&n.Split.A, target); h != nil {
-		return h
-	}
-	return findSplitHolder(&n.Split.B, target)
 }
 
 // Swap exchanges the positions of two panes in the tree. After Swap,
@@ -518,32 +430,4 @@ func (t *Tree) SetFocus(id string) error {
 	}
 	t.Focus = id
 	return nil
-}
-
-// SetRatio sets the ratio of the split that contains the named pane as one
-// of its direct children. Returns false if no such split exists (the pane
-// is at root).
-func (t *Tree) SetRatio(paneID string, ratio float64) bool {
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-	return setRatio(&t.Root, paneID, ratio)
-}
-
-func setRatio(n *TreeNode, paneID string, ratio float64) bool {
-	if n.IsLeaf() {
-		return false
-	}
-	if (n.Split.A.IsLeaf() && n.Split.A.Pane.ID == paneID) ||
-		(n.Split.B.IsLeaf() && n.Split.B.Pane.ID == paneID) {
-		n.Split.Ratio = ratio
-		return true
-	}
-	if setRatio(&n.Split.A, paneID, ratio) {
-		return true
-	}
-	return setRatio(&n.Split.B, paneID, ratio)
 }

@@ -71,86 +71,6 @@ func TestSplitHorizontalCreatesSibling(t *testing.T) {
 	}
 }
 
-func TestCloseLastPaneRefused(t *testing.T) {
-	tr := NewTree()
-	if err := tr.Close(); err == nil {
-		t.Error("expected error closing last pane")
-	}
-}
-
-func TestSplitAndClose(t *testing.T) {
-	tr := NewTree()
-	first := tr.FocusedPane().ID
-	if _, err := tr.Split(Vertical); err != nil {
-		t.Fatal(err)
-	}
-	// Focus is still on first.
-	if tr.Focus != first {
-		t.Errorf("focus shifted: %q", tr.Focus)
-	}
-	if err := tr.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if tr.Count() != 1 {
-		t.Errorf("count after close = %d", tr.Count())
-	}
-}
-
-func TestNestedSplitsAndClose(t *testing.T) {
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	b, err := tr.Split(Horizontal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = tr.SetFocus(b.ID)
-	c, err := tr.Split(Vertical)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Count() != 3 {
-		t.Errorf("count = %d", tr.Count())
-	}
-	// Close c; b should remain.
-	_ = tr.SetFocus(c.ID)
-	if err := tr.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if tr.FocusedPane().ID != b.ID {
-		t.Errorf("focus after close = %q, want %q", tr.Focus, b.ID)
-	}
-	if tr.FindPane(a) == nil {
-		t.Error("pane a got dropped")
-	}
-}
-
-func TestSetRatio(t *testing.T) {
-	tr := NewTree()
-	a := tr.FocusedPane().ID
-	b, _ := tr.Split(Horizontal)
-
-	if !tr.SetRatio(a, 0.3) {
-		t.Error("SetRatio returned false for valid pane")
-	}
-	// Walk to find the split's ratio.
-	if tr.Root.Split.Ratio != 0.3 {
-		t.Errorf("ratio = %v", tr.Root.Split.Ratio)
-	}
-	// Clamping.
-	if !tr.SetRatio(b.ID, 1.5) {
-		t.Error("SetRatio returned false")
-	}
-	if tr.Root.Split.Ratio != 1.0 {
-		t.Errorf("clamp upper bound: ratio = %v", tr.Root.Split.Ratio)
-	}
-	if !tr.SetRatio(b.ID, -0.5) {
-		t.Error("SetRatio returned false")
-	}
-	if tr.Root.Split.Ratio != 0.0 {
-		t.Errorf("clamp lower bound: ratio = %v", tr.Root.Split.Ratio)
-	}
-}
-
 // TestSetFocusUnknown returns an error.
 func TestSetFocusUnknown(t *testing.T) {
 	tr := NewTree()
@@ -439,62 +359,8 @@ func TestSwapInDeepTree(t *testing.T) {
 	}
 }
 
-func TestCollapseSplitDropA(t *testing.T) {
-	tr, a, b := twoPaneTree(t)
-	if err := tr.CollapseSplit(tr.Root.Split, true); err != nil {
-		t.Fatal(err)
-	}
-	if tr.Count() != 1 {
-		t.Errorf("count = %d, want 1", tr.Count())
-	}
-	if tr.FindPane(b) == nil {
-		t.Error("surviving pane b missing")
-	}
-	if tr.FindPane(a) != nil {
-		t.Error("dropped pane a still present")
-	}
-	if tr.Focus != b {
-		t.Errorf("focus = %q, want %q", tr.Focus, b)
-	}
-}
-
-func TestCollapseSplitDropB(t *testing.T) {
-	tr, a, b := twoPaneTree(t)
-	if err := tr.CollapseSplit(tr.Root.Split, false); err != nil {
-		t.Fatal(err)
-	}
-	if tr.FindPane(a) == nil {
-		t.Error("surviving pane a missing")
-	}
-	if tr.FindPane(b) != nil {
-		t.Error("dropped pane b still present")
-	}
-	if tr.Focus != a {
-		t.Errorf("focus = %q, want %q", tr.Focus, a)
-	}
-}
-
-func TestCollapseSplitNested(t *testing.T) {
-	// root: H (A=a, B=split V (A=b, B=c))
-	tr, a, b, c := threePaneTree(t)
-
-	// Collapse the OUTER split, dropping A (pane a).
-	// Surviving subtree is the inner V split (still containing b, c).
-	if err := tr.CollapseSplit(tr.Root.Split, true); err != nil {
-		t.Fatal(err)
-	}
-	if tr.Count() != 2 {
-		t.Errorf("count = %d, want 2", tr.Count())
-	}
-	if tr.FindPane(b) == nil || tr.FindPane(c) == nil {
-		t.Error("inner panes lost")
-	}
-	if tr.FindPane(a) != nil {
-		t.Error("pane a still present")
-	}
-}
-
 // TestPropertyAtLeastOnePane runs a random sequence of split/close operations
+// (close = RemoveSegment on the focused leaf, the live crush-close mechanism)
 // and asserts that the pane count never drops below 1.
 func TestPropertyAtLeastOnePane(t *testing.T) {
 	tr := NewTree()
@@ -509,7 +375,9 @@ func TestPropertyAtLeastOnePane(t *testing.T) {
 		case "split-v":
 			_, _ = tr.Split(Vertical)
 		case "close":
-			_ = tr.Close()
+			if h := findPaneNode(&tr.Root, tr.Focus); h != nil {
+				_ = tr.RemoveSegment(*h)
+			}
 		case "focus-other":
 			tr.Walk(func(p *Pane) {
 				if p.ID != tr.Focus {

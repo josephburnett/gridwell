@@ -262,56 +262,6 @@ func ClassifyRegion(r Rect, bandPx, sx, sy float64) Region {
 	return RegionNone
 }
 
-// RatioFromCursor projects the cursor (sx, sy) onto the divider's
-// axis inside the parent split's container rect, and returns the
-// resulting split ratio in [0, 1]. Useful for live divider drags:
-// the caller can call SetRatio (or directly mutate Split.Ratio) with
-// this value on every mousemove tick.
-//
-// dir picks the axis: Horizontal divider → projects onto y;
-// Vertical divider → onto x. Cursor positions outside the container
-// are clamped to the edges.
-func RatioFromCursor(container Rect, dir Direction, sx, sy float64) float64 {
-	var num, denom float64
-	if dir == Horizontal {
-		num = sy - container.Y
-		denom = container.H
-	} else {
-		num = sx - container.X
-		denom = container.W
-	}
-	if denom <= 0 {
-		return 0.5
-	}
-	r := num / denom
-	if r < 0 {
-		r = 0
-	}
-	if r > 1 {
-		r = 1
-	}
-	return r
-}
-
-// SplitGestureActive reports whether the cursor at (curX, curY) has
-// moved past the start (startX, startY) in the direction expected for
-// the given side: top expects a downward drag, bottom an upward drag,
-// left a rightward drag, and right a leftward drag. The "active" state
-// drives the split preview line color (blue vs grey).
-func SplitGestureActive(side Side, startX, startY, curX, curY float64) bool {
-	switch side {
-	case SideTop:
-		return curY > startY
-	case SideBottom:
-		return curY < startY
-	case SideLeft:
-		return curX > startX
-	case SideRight:
-		return curX < startX
-	}
-	return false
-}
-
 // MinPanePx is THE minimum size of a pane side, universal across every way
 // a pane can acquire a size (issue #167): the left-drag resize clamp, the
 // right-drag crush-to-collapse threshold, the drag-to-split clamp, and the
