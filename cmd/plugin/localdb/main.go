@@ -16,9 +16,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/plugin/guest"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/shellsvc"
-	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/internal/tmux"
 )
 
@@ -30,13 +28,12 @@ func main() {
 		os.Exit(1)
 	}
 	uuid := cfg["uuid"]
-	if _, err := pluginmeta.Verify(dbPath, uuid, cfg["kind"]); err != nil {
-		fmt.Fprintf(os.Stderr, "gridwell-localdb: %v\n", err)
-		os.Exit(1)
-	}
-	st, err := store.Open(dbPath)
+	// Verify + open + identity injection are one fused step (issue #196:
+	// a store opened without the verified config id silently answers
+	// identity reads with the bootstrap mint).
+	st, err := localdb.OpenVerified(dbPath, uuid, cfg["kind"])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gridwell-localdb: open db: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gridwell-localdb: %v\n", err)
 		os.Exit(1)
 	}
 
