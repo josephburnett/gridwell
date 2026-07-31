@@ -23,9 +23,6 @@ type Kind int
 
 const (
 	None Kind = iota
-	// EmbedHint surfaces the chain-link glyph over a tile-embed inside a
-	// rendered text descent. Drag and release both do nothing.
-	EmbedHint
 	// Ascend is armed on the corner +/refresh/back circle when the pane
 	// has somewhere to ascend to. Release inside the circle ascends;
 	// dragging out cancels.
@@ -51,11 +48,6 @@ const (
 // The booleans are evaluated in priority order, so a field only matters
 // when every higher-priority field is false.
 type Input struct {
-	// OverEmbed is true when the pane is a rendered text descent and the
-	// cursor is over a tile-embed. Highest priority — the embed hint wins
-	// over everything so the chain-link is always discoverable.
-	OverEmbed bool
-
 	// InGridView is true when the pane shows a grid (p.TextFocus == 0) —
 	// tile gestures are only valid there. OverTile is true when the cursor
 	// is over a tile; InTileCenter is true when it's in that tile's inner
@@ -77,8 +69,6 @@ type Input struct {
 // ascends — bar clicks never reach the pane gesture layer.)
 func Classify(in Input) Kind {
 	switch {
-	case in.OverEmbed:
-		return EmbedHint
 	case in.InGridView && in.OverTile:
 		if in.InTileCenter {
 			return TileCenter

@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"io"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -106,7 +104,7 @@ func TestReadContentResolvesLeafLinkAtServer(t *testing.T) {
 }
 
 func TestPreviewDoorResolvesLeafLink(t *testing.T) {
-	cl, baseURL, rootA, rootB := twoPluginHTTPServer(t)
+	cl, _, rootA, rootB := twoPluginHTTPServer(t)
 	ctx := context.Background()
 
 	// A url tile in A with a frozen JPEG preview.
@@ -140,20 +138,4 @@ func TestPreviewDoorResolvesLeafLink(t *testing.T) {
 		t.Errorf("link preview = %q, want the target's jpeg", got)
 	}
 
-	// The HTTP embed door resolves through the same point.
-	resp, err := http.Get(baseURL + "/preview/tile/" + link.ID)
-	if err != nil {
-		t.Fatalf("GET preview: %v", err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("preview door status %d: %s", resp.StatusCode, body)
-	}
-	if ct := resp.Header.Get("Content-Type"); ct != "image/jpeg" {
-		t.Errorf("content type %q, want image/jpeg (the target's frozen frame)", ct)
-	}
-	if string(body) != string(jpeg) {
-		t.Errorf("embed preview = %q, want the target's jpeg", body)
-	}
 }

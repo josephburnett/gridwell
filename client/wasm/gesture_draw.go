@@ -42,21 +42,7 @@ func (a *App) drawRightDragPreview() {
 	case rightDragTileResize:
 		a.drawTileHotspotOverlay(rd)
 		a.drawTileResizePreview(rd)
-	case rightDragEmbedHint:
-		a.drawEmbedHintOverlay(rd)
 	}
-}
-
-// drawEmbedHintOverlay paints the chain-link glyph centered inside the
-// rendered embed under the cursor. Surfaces the message that this is a
-// hyperlink — nothing else right-click can do here.
-func (a *App) drawEmbedHintOverlay(rd *rightDragState) {
-	c := a.cctx
-	x, y, w, h := rd.embedRect[0], rd.embedRect[1], rd.embedRect[2], rd.embedRect[3]
-	// Dim the embed slightly so the badge reads.
-	c.Set("fillStyle", "rgba(0,0,0,0.35)")
-	c.Call("fillRect", x, y, w, h)
-	drawGhostLinkBadge(c, x+w/2, y+h/2, min(w, h))
 }
 
 // drawPaneHotspotOverlay paints the affordance overlay for pane-management
@@ -533,4 +519,58 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 		a.cctx.Call("strokeRect", rr.X+half, rr.Y+half, rr.W-paneBorderPx, rr.H-paneBorderPx)
 	}
 	a.cctx.Set("lineWidth", 1.0)
+}
+
+// drawGhostNoEntryBadge paints the international "no entry" sign (red
+// disc, white ring, white diagonal slash) centered at (cx, cy). Used as
+// a ghost overlay during drags whose drop would be rejected — most
+// notably left-drag (move) of a source-grid tile into a regular grid,
+// which the server rejects in favor of right-drag (clone/link).
+func drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
+	radius := size * 0.32
+	if radius < 14 {
+		radius = 14
+	}
+	ringW := radius * 0.18
+	// Red disc.
+	c.Set("fillStyle", colorNoEntryFill)
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, radius, 0.0, 2*math.Pi, false)
+	c.Call("fill")
+	// White ring inside the red.
+	c.Set("strokeStyle", colorNoEntryStroke)
+	c.Set("lineWidth", ringW)
+	c.Call("beginPath")
+	c.Call("arc", cx, cy, radius-ringW/2-1, 0.0, 2*math.Pi, false)
+	c.Call("stroke")
+	// White diagonal slash (top-left → bottom-right).
+	slashR := radius - ringW*1.4
+	angle := math.Pi / 4
+	c.Set("lineCap", "round")
+	c.Call("beginPath")
+	c.Call("moveTo", cx+math.Cos(angle+math.Pi)*slashR, cy+math.Sin(angle+math.Pi)*slashR)
+	c.Call("lineTo", cx+math.Cos(angle)*slashR, cy+math.Sin(angle)*slashR)
+	c.Call("stroke")
+	c.Set("lineCap", "butt")
+	c.Set("lineWidth", 1.0)
+}
+
+// drawGhostLinkBadge paints the chain-link glyph over the dragged ghost
+// when it's sitting over a doc drop target. Same chain-link visual as
+// the right-click-stationary hint on a rendered embed.
+func drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
+	stroke := size * 0.10
+	if stroke < 2 {
+		stroke = 2
+	}
+	r := size * 0.20
+	off := r * 0.55
+	c.Set("strokeStyle", colorPlusFg)
+	c.Set("lineWidth", stroke)
+	c.Call("beginPath")
+	c.Call("arc", cx-off, cy, r, 0.0, 2*math.Pi, false)
+	c.Call("stroke")
+	c.Call("beginPath")
+	c.Call("arc", cx+off, cy, r, 0.0, 2*math.Pi, false)
+	c.Call("stroke")
 }

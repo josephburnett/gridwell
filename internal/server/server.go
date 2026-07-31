@@ -1,7 +1,7 @@
 // Package server is the HTTP layer of Gridwell. The RPC surface is
 // served by a Connect-RPC handler at /gridwell.v1.Gridwell/<Method>
 // (binary-proto and JSON-over-proto codecs both supported); the embed
-// preview JPEG/PNG endpoint stays at /preview/tile/<id>; and the static
+// and the static
 // web/ directory is served at /. Live URL tiles are hosted natively by the
 // Electron shell (WebContentsView), and shell PTY bytes ride the Electron
 // main process's gRPC OpenShell stream against the node export — the
@@ -179,7 +179,6 @@ func (s *Server) routes() {
 
 	// Embed preview is plain image bytes for external viewers (VS Code,
 	// etc.); not RPC.
-	s.mux.HandleFunc("/preview/tile/", s.previewTile)
 
 	// (The /session/ door is gone — 2026-07-26: the Chromium session is
 	// host-local; nothing hydrates or dehydrates a plugin session blob.)

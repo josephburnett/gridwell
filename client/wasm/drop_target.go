@@ -60,9 +60,6 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 		TileID:        d.tileID,
 		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
-	docTarget, overDoc := a.docDropTargetAt(sx, sy)
-	in.OverDoc = overDoc
-	in.DocReject = a.docRejectAt(sx, sy)
 	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
 	in.HasTarget = haveT
 	if haveT {
@@ -85,17 +82,12 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 		targetPaneID = t.pane.ID
 		targetCellSize = t.cellSize
 	}
-	var docPaneID string
-	if overDoc {
-		docPaneID = docTarget.pane.ID
-	}
-	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in.DocReject, in.Forbidden, clone,
-		d.originPaneID, targetPaneID, docPaneID, d.srcCellSize, targetCellSize)
+	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in.Forbidden, clone,
+		d.originPaneID, targetPaneID, d.srcCellSize, targetCellSize)
 	a.ghost.paneID = plan.PaneID
 	a.ghost.targetCellSize = plan.TargetCellSize
 	a.ghost.targetFragmentation = plan.Fragmentation
 	a.ghost.forbidden = plan.Forbidden
-	a.ghost.overDoc = plan.OverDoc
 	a.ghost.link = plan.Link
 	a.canvas.Get("style").Set("cursor", plan.Cursor)
 

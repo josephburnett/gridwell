@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"syscall/js"
 
-	embedpkg "github.com/josephburnett/gridwell/client/embed"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -428,6 +428,7 @@ func (a *App) refreshFileToggle() {
 // pane state changes (descent completes, mode toggles, ascent begins).
 func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
+	a.refreshRenderedOverlay()
 	a.ensureFileTextarea()
 	ta := a.textTextarea
 
@@ -464,7 +465,7 @@ func (a *App) refreshFileOverlay() {
 	style.Set("display", "block")
 
 	// Sync the textarea singleton to the focused tile. The decision
-	// lives in client/embed.DecideTextareaSync so it's natively
+	// lives in textedit.DecideTextareaSync so it's natively
 	// testable — the wasm side just gathers inputs from cache + DOM
 	// and applies the result. Critically, on a tile switch we clear
 	// immediately even when the blob hasn't loaded yet, so the
@@ -473,7 +474,7 @@ func (a *App) refreshFileOverlay() {
 	// refreshFileOverlay again with the actual content.
 	gid := a.gridIDForPane(p)
 	_, pendingEdit := a.c.DirtyContent(a.contentKey(a.lastTextareaTileID))
-	in := embedpkg.TextareaSyncInput{
+	in := textedit.TextareaSyncInput{
 		FocusedTileID: p.TextFocus,
 		LastTileID:    a.lastTextareaTileID,
 		CurrentValue:  ta.Get("value").String(),
@@ -491,7 +492,7 @@ func (a *App) refreshFileOverlay() {
 	// lives in its own content-store entry, and the dirty sweep posts it no
 	// matter which pane (if any) still shows it. The old "flush old first /
 	// discard when the pane is gone" seam is unrepresentable now.
-	dec := embedpkg.DecideTextareaSync(in)
+	dec := textedit.DecideTextareaSync(in)
 	if dec.SetValue {
 		ta.Set("value", dec.Value)
 		// Track whether the textarea now has content for textedit.CanvasHiddenByOverlay:

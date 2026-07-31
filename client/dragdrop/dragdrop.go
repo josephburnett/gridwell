@@ -281,9 +281,6 @@ const (
 	// DropDelete: released over the source pane's + (trashcan) button.
 	// This is the regression branch.
 	DropDelete
-	// DropEmbed: released over a raw-text descent — insert a markdown
-	// reference instead of moving the tile.
-	DropEmbed
 	// DropRejected: nothing legal here (read-only doc, no target,
 	// forbidden cross-grid move, same cell, or occupied) — snap back.
 	DropRejected
@@ -307,8 +304,6 @@ const (
 //
 // Field provenance in the wasm caller (impure resolvers stay there):
 //   - OverDelete:  a.overDeleteButton(d, sx, sy)
-//   - OverDoc:     a.docDropTargetAt(sx, sy)
-//   - DocReject:   a.docRejectAt(sx, sy)
 //   - HasTarget:   a.dropTargetAt(sx, sy, tileID) resolved
 //   - Forbidden:   per gesture — move: a.dropForbiddenForMove(d, t)
 //     (MoveForbidden); clone: dropForbiddenForClone(d, t) (CloneForbidden)
@@ -327,8 +322,6 @@ type DropInput struct {
 	Clone         bool   // right-drag armed
 	TileID        string // "" = pan / empty-space drag
 	OverDelete    bool
-	OverDoc       bool
-	DocReject     bool
 	HasTarget     bool
 	Forbidden     bool
 	// TargetReadOnly: the destination grid refuses mutations (the node grid,
@@ -348,23 +341,17 @@ type DropInput struct {
 //
 // The order is canonical and load-bearing — it mirrors the left-drag
 // commit (onMouseUp) and reconciles the right-drag commit
-// (commitRightClone), which is behavior-preserving because the two never
-// actually contend: the + (trashcan) button lives in a grid-pane corner
-// while OverDoc/DocReject describe a *different* pane that is a text
-// descent, so OverDelete and OverDoc/DocReject are mutually exclusive in
-// practice. Earlier branches strictly win:
+// (commitRightClone). Earlier branches strictly win:
 //
 //  1. !Started      → Navigate     (bare click beats everything)
 //  2. IsTemplate    → CreateTemplate
 //  3. TileID == ""  → PanEnd
 //  4. OverDelete    → Delete
-//  5. OverDoc       → Embed
-//  6. DocReject     → Rejected      (read-only rendered doc)
-//  7. !HasTarget    → Rejected
-//  8. Forbidden     → Rejected      (cross-grid move; move-only input)
-//  9. SameCell      → Rejected
-//  10. Occupied     → Rejected
-//  11. else         → Clone ? DropClone : DropMove
+//  5. !HasTarget    → Rejected
+//  6. Forbidden     → Rejected      (cross-grid move; move-only input)
+//  7. SameCell      → Rejected
+//  8. Occupied      → Rejected
+//  9. else          → Clone ? DropClone : DropMove
 func DecideDrop(in DropInput) DropAction {
 	switch {
 	case !in.Started && !in.OriginFocused:
@@ -377,10 +364,6 @@ func DecideDrop(in DropInput) DropAction {
 		return DropPanEnd
 	case in.OverDelete:
 		return DropDelete
-	case in.OverDoc:
-		return DropEmbed
-	case in.DocReject:
-		return DropRejected
 	case !in.HasTarget:
 		return DropRejected
 	case in.Forbidden:
@@ -409,7 +392,6 @@ type GhostPlan struct {
 	TargetCellSize float64 // size the ghost lerps toward
 	Fragmentation  float64 // 1 = shattering into the trashcan
 	Forbidden      bool    // draw the no-entry badge
-	OverDoc        bool    // draw the link (embed) badge
 	// Link: this drop will create a LINK, not move the tile — draw the
 	// dashed ghost + chain badge so the user learns mid-drag that the
 	// source stays put and the destination gains a reference. Without this
@@ -419,17 +401,13 @@ type GhostPlan struct {
 	Cursor string // CSS cursor: "" or "not-allowed"
 }
 
-// GhostPlanForDrop maps a DecideDrop verdict (plus the two reject causes
-// and the clone flavor) to the ghost styling. The pane ids and cell sizes
-// are passed in because the ghost rests in a different pane per verdict:
-// the origin pane for a delete or an off-canvas/forbidden-doc reject, the
-// doc pane for an embed, the drop target for a placement or a forbidden
-// cross-grid move.
+// GhostPlanForDrop maps a DecideDrop verdict (plus the reject cause and
+// the clone flavor) to the ghost styling. The pane ids and cell sizes are
+// passed in because the ghost rests in a different pane per verdict: the
+// origin pane for a delete or an off-canvas reject, the drop target for a
+// placement or a forbidden cross-grid move.
 //
 //   - Delete  → shrink to 1/5 and fully fragment, in the origin pane.
-//   - Embed   → source size in the doc pane, link badge.
-//   - Rejected, docReject → source size in origin; no-entry badge UNLESS
-//     this is a clone (the clone preview never drew the badge).
 //   - Rejected, forbidden → source size in the target pane, no-entry badge.
 //   - Rejected, otherwise (off-canvas / file-mode) → source size in origin,
 //     no badge.
@@ -441,24 +419,18 @@ type GhostPlan struct {
 // SameCell/Occupied never reach here as a distinct style: the preview is
 // optimistic about placement and shows the snap-to-cell (the commit does
 // the authoritative overlap check).
-func GhostPlanForDrop(action DropAction, docReject, forbidden, clone bool,
-	originPaneID, targetPaneID, docPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
+func GhostPlanForDrop(action DropAction, forbidden, clone bool,
+	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
 	switch action {
 	case DropDelete:
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
-	case DropEmbed:
-		return GhostPlan{PaneID: docPaneID, TargetCellSize: srcCellSize, OverDoc: true}
 	case DropLink:
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Link: true}
 	case DropRejected:
-		switch {
-		case docReject:
-			return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize, Forbidden: !clone, Cursor: "not-allowed"}
-		case forbidden:
+		if forbidden {
 			return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
-		default:
-			return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
 		}
+		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
 	default: // DropMove / DropClone
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize}
 	}

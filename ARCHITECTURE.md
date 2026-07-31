@@ -34,7 +34,7 @@ explicitly (see [§9 Known drift](#9-known-drift-do-not-trust-these-comments)).
                 │  IPC  (window.gridwell bridge, CSS-px bounds both ways)
 ┌───────────────▼──────────────────────────────────────────────────────┐
 │ Go→wasm client               client/wasm/  +  pure client/* packages  │
-│   canvas, panes, gestures, framing, previews, menu, embeds            │
+│   canvas, panes, gestures, framing, previews, menu                    │
 │   THE INSTABILITY EPICENTER (~13.4k LOC, 0 unit tests — see §5)        │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  Connect-RPC  (the Gridwell service)
@@ -248,10 +248,10 @@ testable `client/*` packages (`pane`, `preview`, `markdown`, `gesture`,
 hottest files in the entire repository live here (`input.go` ~2,300 LOC,
 `render.go` ~1,350, `right_button.go` ~900, `main.go` ~1,150). `make check` *compiles* this package (the `GOOS=js` build) but
 **executes none of it.** Only the e2e harness touches it — as a black box.
-Within it, `embed.go`/`embed_drop.go`, `touch.go`, and `file_overlay.go` are
-reachable by **no gate at all** (no e2e simulates an embed edit, a touch
-gesture, or an OS file drop) — and "embed reverts to link text" is a named
-recurring bug with no test home.
+Within it, `touch.go` and `file_overlay.go` are reachable by **no gate at
+all** (no e2e simulates a touch gesture or an OS file drop). (`embed.go`/
+`embed_drop.go` and their whole feature were deleted with the custom
+markdown engine, issue #218.)
 
 ### 5.1 The `App` god-object
 
@@ -529,8 +529,10 @@ all fixed. What remains (verified July 2026):
   resolution (the popover floats over whatever pane is under it; resolving
   that pane first would transfer focus and SyncFocus-close the menu). Closing
   goes through the same owner's transitions (focus change, ascent, gesture end).
-- **Render an embed.** `ResolveEmbedTileID` → `fetchTileByID` →
-  `PlanEmbedDescent`, possibly re-anchoring across a plugin boundary.
+- **Render a doc.** The rendered view is a sanitized-HTML overlay div
+  (`markdown.RenderHTML`: goldmark, go-org for `.org` names, bluemonday) on
+  the focused pane; every other view paints raw soft-wrapped source on
+  canvas (issues #216/#218). Embeds are gone — a doc link is just a link.
 
 ---
 

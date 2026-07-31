@@ -52,11 +52,6 @@ const (
 	// cell) defines the moving corner. New footprint = bounding box of
 	// (pin, cursor) with each side >= 1. Pin can be crossed mid-drag.
 	rightDragTileResize
-	// rightDragEmbedHint is armed when right-down lands on a rendered
-	// tile-embed inside a text descent. Drag does nothing; release does
-	// nothing. The sole purpose is to surface the chain-link icon so the
-	// user discovers that "this is a reference, not a tile."
-	rightDragEmbedHint
 )
 
 // The corner-circle rightDragAscend gesture is gone (issue #214): the
@@ -133,12 +128,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 		Region:     pane.ClassifyRegion(r, resizeBandPx, sx, sy),
 	}
 
-	var hit *embedHit
-	if p.TextFocus != "" && p.TextMode == rpc.TextModeRendered {
-		hit = a.embedHitAt(p.ID, sx, sy)
-		in.OverEmbed = hit != nil
-	}
-
 	var tile *rpc.Tile
 	if in.InGridView {
 		tile = a.tileAtScreen(p, r, sx, sy)
@@ -149,18 +138,6 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	}
 
 	switch gesture.Classify(in) {
-	case gesture.EmbedHint:
-		// No drag, no commit — the gesture exists only to surface the
-		// chain-link glyph while the button is held.
-		a.rightDrag = &rightDragState{
-			kind:      rightDragEmbedHint,
-			startX:    sx,
-			startY:    sy,
-			curX:      sx,
-			curY:      sy,
-			embedRect: [4]float64{hit.x, hit.y, hit.w, hit.h},
-		}
-		a.draw()
 	case gesture.TileCenter, gesture.TileResize:
 		// armTileGesture re-derives center-vs-resize via dragdrop and arms
 		// the matching state (and primes the clone ghost for the center).
@@ -375,9 +352,6 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitTileCenter(rd, sx, sy)
 	case rightDragTileResize:
 		a.commitTileResize(rd)
-	case rightDragEmbedHint:
-		// No-op: the gesture only existed to surface the chain-link glyph
-		// while the button was held. Release just clears it.
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -495,9 +469,6 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		TileID:        d.tileID,
 		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
-	docTarget, overDoc := a.docDropTargetAt(sx, sy)
-	in.OverDoc = overDoc
-	in.DocReject = a.docRejectAt(sx, sy)
 	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
 	in.HasTarget = haveT
 	var dropX, dropY int64
@@ -519,13 +490,6 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
-		return
-	case dragdrop.DropEmbed:
-		// A raw-mode text descent under the cursor turns the gesture into
-		// "insert markdown reference". The source tile is left in place
-		// (clone semantics), the doc gains a link.
-		a.commitEmbedDrop(d, docTarget)
-		a.cancelDragSnapBack(d)
 		return
 	case dragdrop.DropRejected:
 		// Read-only doc, no target, same cell, or occupied — snap back.

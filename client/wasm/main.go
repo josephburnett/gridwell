@@ -18,7 +18,6 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
-	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
@@ -226,16 +225,6 @@ type App struct {
 	// tile's PreviewBlobID changes server-side — see client/preview.
 	urlPreview *preview.Cache
 
-	// mdCache memoizes markdown layout (parse → lower → layout) keyed by
-	// content hash + content width, so a frame doesn't re-lay-out every
-	// visible text tile. Positions are logical; the painter scales them, so a
-	// cached layout is valid across zoom levels. See layoutMarkdown.
-	mdCache map[mdCacheKey]markdown.LayoutResult
-
-	// mdImages caches HTMLImageElements for real markdown images (![](src)),
-	// keyed by src URL; mdImageState tracks load progress (0 loading, 1 ready,
-	// 2 error). See drawMarkdownImage.
-	mdImages     map[string]js.Value
 	mdImageState map[string]int8
 
 	// shellAlive caches the result of the ShellSessionAlive probe per
@@ -276,6 +265,15 @@ type App struct {
 	// current crumb hides its name text underneath it — bottombar.go).
 	renameEditing bool
 
+	// renderedView is the singleton read-only rendered-HTML overlay div
+	// (issue #218; rendered_overlay.go). renderedReady mirrors
+	// textareaReady for the rendered mode: the canvas paints raw source
+	// until the overlay holds content. lastRenderedKey caches the render
+	// (tile+version+org) so scrolling never re-renders.
+	renderedView    js.Value
+	renderedReady   bool
+	lastRenderedKey string
+
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
 	// the textarea overlay — letting the text content fill the pane
@@ -286,12 +284,6 @@ type App struct {
 	// urlModalOpen tracks whether the URL-entry modal is currently open.
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
-
-	// embedHits collects click-targets for tile-embeds rendered inside
-	// text panes this frame. Reset at the start of each draw() and
-	// appended to as embeds are painted by drawMarkdownInPane. Queried by
-	// the input handler to descend on click. See embed.go.
-	embedHits []embedHit
 
 	// lastTextareaTileID tracks which text-tile id the singleton
 	// textarea is currently bound to (i.e., whose blob it holds in its
@@ -536,13 +528,6 @@ type ghost struct {
 	// does, so dragging in and back out smoothly reassembles.
 	displayedFragmentation float64
 	targetFragmentation    float64
-
-	// overDoc is true while the cursor is hovering a raw-mode text-pane
-	// drop target (right-drag-clone semantics → insert markdown link
-	// instead of clone). The ghost renderer paints a chain-link badge
-	// over the tile so the user sees the action will be "link", not
-	// "clone".
-	overDoc bool
 
 	// forbidden is set when the cursor is over a drop target that would
 	// be rejected: a rendered-mode doc (read-only), a same-namespace

@@ -38,15 +38,6 @@ func TestClassifyPriority(t *testing.T) {
 		want Kind
 	}{
 		{
-			name: "embed beats everything",
-			in: Input{
-				OverEmbed:  true,
-				InGridView: true, OverTile: true, InTileCenter: true,
-				Region: swap,
-			},
-			want: EmbedHint,
-		},
-		{
 			name: "tile center is the clone handle",
 			in: Input{
 				InGridView: true, OverTile: true, InTileCenter: true,

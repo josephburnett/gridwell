@@ -441,12 +441,11 @@ the empty anchor, so "/" (and bare `/3/4`) is home. Crossing a plugin
 boundary is a PORTAL — the anchor swaps — so tile ids never mix namespaces;
 a remote anchor is simply more leading segments (`/<ssh>/<plugin>/1/4`).
 The legacy `?a=<anchor>` form still decodes (old bookmarks) but is never
-emitted. Two kinds of links:
-- **URL bar / bookmarks** — anchor + path + viewport. A *place*. The
-  ascent-return target depends on it.
-- **Markdown embed links** — a single qualified id (`<plugin_uuid>/<tile_id>`).
-  A *thing*: globally routable, stable, survives restructuring of the containing
-  space. The server resolves it directly without the descent path.
+emitted. A link is a *place*: anchor + path + viewport in the URL bar, and
+the ascent-return target depends on it. (Markdown embed links — a tile id
+as a doc href with special meaning — were deleted with the custom markdown
+engine, owner decision 2026-07-30, issue #218; a doc link is just a link,
+and the rendered view is read-only sanitized HTML via goldmark/go-org.)
 
 ## The plugin gRPC interface (same as the server interface)
 

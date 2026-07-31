@@ -444,20 +444,8 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", OverDelete: true}, DropDelete},
 		{"delete wins over an occupied target (precedence)",
 			DropInput{Started: true, TileID: "7", OverDelete: true, HasTarget: true, Occupied: true}, DropDelete},
-		{"delete wins over a doc target (precedence)",
-			DropInput{Started: true, TileID: "7", OverDelete: true, OverDoc: true}, DropDelete},
 		{"delete fires even with no target",
 			DropInput{Started: true, TileID: "7", OverDelete: true, HasTarget: false}, DropDelete},
-
-		// --- doc embed vs reject ---
-		{"over raw-text doc -> embed",
-			DropInput{Started: true, TileID: "7", OverDoc: true}, DropEmbed},
-		{"embed wins over a normal target",
-			DropInput{Started: true, TileID: "7", OverDoc: true, HasTarget: true}, DropEmbed},
-		{"rendered (read-only) doc -> rejected",
-			DropInput{Started: true, TileID: "7", DocReject: true}, DropRejected},
-		{"docReject does not block delete (delete is earlier)",
-			DropInput{Started: true, TileID: "7", OverDelete: true, DocReject: true}, DropDelete},
 
 		// --- rejection cases, one cause each ---
 		{"no target -> rejected",
@@ -512,36 +500,29 @@ func TestGhostPlanForDrop(t *testing.T) {
 	cases := []struct {
 		name      string
 		action    DropAction
-		docReject bool
 		forbidden bool
 		clone     bool
 		want      GhostPlan
 	}{
-		{"delete shrinks+fragments in origin", DropDelete, false, false, false,
+		{"delete shrinks+fragments in origin", DropDelete, false, false,
 			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
-		{"embed: doc pane, link badge, source size", DropEmbed, false, false, false,
-			GhostPlan{PaneID: doc, TargetCellSize: srcSz, OverDoc: true}},
-		{"rejected docReject (move): no-entry in origin", DropRejected, true, false, false,
-			GhostPlan{PaneID: origin, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
-		{"rejected docReject (clone): NO badge, still not-allowed", DropRejected, true, false, true,
-			GhostPlan{PaneID: origin, TargetCellSize: srcSz, Forbidden: false, Cursor: "not-allowed"}},
-		{"rejected forbidden cross-grid: no-entry in target", DropRejected, false, true, false,
+		{"rejected forbidden cross-grid: no-entry in target", DropRejected, true, false,
 			GhostPlan{PaneID: target, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
-		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false, false, false,
+		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false, false,
 			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
-		{"move snaps to target cell", DropMove, false, false, false,
+		{"move snaps to target cell", DropMove, false, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
-		{"clone snaps to target cell", DropClone, false, false, true,
+		{"clone snaps to target cell", DropClone, false, true,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
 		// The teaching signal: a cross-namespace left-drag previews as a
 		// LINK (chain badge) — never as a bare move, or the source's
 		// survival after the drop would read as a surprise duplicate.
-		{"link snaps to target cell with the chain badge", DropLink, false, false, false,
+		{"link snaps to target cell with the chain badge", DropLink, false, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
 	}
 	for _, c := range cases {
-		got := GhostPlanForDrop(c.action, c.docReject, c.forbidden, c.clone,
-			origin, target, doc, srcSz, tgtSz)
+		got := GhostPlanForDrop(c.action, c.forbidden, c.clone,
+			origin, target, srcSz, tgtSz)
 		if got != c.want {
 			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
 		}

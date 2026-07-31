@@ -604,12 +604,6 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
-  // renderedCaret reads the focused pane's rendered-mode caret: the source byte
-  // offset the next keystroke will splice at, or has=false when none is placed.
-  renderedCaret(): Promise<{ has: boolean; offset: number }> {
-    return this.win.evaluate(() => (window as any).__gridwellTest.renderedCaret());
-  }
-
   // textInnerBox returns the screen rect the focused pane's file content is
   // rendered into (null when not descended into a file) — where to click to
   // hit the rendered text.

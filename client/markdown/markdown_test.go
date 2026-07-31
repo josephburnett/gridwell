@@ -5,31 +5,6 @@ import (
 	"testing"
 )
 
-func TestEmbedSizeFromSrcEdges(t *testing.T) {
-	cases := []struct {
-		src  string
-		w, h int
-	}{
-		{"/preview/tile/5", 0, 0}, // no query
-		{"/preview/tile/5?w=192&h=128", 192, 128},
-		{"/preview/tile/5?w=0&h=0", 0, 0},       // explicit zero
-		{"/preview/tile/5?h=128", 0, 128},       // only h
-		{"/preview/tile/5?w=192", 192, 0},       // only w
-		{"/preview/tile/5?w=abc&h=128", 0, 128}, // non-numeric → 0
-		{"/preview/tile/5?w=&h=", 0, 0},         // empty values
-		{"/preview/tile/5?other=stuff", 0, 0},   // ignored params
-	}
-	for _, tc := range cases {
-		t.Run(tc.src, func(t *testing.T) {
-			gotW, gotH := embedSizeFromSrc(tc.src)
-			if gotW != tc.w || gotH != tc.h {
-				t.Errorf("embedSizeFromSrc(%q) = %d,%d; want %d,%d",
-					tc.src, gotW, gotH, tc.w, tc.h)
-			}
-		})
-	}
-}
-
 func TestAltFromSource(t *testing.T) {
 	cases := []struct {
 		name string

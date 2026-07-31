@@ -78,10 +78,7 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	}
 	// Ctrl/Cmd +/-/0 zooms a descended tile's CONTENT (issue #82) — checked
 	// first so Electron's built-in page zoom never double-fires.
-	if a.handleContentZoomKey(args[0]) {
-		return nil
-	}
-	a.editRenderedKey(args[0])
+	a.handleContentZoomKey(args[0])
 	return nil
 }
 
@@ -382,35 +379,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			// on the corner circle. Swallow it.
 			return nil
 		}
-		// Rendered mode: clicks may land on a tile-embed (descent into the
-		// referenced tile) or on plain content (start a pan drag). Text
-		// mode: the textarea covers most of the pane and handles drag
-		// itself. Margin clicks (text mode, narrow textarea) fall through
-		// to a no-op.
-		if p.TextMode == rpc.TextModeRendered {
-			if hit := a.embedHitAt(p.ID, sx, sy); hit != nil {
-				if a.descendIntoEmbed(p, hit) {
-					return nil
-				}
-				// Embed under cursor but unresolvable (broken link or
-				// cross-grid target): swallow the click so it doesn't start
-				// a pan that would scroll the doc away from the embed.
-				return nil
-			}
-			// Editable rendered mode: place the text caret at the click. A
-			// read-only tile (a plugin's @info / file metadata) gets no caret.
-			// A drag still pans (armed below); a bare click just places.
-			a.placeMarkdownCaret(p, r, sx, sy)
-			a.dragging = &dragState{
-				originPaneID:  p.ID,
-				originFocused: prevFocus == p.ID,
-				tileID:        "",
-				startScreenX:  sx,
-				startScreenY:  sy,
-				curScreenX:    sx,
-				curScreenY:    sy,
-			}
-		}
+		// Rendered mode is a DOM overlay (issue #218) that owns its own
+		// clicks and scrolling; a canvas click reaching here is the margin.
 		return nil
 	}
 
@@ -752,9 +722,6 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		TileID:        d.tileID,
 		OverDelete:    a.overDeleteButton(d, sx, sy),
 	}
-	docTarget, overDoc := a.docDropTargetAt(sx, sy)
-	in.OverDoc = overDoc
-	in.DocReject = a.docRejectAt(sx, sy)
 	t, haveT := a.dropTargetAt(sx, sy, d.tileID)
 	in.HasTarget = haveT
 	var dropX, dropY int64
@@ -820,15 +787,6 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
-		return nil
-
-	case dragdrop.DropEmbed:
-		// Dropping a tile onto a raw-mode text descent inserts a markdown
-		// reference rather than moving the source. The doc isn't a placement
-		// medium, so left-drag auto-promotes to "leave source" — same outcome
-		// as right-drag, no tile orphaned.
-		a.commitEmbedDrop(d, docTarget)
-		a.cancelDragSnapBack(d)
 		return nil
 
 	case dragdrop.DropRejected:
@@ -1406,7 +1364,7 @@ func (a *App) startAscent(p *pane.Pane) {
 		},
 		onComplete: func() {
 			if fp := a.tree.FindPane(p.ID); fp != nil {
-				a.restoreEmbedReturn(fp, saved)
+				a.restoreStashedDescent(fp, saved)
 			}
 		},
 	})
@@ -1657,12 +1615,9 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			fp.TextScrollX = initialScrollX
 			fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
 			// Reset the per-pane caret on each new descent — it's view state,
-			// not tile state, so it does not survive across descents (a fresh
-			// doc starts with no caret). Unsaved-edit state is NOT touched
+			// Unsaved-edit state is NOT touched
 			// here: it lives tile-scoped in the content store, so descending
 			// this pane elsewhere can't strand a previous document's typing.
-			pl := a.local(fp.ID)
-			pl.ClearCaret()
 			a.refreshFileOverlay()
 			// Descending IS the engagement gesture (owner decision
 			// 2026-07-26, issue #202): a url reopens, a shell reconnects
@@ -1681,7 +1636,7 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 
 // autoLiveOnRestore is autoLiveOnDescent for the RESTORE paths — reload
 // (applyURLState), workspace install, an ascent landing back on a stashed
-// descent (restoreEmbedReturn). The tile row is not necessarily cached at
+// descent (restoreStashedDescent). The tile row is not necessarily cached at
 // restore time, so it is fetched first; the pane is re-resolved when the
 // read lands (the user may have moved on — never override where they went).
 func (a *App) autoLiveOnRestore(paneID, tileID string) {
@@ -1733,15 +1688,15 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 	}
 }
 
-// startTextAscent reverses the text tile descent: animate zoom-out from the
-// tile's footprint back to the saved viewport, then clear TextFocus and
-// save the tile's content + scroll.
-// restoreEmbedReturn applies a saved paneState's doc-return fields to fp when an
-// embed descent originated it: the captured text focus, and — for a cross-grid
-// or cross-plugin follow — the doc's grid Anchor + Path, so one ascent lands
-// back in the doc rather than in the foreign grid the embed jumped into. No-op
-// when the saved state carries no focus (an ordinary, non-embed ascent).
-func (a *App) restoreEmbedReturn(fp *pane.Pane, saved *paneState) {
+// restoreStashedDescent applies a saved paneState's stacked-descent fields to
+// fp when an ascent's saved state carries a TextFocus — the descent the pane
+// was in when a deeper ephemeral visit was stacked on top of it
+// (descendEphemeral: a url opened over a live shell descent). One ascent
+// lands back on the stashed descent — and, for a cross-grid stash, its
+// anchor + path — rather than in the grid behind it. No-op when the saved
+// state carries no focus (an ordinary ascent). (The embed-click descents
+// that shared this mechanism died with issue #218.)
+func (a *App) restoreStashedDescent(fp *pane.Pane, saved *paneState) {
 	if saved == nil || saved.TextFocus == "" {
 		return
 	}
@@ -1838,7 +1793,7 @@ func (a *App) startTextAscent(p *pane.Pane) {
 		},
 		onComplete: func() {
 			if fp := a.tree.FindPane(p.ID); fp != nil {
-				a.restoreEmbedReturn(fp, saved)
+				a.restoreStashedDescent(fp, saved)
 			}
 		},
 	})
@@ -1881,7 +1836,7 @@ func (a *App) exitTextInstant(p *pane.Pane, restoreEmbed bool) {
 		// (and its anchor/path for a cross-grid follow) so a single ascent
 		// lands on the doc, not the grid behind it.
 		if restoreEmbed {
-			a.restoreEmbedReturn(p, saved)
+			a.restoreStashedDescent(p, saved)
 		}
 	}
 	a.refreshFileOverlay()
@@ -2366,7 +2321,7 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 		a.startTextDescent(fp, tile, nil)
 		return
 	}
-	// Stash the current descent (shell): restoreEmbedReturn lands back on it.
+	// Stash the current descent (shell): restoreStashedDescent lands back on it.
 	savedAnchor := fp.Anchor
 	savedPath := slices.Clone(fp.Path)
 	savedFocus := fp.TextFocus

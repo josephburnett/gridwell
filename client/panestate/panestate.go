@@ -1,21 +1,24 @@
-// Package panestate holds the per-pane, session-local client state for one pane:
-// the current selection, the saved-ascent stack, the rendered-mode caret + dirty
-// flag. None of it is persisted (the server owns
-// durable state); it is the plain-data half of a pane's client-only state.
+// Package panestate holds the per-pane, session-local client state for one
+// pane: the current selection and the saved-ascent stack. None of it is
+// persisted (the server owns durable state); it is the plain-data half of a
+// pane's client-only state. (The rendered-mode caret died with the custom
+// markdown engine, issue #218.)
 //
-// It exists as its own package so this data and its small amount of logic (the
-// ascent stack and the caret's "no caret" sentinel) are unit-tested as plain Go,
-// instead of living as a sprawl of parallel maps on the wasm App god-object where
-// nothing about them can be tested. The wasm side embeds State in a per-pane
-// struct that adds the native (js-coupled) live URL/shell handles; this package
-// stays js-free.
+// It exists as its own package so this data and its small amount of logic
+// (the ascent stack) are unit-tested as plain Go, instead of living as a
+// sprawl of parallel maps on the wasm App god-object where nothing about
+// them can be tested. The wasm side embeds State in a per-pane struct that
+// adds the native (js-coupled) live URL/shell handles; this package stays
+// js-free.
 package panestate
 
 // Saved is one entry on the ascent stack: the parent viewport (Cx/Cy/Zoom) saved
 // just before a descent, plus — when the descent originated inside a text tile —
 // the text-descent context to reinstall on the matching ascent so a single
 // ascent lands back in the doc. Anchor/Path are set only for an embed descent
-// that re-anchored the pane onto another grid (a cross-grid/plugin follow).
+// that re-anchored the pane onto another grid. Since #218 the one writer of
+// the text-descent fields is descendEphemeral's stack-a-visit-over-a-shell
+// stash (the #208 residual class); readers restore via restoreStashedDescent.
 type Saved struct {
 	Cx          float64  `json:"cx"`
 	Cy          float64  `json:"cy"`
@@ -28,13 +31,7 @@ type Saved struct {
 	Path        []string `json:"path,omitempty"`
 }
 
-// noCaret is the caret value meaning "this pane has no rendered-mode caret"
-// (never clicked into editable rendered mode). It replaces the old "absent from
-// the map" sentinel, which made the state easy to leave dangling.
-const noCaret = -1
-
-// State is the plain-data per-pane client state. Construct with New so the caret
-// sentinel is set; the zero value would read as a caret at offset 0.
+// State is the plain-data per-pane client state.
 type State struct {
 	// Selected is the selected tile id in this pane ("" = nothing selected).
 	Selected string
@@ -43,11 +40,10 @@ type State struct {
 	// — a pane-scoped copy was reset by the pane's next descent, stranding the
 	// edit it described (the 2026-07-18 incident's sibling bug).
 	ascent []Saved
-	caret  int
 }
 
-// New returns an empty pane state with no caret.
-func New() State { return State{caret: noCaret} }
+// New returns an empty pane state.
+func New() State { return State{} }
 
 // PushAscent saves a parent viewport on this pane's ascent stack.
 func (s *State) PushAscent(v Saved) { s.ascent = append(s.ascent, v) }
@@ -76,17 +72,3 @@ func (s *State) PeekAscent() *Saved {
 
 // AscentDepth is the number of saved levels (matches the pane's descent depth).
 func (s *State) AscentDepth() int { return len(s.ascent) }
-
-// Caret returns the rendered-mode caret byte offset and whether one is set.
-func (s *State) Caret() (int, bool) {
-	if s.caret == noCaret {
-		return 0, false
-	}
-	return s.caret, true
-}
-
-// SetCaret sets the rendered-mode caret to a source byte offset.
-func (s *State) SetCaret(off int) { s.caret = off }
-
-// ClearCaret removes the caret ("no caret in this pane").
-func (s *State) ClearCaret() { s.caret = noCaret }

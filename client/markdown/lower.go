@@ -271,7 +271,6 @@ func imageSpan(img *ast.Image, src []byte, style SpanStyle, href string) Span {
 		Alt:   inlineText(img, src),
 		Href:  href,
 	}
-	sp.W, sp.H = embedSizeFromSrc(sp.Src)
 	return sp
 }
 

@@ -92,29 +92,6 @@ func clampRunes(s string, n int) string {
 	return string(runes[:n])
 }
 
-// embedSizeFromSrc parses ?w= and ?h= out of an embed src URL. Returns (0, 0)
-// if either is missing — the layout falls back to its default size.
-func embedSizeFromSrc(src string) (int, int) {
-	_, query, ok := strings.Cut(src, "?")
-	if !ok {
-		return 0, 0
-	}
-	w, h := 0, 0
-	for kv := range strings.SplitSeq(query, "&") {
-		k, v, ok := strings.Cut(kv, "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "w":
-			w = atoiSafe(v)
-		case "h":
-			h = atoiSafe(v)
-		}
-	}
-	return w, h
-}
-
 func atoiSafe(s string) int {
 	n := 0
 	for _, c := range s {

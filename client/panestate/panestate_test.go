@@ -5,19 +5,6 @@ import (
 	"testing"
 )
 
-func TestNewHasNoCaret(t *testing.T) {
-	s := New()
-	if _, ok := s.Caret(); ok {
-		t.Fatal("a new pane state must have no caret")
-	}
-	if s.AscentDepth() != 0 {
-		t.Fatalf("new ascent depth = %d, want 0", s.AscentDepth())
-	}
-	if s.Selected != "" {
-		t.Fatal("new state must be unselected")
-	}
-}
-
 func TestAscentPushPopIsLIFO(t *testing.T) {
 	s := New()
 	s.PushAscent(Saved{Zoom: 1})
@@ -54,38 +41,6 @@ func TestPeekAscentMutatesInPlace(t *testing.T) {
 	got := s.PopAscent()
 	if got.Anchor != "g/9" || got.TextFocus != "t1" {
 		t.Fatalf("peek mutation didn't persist: %+v", got)
-	}
-}
-
-func TestCaretSetClear(t *testing.T) {
-	s := New()
-	s.SetCaret(42)
-	off, ok := s.Caret()
-	if !ok || off != 42 {
-		t.Fatalf("Caret = (%d,%v), want (42,true)", off, ok)
-	}
-	// Offset 0 is a real caret position, distinct from "no caret".
-	s.SetCaret(0)
-	if off, ok := s.Caret(); !ok || off != 0 {
-		t.Fatalf("caret 0 must read as present: (%d,%v)", off, ok)
-	}
-	s.ClearCaret()
-	if _, ok := s.Caret(); ok {
-		t.Fatal("ClearCaret must remove the caret")
-	}
-}
-
-// The zero value reads as a caret at offset 0 — that hazard is WHY New exists
-// (the doc says "construct with New"). Pin the difference so the sentinel
-// can't be silently refactored away.
-func TestZeroValueVsNew(t *testing.T) {
-	var zero State
-	if off, ok := zero.Caret(); !ok || off != 0 {
-		t.Fatalf("documented zero-value hazard changed: Caret() = (%d,%v); update the State docstring", off, ok)
-	}
-	fresh := New()
-	if _, ok := fresh.Caret(); ok {
-		t.Fatal("New() must start with no caret")
 	}
 }
 

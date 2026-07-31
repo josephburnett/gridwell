@@ -47,7 +47,6 @@ func (a *App) installTestHook() {
 		"previewSigs":   js.FuncOf(a.thPreviewSigs),
 		"gridSigs":      js.FuncOf(a.thGridSigs),
 		"transitioning": js.FuncOf(a.thTransitioning),
-		"embedHits":     js.FuncOf(a.thEmbedHits),
 		"setTransitionMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// e2e-only ACTION (like shellVisitURL): stretch the transition
 			// clock so a spec can deterministically land an event mid-flight.
@@ -65,7 +64,6 @@ func (a *App) installTestHook() {
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
-		"renderedCaret": js.FuncOf(a.thRenderedCaret),
 		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
 		"errors":        js.FuncOf(a.thErrors),
@@ -142,23 +140,6 @@ func (a *App) thTraces(_ js.Value, _ []js.Value) any {
 		out.Call("push", o)
 	}
 	return out
-}
-
-// thRenderedCaret returns the focused pane's rendered-mode caret as
-// {offset, has}: the source byte offset typing will splice at, or has=false
-// when no caret is placed. Pure read of the per-pane state; lets an e2e
-// assert click-to-place landed where the click said.
-func (a *App) thRenderedCaret(js.Value, []js.Value) any {
-	p := a.tree.FocusedPane()
-	if p == nil {
-		return map[string]any{"has": false, "offset": 0}
-	}
-	pl, ok := a.localIf(p.ID)
-	if !ok {
-		return map[string]any{"has": false, "offset": 0}
-	}
-	off, has := pl.Caret()
-	return map[string]any{"has": has, "offset": off}
 }
 
 // thTextareaInfo returns the current textarea overlay's binding: which pane it
@@ -295,22 +276,6 @@ func (a *App) thOrigin(js.Value, []js.Value) any {
 // animation) is in flight — the window I11's injection spec aims for.
 func (a *App) thTransitioning(js.Value, []js.Value) any {
 	return a.transition != nil
-}
-
-// thEmbedHits exposes the embeds drawn in the last frame — the same hit
-// rects the click handler resolves against, so a spec can find WHERE an
-// embed rendered and whether its target resolved. Read-only render scratch.
-func (a *App) thEmbedHits(js.Value, []js.Value) any {
-	out := make([]any, 0, len(a.embedHits))
-	for _, h := range a.embedHits {
-		out = append(out, map[string]any{
-			"paneId": h.paneID,
-			"href":   h.href,
-			"tileId": h.tileID,
-			"x":      h.x, "y": h.y, "w": h.w, "h": h.h,
-		})
-	}
-	return out
 }
 
 // thAscentDepth returns the session ascent-stack depth for a pane.

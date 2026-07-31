@@ -12,148 +12,230 @@ import "testing"
 //     keeps it visible during the pane-switch loading race).
 func TestCanvasHiddenByOverlay(t *testing.T) {
 	cases := []struct {
-		name                                              string
-		isDescended, isFocused, isTextMode, textareaReady bool
-		want                                              bool
+		name                                string
+		isDescended, isFocused, ready, want bool
 	}{
-		// Only true case: all four conditions hold.
-		{"all true → hidden", true, true, true, true, true},
-		// Preview path (not descended): NEVER hidden regardless of other flags.
-		{"preview: not descended → always paint", false, true, true, true, false},
-		{"preview: not descended, not focused → always paint", false, false, true, true, false},
-		// Descended but textarea is over a different pane.
-		{"descended not focused → textarea not here", true, false, true, true, false},
-		// Descended + focused but wrong mode (textarea hidden in rendered mode).
-		{"rendered mode → canvas paints", true, true, false, true, false},
-		// Loading race: textarea was cleared on pane switch, blob not yet arrived.
-		{"textarea not ready → canvas paints", true, true, true, false, false},
-		// Nothing at all.
-		{"all false", false, false, false, false, false},
+		// The one hide case: the focused descended pane whose overlay
+		// (textarea or rendered div, issue #218) holds content.
+		{"focused descended with ready overlay hides canvas", true, true, true, true},
+		{"preview node never hidden", false, true, true, false},
+		{"descended not focused → overlay not here", true, false, true, false},
+		// Loading race: overlay cleared on pane switch, blob not yet arrived.
+		{"overlay not ready → canvas paints", true, true, false, false},
+		{"all false", false, false, false, false},
 	}
 	for _, c := range cases {
-		got := CanvasHiddenByOverlay(c.isDescended, c.isFocused, c.isTextMode, c.textareaReady)
+		got := CanvasHiddenByOverlay(c.isDescended, c.isFocused, c.ready)
 		if got != c.want {
-			t.Errorf("%s: CanvasHiddenByOverlay(%v,%v,%v,%v) = %v, want %v",
-				c.name, c.isDescended, c.isFocused, c.isTextMode, c.textareaReady, got, c.want)
+			t.Errorf("%s: CanvasHiddenByOverlay(%v,%v,%v) = %v, want %v",
+				c.name, c.isDescended, c.isFocused, c.ready, got, c.want)
 		}
 	}
 }
 
-func TestInsertAt(t *testing.T) {
+func TestDecideTextareaSync(t *testing.T) {
 	cases := []struct {
-		src, ins string
-		off      int
-		want     string
-		wantOff  int
+		name string
+		in   TextareaSyncInput
+		want TextareaSyncDecision
 	}{
-		{"", "x", 0, "x", 1},
-		{"ab", "X", 0, "Xab", 1},
-		{"ab", "X", 1, "aXb", 2},
-		{"ab", "X", 2, "abX", 3},
-		{"ab", "X", 99, "abX", 3},  // clamp
-		{"ab", "X", -1, "Xab", 1},  // clamp
-		{"ab", "\n", 1, "a\nb", 2}, // newline (Enter)
+		{
+			// The bug the user reported: descend into new tile 7 while
+			// textarea still holds "old content" from tile 4 and the new
+			// tile's blob hasn't arrived in the cache yet. The textarea
+			// must clear so the user doesn't see 4's content as 7's
+			// default; LastTileID must advance so the blob fetch's
+			// follow-up call seeds rather than re-clears.
+			name: "different tile, blob not cached → clear and advance",
+			in: TextareaSyncInput{
+				FocusedTileID: "7",
+				LastTileID:    "4",
+				CurrentValue:  "old content",
+				BlobCached:    false,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "",
+				NewLastTileID: "7",
+			},
+		},
+		{
+			name: "different tile, blob cached → seed with content",
+			in: TextareaSyncInput{
+				FocusedTileID: "7",
+				LastTileID:    "4",
+				CurrentValue:  "old content",
+				BlobCached:    true,
+				BlobContent:   "tile 7 body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "tile 7 body",
+				NewLastTileID: "7",
+			},
+		},
+		{
+			name: `first focus (LastTileID ""), blob cached → seed`,
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "",
+				CurrentValue:  "",
+				BlobCached:    true,
+				BlobContent:   "first focus body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "first focus body",
+				NewLastTileID: "5",
+			},
+		},
+		{
+			name: "same tile, textarea empty (post-toggle), blob cached → seed",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "",
+				BlobCached:    true,
+				BlobContent:   "tile 5 body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "tile 5 body",
+				NewLastTileID: "5",
+			},
+		},
+		{
+			// The foreign-writer visibility rule: with NO pending edit the
+			// buffer is a mere view of the cached body and must follow it.
+			// Another device edited this tile; the event evicted the stale
+			// body, the refetch landed the foreign bytes — the open editor
+			// repaints. (Real typing always sets PendingEdit, so this input
+			// combination IS the stale-view case; the old "non-empty →
+			// preserve" rule kept the stale buffer, and the ascent flush
+			// then saved it back over the foreign edit — the stomp.)
+			name: "same tile, clean buffer differs from cache → follow the cache",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "stale buffer from before the foreign edit",
+				BlobCached:    true,
+				BlobContent:   "foreign edit, refetched",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "foreign edit, refetched",
+				NewLastTileID: "5",
+			},
+		},
+		{
+			// Clean buffer already matches the cache: no write, no churn (a
+			// SetValue would move the caret/scroll for nothing).
+			name: "same tile, clean buffer equals cache → leave alone",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "settled body",
+				BlobCached:    true,
+				BlobContent:   "settled body",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: "5",
+			},
+		},
+		{
+			// Deleting everything is an edit like any other: an empty DIRTY
+			// buffer must not be "helpfully" reseeded from the cache — that
+			// would resurrect the deleted text under the user's caret.
+			name: "same tile, pending edit emptied the buffer → preserve",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "",
+				BlobCached:    true,
+				BlobContent:   "deleted content",
+				PendingEdit:   true,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: "5",
+			},
+		},
+		{
+			name: "same tile, textarea empty, blob still loading → wait",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "",
+				BlobCached:    false,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: "5",
+			},
+		},
+		{
+			// The fast-pane-switch case (issue #35): typing into tile 4 arms
+			// the debounced save; switching to another text descent within
+			// the debounce rebinds the textarea. The rebind simply seeds the
+			// new tile — tile 4's typing already lives in ITS content-store
+			// entry (every keystroke mirrors), and the dirty sweep posts it
+			// regardless of where focus went. Nothing to rescue at the seam.
+			name: "different tile with pending edit → rebind; the old edit is cache-owned",
+			in: TextareaSyncInput{
+				FocusedTileID: "7",
+				LastTileID:    "4",
+				CurrentValue:  "unsaved typing for 4",
+				BlobCached:    true,
+				BlobContent:   "tile 7 body",
+				PendingEdit:   true,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "tile 7 body",
+				NewLastTileID: "7",
+			},
+		},
+		{
+			// Same tile: the buffer still belongs to the focused tile; the
+			// debounced save owns persistence, not the rebind flush.
+			name: "same tile with pending edit → no flush, preserve typing",
+			in: TextareaSyncInput{
+				FocusedTileID: "5",
+				LastTileID:    "5",
+				CurrentValue:  "user just typed this",
+				BlobCached:    true,
+				BlobContent:   "stale cache content",
+				PendingEdit:   true,
+			},
+			want: TextareaSyncDecision{
+				SetValue:      false,
+				NewLastTileID: "5",
+			},
+		},
+		{
+			name: "different tile, blob cached but empty (fresh tile) → clear",
+			in: TextareaSyncInput{
+				FocusedTileID: "9",
+				LastTileID:    "4",
+				CurrentValue:  "previous content",
+				BlobCached:    true,
+				BlobContent:   "",
+			},
+			want: TextareaSyncDecision{
+				SetValue:      true,
+				Value:         "",
+				NewLastTileID: "9",
+			},
+		},
 	}
-	for _, c := range cases {
-		got, off := InsertAt(c.src, c.ins, c.off)
-		if got != c.want || off != c.wantOff {
-			t.Errorf("InsertAt(%q,%q,%d) = (%q,%d), want (%q,%d)", c.src, c.ins, c.off, got, off, c.want, c.wantOff)
-		}
-	}
-}
-
-func TestInsertParagraphBreak(t *testing.T) {
-	cases := []struct {
-		name    string
-		src     string
-		off     int
-		want    string
-		wantOff int
-	}{
-		{"end of doc", "hello", 5, "hello\n\n", 7},
-		{"mid word splits the paragraph", "hello", 2, "he\n\nllo", 4},
-		{"between paragraphs is idempotent (caret at next para)", "a\n\nb", 3, "a\n\nb", 3},
-		{"at end of para jumps past the break", "a\n\nb", 1, "a\n\nb", 3},
-		{"inside the break normalizes in place", "a\n\nb", 2, "a\n\nb", 3},
-		{"soft break upgrades to a paragraph break", "a\nb", 2, "a\n\nb", 3},
-		{"extra blank lines collapse", "a\n\n\n\nb", 3, "a\n\nb", 3},
-		{"trailing newlines collapse", "a\n\n\n", 4, "a\n\n", 3},
-		{"empty doc", "", 0, "\n\n", 2},
-		{"start of doc", "a", 0, "\n\na", 2},
-		{"hard-break spaces are left alone", "a  \nb", 4, "a  \n\nb", 5},
-		{"clamped past end", "a", 99, "a\n\n", 3},
-		{"clamped before start", "a", -1, "\n\na", 2},
-	}
-	for _, c := range cases {
-		got, off := InsertParagraphBreak(c.src, c.off)
-		if got != c.want || off != c.wantOff {
-			t.Errorf("%s: InsertParagraphBreak(%q,%d) = (%q,%d), want (%q,%d)",
-				c.name, c.src, c.off, got, off, c.want, c.wantOff)
-		}
-	}
-}
-
-// TestInsertParagraphBreakIdempotent: pressing Enter repeatedly at the same
-// boundary must converge — the source stops changing after the first press.
-// This is the fix for the invisible-blank-line accumulation class.
-func TestInsertParagraphBreakIdempotent(t *testing.T) {
-	src, off := "one two", 3
-	src, off = InsertParagraphBreak(src, off)
-	for i := 0; i < 3; i++ {
-		next, nextOff := InsertParagraphBreak(src, off)
-		if next != src {
-			t.Fatalf("press %d changed the source: %q -> %q", i+2, src, next)
-		}
-		src, off = next, nextOff
-	}
-	if src != "one\n\n two" {
-		t.Errorf("converged source = %q, want %q", src, "one\n\n two")
-	}
-}
-
-func TestDeleteBefore(t *testing.T) {
-	cases := []struct {
-		src     string
-		off     int
-		want    string
-		wantOff int
-	}{
-		{"abc", 0, "abc", 0}, // nothing before
-		{"abc", 1, "bc", 0},
-		{"abc", 3, "ab", 2},
-		{"café", 5, "caf", 3}, // é is 2 bytes: delete whole rune
-		{"abc", 99, "ab", 2},  // clamp
-	}
-	for _, c := range cases {
-		got, off := DeleteBefore(c.src, c.off)
-		if got != c.want || off != c.wantOff {
-			t.Errorf("DeleteBefore(%q,%d) = (%q,%d), want (%q,%d)", c.src, c.off, got, off, c.want, c.wantOff)
-		}
-	}
-}
-
-func TestDeleteAt(t *testing.T) {
-	if got := DeleteAt("abc", 0); got != "bc" {
-		t.Errorf("DeleteAt(abc,0) = %q", got)
-	}
-	if got := DeleteAt("café", 3); got != "caf" { // delete é (2 bytes)
-		t.Errorf("DeleteAt(café,3) = %q", got)
-	}
-	if got := DeleteAt("abc", 3); got != "abc" { // at end: no-op
-		t.Errorf("DeleteAt(abc,3) = %q", got)
-	}
-}
-
-func TestMoveLeftRight(t *testing.T) {
-	// "aé b": a=1 byte, é=2 bytes (offsets 1..3), space at 3, b at 4.
-	s := "aé b"
-	if MoveRight(s, 0) != 1 || MoveRight(s, 1) != 3 || MoveRight(s, 3) != 4 {
-		t.Errorf("MoveRight chain wrong: %d %d %d", MoveRight(s, 0), MoveRight(s, 1), MoveRight(s, 3))
-	}
-	if MoveLeft(s, 3) != 1 || MoveLeft(s, 1) != 0 || MoveLeft(s, 0) != 0 {
-		t.Errorf("MoveLeft chain wrong: %d %d %d", MoveLeft(s, 3), MoveLeft(s, 1), MoveLeft(s, 0))
-	}
-	if MoveRight(s, len(s)) != len(s) {
-		t.Error("MoveRight past end should clamp")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DecideTextareaSync(tc.in)
+			if got != tc.want {
+				t.Errorf("DecideTextareaSync(%+v) = %+v, want %+v",
+					tc.in, got, tc.want)
+			}
+		})
 	}
 }

@@ -293,8 +293,6 @@ func (a *App) draw() {
 		}
 	}
 
-	a.embedHits = a.embedHits[:0]
-
 	a.cctx.Set("fillStyle", colorBg)
 	a.cctx.Call("fillRect", 0, 0, a.width, a.height)
 
@@ -333,6 +331,9 @@ func (a *App) draw() {
 	// Reposition the textarea overlay (if any) so it tracks the focused
 	// pane through resizes and pane-tree edits.
 	a.syncTextOverlayPosition()
+	// The rendered-HTML overlay tracks the focused pane the same way
+	// (issue #218) — position, content key, and visibility per frame.
+	a.refreshRenderedOverlay()
 	// Same for any live shell overlays — xterm host divs follow their
 	// pane's screen rect each frame.
 	a.syncShellOverlayPosition()
@@ -1177,7 +1178,7 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
-			} else if a.ghost.overDoc || a.ghost.link {
+			} else if a.ghost.link {
 				drawGhostLinkBadge(a.cctx, x+w/2, y+h/2, min(w, h))
 			}
 		}
