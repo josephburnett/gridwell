@@ -170,28 +170,6 @@ func (s *Store) GetTilePreview(ctx context.Context, tileID string) ([]byte, erro
 	return s.GetBlob(ctx, previewBID.Int64)
 }
 
-// AllShellTileIDs returns the ids of every tile with kind='shell' in
-// the database. Used by the server's startup orphan-cleanup pass: a
-// session on the gridwell tmux socket whose id isn't in this list is
-// a leftover from a tile deleted while gridwell was down, and gets
-// killed.
-func (s *Store) AllShellTileIDs(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM tiles WHERE kind = 'shell'`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
 // ShellTileExists reports whether a shell tile with the given row id is
 // still present. The DeleteTile handler uses it to decide whether the tmux
 // session keyed to that id is now orphaned: the session must die only when

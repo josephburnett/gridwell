@@ -481,9 +481,6 @@ func (p *Plugin) captureShellTitle(tileID string) {
 	_ = p.st.SetTileAlt(context.Background(), id, cmd, false)
 }
 
-// sessionChunkSize bounds each streamed session fragment.
-const sessionChunkSize = 64 * 1024
-
 func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	tileID := req.TileId
 	if err := p.st.DeleteTile(ctx, rpc.DeleteTileFromProto(req)); err != nil {

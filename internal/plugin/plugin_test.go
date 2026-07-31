@@ -115,24 +115,6 @@ func TestRegistry_GetMissing(t *testing.T) {
 	}
 }
 
-// TestRegistry_Deregister verifies that Deregister removes the entry.
-func TestRegistry_Deregister(t *testing.T) {
-	client, closer, err := plugin.ServeInProcess(&stubServer{})
-	if err != nil {
-		t.Fatalf("ServeInProcess: %v", err)
-	}
-	reg := plugin.NewRegistry()
-	reg.Register("test-id", "stub", client, closer)
-
-	if _, ok := reg.Get("test-id"); !ok {
-		t.Fatal("plugin not registered")
-	}
-	reg.Deregister("test-id")
-	if _, ok := reg.Get("test-id"); ok {
-		t.Error("plugin still in registry after Deregister")
-	}
-}
-
 // TestRegistry_Label round-trips the configured display name and returns ""
 // for an unlabelled plugin (so callers fall back to Info / kind).
 func TestRegistry_Label(t *testing.T) {

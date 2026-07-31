@@ -13,14 +13,6 @@ import "strings"
 // owned by the host (the filesystem, the process table, a bash session),
 // not by Gridwell. The color grammar (red outline) follows.
 const (
-	// Canonical alt-text strings supplied by the fs/proc plugins as the
-	// Attach label of a file/process well. The client renders tile.AltText
-	// verbatim — no derivation — so server and client always agree on what a
-	// tile is called.
-	AltFiles     = "files"     // root file well (path "/")
-	AltProcesses = "processes" // root process well (PID 1)
-	AltInfo      = "info"      // synthetic @info tile inside a process grid
-
 	KindWell  = "well"
 	KindText  = "text"
 	KindURL   = "url"

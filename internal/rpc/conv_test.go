@@ -123,13 +123,11 @@ func TestMutationRequestRoundTrips(t *testing.T) {
 		t.Errorf("delete round-trip: in=%+v out=%+v", del, got)
 	}
 
-	alive := &ShellSessionAliveRequest{TileID: "t-9"}
-	if got := ShellSessionAliveFromProto(ShellSessionAliveToProto(alive)); !reflect.DeepEqual(alive, got) {
-		t.Errorf("shell-alive req round-trip: in=%+v out=%+v", alive, got)
+	if got := ShellSessionAliveToProto(&ShellSessionAliveRequest{TileID: "t-9"}); got.TileId != "t-9" {
+		t.Errorf("shell-alive req: got %+v", got)
 	}
-	aliveResp := &ShellSessionAliveResponse{Alive: true}
-	if got := ShellSessionAliveResponseFromProto(ShellSessionAliveResponseToProto(aliveResp)); !reflect.DeepEqual(aliveResp, got) {
-		t.Errorf("shell-alive resp round-trip: in=%+v out=%+v", aliveResp, got)
+	if got := ShellSessionAliveResponseFromProto(&pb.ShellSessionAliveResponse{Alive: true}); !got.Alive {
+		t.Errorf("shell-alive resp: got %+v", got)
 	}
 }
 

@@ -20,14 +20,10 @@ import (
 	"strings"
 	"sync"
 
-	gcodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/rpc"
-	"github.com/josephburnett/gridwell/internal/store"
 )
 
 // Config configures the server.
@@ -210,36 +206,5 @@ func (s *Server) staticOrSPA(dir string) http.Handler {
 
 // The sentinel→class table lives in internal/store (store.ClassifyError),
 // next to the sentinel declarations, so every transport — Connect
-// (asConnectError), raw HTTP (writeHTTPError), and the plugin gRPC hop
-// (localdb.errToStatus) — maps from the one classification. Do not
-// re-enumerate the sentinels here.
-
-// writeHTTPError maps an error to the right HTTP status and writes a plain-text
-// body. Used by the non-Connect endpoints (preview image, ShellStream). Errors
-// now arrive from plugins as gRPC status errors, so map those codes; a raw
-// store sentinel (should not occur post-routing) falls through to the same
-// store.ClassifyError categorization.
-func writeHTTPError(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-	if st, ok := status.FromError(err); ok {
-		switch st.Code() {
-		case gcodes.NotFound:
-			code = http.StatusNotFound
-		case gcodes.InvalidArgument:
-			code = http.StatusBadRequest
-		case gcodes.FailedPrecondition:
-			code = http.StatusConflict
-		}
-		http.Error(w, st.Message(), code)
-		return
-	}
-	switch store.ClassifyError(err) {
-	case store.ClassNotFound:
-		code = http.StatusNotFound
-	case store.ClassInvalidArgument:
-		code = http.StatusBadRequest
-	case store.ClassConflict:
-		code = http.StatusConflict
-	}
-	http.Error(w, err.Error(), code)
-}
+// (asConnectError) and the plugin gRPC hop (localdb.errToStatus) — maps
+// from the one classification. Do not re-enumerate the sentinels here.

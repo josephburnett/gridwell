@@ -381,14 +381,6 @@ func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef
 	return 0, 0
 }
 
-// tileBlobRef returns the blob a tile of the given kind holds a refcount on
-// (text body or url/shell preview), or 0. The blob half of tileRefs, used when
-// materializing a copy.
-func tileBlobRef(kind string, blob, previewBlob int64) int64 {
-	_, b := tileRefs(kind, 0, blob, previewBlob)
-	return b
-}
-
 // decTileRefs releases what a deleted tile owned: its interior-well child grid
 // (recursively deleted) and its blob (refcount dec, GC'd at zero). Called when
 // a tile row is destroyed by single-delete (dropTileRow / deleteFSGridTile) or

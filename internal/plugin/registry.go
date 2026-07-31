@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"fmt"
 	"sync"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -83,25 +82,6 @@ func (r *Registry) Ordered() []struct{ UUID, Kind string } {
 	return out
 }
 
-// Deregister removes a plugin from the registry and calls its closer. Silently
-// does nothing if id is not registered.
-func (r *Registry) Deregister(id string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if c, ok := r.closers[id]; ok {
-		c()
-		delete(r.closers, id)
-	}
-	delete(r.clients, id)
-	delete(r.kinds, id)
-	for i, oid := range r.order {
-		if oid == id {
-			r.order = append(r.order[:i], r.order[i+1:]...)
-			break
-		}
-	}
-}
-
 // Transit reports whether the plugin's ids are CHAINS from another node — a
 // node mount, where the plugin forwards to a remote gridwell's front door and
 // its ids arrive already qualified from the remote's perspective. The server's
@@ -122,16 +102,6 @@ func (r *Registry) Get(id string) (gridwellv1.GridwellClient, bool) {
 	defer r.mu.RUnlock()
 	c, ok := r.clients[id]
 	return c, ok
-}
-
-// MustGet returns the client for id or panics. Useful in code paths where the
-// plugin id is known to be registered.
-func (r *Registry) MustGet(id string) gridwellv1.GridwellClient {
-	c, ok := r.Get(id)
-	if !ok {
-		panic(fmt.Sprintf("plugin %q not registered", id))
-	}
-	return c
 }
 
 // IDs returns all registered plugin UUIDs in unspecified order.

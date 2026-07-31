@@ -436,20 +436,6 @@ func TestCloneThreeIndependentCopies(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// tilesEqual reports whether two tile slices are equal by all observable
-// field values.
-func tilesEqual(a, b []rpc.Tile) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // TestRefcountGCBlobOnTileDelete pins blob refcount/GC end-to-end: a cloned
 // text shares the blob (refcount 2), GC'd only when the last reference goes.
 func TestRefcountGCBlobOnTileDelete(t *testing.T) {
