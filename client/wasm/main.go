@@ -225,8 +225,6 @@ type App struct {
 	// tile's PreviewBlobID changes server-side — see client/preview.
 	urlPreview *preview.Cache
 
-	mdImageState map[string]int8
-
 	// shellAlive caches the result of the ShellSessionAlive probe per
 	// tile id. The refresh button shows iff (preview_blob_id == 0)
 	// || shellAlive[id] is true. shellAliveProbing dedups in-flight
@@ -335,12 +333,6 @@ type scheduler struct {
 	// textSaveScheduled / textSaveCb debounce the text-tile content save.
 	textSaveScheduled bool
 	textSaveCb        js.Func
-
-	// rootViewSaveScheduled / rootViewSaveCb debounce the root-grid
-	// default-view persistence (only fires when the focused pane is at the
-	// user's root; well descents persist via SetWellView on ascent).
-	rootViewSaveScheduled bool
-	rootViewSaveCb        js.Func
 
 	// errExpireScheduled / errExpireCb arm one timer for the error surface's
 	// soonest expiry deadline, so stale one-shot notices leave the strip
@@ -584,11 +576,10 @@ type dragState struct {
 	// a drag commits only through the right-button release path; the
 	// left-button move-commit must refuse it so a stray non-right release
 	// can't silently turn the clone into a move.
-	clone          bool
-	snapshotTile   rpc.Tile
-	originScreenX  float64
-	originScreenY  float64
-	originPaneRect pane.Rect
+	clone         bool
+	snapshotTile  rpc.Tile
+	originScreenX float64
+	originScreenY float64
 
 	// Palette drag from the + menu: tileID is "" (no real node yet) but
 	// isTemplate is true and item carries the grabbed palette entry — a
@@ -599,11 +590,10 @@ type dragState struct {
 
 	// Source-grid info — set at mousedown; same as the focused pane's
 	// grid for parent-grid drags, or the well's child grid for "pull
-	// out of well" drags. Carried separately so the drop commit can
-	// build a MoveTile RPC with the right Path/grid id even when source
-	// and dest are different grids inside the same pane.
+	// out of well" drags. Carried separately so the drop commit names
+	// the right source grid even when source and dest are different
+	// grids inside the same pane.
 	srcGridID   string
-	srcPath     []string
 	srcCellSize float64
 }
 

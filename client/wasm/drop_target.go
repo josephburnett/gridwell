@@ -3,7 +3,6 @@
 package main
 
 import (
-	"slices"
 
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -25,9 +24,7 @@ import (
 // the target cell at the cursor.
 type dropTarget struct {
 	pane     *pane.Pane
-	rect     pane.Rect
 	gridID   string
-	path     []string
 	cellSize float64
 	originX  float64
 	originY  float64
@@ -133,12 +130,9 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 			X, Y, W, H, ViewX, ViewY int64
 		}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewX: n.ViewX, ViewY: n.ViewY},
 			ratio)
-		path := append(slices.Clone(p.Path), n.ID)
 		return &dropTarget{
 			pane:     p,
-			rect:     r,
 			gridID:   n.ChildGridID,
-			path:     path,
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
@@ -148,9 +142,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	// Parent-grid drop.
 	return &dropTarget{
 		pane:     p,
-		rect:     r,
 		gridID:   a.gridIDForPane(p),
-		path:     slices.Clone(p.Path),
 		cellSize: parentCell,
 		originX:  parentOriginX,
 		originY:  parentOriginY,

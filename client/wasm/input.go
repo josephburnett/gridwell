@@ -121,19 +121,6 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *rpc.Tile {
 	return nil
 }
 
-// updateURLCursor sets the canvas CSS cursor for a URL descent pane.
-// Frozen descent: "grab" at rest, "grabbing" while dragging.
-// Live descent: default (the iframe / Chromium manages its own cursor).
-func (a *App) updateURLCursor(p *pane.Pane, _ pane.Rect) {
-	if a.urlViewFor(p.ID) != nil {
-		// Live: restore default and let the page/browser control the cursor.
-		a.canvas.Get("style").Set("cursor", "")
-		return
-	}
-	// Frozen: default cursor — the letterboxed preview has no pan gesture.
-	a.canvas.Get("style").Set("cursor", "")
-}
-
 // focusToPane transfers wasm focus to pane p. If focus actually changes it
 // calls menu.TransferFocus (which closes the menu when it was on the old pane),
 // refreshes the file overlay, and draws. Returns true when focus changed.
@@ -353,61 +340,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 
-	// In file-focus mode the lower-right button is a text/rendered toggle
-	// rather than the + creation menu.
+	// Content descent (text/url/shell): every interactive surface is a DOM
+	// overlay or native view that owns its own clicks (textarea, rendered
+	// div, xterm, WebContentsView), and the bar slot owns the buttons
+	// (issue #214). A canvas left-click reaching here is pane chrome or
+	// margin — ascent lives on the middle button and the bar crumbs — so
+	// it is swallowed whole.
 	if p.TextFocus != "" {
-		// Shell tile descent: the plus button refreshes a frozen
-		// shell (spawns a new bash), and the outer margin ascends.
-		// Inside the xterm overlay, clicks are captured by xterm.js
-		// itself (the DOM element absorbs them), so this path only
-		// fires for clicks on the pane chrome.
-		if a.isShellDescent(p) {
-			// The refresh/back button lives in the bar slot now (issue #214);
-			// barSlotClick handles it before this path is reached.
-			if !pointInPaneContent(r, sx, sy) {
-				// Outer margin: ascent moved to the middle button / a
-				// right-click on the corner circle. Swallow so a margin
-				// click doesn't start anything.
-				return nil
-			}
-			// Inside the content area: clicks fall through to xterm
-			// (the overlay div is above the canvas). Live shell
-			// streams never receive clicks here in practice.
-			return nil
-		}
-		// URL tile descent. A live tile is a native WebContentsView over the
-		// content box; it owns its own clicks (the canvas never sees them).
-		// The canvas only gets events here when the pane is frozen, or in the
-		// pane-border band. The outer margin ascends; the corner button goes
-		// live (frozen) or navigates back (live, if a stray click reaches us).
-		if a.isURLDescent(p) {
-			// The back / go-live / no-live button lives in the bar slot now
-			// (issue #214); barSlotClick handles it before this path.
-			if !pointInPaneContent(r, sx, sy) {
-				// Outer margin: ascent moved to the middle button / a
-				// right-click on the corner circle. Swallow it.
-				return nil
-			}
-			// Inside the content box: a live view owns its own clicks (the
-			// canvas never sees them); on a frozen pane the preview is
-			// letterboxed to fit — nothing to pan — so the click is just
-			// swallowed. (The cover-mode pan drag lived here; removed with
-			// cover mode itself, issue #89.)
-			return nil
-		}
-		// The rendered/raw toggle is a DOM overlay button
-		// (refreshFileToggle); its clicks never reach the canvas.
-		// Anywhere outside the inner box (textarea / rendered area)
-		// is "outer ring" — ascent. The textarea overlay catches
-		// clicks inside in text mode; rendered mode falls through to
-		// pan below.
-		if !pointInFileInner(p, r, sx, sy) {
-			// Outer ring: ascent moved to the middle button / a right-click
-			// on the corner circle. Swallow it.
-			return nil
-		}
-		// Rendered mode is a DOM overlay (issue #218) that owns its own
-		// clicks and scrolling; a canvas click reaching here is the margin.
 		return nil
 	}
 
@@ -446,7 +385,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		// Default source = the focused pane's leaf grid; overridden
 		// below if we land on a child preview tile.
 		srcGridID:   a.gridIDForPane(p),
-		srcPath:     slices.Clone(p.Path),
 		srcCellSize: parentCell,
 	}
 	if n != nil {
@@ -467,9 +405,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.cellOffsetY = cyF - float64(child.Y)
 			a.dragging.originScreenX = tlX
 			a.dragging.originScreenY = tlY
-			a.dragging.originPaneRect = r
 			a.dragging.srcGridID = n.ChildGridID
-			a.dragging.srcPath = append(slices.Clone(p.Path), n.ID)
 			a.dragging.srcCellSize = cp.CellPx
 			return nil
 		}
@@ -480,7 +416,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		a.dragging.cellOffsetY = cy - float64(n.Y)
 		a.dragging.snapshotTile = *n
 		a.dragging.originScreenX, a.dragging.originScreenY = ps.CellToScreen(float64(n.X), float64(n.Y))
-		a.dragging.originPaneRect = r
 	}
 	return nil
 }
@@ -505,19 +440,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// charge of the move so the user can drag clones / resize past a
 	// URL pane without the page seeing it.
 	if a.rightDrag == nil && a.dragging == nil {
-		if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-			if pointInPaneContent(r, sx, sy) {
-				// Live pane: the native view owns the cursor (the canvas
-				// won't get moves over it anyway). Frozen pane: grab cursor.
-				if a.urlViewFor(p.ID) != nil {
-					a.canvas.Get("style").Set("cursor", "")
-					return nil
-				}
-				// Frozen URL descent: show grab cursor.
-				a.updateURLCursor(p, r)
-				return nil
-			}
-			// Outside content area: restore default cursor.
+		if p, _, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
+			// A live pane's native view owns its own cursor (the canvas
+			// won't get moves over it anyway); a frozen pane's letterboxed
+			// preview has no pan gesture. Default cursor either way.
 			a.canvas.Get("style").Set("cursor", "")
 		} else {
 			// Not hovering a URL descent pane: show a resize cursor when
@@ -602,27 +528,14 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 	}
 	if d.tileID == "" && !d.isTemplate {
-		// Pan the source pane smoothly. In file-rendered mode the drag
-		// scrolls the file's logical content; in grid mode it pans the
-		// parent-grid view. (Frozen URL descents no longer pan — the
-		// preview letterboxes to fit, issue #89.)
+		// Pan the source pane's parent-grid view smoothly. (A pan drag
+		// only arms in grid mode — a content descent swallows the
+		// mousedown — so there is no text-scroll arm here.)
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused != nil {
-			if focused.TextFocus != "" && focused.TextMode == rpc.TextModeRendered {
-				z := nonzero(focused.TextZoom)
-				focused.TextScrollX -= (sx - d.curScreenX) / z
-				focused.TextScrollY -= (sy - d.curScreenY) / z
-				if focused.TextScrollY < 0 {
-					focused.TextScrollY = 0
-				}
-				if focused.TextScrollX < 0 {
-					focused.TextScrollX = 0
-				}
-			} else {
-				cellSize := cellPx * focused.Zoom
-				focused.Cx -= (sx - d.curScreenX) / cellSize
-				focused.Cy -= (sy - d.curScreenY) / cellSize
-			}
+			cellSize := cellPx * focused.Zoom
+			focused.Cx -= (sx - d.curScreenX) / cellSize
+			focused.Cy -= (sy - d.curScreenY) / cellSize
 		}
 	} else if a.ghost != nil {
 		// Update the ghost from the SAME dragdrop.DecideDrop verdict the
@@ -1093,14 +1006,6 @@ func zoomDist(z1, z2 float64) float64 {
 	return zoomtrans.ZoomDist(z1, z2, cellPx, zoomDistFactor)
 }
 
-// canAscend reports whether pane p has somewhere to ascend to: it's
-// descended into a text/url/shell tile (TextFocus), into a child grid
-// (non-empty Path), or it entered a plugin via the + menu and has a frame
-// to pop (non-empty Up). At the launcher start screen none hold.
-func (a *App) canAscend(p *pane.Pane) bool {
-	return p.TextFocus != "" || len(p.Path) > 0 || len(p.Up) > 0
-}
-
 // ascendPane performs the appropriate ascent for pane p: a file ascent
 // when it's descended into a text/url/shell tile, a well ascent when it's
 // in a child grid, a portal ascent (pop the + menu entry stack) when it
@@ -1536,15 +1441,6 @@ func (a *App) installDescent(p *pane.Pane, r pane.Rect, from zoomtrans.Endpoints
 			segC,
 		},
 	})
-}
-
-// nonzero returns x or 1.0 if x is zero/negative. Saves a guard at every
-// call site that divides by TextZoom.
-func nonzero(x float64) float64 {
-	if x <= 0 {
-		return 1.0
-	}
-	return x
 }
 
 // startTextDescent zooms a pane into a text tile in a single
@@ -2065,9 +1961,8 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 		cellOffsetX:    0.5,
 		cellOffsetY:    0.5,
 		snapshotTile:   paletteItemGhostNode(item),
-		originScreenX:  tx,
-		originScreenY:  ty,
-		originPaneRect: r,
+		originScreenX: tx,
+		originScreenY: ty,
 		// Start the ghost at the (fixed, zoom-independent) swatch size; the
 		// drop-target machinery grows/shrinks it to the destination grid's
 		// cell size as the cursor moves over a pane, and back to the swatch

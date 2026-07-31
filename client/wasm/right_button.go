@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"math"
-	"slices"
 
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gesture"
@@ -75,11 +74,6 @@ type rightDragState struct {
 	// direction can flip mid-gesture).
 	splitAxis pane.Direction
 
-	// Resize-only.
-	targetSplit *pane.Split
-	splitDir    pane.Direction
-	container   pane.Rect
-
 	// Tile-only.
 	tilePaneID string
 	tileNode   rpc.Tile
@@ -103,11 +97,6 @@ type rightDragState struct {
 	clickCellX, clickCellY   int64
 	tileNewX, tileNewY       int64
 	tileNewW, tileNewH       int64
-
-	// rightDragEmbedHint-only. embedRect is the screen rectangle of the
-	// rendered tile-embed under the cursor; the chain-link glyph paints
-	// centered inside it.
-	embedRect [4]float64
 }
 
 // onRightDown classifies the right-down and arms the matching gesture
@@ -421,12 +410,10 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *rpc.Tile, sx, sy float
 		cellOffsetX:    cxF - float64(n.X),
 		cellOffsetY:    cyF - float64(n.Y),
 		snapshotTile:   *n,
-		originScreenX:  tlX,
-		originScreenY:  tlY,
-		originPaneRect: r,
-		srcGridID:      a.gridIDForPane(p),
-		srcPath:        slices.Clone(p.Path),
-		srcCellSize:    cellSize,
+		originScreenX: tlX,
+		originScreenY: tlY,
+		srcGridID:     a.gridIDForPane(p),
+		srcCellSize:   cellSize,
 	}
 }
 
@@ -542,16 +529,6 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	a.postTwoGridMutate("DeleteTile", d.srcGridID, dstGridID, func(ctx context.Context) error {
 		return a.cl.DeleteTile(ctx, req)
 	})
-}
-
-// tileAtCellInTarget returns the tile the cursor is *inside* of in
-// the resolved drop target's grid (which may be a well's child grid),
-// or nil. Hit-test semantics: use floor, never round — round-half
-// silently misses the lower-right portion of every cell, which broke
-// the black-hole delete trigger across half each black hole.
-func (a *App) tileAtCellInTarget(t *dropTarget, sx, sy float64) *rpc.Tile {
-	cellX, cellY := dragdrop.FloorCellAt(t.originX, t.originY, t.cellSize, sx, sy)
-	return a.nodeAtCellInGrid(t.gridID, cellX, cellY)
 }
 
 // commitTileResize commits the proposed (X, Y, W, H) via PlaceTile — the one

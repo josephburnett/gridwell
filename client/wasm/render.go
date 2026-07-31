@@ -86,11 +86,6 @@ const (
 	// its processes included), and the border is the warning (issue #85).
 	colorEphemeralBorder      = "#8b8e96"
 	colorEphemeralBorderFaded = "#4b4d52"
-	// colorExitBorder / colorExitFill are the error red used for a broken
-	// embed reference (a link whose target no longer resolves) — a genuine
-	// "this is wrong" signal, distinct from the plugin/shell identities.
-	colorExitBorder = "#c87a5a"
-	colorExitFill   = "#3a241a"
 	// colorSourceLabelBg is the translucent strip behind the name label
 	// shown at the top of a tile (plugin / host content). Dark enough that
 	// the warm foreground reads clearly over any underlying preview.
@@ -120,10 +115,6 @@ const (
 	colorMenuBg     = "#16181f"
 	colorMenuItemHi = "#e8e9ee"
 	colorMuted      = "#6c6f78"
-	// Inline-markdown body colors used by the rendered-markdown
-	// drawing path (drawInlineLines, drawMarkdownRendered).
-	colorMarkdownBody    = "#d8d9de"
-	colorMarkdownCodeBg2 = "#3a4658"
 	// Launcher tile tints for a non-enterable plugin (client/pluginhealth):
 	// broken (Info failed/timed out) gets a red-tinted overlay — the same
 	// alarm family as the error notice strip; rootless (healthy, no root
@@ -936,7 +927,7 @@ func (a *App) drawTileBannerLabel(n *rpc.Tile, x, y, w, h float64, outside bool)
 	a.cctx.Call("clip")
 	a.cctx.Set("fillStyle", colorSourceLabelBg)
 	a.cctx.Call("fillRect", ix, iy, iw, bannerH)
-	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true, false)
+	setFont(a.cctx, fontPx, `ui-sans-serif, system-ui, -apple-system, sans-serif`, true)
 	a.cctx.Set("fillStyle", bannerTextColor(n, outside))
 	a.cctx.Set("textBaseline", "middle")
 	a.cctx.Set("textAlign", "start")

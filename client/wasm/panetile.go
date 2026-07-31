@@ -102,7 +102,7 @@ func (a *App) drawPaneTilePreview(n *rpc.Tile, x, y, w, h float64, selected, out
 		// Divider lines on top, so the split structure reads at any size.
 		for _, d := range pane.Dividers(tree, tileRect, 1) {
 			c.Set("fillStyle", colorPaneTileBorder)
-			c.Call("fillRect", d.Rect.X, d.Rect.Y, maxf(d.Rect.W, 1), maxf(d.Rect.H, 1))
+			c.Call("fillRect", d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1))
 		}
 		c.Call("restore")
 	}
@@ -164,9 +164,3 @@ func (a *App) createPaneAtCell(p *pane.Pane, cellX, cellY int64) {
 	}, nil)
 }
 
-func maxf(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}

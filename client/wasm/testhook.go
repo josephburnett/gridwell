@@ -654,7 +654,7 @@ func (a *App) thRawRows(js.Value, []js.Value) any {
 	src := a.textTextarea.Get("value").String()
 	st := defaultMarkdownStyle()
 	scale := a.textScaleFor(p)
-	setFont(a.cctx, st.codePx*scale, st.monospace, false, false)
+	setFont(a.cctx, st.codePx*scale, st.monospace, false)
 	m := a.cctx.Call("measureText", "M")
 	w := a.textContentWidth(p)
 	return len(markdown.WrapRawText(src, rawWrapCols(m, w, scale, st.pad)))

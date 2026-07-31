@@ -362,8 +362,6 @@ func (a *App) drawSplitAxisHint(r pane.Rect, rd *rightDragState) {
 	}
 }
 
-type pointXY struct{ x, y float64 }
-
 // drawSwapPreview draws the swap affordance overlay. Before any drag
 // motion (or while still inside the origin pane), an inline "swap"
 // glyph sits at the cursor as a hint: "this is a swap gesture; drag

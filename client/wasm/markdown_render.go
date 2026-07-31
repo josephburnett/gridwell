@@ -132,49 +132,28 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, _ pane.Rect, sel
 	}
 }
 
-// markdownStyle holds the per-block font/spacing/color parameters in logical
-// pixels (before scale). It is the single source the LayoutStyle and the
-// color map are derived from.
+// markdownStyle holds the raw-text painter's font/spacing/color parameters
+// in logical pixels (before scale). The rest of the old canvas layout
+// engine's parameters died with it (#218); these four are what the raw
+// soft-wrap painter and the textarea sizing still read.
 type markdownStyle struct {
-	bodyPx     float64
-	h1Px       float64
-	h2Px       float64
-	h3Px       float64
-	codePx     float64
-	pad        float64
-	gapAfter   float64
-	monospace  string
-	sansSerif  string
-	textColor  string
-	mutedColor string
-	codeBg     string
-	quoteBar   string
+	codePx    float64
+	pad       float64
+	monospace string
+	textColor string
 }
 
 func defaultMarkdownStyle() markdownStyle {
 	return markdownStyle{
-		bodyPx:     14,
-		h1Px:       24,
-		h2Px:       19,
-		h3Px:       16,
-		codePx:     13,
-		pad:        6,
-		gapAfter:   4,
-		monospace:  `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
-		sansSerif:  `ui-sans-serif, system-ui, -apple-system, sans-serif`,
-		textColor:  "#d8d9de",
-		mutedColor: "#9ca0ad",
-		codeBg:     "#1c1d24",
-		quoteBar:   "#3a4b5a",
+		codePx:    13,
+		pad:       6,
+		monospace: `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
+		textColor: "#d8d9de",
 	}
 }
 
 // setFont assembles a CSS font shorthand and assigns it. size is in pixels.
-func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
-	style := "normal"
-	if italic {
-		style = "italic"
-	}
+func setFont(c js.Value, sizePx float64, family string, bold bool) {
 	weight := "normal"
 	if bold {
 		weight = "bold"
@@ -182,7 +161,7 @@ func setFont(c js.Value, sizePx float64, family string, bold, italic bool) {
 	if sizePx < 1 {
 		sizePx = 1
 	}
-	c.Set("font", fmt.Sprintf("%s %s %.2fpx %s", style, weight, sizePx, family))
+	c.Set("font", fmt.Sprintf("normal %s %.2fpx %s", weight, sizePx, family))
 }
 
 // drawMarkdownText paints src as raw monospace text at the given scale. Used
@@ -200,7 +179,7 @@ const rawTextLineHeight = 1.35
 func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
-	setFont(c, fontPx*scale, st.monospace, false, false)
+	setFont(c, fontPx*scale, st.monospace, false)
 	c.Set("fillStyle", st.textColor)
 	// Place each line's baseline exactly where a CSS line box would, so this
 	// matches the editing <textarea> (file_overlay.go) to the pixel and the

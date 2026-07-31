@@ -549,7 +549,7 @@ func (a *App) onShellExit(paneID, message string, sessionGone bool) {
 	shellLog("exit pane=%s tile=%s gone=%v msg=%q", paneID, conn.tileID, sessionGone, message)
 	if sessionGone {
 		a.setShellAlive(conn.tileID, false)
-	} else if _, ok := a.shellAlive[conn.tileID]; ok {
+	} else {
 		delete(a.shellAlive, conn.tileID)
 	}
 	if message != "" {

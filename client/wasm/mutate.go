@@ -104,17 +104,6 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, cal
 	}()
 }
 
-// postPersist runs a "save my local view" RPC: the caller has already
-// patched the cache, the server-side write is the durable mirror. Used
-// by SetWellView, where the cache has already been updated
-// optimistically before the goroutine fires.
-func (a *App) postPersist(label string, gid string, call tileCall) {
-	go func() {
-		_, err := call(context.Background())
-		a.reactToErr(label, gid, err)
-	}()
-}
-
 // postOptimisticPersist is postPersist for a caller that ALREADY patched the
 // cache before the RPC (e.g. persistWellView's framing patch). The reaction
 // table differs: ANY failure refetches, because a rejected optimistic patch
