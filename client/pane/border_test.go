@@ -219,3 +219,29 @@ func TestBorderColorEphemeralTile(t *testing.T) {
 		t.Errorf("persistent shell = %q, want shell orange", got)
 	}
 }
+
+// TestFamilyOf pins the one classifier the border AND the bottom bar derive
+// from (issue #223): kind → family, with ephemeral beating the kind and an
+// unknown tile falling back to the grid family.
+func TestFamilyOf(t *testing.T) {
+	cases := []struct {
+		name string
+		in   BorderInput
+		want Family
+	}{
+		{"grid", BorderInput{}, FamilyGrid},
+		{"node grid", BorderInput{IsLauncher: true}, FamilyRoot},
+		{"text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text"}, FamilyText},
+		{"source text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InSourceGrid: true}, FamilyExit},
+		{"url frozen", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url"}, FamilyURL},
+		{"url live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true}, FamilyURLLive},
+		{"shell", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell"}, FamilyShell},
+		{"ephemeral beats kind", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell", Ephemeral: true}, FamilyEphemeral},
+		{"unknown tile falls back to grid", BorderInput{HasTextFocus: true}, FamilyGrid},
+	}
+	for _, c := range cases {
+		if got := FamilyOf(c.in); got != c.want {
+			t.Errorf("%s: FamilyOf = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

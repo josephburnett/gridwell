@@ -60,23 +60,26 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 	cx, cy := a.plusButtonCenter()
 	deleting := a.tileDragInFlight()
 	hot := deleting && a.pointInPlus(a.dragging.curScreenX, a.dragging.curScreenY)
-	// The pane-tile teal (2026-07-30 tweak): the slot reads as part of the
-	// bar's family, standing out from the dark band instead of graying into
-	// its corner. Open menu brightens it; the hot trashcan goes danger-red.
-	bg := colorPaneTileBorder
-	switch {
-	case hot:
+	// The button wears the pane's family hue (issue #223): saturated on the
+	// subtle dark band, so it stands out while still matching the scheme.
+	// The hot trashcan goes danger-red; an open menu gets a brighter ring.
+	band, button := a.barTheme()
+	bg := button
+	if hot {
 		bg = colorPlusBgDelete
-	case a.menu.OpenOn(p.ID):
-		bg = "#5ecfcf"
 	}
 	a.cctx.Set("fillStyle", bg)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
 	a.cctx.Call("fill")
 	a.cctx.Set("strokeStyle", "#dff4f4")
-	a.cctx.Set("lineWidth", 1.0)
+	if a.menu.OpenOn(p.ID) {
+		a.cctx.Set("lineWidth", 2.0)
+	} else {
+		a.cctx.Set("lineWidth", 1.0)
+	}
 	a.cctx.Call("stroke")
+	a.cctx.Set("lineWidth", 1.0)
 
 	if deleting {
 		// Trashcan glyph centered in the circle — drop a tile here to delete.
@@ -85,8 +88,8 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 		return
 	}
 
-	// Plus glyph: two strokes through center, dark on the teal face.
-	a.cctx.Set("strokeStyle", colorPaneTileFill)
+	// Plus glyph: two strokes through center, dark on the family face.
+	a.cctx.Set("strokeStyle", band)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("moveTo", cx-8, cy)

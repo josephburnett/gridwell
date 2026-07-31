@@ -548,12 +548,12 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 }
 
 // drawCircleButtonChrome paints the filled, bordered circle shared by the
-// lower-right corner buttons (URL back / refresh), so the position and look
-// stay muscle-memory-compatible with the + button. The caller then draws its
-// glyph on top at (cx, cy).
+// bar-slot buttons (URL back / refresh), so the position and look stay
+// muscle-memory-compatible with the + button. Like it, the face wears the
+// pane's family hue (issue #223). The caller then draws its glyph on top.
 func (a *App) drawCircleButtonChrome(cx, cy float64) {
-	// The pane-tile teal, matching the + button (2026-07-30 tweak).
-	a.cctx.Set("fillStyle", colorPaneTileBorder)
+	_, button := a.barTheme()
+	a.cctx.Set("fillStyle", button)
 	a.cctx.Call("beginPath")
 	a.cctx.Call("arc", cx, cy, float64(plusButtonRadius), 0, 2*math.Pi)
 	a.cctx.Call("fill")
@@ -570,7 +570,8 @@ func (a *App) drawURLBackButton() {
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
-	a.cctx.Set("strokeStyle", colorPaneTileFill)
+	band, _ := a.barTheme()
+	a.cctx.Set("strokeStyle", band)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Set("lineCap", "round")
 	a.cctx.Set("lineJoin", "round")
@@ -595,7 +596,8 @@ func (a *App) drawURLRefreshButton() {
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
-	drawRefreshIcon(a.cctx, cx, cy, 7.0, colorPaneTileFill)
+	band, _ := a.barTheme()
+	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 }
 
 // drawURLNoLiveButton paints the bar-slot button on a frozen URL-tile descent
@@ -607,10 +609,11 @@ func (a *App) drawURLNoLiveButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
-	drawRefreshIcon(a.cctx, cx, cy, 7.0, "#1d4a4a")
+	band, _ := a.barTheme()
+	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 	// The slash: corner-to-corner over the glyph, same dim color, so the
 	// shape reads as "refresh — crossed out" at a glance.
-	a.cctx.Set("strokeStyle", "#1d4a4a")
+	a.cctx.Set("strokeStyle", band)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Set("lineCap", "round")
 	a.cctx.Call("beginPath")
@@ -1142,6 +1145,13 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 // the descended tile isn't cached yet, we fall back to the generic
 // blue so the user still sees "descended into something".
 func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
+	return pane.BorderColor(a.borderInputFor(p, g, gridOK, focused, urlLive), paneBorderColors)
+}
+
+// borderInputFor resolves the facts pane.FamilyOf classifies on — shared by
+// the pane border and the bottom bar theme (issue #223), so the frame and
+// the band can never disagree about what the pane is showing.
+func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) pane.BorderInput {
 	in := pane.BorderInput{
 		HasTextFocus: p.TextFocus != "",
 		DescentDepth: len(p.Path),
@@ -1162,7 +1172,7 @@ func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focus
 	if gridOK && g != nil && (g.Meta.SourceKind == rpc.GridSourceFS || g.Meta.SourceKind == rpc.GridSourceProc) {
 		in.InSourceGrid = true
 	}
-	return pane.BorderColor(in, paneBorderColors)
+	return in
 }
 
 // paneBorderColors bundles the wasm renderer's color constants for the

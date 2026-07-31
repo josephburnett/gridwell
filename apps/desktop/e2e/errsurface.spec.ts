@@ -92,10 +92,12 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
   const winH = await window.evaluate(() => window.innerHeight);
   const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
   // Panes reclaim the full window height — no strip, and no reserved bar
-  // band either: since #220 the bar rides INSIDE the focused pane, flush
-  // with its bottom edge.
+  // band either: the bar rides INSIDE the focused pane (#220), a border's
+  // width above its bottom edge (#223 — the border wraps around).
   expect(bottom, 'panes reclaim the reserved strip height').toBe(winH);
-  expect(bar.top, 'the bar band rides the focused pane bottom').toBe(bottom - bar.height);
+  const gap = bottom - (bar.top + bar.height);
+  expect(gap, 'the band sits inside the pane border').toBeGreaterThan(0);
+  expect(gap, 'by exactly the border width').toBeLessThan(8);
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {

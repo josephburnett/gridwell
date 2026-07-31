@@ -54,16 +54,17 @@ func TestWorkspaceCrumbWidthCapped(t *testing.T) {
 
 func TestChainSquares(t *testing.T) {
 	segs := Layout(0, 3, 1000)
-	// Outside a workspace an anchor block fronts the chain (issue #220).
-	if segs[0].Kind != KindAnchor || segs[0].W != AnchorW || segs[0].X != 0 {
-		t.Fatalf("segment 0 = %+v, want the anchor block at x=0 w=%v", segs[0], AnchorW)
+	// Outside a workspace the chain starts at the band's left edge — the
+	// anchor block is gone (owner reversal 2026-07-31, issue #223).
+	if segs[0].Kind != KindChain || segs[0].X != 0 {
+		t.Fatalf("segment 0 = %+v, want a chain crumb at x=0", segs[0])
 	}
-	for _, s := range segs[1:] {
+	for _, s := range segs {
 		if s.W != RowH {
 			t.Fatalf("chain crumb w = %v, want square %v", s.W, RowH)
 		}
 		if s.Kind != KindChain {
-			t.Fatalf("segment after the anchor = %+v, want a chain crumb", s)
+			t.Fatalf("segment = %+v, want a chain crumb", s)
 		}
 	}
 	// Workspace crumbs cap at the (deliberately narrow, issue #220)

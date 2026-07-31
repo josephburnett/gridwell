@@ -647,8 +647,6 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
 		switch s.Kind {
-		case wsbar.KindAnchor:
-			e["kind"] = "anchor"
 		case wsbar.KindWorkspace:
 			e["kind"] = "workspace"
 		case wsbar.KindChain:
@@ -660,11 +658,14 @@ func (a *App) thBar(js.Value, []js.Value) any {
 		}
 		out = append(out, e)
 	}
+	band, button := a.barTheme()
 	res := map[string]any{
 		"top":      top,
 		"left":     bx,
 		"width":    bw,
 		"height":   wsbar.RowH,
+		"band":     band,
+		"button":   button,
 		"segments": out,
 	}
 	// The centered current-pane title (2026-07-30 tweak): the exact rect

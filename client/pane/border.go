@@ -70,53 +70,85 @@ type BorderInput struct {
 	Ephemeral bool
 }
 
-// BorderColor returns the CSS color string for the pane's outline,
-// implementing Gridwell's color grammar:
-//
-//   - Descent into a URL tile, live   → URLLive
-//   - Descent into a URL tile, frozen → URL or URLFaded
-//   - Descent into a shell tile       → Shell or ShellFaded
-//   - Descent into a read-only host text tile → Exit or ExitFaded
-//   - Descent into a text tile        → Text or TextFaded
-//   - Launcher home (gridless)        → Root
-//   - Any grid (any depth, any plugin) → Focused or FocusedFaded
-//
-// The pattern is: classify by what's inside, then pick the saturated
-// or faded variant based on focus.
-func BorderColor(s BorderInput, c BorderColors) string {
+// Family names the color family a pane belongs to — the ONE
+// classification behind Gridwell's color grammar. BorderColor picks the
+// pane outline from it, and the bottom bar picks its band + button shades
+// from the same fact (issue #223), so the frame and the bar can never
+// disagree about what the pane is showing.
+type Family int
+
+const (
+	// FamilyGrid is any grid the user is navigating, at any depth and in
+	// any plugin (every grid is blue).
+	FamilyGrid Family = iota
+	// FamilyRoot is the node grid (the landing page): the brown home
+	// identity.
+	FamilyRoot
+	// FamilyText is a descent into a markdown text tile.
+	FamilyText
+	// FamilyURL is a descent into a URL tile, frozen preview.
+	FamilyURL
+	// FamilyURLLive is a descent into a URL tile with a live view open.
+	FamilyURLLive
+	// FamilyShell is a descent into a shell tile.
+	FamilyShell
+	// FamilyExit is a read-only host content descent (a text tile inside a
+	// source grid): brown, echoing the plugin well that led here.
+	FamilyExit
+	// FamilyEphemeral is a descent into an EPHEMERAL (scratch-grid) tile:
+	// gray beats the kind color, because ascending DELETES it (issue #85).
+	FamilyEphemeral
+)
+
+// FamilyOf classifies the pane by what's inside it. This is the single
+// classifier every color consumer derives from.
+func FamilyOf(s BorderInput) Family {
 	if s.HasTextFocus {
 		if s.TileKnown {
-			// Gray beats the kind color: an ephemeral tile dies on ascent,
-			// and the border is how the user knows (issue #85).
 			if s.Ephemeral {
-				return focused(s, c.Ephemeral, c.EphemeralFaded)
+				return FamilyEphemeral
 			}
 			switch s.TileKind {
 			case "url":
 				if s.URLLive {
-					return c.URLLive
+					return FamilyURLLive
 				}
-				return focused(s, c.URL, c.URLFaded)
+				return FamilyURL
 			case "shell":
-				return focused(s, c.Shell, c.ShellFaded)
+				return FamilyShell
 			case "text":
-				// A text tile that lives in a source-backed grid is a
-				// read-only window onto host state (the @info tile in a
-				// proc-well, file metadata in an fs-well). Its outline
-				// belongs to the Exit (brown) family so the frame keeps
-				// echoing the plugin well that put us here.
 				if s.InSourceGrid {
-					return focused(s, c.Exit, c.ExitFaded)
+					return FamilyExit
 				}
-				return focused(s, c.Text, c.TextFaded)
+				return FamilyText
 			}
 		}
-		return focused(s, c.Focused, c.FocusedFaded)
+		return FamilyGrid
 	}
-	// Not descended into a content tile: the node-grid home is brown, every
-	// grid (any depth, any plugin — including source-backed fs/proc grids)
-	// is blue.
 	if s.IsLauncher {
+		return FamilyRoot
+	}
+	return FamilyGrid
+}
+
+// BorderColor returns the CSS color string for the pane's outline: the
+// pane's Family, in the saturated variant when the pane has focus and the
+// faded one otherwise (URLLive and Root have no faded variant).
+func BorderColor(s BorderInput, c BorderColors) string {
+	switch FamilyOf(s) {
+	case FamilyEphemeral:
+		return focused(s, c.Ephemeral, c.EphemeralFaded)
+	case FamilyURLLive:
+		return c.URLLive
+	case FamilyURL:
+		return focused(s, c.URL, c.URLFaded)
+	case FamilyShell:
+		return focused(s, c.Shell, c.ShellFaded)
+	case FamilyExit:
+		return focused(s, c.Exit, c.ExitFaded)
+	case FamilyText:
+		return focused(s, c.Text, c.TextFaded)
+	case FamilyRoot:
 		return c.Root
 	}
 	return focused(s, c.Focused, c.FocusedFaded)

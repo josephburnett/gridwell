@@ -31,16 +31,22 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  // The band lives INSIDE the focused pane (issue #220): its top edge is
-  // one row above the pane's bottom. Outside a workspace there is no
-  // workspace crumb — the teal anchor block fronts the chain instead.
+  // The band lives INSIDE the focused pane's border (issues #220/#223):
+  // its top edge is one row + the border above the pane's bottom, so the
+  // border wraps all the way around. Outside a workspace there is no
+  // workspace crumb and no anchor block (reversal 2026-07-31) — the chain
+  // starts the band. On a grid the theme is the blue grid family.
   const outside = await bar(window);
   expect((await workspaceState(window)).depth).toBe(0);
   const fp0 = await gw.focused();
-  expect(outside.top, 'the band is the focused pane\'s bottom strip').toBeCloseTo(fp0.y + fp0.h - outside.height, 1);
+  const borderPx = fp0.y + fp0.h - outside.height - outside.top;
+  expect(borderPx, 'the band sits inside the pane border').toBeGreaterThan(0);
+  expect(borderPx, 'by exactly the border width').toBeLessThan(8);
   expect(outside.segments.some((s: any) => s.kind === 'workspace')).toBe(false);
-  expect(outside.segments[0].kind, 'the anchor block fronts the cookies').toBe('anchor');
-  expect(outside.segments.some((s: any) => s.kind === 'chain'), 'the chain shows even at depth 0').toBe(true);
+  expect(outside.segments.some((s: any) => s.kind === 'anchor'), 'the anchor block is gone').toBe(false);
+  expect(outside.segments[0].kind, 'the chain starts the band').toBe('chain');
+  expect(outside.band, 'grid-family band shade').toBe('#151b2e');
+  expect(outside.button, 'grid-family button hue').toBe('#4a6fff');
 
   await gw.openPalette();
   await gw.dragCreate('pane', wx, wy);
@@ -49,11 +55,10 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 
-  // Inside: the workspace crumb replaces the anchor block.
+  // Inside: the workspace crumb fronts the chain.
   const inside = await bar(window);
   const crumb = inside.segments.find((s: any) => s.kind === 'workspace' && s.index === 1);
   expect(crumb, 'the workspace crumb must appear').toBeTruthy();
-  expect(inside.segments.some((s: any) => s.kind === 'anchor')).toBe(false);
 
   // The workspace's default pane frames the containing grid with nothing
   // to pop in-pane (no path, no portal frames). Middle-click (the universal

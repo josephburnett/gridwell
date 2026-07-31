@@ -22,21 +22,51 @@ import (
 // DERIVED per frame from the focused pane's own facts (pane.DescentChain);
 // nothing here stores a second copy of where the pane is.
 
-// bottomBarRect returns the bar band: the focused pane's bottom RowH
-// strip (issue #220). ok=false with no pane or a degenerate rect. Native
-// surfaces on the focused pane carve this band out of their content boxes
-// (panebox.BarInset) so they can never occlude it; canvas content may
-// paint under — the bar paints last.
+// bottomBarRect returns the bar band: a RowH strip INSIDE the focused
+// pane's border, flush above the bottom edge (issues #220/#223 — the
+// border wraps all the way around; the band never paints over it).
+// ok=false with no pane or a degenerate rect. Native surfaces on the
+// focused pane carve the band out of their content boxes (panebox.BarInset)
+// so they can never occlude it; their content box's bottom edge is exactly
+// this band's top.
 func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return 0, 0, 0, false
 	}
 	r := a.paneRectByID(p.ID)
-	if r.W <= 0 || r.H <= wsbar.RowH {
+	if r.W <= 2*paneBorderPx || r.H <= wsbar.RowH+paneBorderPx {
 		return 0, 0, 0, false
 	}
-	return r.X, r.Y + r.H - wsbar.RowH, r.W, true
+	return r.X + paneBorderPx, r.Y + r.H - paneBorderPx - wsbar.RowH, r.W - 2*paneBorderPx, true
+}
+
+// barTheme returns the band and button shades for the focused pane: a
+// subtle dark of the pane's color family for the band, the family's
+// saturated hue for the buttons (issue #223). Same classifier as the pane
+// border (pane.FamilyOf via borderInputFor) — one fact, two shades.
+func (a *App) barTheme() (band, button string) {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return colorBg, colorFocusBorder
+	}
+	g, gridOK := a.c.Grid(a.gridIDForPane(p))
+	in := a.borderInputFor(p, g, gridOK, true, a.urlViewFor(p.ID) != nil)
+	switch pane.FamilyOf(in) {
+	case pane.FamilyText:
+		return "#1b2213", colorMarkdownLine
+	case pane.FamilyURL:
+		return colorURLFill, colorURLLine
+	case pane.FamilyURLLive:
+		return colorURLFill, colorURLLiveLine
+	case pane.FamilyShell:
+		return colorShellFill, colorShellBorder
+	case pane.FamilyRoot, pane.FamilyExit:
+		return "#241e12", colorPluginBorder
+	case pane.FamilyEphemeral:
+		return "#1d1f24", colorEphemeralBorder
+	}
+	return "#151b2e", colorFocusBorder
 }
 
 // bottomBarChain returns the focused pane and its descent chain (nil chain
@@ -65,8 +95,9 @@ func (a *App) drawBottomBar() {
 	if !ok {
 		return
 	}
+	band, button := a.barTheme()
 	c := a.cctx
-	c.Set("fillStyle", colorPaneTileFill)
+	c.Set("fillStyle", band)
 	c.Call("fillRect", bx, top, bw, wsbar.RowH)
 
 	_, chain := a.bottomBarChain()
@@ -77,10 +108,6 @@ func (a *App) drawBottomBar() {
 	c.Set("textBaseline", "middle")
 	for _, s := range segs {
 		switch s.Kind {
-		case wsbar.KindAnchor:
-			// The nameless teal block fronting the cookies (issue #220).
-			c.Set("fillStyle", colorPaneTileBorder)
-			c.Call("fillRect", bx+s.X+2, top+3, s.W-3, wsbar.RowH-6)
 		case wsbar.KindWorkspace:
 			// Crumb face: the current (innermost) workspace reads brightest.
 			if s.Index == depth {
@@ -106,8 +133,8 @@ func (a *App) drawBottomBar() {
 			a.drawChainCrumb(chain[s.Index], shifted, top)
 		}
 	}
-	c.Set("fillStyle", "#dff4f4")
-	c.Call("fillRect", bx, top, bw, 1) // hairline above the band
+	c.Set("fillStyle", button)
+	c.Call("fillRect", bx, top, bw, 1) // hairline above the band, kind-hued
 	a.drawBarTitle(top)
 	a.drawBarSlot()
 }
