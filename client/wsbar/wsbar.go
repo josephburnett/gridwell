@@ -100,6 +100,34 @@ func Layout(wsCount, chainCount int, width float64) []Segment {
 	return out
 }
 
+// titlePad is the breathing room on either side of the centered title:
+// off the last crumb on its left, off the circle slot on its right.
+const titlePad = 8.0
+
+// minTitleW is the narrowest span worth drawing a title into.
+const minTitleW = 24.0
+
+// TitleSpan places the centered pane title: centered in the free space
+// BETWEEN the crumbs' end and the circle slot (issue #230 — centering in
+// the whole band let growing crumbs crowd the title one-sidedly, and it
+// never recentered). crumbsEnd is the right edge of the last crumb (0
+// with none), width the band width, textW the measured title width
+// (padding included). x is relative to the band's left edge; a title
+// wider than the free space is clamped to it; ok=false when less than
+// minTitleW remains.
+func TitleSpan(crumbsEnd, width, textW float64) (x, w float64, ok bool) {
+	left := crumbsEnd + titlePad
+	right := width - SlotW - titlePad
+	if right-left < minTitleW {
+		return 0, 0, false
+	}
+	w = textW
+	if w > right-left {
+		w = right - left
+	}
+	return left + (right-left-w)/2, w, true
+}
+
 // At returns the segment under x (relative to the bar's left edge), or
 // ok=false when x falls outside every crumb.
 func At(segs []Segment, x float64) (Segment, bool) {

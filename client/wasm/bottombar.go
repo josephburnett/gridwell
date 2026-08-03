@@ -140,9 +140,9 @@ func (a *App) drawBottomBar() {
 }
 
 // barTitleGeom computes the centered current-pane title: the pane's name
-// (bubbleLabel/bubbleDecorate — the one owners), centered in the bar and
-// clamped so it never overlaps the crumbs on its left or the circle slot on
-// its right. Render, hit-test, and the rename input all read this one rect.
+// (bubbleLabel/bubbleDecorate — the one owners), centered by wsbar.TitleSpan
+// in the free space between the crumbs and the circle slot (issue #230).
+// Render, hit-test, and the rename input all read this one rect.
 func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bool) {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -158,24 +158,18 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 		return
 	}
 	a.cctx.Set("font", "12px system-ui, sans-serif")
-	w = a.cctx.Call("measureText", label).Get("width").Float() + 24
-	x = bx + (bw-w)/2
+	textW := a.cctx.Call("measureText", label).Get("width").Float() + 24
 	_, chain := a.bottomBarChain()
 	segs := a.bottomBarSegments(chain)
-	crumbsEnd := bx
+	crumbsEnd := 0.0
 	if n := len(segs); n > 0 {
-		crumbsEnd = bx + segs[n-1].X + segs[n-1].W
+		crumbsEnd = segs[n-1].X + segs[n-1].W
 	}
-	if x < crumbsEnd+8 {
-		x = crumbsEnd + 8
-	}
-	if maxW := bx + bw - wsbar.SlotW - 8 - x; w > maxW {
-		w = maxW
-	}
-	if w < 24 {
+	tx, tw, spanOK := wsbar.TitleSpan(crumbsEnd, bw, textW)
+	if !spanOK {
 		return
 	}
-	ok = true
+	x, w, ok = bx+tx, tw, true
 	return
 }
 

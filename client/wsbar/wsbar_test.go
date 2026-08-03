@@ -100,3 +100,45 @@ func TestWorkspaceSegmentLookup(t *testing.T) {
 		t.Fatal("missing level must not resolve")
 	}
 }
+
+// The title centers in the free space BETWEEN the crumbs' end and the slot
+// (issue #230) — not in the whole band, where growing crumbs crowd it
+// one-sidedly and it never recenters.
+func TestTitleSpanCentersInFreeSpace(t *testing.T) {
+	width, textW := 1000.0, 100.0
+	crumbsEnd := 400.0
+	x, w, ok := TitleSpan(crumbsEnd, width, textW)
+	if !ok {
+		t.Fatal("plenty of room, want ok")
+	}
+	if w != textW {
+		t.Fatalf("w = %v, want the full text width %v", w, textW)
+	}
+	left := crumbsEnd + titlePad
+	right := width - SlotW - titlePad
+	if got, want := x+w/2, (left+right)/2; got != want {
+		t.Fatalf("title center = %v, want the free-space center %v (not the band center %v)",
+			got, want, width/2)
+	}
+	// No crumbs: the free space starts at the band's left edge.
+	x, w, ok = TitleSpan(0, width, textW)
+	if !ok || x+w/2 != (titlePad+right)/2 {
+		t.Fatalf("no crumbs: center = %v ok=%v, want %v", x+w/2, ok, (titlePad+right)/2)
+	}
+}
+
+func TestTitleSpanClampsAndGivesUp(t *testing.T) {
+	// A title wider than the free space is clamped to it.
+	x, w, ok := TitleSpan(400, 1000, 5000)
+	if !ok {
+		t.Fatal("want ok")
+	}
+	left, right := 400+titlePad, 1000-SlotW-titlePad
+	if x != left || w != right-left {
+		t.Fatalf("clamp: x=%v w=%v, want x=%v w=%v", x, w, left, right-left)
+	}
+	// Crumbs leaving almost nothing: no title at all.
+	if _, _, ok := TitleSpan(950, 1000, 100); ok {
+		t.Fatal("sliver of space must not show a title")
+	}
+}
