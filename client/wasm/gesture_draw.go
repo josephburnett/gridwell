@@ -498,14 +498,10 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 	a.cctx.Set("lineWidth", 1.0)
 
 	// The crush verdict (issue #217): every corridor segment the drag has
-	// pressed past its bump reds — the release reads the IDENTICAL
-	// lr.crush.Red(cursor), so the red set and the closed set cannot
-	// diverge. Rects are live (SegmentRects), tracking the crush.
-	cursor := lr.curX
-	if lr.splitDir == pane.Horizontal {
-		cursor = lr.curY
-	}
-	red := lr.crush.Red(cursor)
+	// pressed past its live bump reds — the release reads the IDENTICAL
+	// stored lr.crush.Red() state, so the red set and the closed set
+	// cannot diverge. Rects are live (SegmentRects), tracking the crush.
+	red := lr.crush.Red()
 	if len(red) == 0 {
 		return
 	}

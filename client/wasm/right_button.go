@@ -594,12 +594,11 @@ func (a *App) flushPaneBeforeDrop(p *pane.Pane) {
 type leftResizeState struct {
 	targetSplit *pane.Split
 	splitDir    pane.Direction
-	// crush is the ARM-TIME bump plan (issue #217): the cursor positions at
-	// which each corridor segment outward from the boundary has been
-	// pressed to its minimum. The red preview and the release both read
-	// crush.Red(cursor) — one verdict. Arm-time sizes are the point:
-	// "pressed past the bump" is defined against where the borders were
-	// when you grabbed.
+	// crush is the close-threshold plan (issues #217/#238): the cursor
+	// positions past which each corridor segment outward from the boundary
+	// is pressed to close — the per-segment steps of the corridor wall,
+	// pure geometry, static for the whole drag. The red preview and the
+	// release both read crush.Red(cursor) — one verdict.
 	crush pane.CrushPlan
 	// curX/curY is the last cursor the move applied — the preview and the
 	// release read the SAME point, so the red warning can never mark a
@@ -682,6 +681,11 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 	if lr.targetSplit.Dir == pane.Horizontal {
 		cursor = sy
 	}
+	// Fold the move into the red state BEFORE the layout follows the
+	// cursor (issues #217/#238): the pre-move layout is what tells a
+	// deeper press (stays red) from a back-off (clears) while a crushed
+	// pane rides the drag at its minimum.
+	lr.crush.Update(a.tree.Root, a.rootLayoutRect(), lr.targetSplit, pane.MinPanePx, cursor)
 	// Walled at the universal pane minimum (issue #167): the drag itself
 	// never collapses — the adjacent pane visibly crushes toward the wall,
 	// signaling "release now closes it" (the release decides, issue #203).
@@ -692,20 +696,16 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 // finishLeftResize is the left release: the live layout was already applied
 // during the move (only-the-grabbed-border, issue #112), so the release
 // only closes what the drag PRESSED (issue #217): every corridor segment
-// the cursor pushed past its bump — red in the preview — is flushed and
-// removed, adjacent-first. Deciding from the last APPLIED cursor (lr.cur*)
-// keeps the verdict byte-identical to the red warning the user saw.
+// red in the preview is flushed and removed, adjacent-first. The release
+// reads the SAME stored red state the last move computed and the preview
+// drew, so the verdict is byte-identical to the warning the user saw.
 func (a *App) finishLeftResize() {
 	lr := a.leftResize
 	a.leftResize = nil
 	if lr == nil {
 		return
 	}
-	cursor := lr.curX
-	if lr.splitDir == pane.Horizontal {
-		cursor = lr.curY
-	}
-	for _, seg := range lr.crush.Red(cursor) {
+	for _, seg := range lr.crush.Red() {
 		a.flushDroppedSubtree(seg)
 		if !a.tree.RemoveSegment(seg) {
 			break

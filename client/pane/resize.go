@@ -45,83 +45,126 @@ func CorridorWalls(root TreeNode, rootRect Rect, target *Split, minPx float64) (
 	return lo, hi, true
 }
 
-// crushEps absorbs float ratio noise in the pressed-past-the-bump compare:
-// a segment reads as crushed only when the cursor is strictly past the
-// position where it reached its minimum, so a bare click (cursor at the
-// bump of an already-minimal neighbor) never closes anything.
+// crushEps absorbs float ratio noise in the pressed-past-the-bump compare
+// and widens each live threshold into a small sticky band (CrushPlan.Update):
+// a segment reds only when the cursor is strictly past the position where
+// it sits at its minimum, so a bare click (cursor at the bump of an
+// already-minimal neighbor) never closes anything.
 const crushEps = 0.5
 
-// CrushPlan is the progressive close model (issue #217, superseding #204's
-// corridor-edge band), captured at ARM time: for each corridor segment
-// outward from the grabbed boundary, the bump threshold — the cursor
-// position at which that segment has been pressed to its minimum. Bumps are
-// defined against the sizes AT GRAB (pressing past where a segment's border
-// was reachable), so a drag that merely returns to a pre-crushed segment's
-// border reds nothing until it presses beyond it.
+// CrushPlan is the progressive close model (issue #217, thresholds made
+// live by #238): for each corridor segment outward from the grabbed
+// boundary, red state driven by a per-move threshold — the position where
+// that segment sits pressed to its minimum in the CURRENT layout (its
+// live edge + its min). On the way in, segments beyond the pressed one
+// still hold their slack, so the bump is where the pane visibly bottoms
+// out ("pressure builds as soon as you hit another border" — and closing
+// a middle pane needs no travel to the screen edge). On the way out after
+// a deep multi-segment crush, those outer segments sit at min, so the red
+// clears just past the wall — backing off ~a minimum-width leaves every
+// crushed pane at min and closes nothing.
+//
+// The grab-time-size thresholds this replaces were #238's hysteresis: the
+// adjacent segment's bump assumed the outer segments still held their
+// GRAB sizes, so after a deep crush, un-redding it required retreating
+// almost to the grab point, regrowing the pane far past its min.
 type CrushPlan struct {
-	// ASegs/AThresh: segments before the boundary, adjacent-first, with the
-	// cursor position that presses each to its minimum (strictly toward the
-	// corridor start). BSegs/BThresh mirror after the boundary.
-	ASegs, BSegs     []TreeNode
-	AThresh, BThresh []float64
+	// ASegs: segments before the boundary, adjacent-first; BSegs mirror
+	// after the boundary. aRed/bRed is the sticky per-segment red state,
+	// folded by Update.
+	ASegs, BSegs []TreeNode
+	aRed, bRed   []bool
 }
 
-// PlanCrush captures the crush thresholds for target's boundary at arm.
+// PlanCrush captures the corridor segments for target's boundary at arm;
+// red state starts empty (a bare click closes nothing, the #204 class).
 func PlanCrush(root TreeNode, rootRect Rect, target *Split, minPx float64) (CrushPlan, bool) {
-	top, topRect, ok := corridorTop(root, rootRect, target)
+	top, _, ok := corridorTop(root, rootRect, target)
 	if !ok {
 		return CrushPlan{}, false
+	}
+	topNode := TreeNode{Split: top}
+	all := flattenCorridor(topNode, target.Dir)
+	bIdx := boundaryIndex(all, target)
+	if bIdx < 0 || bIdx+1 >= len(all) {
+		return CrushPlan{}, false
+	}
+	var plan CrushPlan
+	for i := bIdx; i >= 0; i-- {
+		plan.ASegs = append(plan.ASegs, all[i])
+	}
+	plan.BSegs = append(plan.BSegs, all[bIdx+1:]...)
+	plan.aRed = make([]bool, len(plan.ASegs))
+	plan.bRed = make([]bool, len(plan.BSegs))
+	return plan, true
+}
+
+// Update folds one cursor move into the red state, reading thresholds off
+// the layout BEFORE the move is applied — call it before ResizeThrough.
+// The pre-move read is the point: while a crushed segment rides the drag
+// at its min, its live threshold tracks the boundary exactly, and only
+// the pre-move snapshot can tell "pressed deeper" (stays red) from
+// "backed off" (clears). crushEps makes each threshold a small sticky
+// band, so sub-pixel jitter never flickers the verdict.
+func (cp *CrushPlan) Update(root TreeNode, rootRect Rect, target *Split, minPx, cursorPx float64) {
+	top, topRect, ok := corridorTop(root, rootRect, target)
+	if !ok {
+		return
 	}
 	topNode := TreeNode{Split: top}
 	all := flattenCorridor(topNode, target.Dir)
 	start, total := axisSpan(topRect, target.Dir)
 	sizes := segmentSizes(topNode, target.Dir, total)
 	bIdx := boundaryIndex(all, target)
-	if bIdx < 0 || bIdx+1 >= len(all) {
-		return CrushPlan{}, false
+	if bIdx < 0 {
+		return
 	}
-	boundary := start
-	for _, sz := range sizes[:bIdx+1] {
-		boundary += sz
+	edges := make([]float64, len(all)+1)
+	edges[0] = start
+	for i, sz := range sizes {
+		edges[i+1] = edges[i] + sz
 	}
-	var plan CrushPlan
-	th := boundary
-	for i := bIdx; i >= 0; i-- {
-		th -= sizes[i] - minSize(all[i], target.Dir, minPx)
-		plan.ASegs = append(plan.ASegs, all[i])
-		plan.AThresh = append(plan.AThresh, th)
+	for k := range cp.ASegs {
+		i := bIdx - k
+		th := edges[i] + minSize(all[i], target.Dir, minPx)
+		switch {
+		case cursorPx < th-crushEps:
+			cp.aRed[k] = true
+		case cursorPx > th+crushEps:
+			cp.aRed[k] = false
+		}
 	}
-	th = boundary
-	for i := bIdx + 1; i < len(all); i++ {
-		th += sizes[i] - minSize(all[i], target.Dir, minPx)
-		plan.BSegs = append(plan.BSegs, all[i])
-		plan.BThresh = append(plan.BThresh, th)
+	for k := range cp.BSegs {
+		i := bIdx + 1 + k
+		th := edges[i+1] - minSize(all[i], target.Dir, minPx)
+		switch {
+		case cursorPx > th+crushEps:
+			cp.bRed[k] = true
+		case cursorPx < th-crushEps:
+			cp.bRed[k] = false
+		}
 	}
-	return plan, true
 }
 
-// Red returns the segments the cursor has pressed to close — the contiguous
-// boundary-adjacent run whose bumps the cursor is strictly past, on the side
-// it is pressing. Backing off shrinks the run in reverse; the preview and
-// the release both read this one verdict, so they cannot disagree.
-func (cp CrushPlan) Red(cursorPx float64) []TreeNode {
+// Red returns the segments currently pressed to close — the contiguous
+// boundary-adjacent run on the pressed side. The preview and the release
+// both read this one state, so they cannot disagree.
+func (cp *CrushPlan) Red() []TreeNode {
 	var out []TreeNode
-	for k, t := range cp.AThresh {
-		if cursorPx < t-crushEps {
-			out = append(out, cp.ASegs[k])
-		} else {
+	for k, r := range cp.aRed {
+		if !r {
 			break
 		}
+		out = append(out, cp.ASegs[k])
 	}
 	if len(out) > 0 {
 		return out
 	}
-	for k, t := range cp.BThresh {
-		if cursorPx > t+crushEps {
-			out = append(out, cp.BSegs[k])
-		} else {
+	for k, r := range cp.bRed {
+		if !r {
 			break
 		}
+		out = append(out, cp.BSegs[k])
 	}
 	return out
 }

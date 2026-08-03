@@ -181,6 +181,39 @@ test('pressing past two bumps closes both panes on release (#217)', async ({ gw 
   expect(survivor.id, 'the pressed-into pane survives').toBe(p3.id);
 });
 
+// The #238 fix: crush deep through BOTH panes on a side, back off a hair
+// past the wall, release — everything survives at its minimum. Under the
+// old grab-size bump model the adjacent pane stayed red until the cursor
+// retreated almost to the grab point, regrowing it far past its min.
+test('backing off just past the wall after a deep crush closes nothing (#238)', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  await gw.splitFocusedPaneVertical();
+  const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(before).toHaveLength(3);
+  const [p1, , p3] = before;
+  const gx = p1.x + p1.w;
+  const gy = p1.y + p1.h / 2;
+  const rightEdge = p3.x + p3.w;
+
+  // Deep press: panes 2 and 3 both crush to min and go red.
+  await window.mouse.move(gx - 2, gy);
+  await window.mouse.down();
+  await window.mouse.move(rightEdge - 10, gy, { steps: 8 });
+  // Back off to just past the wall (both mins plus a little) and release.
+  await window.mouse.move(rightEdge - 64 - 12, gy, { steps: 4 });
+  await window.mouse.up();
+  await gw.waitIdle();
+
+  const after = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  expect(after, 'nothing closes').toHaveLength(3);
+  expect(after[1].w, 'middle pane sits near its min').toBeLessThan(50);
+  expect(after[2].w, 'third pane sits near its min').toBeLessThan(50);
+});
+
 test('the same divider closes either side by drag direction (#204)', async ({ gw }) => {
   await gw.enterPlugin('localdb');
   await gw.splitFocusedPaneVertical();
