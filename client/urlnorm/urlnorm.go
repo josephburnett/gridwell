@@ -70,28 +70,36 @@ func Normalize(raw string) (string, error) {
 	return "https://" + s, nil
 }
 
-// Suggest ranks candidate URLs against the user's partial input for the
-// new-url modal's autocomplete. Matching is case-insensitive and ignores a
-// leading scheme ("http(s)://") and "www." on both sides, so typing "git"
-// matches "https://github.com". A candidate whose comparable form STARTS with
-// the input ranks before one that merely contains it; within a rank the input
-// candidate order is preserved (the caller passes most-relevant-first).
-// Exact-string duplicates are dropped. Empty input returns the first `limit`
-// distinct candidates. Returns at most `limit` results (nil when limit <= 0).
-func Suggest(input string, candidates []string, limit int) []string {
+// Candidate is one autocomplete entry: an address plus the page title the
+// freeze captured (a url tile's alt_text; "" when never frozen).
+type Candidate struct {
+	URL, Title string
+}
+
+// Suggest ranks candidates against the user's partial input for the
+// new-url modal's autocomplete. The query matches the ADDRESS
+// (case-insensitively, ignoring a leading "http(s)://" and "www." on both
+// sides — typing "git" matches "https://github.com") or the TITLE
+// (case-insensitive substring — typing words from a page's title finds
+// its url, issue #235). A candidate whose comparable address STARTS with
+// the input ranks before any other match (address substring or title
+// hit); within a rank the input order is preserved (the caller passes
+// most-relevant-first). Dedupe is by the COMPARABLE address, so
+// scheme/www variants of one address collapse to a single suggestion.
+// Empty input returns the first `limit` distinct candidates. Returns at
+// most `limit` results (nil when limit <= 0).
+func Suggest(input string, candidates []Candidate, limit int) []Candidate {
 	if limit <= 0 {
 		return nil
 	}
 	q := comparableURL(input)
+	qTitle := strings.ToLower(strings.TrimSpace(input))
 	seen := make(map[string]bool, len(candidates))
-	var prefix, substr []string
+	var prefix, other []Candidate
 	for _, c := range candidates {
-		c = strings.TrimSpace(c)
-		cmp := comparableURL(c)
-		// Dedupe by the COMPARABLE form, not the raw string, so scheme/www
-		// variants of one address (http://x.com, https://www.x.com) collapse to
-		// a single suggestion instead of crowding the list with look-alikes.
-		if c == "" || seen[cmp] {
+		c.URL = strings.TrimSpace(c.URL)
+		cmp := comparableURL(c.URL)
+		if c.URL == "" || seen[cmp] {
 			continue
 		}
 		seen[cmp] = true
@@ -103,10 +111,12 @@ func Suggest(input string, candidates []string, limit int) []string {
 		case idx == 0:
 			prefix = append(prefix, c)
 		case idx > 0:
-			substr = append(substr, c)
+			other = append(other, c)
+		case qTitle != "" && strings.Contains(strings.ToLower(c.Title), qTitle):
+			other = append(other, c)
 		}
 	}
-	out := append(prefix, substr...)
+	out := append(prefix, other...)
 	if len(out) > limit {
 		out = out[:limit]
 	}

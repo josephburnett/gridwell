@@ -13,14 +13,15 @@ import (
 // short enough to stay a glanceable list rather than a scroll.
 const maxURLSuggestions = 8
 
-// urlSuggestCandidates collects the addresses of every url tile in the given
-// plugin that is currently cached, for the new-url modal's autocomplete.
+// urlSuggestCandidates collects the address + captured page title of every
+// url tile in the given plugin that is currently cached, for the new-url
+// modal's autocomplete (issue #235).
 // Scoped to one plugin (the session boundary, CLAUDE.md): you autocomplete only
 // from url tiles in the space you're creating the tile in. Cache-bound — grids
 // not opened this session don't contribute (a server query could broaden it;
 // the cache is the set you've actually browsed).
-func (a *App) urlSuggestCandidates(pluginUUID string) []string {
-	var out []string
+func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
+	var out []urlnorm.Candidate
 	for _, gid := range a.c.KnownGridIDs() {
 		if uuidOf(gid) != pluginUUID {
 			continue
@@ -31,7 +32,9 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []string {
 		}
 		for _, t := range g.Tiles {
 			if t.Kind == rpc.KindURL && t.URLString != "" {
-				out = append(out, t.URLString)
+				// AltText is the page title captured at freeze (issue
+				// #235: typing title words finds the address).
+				out = append(out, urlnorm.Candidate{URL: t.URLString, Title: t.AltText})
 			}
 		}
 	}
@@ -51,7 +54,7 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []string {
 //
 // Listeners are installed fresh on every open and released on close, so
 // repeat opens don't leak js.FuncOf handles.
-func (a *App) openURLModal(candidates []string, onSubmit func(url string), onCancel func()) {
+func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url string), onCancel func()) {
 	if a.urlModalOpen {
 		return
 	}
@@ -69,15 +72,21 @@ func (a *App) openURLModal(candidates []string, onSubmit func(url string), onCan
 	suggestEl := doc.Call("getElementById", "gw-url-suggest")
 
 	// Suggestion state shared by the input, keydown, and click handlers.
-	var suggestions []string
+	var suggestions []urlnorm.Candidate
 	activeIdx := -1 // -1 = the typed input itself (no highlight)
 
 	renderSuggest := func() {
 		suggestEl.Set("innerHTML", "")
 		for i, s := range suggestions {
 			li := doc.Call("createElement", "li")
-			li.Set("textContent", s)
-			li.Get("dataset").Set("url", s)
+			// One text node (no child spans): the mousedown handler reads
+			// dataset.url off its target, which must stay the li itself.
+			label := s.URL
+			if s.Title != "" {
+				label = s.Title + " — " + s.URL
+			}
+			li.Set("textContent", label)
+			li.Get("dataset").Set("url", s.URL)
 			if i == activeIdx {
 				li.Get("classList").Call("add", "active")
 			}
@@ -183,7 +192,7 @@ func (a *App) openURLModal(candidates []string, onSubmit func(url string), onCan
 			// Fill the highlighted suggestion, then let the form's submit
 			// fire and commit the chosen value (no preventDefault here).
 			if activeIdx >= 0 && activeIdx < len(suggestions) {
-				input.Set("value", suggestions[activeIdx])
+				input.Set("value", suggestions[activeIdx].URL)
 			}
 		}
 		return nil
