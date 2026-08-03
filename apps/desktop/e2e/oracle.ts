@@ -127,6 +127,29 @@ export async function writeContent(
   }
 }
 
+// placeTile moves/resizes a tile DIRECTLY through the server — a foreign
+// writer moving the tile out from under the app's stored references
+// (the #234 relocation specs' shape). Unary Connect JSON like getGrid.
+export async function placeTile(
+  origin: string,
+  tileId: string,
+  version: number | string | undefined,
+  gridId: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/PlaceTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    body: JSON.stringify({ tileId, version: Number(version ?? 0), gridId, x, y, w, h }),
+  });
+  if (!res.ok) {
+    throw new Error(`PlaceTile(${tileId}) failed: ${res.status} ${await res.text()}`);
+  }
+}
+
 // updateText is writeContent for a text body (the foreign-writer specs' shape).
 export async function updateText(
   origin: string,

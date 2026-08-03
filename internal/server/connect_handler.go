@@ -243,6 +243,23 @@ func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.Ge
 	return h.tileResp(uuid, resp, err)
 }
 
+// LocateTile routes by tile id and qualifies the returned well chain
+// exactly like GetGrid's tiles, so the healed path's ids match what the
+// client's cache holds (issue #234).
+func (h *connectHandler) LocateTile(ctx context.Context, req *connect.Request[pb.LocateTileRequest]) (*connect.Response[pb.LocateTileResponse], error) {
+	c, local, uuid, err := h.route(req.Msg.TileId)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.LocateTile(ctx, &pb.LocateTileRequest{TileId: local})
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	return connect.NewResponse(&pb.LocateTileResponse{
+		Wells: qualifyTilesFor(h.srv.pluginReg.Transit(uuid), uuid, resp.Wells),
+	}), nil
+}
+
 // ── creates ──────────────────────────────────────────────────────────────────
 
 // CreateTile is the single create router: resolve the owning plugin by

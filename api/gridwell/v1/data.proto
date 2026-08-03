@@ -299,6 +299,20 @@ message GetTileRequest {
   string tile_id = 1;
 }
 
+// LocateTile resolves a tile's CURRENT place (issue #234): the
+// containing-well chain from the plugin's root grid down to the tile's
+// grid, outermost first — empty when the tile sits at the root. Ids are
+// immutable; paths are not: a stored reference (a workspace leaf bound to
+// a tile that has since been moved) heals itself by re-deriving the path
+// from the id. Read-only; full well rows ride back so the healed crumbs
+// have their previews.
+message LocateTileRequest {
+  string tile_id = 1;
+}
+message LocateTileResponse {
+  repeated Tile wells = 1;
+}
+
 // (SetTileAltRequest is gone — the versioned rename rides SetTile.rename.)
 
 // (SetPaneLayoutRequest is gone — a pane layout is content bytes and rides
@@ -521,6 +535,7 @@ service Gridwell {
   rpc GetGrid(GetGridRequest)               returns (GetGridResponse);
   rpc GetTile(GetTileRequest)               returns (TileResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
+  rpc LocateTile(LocateTileRequest)         returns (LocateTileResponse);
 
   // ── Content streams (the one way content bytes move; see the messages) ────
   rpc ReadContent(ReadContentRequest)        returns (stream ContentChunk);

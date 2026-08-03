@@ -187,6 +187,16 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	return tileResp(p.st.GetTile(ctx, req.TileId))
 }
 
+// LocateTile re-derives a tile's current path from its immutable id
+// (issue #234): the containing-well chain, outermost first.
+func (p *Plugin) LocateTile(ctx context.Context, req *gridwellv1.LocateTileRequest) (*gridwellv1.LocateTileResponse, error) {
+	wells, err := p.st.LocateTile(ctx, req.TileId)
+	if err != nil {
+		return nil, errToStatus(err)
+	}
+	return &gridwellv1.LocateTileResponse{Wells: rpc.TilesToProto(wells)}, nil
+}
+
 // contentChunkBytes is the ReadContent chunk size. Small enough to stream a
 // large body without one giant message, large enough that a typical text tile
 // is one chunk.

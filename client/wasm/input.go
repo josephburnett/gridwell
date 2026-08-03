@@ -1562,9 +1562,55 @@ func (a *App) autoLiveOnRestore(paneID, tileID string) {
 			return // a leaf whose reference no longer resolves stays frozen
 		}
 		a.c.UpdateTile(tile.GridID, *tile)
+		a.healStalePanePath(paneID, tile)
 		a.autoLiveOnDescent(paneID, tile)
 		a.draw()
 	}()
+}
+
+// healStalePanePath re-derives a restored pane's path when its stored
+// (anchor, path) no longer leads to the descended tile's grid (issue
+// #234): the tile moved — its id is immutable, its path is not. The
+// server's LocateTile answers with the CURRENT containing-well chain;
+// the pane re-anchors at the owning root with the fresh path, so the
+// descent binds and the crumbs show a true path from root. The workspace
+// persister derives the corrected layout from the live tree on its next
+// tick, so the heal persists with no dedicated writer. Runs on the
+// restore goroutine (a blocking read is fine there); an unlocatable tile
+// (a plugin without LocateTile) leaves today's frozen-preview state.
+func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
+	fp := a.tree.FindPane(paneID)
+	if fp == nil || fp.TextFocus != tile.ID {
+		return
+	}
+	if a.gridIDForPathFrom(fp.Anchor, fp.Path) == tile.GridID {
+		return
+	}
+	wells, err := a.cl.LocateTile(context.Background(), tile.ID)
+	if err != nil {
+		return
+	}
+	fp = a.tree.FindPane(paneID)
+	if fp == nil || fp.TextFocus != tile.ID {
+		return // the user moved on while the locate was in flight
+	}
+	anchor := tile.GridID
+	path := make([]string, 0, len(wells))
+	if len(wells) > 0 {
+		anchor = wells[0].GridID
+		for _, w := range wells {
+			path = append(path, w.ID)
+		}
+	}
+	fp.Anchor = anchor
+	fp.Path = path
+	// Center the healed viewport on the tile in its new grid, so ascending
+	// out of the descent lands looking at the tile, not a stale offset.
+	fp.Cx = float64(tile.X) + float64(tile.W)/2
+	fp.Cy = float64(tile.Y) + float64(tile.H)/2
+	a.fetchGrid(tile.GridID)
+	a.draw()
+	a.scheduleURLUpdate()
 }
 
 // autoLiveOnDescent applies the shellconn.DecideAutoLive verdict for the
