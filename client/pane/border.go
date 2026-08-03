@@ -12,7 +12,8 @@ package pane
 //	Root — the node grid (the landing page): the brown home identity.
 //	Text / TextFaded — descent into a markdown text tile.
 //	URL / URLFaded — descent into a URL tile, frozen preview.
-//	URLLive — descent into a URL tile with a live stream open.
+//	URLLive / URLLiveFaded — descent into a URL tile with a live stream
+//	  open (faded added by issue #226 — live used to override focus).
 //	Shell / ShellFaded — descent into a shell tile (bash runs outside
 //	  Gridwell's data world). Orange.
 //	Exit / ExitFaded — read-only host content (a text tile inside a source
@@ -25,7 +26,8 @@ type BorderColors struct {
 	Focused, FocusedFaded     string
 	Root                      string
 	Text, TextFaded           string
-	URL, URLFaded, URLLive    string
+	URL, URLFaded             string
+	URLLive, URLLiveFaded     string
 	Shell, ShellFaded         string
 	Exit, ExitFaded           string
 	Ephemeral, EphemeralFaded string
@@ -133,13 +135,14 @@ func FamilyOf(s BorderInput) Family {
 
 // BorderColor returns the CSS color string for the pane's outline: the
 // pane's Family, in the saturated variant when the pane has focus and the
-// faded one otherwise (URLLive and Root have no faded variant).
+// faded one otherwise (only Root has no faded variant — it is the one
+// landing page and never shares the screen ambiguously).
 func BorderColor(s BorderInput, c BorderColors) string {
 	switch FamilyOf(s) {
 	case FamilyEphemeral:
 		return focused(s, c.Ephemeral, c.EphemeralFaded)
 	case FamilyURLLive:
-		return c.URLLive
+		return focused(s, c.URLLive, c.URLLiveFaded)
 	case FamilyURL:
 		return focused(s, c.URL, c.URLFaded)
 	case FamilyShell:

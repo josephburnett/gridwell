@@ -66,7 +66,11 @@ const (
 	// colorURLLiveLine is the pane border used when a URL tile is live
 	// (WebSocket stream open). Same purple hue as colorURLLine but brighter
 	// and more saturated so it's clearly distinct from the frozen state.
-	colorURLLiveLine = "#a07acc"
+	// The faded variant (issue #226) dims when the pane loses focus, but
+	// stays brighter than the frozen faded purple so live vs frozen still
+	// reads at a glance across unfocused panes.
+	colorURLLiveLine      = "#a07acc"
+	colorURLLiveLineFaded = "#5c4478"
 	// colorShellBorder is the orange identity for shell tiles and the pane
 	// border on a shell descent — bash runs outside Gridwell's data world, so
 	// it gets its own warm hue, distinct from plugin brown.
@@ -1195,6 +1199,7 @@ var paneBorderColors = pane.BorderColors{
 	URL:            colorURLLine,
 	URLFaded:       colorURLLineFaded,
 	URLLive:        colorURLLiveLine,
+	URLLiveFaded:   colorURLLiveLineFaded,
 	Shell:          colorShellBorder,
 	ShellFaded:     colorShellBorderFaded,
 	Exit:           colorPluginBorder,

@@ -12,6 +12,7 @@ func testColors() BorderColors {
 		URL:            "URL",
 		URLFaded:       "URL_FADED",
 		URLLive:        "URL_LIVE",
+		URLLiveFaded:   "URL_LIVE_FADED",
 		Shell:          "SHELL",
 		ShellFaded:     "SHELL_FADED",
 		Exit:           "EXIT",
@@ -86,9 +87,11 @@ func TestBorderColorURLTile(t *testing.T) {
 		t.Errorf("live url + focused: got %q, want URL_LIVE", got)
 	}
 	in.Focused = false
-	// Live wins over focus state.
-	if got := BorderColor(in, testColors()); got != "URL_LIVE" {
-		t.Errorf("live url + not focused: got %q, want URL_LIVE (live overrides focus)", got)
+	// Live fades like every other family when the pane loses focus (issue
+	// #226 — before that, live overrode focus and a url pane read as
+	// permanently active).
+	if got := BorderColor(in, testColors()); got != "URL_LIVE_FADED" {
+		t.Errorf("live url + not focused: got %q, want URL_LIVE_FADED", got)
 	}
 }
 
