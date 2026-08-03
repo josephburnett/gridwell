@@ -10,6 +10,8 @@ import {
   zoomChordKey,
   minWidthZoomFactor,
   composeZoom,
+  allowPermission,
+  openBelowUrl,
   serializeHistory,
   parseHistory,
   URL_MIN_LAYOUT_WIDTH,
@@ -317,4 +319,25 @@ test('zoomChordKey matches the wasm chord set', () => {
   assert.equal(zoomChordKey({ key: '=', control: false, meta: false }), '');
   assert.equal(zoomChordKey({ key: 'a', control: true }), '');
   assert.equal(zoomChordKey({ key: 'F11', control: true }), '');
+});
+
+// Issue #232: 'openExternal' is the one permission that hands a navigation
+// to the OS (xdg-open → the default browser on an unhandled protocol) —
+// deny it; everything else keeps Electron's default grant.
+test('allowPermission denies exactly openExternal', () => {
+  assert.equal(allowPermission('openExternal'), false);
+  assert.equal(allowPermission('notifications'), true);
+  assert.equal(allowPermission('clipboard-read'), true);
+  assert.equal(allowPermission('media'), true);
+});
+
+// Issue #232: only web urls open below; a non-web protocol opens nowhere
+// (forwarding it would just re-trigger the external-protocol path).
+test('openBelowUrl forwards web urls and drops everything else', () => {
+  assert.equal(openBelowUrl('https://example.com/x'), 'https://example.com/x');
+  assert.equal(openBelowUrl('HTTP://example.com'), 'HTTP://example.com');
+  assert.equal(openBelowUrl('zoommtg://zoom.us/join?confno=1'), null);
+  assert.equal(openBelowUrl('mailto:a@b.c'), null);
+  assert.equal(openBelowUrl('about:blank'), null);
+  assert.equal(openBelowUrl(''), null);
 });

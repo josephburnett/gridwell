@@ -34,6 +34,18 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     )
     .toBe(true);
 
+  // A NON-WEB protocol popup first (issue #232): it must open NOTHING — no
+  // pane split, and no OS hand-off (the session denies openExternal). The
+  // web url that follows proves the path itself still works, so a silent
+  // swallow of everything would fail below.
+  await electronApp.evaluate(async ({ webContents }) => {
+    const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('src=page'));
+    if (!wc) throw new Error('live view not found');
+    await wc.executeJavaScript(`window.open('zoommtg://zoom.us/join?confno=1')`, true);
+  });
+  await gw.waitIdle();
+  expect((await gw.panes()).length, 'a non-web protocol opens no pane').toBe(panesBefore);
+
   // The page opens a link the way target=_blank / ctrl-click would.
   await electronApp.evaluate(async ({ webContents }, org: string) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('src=page'));

@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron';
+import { app, dialog, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
@@ -7,7 +7,7 @@ import { ShellStreams } from './shellstreams';
 import { makeShellDialer } from './shellgrpc';
 import { dataProtoPath } from './paths';
 import { MirrorPump } from './capture';
-import { sanitizeUserAgent } from './viewutil';
+import { sanitizeUserAgent, allowPermission, SESSION_PARTITION } from './viewutil';
 import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 
@@ -60,6 +60,16 @@ async function boot(): Promise<void> {
   // every url tile (all partitions) presents as plain Chrome. userAgentFallback
   // is the UA used when none is set per-webContents, i.e. our default.
   app.userAgentFallback = sanitizeUserAgent(app.userAgentFallback, app.getName());
+  // The live-view session must not hand navigations to the OS: Electron
+  // grants the 'openExternal' permission by default, so a page navigating
+  // to zoommtg:// (or any non-web protocol) ALSO launched the default
+  // browser via xdg-open (issue #232). allowPermission (unit-tested)
+  // decides; everything else keeps the default grant.
+  session
+    .fromPartition(SESSION_PARTITION)
+    .setPermissionRequestHandler((_wc, permission, callback) => {
+      callback(allowPermission(permission));
+    });
   try {
     sidecar = await startSidecar();
   } catch (err) {

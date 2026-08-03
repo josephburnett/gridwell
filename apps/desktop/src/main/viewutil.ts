@@ -11,6 +11,27 @@ export const SESSION_PARTITION = 'persist:gridwell';
 
 
 
+// allowPermission decides the live-view session's permission requests
+// (issue #232). 'openExternal' is Chromium handing a non-web protocol
+// (zoommtg:, mailto:, …) to the OS — Electron grants it BY DEFAULT and
+// calls shell.openExternal, and on Linux xdg-open bounces an unhandled
+// protocol into the default browser: the "link opened in a pane AND in an
+// outside browser" leak. A tile is Gridwell's only browsing surface, so
+// nothing may escape to the OS. Every other permission keeps Electron's
+// default (granted).
+export function allowPermission(permission: string): boolean {
+  return permission !== 'openExternal';
+}
+
+// openBelowUrl returns the url a denied popup (window.open / target=_blank)
+// should open in the pane below, or null when the target must not open at
+// all: only web urls belong in a tile — a non-web protocol has no in-grid
+// meaning, and forwarding it would just re-trigger the external-protocol
+// path the permission handler blocks (issue #232).
+export function openBelowUrl(target: string): string | null {
+  return /^https?:\/\//i.test(target) ? target : null;
+}
+
 // sanitizeUserAgent strips the two tokens that mark Chromium's default UA as a
 // non-browser embedding — `Electron/<ver>` and the app's own `<AppName>/<ver>` —
 // leaving the genuine `Chrome/<ver>` token (and everything else) intact. A live

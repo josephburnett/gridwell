@@ -18,6 +18,7 @@ import {
   cookieDomainMatches,
   storageOriginsFor,
   zoomChordKey,
+  openBelowUrl,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { captureJpegBase64 } from './capture';
@@ -230,9 +231,12 @@ export class WebviewRegistry {
       // (issue #111): the link opens in real Chromium on the tile's
       // persistent session (no popup bot-guard friction), in a pane you can
       // read next to the page you came from, and it dies on ascent.
+      // openBelowUrl filters to web urls only (issue #232) — a non-web
+      // protocol opens nowhere, matching the session's openExternal deny.
       view.webContents.setWindowOpenHandler(({ url: target }) => {
-        if (target && target !== 'about:blank') {
-          this.cb.onOpenBelow?.({ paneId, url: target });
+        const below = openBelowUrl(target);
+        if (below) {
+          this.cb.onOpenBelow?.({ paneId, url: below });
         }
         return { action: 'deny' };
       });
