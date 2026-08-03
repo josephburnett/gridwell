@@ -659,7 +659,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		in.CrossPlugin = dropCrossNamespace(d, t)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+		in.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
+			d.snapshotTile.W, d.snapshotTile.H, d.tileID)
 	}
 
 	switch dragdrop.DecideDrop(in) {
@@ -812,21 +813,27 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	}, nil)
 }
 
-// nodeAtCellInGrid returns the cached tile covering (cellX, cellY) in
-// gridID, or nil. Mirrors tileAtCell but works against an arbitrary
-// grid id rather than the focused pane's leaf grid.
-func (a *App) nodeAtCellInGrid(gridID string, cellX, cellY int64) *rpc.Tile {
+// occupiedForDrop reports whether the dropped FOOTPRINT (x, y, w, h) in
+// gridID overlaps any cached tile other than excludeID. A move passes the
+// dragged tile's own id — mirroring the server's PlaceTile self-exclusion,
+// so the preflight can never reject a placement the server would accept
+// (#231: a large tile dragged a short distance crosses its own old
+// footprint, which is not a collision). A clone passes "" — the source
+// tile is a real neighbor there.
+func (a *App) occupiedForDrop(gridID string, x, y, w, h int64, excludeID string) bool {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
-		return nil
+		return false
 	}
 	for _, n := range g.Tiles {
-		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
-			nn := n
-			return &nn
+		if n.ID == excludeID {
+			continue
+		}
+		if dragdrop.RectsOverlap(n.X, n.Y, n.W, n.H, x, y, w, h) {
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 // startSnap animates the active ghost from its current position to (toX, toY)

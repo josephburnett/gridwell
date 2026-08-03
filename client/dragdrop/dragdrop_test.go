@@ -533,3 +533,26 @@ func TestPromoteToWell(t *testing.T) {
 		}
 	}
 }
+
+// RectsOverlap is the client half of the placement collision contract
+// (#231): strict interior intersection, edge-adjacency is NOT a collision.
+func TestRectsOverlap(t *testing.T) {
+	cases := []struct {
+		name           string
+		ax, ay, aw, ah int64
+		bx, by, bw, bh int64
+		want           bool
+	}{
+		{"identical", 0, 0, 2, 2, 0, 0, 2, 2, true},
+		{"one-cell shift of a 2x2 (the #231 self-cross)", 0, 0, 2, 2, 1, 0, 2, 2, true},
+		{"corner touch only", 0, 0, 2, 2, 2, 2, 2, 2, false},
+		{"edge adjacent", 0, 0, 2, 2, 2, 0, 2, 2, false},
+		{"contained", 0, 0, 4, 4, 1, 1, 1, 1, true},
+		{"disjoint", 0, 0, 2, 2, 5, 5, 1, 1, false},
+	}
+	for _, c := range cases {
+		if got := RectsOverlap(c.ax, c.ay, c.aw, c.ah, c.bx, c.by, c.bw, c.bh); got != c.want {
+			t.Errorf("%s: RectsOverlap = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

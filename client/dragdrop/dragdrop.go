@@ -143,6 +143,14 @@ func TileContainsCell(x, y, w, h, cx, cy int64) bool {
 	return cx >= x && cx < x+w && cy >= y && cy < y+h
 }
 
+// RectsOverlap reports whether two cell-space footprints intersect — the
+// same predicate the server's overlap check applies, so the client's drop
+// preflight and the authoritative PlaceTile can never disagree about what
+// counts as a collision (#231).
+func RectsOverlap(ax, ay, aw, ah, bx, by, bw, bh int64) bool {
+	return ax < bx+bw && bx < ax+aw && ay < by+bh && by < ay+ah
+}
+
 // InTileCenter reports whether the cell-space point (cellX, cellY) lies
 // inside the inner 1/3 × 1/3 of the tile at (x, y, w, h). The center
 // region scales with the tile so it's always 1/9 of the footprint, even
@@ -309,7 +317,10 @@ const (
 //     (MoveForbidden); clone: dropForbiddenForClone(d, t) (CloneForbidden)
 //   - CrossPlugin: dropCrossNamespace(d, t) — NamespaceOf(src) != NamespaceOf(dst)
 //   - SameCell:    target grid == source grid && drop cell == source cell
-//   - Occupied:    a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+//   - Occupied:    a.occupiedForDrop(t.gridID, dropX, dropY, w, h, exclude)
+//     — the dragged FOOTPRINT against the cached tiles, excluding the
+//     moving tile itself on a move (never on a clone), mirroring the
+//     server's PlaceTile self-exclusion (#231)
 type DropInput struct {
 	Started bool
 	// OriginFocused: the origin pane was already focused when the press

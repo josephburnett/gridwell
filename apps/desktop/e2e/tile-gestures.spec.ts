@@ -61,3 +61,32 @@ test('tile gestures (move, clone, resize, delete) mutate server state', async ({
   expect(countKind(snap, 'text'), 'delete removed one text tile').toBe(beforeDel - 1);
   expect(tileAt(snap, 'text', cx + 1, cy + 1), 'deleted tile is gone').toBeFalsy();
 });
+
+// #231: a multi-cell tile dragged a SHORT distance — its new footprint
+// overlapping its own old one — must move. The client's drop preflight
+// used to count the moving tile itself as an obstacle (the server's
+// PlaceTile has excluded self all along) and snapped the drag back with
+// nothing visibly in the way; dragging far away and back again "worked"
+// because the old footprint was no longer under the target.
+test('a multi-cell tile moves one cell into its own old footprint (#231)', async ({ gw }) => {
+  await gw.enterPlugin('localdb');
+  const f = await gw.focused();
+  const grid = f.gridID;
+  const cx = Math.round(f.cx) - 1;
+  const cy = Math.round(f.cy) - 1;
+
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  await gw.resizeTileCell(cx, cy, cx + 2, cy + 2);
+  const t = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
+  expect(Number(t.w), '2x2 footprint').toBe(2);
+
+  // One cell right: new rect [cx+1..cx+2] overlaps old [cx..cx+1].
+  await gw.dragTileCell(cx, cy, cx + 1, cy);
+  const snap = await gw.getGrid(grid);
+  const moved = (snap.tiles ?? []).find((n: any) => n.id === t.id)!;
+  expect(
+    { x: Number(moved.x ?? 0), y: Number(moved.y ?? 0) },
+    'the tile moved one cell despite crossing itself',
+  ).toEqual({ x: cx + 1, y: cy });
+});

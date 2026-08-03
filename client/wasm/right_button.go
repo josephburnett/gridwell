@@ -461,7 +461,10 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		in.Forbidden = dropForbiddenForClone(d, t)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-		in.Occupied = a.nodeAtCellInGrid(t.gridID, dropX, dropY) != nil
+		// A clone excludes nothing: the source tile is a real neighbor the
+		// copy must not land on.
+		in.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
+			d.snapshotTile.W, d.snapshotTile.H, "")
 	}
 
 	switch dragdrop.DecideDrop(in) {
