@@ -331,26 +331,39 @@ func (p *Plugin) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest
 // SetTile is the single framing/preview writeback: tile.kind selects the one
 // store operation that kind supports, and that mapping fixes the version
 // semantics — well/text framing never bumps version, url/shell preview does.
-// 2026-07-26: it also carries the two absorbed scalar operations — rename
-// (the versioned user rename; latches alt_user) and content_zoom (framing) —
-// exactly ONE operation per call, refused otherwise, so the empty-fields-skip
-// rule never turns ambiguous.
+// 2026-07-26: it also carries the absorbed scalar operations — rename (the
+// versioned user rename; latches alt_user), content_zoom (framing), and
+// url_frozen (framing, issue #237) — exactly ONE operation per call,
+// refused otherwise, so the empty-fields-skip rule never turns ambiguous.
 func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
-	if req.Rename != "" && req.ContentZoom != nil {
-		return nil, status.Error(codes.InvalidArgument, "set: one operation per call (rename OR content_zoom)")
+	ops := 0
+	if req.Rename != "" {
+		ops++
+	}
+	if req.ContentZoom != nil {
+		ops++
+	}
+	if req.UrlFrozen != nil {
+		ops++
+	}
+	if req.Tile != nil {
+		ops++
+	}
+	if ops > 1 {
+		return nil, status.Error(codes.InvalidArgument,
+			"set: one operation per call (rename, content_zoom, url_frozen, or tile writeback)")
 	}
 	if req.Rename != "" {
-		if req.Tile != nil {
-			return nil, status.Error(codes.InvalidArgument, "set: one operation per call (rename OR tile writeback)")
-		}
 		return tileResp(p.st.RenameTile(ctx, req.TileId, req.Version, req.Rename))
 	}
 	if req.ContentZoom != nil {
-		if req.Tile != nil {
-			return nil, status.Error(codes.InvalidArgument, "set: one operation per call (content_zoom OR tile writeback)")
-		}
 		return tileResp(p.st.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
 			TileID: req.TileId, Version: req.Version, ContentZoom: *req.ContentZoom,
+		}))
+	}
+	if req.UrlFrozen != nil {
+		return tileResp(p.st.SetURLFrozen(ctx, &rpc.SetURLFrozenRequest{
+			TileID: req.TileId, Version: req.Version, Frozen: *req.UrlFrozen,
 		}))
 	}
 	t := req.Tile

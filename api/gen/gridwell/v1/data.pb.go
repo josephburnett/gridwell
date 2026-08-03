@@ -276,7 +276,13 @@ type Tile struct {
 	// orthogonal metadata. The well kind's link variant remains a qualified
 	// child_grid_id (the battle-tested exit well) — Reference is the single
 	// derived "is a link" bit over both shapes. Deleting a link only unlinks.
-	LinkTargetId  string `protobuf:"bytes,29,opt,name=link_target_id,json=linkTargetId,proto3" json:"link_target_id,omitempty"`
+	LinkTargetId string `protobuf:"bytes,29,opt,name=link_target_id,json=linkTargetId,proto3" json:"link_target_id,omitempty"`
+	// url_frozen is the USER'S standing freeze on a url tile (issue #237):
+	// set by the explicit freeze gesture, cleared by the reconnect button.
+	// While set, descending does NOT auto-go-live (unlike the transient
+	// navigate-away freeze, which auto-revives on return). Framing-class —
+	// written by the SetTile url_frozen arm only, never bumps version.
+	UrlFrozen     bool `protobuf:"varint,30,opt,name=url_frozen,json=urlFrozen,proto3" json:"url_frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -491,6 +497,13 @@ func (x *Tile) GetLinkTargetId() string {
 		return x.LinkTargetId
 	}
 	return ""
+}
+
+func (x *Tile) GetUrlFrozen() bool {
+	if x != nil {
+		return x.UrlFrozen
+	}
+	return false
 }
 
 // Info is the whole plugin handshake: a plugin loaded from server.yaml is
@@ -1976,7 +1989,11 @@ type SetTileRequest struct {
 	// content_zoom (formerly SetContentZoom): the per-tile content scale.
 	// Framing — never bumps version; refused for wells. optional so presence
 	// is explicit (0 is a meaningful "unset" stored value).
-	ContentZoom   *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
+	ContentZoom *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
+	// url_frozen: the user's standing freeze on a url tile (issue #237).
+	// Framing — never bumps version; refused for non-url tiles. optional so
+	// clearing (false) is distinct from absent.
+	UrlFrozen     *bool `protobuf:"varint,8,opt,name=url_frozen,json=urlFrozen,proto3,oneof" json:"url_frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2051,6 +2068,13 @@ func (x *SetTileRequest) GetContentZoom() float64 {
 		return *x.ContentZoom
 	}
 	return 0
+}
+
+func (x *SetTileRequest) GetUrlFrozen() bool {
+	if x != nil && x.UrlFrozen != nil {
+		return *x.UrlFrozen
+	}
+	return false
 }
 
 type DeleteTileRequest struct {
@@ -2627,7 +2651,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\x9d\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xbc\x05\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -2657,7 +2681,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\fcontent_zoom\x18\x1b \x01(\x01R\vcontentZoom\x12\x1f\n" +
 	"\vurl_history\x18\x1c \x01(\tR\n" +
 	"urlHistory\x12$\n" +
-	"\x0elink_target_id\x18\x1d \x01(\tR\flinkTargetId\"\r\n" +
+	"\x0elink_target_id\x18\x1d \x01(\tR\flinkTargetId\x12\x1d\n" +
+	"\n" +
+	"url_frozen\x18\x1e \x01(\bR\turlFrozen\"\r\n" +
 	"\vInfoRequest\"\xf5\x03\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
@@ -2762,15 +2788,18 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\fdest_grid_id\x18\x04 \x01(\tR\n" +
 	"destGridId\x12\f\n" +
 	"\x01x\x18\x06 \x01(\x03R\x01x\x12\f\n" +
-	"\x01y\x18\a \x01(\x03R\x01yJ\x04\b\x01\x10\x02J\x04\b\x05\x10\x06\"\xdb\x01\n" +
+	"\x01y\x18\a \x01(\x03R\x01yJ\x04\b\x01\x10\x02J\x04\b\x05\x10\x06\"\x8e\x02\n" +
 	"\x0eSetTileRequest\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12%\n" +
 	"\x04tile\x18\x04 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12\x18\n" +
 	"\apreview\x18\x05 \x01(\fR\apreview\x12\x16\n" +
 	"\x06rename\x18\x06 \x01(\tR\x06rename\x12&\n" +
-	"\fcontent_zoom\x18\a \x01(\x01H\x00R\vcontentZoom\x88\x01\x01B\x0f\n" +
-	"\r_content_zoomJ\x04\b\x01\x10\x02\"L\n" +
+	"\fcontent_zoom\x18\a \x01(\x01H\x00R\vcontentZoom\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"url_frozen\x18\b \x01(\bH\x01R\turlFrozen\x88\x01\x01B\x0f\n" +
+	"\r_content_zoomB\r\n" +
+	"\v_url_frozenJ\x04\b\x01\x10\x02\"L\n" +
 	"\x11DeleteTileRequest\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversionJ\x04\b\x01\x10\x02\"\x14\n" +

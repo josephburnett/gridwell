@@ -56,11 +56,14 @@ const (
 // kind); liveURL/liveShell are the host capabilities; hasPreview and the
 // aliveness pair are the shell tile's state (same inputs as
 // DecideShellRefreshVisible — the two decisions must agree about what a
-// dead session means, so they read the same facts).
-func DecideAutoLive(kindURL, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive bool) AutoLive {
+// dead session means, so they read the same facts). urlFrozen is the
+// user's standing freeze on a url tile (issue #237): a deliberate freeze
+// beats the engagement default, so re-descending stays frozen until the
+// reconnect gesture clears the stored intent.
+func DecideAutoLive(kindURL, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive, urlFrozen bool) AutoLive {
 	switch {
 	case kindURL:
-		if liveURL {
+		if liveURL && !urlFrozen {
 			return AutoLiveURL
 		}
 	case kindShell:

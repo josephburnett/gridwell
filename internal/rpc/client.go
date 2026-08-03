@@ -269,6 +269,14 @@ func (c *Client) SetContentZoom(ctx context.Context, req *SetContentZoomRequest)
 	})))
 }
 
+// SetURLFrozen persists the user's standing freeze on a url tile (issue
+// #237; framing, never bumps version). Rides the SetTile url_frozen arm.
+func (c *Client) SetURLFrozen(ctx context.Context, req *SetURLFrozenRequest) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
+		TileId: req.TileID, Version: req.Version, UrlFrozen: &req.Frozen,
+	})))
+}
+
 func (c *Client) DeleteTile(ctx context.Context, req *DeleteTileRequest) error {
 	_, err := c.cl.DeleteTile(ctx, connect.NewRequest(DeleteTileToProto(req)))
 	return err

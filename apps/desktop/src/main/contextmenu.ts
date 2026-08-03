@@ -50,6 +50,11 @@ export interface ContextActions {
   // and the page origin's storage from the shared partition, then reloads
   // (issue #136).
   clearSiteData(): void;
+  // freeze is the explicit freeze gesture (issue #237): tear the live view
+  // down (with the usual freeze writeback) and store the user's standing
+  // frozen intent on the tile, so re-descending stays frozen until the
+  // reconnect button clears it.
+  freeze(): void;
 }
 
 // MenuTemplateItem is the structural subset of Electron's
@@ -90,6 +95,7 @@ export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): Men
   items.push({ label: 'Back', enabled: p.canGoBack, click: () => a.back() });
   items.push({ label: 'Forward', enabled: p.canGoForward, click: () => a.forward() });
   items.push({ label: 'Reload', click: () => a.reload() });
+  items.push({ label: 'Freeze Page', click: () => a.freeze() });
 
   if (p.pageHost) {
     items.push({ type: 'separator' });

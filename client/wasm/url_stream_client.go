@@ -97,6 +97,24 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 	if !ok {
 		return
 	}
+	if t.URLFrozen {
+		// Going live IS the unfreeze (issue #237): the reconnect gesture
+		// clears the standing intent, so the two facts never coexist.
+		// (Auto-live never reaches here while the intent is set —
+		// DecideAutoLive blocks it — so this only fires on the explicit
+		// reconnect click.)
+		tid, version := t.ID, t.Version
+		go func() {
+			cleared, err := a.cl.SetURLFrozen(context.Background(), &rpc.SetURLFrozenRequest{
+				TileID: tid, Version: version, Frozen: false,
+			})
+			if err != nil {
+				a.surfaceRPCError("SetTile", err)
+				return
+			}
+			a.c.UpdateTile(cleared.GridID, *cleared)
+		}()
+	}
 	if t.LinkTargetID == "" {
 		a.placeURLView(p.ID, t, 0)
 		return
@@ -192,6 +210,43 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 		}
 		a.draw()
 	})
+}
+
+// freezeURLPaneByIntent runs the explicit freeze gesture (issue #237, the
+// context menu's "Freeze Page"): persist the user's STANDING freeze, then
+// tear the live view down through the ordinary freeze writeback. The
+// intent lands on the DESCENDED row (p.TextFocus) — for a url link that
+// is the link row itself: the freeze is this reference's presentation,
+// not the content owner's, and it is the row the next descent's
+// DecideAutoLive reads. The intent write goes first: it is framing
+// (version untouched), while the teardown's SetURLState bumps the
+// version. Ephemeral visits are skipped — they die on ascent and carry
+// no durable intent.
+func (a *App) freezeURLPaneByIntent(paneID string) {
+	p := a.tree.FindPane(paneID)
+	pl, ok := a.localIf(paneID)
+	if p == nil || !ok || pl.urlView == nil || p.TextFocus == "" {
+		return
+	}
+	tile, ok := a.descendedTile(p)
+	if !ok || tile.Kind != rpc.KindURL || a.isEphemeralTile(p, &tile) {
+		return
+	}
+	tid, version := tile.ID, tile.Version
+	go func() {
+		t, err := a.cl.SetURLFrozen(context.Background(), &rpc.SetURLFrozenRequest{
+			TileID: tid, Version: version, Frozen: true,
+		})
+		if err != nil {
+			// The freeze the user asked for did not stick — surface it
+			// (charter §6); the teardown below still parks the view.
+			a.surfaceRPCError("SetTile", err)
+		} else {
+			a.c.UpdateTile(t.GridID, *t)
+		}
+		a.closeURLStream(paneID, true)
+		a.draw()
+	}()
 }
 
 // closeAllURLStreams tears down every live view. Used on beforeunload so the

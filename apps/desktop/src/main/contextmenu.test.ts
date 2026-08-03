@@ -21,6 +21,7 @@ function spyActions() {
     forward: rec('forward'),
     reload: rec('reload'),
     clearSiteData: rec('clearSiteData'),
+    freeze: rec('freeze'),
   };
   return { actions, calls };
 }
@@ -46,7 +47,7 @@ const labels = (t: ReturnType<typeof urlContextMenuTemplate>) =>
 test('navigation items are always present', () => {
   const { actions } = spyActions();
   const t = urlContextMenuTemplate(baseParams(), actions);
-  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload']);
+  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload', 'Freeze Page']);
 });
 
 // THE REGRESSION GUARD for the reported bug: a right-click over a link must
@@ -56,7 +57,7 @@ test('a link yields Open Link + Copy Link Address that copy the href', () => {
   const url = 'https://example.com/target?x=1';
   const t = urlContextMenuTemplate(baseParams({ linkURL: url }), actions);
 
-  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload']);
+  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload', 'Freeze Page']);
 
   const copy = t.find((i) => i.label === 'Copy Link Address');
   assert.ok(copy?.click, 'Copy Link Address must have a click handler');
@@ -137,4 +138,15 @@ test('clear site data appears with a page host and fires', () => {
   assert.ok(item, 'item present and labeled with the host');
   item!.click!();
   assert.ok('clearSiteData' in calls, 'the action fired');
+});
+
+// The explicit freeze gesture (issue #237): always present in the navigation
+// block, and its click invokes the injected freeze action.
+test('Freeze Page is always offered and fires the freeze action', () => {
+  const { actions, calls } = spyActions();
+  const t = urlContextMenuTemplate(baseParams(), actions);
+  const item = t.find((i) => i.label === 'Freeze Page');
+  assert.ok(item, 'menu carries Freeze Page');
+  item!.click!();
+  assert.equal((calls.freeze ?? []).length, 1);
 });

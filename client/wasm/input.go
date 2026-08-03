@@ -1587,7 +1587,7 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 	verdict := shellconn.DecideAutoLive(
 		tile.Kind == rpc.KindURL, tile.Kind == rpc.KindShell,
 		a.caps.LiveURL, a.caps.LiveShell,
-		tile.PreviewBlobID != 0, known, alive)
+		tile.PreviewBlobID != 0, known, alive, tile.URLFrozen)
 	switch verdict {
 	case shellconn.AutoLiveURL:
 		a.openURLStream(fp, tileID)

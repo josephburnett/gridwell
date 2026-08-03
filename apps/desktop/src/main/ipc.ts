@@ -53,6 +53,7 @@ export const EV = {
   shellExit: 'gw:shell-exit', // ShellExitEvent — the pane's stream ended (exactly once)
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
+  freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture (issue #237)
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus (issue #170)
                       // (webview, session, sidecar) that must reach the user.
                       // Charter §1/§6: one owner, no second "silent" path for
@@ -184,6 +185,13 @@ export interface NavEvent {
 export interface OpenBelowEvent {
   paneId: string;
   url: string;
+}
+
+// FreezeURLEvent: the user picked "Freeze Page" in a live view's context
+// menu (issue #237). The renderer tears the view down with the usual freeze
+// writeback and persists the standing frozen intent on the tile.
+export interface FreezeURLEvent {
+  paneId: string;
 }
 
 // ZoomKeyEvent: Ctrl/Cmd +/=/-/0 pressed while a live URL view owns OS

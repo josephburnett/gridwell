@@ -10,6 +10,7 @@ import {
   SetHiddenArgs,
   SetZoomArgs,
   OpenBelowEvent,
+  FreezeURLEvent,
   ZoomKeyEvent,
   RemoveArgs,
   PaneRef,
@@ -109,6 +110,14 @@ const api = {
     const h = (_e: unknown, ev: OpenBelowEvent) => cb(ev);
     ipcRenderer.on(EV.openBelow, h);
     return () => ipcRenderer.removeListener(EV.openBelow, h);
+  },
+  // onFreezeURL fires when the user picked "Freeze Page" in a live view's
+  // context menu (issue #237); the wasm freezes the pane's view and stores
+  // the standing intent.
+  onFreezeURL(cb: (ev: FreezeURLEvent) => void): () => void {
+    const h = (_e: unknown, ev: FreezeURLEvent) => cb(ev);
+    ipcRenderer.on(EV.freezeUrl, h);
+    return () => ipcRenderer.removeListener(EV.freezeUrl, h);
   },
   // onZoomKey fires when the content-zoom chord was pressed while a live
   // view owned OS keyboard focus (issue #170); the wasm zoom owner applies

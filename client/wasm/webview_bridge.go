@@ -291,6 +291,13 @@ func (a *App) installWebviewListeners() {
 		a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
 		return nil
 	})
+	// The user picked "Freeze Page" in a live view's context menu (issue
+	// #237): freeze the pane's view and store the standing intent.
+	onFreezeURL := js.FuncOf(func(_ js.Value, p []js.Value) any {
+		ev := p[0]
+		a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
+		return nil
+	})
 	// The content-zoom chord was pressed while a LIVE URL view owned OS
 	// keyboard focus (issue #170): the window-level keydown never fires, so
 	// main intercepts the chord in before-input-event and relays it here,
@@ -332,6 +339,7 @@ func (a *App) installWebviewListeners() {
 	g.Call("onMiddleForward", onMiddleForward)
 	g.Call("onLeftForward", onLeftForward)
 	g.Call("onOpenBelow", onOpenBelow)
+	g.Call("onFreezeURL", onFreezeURL)
 	g.Call("onZoomKey", onZoomKey)
 	g.Call("onError", onError)
 	// Listeners live for the lifetime of the app; no Release.

@@ -1,7 +1,7 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
-import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, ZoomKeyEvent } from './ipc';
+import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, FreezeURLEvent, ZoomKeyEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -77,6 +77,9 @@ export interface RegistryCallbacks {
   // (target=_blank, window.open, ctrl/cmd-click). The renderer splits the
   // pane and opens the url as an ephemeral visit below (issue #111).
   onOpenBelow?: (ev: OpenBelowEvent) => void;
+  // onFreezeURL fires when the user picks "Freeze Page" in a live view's
+  // context menu (issue #237); the renderer freezes and stores the intent.
+  onFreezeURL?: (ev: FreezeURLEvent) => void;
   // onZoomKey fires when the content-zoom chord (Ctrl/Cmd +/=/-/0) is pressed
   // while this view owns OS keyboard focus (issue #170). The renderer's
   // applyContentZoom — the one owner of cache + persistence — handles it.
@@ -124,7 +127,7 @@ export class WebviewRegistry {
   // policy (which items, what each does) lives in the pure urlContextMenuTemplate
   // (unit-tested); here we only translate Electron's params + bind the actions
   // to the real clipboard and webContents, then pop the menu over the window.
-  private showContextMenu(view: WebContentsView, params: ContextMenuParams): void {
+  private showContextMenu(paneId: string, view: WebContentsView, params: ContextMenuParams): void {
     const wc = view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(
@@ -161,6 +164,7 @@ export class WebviewRegistry {
         },
         reload: () => wc.reload(),
         clearSiteData: () => void this.clearSiteData(wc),
+        freeze: () => this.cb.onFreezeURL?.({ paneId }),
       },
     );
     const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
@@ -267,7 +271,7 @@ export class WebviewRegistry {
       // it only emits this event and leaves the menu to us. The injected
       // preload already suppresses this event for a right-DRAG (a pane
       // gesture), so reaching here means a genuine click.
-      view.webContents.on('context-menu', (_event, params) => this.showContextMenu(view, params));
+      view.webContents.on('context-menu', (_event, params) => this.showContextMenu(paneId, view, params));
       // focused starts true: a pane only goes live by an action on the focused
       // pane, so the control should appear immediately; syncURLViews corrects
       // it on the next frame if focus has already moved.

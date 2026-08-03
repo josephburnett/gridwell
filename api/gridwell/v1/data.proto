@@ -138,6 +138,13 @@ message Tile {
   // child_grid_id (the battle-tested exit well) — Reference is the single
   // derived "is a link" bit over both shapes. Deleting a link only unlinks.
   string link_target_id = 29;
+
+  // url_frozen is the USER'S standing freeze on a url tile (issue #237):
+  // set by the explicit freeze gesture, cleared by the reconnect button.
+  // While set, descending does NOT auto-go-live (unlike the transient
+  // navigate-away freeze, which auto-revives on return). Framing-class —
+  // written by the SetTile url_frozen arm only, never bumps version.
+  bool url_frozen = 30;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -425,6 +432,10 @@ message SetTileRequest {
   // Framing — never bumps version; refused for wells. optional so presence
   // is explicit (0 is a meaningful "unset" stored value).
   optional double content_zoom = 7;
+  // url_frozen: the user's standing freeze on a url tile (issue #237).
+  // Framing — never bumps version; refused for non-url tiles. optional so
+  // clearing (false) is distinct from absent.
+  optional bool url_frozen = 8;
 }
 
 // (UpdateTextRequest is gone — text bodies ride WriteContent, whose

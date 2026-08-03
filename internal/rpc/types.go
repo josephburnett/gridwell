@@ -271,6 +271,11 @@ type Tile struct {
 	// ChildGridID (the exit well); Reference is the one derived "is a link"
 	// bit over both shapes. "" = an ordinary owned tile.
 	LinkTargetID string `json:"link_target_id,omitempty"`
+	// URLFrozen is the user's standing freeze on a url tile (issue #237):
+	// set by the explicit freeze gesture, cleared by reconnect. While set,
+	// descending does not auto-go-live. Framing — written by the SetTile
+	// url_frozen arm only, never bumps version.
+	URLFrozen bool `json:"url_frozen,omitempty"`
 }
 
 // ContentID returns the tile id that OWNS this tile's content: a leaf link's
@@ -532,6 +537,14 @@ type SetContentZoomRequest struct {
 	TileID      string  `json:"tile_id"`
 	Version     int64   `json:"version"`
 	ContentZoom float64 `json:"content_zoom"`
+}
+
+// SetURLFrozenRequest persists the user's standing freeze on a url tile
+// (issue #237; framing, no bump).
+type SetURLFrozenRequest struct {
+	TileID  string `json:"tile_id"`
+	Version int64  `json:"version"`
+	Frozen  bool   `json:"frozen"`
 }
 
 type DeleteTileRequest struct {

@@ -86,11 +86,55 @@ func TestSetTileContentZoomArm(t *testing.T) {
 	}
 }
 
+// TestSetTileURLFrozenArm pins the #237 intent bit: framing (no version
+// bump), set and clear both round-trip, refused off the url kind.
+func TestSetTileURLFrozenArm(t *testing.T) {
+	p := openPlugin(t)
+	root := rootGrid(t, p)
+	ctx := context.Background()
+	frozen := func(v bool) *bool { return &v }
+
+	url := createTile(t, p, root, &gridwellv1.Tile{Kind: "url", X: 0, Y: 0, W: 2, H: 2, UrlString: "https://a"}, nil)
+	r, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId: url.Id, Version: url.Version, UrlFrozen: frozen(true),
+	})
+	if err != nil {
+		t.Fatalf("freeze: %v", err)
+	}
+	if !r.Tile.UrlFrozen {
+		t.Error("url_frozen did not set")
+	}
+	if r.Tile.Version != url.Version {
+		t.Errorf("url_frozen is framing: version must not bump (%d -> %d)", url.Version, r.Tile.Version)
+	}
+
+	// Clearing (the reconnect gesture) is a distinct false write, not an
+	// absent field.
+	r, err = p.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId: url.Id, Version: url.Version, UrlFrozen: frozen(false),
+	})
+	if err != nil {
+		t.Fatalf("unfreeze: %v", err)
+	}
+	if r.Tile.UrlFrozen {
+		t.Error("url_frozen did not clear")
+	}
+
+	// Only url tiles carry the intent.
+	text := createTile(t, p, root, &gridwellv1.Tile{Kind: "text", X: 3, Y: 0, W: 1, H: 1}, []byte("# t"))
+	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
+		TileId: text.Id, Version: text.Version, UrlFrozen: frozen(true),
+	}); err == nil {
+		t.Error("url_frozen on a text tile must be refused")
+	}
+}
+
 func TestSetTileOneOperationPerCall(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 	zoom := func(v float64) *float64 { return &v }
+	frozen := func(v bool) *bool { return &v }
 
 	url := createTile(t, p, root, &gridwellv1.Tile{Kind: "url", X: 0, Y: 0, W: 2, H: 2, UrlString: "https://a"}, nil)
 
@@ -98,6 +142,8 @@ func TestSetTileOneOperationPerCall(t *testing.T) {
 		{TileId: url.Id, Version: url.Version, Rename: "n", ContentZoom: zoom(1.5)},
 		{TileId: url.Id, Version: url.Version, Rename: "n", Tile: &gridwellv1.Tile{Kind: "url"}},
 		{TileId: url.Id, Version: url.Version, ContentZoom: zoom(1.5), Tile: &gridwellv1.Tile{Kind: "url"}},
+		{TileId: url.Id, Version: url.Version, UrlFrozen: frozen(true), Rename: "n"},
+		{TileId: url.Id, Version: url.Version, UrlFrozen: frozen(true), Tile: &gridwellv1.Tile{Kind: "url"}},
 	}
 	for i, req := range cases {
 		if _, err := p.SetTile(ctx, req); err == nil {

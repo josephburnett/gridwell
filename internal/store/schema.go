@@ -183,6 +183,11 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- column is never set on wells. Added post-v1 (schema v6, rebuild —
     -- the CHECK gained the link branch).
     link_target_id TEXT,
+    -- url_frozen=1 is the USER'S standing freeze on a url tile (issue
+    -- #237): descending does not auto-go-live until the reconnect gesture
+    -- clears it. Framing, never bumps version. Added post-v1 (schema v7,
+    -- additive).
+    url_frozen    INTEGER NOT NULL DEFAULT 0,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (

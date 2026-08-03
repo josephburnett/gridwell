@@ -144,6 +144,44 @@ func (s *Store) SetContentZoom(ctx context.Context, req *rpc.SetContentZoomReque
 	return out, err
 }
 
+// SetURLFrozen persists the user's standing freeze on a url tile (issue
+// #237): frozen=true means descending must not auto-go-live until the
+// reconnect gesture clears it. Framing: emitTileChanged, never a version
+// bump — the enforced split (CLAUDE.md face #3). Refused for every other
+// kind: the fact only means something for a url tile.
+func (s *Store) SetURLFrozen(ctx context.Context, req *rpc.SetURLFrozenRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, err := s.checkTileVersion(ctx, tx, tileID, req.Version)
+		if err != nil {
+			return err
+		}
+		if n.Kind != rpc.KindURL {
+			return fmt.Errorf("%w: url_frozen only applies to url tiles", ErrInvalidArgument)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tiles SET url_frozen = ?, updated_at = ? WHERE id = ?`,
+			boolToInt(req.Frozen), s.now().Unix(), tileID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// boolToInt maps a bool onto SQLite's 0/1 integer convention.
+func boolToInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // Navigation no longer has its own RPC: in the Electron model the live
 // WebContentsView reports its final address back through SetURLState at
 // freeze time, so the old rod-era SetURLString (driven by a server-side

@@ -2,7 +2,7 @@ import { app, dialog, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
-import { registerWebviewIpc, registerShellIpc, makeNavForwarder, makeOpenBelowForwarder, makeZoomKeyForwarder, sendFrame, sendError, sendShellData, sendShellExit } from './register';
+import { registerWebviewIpc, registerShellIpc, makeNavForwarder, makeOpenBelowForwarder, makeFreezeURLForwarder, makeZoomKeyForwarder, sendFrame, sendError, sendShellData, sendShellExit } from './register';
 import { ShellStreams } from './shellstreams';
 import { makeShellDialer } from './shellgrpc';
 import { dataProtoPath } from './paths';
@@ -91,6 +91,7 @@ async function boot(): Promise<void> {
     onNav: makeNavForwarder(rootWC),
     onError: (ev) => sendError(rootWC, ev.source, ev.message),
     onOpenBelow: makeOpenBelowForwarder(rootWC),
+    onFreezeURL: makeFreezeURLForwarder(rootWC),
     onZoomKey: makeZoomKeyForwarder(rootWC),
     // A live view stole focus via page-initiated navigation (issue #172):
     // give it back to the root renderer, where the user was typing.

@@ -611,4 +611,28 @@ func init() {
 			}
 		},
 	})
+
+	// v7: url_frozen — the user's standing freeze (issue #237).
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 7,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
+				VALUES ('fixt-v7-url', ` + rootID + `, 'url', 30, 6, 1, 1, 'https://v6.example', 'v6 url', 100, 100)`); err != nil {
+				t.Fatalf("seed v6 url tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var frozen int
+			var url string
+			if err := db.QueryRow(`SELECT url_frozen, url_string
+				FROM tiles WHERE object_id = 'fixt-v7-url'`).Scan(&frozen, &url); err != nil {
+				t.Fatalf("read v6 url tile: %v", err)
+			}
+			if frozen != 0 || url != "https://v6.example" {
+				t.Errorf("v6 row: frozen=%d url=%q, want an unfrozen row with its url intact", frozen, url)
+			}
+		},
+	})
 }

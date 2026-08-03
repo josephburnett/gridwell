@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 6
+const schemaVersion = 7
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -64,6 +64,11 @@ var migrations = []migration{
 	// branch forbade), so this is a rebuild, not an ADD COLUMN. Old rows
 	// get link_target_id NULL (not a link) — exactly their old meaning.
 	{to: 6, run: rebuildTilesForLinkTarget},
+	// v7: url_frozen — the user's standing freeze on a url tile (issue
+	// #237): descent does not auto-go-live until reconnect clears it.
+	// If-missing because the v6 REBUILD materializes the current template.
+	{to: 7, run: addColumnIfMissingDDL("tiles", "url_frozen",
+		`ALTER TABLE tiles ADD COLUMN url_frozen INTEGER NOT NULL DEFAULT 0`)},
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
@@ -149,6 +154,43 @@ func rebuildTiles(ctx context.Context, tx *sql.Tx) error {
 func addColumnDDL(ddl string) func(ctx context.Context, tx *sql.Tx) error {
 	return func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, ddl)
+		return err
+	}
+}
+
+// addColumnIfMissingDDL is addColumnDDL for a column added AFTER a
+// table-rebuild migration. A rebuild materializes the CURRENT
+// tablesTemplate (one DDL source, no drift — the v5/v6 recipe), so a chain
+// that passes through it already carries every later column and the plain
+// ALTER would fail with "duplicate column"; a genuinely old file whose
+// rebuild ran under an older binary still needs it. Both paths converge on
+// the same shape — TestSchemaEquivalence proves it.
+func addColumnIfMissingDDL(table, column, ddl string) func(ctx context.Context, tx *sql.Tx) error {
+	return func(ctx context.Context, tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				cid       int
+				name, typ string
+				notnull   int
+				dflt      sql.NullString
+				pk        int
+			)
+			if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+				return err
+			}
+			if name == column {
+				return nil // the rebuild already materialized it
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, ddl)
 		return err
 	}
 }

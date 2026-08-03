@@ -14,6 +14,7 @@ import {
   ForwardedRightdown,
   ErrorEvent,
   OpenBelowEvent,
+  FreezeURLEvent,
   ZoomKeyEvent,
   ShellOpenArgs,
   ShellWriteArgs,
@@ -136,6 +137,13 @@ export function makeNavForwarder(rootWC: WebContents) {
 // (EV.openBelow), which splits the pane and opens it ephemeral (issue #111).
 export function makeOpenBelowForwarder(rootWC: WebContents): (ev: OpenBelowEvent) => void {
   return (ev) => safeSend(rootWC, EV.openBelow, ev);
+}
+
+// makeFreezeURLForwarder relays the context menu's explicit freeze gesture
+// (issue #237) to the renderer (EV.freezeUrl), where the wasm tears the view
+// down and persists the standing frozen intent.
+export function makeFreezeURLForwarder(rootWC: WebContents): (ev: FreezeURLEvent) => void {
+  return (ev) => safeSend(rootWC, EV.freezeUrl, ev);
 }
 
 // makeZoomKeyForwarder relays the content-zoom chord from a focused live view
