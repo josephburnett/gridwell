@@ -24,6 +24,16 @@ test('typing into a descended text tile persists to the server', async ({ gw, wi
   const themed = await window.evaluate(() => (window as any).__gridwellTest.bar());
   expect(themed.band, 'text-family band').toBe('#1b2213');
   expect(themed.button, 'text-family button').toBe('#8aa05a');
+  // The rendered/raw toggle is a DOM element in the same slot; it must wear
+  // the same family shades as the canvas buttons (issue #227 — it used to
+  // freeze pane-tile teal into its style at creation, a second copy of the
+  // theme fact that #223 never reached).
+  const toggle = window.locator('#gw-text-toggle');
+  await expect(toggle).toBeVisible();
+  await expect
+    .poll(async () =>
+      toggle.evaluate((el: HTMLElement) => getComputedStyle(el).backgroundColor))
+    .toBe('rgb(138, 160, 90)'); // #8aa05a, the text-family button hue
   const marker = 'gridwell-e2e-typed';
   await gw.typeText(marker);
 

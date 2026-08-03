@@ -322,6 +322,7 @@ func (a *App) ensureFileToggle() {
 		return
 	}
 	btn := a.doc.Call("createElement", "div")
+	btn.Set("id", "gw-text-toggle")
 	style := btn.Get("style")
 	style.Set("position", "absolute")
 	style.Set("display", "none")
@@ -329,11 +330,10 @@ func (a *App) ensureFileToggle() {
 	style.Set("width", strconv.Itoa(2*plusButtonRadius)+"px")
 	style.Set("height", strconv.Itoa(2*plusButtonRadius)+"px")
 	style.Set("borderRadius", "50%")
-	// The pane-tile teal, matching the bar-slot circle it sits on
-	// (2026-07-30 tweak).
-	style.Set("background", colorPaneTileBorder)
+	// background/color are NOT set here: refreshFileToggle derives them from
+	// barTheme on every refresh (issue #227 — a create-time color was a
+	// second, frozen copy of the theme fact).
 	style.Set("border", "1px solid #dff4f4")
-	style.Set("color", colorPaneTileFill)
 	style.Set("cursor", "pointer")
 	style.Set("alignItems", "center")
 	style.Set("justifyContent", "center")
@@ -416,6 +416,11 @@ func (a *App) refreshFileToggle() {
 	cx, cy := a.plusButtonCenter()
 	style.Set("left", pxf(cx-plusButtonRadius))
 	style.Set("top", pxf(cy-plusButtonRadius))
+	// The family shades, same as the canvas slot buttons (issue #223/#227):
+	// saturated hue for the face, the dark band shade for the glyph.
+	band, button := a.barTheme()
+	style.Set("background", button)
+	style.Set("color", band)
 	// Glyph hints at the TARGET mode: an italic serif "a" means clicking
 	// renders; a monospace "a" means clicking edits the source.
 	if p.TextMode == rpc.TextModeRendered {
