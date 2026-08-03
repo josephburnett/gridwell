@@ -270,6 +270,12 @@ type App struct {
 	renderedReady   bool
 	lastRenderedKey string
 
+	// renderedPrev caches rasterized rendered-mode grid previews by tile id
+	// (issue #233; rendered_preview.go): SVG-foreignObject images of
+	// markdown.RenderHTML's output, decoded async and drawn by
+	// drawMarkdownNode when a tile's stored text_mode is "rendered".
+	renderedPrev map[string]*renderedPreview
+
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
 	// the textarea overlay — letting the text content fill the pane
@@ -618,6 +624,7 @@ func main() {
 		wellWheelPending:  map[string]wellWheelDrift{},
 		traces:            map[string]traceState{},
 		paneLayouts:       map[string]*paneLayoutEntry{},
+		renderedPrev:      map[string]*renderedPreview{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")

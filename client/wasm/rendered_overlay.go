@@ -26,7 +26,7 @@ func (a *App) ensureRenderedView() {
 		return
 	}
 	st := a.doc.Call("createElement", "style")
-	st.Set("textContent", renderedCSS)
+	st.Set("textContent", markdown.RenderedCSS("#gw-rendered-view"))
 	a.doc.Get("head").Call("appendChild", st)
 
 	div := a.doc.Call("createElement", "div")
@@ -139,24 +139,5 @@ func (a *App) refreshRenderedOverlay() {
 	a.renderedReady = true
 }
 
-// renderedCSS is the overlay's scoped stylesheet: goldmark emits bare
-// semantic HTML, so the div supplies the reading style — the app's own
-// dark palette, em-relative so content zoom scales everything.
-const renderedCSS = `
-#gw-rendered-view { color: #d8d9de; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
-#gw-rendered-view h1 { font-size: 1.7em; margin: 0.6em 0 0.4em; }
-#gw-rendered-view h2 { font-size: 1.35em; margin: 0.6em 0 0.35em; }
-#gw-rendered-view h3, #gw-rendered-view h4 { font-size: 1.15em; margin: 0.5em 0 0.3em; }
-#gw-rendered-view p, #gw-rendered-view ul, #gw-rendered-view ol, #gw-rendered-view blockquote, #gw-rendered-view table, #gw-rendered-view pre { margin: 0.35em 0 0.6em; }
-#gw-rendered-view ul, #gw-rendered-view ol { padding-left: 1.6em; }
-#gw-rendered-view a { color: #7a9fd4; text-decoration: underline; cursor: pointer; }
-#gw-rendered-view code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; background: #1c1d24; padding: 0.08em 0.3em; border-radius: 3px; }
-#gw-rendered-view pre { background: #1c1d24; padding: 0.6em 0.8em; border-radius: 4px; overflow-x: auto; }
-#gw-rendered-view pre code { background: none; padding: 0; }
-#gw-rendered-view blockquote { border-left: 3px solid #3a4b5a; padding-left: 0.8em; color: #9ca0ad; }
-#gw-rendered-view table { border-collapse: collapse; }
-#gw-rendered-view th, #gw-rendered-view td { border: 1px solid #3a4150; padding: 0.25em 0.6em; }
-#gw-rendered-view img { max-width: 100%; }
-#gw-rendered-view hr { border: 0; border-top: 1px solid #3a4150; }
-#gw-rendered-view input[type=checkbox] { margin-right: 0.4em; }
-`
+// The overlay's stylesheet lives in markdown.RenderedCSS — one stylesheet
+// shared with the rasterized grid preview (issue #233), scoped per surface.

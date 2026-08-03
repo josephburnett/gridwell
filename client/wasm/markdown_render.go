@@ -81,10 +81,11 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 // drawMarkdownNode renders a text tile at (x, y, w, h) as a grid preview.
 // Constant-scale window (issue #205): the type size never follows grid
 // zoom, the doc wraps to the tile's width (issue #216's raw wrap), and the
-// stored scroll (TextX/TextY) places the window. Since #218 the preview is
-// ALWAYS the raw source — the styled canvas engine is gone (canvas cannot
-// host the rendered HTML), and at grid zoom a handful of monospace lines
-// reads as well as styled text.
+// stored scroll (TextX/TextY) places the window. The preview follows the
+// tile's stored text_mode (issue #233): "rendered" draws the rasterized
+// RenderHTML output (rendered_preview.go — no second layout engine, #218
+// stands), anything else the raw source; the raw source also covers the
+// async raster gap.
 func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentZoomOf(n), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
@@ -107,10 +108,16 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 		}
 	}
 	if markdown.PreviewContentVisible(h-topInset, scale) {
-		if body, ok := a.tileBody(n); ok {
-			drawMarkdownText(a.cctx, string(body),
-				x-scrollX*scale, y+topInset-scrollY*scale,
-				frame.ContentW, h-topInset+scrollY*scale, scale, 0)
+		drawn := false
+		if n.TextMode == rpc.TextModeRendered {
+			drawn = a.drawRenderedPreview(n, frame, x, y, w, h, topInset)
+		}
+		if !drawn {
+			if body, ok := a.tileBody(n); ok {
+				drawMarkdownText(a.cctx, string(body),
+					x-scrollX*scale, y+topInset-scrollY*scale,
+					frame.ContentW, h-topInset+scrollY*scale, scale, 0)
+			}
 		}
 	}
 

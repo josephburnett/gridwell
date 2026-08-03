@@ -73,6 +73,16 @@ func (a *App) installTestHook() {
 		"shellText":     js.FuncOf(a.thShellText),
 		"shellFeed":     js.FuncOf(a.thShellFeed),
 		"rawRows":       js.FuncOf(a.thRawRows),
+		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
+			// The rendered-raster cache (issue #233): tile id → decode state.
+			// Lets a spec prove a rendered-mode tile's preview switched to
+			// the rasterized path (and the raster actually decoded).
+			out := map[string]any{}
+			for id, e := range a.renderedPrev {
+				out[id] = map[string]any{"ready": e.ready, "failed": e.failed}
+			}
+			return out
+		}),
 	}))
 }
 
