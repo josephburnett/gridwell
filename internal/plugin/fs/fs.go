@@ -16,6 +16,7 @@ import (
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/fssource"
@@ -298,9 +299,17 @@ func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gr
 	return griddb.ApplySetWellView(p.db, fsLabelCol, req)
 }
 
-// ContentBody returns the descent body for a file tile: a small markdown
-// summary of the file's metadata. Directories, unreadable paths, and unknown
-// ids return empty content rather than an error.
+// renderableBodyCap bounds how much of a renderable file the descent body
+// carries (issue #236): a document view, not a file transfer. Files past
+// the cap fall back to the metadata summary.
+const renderableBodyCap = 4 << 20
+
+// ContentBody returns the descent body for a file tile. A RENDERABLE file
+// (markdown.Renderable — the same rule the client colors tiles by, issue
+// #236) serves its real bytes, so descending shows the document itself;
+// everything else serves the small metadata summary. Directories,
+// unreadable paths, and unknown ids return empty content rather than an
+// error.
 func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, err error) {
 	tileID, err := strconv.ParseInt(tileIDStr, 10, 64)
 	if err != nil {
@@ -322,9 +331,17 @@ func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, e
 	if err != nil {
 		return nil, "", err
 	}
-	entry, err := fssource.Stat(filepath.Join(dirPath, name))
+	fullPath := filepath.Join(dirPath, name)
+	entry, err := fssource.Stat(fullPath)
 	if err != nil {
 		return nil, "", nil
+	}
+	if markdown.Renderable(name) && entry.Size <= renderableBodyCap {
+		if body, readErr := os.ReadFile(fullPath); readErr == nil {
+			return body, "text/markdown", nil
+		}
+		// Unreadable despite the stat: the metadata summary still tells
+		// the user what is here instead of a blank pane (charter §6).
 	}
 	return []byte(fssource.MetadataMarkdown(entry)), "text/markdown", nil
 }

@@ -39,6 +39,16 @@ func IsOrg(name string) bool {
 	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)), ".org")
 }
 
+// Renderable reports whether a name marks content this package can render
+// (issue #236) — THE renderability rule: the fs plugin serves a
+// renderable file's real bytes as the descent body (metadata otherwise),
+// and the client colors file tiles by the same verdict (green vs grey),
+// so what looks renderable and what actually renders can never disagree.
+func Renderable(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return strings.HasSuffix(n, ".md") || strings.HasSuffix(n, ".markdown") || IsOrg(n)
+}
+
 // RenderHTML renders source bytes to sanitized HTML for the read-only
 // rendered view. org selects the org-mode renderer; anything else is
 // GFM markdown. Errors degrade to an escaped <pre> of the source — a
