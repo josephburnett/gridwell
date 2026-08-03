@@ -339,13 +339,19 @@ func (a *App) draw() {
 	// strip.
 	a.drawBottomBar()
 	a.drawErrStrip()
-	// Inside a workspace, a thin pane-tile-teal line wraps the whole
-	// window (issue #225) — a second hint you're in a pane tile, alongside
-	// the named crumb in the bar. Drawn last so nothing covers it.
+	// Inside a workspace, a pane-tile-teal line wraps the whole window
+	// (issue #225) — a second hint you're in a pane tile, alongside the
+	// named crumb in the bar. It owns a reserved gutter (issue #228:
+	// rootLayoutRect insets the panes by wsOutlinePx), so it never paints
+	// over the panes' kind-colored borders. Drawn last so nothing covers it.
 	if a.ws.Depth() > 0 {
+		// The same height the layout used: the outline wraps the pane area
+		// and stays off the notice strip below it.
+		h := a.height - errsurface.StripHeight(a.errs.Len())
 		a.cctx.Set("strokeStyle", colorPaneTileBorder)
-		a.cctx.Set("lineWidth", 2.0)
-		a.cctx.Call("strokeRect", 1, 1, a.width-2, a.height-2)
+		a.cctx.Set("lineWidth", wsOutlinePx)
+		a.cctx.Call("strokeRect", wsOutlinePx/2, wsOutlinePx/2,
+			a.width-wsOutlinePx, h-wsOutlinePx)
 		a.cctx.Set("lineWidth", 1.0)
 	}
 
@@ -369,15 +375,27 @@ func (a *App) layoutPanes() map[string]pane.Rect {
 	return pane.Layout(a.tree, a.rootLayoutRect())
 }
 
+// wsOutlinePx is the width of the teal workspace outline (issues
+// #225/#228): the reserved gutter panes inset by while inside a workspace,
+// so the line and the pane borders never overlap.
+const wsOutlinePx = 3.0
+
 // rootLayoutRect is the rectangle the pane tree lays out into: the canvas
-// minus the reserved notice strip. One owner — the cascading divider resize
-// (pane.ResizeThrough) must see the exact rect the layout uses.
+// minus the reserved notice strip, and — inside a workspace — minus the
+// outline gutter on all four sides. One owner — the cascading divider
+// resize (pane.ResizeThrough) must see the exact rect the layout uses.
 func (a *App) rootLayoutRect() pane.Rect {
-	// One reserved band: the notice strip. The bottom bar lives INSIDE the
-	// focused pane now (issue #220 — bottomBarRect), so panes fill
-	// everything above the strip.
-	return pane.Rect{X: 0, Y: 0, W: a.width,
+	// The bottom bar lives INSIDE the focused pane (issue #220 —
+	// bottomBarRect), so panes fill everything above the strip.
+	r := pane.Rect{X: 0, Y: 0, W: a.width,
 		H: a.height - errsurface.StripHeight(a.errs.Len())}
+	if a.ws.Depth() > 0 {
+		r.X += wsOutlinePx
+		r.Y += wsOutlinePx
+		r.W -= 2 * wsOutlinePx
+		r.H -= 2 * wsOutlinePx
+	}
+	return r
 }
 
 // drawErrStrip paints the notice strip in the reserved band at the bottom of

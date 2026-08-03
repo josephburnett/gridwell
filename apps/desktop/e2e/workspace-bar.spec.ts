@@ -47,6 +47,8 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(outside.segments[0].kind, 'the chain starts the band').toBe('chain');
   expect(outside.band, 'grid-family band shade').toBe('#151b2e');
   expect(outside.button, 'grid-family button hue').toBe('#4a6fff');
+  expect(fp0.x, 'no outline gutter outside a workspace').toBe(0);
+  expect(fp0.y, 'no outline gutter outside a workspace').toBe(0);
 
   await gw.openPalette();
   await gw.dragCreate('pane', wx, wy);
@@ -54,6 +56,18 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(pt).toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
+
+  // The teal workspace outline is reserved layout (issue #228): panes inset
+  // by its width on every side, so the line never paints over the panes'
+  // own kind-colored borders — the strip's reserved-band pattern again.
+  const winW = await window.evaluate(() => window.innerWidth);
+  const winH = await window.evaluate(() => window.innerHeight);
+  const wp = (await gw.panes())[0];
+  expect(wp.x, 'left outline gutter exists').toBeGreaterThan(0);
+  expect(wp.x, 'the gutter is thin').toBeLessThan(8);
+  expect(wp.y, 'top gutter matches').toBe(wp.x);
+  expect(winW - (wp.x + wp.w), 'right gutter matches').toBe(wp.x);
+  expect(winH - (wp.y + wp.h), 'bottom gutter matches').toBe(wp.x);
 
   // Inside: the workspace crumb fronts the chain.
   const inside = await bar(window);
