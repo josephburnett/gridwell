@@ -123,9 +123,14 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 
 	a.cctx.Call("restore")
 
+	// Host (outside) file tiles color by RENDERABILITY (issue #236, owner
+	// decision revising the uniform brown): a file the markdown renderer
+	// can show is text-green like any document; one it can't (metadata
+	// only on descent) is muted grey. markdown.Renderable is the same rule
+	// the fs plugin serves bodies by, so the color never lies.
 	outlineColor := colorMarkdownLine
-	if outside {
-		outlineColor = colorPluginBorder
+	if outside && !markdown.Renderable(n.AltText) {
+		outlineColor = colorMuted
 	}
 	if dashed {
 		setTileDash(a.cctx)

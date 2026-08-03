@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -401,10 +402,12 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	if a.tileReadOnly(&file) {
-		// Source-backed text tiles have no editable mode to toggle to —
-		// the body is reconciler output, not user content. Hiding the
-		// glyph keeps the read-only contract visible at a glance.
+	if a.tileReadOnly(&file) && !markdown.Renderable(file.AltText) {
+		// A non-renderable source-backed tile has nothing to flip: its
+		// body IS the metadata summary. A renderable host file (fs .md /
+		// .org — issue #236) keeps the toggle: the flip is rendered vs raw
+		// SOURCE, a presentation choice — the textarea guard still keeps
+		// raw mode read-only.
 		hide()
 		return
 	}
@@ -575,10 +578,11 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	if p.TextFocus == "" {
 		return
 	}
-	// No editable mode for source-backed text — toggle would put us in
-	// a state with a visible textarea over a read-only blob.
+	// A read-only NON-renderable tile has no mode to flip to; a renderable
+	// host file flips rendered/raw source (issue #236) — the textarea
+	// guard in refreshFileOverlay keeps raw mode caret-free either way.
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
+		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) && !markdown.Renderable(file.AltText) {
 			return
 		}
 	}

@@ -1847,10 +1847,15 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// unconditionally, so a merely-opened tile rewrote its blob and bumped
 	// its version on every visit; dirty-gating makes a pure read write-free
 	// (the guiding rule: reading never mutates).
-	buf, hasBuf := a.c.DirtyContent(file.ContentID())
+	// Read-only host tiles have no write-back at all: no content (the body
+	// is reconciler output) and no framing store either — the fs plugin's
+	// SetTile refuses text framing, so posting SetTextView from here only
+	// manufactured an error strip (#236). The mode/scroll stay session
+	// facts for them.
 	if a.tileReadOnly(&file) {
-		hasBuf = false
+		return
 	}
+	buf, hasBuf := a.c.DirtyContent(file.ContentID())
 
 	// The framed window in doc px: scroll position + the inner box size
 	// (= screen px, since scale is fixed at 1.0). The parent-grid preview
