@@ -15,13 +15,9 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
 }
 
 async function barClickCrumb(gw: any, window: any, level: number): Promise<void> {
-  // The bar hook reports the exact rects the renderer drew (issue #212) —
-  // click the workspace crumb's center, no spec-side geometry restatement.
-  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const seg = bar.segments.find((s: any) => s.kind === 'workspace' && s.index === level);
-  expect(seg, `workspace crumb ${level} must be in the bar`).toBeTruthy();
-  await window.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);
-  await gw.waitIdle();
+  // One-chain nav (#245): "leave workspace `level` and deeper" = go to
+  // level-1 — the crumb before that boundary.
+  await gw.leaveWorkspace(level - 1);
 }
 
 test('nested workspaces: breadcrumbs, session-only membership, safe self-reference', async ({ gw, window }) => {

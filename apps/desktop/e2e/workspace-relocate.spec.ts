@@ -45,12 +45,7 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 10_000 }).toBe(doc.id);
 
   // Leave the workspace (crumb click flushes the layout with the leaf).
-  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const crumb = bar.segments.find((s: any) => s.kind === 'workspace' && s.index === 1);
-  await window.mouse.click(crumb.x + 20, bar.top + bar.height / 2);
-  // waitIdle covers the return animation — a click during it is
-  // deliberately swallowed, so the re-descend below must not race it.
-  await gw.waitIdle();
+  await gw.leaveWorkspace();
   await expect
     .poll(async () => window.evaluate(() => (window as any).__gridwellTest.workspace().depth))
     .toBe(0);

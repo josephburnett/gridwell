@@ -62,10 +62,7 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
   // Leave the workspace (bar ascent flushes + persists the layout with the
   // descent), then edit Routine OUTSIDE it — the singleton is now bound to
   // Routine.
-  const bar1 = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const ws1 = bar1.segments.find((s: any) => s.kind === 'workspace');
-  await window.mouse.click(ws1.x + 20, bar1.top + bar1.height / 2);
-  await gw.waitIdle();
+  await gw.leaveWorkspace();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   await expect
     .poll(async () => {
@@ -96,7 +93,7 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
   // Leave the workspace again — the boundary flush must not write anything
   // foreign into Today.
   const bar2 = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const ws2 = bar2.segments.find((s: any) => s.kind === 'workspace');
+  const ws2 = bar2.segments.find((s: any) => s.kind === 'pane');
   await window.mouse.click(ws2.x + 20, bar2.top + bar2.height / 2, { button: 'right' });
   await gw.waitIdle();
   await expect

@@ -16,12 +16,9 @@ async function workspaceState(window: any): Promise<{ depth: number }> {
 }
 
 async function barLeave(gw: any, window: any): Promise<void> {
-  // The bar lives inside the FOCUSED pane (issue #220): click the
-  // workspace crumb where the hook says it is.
-  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const seg = bar.segments.find((s: any) => s.kind === 'workspace');
-  await window.mouse.click(seg.x + 20, bar.top + bar.height / 2);
-  await gw.waitIdle();
+  // The bar lives inside the FOCUSED pane (issue #220); leaving is the
+  // crumb BEFORE the pane boundary (one-chain nav, #245: click = go there).
+  await gw.leaveWorkspace();
 }
 
 test('cloning a workspace: shared blob, independent divergence', async ({ gw, window }) => {

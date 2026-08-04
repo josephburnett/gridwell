@@ -173,6 +173,23 @@ export class GridwellDriver {
     await this.win.mouse.click(b.x + b.w / 2, b.top + b.height / 2, { button });
   }
 
+  // leaveWorkspace exits down to workspace stack level toLevel (0 = the
+  // session) via the one-chain nav (#245): a crumb click GOES THERE, so
+  // leaving means clicking the last crumb BEFORE the pane-tile boundary of
+  // level toLevel+1 — the outer chain's tail, which lands exactly where the
+  // old leave-crumb click did. waitIdle covers the return animation (a
+  // click during it is deliberately swallowed).
+  async leaveWorkspace(toLevel = 0): Promise<void> {
+    const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
+    const boundary = bar.segments.findIndex(
+      (s: any) => s.kind === 'pane' && s.level === toLevel + 1,
+    );
+    if (boundary <= 0) throw new Error(`no crumb before the level-${toLevel + 1} boundary`);
+    const seg = bar.segments[boundary - 1];
+    await this.win.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);
+    await this.waitIdle();
+  }
+
   // cellCenter maps a grid cell to screen coordinates — and REFUSES a point
   // outside the pane's rect. An off-pane (or off-viewport) point is always a
   // spec bug (the cell isn't where the viewport shows at this zoom), and CDP
@@ -530,7 +547,10 @@ export class GridwellDriver {
   // right-click-the-circle ascend is gone).
   async ascendViaCrumb(): Promise<void> {
     const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
-    const chain = (bar.segments as any[]).filter((s) => s.kind === 'chain');
+    const depth = await this.win.evaluate(() => (window as any).__gridwellTest.workspace().depth);
+    // Only the CURRENT tree's crumbs (#245: the one chain also carries the
+    // outer context — clicking those would cross the workspace boundary).
+    const chain = (bar.segments as any[]).filter((s) => s.kind === 'chain' && s.level === depth);
     if (chain.length < 2) return; // nothing to ascend to — a graceful no-op
     const seg = chain[chain.length - 2];
     await this.win.mouse.click(seg.x + seg.w / 2, bar.top + bar.height / 2);

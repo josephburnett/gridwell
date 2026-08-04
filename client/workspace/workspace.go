@@ -98,15 +98,17 @@ func (s *Stack) Names() []string {
 	return out
 }
 
-// PopCountForCrumb maps a clicked crumb (1-based level, leftmost = 1) to how
-// many workspaces to leave: clicking crumb k means "leave workspace k and
-// everything deeper", landing at level k-1. The rightmost crumb therefore
-// leaves just the current workspace. 0 for an out-of-range level.
-func (s *Stack) PopCountForCrumb(level int) int {
-	if level < 1 || level > len(s.frames) {
+// PopCountTo maps a nav target to how many workspaces to leave: level k
+// (1-based) means "be INSIDE workspace k" — pop everything deeper; level
+// 0 is the session outside every workspace. The one-chain nav (issue
+// #245): a crumb click GOES THERE, so clicking the current boundary pops
+// nothing (you are already there), and the old leave-k-inclusive
+// semantics live at level k-1. 0 for an out-of-range level.
+func (s *Stack) PopCountTo(level int) int {
+	if level < 0 || level >= len(s.frames) {
 		return 0
 	}
-	return len(s.frames) - level + 1
+	return len(s.frames) - level
 }
 
 // LayoutHash digests encoded layout bytes for the persister's diff.

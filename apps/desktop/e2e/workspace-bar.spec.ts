@@ -1,15 +1,15 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The bottom bar is ALWAYS-reserved layout (issue #212): outside a workspace
-// it carries the focused pane's descent chain (no workspace crumb), inside it
-// gains the workspace crumbs — and the band never overlays pane content.
-// The workspace boundary itself still belongs to the bar alone:
+// The bottom bar is ALWAYS-reserved layout (issue #212) carrying the ONE
+// nav chain (issue #245): the complete path from the root — outer chain,
+// pane-tile boundary crumb, inner chain — and the band never overlays
+// pane content. Every crumb click GOES THERE: the current boundary is a
+// no-op (you are there), and leaving is clicking any crumb before it.
+// The workspace boundary still belongs to the bar alone:
 //   - the IN-PANE ascent gesture (middle click) on a fully-ascended pane
 //     does NOT leave the workspace — the two ascent vocabularies never blur;
-//   - the workspace crumb: LEFT-click leaves (ascend, like every crumb),
-//     RIGHT-click renames the workspace inline (user-owned) —
-//     the 2026-07-30 button swap.
+//   - RIGHT-click on the boundary crumb renames the workspace inline.
 
 async function workspaceState(window: any): Promise<{ depth: number; names: string[] }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
@@ -42,8 +42,7 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   const borderPx = fp0.y + fp0.h - outside.height - outside.top;
   expect(borderPx, 'the band sits inside the pane border').toBeGreaterThan(0);
   expect(borderPx, 'by exactly the border width').toBeLessThan(8);
-  expect(outside.segments.some((s: any) => s.kind === 'workspace')).toBe(false);
-  expect(outside.segments.some((s: any) => s.kind === 'anchor'), 'the anchor block is gone').toBe(false);
+  expect(outside.segments.some((s: any) => s.kind === 'pane'), 'no boundary crumb outside').toBe(false);
   expect(outside.segments[0].kind, 'the chain starts the band').toBe('chain');
   expect(outside.band, 'grid-family band shade').toBe('#151b2e');
   expect(outside.button, 'grid-family button hue').toBe('#4a6fff');
@@ -69,10 +68,22 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(winW - (wp.x + wp.w), 'right gutter matches').toBe(wp.x);
   expect(winH - (wp.y + wp.h), 'bottom gutter matches').toBe(wp.x);
 
-  // Inside: the workspace crumb fronts the chain.
+  // Inside: ONE nav chain (issue #245) — the outer chain, then the pane
+  // tile's boundary crumb, then the inner chain. Complete path from root.
   const inside = await bar(window);
-  const crumb = inside.segments.find((s: any) => s.kind === 'workspace' && s.index === 1);
-  expect(crumb, 'the workspace crumb must appear').toBeTruthy();
+  const crumb = inside.segments.find((s: any) => s.kind === 'pane' && s.level === 1);
+  expect(crumb, 'the pane-tile boundary crumb must appear').toBeTruthy();
+  const boundaryIdx = inside.segments.indexOf(crumb);
+  expect(boundaryIdx, 'the outer chain precedes the boundary').toBeGreaterThan(0);
+  expect(inside.segments[boundaryIdx - 1].kind).toBe('chain');
+  expect(inside.segments.length, 'the inner chain follows the boundary').toBeGreaterThan(boundaryIdx + 1);
+
+  // Clicking the CURRENT boundary crumb GOES THERE — which is here: a
+  // no-op, never a close (#245: click = go there; the last view closes by
+  // clicking any crumb before its boundary).
+  await window.mouse.click(crumb.x + crumb.w / 2, inside.top + inside.height / 2);
+  await gw.waitIdle();
+  expect((await workspaceState(window)).depth, 'clicking the current boundary stays put').toBe(1);
 
   // The workspace's default pane frames the containing grid with nothing
   // to pop in-pane (no path, no portal frames). Middle-click (the universal
@@ -98,9 +109,9 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   }, { message: 'the rename must persist as the tile alt' }).toBe('ops board');
   expect((await workspaceState(window)).depth, 'renaming must not ascend').toBe(1);
 
-  // LEFT-click the crumb leaves (the ascent gesture); the band stays.
-  await window.mouse.click(crumb.x + 20, inside.top + inside.height / 2);
-  await gw.waitIdle();
+  // Leaving = clicking the crumb BEFORE the boundary (go to the outer
+  // place); the band stays.
+  await gw.leaveWorkspace();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
 
   // Wheel over the band zooms the CURRENT pane, centered (issue #220) —

@@ -12,15 +12,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// The bottom bar (issues #212/#220): the band at the bottom of the ACTIVE
-// pane — its contents are per-pane facts, so it rides the focused pane and
-// unfocused panes keep their full height. It carries the workspace crumbs
-// (narrow named rectangles), the anchor block, the focused pane's descent
-// chain (square tile previews, root inclusive), the centered title, and
-// the circle slot. Geometry comes from wsbar so the click hit-test reads
-// the identical layout — render and input cannot disagree. The chain is
-// DERIVED per frame from the focused pane's own facts (pane.DescentChain);
-// nothing here stores a second copy of where the pane is.
+// The bottom bar (issues #212/#220/#245): the band at the bottom of the
+// ACTIVE pane — its contents are per-pane facts, so it rides the focused
+// pane and unfocused panes keep their full height. It carries the ONE nav
+// chain (the complete path from the root: outer chains, pane-tile
+// boundary crumbs, the current chain — square previews truncated from the
+// LEFT on overflow), the centered title, and the circle slot. Geometry
+// comes from wsbar so the click hit-test reads the identical layout —
+// render and input cannot disagree. The chain is DERIVED per frame from
+// the workspace stack + each tree's own facts (pane.DescentChain);
+// nothing here stores a second copy of where anything is.
 
 // bottomBarRect returns the bar band: a RowH strip INSIDE the focused
 // pane's border, flush above the bottom edge (issues #220/#223 — the
@@ -69,27 +70,72 @@ func (a *App) barTheme() (band, button string) {
 	return "#151b2e", colorFocusBorder
 }
 
-// bottomBarChain returns the focused pane and its descent chain (nil chain
-// for a boot-blank pane).
-func (a *App) bottomBarChain() (*pane.Pane, []pane.Crumb) {
-	p := a.tree.FocusedPane()
-	if p == nil {
-		return nil, nil
-	}
-	return p, pane.DescentChain(p)
+// navCrumb is one link of the COMPLETE nav chain (issue #245): the whole
+// path from the root in one breadcrumb. Each workspace frame contributes
+// its ORIGIN pane's descent chain in the outer tree it will restore, then
+// the pane tile itself as a boundary crumb; the current tree's
+// focused-pane chain ends it. Clicking any crumb GOES THERE — the last
+// crumb is where you are, so it does nothing.
+type navCrumb struct {
+	// paneTile marks a workspace boundary: wsLevel is the 1-based stack
+	// level, tileID the pane tile (preview square + rename target).
+	paneTile bool
+	wsLevel  int
+	tileID   string
+	// Chain crumbs: crumb is the descent-chain entry; treeLevel is the
+	// workspace depth at which its tree is CURRENT (0 = the session tree,
+	// Depth = the live tree) — a click pops to treeLevel, then ascends.
+	treeLevel int
+	crumb     pane.Crumb
 }
 
-// bottomBarSegments lays out the bar for the current stack + chain,
-// relative to the band's left edge (bottomBarRect's x translates).
-func (a *App) bottomBarSegments(chain []pane.Crumb) []wsbar.Segment {
+// navChain assembles the full chain, outermost first.
+func (a *App) navChain() []navCrumb {
+	var out []navCrumb
+	depth := a.ws.Depth()
+	for k := 1; k <= depth; k++ {
+		f := a.ws.At(k)
+		if f == nil {
+			continue
+		}
+		outerLen := len(out)
+		if f.OuterTree != nil && f.OriginPane != "" {
+			if op := f.OuterTree.FindPane(f.OriginPane); op != nil {
+				for _, c := range pane.DescentChain(op) {
+					out = append(out, navCrumb{treeLevel: k - 1, crumb: c})
+				}
+			}
+		}
+		if len(out) == outerLen {
+			// A boot-restored frame (OuterTree nil — nesting is session
+			// state): the outside still exists (ascending lands at the
+			// fallback, the pane tile's containing grid), so the chain
+			// offers it as one synthetic crumb — otherwise the boundary
+			// would be the first crumb and the workspace inescapable by
+			// the one-chain rule (a crumb click goes there).
+			out = append(out, navCrumb{treeLevel: k - 1})
+		}
+		out = append(out, navCrumb{paneTile: true, wsLevel: k, tileID: f.TileID})
+	}
+	if p := a.tree.FocusedPane(); p != nil {
+		for _, c := range pane.DescentChain(p) {
+			out = append(out, navCrumb{treeLevel: depth, crumb: c})
+		}
+	}
+	return out
+}
+
+// bottomBarSegments lays out the visible suffix of the chain (wsbar's
+// left-truncation), relative to the band's left edge.
+func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
 	_, _, w, ok := a.bottomBarRect()
 	if !ok {
 		return nil
 	}
-	return wsbar.Layout(a.ws.Depth(), len(chain), w)
+	return wsbar.Layout(len(chain), w)
 }
 
-// drawBottomBar paints the band: workspace crumbs, then the chain squares.
+// drawBottomBar paints the band: the one nav chain, then title and slot.
 func (a *App) drawBottomBar() {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok {
@@ -100,43 +146,57 @@ func (a *App) drawBottomBar() {
 	c.Set("fillStyle", band)
 	c.Call("fillRect", bx, top, bw, wsbar.RowH)
 
-	_, chain := a.bottomBarChain()
+	chain := a.navChain()
 	segs := a.bottomBarSegments(chain)
-	names := a.ws.Names()
-	depth := a.ws.Depth()
 	c.Set("font", "12px system-ui, sans-serif")
 	c.Set("textBaseline", "middle")
 	for _, s := range segs {
-		switch s.Kind {
-		case wsbar.KindWorkspace:
-			// Crumb face: the current (innermost) workspace reads brightest.
-			if s.Index == depth {
-				c.Set("fillStyle", colorPaneTileBorder)
-			} else {
-				c.Set("fillStyle", "#1d4a4a")
-			}
-			c.Call("fillRect", bx+s.X+2, top+3, s.W-4, wsbar.RowH-6)
-			c.Set("fillStyle", "#dff4f4")
-			label := names[s.Index-1]
-			if label == "" {
-				label = "workspace"
-			}
-			c.Call("save")
-			c.Call("beginPath")
-			c.Call("rect", bx+s.X+2, top, s.W-4, wsbar.RowH)
-			c.Call("clip")
-			c.Call("fillText", label, bx+s.X+10, top+wsbar.RowH/2)
-			c.Call("restore")
-		case wsbar.KindChain:
-			shifted := s
-			shifted.X += bx
-			a.drawChainCrumb(chain[s.Index], shifted, top)
+		shifted := s
+		shifted.X += bx
+		if nc := chain[s.Index]; nc.paneTile {
+			a.drawPaneTileCrumb(nc.tileID, shifted, top)
+		} else {
+			a.drawChainCrumb(nc.crumb, shifted, top)
 		}
 	}
 	c.Set("fillStyle", button)
 	c.Call("fillRect", bx, top, bw, 1) // hairline above the band, kind-hued
 	a.drawBarTitle(top)
 	a.drawBarSlot()
+}
+
+// drawPaneTileCrumb paints a workspace-boundary crumb: the pane tile's
+// own preview when its row is cached (the same drawer its grid uses — the
+// teal face is what makes the boundary readable in the chain), a teal
+// placeholder otherwise (a boot-restored frame may never have loaded the
+// outer grid).
+func (a *App) drawPaneTileCrumb(tileID string, s wsbar.Segment, top float64) {
+	c := a.cctx
+	square := min(s.W, wsbar.RowH)
+	side := square - 2
+	if side < 4 {
+		return
+	}
+	x := s.X + (square-side)/2
+	y := top + (wsbar.RowH-side)/2
+	c.Call("save")
+	c.Call("beginPath")
+	c.Call("rect", x, y, side, side)
+	c.Call("clip")
+	if t := a.findTileByID(tileID); t != nil {
+		cells := float64(max(t.W, t.H))
+		if cells < 1 {
+			cells = 1
+		}
+		a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, false, isLinkTile(t), "")
+	} else {
+		c.Set("fillStyle", colorPaneTileFill)
+		c.Call("fillRect", x, y, side, side)
+		c.Set("strokeStyle", colorPaneTileBorder)
+		c.Set("lineWidth", 1.0)
+		c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
+	}
+	c.Call("restore")
 }
 
 // barTitleGeom computes the centered current-pane title: the pane's name
@@ -159,8 +219,7 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 	}
 	a.cctx.Set("font", "12px system-ui, sans-serif")
 	textW := a.cctx.Call("measureText", label).Get("width").Float() + 24
-	_, chain := a.bottomBarChain()
-	segs := a.bottomBarSegments(chain)
+	segs := a.bottomBarSegments(a.navChain())
 	crumbsEnd := 0.0
 	if n := len(segs); n > 0 {
 		crumbsEnd = segs[n-1].X + segs[n-1].W
@@ -354,32 +413,28 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 	return &t
 }
 
-// bottomBarClick consumes a click in the bar band. A workspace crumb is
-// the workspace's universal handle: LEFT-click LEAVES workspace k and
-// everything deeper, RIGHT-click renames it inline. A chain crumb is a
-// place: LEFT-click ascends the focused pane all the way back to that
-// level (issue #212) — the one bar ascent gesture (#222). Left clicks in
-// the band never fall through to a pane below; right clicks outside the
-// title/workspace crumbs DO fall through, so the pane border gestures
-// under the band stay reachable (#220).
+// bottomBarClick consumes a click in the bar band. Every crumb of the one
+// nav chain (issue #245) answers LEFT-click with GO THERE: a pane-tile
+// crumb lands you INSIDE that workspace (deeper ones close; the current
+// boundary is where you are — a no-op), and a chain crumb pops to its
+// tree and ascends within it — one verb, whether the target is above,
+// beside, or outside the current workspace. RIGHT-click renames: the
+// title, or a pane-tile crumb's workspace. Left clicks in the band never
+// fall through to a pane below; right clicks outside the rename surfaces
+// DO, so the pane border gestures under the band stay reachable (#220).
 func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
 		return false
 	}
+	chain := a.navChain()
 	if button == 2 {
-		// RIGHT-clicks: only the two rename surfaces own them (the title
-		// and a workspace crumb); everything else falls THROUGH to the pane
-		// gesture layer, so the focused pane's bottom-edge border gestures
-		// (right-drag split, divider grab) stay reachable under the band
-		// (issue #220 — the band covers the pane's bottom resize band).
 		if tx, tw, _, _, _, tOK := a.barTitleGeom(); tOK && sx >= tx && sx < tx+tw {
 			a.openRenameInput()
 			return true
 		}
-		_, chain := a.bottomBarChain()
-		if seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx); segOK && seg.Kind == wsbar.KindWorkspace {
-			a.openWorkspaceRenameInput(seg.Index)
+		if seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx); segOK && chain[seg.Index].paneTile {
+			a.openWorkspaceRenameInput(chain[seg.Index].wsLevel)
 			return true
 		}
 		return false
@@ -397,45 +452,70 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		}
 		return true
 	}
-	p, chain := a.bottomBarChain()
 	seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx)
 	if !segOK {
 		return true // empty band space swallows clicks (no gesture, #222)
 	}
-	// LEFT-click ascends on every crumb kind alike (2026-07-30 tweak: one
-	// gesture for "go there"); workspace-crumb rename was handled above.
-	switch seg.Kind {
-	case wsbar.KindWorkspace:
-		if button == 0 {
-			a.ascendWorkspaceLevels(a.ws.PopCountForCrumb(seg.Index))
+	if button != 0 {
+		return true
+	}
+	nc := chain[seg.Index]
+	if nc.paneTile {
+		if n := a.ws.PopCountTo(nc.wsLevel); n > 0 {
+			a.ascendWorkspaceLevels(n)
 		}
-	case wsbar.KindChain:
-		if p != nil && button == 0 {
-			a.ascendToChainCrumb(p, chain[seg.Index])
-		}
+		return true
+	}
+	// A chain crumb: pop to the tree that holds it (ascendWorkspaceLevels
+	// restores that frame's origin pane as the focus — the very pane whose
+	// chain this crumb came from), then ascend within it.
+	if n := a.ws.PopCountTo(nc.treeLevel); n > 0 {
+		a.ascendWorkspaceLevels(n)
+	}
+	if p := a.tree.FocusedPane(); p != nil && (nc.crumb.TileID != "" || nc.crumb.Anchor != "") {
+		// The synthetic boot-outside crumb has no place to ascend WITHIN —
+		// the pop above already landed at the fallback.
+		a.ascendToChainCrumb(p, nc.crumb)
 	}
 	return true
 }
 
-// openWorkspaceRenameInput opens the shared inline rename input over crumb
-// `level` — the same input the pane name bubble uses, committing via the
-// same user-owned versioned rename.
+// openWorkspaceRenameInput opens the shared inline rename input over the
+// pane-tile crumb of workspace `level` — the same input the pane name
+// bubble uses, committing via the same user-owned versioned rename. The
+// crumb is a square now (issue #245), so the input grows rightward from
+// it to a typeable width, clamped off the slot.
 func (a *App) openWorkspaceRenameInput(level int) {
 	f := a.ws.At(level)
 	if f == nil {
 		return
 	}
-	_, chain := a.bottomBarChain()
-	seg, ok := wsbar.WorkspaceSegment(a.bottomBarSegments(chain), level)
-	if !ok {
+	chain := a.navChain()
+	idx := -1
+	for i, nc := range chain {
+		if nc.paneTile && nc.wsLevel == level {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
 		return
 	}
-	bx, top, _, rectOK := a.bottomBarRect()
+	seg, ok := wsbar.SegmentAt(a.bottomBarSegments(chain), idx)
+	if !ok {
+		return // truncated off the left edge; rename via the title instead
+	}
+	bx, top, bw, rectOK := a.bottomBarRect()
 	if !rectOK {
 		return
 	}
-	a.openNameInputAt(f.Name, seg.W-28, func(st js.Value) {
-		st.Set("left", pxOf(bx+seg.X+2))
+	w := 160.0
+	x := bx + seg.X
+	if max := bx + bw - wsbar.SlotW - 8; x+w > max {
+		x = max - w
+	}
+	a.openNameInputAt(f.Name, w-24, func(st js.Value) {
+		st.Set("left", pxOf(x))
 		st.Set("top", pxOf(top+4))
 	}, func(val string) {
 		a.commitWorkspaceRename(level, val)

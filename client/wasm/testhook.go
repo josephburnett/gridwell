@@ -647,24 +647,27 @@ func (a *App) thBar(js.Value, []js.Value) any {
 	if !ok {
 		return map[string]any{"top": 0.0, "height": wsbar.RowH, "segments": []any{}}
 	}
-	_, chain := a.bottomBarChain()
+	chain := a.navChain()
 	segs := a.bottomBarSegments(chain)
 	out := make([]any, 0, len(segs))
 	for _, s := range segs {
 		// Segment X is emitted ABSOLUTE (the band lives inside the focused
-		// pane since #220), so specs click hook coordinates verbatim.
+		// pane since #220), so specs click hook coordinates verbatim. Index
+		// addresses the FULL chain (left-truncation drops leading crumbs).
 		e := map[string]any{
 			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
-		switch s.Kind {
-		case wsbar.KindWorkspace:
-			e["kind"] = "workspace"
-		case wsbar.KindChain:
+		nc := chain[s.Index]
+		if nc.paneTile {
+			e["kind"] = "pane"
+			e["level"] = nc.wsLevel
+			e["tileID"] = nc.tileID
+		} else {
 			e["kind"] = "chain"
-			c := chain[s.Index]
-			e["anchor"] = c.Anchor
-			e["tileID"] = c.TileID
-			e["text"] = c.Text
+			e["level"] = nc.treeLevel
+			e["anchor"] = nc.crumb.Anchor
+			e["tileID"] = nc.crumb.TileID
+			e["text"] = nc.crumb.Text
 		}
 		out = append(out, e)
 	}

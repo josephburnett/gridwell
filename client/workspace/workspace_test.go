@@ -33,24 +33,26 @@ func TestStackPushPopRestoresOuterTrees(t *testing.T) {
 	}
 }
 
-// TestPopCountForCrumb pins the bar semantics: clicking crumb k LEAVES
-// workspace k (and everything deeper) — consistent whether k is the current
-// workspace (rightmost: leave one) or an ancestor (leave several). The same
-// verb everywhere, so the bar never means two different things.
-func TestPopCountForCrumb(t *testing.T) {
+// TestPopCountTo pins the one-chain nav semantics (issue #245): a crumb
+// click GOES THERE — level k means inside workspace k (pop what's
+// deeper; the current boundary pops nothing), level 0 the session — the
+// same verb everywhere, so the bar never means two different things.
+func TestPopCountTo(t *testing.T) {
 	var s Stack
 	s.Push(Frame{Name: "A"})
 	s.Push(Frame{Name: "B"})
 	s.Push(Frame{Name: "C"})
 	cases := []struct{ level, want int }{
-		{3, 1}, // rightmost: leave C, land in B
-		{2, 2}, // leave B+C, land in A
-		{1, 3}, // leave everything, land in the session
-		{0, 0}, {4, 0},
+		{3, 0},  // the current boundary: already there (issue #245)
+		{2, 1},  // be inside B: leave C
+		{1, 2},  // be inside A: leave B+C
+		{0, 3},  // the session outside every workspace
+		{-1, 0}, // out of range
+		{4, 0},  // out of range
 	}
 	for _, c := range cases {
-		if got := s.PopCountForCrumb(c.level); got != c.want {
-			t.Errorf("PopCountForCrumb(%d) = %d, want %d", c.level, got, c.want)
+		if got := s.PopCountTo(c.level); got != c.want {
+			t.Errorf("PopCountTo(%d) = %d, want %d", c.level, got, c.want)
 		}
 	}
 }

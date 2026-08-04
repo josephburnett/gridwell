@@ -59,10 +59,7 @@ test('first descent captures the current split; later descents restore it', asyn
 
   // Leave (waitIdle: the return animation swallows clicks) and re-enter:
   // an ordinary blob descent restores the captured split.
-  const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const crumb = bar.segments.find((s: any) => s.kind === 'workspace' && s.index === 1);
-  await window.mouse.click(crumb.x + 20, bar.top + bar.height / 2);
-  await gw.waitIdle();
+  await gw.leaveWorkspace();
   await expect.poll(async () => depth(window)).toBe(0);
   await gw.descendCell(cx, cy);
   await expect.poll(async () => depth(window)).toBe(1);

@@ -1584,6 +1584,13 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	if fp == nil || fp.TextFocus != tile.ID {
 		return
 	}
+	if a.isEphemeralTile(fp, tile) {
+		// An EPHEMERAL descent is deliberately focused OFF the pane's grid
+		// (the scratch tile rides above whatever place the pane frames):
+		// the path is not stale, the tile is elsewhere BY DESIGN — healing
+		// would re-anchor the pane into the scratch grid.
+		return
+	}
 	if a.gridIDForPathFrom(fp.Anchor, fp.Path) == tile.GridID {
 		return
 	}
