@@ -20,7 +20,6 @@ function spyActions() {
     back: rec('back'),
     forward: rec('forward'),
     reload: rec('reload'),
-    clearSiteData: rec('clearSiteData'),
     freeze: rec('freeze'),
   };
   return { actions, calls };
@@ -34,7 +33,7 @@ function baseParams(over: Partial<ContextParams> = {}): ContextParams {
     editFlags: { canCut: false, canCopy: false, canPaste: false },
     canGoBack: false,
     canGoForward: false,
-    pageHost: '',
+    canFreeze: false,
     ...over,
   };
 }
@@ -47,7 +46,7 @@ const labels = (t: ReturnType<typeof urlContextMenuTemplate>) =>
 test('navigation items are always present', () => {
   const { actions } = spyActions();
   const t = urlContextMenuTemplate(baseParams(), actions);
-  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload', 'Freeze Page']);
+  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload']);
 });
 
 // THE REGRESSION GUARD for the reported bug: a right-click over a link must
@@ -57,7 +56,7 @@ test('a link yields Open Link + Copy Link Address that copy the href', () => {
   const url = 'https://example.com/target?x=1';
   const t = urlContextMenuTemplate(baseParams({ linkURL: url }), actions);
 
-  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload', 'Freeze Page']);
+  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload']);
 
   const copy = t.find((i) => i.label === 'Copy Link Address');
   assert.ok(copy?.click, 'Copy Link Address must have a click handler');
@@ -126,27 +125,20 @@ test('Back/Forward enablement tracks the history flags', () => {
   assert.equal(calls.reload?.length, 1);
 });
 
-// Issue #136: the clear-site-data item appears only with a real page host,
-// labeled with it, and fires its action.
-test('clear site data appears with a page host and fires', () => {
+// The explicit freeze gesture (issue #237), gated by durability (issue
+// #240): a DURABLE tile's menu offers Freeze Page and its click fires the
+// injected action; an ephemeral visit — nothing to re-descend into — gets
+// no item at all. (Clear Site Data is gone entirely: clearing browser
+// state is the `gridwell clear-browser-data` CLI now.)
+test('Freeze Page appears only for a durable tile and fires the action', () => {
   const { actions, calls } = spyActions();
-  const none = urlContextMenuTemplate(baseParams(), actions);
-  assert.equal(none.some((i) => i.label?.startsWith('Clear Site Data')), false);
-
-  const t = urlContextMenuTemplate(baseParams({ pageHost: 'accounts.google.com' }), actions);
-  const item = t.find((i) => i.label === 'Clear Site Data (accounts.google.com)');
-  assert.ok(item, 'item present and labeled with the host');
-  item!.click!();
-  assert.ok('clearSiteData' in calls, 'the action fired');
-});
-
-// The explicit freeze gesture (issue #237): always present in the navigation
-// block, and its click invokes the injected freeze action.
-test('Freeze Page is always offered and fires the freeze action', () => {
-  const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(baseParams(), actions);
+  const t = urlContextMenuTemplate(baseParams({ canFreeze: true }), actions);
   const item = t.find((i) => i.label === 'Freeze Page');
-  assert.ok(item, 'menu carries Freeze Page');
+  assert.ok(item, 'a durable tile offers Freeze Page');
   item!.click!();
   assert.equal((calls.freeze ?? []).length, 1);
+
+  const eph = urlContextMenuTemplate(baseParams(), actions);
+  assert.ok(!labels(eph).includes('Freeze Page'), 'an ephemeral visit offers no freeze');
+  assert.ok(!eph.some((i) => i.label?.startsWith('Clear Site Data')), 'clear site data is gone');
 });

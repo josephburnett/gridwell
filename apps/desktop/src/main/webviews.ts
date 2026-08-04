@@ -15,8 +15,6 @@ import {
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
-  cookieDomainMatches,
-  storageOriginsFor,
   zoomChordKey,
   openBelowUrl,
 } from './viewutil';
@@ -44,6 +42,10 @@ interface Entry {
   // the one legitimate way a view acquires OS focus (issue #172). The focus
   // guard treats a grab inside this grace window as user intent.
   lastUserClickMs: number;
+  // durable is whether the tile behind this view survives ascent — false for
+  // an ephemeral visit, which has nothing to re-descend into, so the context
+  // menu offers no Freeze Page there (issue #240).
+  durable: boolean;
 }
 
 // USER_CLICK_FOCUS_GRACE_MS is how long after a forwarded left press a view
@@ -142,13 +144,9 @@ export class WebviewRegistry {
         },
         canGoBack: nav.canGoBack(),
         canGoForward: nav.canGoForward(),
-        pageHost: (() => {
-          try {
-            return new URL(wc.getURL()).hostname;
-          } catch {
-            return '';
-          }
-        })(),
+        // Only a DURABLE tile can hold the freeze intent — an ephemeral
+        // visit has nothing to re-descend into (issue #240).
+        canFreeze: this.entries.get(paneId)?.durable ?? false,
       },
       {
         copyText: (t) => clipboard.writeText(t),
@@ -163,7 +161,6 @@ export class WebviewRegistry {
           if (nav.canGoForward()) nav.goForward();
         },
         reload: () => wc.reload(),
-        clearSiteData: () => void this.clearSiteData(wc),
         freeze: () => this.cb.onFreezeURL?.({ paneId }),
       },
     );
@@ -200,7 +197,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = ''): Promise<void> {
+  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false): Promise<void> {
     const rounded = roundBounds(bounds);
     // ONE host-local session (owner decision 2026-07-26): every live url
     // tile, local or through a mount, browses on the shared persistent
@@ -280,7 +277,7 @@ export class WebviewRegistry {
       // of the canvas overlay. syncURLViews will call setHidden for this pane on
       // the next draw() and reaffirm the correct state.
       const startHidden = this._globalHidden;
-      e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0 };
+      e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
@@ -332,40 +329,6 @@ export class WebviewRegistry {
     this.applyMinWidthZoom(e);
   }
 
-  // clearSiteData wipes the current SITE from the view's partition (issue
-  // #136): every cookie of the same registrable domain — including SIBLING
-  // subdomains, so clearing from mail.google.com reaches the login state on
-  // accounts.google.com (issue #177) — plus storage (localStorage, IndexedDB,
-  // service workers, caches) for the page origin and every matched cookie
-  // host, then reloads so the site sees the cleared state. The partition's
-  // own disk persistence carries the reset forward.
-  async clearSiteData(wc: WebContents): Promise<void> {
-    let u: URL;
-    try {
-      u = new URL(wc.getURL());
-    } catch {
-      return;
-    }
-    const ses = wc.session;
-    const cookies = await ses.cookies.get({});
-    const matched = cookies.filter((c) => cookieDomainMatches(u.hostname, c.domain ?? ''));
-    await Promise.all(
-      matched.map((c) => {
-        const proto = c.secure ? 'https' : 'http';
-        const host = (c.domain ?? '').replace(/^\./, '');
-        return ses.cookies.remove(`${proto}://${host}${c.path ?? '/'}`, c.name).catch(() => {});
-      }),
-    );
-    const origins = storageOriginsFor(
-      u.origin,
-      matched.map((c) => c.domain ?? ''),
-    );
-    await Promise.all(
-      origins.map((origin) => ses.clearStorageData({ origin }).catch(() => {})),
-    );
-    wc.reload();
-  }
-
   // noteUserClick stamps the entry whose view the given webContents belongs
   // to: its preload just forwarded a left press — the one legitimate path to
   // OS focus for a live view (issue #172). The focus guard honors the stamp.
@@ -376,13 +339,6 @@ export class WebviewRegistry {
         return;
       }
     }
-  }
-
-  // clearSiteDataFor is the pane-addressed variant (the e2e drives it —
-  // Playwright cannot click a native menu).
-  async clearSiteDataFor(paneId: string): Promise<void> {
-    const e = this.entries.get(paneId);
-    if (e) await this.clearSiteData(e.view.webContents);
   }
 
   // applyMinWidthZoom keeps a narrow URL pane from reflowing the page to a

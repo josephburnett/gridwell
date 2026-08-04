@@ -21,6 +21,8 @@ func main() {
 		os.Exit(cli.RunServe(args))
 	case "backup":
 		os.Exit(cli.RunBackup(args))
+	case "clear-browser-data":
+		os.Exit(cli.RunClearBrowserData(args))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -41,6 +43,11 @@ Usage:
                                               run the backend server
     gridwell backup DEST                      snapshot every plugin DB + server.yaml
                                               (VACUUM INTO; safe while serving)
+    gridwell clear-browser-data [--user-data DIR]
+                                              delete the desktop app's Chromium
+                                              session (cookies, storage, caches
+                                              of every live url tile); the app
+                                              must not be running
 
 init mints a plugin id, creates its DB (at ~/.gridwell/db/<id>/) with identity
 metadata, and appends the entry to ~/.gridwell/server.yaml. serve requires that

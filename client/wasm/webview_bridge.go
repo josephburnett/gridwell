@@ -51,7 +51,7 @@ func (b viewBounds) toJS() js.Value {
 // bridgePlace asks main to create/attach a WebContentsView for paneID showing
 // url at bounds. Every live view shares the ONE host-local session (owner
 // decision 2026-07-26 — there is no per-plugin partition or session key).
-func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, contentZoom float64, history string) {
+func bridgePlace(paneID string, tileID string, objectID, url string, b viewBounds, contentZoom float64, history string, durable bool) {
 	g := bridge()
 	if !g.Truthy() {
 		return
@@ -64,6 +64,9 @@ func bridgePlace(paneID string, tileID string, objectID, url string, b viewBound
 	args.Set("bounds", b.toJS())
 	args.Set("contentZoom", contentZoom)
 	args.Set("history", history)
+	// durable gates the context menu's Freeze Page (issue #240): an
+	// ephemeral visit has nothing to re-descend into.
+	args.Set("durable", durable)
 	g.Call("placeWebview", args)
 }
 

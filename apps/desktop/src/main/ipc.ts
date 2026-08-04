@@ -128,6 +128,9 @@ export interface PlaceArgs {
   // history is the tile's persisted navigation back-stack; when valid the
   // view restores it instead of a bare loadURL (issue #113).
   history?: string;
+  // durable is whether the tile survives ascent (false = ephemeral visit);
+  // gates the context menu's Freeze Page (issue #240). Absent = false.
+  durable?: boolean;
 }
 
 export interface SetZoomArgs {

@@ -149,8 +149,14 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
 	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
+	// durable = the DESCENDED row survives ascent: false for an ephemeral
+	// visit, which gets no Freeze Page in the context menu (issue #240).
+	durable := true
+	if tile, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &tile) {
+		durable = false
+	}
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, t.URLString)
-	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, contentZoomOf(&t), t.URLHistory)
+	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, contentZoomOf(&t), t.URLHistory, durable)
 	a.draw()
 }
 

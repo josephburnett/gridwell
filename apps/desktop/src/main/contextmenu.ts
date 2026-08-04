@@ -29,9 +29,9 @@ export interface ContextParams {
   // canGoBack/canGoForward gate the navigation items (from navigationHistory).
   canGoBack: boolean;
   canGoForward: boolean;
-  // pageHost is the current page's hostname — labels the clear-site-data
-  // item; '' hides it (nothing sensible to clear on about:blank).
-  pageHost: string;
+  // canFreeze is whether the view's tile is DURABLE: an ephemeral visit has
+  // nothing to re-descend into, so it gets no Freeze Page item (issue #240).
+  canFreeze: boolean;
 }
 
 // ContextActions are the effects the menu items invoke. Injected so the
@@ -46,10 +46,9 @@ export interface ContextActions {
   back(): void;
   forward(): void;
   reload(): void;
-  // clearSiteData wipes the current site's cookies (domain-suffix matched)
-  // and the page origin's storage from the shared partition, then reloads
-  // (issue #136).
-  clearSiteData(): void;
+  // (clearSiteData is gone, issue #240: clearing browser state is the
+  // `gridwell clear-browser-data` CLI now — an operator action on the
+  // profile, not an in-page gesture.)
   // freeze is the explicit freeze gesture (issue #237): tear the live view
   // down (with the usual freeze writeback) and store the user's standing
   // frozen intent on the tile, so re-descending stays frozen until the
@@ -95,11 +94,8 @@ export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): Men
   items.push({ label: 'Back', enabled: p.canGoBack, click: () => a.back() });
   items.push({ label: 'Forward', enabled: p.canGoForward, click: () => a.forward() });
   items.push({ label: 'Reload', click: () => a.reload() });
-  items.push({ label: 'Freeze Page', click: () => a.freeze() });
-
-  if (p.pageHost) {
-    items.push({ type: 'separator' });
-    items.push({ label: `Clear Site Data (${p.pageHost})`, click: () => a.clearSiteData() });
+  if (p.canFreeze) {
+    items.push({ label: 'Freeze Page', click: () => a.freeze() });
   }
 
   return items;

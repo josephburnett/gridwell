@@ -5,8 +5,6 @@ import {
   roundBounds,
   boundsEqual,
   parkedBounds,
-  cookieDomainMatches,
-  storageOriginsFor,
   zoomChordKey,
   minWidthZoomFactor,
   composeZoom,
@@ -260,53 +258,6 @@ test('classifyRightPress: a fast flick past the far threshold is a drag (#119)',
   assert.equal(classifyRightPress(24, 0, 50, dist, time), false);
 });
 
-
-// Issue #136 / #177: the site-clearing cookie match — one SITE (registrable
-// domain), which includes SIBLING subdomains: Google's login state lives on
-// accounts.google.com while the user clears from mail.google.com, and a
-// clear that misses it strands a broken login forever ("cleared, logged in,
-// same error"). Over-broad matching would log the user out of unrelated
-// sites; the public-suffix list keeps foo.co.uk from matching bar.co.uk.
-test('cookieDomainMatches spans one site incl. siblings, never unrelated sites', () => {
-  assert.equal(cookieDomainMatches('accounts.google.com', '.google.com'), true);
-  assert.equal(cookieDomainMatches('google.com', 'accounts.google.com'), true);
-  assert.equal(cookieDomainMatches('google.com', 'google.com'), true);
-  assert.equal(cookieDomainMatches('google.com', '.GOOGLE.com'), true);
-  // Sibling subdomains of one site (the Gmail clear-and-relogin loop).
-  assert.equal(cookieDomainMatches('mail.google.com', 'accounts.google.com'), true);
-  assert.equal(cookieDomainMatches('mail.google.com', '.accounts.google.com'), true);
-  assert.equal(cookieDomainMatches('calendar.google.com', 'mail.google.com'), true);
-  // Never across sites — including same-public-suffix neighbours.
-  assert.equal(cookieDomainMatches('notgoogle.com', '.google.com'), false);
-  assert.equal(cookieDomainMatches('google.com', 'oogle.com'), false);
-  assert.equal(cookieDomainMatches('google.com', 'github.com'), false);
-  assert.equal(cookieDomainMatches('foo.co.uk', 'bar.co.uk'), false);
-  assert.equal(cookieDomainMatches('a.foo.co.uk', 'b.foo.co.uk'), true);
-  // Hosts outside the public-suffix world (IPs, single labels) keep the
-  // exact/ancestor rules and never sibling-match.
-  assert.equal(cookieDomainMatches('127.0.0.1', '127.0.0.1'), true);
-  assert.equal(cookieDomainMatches('localhost', 'localhost'), true);
-  assert.equal(cookieDomainMatches('mylocalhost', 'otherlocalhost'), false);
-  assert.equal(cookieDomainMatches('', 'google.com'), false);
-});
-
-// Issue #177: the storage-clear scope is derived from the SAME matched cookie
-// set (one owner) — every matched cookie host contributes its https/http
-// origins, plus the page origin itself (which alone carries the port).
-test('storageOriginsFor derives origins from matched cookie hosts', () => {
-  const got = storageOriginsFor('http://mail.google.com:8080', [
-    '.google.com',
-    'accounts.google.com',
-    'accounts.google.com', // dedup
-  ]);
-  assert.deepEqual(got.sort(), [
-    'http://accounts.google.com',
-    'http://google.com',
-    'http://mail.google.com:8080',
-    'https://accounts.google.com',
-    'https://google.com',
-  ]);
-});
 
 // Issue #170: the live-view zoom forward accepts exactly the key set the
 // wasm handler accepts — a drift here makes the two focus states zoom
