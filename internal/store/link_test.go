@@ -134,3 +134,33 @@ func TestContentMutationOnLeafLinkRejected(t *testing.T) {
 	}
 	verifyRefcounts(t, s)
 }
+
+// Issue #239: text framing on a LINK row persists x/y/w/h but never
+// text_mode — the v6 CHECK requires text_mode NULL on links (framing is
+// per-link local; the mode is not). Before the fix the unconditional
+// text_mode write failed the whole ascent framing save with a CHECK
+// violation.
+func TestSetTextViewOnLinkKeepsModeNull(t *testing.T) {
+	s := newTestStore(t)
+	root := rootID(t, s)
+	ctx := context.Background()
+
+	link, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText,
+		"aabbccddeeff00112233445566778899/7", "linked doc", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.SetTextView(ctx, &rpc.SetTextViewRequest{
+		TileID: link.ID, Version: link.Version,
+		TextX: 3, TextY: 40, TextW: 300, TextH: 200, TextMode: rpc.TextModeRendered,
+	})
+	if err != nil {
+		t.Fatalf("SetTextView on a link: %v", err)
+	}
+	if got.TextX != 3 || got.TextY != 40 || got.TextW != 300 || got.TextH != 200 {
+		t.Errorf("framing not persisted: %+v", got)
+	}
+	if got.TextMode != "" {
+		t.Errorf("text_mode = %q on a link, want empty (the CHECK's NULL)", got.TextMode)
+	}
+}

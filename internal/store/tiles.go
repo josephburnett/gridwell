@@ -380,7 +380,21 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 	}
 	var out *rpc.Tile
 	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
-		if _, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, rpc.KindText, ErrNotTextTile); err != nil {
+		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, rpc.KindText, ErrNotTextTile)
+		if err != nil {
+			return err
+		}
+		if n.LinkTargetID != "" {
+			// A LINK row persists the framed window only: the v6 CHECK keeps
+			// text_mode NULL on links (framing is per-link local, the mode is
+			// not — issue #239). Writing it failed the whole framing save.
+			_, err := tx.ExecContext(ctx,
+				`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, updated_at = ? WHERE id = ?`,
+				req.TextX, req.TextY, req.TextW, req.TextH, s.now().Unix(), tileID)
+			if err != nil {
+				return err
+			}
+			out, err = s.emitTileChanged(ctx, tx, tileID, events)
 			return err
 		}
 		var textModeArg any
@@ -392,7 +406,6 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), tileID); err != nil {
 			return err
 		}
-		var err error
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
 		return err
 	})
