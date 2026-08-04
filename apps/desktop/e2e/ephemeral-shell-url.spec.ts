@@ -32,6 +32,7 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
   const shellCy = Math.round(home.cy);
   await gw.openPalette();
   await gw.dragCreate('shell', shellCx, shellCy);
+  await gw.descendCell(shellCx, shellCy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;

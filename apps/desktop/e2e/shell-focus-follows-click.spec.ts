@@ -30,6 +30,7 @@ test('left-click into a live shell transfers pane focus', async ({
   const cy = Math.round(lf.cy);
   await gw.openPalette();
   await gw.dragCreate('shell', cx, cy);
+  await gw.descendCell(cx, cy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPaneId = (await gw.focused()).id;
 

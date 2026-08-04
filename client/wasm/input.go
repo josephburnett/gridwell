@@ -2449,21 +2449,16 @@ func (a *App) shellURLActivate(paneID, url string) {
 // to the same tmux session (state preserved).
 func (a *App) createShellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
-	paneID := p.ID
 	req := &rpc.CreateShellRequest{
 		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
 	}
+	// The drop just lands the tile — no auto-descend, like every other
+	// primitive since #209 (issue #241; the descend-on-create here was a
+	// leftover of the pre-#209 url flow). The FIRST descent creates the
+	// session: DecideAutoLive's fresh-shell arm (no preview blob).
 	a.postTileMutate("CreateShell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateShell(ctx, req)
-	}, func(tile rpc.Tile) {
-		fp := a.tree.FindPane(paneID)
-		if fp == nil || fp.TextFocus != "" {
-			return
-		}
-		// Mirror createURLAtCell: descend; the descent goes live itself
-		// (a fresh shell auto-creates its session — autoLiveOnDescent).
-		a.startTextDescent(fp, &tile, nil)
-	})
+	}, nil)
 }
 
 // mouseXY returns the click coordinates relative to the canvas.

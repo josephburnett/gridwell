@@ -15,9 +15,15 @@ test('shell descent reconnects the running session with its state', async ({ gw,
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // Drag-create a shell: descends + goes live (the create path).
+  // Drag-create a shell: the drop LANDS BARE like every primitive (#241 —
+  // the old auto-descend was a pre-#209 leftover); the first descent
+  // creates the session (DecideAutoLive's fresh-shell arm).
   await gw.openPalette();
   await gw.dragCreate('shell', cx, cy);
+  await expect.poll(async () => tileAt(await gw.getGrid(f.gridID), 'shell', cx, cy)).toBeTruthy();
+  await gw.waitIdle();
+  expect((await gw.focused()).textFocus, 'a shell drop does not descend').toBe('');
+  await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellRenderer()), {

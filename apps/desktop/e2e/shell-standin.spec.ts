@@ -25,6 +25,7 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   const cy = Math.round(a.cy);
   await gw.openPalette();
   await gw.dragCreate('shell', cx, cy);
+  await gw.descendCell(cx, cy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPaneId = (await gw.focused()).id;
   const shell = tileAt(await gw.getGrid(a.gridID), 'shell', cx, cy)!;

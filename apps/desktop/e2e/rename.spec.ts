@@ -48,6 +48,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
   // A placed shell (drag) auto-descends and spawns the PTY.
   await gw.openPalette();
   await gw.dragCreate('shell', cx, cy);
+  await gw.descendCell(cx, cy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // Rename it while inside — the tmux-pane-rename case.

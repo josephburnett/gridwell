@@ -24,6 +24,7 @@ test('wheel over a live shell scrolls back through tmux history (#206)', async (
 
   await gw.openPalette();
   await gw.dragCreate('shell', sx, sy);
+  await gw.descendCell(sx, sy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // Fill well past one screen. The -end suffix keeps "line-5-end" from

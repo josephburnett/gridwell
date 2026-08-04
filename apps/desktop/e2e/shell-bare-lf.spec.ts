@@ -19,6 +19,7 @@ test('a bare LF keeps the cursor column (#211)', async ({ gw, window }) => {
 
   await gw.openPalette();
   await gw.dragCreate('shell', sx, sy);
+  await gw.descendCell(sx, sy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // \r\n first: start at column 0 regardless of the prompt. Then 13 chars,

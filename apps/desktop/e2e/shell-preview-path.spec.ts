@@ -35,6 +35,7 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   const sy = Math.round(inWell.cy);
   await gw.openPalette();
   await gw.dragCreate('shell', sx, sy);
+  await gw.descendCell(sx, sy); // a drop lands bare (#241); the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shell = tileAt(await gw.getGrid(child), 'shell', sx, sy)!;
   expect(shell, 'shell created in the sub-grid').toBeTruthy();
