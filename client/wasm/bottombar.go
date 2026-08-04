@@ -87,35 +87,43 @@ type navCrumb struct {
 	// Depth = the live tree) — a click pops to treeLevel, then ascends.
 	treeLevel int
 	crumb     pane.Crumb
+	// closeOnly: the leading ROOT crumb while inside a view (owner tweak
+	// 2026-08-04 on #245): its click CLOSES all views — pop to the
+	// session, never an in-tree ascent (mutating a far-away tree's state
+	// from the bar read badly; the session restores exactly as left).
+	closeOnly bool
 }
 
-// navChain assembles the full chain, outermost first.
+// navChain assembles the chain, outermost first: the ROOT crumb (click =
+// close all views), one boundary bar per open view, then the CURRENT
+// pane's full chain. The intermediate trees' tile crumbs are deliberately
+// NOT shown (owner tweak 2026-08-04 on #245): clicking them mutated a
+// far-away tree's state from the bar, and the last of them duplicated
+// "go to the previous view" — the boundary bars already say that.
 func (a *App) navChain() []navCrumb {
 	var out []navCrumb
 	depth := a.ws.Depth()
-	for k := 1; k <= depth; k++ {
-		f := a.ws.At(k)
-		if f == nil {
-			continue
-		}
-		outerLen := len(out)
-		if f.OuterTree != nil && f.OriginPane != "" {
+	if depth > 0 {
+		// The root crumb wears the session origin's ROOT face (namespace
+		// glyph) when it is known; a boot-restored frame has none and the
+		// crumb draws as the muted placeholder. Either way the click only
+		// closes views.
+		root := navCrumb{treeLevel: 0, closeOnly: true}
+		if f := a.ws.At(1); f != nil && f.OuterTree != nil && f.OriginPane != "" {
 			if op := f.OuterTree.FindPane(f.OriginPane); op != nil {
-				for _, c := range pane.DescentChain(op) {
-					out = append(out, navCrumb{treeLevel: k - 1, crumb: c})
+				if chain := pane.DescentChain(op); len(chain) > 0 {
+					root.crumb = chain[0]
 				}
 			}
 		}
-		if len(out) == outerLen {
-			// A boot-restored frame (OuterTree nil — nesting is session
-			// state): the outside still exists (ascending lands at the
-			// fallback, the pane tile's containing grid), so the chain
-			// offers it as one synthetic crumb — otherwise the boundary
-			// would be the first crumb and the workspace inescapable by
-			// the one-chain rule (a crumb click goes there).
-			out = append(out, navCrumb{treeLevel: k - 1})
+		out = append(out, root)
+		for k := 1; k <= depth; k++ {
+			f := a.ws.At(k)
+			if f == nil {
+				continue
+			}
+			out = append(out, navCrumb{paneTile: true, wsLevel: k, tileID: f.TileID})
 		}
-		out = append(out, navCrumb{paneTile: true, wsLevel: k, tileID: f.TileID})
 	}
 	if p := a.tree.FocusedPane(); p != nil {
 		for _, c := range pane.DescentChain(p) {
@@ -464,21 +472,17 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		return true
 	}
 	nc := chain[seg.Index]
-	if nc.paneTile {
+	if nc.paneTile || nc.closeOnly {
+		// GO THERE: be inside view wsLevel — or, for the root crumb, back
+		// in the session (closeOnly: views close; the session's own state
+		// is never touched from the bar).
 		if n := a.ws.PopCountTo(nc.wsLevel); n > 0 {
 			a.ascendWorkspaceLevels(n)
 		}
 		return true
 	}
-	// A chain crumb: pop to the tree that holds it (ascendWorkspaceLevels
-	// restores that frame's origin pane as the focus — the very pane whose
-	// chain this crumb came from), then ascend within it.
-	if n := a.ws.PopCountTo(nc.treeLevel); n > 0 {
-		a.ascendWorkspaceLevels(n)
-	}
-	if p := a.tree.FocusedPane(); p != nil && (nc.crumb.TileID != "" || nc.crumb.Anchor != "") {
-		// The synthetic boot-outside crumb has no place to ascend WITHIN —
-		// the pop above already landed at the fallback.
+	// A current-chain crumb: ascend within the live tree.
+	if p := a.tree.FocusedPane(); p != nil {
 		a.ascendToChainCrumb(p, nc.crumb)
 	}
 	return true
