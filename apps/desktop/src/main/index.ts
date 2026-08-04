@@ -60,16 +60,30 @@ async function boot(): Promise<void> {
   // every url tile (all partitions) presents as plain Chrome. userAgentFallback
   // is the UA used when none is set per-webContents, i.e. our default.
   app.userAgentFallback = sanitizeUserAgent(app.userAgentFallback, app.getName());
-  // The live-view session must not hand navigations to the OS: Electron
-  // grants the 'openExternal' permission by default, so a page navigating
-  // to zoommtg:// (or any non-web protocol) ALSO launched the default
-  // browser via xdg-open (issue #232). allowPermission (unit-tested)
-  // decides; everything else keeps the default grant.
-  session
-    .fromPartition(SESSION_PARTITION)
-    .setPermissionRequestHandler((_wc, permission, callback) => {
+  // NOTHING escapes to the OS (issues #232/#246): Electron grants the
+  // 'openExternal' permission by default, so a page navigating to a
+  // non-web protocol launched the platform opener (on WSL, xdg-open →
+  // the WINDOWS default browser). #232 denied it on the live-view
+  // partition only; the deny is now app-wide — EVERY session (the root
+  // renderer's default session included), because the invariant is about
+  // the app, not one partition: a tile is Gridwell's only browsing
+  // surface. allowPermission (unit-tested) decides; everything else
+  // keeps the default grant.
+  const denyExternal = (ses: Electron.Session) =>
+    ses.setPermissionRequestHandler((_wc, permission, callback) => {
       callback(allowPermission(permission));
     });
+  denyExternal(session.defaultSession);
+  denyExternal(session.fromPartition(SESSION_PARTITION));
+  // And no webContents may spawn a window: live views get their own
+  // open-below handler when the registry places them (a later
+  // setWindowOpenHandler replaces this one); everything else — the root
+  // renderer, preloads, anything future — denies outright. Gridwell code
+  // never calls window.open, so a call reaching this default is a page
+  // (or a library) trying to leave.
+  app.on('web-contents-created', (_ev, wc) => {
+    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  });
   try {
     sidecar = await startSidecar();
   } catch (err) {

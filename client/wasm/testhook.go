@@ -73,6 +73,29 @@ func (a *App) installTestHook() {
 		"shellText":     js.FuncOf(a.thShellText),
 		"shellFeed":     js.FuncOf(a.thShellFeed),
 		"rawRows":       js.FuncOf(a.thRawRows),
+		"shellCellPx": js.FuncOf(func(_ js.Value, args []js.Value) any {
+			// Screen center of terminal cell (col, row), 0-based — lets a
+			// spec CLICK rendered terminal content (links) at real pixels.
+			if len(args) < 2 {
+				return nil
+			}
+			conn := a.shellConnFor(a.tree.Focus)
+			if conn == nil || !conn.container.Truthy() {
+				return nil
+			}
+			r := conn.container.Call("getBoundingClientRect")
+			cols := conn.term.Get("cols").Float()
+			rows := conn.term.Get("rows").Float()
+			if cols <= 0 || rows <= 0 {
+				return nil
+			}
+			cw := r.Get("width").Float() / cols
+			ch := r.Get("height").Float() / rows
+			return map[string]any{
+				"x": r.Get("left").Float() + (args[0].Float()+0.5)*cw,
+				"y": r.Get("top").Float() + (args[1].Float()+0.5)*ch,
+			}
+		}),
 		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			// The rendered-raster cache (issue #233): tile id → decode state.
 			// Lets a spec prove a rendered-mode tile's preview switched to
