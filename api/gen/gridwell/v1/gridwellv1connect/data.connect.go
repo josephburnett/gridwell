@@ -60,8 +60,8 @@ const (
 	GridwellGetTileProcedure = "/gridwell.v1.Gridwell/GetTile"
 	// GridwellGetTilePreviewProcedure is the fully-qualified name of the Gridwell's GetTilePreview RPC.
 	GridwellGetTilePreviewProcedure = "/gridwell.v1.Gridwell/GetTilePreview"
-	// GridwellLocateTileProcedure is the fully-qualified name of the Gridwell's LocateTile RPC.
-	GridwellLocateTileProcedure = "/gridwell.v1.Gridwell/LocateTile"
+	// GridwellSearchProcedure is the fully-qualified name of the Gridwell's Search RPC.
+	GridwellSearchProcedure = "/gridwell.v1.Gridwell/Search"
 	// GridwellReadContentProcedure is the fully-qualified name of the Gridwell's ReadContent RPC.
 	GridwellReadContentProcedure = "/gridwell.v1.Gridwell/ReadContent"
 	// GridwellWriteContentProcedure is the fully-qualified name of the Gridwell's WriteContent RPC.
@@ -100,7 +100,7 @@ type GridwellClient interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
-	LocateTile(context.Context, *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error)
+	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest]) (*connect.ServerStreamForClient[v1.ContentChunk], error)
 	WriteContent(context.Context) *connect.ClientStreamForClient[v1.WriteContentRequest, v1.TileResponse]
@@ -173,10 +173,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
 			connect.WithClientOptions(opts...),
 		),
-		locateTile: connect.NewClient[v1.LocateTileRequest, v1.LocateTileResponse](
+		search: connect.NewClient[v1.SearchRequest, v1.SearchResponse](
 			httpClient,
-			baseURL+GridwellLocateTileProcedure,
-			connect.WithSchema(gridwellMethods.ByName("LocateTile")),
+			baseURL+GridwellSearchProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Search")),
 			connect.WithClientOptions(opts...),
 		),
 		readContent: connect.NewClient[v1.ReadContentRequest, v1.ContentChunk](
@@ -251,7 +251,7 @@ type gridwellClient struct {
 	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
 	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
 	getTilePreview    *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
-	locateTile        *connect.Client[v1.LocateTileRequest, v1.LocateTileResponse]
+	search            *connect.Client[v1.SearchRequest, v1.SearchResponse]
 	readContent       *connect.Client[v1.ReadContentRequest, v1.ContentChunk]
 	writeContent      *connect.Client[v1.WriteContentRequest, v1.TileResponse]
 	placeTile         *connect.Client[v1.PlaceTileRequest, v1.TileResponse]
@@ -299,9 +299,9 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, req *connect.Reques
 	return c.getTilePreview.CallUnary(ctx, req)
 }
 
-// LocateTile calls gridwell.v1.Gridwell.LocateTile.
-func (c *gridwellClient) LocateTile(ctx context.Context, req *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error) {
-	return c.locateTile.CallUnary(ctx, req)
+// Search calls gridwell.v1.Gridwell.Search.
+func (c *gridwellClient) Search(ctx context.Context, req *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
+	return c.search.CallUnary(ctx, req)
 }
 
 // ReadContent calls gridwell.v1.Gridwell.ReadContent.
@@ -369,7 +369,7 @@ type GridwellHandler interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
-	LocateTile(context.Context, *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error)
+	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error
 	WriteContent(context.Context, *connect.ClientStream[v1.WriteContentRequest]) (*connect.Response[v1.TileResponse], error)
@@ -438,10 +438,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellLocateTileHandler := connect.NewUnaryHandler(
-		GridwellLocateTileProcedure,
-		svc.LocateTile,
-		connect.WithSchema(gridwellMethods.ByName("LocateTile")),
+	gridwellSearchHandler := connect.NewUnaryHandler(
+		GridwellSearchProcedure,
+		svc.Search,
+		connect.WithSchema(gridwellMethods.ByName("Search")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellReadContentHandler := connect.NewServerStreamHandler(
@@ -520,8 +520,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellGetTileHandler.ServeHTTP(w, r)
 		case GridwellGetTilePreviewProcedure:
 			gridwellGetTilePreviewHandler.ServeHTTP(w, r)
-		case GridwellLocateTileProcedure:
-			gridwellLocateTileHandler.ServeHTTP(w, r)
+		case GridwellSearchProcedure:
+			gridwellSearchHandler.ServeHTTP(w, r)
 		case GridwellReadContentProcedure:
 			gridwellReadContentHandler.ServeHTTP(w, r)
 		case GridwellWriteContentProcedure:
@@ -579,8 +579,8 @@ func (UnimplementedGridwellHandler) GetTilePreview(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTilePreview is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) LocateTile(context.Context, *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.LocateTile is not implemented"))
+func (UnimplementedGridwellHandler) Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Search is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error {

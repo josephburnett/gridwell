@@ -1570,14 +1570,15 @@ func (a *App) autoLiveOnRestore(paneID, tileID string) {
 
 // healStalePanePath re-derives a restored pane's path when its stored
 // (anchor, path) no longer leads to the descended tile's grid (issue
-// #234): the tile moved — its id is immutable, its path is not. The
-// server's LocateTile answers with the CURRENT containing-well chain;
-// the pane re-anchors at the owning root with the fresh path, so the
-// descent binds and the crumbs show a true path from root. The workspace
-// persister derives the corrected layout from the live tree on its next
-// tick, so the heal persists with no dedicated writer. Runs on the
-// restore goroutine (a blocking read is fine there); an unlocatable tile
-// (a plugin without LocateTile) leaves today's frozen-preview state.
+// #234): the tile moved — its id is immutable, its path is not. A scoped
+// `id:` Search (the one find verb, issue #244) answers with the CURRENT
+// containing-well chain; the pane re-anchors at the owning root with the
+// fresh path, so the descent binds and the crumbs show a true path from
+// root. The workspace persister derives the corrected layout from the
+// live tree on its next tick, so the heal persists with no dedicated
+// writer. Runs on the restore goroutine (a blocking read is fine there);
+// an unsearchable tile (a plugin without Search) leaves today's
+// frozen-preview state.
 func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	fp := a.tree.FindPane(paneID)
 	if fp == nil || fp.TextFocus != tile.ID {
@@ -1586,10 +1587,11 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	if a.gridIDForPathFrom(fp.Anchor, fp.Path) == tile.GridID {
 		return
 	}
-	wells, err := a.cl.LocateTile(context.Background(), tile.ID)
-	if err != nil {
+	res, err := a.cl.Search(context.Background(), "id:"+tile.ID, tile.ID, 1)
+	if err != nil || len(res) == 0 {
 		return
 	}
+	wells := res[0].Path
 	fp = a.tree.FindPane(paneID)
 	if fp == nil || fp.TextFocus != tile.ID {
 		return // the user moved on while the locate was in flight

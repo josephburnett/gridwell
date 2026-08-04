@@ -269,21 +269,6 @@ func (c *Client) SetContentZoom(ctx context.Context, req *SetContentZoomRequest)
 	})))
 }
 
-// LocateTile re-derives a tile's current containing-well chain from its
-// immutable id (issue #234), outermost first — empty when the tile sits
-// at the plugin's root grid.
-func (c *Client) LocateTile(ctx context.Context, tileID string) ([]Tile, error) {
-	resp, err := c.cl.LocateTile(ctx, connect.NewRequest(&pb.LocateTileRequest{TileId: tileID}))
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Tile, 0, len(resp.Msg.Wells))
-	for _, w := range resp.Msg.Wells {
-		out = append(out, *TileFromProto(w))
-	}
-	return out, nil
-}
-
 // SetURLFrozen persists the user's standing freeze on a url tile (issue
 // #237; framing, never bumps version). Rides the SetTile url_frozen arm.
 func (c *Client) SetURLFrozen(ctx context.Context, req *SetURLFrozenRequest) (*Tile, error) {

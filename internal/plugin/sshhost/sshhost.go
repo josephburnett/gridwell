@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -886,6 +887,63 @@ func nsOf(fw *forward) string {
 		return ""
 	}
 	return fw.ns
+}
+
+// Search forwards the one find verb through the mount (issue #244). An
+// `id:` query routes to the connection owning the id, like every routed
+// call; free text fans out — to LIVE connections only (a search answers
+// with what is reachable; it never dials the world). Each remote answer
+// comes from a node SERVER, which fans to its own plugins and mounts —
+// the federation recursion falls out of the chain shape. Result ids
+// (tiles and paths) get the connection's namespace prepended like every
+// other read; a connection that errors or times out contributes nothing.
+func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
+	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
+		fw, local, err := s.route(ctx, q.ID)
+		if err != nil || fw == nil {
+			return &gridwellv1.SearchResponse{}, nil
+		}
+		resp, err := fw.client.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + local, Limit: req.Limit})
+		if err != nil {
+			return &gridwellv1.SearchResponse{}, nil
+		}
+		return prependSearchResp(fw.ns, resp), nil
+	}
+	s.mu.Lock()
+	type hop struct {
+		ns     string
+		client gridwellv1.GridwellClient
+	}
+	hops := make([]hop, 0, len(s.live))
+	for ns, lc := range s.live {
+		hops = append(hops, hop{ns, lc.client})
+	}
+	s.mu.Unlock()
+	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
+	out := &gridwellv1.SearchResponse{}
+	for _, hp := range hops {
+		resp, err := hp.client.Search(ctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+		if err != nil {
+			continue
+		}
+		out.Results = append(out.Results, prependSearchResp(hp.ns, resp).Results...)
+	}
+	return out, nil
+}
+
+// prependSearchResp applies the transit prepend to every id a search
+// answer carries — result tiles and their path chains alike.
+func prependSearchResp(ns string, resp *gridwellv1.SearchResponse) *gridwellv1.SearchResponse {
+	out := &gridwellv1.SearchResponse{Results: make([]*gridwellv1.SearchResult, 0, len(resp.Results))}
+	for _, r := range resp.Results {
+		qr := &gridwellv1.SearchResult{Snippet: r.Snippet, Score: r.Score}
+		if r.Tile != nil {
+			qr.Tile = rpc.TransitQualifyTiles(ns, []*gridwellv1.Tile{r.Tile})[0]
+		}
+		qr.Path = rpc.TransitQualifyTiles(ns, r.Path)
+		out.Results = append(out.Results, qr)
+	}
+	return out
 }
 
 func prependTileResp(ns string, resp *gridwellv1.TileResponse) *gridwellv1.TileResponse {

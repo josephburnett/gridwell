@@ -299,18 +299,40 @@ message GetTileRequest {
   string tile_id = 1;
 }
 
-// LocateTile resolves a tile's CURRENT place (issue #234): the
-// containing-well chain from the plugin's root grid down to the tile's
-// grid, outermost first — empty when the tile sits at the root. Ids are
-// immutable; paths are not: a stored reference (a workspace leaf bound to
-// a tile that has since been moved) heals itself by re-deriving the path
-// from the id. Read-only; full well rows ride back so the healed crumbs
-// have their previews.
-message LocateTileRequest {
-  string tile_id = 1;
+// Search is the one generic find verb (issue #244, generalizing #234's
+// LocateTile). Every plugin MAY implement it — Unimplemented simply means
+// no results. The query is free text with a small selector grammar owned
+// by ONE shared parser (internal/rpc.ParseSearchQuery): `id:<tile-id>` is
+// an exact-id lookup (what LocateTile was), anything else is
+// plugin-interpreted text matching (names, bodies, addresses — whatever
+// the plugin's data means). Each result is a PLACE, not just a row: the
+// tile plus its containing-well chain from the plugin's root grid
+// (outermost first, empty at the root), so a hit can be navigated to and
+// its crumbs previewed; snippet/score are optional context and ranking
+// for merged displays.
+//
+// Routing (the server surface): scope routes to one namespace (any
+// qualified id — the plugin that owns it answers); an empty scope fans
+// out to every configured plugin in config order. A transit plugin (a
+// node mount) forwards the query to its remote node's server, which fans
+// out again — so an unscoped search recurses through the whole federation
+// naturally, and results come back qualified like every other id.
+message SearchRequest {
+  string query = 1;
+  // limit caps the results per answering plugin; 0 = the plugin default.
+  int32 limit = 2;
+  // scope: server surface only (plugins receive their own namespace's
+  // queries with scope already consumed).
+  string scope = 3;
 }
-message LocateTileResponse {
-  repeated Tile wells = 1;
+message SearchResult {
+  Tile tile = 1;
+  repeated Tile path = 2;
+  string snippet = 3;
+  double score = 4;
+}
+message SearchResponse {
+  repeated SearchResult results = 1;
 }
 
 // (SetTileAltRequest is gone — the versioned rename rides SetTile.rename.)
@@ -535,7 +557,7 @@ service Gridwell {
   rpc GetGrid(GetGridRequest)               returns (GetGridResponse);
   rpc GetTile(GetTileRequest)               returns (TileResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
-  rpc LocateTile(LocateTileRequest)         returns (LocateTileResponse);
+  rpc Search(SearchRequest)                 returns (SearchResponse);
 
   // ── Content streams (the one way content bytes move; see the messages) ────
   rpc ReadContent(ReadContentRequest)        returns (stream ContentChunk);

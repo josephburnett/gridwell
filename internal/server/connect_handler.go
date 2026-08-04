@@ -243,21 +243,74 @@ func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.Ge
 	return h.tileResp(uuid, resp, err)
 }
 
-// LocateTile routes by tile id and qualifies the returned well chain
-// exactly like GetGrid's tiles, so the healed path's ids match what the
-// client's cache holds (issue #234).
-func (h *connectHandler) LocateTile(ctx context.Context, req *connect.Request[pb.LocateTileRequest]) (*connect.Response[pb.LocateTileResponse], error) {
-	c, local, uuid, err := h.route(req.Msg.TileId)
-	if err != nil {
-		return nil, err
+// searchPluginTimeout bounds each plugin's answer during a fan-out, so
+// one hung plugin (a dead ssh tunnel) can't stall the whole search.
+const searchPluginTimeout = 3 * time.Second
+
+// Search is the one generic find verb (issue #244). scope (any qualified
+// id) routes to the namespace owning it — localized like every routed
+// call; an empty scope fans out to every configured plugin in config
+// order, each bounded by searchPluginTimeout, Unimplemented and errors
+// skipped (a search answers with what answered). Results come back
+// qualified like every other id — tile and path rows alike — so a hit is
+// immediately addressable.
+func (h *connectHandler) Search(ctx context.Context, req *connect.Request[pb.SearchRequest]) (*connect.Response[pb.SearchResponse], error) {
+	m := req.Msg
+	if m.Scope != "" {
+		c, _, uuid, err := h.route(m.Scope)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.Search(ctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, uuid), Limit: m.Limit})
+		if err != nil {
+			return nil, asConnectError(err)
+		}
+		return connect.NewResponse(qualifySearch(h.srv.pluginReg.Transit(uuid), uuid, resp)), nil
 	}
-	resp, err := c.LocateTile(ctx, &pb.LocateTileRequest{TileId: local})
-	if err != nil {
-		return nil, asConnectError(err)
+	out := &pb.SearchResponse{}
+	for _, p := range h.srv.pluginReg.Ordered() {
+		c, ok := h.srv.routeClient(p.UUID)
+		if !ok {
+			continue
+		}
+		pctx, cancel := context.WithTimeout(ctx, searchPluginTimeout)
+		resp, err := c.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, p.UUID), Limit: m.Limit})
+		cancel()
+		if err != nil {
+			continue // Unimplemented, timeout, a dead mount: not this plugin's answer
+		}
+		out.Results = append(out.Results,
+			qualifySearch(h.srv.pluginReg.Transit(p.UUID), p.UUID, resp).Results...)
 	}
-	return connect.NewResponse(&pb.LocateTileResponse{
-		Wells: qualifyTilesFor(h.srv.pluginReg.Transit(uuid), uuid, resp.Wells),
-	}), nil
+	return connect.NewResponse(out), nil
+}
+
+// localizeSearchQuery strips this plugin's uuid off an `id:` selector the
+// way every routed id is localized; other queries pass through verbatim.
+// One place, via the one grammar parser — a plugin must never see a
+// foreign-qualified id it would fail to parse.
+func localizeSearchQuery(query, uuid string) string {
+	q := rpc.ParseSearchQuery(query)
+	if q.ID == "" {
+		return query
+	}
+	return "id:" + stripUUID(q.ID, uuid)
+}
+
+// qualifySearch re-applies the owning namespace to every id in a search
+// response — the result tiles AND their path chains, with the same
+// leaf/transit rule as every other read.
+func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.SearchResponse {
+	out := &pb.SearchResponse{Results: make([]*pb.SearchResult, 0, len(resp.Results))}
+	for _, r := range resp.Results {
+		qr := &pb.SearchResult{Snippet: r.Snippet, Score: r.Score}
+		if r.Tile != nil {
+			qr.Tile = qualifyTilesFor(transit, uuid, []*pb.Tile{r.Tile})[0]
+		}
+		qr.Path = qualifyTilesFor(transit, uuid, r.Path)
+		out.Results = append(out.Results, qr)
+	}
+	return out
 }
 
 // ── creates ──────────────────────────────────────────────────────────────────

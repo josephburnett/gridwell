@@ -187,14 +187,19 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	return tileResp(p.st.GetTile(ctx, req.TileId))
 }
 
-// LocateTile re-derives a tile's current path from its immutable id
-// (issue #234): the containing-well chain, outermost first.
-func (p *Plugin) LocateTile(ctx context.Context, req *gridwellv1.LocateTileRequest) (*gridwellv1.LocateTileResponse, error) {
-	wells, err := p.st.LocateTile(ctx, req.TileId)
+// Search is the one generic find verb (issue #244): `id:` locates a tile
+// by its immutable id (path included — the old LocateTile), free text
+// matches names and text bodies. The store owns the semantics.
+func (p *Plugin) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
+	res, err := p.st.Search(ctx, req.Query, int(req.Limit))
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.LocateTileResponse{Wells: rpc.TilesToProto(wells)}, nil
+	out := &gridwellv1.SearchResponse{}
+	for i := range res {
+		out.Results = append(out.Results, rpc.SearchResultToProto(&res[i]))
+	}
+	return out, nil
 }
 
 // contentChunkBytes is the ReadContent chunk size. Small enough to stream a
