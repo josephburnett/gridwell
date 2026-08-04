@@ -126,13 +126,22 @@ func (a *App) navChain() []navCrumb {
 }
 
 // bottomBarSegments lays out the visible suffix of the chain (wsbar's
-// left-truncation), relative to the band's left edge.
+// left-truncation), relative to the band's left edge: squares for chain
+// crumbs, the wide named bar for workspace boundaries.
 func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
 	_, _, w, ok := a.bottomBarRect()
 	if !ok {
 		return nil
 	}
-	return wsbar.Layout(len(chain), w)
+	widths := make([]float64, len(chain))
+	for i, nc := range chain {
+		if nc.paneTile {
+			widths[i] = wsbar.BoundaryW
+		} else {
+			widths[i] = wsbar.RowH
+		}
+	}
+	return wsbar.Layout(widths, w)
 }
 
 // drawBottomBar paints the band: the one nav chain, then title and slot.
@@ -154,7 +163,7 @@ func (a *App) drawBottomBar() {
 		shifted := s
 		shifted.X += bx
 		if nc := chain[s.Index]; nc.paneTile {
-			a.drawPaneTileCrumb(nc.tileID, shifted, top)
+			a.drawBoundaryCrumb(nc.wsLevel, shifted, top)
 		} else {
 			a.drawChainCrumb(nc.crumb, shifted, top)
 		}
@@ -165,37 +174,32 @@ func (a *App) drawBottomBar() {
 	a.drawBarSlot()
 }
 
-// drawPaneTileCrumb paints a workspace-boundary crumb: the pane tile's
-// own preview when its row is cached (the same drawer its grid uses — the
-// teal face is what makes the boundary readable in the chain), a teal
-// placeholder otherwise (a boot-restored frame may never have loaded the
-// outer grid).
-func (a *App) drawPaneTileCrumb(tileID string, s wsbar.Segment, top float64) {
+// drawBoundaryCrumb paints a workspace-boundary crumb as the light-blue
+// NAMED bar (owner tweak 2026-08-04 on #245: a tile-preview square didn't
+// stand out — this crumb is the thing you're working on, a whole desktop
+// of state, and the wide face is the obvious rename target). The current
+// (innermost) workspace reads brightest.
+func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	c := a.cctx
-	square := min(s.W, wsbar.RowH)
-	side := square - 2
-	if side < 4 {
-		return
+	if level == a.ws.Depth() {
+		c.Set("fillStyle", colorPaneTileBorder)
+	} else {
+		c.Set("fillStyle", "#1d4a4a")
 	}
-	x := s.X + (square-side)/2
-	y := top + (wsbar.RowH-side)/2
+	c.Call("fillRect", s.X+2, top+3, s.W-4, wsbar.RowH-6)
+	label := ""
+	if f := a.ws.At(level); f != nil {
+		label = f.Name
+	}
+	if label == "" {
+		label = "workspace"
+	}
+	c.Set("fillStyle", "#dff4f4")
 	c.Call("save")
 	c.Call("beginPath")
-	c.Call("rect", x, y, side, side)
+	c.Call("rect", s.X+2, top, s.W-4, wsbar.RowH)
 	c.Call("clip")
-	if t := a.findTileByID(tileID); t != nil {
-		cells := float64(max(t.W, t.H))
-		if cells < 1 {
-			cells = 1
-		}
-		a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, false, isLinkTile(t), "")
-	} else {
-		c.Set("fillStyle", colorPaneTileFill)
-		c.Call("fillRect", x, y, side, side)
-		c.Set("strokeStyle", colorPaneTileBorder)
-		c.Set("lineWidth", 1.0)
-		c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
-	}
+	c.Call("fillText", label, s.X+10, top+wsbar.RowH/2)
 	c.Call("restore")
 }
 
@@ -505,17 +509,12 @@ func (a *App) openWorkspaceRenameInput(level int) {
 	if !ok {
 		return // truncated off the left edge; rename via the title instead
 	}
-	bx, top, bw, rectOK := a.bottomBarRect()
+	bx, top, _, rectOK := a.bottomBarRect()
 	if !rectOK {
 		return
 	}
-	w := 160.0
-	x := bx + seg.X
-	if max := bx + bw - wsbar.SlotW - 8; x+w > max {
-		x = max - w
-	}
-	a.openNameInputAt(f.Name, w-24, func(st js.Value) {
-		st.Set("left", pxOf(x))
+	a.openNameInputAt(f.Name, seg.W-28, func(st js.Value) {
+		st.Set("left", pxOf(bx+seg.X+2))
 		st.Set("top", pxOf(top+4))
 	}, func(val string) {
 		a.commitWorkspaceRename(level, val)

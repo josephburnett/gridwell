@@ -5,7 +5,7 @@ import "testing"
 // Render and input read the same rects, so the crumb drawn at a point is
 // the crumb a click there resolves to.
 func TestLayoutAndHitTestAgree(t *testing.T) {
-	segs := Layout(7, 900)
+	segs := Layout(squares(7), 900)
 	if len(segs) != 7 {
 		t.Fatalf("segments = %d, want all 7 (room for them)", len(segs))
 	}
@@ -27,7 +27,7 @@ func TestLayoutAndHitTestAgree(t *testing.T) {
 // Every crumb is a full RowH square, abutting its neighbor, starting at
 // x=0 — one uniform chain (issue #245).
 func TestLayoutSquares(t *testing.T) {
-	segs := Layout(3, 1000)
+	segs := Layout(squares(3), 1000)
 	if segs[0].X != 0 || segs[0].Index != 0 {
 		t.Fatalf("segment 0 = %+v, want index 0 at x=0", segs[0])
 	}
@@ -46,7 +46,7 @@ func TestLayoutSquares(t *testing.T) {
 // the caller's full crumb list.
 func TestLayoutTruncatesFromLeft(t *testing.T) {
 	width := SlotW + 3*RowH + 10 // room for exactly 3 squares
-	segs := Layout(10, width)
+	segs := Layout(squares(10), width)
 	if len(segs) != 3 {
 		t.Fatalf("visible = %d, want 3", len(segs))
 	}
@@ -66,10 +66,36 @@ func TestLayoutTruncatesFromLeft(t *testing.T) {
 }
 
 func TestLayoutDegenerate(t *testing.T) {
-	if segs := Layout(0, 900); segs != nil {
+	if segs := Layout(nil, 900); segs != nil {
 		t.Errorf("no crumbs: %v, want nil", segs)
 	}
-	if segs := Layout(5, SlotW+10); segs != nil {
+	if segs := Layout(squares(5), SlotW+10); segs != nil {
 		t.Errorf("no room for even one square: %v, want nil", segs)
+	}
+}
+
+// squares is the all-chain-crumb width list.
+func squares(n int) []float64 {
+	out := make([]float64, n)
+	for i := range out {
+		out[i] = RowH
+	}
+	return out
+}
+
+// A boundary crumb is a WIDE bar among the squares; truncation still
+// drops whole crumbs from the left, wide or not.
+func TestLayoutMixedWidths(t *testing.T) {
+	widths := []float64{RowH, BoundaryW, RowH, RowH}
+	segs := Layout(widths, 900)
+	if len(segs) != 4 || segs[1].W != BoundaryW || segs[2].X != RowH+BoundaryW {
+		t.Fatalf("mixed layout = %+v", segs)
+	}
+	// Width for the last three only (boundary + 2 squares): the leading
+	// square drops.
+	tight := SlotW + BoundaryW + 2*RowH + 4
+	segs = Layout(widths, tight)
+	if len(segs) != 3 || segs[0].Index != 1 || segs[0].W != BoundaryW {
+		t.Fatalf("tight layout = %+v, want the tail starting at the boundary", segs)
 	}
 }

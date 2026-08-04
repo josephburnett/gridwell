@@ -32,31 +32,42 @@ type Segment struct {
 	X, W  float64
 }
 
-// Layout lays the ONE nav chain (issue #245): chainCount square crumbs of
-// side RowH, left to right — the complete path from the root, workspace
-// boundaries included, laid out by the caller. When the band can't fit
-// them all, crumbs drop from the LEFT: the tail — where you are — keeps
-// priority, and the survivors keep their full size (no shrinking; a
-// too-small preview reads as nothing). The current pane's name is a
-// separate CENTERED title, not a crumb.
-func Layout(chainCount int, width float64) []Segment {
-	if chainCount <= 0 || width <= 0 {
+// BoundaryW is a workspace-boundary crumb's width: the light-blue NAMED
+// bar (the thing you're working on — a whole desktop of state deserves to
+// stand out from the square previews, and the wide face is the obvious
+// rename target). Chain crumbs stay RowH squares.
+const BoundaryW = 120.0
+
+// Layout lays the ONE nav chain (issue #245): the complete path from the
+// root, left to right — RowH squares for chain crumbs, BoundaryW bars for
+// workspace boundaries (widths[i] chooses per crumb; the caller passes
+// RowH or BoundaryW). When the band can't fit them all, crumbs drop from
+// the LEFT: the tail — where you are — keeps priority, and survivors keep
+// their full size (no shrinking; a too-small preview reads as nothing).
+// The current pane's name is a separate CENTERED title, not a crumb.
+func Layout(widths []float64, width float64) []Segment {
+	if len(widths) == 0 || width <= 0 {
 		return nil
 	}
 	width -= SlotW // the right-end circle slot is reserved (issue #214)
-	if width < RowH {
+	// Walk from the TAIL, keeping crumbs while they fit.
+	first := len(widths)
+	rem := width
+	for i := len(widths) - 1; i >= 0; i-- {
+		if widths[i] > rem {
+			break
+		}
+		rem -= widths[i]
+		first = i
+	}
+	if first == len(widths) {
 		return nil
 	}
-	visible := int(width / RowH)
-	if visible > chainCount {
-		visible = chainCount
-	}
-	first := chainCount - visible
-	out := make([]Segment, 0, visible)
+	out := make([]Segment, 0, len(widths)-first)
 	x := 0.0
-	for i := first; i < chainCount; i++ {
-		out = append(out, Segment{Index: i, X: x, W: RowH})
-		x += RowH
+	for i := first; i < len(widths); i++ {
+		out = append(out, Segment{Index: i, X: x, W: widths[i]})
+		x += widths[i]
 	}
 	return out
 }
