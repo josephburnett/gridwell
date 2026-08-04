@@ -60,6 +60,8 @@ const (
 	GridwellGetTileProcedure = "/gridwell.v1.Gridwell/GetTile"
 	// GridwellGetTilePreviewProcedure is the fully-qualified name of the Gridwell's GetTilePreview RPC.
 	GridwellGetTilePreviewProcedure = "/gridwell.v1.Gridwell/GetTilePreview"
+	// GridwellLocateTileProcedure is the fully-qualified name of the Gridwell's LocateTile RPC.
+	GridwellLocateTileProcedure = "/gridwell.v1.Gridwell/LocateTile"
 	// GridwellReadContentProcedure is the fully-qualified name of the Gridwell's ReadContent RPC.
 	GridwellReadContentProcedure = "/gridwell.v1.Gridwell/ReadContent"
 	// GridwellWriteContentProcedure is the fully-qualified name of the Gridwell's WriteContent RPC.
@@ -98,6 +100,7 @@ type GridwellClient interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
+	LocateTile(context.Context, *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest]) (*connect.ServerStreamForClient[v1.ContentChunk], error)
 	WriteContent(context.Context) *connect.ClientStreamForClient[v1.WriteContentRequest, v1.TileResponse]
@@ -168,6 +171,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			httpClient,
 			baseURL+GridwellGetTilePreviewProcedure,
 			connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
+			connect.WithClientOptions(opts...),
+		),
+		locateTile: connect.NewClient[v1.LocateTileRequest, v1.LocateTileResponse](
+			httpClient,
+			baseURL+GridwellLocateTileProcedure,
+			connect.WithSchema(gridwellMethods.ByName("LocateTile")),
 			connect.WithClientOptions(opts...),
 		),
 		readContent: connect.NewClient[v1.ReadContentRequest, v1.ContentChunk](
@@ -242,6 +251,7 @@ type gridwellClient struct {
 	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
 	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
 	getTilePreview    *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
+	locateTile        *connect.Client[v1.LocateTileRequest, v1.LocateTileResponse]
 	readContent       *connect.Client[v1.ReadContentRequest, v1.ContentChunk]
 	writeContent      *connect.Client[v1.WriteContentRequest, v1.TileResponse]
 	placeTile         *connect.Client[v1.PlaceTileRequest, v1.TileResponse]
@@ -287,6 +297,11 @@ func (c *gridwellClient) GetTile(ctx context.Context, req *connect.Request[v1.Ge
 // GetTilePreview calls gridwell.v1.Gridwell.GetTilePreview.
 func (c *gridwellClient) GetTilePreview(ctx context.Context, req *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error) {
 	return c.getTilePreview.CallUnary(ctx, req)
+}
+
+// LocateTile calls gridwell.v1.Gridwell.LocateTile.
+func (c *gridwellClient) LocateTile(ctx context.Context, req *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error) {
+	return c.locateTile.CallUnary(ctx, req)
 }
 
 // ReadContent calls gridwell.v1.Gridwell.ReadContent.
@@ -354,6 +369,7 @@ type GridwellHandler interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
+	LocateTile(context.Context, *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error
 	WriteContent(context.Context, *connect.ClientStream[v1.WriteContentRequest]) (*connect.Response[v1.TileResponse], error)
@@ -420,6 +436,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		GridwellGetTilePreviewProcedure,
 		svc.GetTilePreview,
 		connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gridwellLocateTileHandler := connect.NewUnaryHandler(
+		GridwellLocateTileProcedure,
+		svc.LocateTile,
+		connect.WithSchema(gridwellMethods.ByName("LocateTile")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellReadContentHandler := connect.NewServerStreamHandler(
@@ -498,6 +520,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellGetTileHandler.ServeHTTP(w, r)
 		case GridwellGetTilePreviewProcedure:
 			gridwellGetTilePreviewHandler.ServeHTTP(w, r)
+		case GridwellLocateTileProcedure:
+			gridwellLocateTileHandler.ServeHTTP(w, r)
 		case GridwellReadContentProcedure:
 			gridwellReadContentHandler.ServeHTTP(w, r)
 		case GridwellWriteContentProcedure:
@@ -553,6 +577,10 @@ func (UnimplementedGridwellHandler) GetTile(context.Context, *connect.Request[v1
 
 func (UnimplementedGridwellHandler) GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTilePreview is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) LocateTile(context.Context, *connect.Request[v1.LocateTileRequest]) (*connect.Response[v1.LocateTileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.LocateTile is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error {

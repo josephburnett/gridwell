@@ -39,6 +39,7 @@ const (
 	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
 	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
+	Gridwell_LocateTile_FullMethodName        = "/gridwell.v1.Gridwell/LocateTile"
 	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
 	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
 	Gridwell_PlaceTile_FullMethodName         = "/gridwell.v1.Gridwell/PlaceTile"
@@ -71,6 +72,7 @@ type GridwellClient interface {
 	GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error)
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
+	LocateTile(ctx context.Context, in *LocateTileRequest, opts ...grpc.CallOption) (*LocateTileResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
 	WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error)
@@ -165,6 +167,16 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetTilePreviewResponse)
 	err := c.cc.Invoke(ctx, Gridwell_GetTilePreview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridwellClient) LocateTile(ctx context.Context, in *LocateTileRequest, opts ...grpc.CallOption) (*LocateTileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LocateTileResponse)
+	err := c.cc.Invoke(ctx, Gridwell_LocateTile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +324,7 @@ type GridwellServer interface {
 	GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error)
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
+	LocateTile(context.Context, *LocateTileRequest) (*LocateTileResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
 	WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error
@@ -359,6 +372,9 @@ func (UnimplementedGridwellServer) GetTile(context.Context, *GetTileRequest) (*T
 }
 func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
+}
+func (UnimplementedGridwellServer) LocateTile(context.Context, *LocateTileRequest) (*LocateTileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LocateTile not implemented")
 }
 func (UnimplementedGridwellServer) ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error {
 	return status.Error(codes.Unimplemented, "method ReadContent not implemented")
@@ -522,6 +538,24 @@ func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridwellServer).GetTilePreview(ctx, req.(*GetTilePreviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gridwell_LocateTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LocateTileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).LocateTile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_LocateTile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).LocateTile(ctx, req.(*LocateTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -711,6 +745,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTilePreview",
 			Handler:    _Gridwell_GetTilePreview_Handler,
+		},
+		{
+			MethodName: "LocateTile",
+			Handler:    _Gridwell_LocateTile_Handler,
 		},
 		{
 			MethodName: "PlaceTile",
