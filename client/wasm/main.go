@@ -270,6 +270,10 @@ type App struct {
 	renderedReady   bool
 	lastRenderedKey string
 
+	// wsExpand is the in-flight first-descent capture animation (issue
+	// #242; workspace.go) — nil when none.
+	wsExpand *wsExpandState
+
 	// renderedPrev caches rasterized rendered-mode grid previews by tile id
 	// (issue #233; rendered_preview.go): SVG-foreignObject images of
 	// markdown.RenderHTML's output, decoded async and drawn by

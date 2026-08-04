@@ -354,6 +354,25 @@ func (a *App) draw() {
 			a.width-wsOutlinePx, h-wsOutlinePx)
 		a.cctx.Set("lineWidth", 1.0)
 	}
+	// The first-descent capture animation (issue #242): the pane tile's
+	// face growing into the workspace outline while the content underneath
+	// never moves. Its end rect IS the #225 outline above, so the install
+	// handoff is seamless. Drawn last, like the outline it becomes.
+	if e := a.wsExpand; e != nil {
+		t := (nowMs() - e.startMs) / totalTransitionMs
+		if t > 1 {
+			t = 1
+		}
+		k := anim.EaseOutCubic(t)
+		lerp := func(from, to float64) float64 { return from + (to-from)*k }
+		h := a.height - errsurface.StripHeight(a.errs.Len())
+		a.cctx.Set("strokeStyle", colorPaneTileBorder)
+		a.cctx.Set("lineWidth", lerp(tileBorderPx, wsOutlinePx))
+		a.cctx.Call("strokeRect",
+			lerp(e.x, wsOutlinePx/2), lerp(e.y, wsOutlinePx/2),
+			lerp(e.w, a.width-wsOutlinePx), lerp(e.h, h-wsOutlinePx))
+		a.cctx.Set("lineWidth", 1.0)
+	}
 
 	// Inside a workspace, every repaint arms the debounced layout persister:
 	// the blob is DERIVED from the live tree (encode + hash-diff), so there
