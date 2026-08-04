@@ -70,12 +70,29 @@ fmt-check:
 	@bad=$$(gofmt -l $$(git ls-files '*.go' | grep -v '/gen/')); \
 	if [ -n "$$bad" ]; then echo "gofmt needed (run: gofmt -w <file>):"; echo "$$bad"; exit 1; fi
 
+# proto-check regenerates the wire code (local buf plugins — offline) and
+# fails when api/gen differs from the git INDEX or carries untracked files.
+# This catches all three ways generated code goes wrong: a proto edit
+# without `buf generate`; a hand-edit to generated code; and a PARTIAL
+# `git add` of the generated set — the 2026-08-04 `make launch` break,
+# where data.pb.go was committed but data_grpc.pb.go/data.connect.go
+# stayed in the working tree, so every working-tree gate was green while
+# the pushed history didn't compile. Staged-but-uncommitted generated
+# files pass (worktree == index is the invariant), so the normal
+# edit → regen → git add → make check → commit loop is unaffected.
+proto-check:
+	@command -v buf >/dev/null || { echo "buf not found — install buf (+protoc-gen-go, -connect-go, -go-grpc) to run proto-check"; exit 1; }
+	buf generate
+	@git diff --exit-code -- api/gen || { echo "api/gen differs from the index — run 'git add api/gen' (or commit the regen with the proto change)"; exit 1; }
+	@untracked=$$(git ls-files --others --exclude-standard api/gen); \
+	if [ -n "$$untracked" ]; then echo "untracked generated files — run 'git add api/gen':"; echo "$$untracked"; exit 1; fi
+
 # check is the per-commit verification gate: every commit must leave all of these
 # green. fmt-check enforces gofmt; the wasm build catches GOOS=js breakage that
 # `go build ./...` (host arch) misses; the typecheck catches Electron-side TS
 # drift; `npm test` runs the desktop main-process unit tests (menu/geometry logic
 # that never reaches the heavier display-bound gates). No display or network needed.
-check: fmt-check
+check: fmt-check proto-check
 	go build ./...
 	go test ./...
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
