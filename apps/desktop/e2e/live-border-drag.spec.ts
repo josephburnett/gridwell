@@ -62,9 +62,16 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
     { ch: EV.leftForward, pt: { x: gx - 8, y: gy } },
   );
 
+  // Wait for the forwarded press to ARM the resize (arming is also what
+  // parks the view) — the observable the sleep used to approximate.
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.leftResizeArmed()), {
+      timeout: 5_000,
+    })
+    .toBe(true);
+
   // Continue the drag on the canvas (post-park, that is where the real events
   // land): a held-button move to the target, then release.
-  await window.waitForTimeout(500);
   await window.evaluate(
     ([tx, ty]: number[]) => {
       const c = document.querySelector('canvas')!;

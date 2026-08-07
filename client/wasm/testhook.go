@@ -70,10 +70,15 @@ func (a *App) installTestHook() {
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
 		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.zoomKeyRelays }),
-		"shellStandin":  js.FuncOf(a.thShellStandin),
-		"shellText":     js.FuncOf(a.thShellText),
-		"shellFeed":     js.FuncOf(a.thShellFeed),
-		"rawRows":       js.FuncOf(a.thRawRows),
+		// leftResizeArmed reports whether a left border-drag resize is armed
+		// (issue #81's forwarded-press path) — the observable a spec polls
+		// instead of sleeping between the forwarded press and the canvas
+		// half of the drag. Arming is also what parks the live view.
+		"leftResizeArmed": js.FuncOf(func(js.Value, []js.Value) any { return a.leftResize != nil }),
+		"shellStandin":    js.FuncOf(a.thShellStandin),
+		"shellText":       js.FuncOf(a.thShellText),
+		"shellFeed":       js.FuncOf(a.thShellFeed),
+		"rawRows":         js.FuncOf(a.thRawRows),
 		"shellCellPx": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// Screen center of terminal cell (col, row), 0-based — lets a
 			// spec CLICK rendered terminal content (links) at real pixels.

@@ -33,7 +33,11 @@ test('shell descent reconnects the running session with its state', async ({ gw,
 
   // Type state into the PTY, then ascend (freeze + detach; tmux keeps it).
   await window.keyboard.type('marker=auto-live-202');
-  await window.waitForTimeout(300);
+  // The marker renders only after the PTY echoes it back — poll for that
+  // round trip instead of sleeping for it.
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellText()), { timeout: 10_000 })
+    .toContain('marker=auto-live-202');
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
 

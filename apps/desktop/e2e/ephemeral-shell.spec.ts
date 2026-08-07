@@ -51,7 +51,14 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   // It is a real terminal: type into it (keys go to the PTY via xterm).
   await window.keyboard.type('echo ephemeral-shell-proof');
   await window.keyboard.press('Enter');
-  await window.waitForTimeout(400);
+  // Wait for echo's OUTPUT line — proof the keys crossed the PTY and came
+  // back, with no wall-clock guess.
+  await expect
+    .poll(async () => {
+      const t: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
+      return t.split('\n').some((l) => l.includes('ephemeral-shell-proof') && !l.includes('echo '));
+    }, { timeout: 10_000 })
+    .toBe(true);
 
   // Ascend (bar crumb click): the tile is DELETED, tmux session included.
   await gw.ascendViaCrumb();

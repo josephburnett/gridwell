@@ -38,7 +38,9 @@ test('a captured shell takes over the live session; leaving hands it back', asyn
     })
     .toBe('webgl');
   await window.keyboard.type('marker=keepalive-249');
-  await window.waitForTimeout(300);
+  // The marker renders only after the PTY echoes it back — poll for that
+  // round trip instead of sleeping for it.
+  await expect.poll(() => shellText(window), { timeout: 10_000 }).toContain('marker=keepalive-249');
 
   // A pane tile in the RIGHT pane; descending from there captures the
   // layout with the shell pane still live.

@@ -45,7 +45,15 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   // show — the content assertion below depends on it.
   await window.keyboard.type('echo FREEZE-MARKER-LINE');
   await window.keyboard.press('Enter');
-  await window.waitForTimeout(500);
+  // Wait for echo's OUTPUT line (the typed command also carries the
+  // marker, so a whole-buffer match would pass early — the shell-link-open
+  // predicate class).
+  await expect
+    .poll(async () => {
+      const t: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
+      return t.split('\n').some((l) => l.includes('FREEZE-MARKER-LINE') && !l.includes('echo '));
+    }, { timeout: 10_000 })
+    .toBe(true);
 
   // Ascend from the live shell (bar crumb click). The freeze capture +
   // SetShellPreview run on this path.

@@ -35,7 +35,15 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   // then descend back into the live session.
   await window.keyboard.type('echo STANDIN-MARKER');
   await window.keyboard.press('Enter');
-  await window.waitForTimeout(500);
+  // Wait for echo's OUTPUT line (the typed command also carries the
+  // marker, so a whole-buffer match would pass early — the shell-link-open
+  // predicate class).
+  await expect
+    .poll(async () => {
+      const t: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
+      return t.split('\n').some((l) => l.includes('STANDIN-MARKER') && !l.includes('echo '));
+    }, { timeout: 10_000 })
+    .toBe(true);
   await gw.ascendViaCrumb();
   await expect
     .poll(async () => Number(tileAt(await gw.getGrid(a.gridID), 'shell', cx, cy)?.previewBlobId ?? 0), {
