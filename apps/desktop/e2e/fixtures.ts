@@ -146,6 +146,13 @@ export const test = base.extend<Fixtures>({
 
     // ── Teardown (runs after every test, pass or fail) ──────────────────────
 
+    // Teardown must complete from ANY spec end-state — including a spec that
+    // died mid-body with a live shell still attached — because a hung teardown
+    // is worse than the failure it follows: the worker is SIGKILLed at the
+    // test timeout, every later step (tmux kill, home removal, the sidecar
+    // assert) is skipped, and the report gains a 90s "Tearing down
+    // electronApp" plus an unattributed error that reads as a mystery flake.
+
     // Capture the sidecar PID before closing (exposed by index.ts under
     // GRIDWELL_E2E=1; null if the app never finished booting).
     let sidecarPid: number | null = null;
@@ -157,7 +164,42 @@ export const test = base.extend<Fixtures>({
       // app already crashed/closed; PID unknown.
     }
 
-    await app.close().catch(() => {});
+    // electronApp.close() NEVER SETTLES when a live shell stream existed at
+    // close time: the Electron process itself exits promptly and cleanly
+    // (exit event fires, code 0) but the playwright-side promise hangs
+    // forever. Probed 2026-08-07 (teardown-dirty.spec.ts pins it): a dirty
+    // live URL view closes fine; only shells wedge it. So: race close()
+    // against a deadline and verify the process exit ourselves — nothing
+    // downstream depends on close()'s own bookkeeping.
+    const proc = app.process();
+    const closed = await Promise.race([
+      app.close().then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((r) => {
+        const t = setTimeout(() => r(false), 10_000);
+        t.unref?.();
+      }),
+    ]);
+    if (!closed) {
+      // Surface it: a wedged close is expected only in the live-shell mode;
+      // seeing this on other specs would be new information.
+      console.warn('[e2e teardown] electronApp.close() did not settle in 10s; proceeding with direct cleanup');
+      if (proc.exitCode === null) {
+        // The app is genuinely still alive (not the known wedge, where it
+        // has already exited): kill it AND the sidecar, which would never
+        // receive before-quit's SIGTERM.
+        proc.kill('SIGKILL');
+        if (sidecarPid != null) {
+          try {
+            process.kill(sidecarPid, 'SIGKILL');
+          } catch {
+            // already gone
+          }
+        }
+      }
+    }
 
     // Kill stray tmux servers before removing the home dir — the tmux socket
     // lives in the OS tmpdir (/tmp/tmux-<uid>/gridwell-<uuid>), not under home,
