@@ -96,11 +96,15 @@ func EncodeLayout(t *Tree, rel func(id string) (string, bool)) (data []byte, ski
 	if rel == nil {
 		rel = func(id string) (string, bool) { return id, true }
 	}
-	root, skipped, err := encodeNode(t.Root, rel, nil)
+	root, skipped, err := encodeNode(t.Root, rel, t.IDPrefix, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	l := LayoutV1{V: layoutVersion, Root: root, Focus: t.Focus, Zoomed: t.Zoomed}
+	// Pane ids are stored BARE (t.IDPrefix stripped): the blob is the
+	// durable fact; the level namespace is session presentation (#249).
+	l := LayoutV1{V: layoutVersion, Root: root,
+		Focus:  strings.TrimPrefix(t.Focus, t.IDPrefix),
+		Zoomed: strings.TrimPrefix(t.Zoomed, t.IDPrefix)}
 	data, err = json.Marshal(l)
 	if err != nil {
 		return nil, nil, err
@@ -108,9 +112,9 @@ func EncodeLayout(t *Tree, rel func(id string) (string, bool)) (data []byte, ski
 	return data, skipped, nil
 }
 
-func encodeNode(n TreeNode, rel func(string) (string, bool), skipped []string) (LayoutNode, []string, error) {
+func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, skipped []string) (LayoutNode, []string, error) {
 	if n.IsLeaf() {
-		lp, ok := encodeLeaf(n.Pane, rel)
+		lp, ok := encodeLeaf(n.Pane, rel, idPrefix)
 		if !ok {
 			skipped = append(skipped, n.Pane.ID)
 		}
@@ -119,11 +123,11 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), skipped []string) (
 	if n.Split == nil {
 		return LayoutNode{}, skipped, errors.New("pane layout: node with neither pane nor split")
 	}
-	a, skipped, err := encodeNode(n.Split.A, rel, skipped)
+	a, skipped, err := encodeNode(n.Split.A, rel, idPrefix, skipped)
 	if err != nil {
 		return LayoutNode{}, skipped, err
 	}
-	b, skipped, err := encodeNode(n.Split.B, rel, skipped)
+	b, skipped, err := encodeNode(n.Split.B, rel, idPrefix, skipped)
 	if err != nil {
 		return LayoutNode{}, skipped, err
 	}
@@ -134,8 +138,9 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), skipped []string) (
 
 // encodeLeaf maps one pane's place into the owning node's frame. ok=false
 // means some id was outside the frame and the leaf was serialized as home.
-func encodeLeaf(p *Pane, rel func(string) (string, bool)) (*LayoutPane, bool) {
-	home := &LayoutPane{ID: p.ID, Zoom: 1}
+func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
+	bareID := strings.TrimPrefix(p.ID, idPrefix)
+	home := &LayoutPane{ID: bareID, Zoom: 1}
 	anchor := ""
 	if p.Anchor != "" {
 		a, ok := rel(p.Anchor)
@@ -164,7 +169,7 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool)) (*LayoutPane, bool) {
 		textFocus = tf
 	}
 	return &LayoutPane{
-		ID: p.ID, Anchor: anchor, Path: path,
+		ID: bareID, Anchor: anchor, Path: path,
 		Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom,
 		TextFocus: textFocus, TextMode: p.TextMode,
 		TextScrollX: p.TextScrollX, TextScrollY: p.TextScrollY, TextZoom: p.TextZoom,
@@ -179,7 +184,11 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool)) (*LayoutPane, bool) {
 // strict on structure (we wrote it) and loose on view state: an unknown
 // Focus falls back to the first leaf, an unknown Zoomed clears, a zero Zoom
 // becomes 1, ratios clamp to [0,1].
-func DecodeLayout(data []byte, abs func(id string) string) (*Tree, error) {
+// idPrefix namespaces the decoded panes' ids (issue #249): the blob's
+// bare "p<N>" ids become "<idPrefix>p<N>", and the tree mints with the
+// same prefix, so stacked live trees can never collide in the pane-keyed
+// maps (locals, native views, shell streams). "" decodes verbatim.
+func DecodeLayout(data []byte, abs func(id string) string, idPrefix string) (*Tree, error) {
 	var l LayoutV1
 	if err := json.Unmarshal(data, &l); err != nil {
 		return nil, fmt.Errorf("pane layout: %w", err)
@@ -190,11 +199,11 @@ func DecodeLayout(data []byte, abs func(id string) string) (*Tree, error) {
 	if abs == nil {
 		abs = func(id string) string { return id }
 	}
-	root, err := decodeNode(l.Root, abs)
+	root, err := decodeNode(l.Root, abs, idPrefix)
 	if err != nil {
 		return nil, err
 	}
-	t := &Tree{Root: root}
+	t := &Tree{Root: root, IDPrefix: idPrefix}
 
 	// Leaf inventory: ids must be present and unique (client locals are keyed
 	// by them), and nextID must clear the highest p<N> so later mints cannot
@@ -219,7 +228,7 @@ func DecodeLayout(data []byte, abs func(id string) string) (*Tree, error) {
 		if first == "" {
 			first = p.ID
 		}
-		if n, ok := paneIDNum(p.ID); ok && n > maxN {
+		if n, ok := paneIDNum(strings.TrimPrefix(p.ID, idPrefix)); ok && n > maxN {
 			maxN = n
 		}
 	})
@@ -228,32 +237,32 @@ func DecodeLayout(data []byte, abs func(id string) string) (*Tree, error) {
 	}
 	t.nextID = maxN
 
-	t.Focus = l.Focus
+	t.Focus = idPrefix + l.Focus
 	if !seen[t.Focus] {
 		t.Focus = first
 	}
-	if seen[l.Zoomed] {
-		t.Zoomed = l.Zoomed
+	if l.Zoomed != "" && seen[idPrefix+l.Zoomed] {
+		t.Zoomed = idPrefix + l.Zoomed
 	}
 	return t, nil
 }
 
-func decodeNode(n LayoutNode, abs func(string) string) (TreeNode, error) {
+func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNode, error) {
 	switch {
 	case n.Pane != nil && n.Split != nil:
 		return TreeNode{}, errors.New("pane layout: node with both pane and split")
 	case n.Pane != nil:
-		return TreeNode{Pane: decodeLeaf(n.Pane, abs)}, nil
+		return TreeNode{Pane: decodeLeaf(n.Pane, abs, idPrefix)}, nil
 	case n.Split != nil:
 		dir := Direction(n.Split.Dir)
 		if dir != Horizontal && dir != Vertical {
 			return TreeNode{}, fmt.Errorf("pane layout: invalid split dir %q", n.Split.Dir)
 		}
-		a, err := decodeNode(n.Split.A, abs)
+		a, err := decodeNode(n.Split.A, abs, idPrefix)
 		if err != nil {
 			return TreeNode{}, err
 		}
-		b, err := decodeNode(n.Split.B, abs)
+		b, err := decodeNode(n.Split.B, abs, idPrefix)
 		if err != nil {
 			return TreeNode{}, err
 		}
@@ -263,9 +272,9 @@ func decodeNode(n LayoutNode, abs func(string) string) (TreeNode, error) {
 	}
 }
 
-func decodeLeaf(lp *LayoutPane, abs func(string) string) *Pane {
+func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
 	p := &Pane{
-		ID: lp.ID,
+		ID: idPrefix + lp.ID,
 		Cx: lp.Cx, Cy: lp.Cy, Zoom: lp.Zoom,
 		TextMode:    lp.TextMode,
 		TextScrollX: lp.TextScrollX, TextScrollY: lp.TextScrollY, TextZoom: lp.TextZoom,

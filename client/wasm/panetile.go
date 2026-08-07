@@ -63,7 +63,7 @@ func (a *App) paneTileLayout(n *rpc.Tile) (*pane.Tree, bool) {
 		return nil, false
 	}
 	prefix := paneTileChainPrefix(n.ID)
-	tree, err := pane.DecodeLayout(body, func(id string) string { return prefix + id })
+	tree, err := pane.DecodeLayout(body, func(id string) string { return prefix + id }, "")
 	if err != nil {
 		// Once per blob generation: the memo entry below short-circuits the
 		// next frames, so a corrupt layout cannot spam the strip.

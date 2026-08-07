@@ -203,7 +203,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 			}
 			prefix := paneTileChainPrefix(tileID)
 			var derr error
-			tree, derr = pane.DecodeLayout(data, func(id string) string { return prefix + id })
+			tree, derr = pane.DecodeLayout(data, func(id string) string { return prefix + id }, "")
 			if derr != nil {
 				a.reportErr(errsurface.Error, "layout:"+tileID,
 					"workspace layout unreadable — opened read-only: "+derr.Error())
@@ -241,7 +241,7 @@ func (a *App) captureWorkspaceTree(tileID string, origin pane.Pane) *pane.Tree {
 		return rest, ok
 	})
 	if err == nil {
-		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }); derr == nil {
+		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, ""); derr == nil {
 			// An EPHEMERAL descent (a click-visit riding the scratch grid)
 			// is session state that dies on ascent — a durable capture must
 			// not reference it, and its copy re-going-live would keep the
@@ -368,7 +368,7 @@ func (a *App) bootWorkspace(tileID string) {
 		return
 	}
 	prefix := paneTileChainPrefix(tileID)
-	tree, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id })
+	tree, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, "")
 	readOnly := false
 	if derr != nil {
 		a.reportErr(errsurface.Error, "layout:"+tileID,

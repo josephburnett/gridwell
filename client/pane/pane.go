@@ -197,6 +197,12 @@ type Tree struct {
 	Zoomed string
 	// nextID is incremented on each split to mint fresh pane ids.
 	nextID int
+	// IDPrefix namespaces every pane id this tree mints or decodes (issue
+	// #249: stacked view trees are ALIVE simultaneously, and pane ids key
+	// the wasm locals, the native view registry, and the shell streams —
+	// "w<level>:" keeps levels from colliding). Stored layout blobs stay
+	// bare: EncodeLayout strips it, DecodeLayout applies it.
+	IDPrefix string
 }
 
 // ToggleZoom zooms paneID to the full layout, or unzooms if it is already
@@ -335,7 +341,7 @@ func (t *Tree) Split(dir Direction) (*Pane, error) {
 		return nil, errors.New("no focused pane")
 	}
 	t.nextID++
-	newPane := focused.Clone(fmt.Sprintf("p%d", t.nextID))
+	newPane := focused.Clone(fmt.Sprintf("%sp%d", t.IDPrefix, t.nextID))
 
 	// Find the parent of the focused pane and replace it with a Split.
 	var replaced bool

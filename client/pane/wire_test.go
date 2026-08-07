@@ -52,7 +52,7 @@ func TestLayoutGoldenV1(t *testing.T) {
 		`"text_focus":"bbbb/12","text_mode":"rendered","text_scroll_x":10,"text_scroll_y":80,"text_zoom":1.25}}}},` +
 		`"focus":"p3","zoomed":"p3"}`
 
-	got, err := DecodeLayout([]byte(golden), nil)
+	got, err := DecodeLayout([]byte(golden), nil, "")
 	if err != nil {
 		t.Fatalf("golden v1 blob failed to decode: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestLayoutRoundTripProperty(t *testing.T) {
 		if err != nil || !bytes.Equal(data, data2) {
 			t.Fatalf("case %d: encoding is not deterministic", i)
 		}
-		got, err := DecodeLayout(data, nil)
+		got, err := DecodeLayout(data, nil, "")
 		if err != nil {
 			t.Fatalf("case %d: decode: %v", i, err)
 		}
@@ -195,7 +195,7 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 		t.Fatalf("blob leaked the reader's transit prefix: %s", data)
 	}
 
-	got, err := DecodeLayout(data, abs)
+	got, err := DecodeLayout(data, abs, "")
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 	}
 
 	// A different reader chain resolves the same blob against ITS prefix.
-	other, err := DecodeLayout(data, func(id string) string { return "tunnel-z/" + id })
+	other, err := DecodeLayout(data, func(id string) string { return "tunnel-z/" + id }, "")
 	if err != nil {
 		t.Fatalf("decode via other chain: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 	if len(skipped) != 1 || skipped[0] != outside.ID {
 		t.Fatalf("skipped = %v, want [%s]", skipped, outside.ID)
 	}
-	got, err := DecodeLayout(data, func(id string) string { return prefix + id })
+	got, err := DecodeLayout(data, func(id string) string { return prefix + id }, "")
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -257,11 +257,11 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 }
 
 func TestLayoutUnknownVersion(t *testing.T) {
-	_, err := DecodeLayout([]byte(`{"v":2,"root":{"pane":{"id":"p1"}}}`), nil)
+	_, err := DecodeLayout([]byte(`{"v":2,"root":{"pane":{"id":"p1"}}}`), nil, "")
 	if !errors.Is(err, ErrLayoutVersion) {
 		t.Fatalf("want ErrLayoutVersion, got %v", err)
 	}
-	_, err = DecodeLayout([]byte(`{"root":{"pane":{"id":"p1"}}}`), nil) // v absent = 0
+	_, err = DecodeLayout([]byte(`{"root":{"pane":{"id":"p1"}}}`), nil, "") // v absent = 0
 	if !errors.Is(err, ErrLayoutVersion) {
 		t.Fatalf("want ErrLayoutVersion for missing v, got %v", err)
 	}
@@ -277,7 +277,7 @@ func TestLayoutMalformed(t *testing.T) {
 		"duplicate leaf": `{"v":1,"root":{"split":{"dir":"h","ratio":0.5,"a":{"pane":{"id":"p1"}},"b":{"pane":{"id":"p1"}}}}}`,
 	}
 	for name, blob := range cases {
-		if _, err := DecodeLayout([]byte(blob), nil); err == nil {
+		if _, err := DecodeLayout([]byte(blob), nil, ""); err == nil {
 			t.Errorf("%s: decode accepted malformed blob", name)
 		}
 	}
@@ -290,7 +290,7 @@ func TestLayoutLooseViewState(t *testing.T) {
 	blob := `{"v":1,"root":{"split":{"dir":"h","ratio":1.7,` +
 		`"a":{"pane":{"id":"p1"}},"b":{"pane":{"id":"p2","zoom":2}}}},` +
 		`"focus":"p99","zoomed":"p98"}`
-	got, err := DecodeLayout([]byte(blob), nil)
+	got, err := DecodeLayout([]byte(blob), nil, "")
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestLayoutDropsUpFrames(t *testing.T) {
 	if bytes.Contains(data, []byte(`"up"`)) || bytes.Contains(data, []byte("plugin/1")) {
 		t.Fatalf("Up frames leaked into the blob: %s", data)
 	}
-	got, err := DecodeLayout(data, nil)
+	got, err := DecodeLayout(data, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestLeafTextFocusIDs(t *testing.T) {
 		`"b":{"split":{"dir":"h","ratio":0.5,` +
 		`"a":{"pane":{"id":"p2","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1}},` +
 		`"b":{"pane":{"id":"p3","anchor":"u/1","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"u/9"}}}}}},"focus":"p1"}`)
-	tree, err := DecodeLayout(blob, func(id string) string { return id })
+	tree, err := DecodeLayout(blob, func(id string) string { return id }, "")
 	if err != nil {
 		t.Fatalf("DecodeLayout: %v", err)
 	}
@@ -350,4 +350,60 @@ func TestLeafTextFocusIDs(t *testing.T) {
 	if len(got) != 2 || got[0] != "u/7" || got[1] != "u/9" {
 		t.Errorf("LeafTextFocusIDs = %v, want [u/7 u/9]", got)
 	}
+}
+
+// IDPrefix round trip (issue #249): decode applies the level namespace to
+// every pane id (Focus/Zoomed included) and minting follows; encode
+// strips it, so the stored blob is byte-identical to a bare tree's.
+func TestLayoutIDPrefixRoundTrip(t *testing.T) {
+	src := NewTree()
+	p1 := src.FocusedPane()
+	p1.Anchor = "aabb/1"
+	if _, err := src.Split(Vertical); err != nil {
+		t.Fatal(err)
+	}
+	bare, _, err := EncodeLayout(src, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dec, err := DecodeLayout(bare, nil, "w2:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec.Walk(func(p *Pane) {
+		if !strings.HasPrefix(p.ID, "w2:p") {
+			t.Errorf("pane id %q not namespaced", p.ID)
+		}
+	})
+	if !strings.HasPrefix(dec.Focus, "w2:") {
+		t.Errorf("focus %q not namespaced", dec.Focus)
+	}
+	// Minting inside the prefixed tree stays inside the namespace.
+	np, err := dec.Split(Vertical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(np.ID, "w2:p") {
+		t.Errorf("minted id %q not namespaced", np.ID)
+	}
+
+	// Encoding the prefixed tree writes BARE ids — the durable blob never
+	// carries a session namespace.
+	out, _, err := EncodeLayout(dec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "w2:") {
+		t.Fatalf("blob leaked the namespace: %s", out)
+	}
+	rt, err := DecodeLayout(out, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.Walk(func(p *Pane) {
+		if strings.Contains(p.ID, "w2:") {
+			t.Errorf("bare re-decode kept a namespace: %q", p.ID)
+		}
+	})
 }
