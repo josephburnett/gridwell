@@ -210,11 +210,37 @@ test('a rejected framing writeback rolls the optimistic patch back (issue #156)'
   // Every framing writeback now fails (non-conflict).
   await window.route('**/gridwell.v1.Gridwell/SetTile', (r: any) => r.abort());
 
-  // Reframe inside the well; the 600ms settle persister patches the parent
-  // cache, posts SetWellView, and is rejected.
-  await gw.wheelAtFocusedCenter(-300);
+  // Reframe inside the well — with a delivery ack: a synthetic wheel under
+  // xvfb can be dropped, and a lost gesture leaves the settle persister
+  // with NOTHING to persist (the pre-2026-08-07 inverse flake: isolated
+  // runs saw zero SetTile posts and this spec timed out on the far-end
+  // notice with no way to say which stage went quiet). The pane's own
+  // framing is the ack; resending an undelivered wheel is harness
+  // recovery, not the property under test.
+  const z0 = (await gw.focused()).zoom;
+  let reframed = false;
+  for (let attempt = 0; attempt < 5 && !reframed; attempt++) {
+    await gw.wheelAtFocusedCenter(-300);
+    try {
+      await expect.poll(async () => (await gw.focused()).zoom, { timeout: 2_000 }).not.toBe(z0);
+      reframed = true;
+    } catch {
+      // wheel lost before the app — send again
+    }
+  }
+  if (!reframed) throw new Error('the wheel reframe never landed after 5 sends');
   const zc = await gw.focused();
   await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+
+  // Staged attribution: the 600ms settle persister must flush and POST the
+  // changed framing (persistPosts counters) — so the far-end notice below
+  // can only fail for far-end reasons.
+  await expect
+    .poll(
+      () => window.evaluate(() => (window as any).__gridwellTest.persistPosts().SetWellView ?? 0),
+      { message: 'the settle persister posts SetWellView for the changed framing', timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
   await expect
     .poll(async () => {
       const e = await errors(window);

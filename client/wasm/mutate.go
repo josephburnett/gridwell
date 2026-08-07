@@ -110,6 +110,7 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, cal
 // left the cache ahead of server truth (clientsync.ClassifyOptimistic,
 // issue #156).
 func (a *App) postOptimisticPersist(label string, gid string, call tileCall) {
+	a.persistPosts[label]++
 	go func() {
 		_, err := call(context.Background())
 		r := clientsync.ClassifyOptimistic(err, isVersionConflict(err))

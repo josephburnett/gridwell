@@ -75,10 +75,22 @@ func (a *App) installTestHook() {
 		// instead of sleeping between the forwarded press and the canvas
 		// half of the drag. Arming is also what parks the live view.
 		"leftResizeArmed": js.FuncOf(func(js.Value, []js.Value) any { return a.leftResize != nil }),
-		"shellStandin":    js.FuncOf(a.thShellStandin),
-		"shellText":       js.FuncOf(a.thShellText),
-		"shellFeed":       js.FuncOf(a.thShellFeed),
-		"rawRows":         js.FuncOf(a.thRawRows),
+		// persistPosts exposes the settle-persist observability counters:
+		// flush passes plus optimistic-persist dispatches by label. Lets a
+		// spec name WHICH stage of gesture → debounce → flush → post went
+		// quiet instead of timing out on the far-end effect (issue #156's
+		// spec, previously an unattributable inverse flake).
+		"persistPosts": js.FuncOf(func(js.Value, []js.Value) any {
+			out := map[string]any{"framingFlushes": a.framingFlushes}
+			for label, n := range a.persistPosts {
+				out[label] = n
+			}
+			return out
+		}),
+		"shellStandin": js.FuncOf(a.thShellStandin),
+		"shellText":    js.FuncOf(a.thShellText),
+		"shellFeed":    js.FuncOf(a.thShellFeed),
+		"rawRows":      js.FuncOf(a.thRawRows),
 		"shellCellPx": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// Screen center of terminal cell (col, row), 0-based — lets a
 			// spec CLICK rendered terminal content (links) at real pixels.

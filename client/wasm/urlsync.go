@@ -51,6 +51,7 @@ func (a *App) flushFramingSave() {
 	if a.transition != nil {
 		return
 	}
+	a.framingFlushes++
 	a.tree.Walk(func(p *pane.Pane) { a.persistPaneFraming(p) })
 	a.flushWellWheelSaves()
 }
