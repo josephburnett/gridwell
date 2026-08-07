@@ -127,7 +127,7 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 			unreadable = true
 			continue
 		}
-		tree, err := pane.DecodeLayout(data, func(id string) string { return id })
+		tree, err := pane.DecodeLayout(data, func(id string) string { return id }, "")
 		if err != nil {
 			unreadable = true
 			continue
