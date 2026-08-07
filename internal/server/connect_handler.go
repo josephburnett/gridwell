@@ -575,7 +575,7 @@ func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, owner pb.G
 	}
 	// Blob ids are in THIS node's frame (the encoder strips the reader's
 	// transit prefix, which is empty for a locally-owned pane tile).
-	tree, err := pane.DecodeLayout(body, func(id string) string { return id })
+	tree, err := pane.DecodeLayout(body, func(id string) string { return id }, "")
 	if err != nil {
 		log.Printf("gridwell: delete %s: layout blob unreadable, reaping nothing: %v", qualifiedID, err)
 		return
