@@ -19,6 +19,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"syscall/js"
@@ -90,6 +91,10 @@ func (a *App) maybeInstallWorkspace(pd *wsPending) {
 func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 	originPane := p.ID
 	tileID := pt.ID
+	// The new level's pane-id namespace (issue #249): stacked trees are all
+	// ALIVE now, and pane ids key the locals / native views / shell
+	// streams, so each level mints and decodes under its own prefix.
+	idPrefix := fmt.Sprintf("w%d:", a.ws.Depth()+1)
 	// The origin pane's place, for the organize-this default and for the
 	// byte-identical viewport restore under the animation.
 	origin := pane.Pane{Anchor: p.Anchor, Path: slices.Clone(p.Path), Cx: p.Cx, Cy: p.Cy, Zoom: p.Zoom}
@@ -203,11 +208,11 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 			}
 			prefix := paneTileChainPrefix(tileID)
 			var derr error
-			tree, derr = pane.DecodeLayout(data, func(id string) string { return prefix + id }, "")
+			tree, derr = pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix)
 			if derr != nil {
 				a.reportErr(errsurface.Error, "layout:"+tileID,
 					"workspace layout unreadable — opened read-only: "+derr.Error())
-				tree = workspaceTreeFromPlace(origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
+				tree = workspaceTreeFromPlace(idPrefix, origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
 				readOnly = true
 			}
 		}
@@ -218,7 +223,7 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 			// byte-identical assertion rides on this).
 			pd.restore()
 			if capture {
-				tree = a.captureWorkspaceTree(tileID, origin)
+				tree = a.captureWorkspaceTree(tileID, idPrefix, origin)
 			}
 			a.installWorkspace(fresh, tree, originPane, readOnly, data, true)
 		}
@@ -234,14 +239,14 @@ func (a *App) startWorkspaceDescent(p *pane.Pane, pt *rpc.Tile) {
 // no second cloner. Any failure (a pane outside the node's reach encodes
 // as home, per the flush rule; a hard error falls all the way back) yields
 // the old organize-this default: a capture must never block the descent.
-func (a *App) captureWorkspaceTree(tileID string, origin pane.Pane) *pane.Tree {
+func (a *App) captureWorkspaceTree(tileID, idPrefix string, origin pane.Pane) *pane.Tree {
 	prefix := paneTileChainPrefix(tileID)
 	data, _, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
 		rest, ok := strings.CutPrefix(id, prefix)
 		return rest, ok
 	})
 	if err == nil {
-		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, ""); derr == nil {
+		if t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix); derr == nil {
 			// An EPHEMERAL descent (a click-visit riding the scratch grid)
 			// is session state that dies on ascent — a durable capture must
 			// not reference it, and its copy re-going-live would keep the
@@ -260,15 +265,18 @@ func (a *App) captureWorkspaceTree(tileID string, origin pane.Pane) *pane.Tree {
 			return t
 		}
 	}
-	return workspaceTreeFromPlace(origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
+	return workspaceTreeFromPlace(idPrefix, origin.Anchor, origin.Path, origin.Cx, origin.Cy, origin.Zoom)
 }
 
 // workspaceTreeFromPlace builds the single-pane fallback: one pane at the
 // given place. The decode-failure read-only default, the boot fallback —
 // and the capture fallback when the current tree cannot encode.
-func workspaceTreeFromPlace(anchor string, path []string, cx, cy, zoom float64) *pane.Tree {
+func workspaceTreeFromPlace(idPrefix, anchor string, path []string, cx, cy, zoom float64) *pane.Tree {
 	t := pane.NewTree()
+	t.IDPrefix = idPrefix
 	p := t.FocusedPane()
+	p.ID = idPrefix + p.ID
+	t.Focus = p.ID
 	p.Anchor = anchor
 	p.Path = slices.Clone(path)
 	p.Cx, p.Cy = cx, cy
@@ -279,10 +287,13 @@ func workspaceTreeFromPlace(anchor string, path []string, cx, cy, zoom float64) 
 	return t
 }
 
-// installWorkspace performs the actual swap: flush and forget every outer
-// leaf (reload semantics at the boundary — shells detach to tmux, live urls
-// freeze, text saves; pane ids collide between trees so locals must empty),
-// push the frame, install the decoded tree. keepOuter=false means the
+// installWorkspace performs the actual swap: push the frame and install
+// the decoded tree, with the OUTER level LEFT RUNNING (issue #249, owner
+// reversal of the boundary freeze): its live views park off-screen and
+// its shells stay attached — liveness follows pane existence, and no pane
+// closed here. Level-scoped pane ids (Tree.IDPrefix) keep the
+// simultaneously-alive trees from colliding in the pane-keyed maps.
+// keepOuter=false means the
 // descent has no return tree (boot restore via ?w= — the boot-blank tree is
 // nothing the user built): the frame records OuterTree nil and ascent falls
 // back to the pane tile's containing grid. baseline is the decoded blob
@@ -300,8 +311,10 @@ func (a *App) installWorkspace(pt *rpc.Tile, tree *pane.Tree, originPane string,
 	// A no-op at depth 0 (no workspace to flush).
 	a.flushWorkspaceSave()
 	outer := a.tree
-	a.flushDroppedSubtree(outer.Root)
 	if !keepOuter {
+		// A boot restore replaces a boot-blank tree nothing lives in; the
+		// ordinary descent keeps the outer level fully ALIVE (issue #249 —
+		// the old flushDroppedSubtree teardown is deliberately gone).
 		outer = nil
 	}
 
@@ -354,8 +367,9 @@ func (a *App) bootWorkspace(tileID string) {
 		a.reportErr(errsurface.Error, "layout:"+tileID, "?w= names a non-workspace tile")
 		return
 	}
+	// The boot workspace is level 1 (the stack is empty at boot).
 	homeTree := func() *pane.Tree {
-		return workspaceTreeFromPlace(tile.GridID, nil,
+		return workspaceTreeFromPlace("w1:", tile.GridID, nil,
 			float64(tile.X)+float64(tile.W)/2, float64(tile.Y)+float64(tile.H)/2, 1)
 	}
 	if tile.BlobID == 0 {
@@ -368,7 +382,7 @@ func (a *App) bootWorkspace(tileID string) {
 		return
 	}
 	prefix := paneTileChainPrefix(tileID)
-	tree, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, "")
+	tree, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, "w1:")
 	readOnly := false
 	if derr != nil {
 		a.reportErr(errsurface.Error, "layout:"+tileID,
@@ -433,10 +447,12 @@ func (a *App) ascendWorkspaceLevels(count int) {
 	// Same rebind as installWorkspace: the restored outer tree's focused pane
 	// may itself be text-descended, and the singleton must follow the swap.
 	a.refreshFileOverlay()
-	// The restored outer leaves re-engage their descents (issue #202): the
-	// boundary froze them; landing back is a re-entry, so the shell
-	// reconnects and the url reopens — the same one-owner decision every
-	// descent applies (restoreWorkspaceLeaves does this for the inward swap).
+	// The restored outer leaves never froze (issue #249 — the boundary
+	// keeps every level alive), so for a still-running pane this walk is a
+	// no-op (the stream openers are idempotent). It still matters for the
+	// panes that lost their surface to the ONE-SURFACE rule while a higher
+	// level held the same tile: the holder just closed, so the surface is
+	// free again and the pane re-engages (issue #202's one owner decides).
 	a.tree.Walk(func(p *pane.Pane) {
 		if p.TextFocus != "" {
 			a.autoLiveOnRestore(p.ID, p.TextFocus)

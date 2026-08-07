@@ -184,6 +184,19 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// Resolve a shell LINK to its target: the PTY session, the alive cache,
 	// and the freeze writeback all key by the id that owns the session.
 	tileID = a.contentKey(tileID)
+	// Idempotent: this pane is already attached to this session (a
+	// keep-alive return, issue #249).
+	if conn := a.shellConnFor(p.ID); conn != nil && conn.tileID == tileID {
+		return
+	}
+	// ONE live surface per content tile (issue #249): another pane
+	// attached to this tmux session detaches (with a freeze) — two
+	// attachments would fight over the terminal size.
+	for otherID, pl := range a.locals {
+		if otherID != p.ID && pl.shellConn != nil && pl.shellConn.tileID == tileID {
+			a.closeShellStream(otherID, true)
+		}
+	}
 	a.closeShellStream(p.ID, true)
 
 	doc := js.Global().Get("document")

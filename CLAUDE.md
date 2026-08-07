@@ -103,6 +103,13 @@ stop creating new copies.
 Each of these was decided deliberately, some reversing an earlier decision.
 Re-litigating them silently is how churn happens.
 
+- **Every stacked level stays alive (#249, 2026-08-06).** Liveness
+  follows PANE EXISTENCE: descending into a pane tile parks the outer
+  level (views keep rendering off-screen, shells stay attached); a pane's
+  resources close only when the pane closes, and leaving a view closes
+  that view's panes. ONE live surface per content tile, at any level:
+  opening a tile live elsewhere freezes the other pane's stream — the
+  opener takes over. This REVERSED the workspace-boundary freeze.
 - **Descent goes live (#202).** The frozen preview is what a tile looks
   like from outside; DESCENDING is the engagement gesture — a url reopens,
   a shell reconnects. One owner decides (`shellconn.DecideAutoLive`); call

@@ -219,6 +219,10 @@ export class WebviewRegistry {
           partition,
           contextIsolation: true,
           nodeIntegration: false,
+          // Stacked levels keep their views RUNNING while parked
+          // off-screen (issue #249 — a hidden Zoom call keeps ringing);
+          // Chromium would otherwise throttle an occluded page's timers.
+          backgroundThrottling: false,
           // Forwards a right-button press to main → renderer so pane gestures
           // work over live content. Safe on arbitrary pages: it only listens
           // for button 2 and uses ipcRenderer, nothing else.

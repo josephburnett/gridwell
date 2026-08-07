@@ -424,6 +424,10 @@ func (a *App) forgetPane(paneID string) {
 	a.closeURLStream(paneID, true)
 	a.closeShellStream(paneID, true)
 	delete(a.locals, paneID)
+	// Level-scoped pane ids RECUR across successive views ("w1:p1" again
+	// on the next descent, issue #249), so every pane-keyed map must clear
+	// here — a stale entry would greet the next view's pane of the same id.
+	delete(a.traces, paneID)
 }
 
 // selectedFor returns the selected tile id in paneID, or "" if nothing is

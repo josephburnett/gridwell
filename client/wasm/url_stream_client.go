@@ -146,6 +146,19 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	if p == nil {
 		return
 	}
+	// Idempotent: the pane already shows this content live (a keep-alive
+	// return, issue #249 — nothing froze, so there is nothing to redo).
+	if v := a.urlViewFor(paneID); v != nil && v.tileID == t.ID {
+		return
+	}
+	// ONE live surface per content tile (issue #249, generalizing the
+	// same-level rule): any OTHER pane — at any stack level — holding a
+	// live view on this content freezes now; the opener takes over.
+	for otherID, pl := range a.locals {
+		if otherID != paneID && pl.urlView != nil && pl.urlView.tileID == t.ID {
+			a.closeURLStream(otherID, true)
+		}
+	}
 	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
 	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
