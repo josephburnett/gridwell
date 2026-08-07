@@ -18,13 +18,26 @@ test('sweepLeakedHomes removes leaked e2e homes and nothing else', () => {
     'plugins:\n    - id: 0123456789abcdef0123456789abcdef\n      kind: localdb\n    - id: k3x9m2q\n      kind: localdb\n',
   );
   const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-real-'));
+  // Stale-socket sweep fixtures in tmux's socket dir ($TMUX_TMPDIR||/tmp):
+  // a dead gridwell-* socket (a plain file — no server answers on it) must
+  // be removed; a non-gridwell name must never be touched.
+  const sockDir = path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
+  fs.mkdirSync(sockDir, { recursive: true });
+  const deadSock = path.join(sockDir, 'gridwell-zz9dead');
+  const foreignSock = path.join(sockDir, 'homes-test-foreign');
+  fs.writeFileSync(deadSock, '');
+  fs.writeFileSync(foreignSock, '');
   try {
     assert.deepEqual(pluginUUIDs(leaked), ['0123456789abcdef0123456789abcdef', 'k3x9m2q']);
     sweepLeakedHomes();
     assert.equal(fs.existsSync(leaked), false, 'the leaked e2e home is swept');
     assert.equal(fs.existsSync(foreign), true, 'a non-e2e dir is never touched');
+    assert.equal(fs.existsSync(deadSock), false, 'a dead gridwell-* socket is removed');
+    assert.equal(fs.existsSync(foreignSock), true, 'a non-gridwell socket is never touched');
   } finally {
     fs.rmSync(foreign, { recursive: true, force: true });
     fs.rmSync(leaked, { recursive: true, force: true });
+    fs.rmSync(deadSock, { force: true });
+    fs.rmSync(foreignSock, { force: true });
   }
 });

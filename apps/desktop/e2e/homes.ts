@@ -73,4 +73,43 @@ export function sweepLeakedHomes(): void {
   if (swept > 0) {
     console.log(`[e2e] swept ${swept} leaked home(s) from previous aborted runs`);
   }
+  sweepStaleSockets();
+}
+
+// sweepStaleSockets removes gridwell-* tmux SOCKET FILES with no server
+// behind them. kill-server deletes the socket only when a live server
+// answers; a SIGKILLed run leaves the file behind forever (63 had
+// accumulated by 2026-08-07 — this function's contract was described in
+// the comment above for a long time but never implemented). A dead socket
+// is probed with list-sessions, which fails fast without spawning a
+// server. Two things are deliberately out of scope: non-gridwell sockets
+// (the user's own tmux lives on "default"), and any LIVE gridwell-<uuid>
+// server — once its e2e home is gone, a leaked live server is
+// indistinguishable from the user's real desktop app, so it is never
+// killed here (the per-test teardown owns killing its own servers).
+function sweepStaleSockets(): void {
+  // tmux's own socket-dir rule: $TMUX_TMPDIR, else /tmp — not os.tmpdir().
+  const dir = path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
+  let socks: string[] = [];
+  try {
+    socks = fs.readdirSync(dir);
+  } catch {
+    return; // no tmux dir — nothing to sweep
+  }
+  let removed = 0;
+  for (const s of socks) {
+    if (!s.startsWith('gridwell-')) continue;
+    const alive = spawnSync('tmux', ['-L', s, 'list-sessions'], { stdio: 'ignore' }).status === 0;
+    if (!alive) {
+      try {
+        fs.unlinkSync(path.join(dir, s));
+        removed++;
+      } catch {
+        // vanished between readdir and unlink — fine
+      }
+    }
+  }
+  if (removed > 0) {
+    console.log(`[e2e] removed ${removed} stale tmux socket(s)`);
+  }
 }
