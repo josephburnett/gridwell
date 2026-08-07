@@ -308,6 +308,7 @@ func (a *App) installWebviewListeners() {
 	// chord (applyContentZoom: cache + live surface + persistence).
 	onZoomKey := js.FuncOf(func(_ js.Value, p []js.Value) any {
 		ev := p[0]
+		a.zoomKeyRelays++
 		a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
 		return nil
 	})

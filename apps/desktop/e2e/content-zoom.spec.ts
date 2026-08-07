@@ -137,14 +137,47 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
       wc.sendInputEvent({ type: 'keyDown', keyCode: '=', modifiers: ['control'] });
       wc.sendInputEvent({ type: 'keyUp', keyCode: '=', modifiers: ['control'] });
     });
-  // One chord at a time, each VERIFIED before the next: the property under
-  // test (#170) is that the intercepted chord reaches the wasm owner and
-  // persists — not that three synthetic events survive rapid fire, which
-  // xvfb under load drops nondeterministically (the #195 flake half of
-  // this spec). A real keyboard's repeat rides the genuine input pipeline
-  // synthetic events can only approximate.
+  // The two ack counters bracket the relay: main's before-input-event
+  // interception (registry.zoomChordRelays) and the wasm owner's receipt
+  // across the IPC hop (zoomKeyRelays). They make a lost chord
+  // ATTRIBUTABLE instead of a silent stuck factor — the 2026-08-06
+  // failure mode, where one of three verified-sequential chords vanished
+  // with nothing to say where.
+  const mainRelays = () =>
+    electronApp.evaluate(() => ((globalThis as any).__gwRegistry?.zoomChordRelays as number) ?? 0);
+  const wasmRelays = () =>
+    window.evaluate(() => (window as any).__gridwellTest.zoomKeyRelays() as number);
+
+  // sendInputEvent is fire-and-forget, and under xvfb the synthetic event
+  // is occasionally dropped BEFORE the input pipeline — which is not the
+  // property under test (#170 is the relay: interception → wasm owner →
+  // persistence; a real keyboard's autorepeat recovers a swallowed
+  // keypress the same way). Resend until main acks the interception.
+  // Everything downstream of the ack is product path and must work on the
+  // first delivery — those assertions stay hard.
+  const sendChordAcked = async () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const before = await mainRelays();
+      await sendChord();
+      try {
+        await expect.poll(mainRelays, { timeout: 2_000 }).toBeGreaterThan(before);
+        return;
+      } catch {
+        // never intercepted — the synthetic event was lost; send again
+      }
+    }
+    throw new Error('zoom chord never reached before-input-event after 5 sends');
+  };
   for (let i = 1; i <= 3; i++) {
-    await sendChord();
+    await sendChordAcked();
+    // The intercepted chord crossed the IPC hop to the one zoom owner…
+    await expect
+      .poll(wasmRelays, {
+        message: `chord ${i}: intercepted by main but never received by the wasm owner`,
+        timeout: 5_000,
+      })
+      .toBeGreaterThanOrEqual(i);
+    // …and the owner applied it to the composed live-view factor.
     const want = base * Math.pow(1.1, i);
     await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(want * 0.97);
   }

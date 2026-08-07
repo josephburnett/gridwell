@@ -69,6 +69,7 @@ func (a *App) installTestHook() {
 		"errors":        js.FuncOf(a.thErrors),
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
+		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.zoomKeyRelays }),
 		"shellStandin":  js.FuncOf(a.thShellStandin),
 		"shellText":     js.FuncOf(a.thShellText),
 		"shellFeed":     js.FuncOf(a.thShellFeed),

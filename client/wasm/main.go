@@ -280,6 +280,13 @@ type App struct {
 	// drawMarkdownNode when a tile's stored text_mode is "rendered".
 	renderedPrev map[string]*renderedPreview
 
+	// zoomKeyRelays counts zoom chords that arrived over the main-process
+	// relay (issue #170's before-input-event interception). e2e-only
+	// introspection: together with the registry's zoomChordRelays counter it
+	// brackets the IPC hop, so a chord lost between interception and the
+	// wasm zoom owner is attributable instead of a silent no-op.
+	zoomKeyRelays int
+
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
 	// the textarea overlay — letting the text content fill the pane

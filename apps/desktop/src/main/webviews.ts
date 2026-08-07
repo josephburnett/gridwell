@@ -111,6 +111,12 @@ export class WebviewRegistry {
   // state after place, but this closes the window where a briefly-visible new
   // view could occlude a canvas overlay.
   private _globalHidden = false;
+  // Count of zoom chords seen by before-input-event and relayed to the
+  // renderer. Read by the e2e (via __gwRegistry) as a delivery ACK: a
+  // synthetic sendInputEvent that never bumps this was lost in the input
+  // pipeline (an xvfb reality, not a product path); a bump with no zoom
+  // effect is a real relay bug. Grows monotonically; e2e-only readers.
+  zoomChordRelays = 0;
 
   constructor(win: BaseWindow, cb: RegistryCallbacks = {}) {
     this.win = win;
@@ -263,6 +269,7 @@ export class WebviewRegistry {
         }
         const key = zoomChordKey(input);
         if (key) {
+          this.zoomChordRelays++;
           this.cb.onZoomKey?.({ paneId, key });
           event.preventDefault();
         }
