@@ -54,23 +54,45 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   const url = `${gw.origin}/wasm_exec.js?shell-link=1`;
   await window.keyboard.type(`echo visit ${url} end`);
   await window.keyboard.press('Enter');
+  // Wait for echo's OUTPUT line — the exact predicate the row selection
+  // below consumes. (A whole-buffer `toContain` was satisfied by the TYPED
+  // COMMAND line, which also carries the marker, so on a slow echo the
+  // selection ran before the output existed and indexed lines[-1] — the
+  // 2026-08-06 "load flake" that was really this spec racing itself.)
+  const outputRow = (t: string) =>
+    t.split('\n').findIndex((l) => l.includes('shell-link=1 end') && !l.includes('echo '));
   await expect
-    .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellText()), {
-      timeout: 10_000,
-    })
-    .toContain('shell-link=1 end');
+    .poll(
+      async () => outputRow(await window.evaluate(() => (window as any).__gridwellTest.shellText())),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThanOrEqual(0);
 
-  // Click the rendered link (buffer row/col → screen px via the hook).
+  // Click the rendered link (buffer row/col → screen px via the hook). The
+  // buffer only appends, so the row found by the poll is stable.
   const text: string = await window.evaluate(() => (window as any).__gridwellTest.shellText());
   const lines = text.split('\n');
-  const row = lines.findIndex((l) => l.includes('shell-link=1') && !l.includes('echo '));
+  const row = outputRow(text);
   const col = lines[row].indexOf('http') + 5;
   const pt = await window.evaluate(
     ([c, r]: number[]) => (window as any).__gridwellTest.shellCellPx(c, r),
     [col, row],
   );
+  // Hover, then wait for xterm's own decoration ACK — it marks a hovered
+  // link by putting xterm-cursor-pointer on the screen element — instead of
+  // sleeping and hoping the linkifier ran. The first move is a step away so
+  // a pointer already at the target still produces a mousemove.
+  await window.mouse.move(pt.x, pt.y - 40);
   await window.mouse.move(pt.x, pt.y);
-  await window.waitForTimeout(300); // let the link provider decorate
+  await expect
+    .poll(
+      () =>
+        window.evaluate(
+          () => document.querySelector('.xterm-screen')?.classList.contains('xterm-cursor-pointer') ?? false,
+        ),
+      { timeout: 5_000 },
+    )
+    .toBe(true);
   await window.mouse.click(pt.x, pt.y);
 
   // The one correct effect: a new pane below, descended into the visit.
