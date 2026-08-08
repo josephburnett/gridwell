@@ -47,3 +47,56 @@ test('left divider-arm mousedown is defaultPrevented; single-jump drag tracks fu
   const after = (await gw.panes()).find((p: any) => p.id === left.id);
   expect(after!.w, 'the divider must track the full jump').toBeLessThan(left.w - 200);
 });
+
+// The 2026-08-07 recurrence: the drag above crosses only bare canvas, but a
+// TEXT descent floats a DOM overlay (textarea / rendered view) above the
+// canvas — and a fast drag whose single mousemove jumps into that rect
+// hit-targets the overlay. With canvas-scoped move/up listeners the drag
+// heard neither the move nor the release: it moved 0 and stayed armed after
+// letting go. The fix routes move/up through window-level capture listeners
+// while a gesture is in flight, so what the pointer crosses cannot matter.
+// This MUST be driven with hit-tested input (window.mouse): dispatching
+// events directly on the canvas element bypasses hit-testing, which is
+// exactly the dimension where this class of bug lives — and why the test
+// above stayed green through it.
+test('a fast divider drag INTO a text pane keeps tracking and releases', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+  await gw.splitFocusedPaneVertical();
+  let panes = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  await gw.focusPane(panes[0]);
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  await gw.descendCell(cx, cy);
+  await expect
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.textareaInfo() != null), {
+      message: 'the text overlay must be up before the drag crosses it',
+    })
+    .toBe(true);
+  panes = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  const left = panes[0];
+  const gx = left.x + left.w;
+  const gy = left.y + left.h / 2;
+
+  // Fast: press on the divider, one giant jump deep into the text pane's
+  // overlay, release there.
+  await window.mouse.move(gx, gy);
+  await window.mouse.down();
+  await window.mouse.move(gx - 300, gy, { steps: 1 });
+  await window.mouse.up();
+  await gw.waitIdle();
+
+  const after = (await gw.panes()).find((p: any) => p.id === left.id)!;
+  expect(left.w - after.w, 'the drag tracks across the overlay').toBeGreaterThan(200);
+  // The release over the overlay must DISARM the resize — pre-fix it stayed
+  // armed until a stray canvas click (the drag "stuck to the cursor").
+  expect(
+    await window.evaluate(() => (window as any).__gridwellTest.leftResizeArmed()),
+    'the release over the overlay ends the gesture',
+  ).toBe(false);
+});

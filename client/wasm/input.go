@@ -28,7 +28,9 @@ const (
 	snapBackMs = 220.0
 )
 
-// installCanvasInput attaches mouse listeners to the canvas. Gridwell
+// installCanvasInput attaches the mouse listeners: presses and the wheel on
+// the canvas (a gesture can only START there), move/release at the window so
+// an in-flight gesture survives whatever the pointer crosses. Gridwell
 // navigation is strictly mouse-only: every gesture (move, descend,
 // ascend, resize, clone, delete) is reachable via left/right click,
 // drag, and the scroll wheel — there are no navigation keybindings.
@@ -44,8 +46,31 @@ const (
 func (a *App) installCanvasInput() {
 	a.canvas.Call("addEventListener", "wheel", js.FuncOf(a.onWheel))
 	a.canvas.Call("addEventListener", "mousedown", js.FuncOf(a.onMouseDown))
-	a.canvas.Call("addEventListener", "mousemove", js.FuncOf(a.onMouseMove))
-	a.canvas.Call("addEventListener", "mouseup", js.FuncOf(a.onMouseUp))
+	// move/up listen at the WINDOW, capture phase — never on the canvas. A
+	// gesture armed by a canvas mousedown must keep tracking no matter what
+	// the pointer crosses: a text descent floats a DOM overlay (textarea /
+	// rendered view) above the canvas, so a fast divider drag whose next
+	// mousemove jumped into that rect hit-targeted the overlay and a
+	// canvas-scoped listener heard neither the move nor the release — the
+	// drag wedged, and it stayed armed after the button was let go (the
+	// "can't drag a text pane border fast" bug). Capture also beats any
+	// stopPropagation an overlay library (xterm) might do. When no gesture
+	// is in flight, events that didn't target the canvas are ignored, so
+	// overlay-local behavior (typing, selection, terminal input) is
+	// exactly as before.
+	captureOpts := js.ValueOf(map[string]any{"capture": true})
+	a.win.Call("addEventListener", "mousemove", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if !a.gestureInFlight() && !args[0].Get("target").Equal(a.canvas) {
+			return nil
+		}
+		return a.onMouseMove(this, args)
+	}), captureOpts)
+	a.win.Call("addEventListener", "mouseup", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if !a.gestureInFlight() && !args[0].Get("target").Equal(a.canvas) {
+			return nil
+		}
+		return a.onMouseUp(this, args)
+	}), captureOpts)
 	// Suppress the browser's context menu on the canvas; right-click is
 	// the clone/resize gesture stem, not a menu.
 	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -72,6 +97,14 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	// first so Electron's built-in page zoom never double-fires.
 	a.handleContentZoomKey(args[0])
 	return nil
+}
+
+// gestureInFlight reports whether any canvas pointer gesture is armed — the
+// states onMouseMove/onMouseUp track across moves. This is the routing gate
+// for the window-level move/up listeners: while true, every move/up belongs
+// to the gesture regardless of what element the pointer is over.
+func (a *App) gestureInFlight() bool {
+	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil
 }
 
 // paneAtScreen returns the pane (and its rect) under the given screen coords,
