@@ -240,21 +240,3 @@ func (s *Store) migrateUp(ctx context.Context, migs []migration, target int) err
 	}
 	return dbformat.EnsureVersion(ctx, s.db, applicationID, target, chain)
 }
-
-// readPragmaInt reads an integer-valued PRAGMA (e.g. application_id,
-// user_version) from the main database.
-func readPragmaInt(ctx context.Context, q gridReader, name string) (int64, error) {
-	var v int64
-	// PRAGMA names are trusted literals here, never user input.
-	if err := q.QueryRowContext(ctx, "PRAGMA "+name).Scan(&v); err != nil {
-		return 0, err
-	}
-	return v, nil
-}
-
-// setPragmaInt writes an integer-valued PRAGMA. PRAGMA statements can't bind
-// parameters, so the value is formatted in; callers pass trusted constants.
-func (s *Store) setPragmaInt(ctx context.Context, name string, v int64) error {
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("PRAGMA %s = %d", name, v))
-	return err
-}

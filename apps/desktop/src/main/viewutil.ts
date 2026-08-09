@@ -1,5 +1,3 @@
-import { getDomain } from 'tldts';
-
 import type { Bounds } from './ipc';
 
 // SESSION_PARTITION is THE Electron partition for live url tiles (owner

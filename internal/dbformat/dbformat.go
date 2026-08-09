@@ -119,13 +119,6 @@ func readPragmaInt(ctx context.Context, db *sql.DB, name string) (int64, error) 
 	return v, nil
 }
 
-// setPragmaInt writes an integer-valued PRAGMA. PRAGMA statements can't bind
-// parameters, so the value is formatted in; callers pass trusted constants.
-func setPragmaInt(ctx context.Context, db *sql.DB, name string, v int64) error {
-	_, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA %s = %d", name, v))
-	return err
-}
-
 // setPragmaIntTx is setPragmaInt inside a transaction — header pragmas are
 // transactional in SQLite, which is what makes the migrate-and-stamp and the
 // fresh-identity stamps atomic.

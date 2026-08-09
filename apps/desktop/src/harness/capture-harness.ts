@@ -6,7 +6,6 @@
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
 //
 // Prints "HARNESS PASS" / "HARNESS FAIL: ..." and exits with 0/1.
-import * as http from 'http';
 import { app, BaseWindow } from 'electron';
 import { WebviewRegistry } from '../main/webviews';
 import type { NavEvent } from '../main/ipc';
