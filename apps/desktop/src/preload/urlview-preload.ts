@@ -22,10 +22,12 @@
 // ../main/viewutil.ts (classifyRightPress) rather than imported.
 import { ipcRenderer } from 'electron';
 
-// Keep in sync with VIEW.rightdown / VIEW.middledown / VIEW.leftdown in ../main/ipc.ts.
+// Keep in sync with VIEW.rightdown / VIEW.middledown / VIEW.leftdown /
+// VIEW.touchscroll in ../main/ipc.ts.
 const VIEW_RIGHTDOWN = 'gw:view-rightdown';
 const VIEW_MIDDLEDOWN = 'gw:view-middledown';
 const VIEW_LEFTDOWN = 'gw:view-leftdown';
+const VIEW_TOUCHSCROLL = 'gw:view-touchscroll';
 // Keep in sync with RIGHT_DRAG_THRESHOLD in ../main/viewutil.ts (and the canvas
 // dragThreshold). classifyRightPress's logic is inlined below (can't import here).
 const RIGHT_DRAG_THRESHOLD = 4;
@@ -116,6 +118,61 @@ window.addEventListener(
   'mouseup',
   (e: MouseEvent) => {
     if (e.button === 2) rightDown = false;
+  },
+  true,
+);
+
+// ── single-finger touch scroll ──────────────────────────────────────────────
+// Chromium does not synthesize scroll gestures from raw touches inside an
+// embedded WebContentsView (they reach the page as TouchEvents and then
+// nothing scrolls), so a finger drag over a live site did nothing. Convert
+// the drag ourselves: forward each move's delta to main, which injects an
+// equivalent mouseWheel back into this view at the finger's position —
+// scrolling whatever scrollable element is under the finger, exactly as a
+// wheel would. preventDefault on the claimed moves keeps Chromium's
+// touch→mouse compat from turning the drag into a text selection (and, on a
+// platform where native touch scrolling DID work, from scrolling twice).
+// Multi-finger touches are left alone (pinch zoom stays the page's).
+let touchScrolling = false;
+let touchLastX = 0;
+let touchLastY = 0;
+
+window.addEventListener(
+  'touchstart',
+  (e: TouchEvent) => {
+    if (e.touches.length !== 1) {
+      touchScrolling = false;
+      return;
+    }
+    touchScrolling = true;
+    touchLastX = e.touches[0].screenX;
+    touchLastY = e.touches[0].screenY;
+  },
+  true,
+);
+
+window.addEventListener(
+  'touchmove',
+  (e: TouchEvent) => {
+    if (!touchScrolling || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.screenX - touchLastX;
+    const dy = t.screenY - touchLastY;
+    touchLastX = t.screenX;
+    touchLastY = t.screenY;
+    if (dx === 0 && dy === 0) return;
+    e.preventDefault();
+    ipcRenderer.send(VIEW_TOUCHSCROLL, { sx: t.screenX, sy: t.screenY, dx, dy });
+  },
+  // Non-passive: window touch listeners default to passive, and a passive
+  // listener's preventDefault is ignored.
+  { capture: true, passive: false },
+);
+
+window.addEventListener(
+  'touchend',
+  (e: TouchEvent) => {
+    if (e.touches.length === 0) touchScrolling = false;
   },
   true,
 );

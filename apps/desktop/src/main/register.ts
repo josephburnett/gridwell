@@ -11,6 +11,7 @@ import {
   PaneRef,
   FreezeResult,
   ViewRightdown,
+  ViewTouchScroll,
   ForwardedRightdown,
   ErrorEvent,
   OpenBelowEvent,
@@ -97,6 +98,13 @@ export function registerWebviewIpc(
     const cb = win.getContentBounds();
     const fwd: ForwardedRightdown = { x: p.sx - cb.x, y: p.sy - cb.y };
     safeSend(rootWC, EV.leftForward, fwd);
+  });
+
+  // A single-finger drag over a live URL view: the view's preload forwards
+  // each move's delta; the registry injects an equivalent mouseWheel back
+  // into that view (Chromium won't gesture-scroll raw touches there).
+  ipcMain.on(VIEW.touchscroll, (event, p: ViewTouchScroll): void => {
+    registry.touchScroll(event.sender, p);
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {

@@ -44,6 +44,7 @@ export const VIEW = {
   rightdown: 'gw:view-rightdown',   // ViewRightdown
   middledown: 'gw:view-middledown', // ViewRightdown (same payload: screen coords)
   leftdown: 'gw:view-leftdown',     // ViewRightdown (focus intent; no preventDefault in preload)
+  touchscroll: 'gw:view-touchscroll', // ViewTouchScroll — single-finger drag over live content
 } as const;
 
 // Main → renderer (send, fire-and-forget).
@@ -70,6 +71,20 @@ export const EV = {
 export interface ViewRightdown {
   sx: number;
   sy: number;
+}
+
+// ViewTouchScroll is one movement step of a single-finger drag over live web
+// content. Chromium does not turn raw touches into scroll gestures inside an
+// embedded WebContentsView, so the view's preload forwards the finger's
+// per-move delta here; main injects an equivalent mouseWheel into the SAME
+// view at the finger's position, scrolling whatever scrollable element sits
+// under it. sx/sy are physical screen px (like ViewRightdown); dx/dy are the
+// finger's movement since the previous step, same units.
+export interface ViewTouchScroll {
+  sx: number;
+  sy: number;
+  dx: number;
+  dy: number;
 }
 
 // ForwardedRightdown carries the press in window-content coordinates, which

@@ -380,6 +380,32 @@ export class WebviewRegistry {
     }
   }
 
+  // touchScroll injects one step of a single-finger drag as a mouseWheel into
+  // the view whose preload forwarded it (Chromium does not gesture-scroll raw
+  // touches inside an embedded WebContentsView — see urlview-preload.ts). The
+  // finger's screen position converts to view-local coords so the wheel lands
+  // on the scrollable element under the finger. Delta sign: the content
+  // follows the finger, like every touch surface — sendInputEvent's wheel
+  // convention makes that the finger's own delta, pinned by the capture
+  // harness's scroll assertion.
+  touchScroll(sender: WebContents, p: { sx: number; sy: number; dx: number; dy: number }): void {
+    for (const e of this.entries.values()) {
+      if (e.view.webContents !== sender) continue;
+      const cb = this.win.getContentBounds();
+      e.view.webContents.sendInputEvent({
+        type: 'mouseWheel',
+        x: p.sx - cb.x - e.bounds.x,
+        y: p.sy - cb.y - e.bounds.y,
+        deltaX: p.dx,
+        deltaY: p.dy,
+        // Precise (touchpad-style) deltas: the page tracks the finger 1:1
+        // instead of running the wheel's animated smoothing.
+        hasPreciseScrollingDeltas: true,
+      });
+      return;
+    }
+  }
+
   // applyMinWidthZoom keeps a narrow URL pane from reflowing the page to a
   // cramped (mobile) layout: below URL_MIN_LAYOUT_WIDTH we zoom the page out
   // so it still lays out at the min width and scales to fit, instead of
