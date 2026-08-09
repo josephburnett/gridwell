@@ -140,6 +140,10 @@ func open(dbPath string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pluginmeta open %s: %w", dbPath, err)
 	}
+	// One connection — the single-writer discipline every SQLite handle in
+	// this repo pins, so a pooled second connection can never race the file
+	// lock into an instant SQLITE_BUSY.
+	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _gridwell_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("pluginmeta schema: %w", err)

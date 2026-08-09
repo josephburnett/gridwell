@@ -87,6 +87,11 @@ func OpenDB(path string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sshhost: open %q: %w", path, err)
 	}
+	// SQLite is single-writer at the file level; one connection eliminates
+	// pool-vs-pool lock races (instant SQLITE_BUSY — there's no
+	// busy_timeout) and gives deterministic transaction interleaving. Same
+	// discipline as the store, fs, and proc.
+	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(connSchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("sshhost: init schema: %w", err)

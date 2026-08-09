@@ -155,3 +155,40 @@ func TestRootViewRoundTrip(t *testing.T) {
 		t.Fatalf("root view round trip: %v %v %v %v", cx, cy, zoom, err)
 	}
 }
+
+// TestConcurrentWritesNeverBusy reproduces the 2026-08-08 `make check` flake:
+// OpenDB used database/sql's default pool, so two pooled connections to the
+// one SQLite file raced the write lock, and with no busy_timeout the loser
+// failed instantly with SQLITE_BUSY — but only when the whole suite's load
+// stretched a transaction long enough for the overlap. The store, fs, and
+// proc all pin SetMaxOpenConns(1) for exactly this; this test makes the
+// overlap deliberate instead of load-dependent so the missing discipline
+// fails every run, not one run in twenty.
+func TestConcurrentWritesNeverBusy(t *testing.T) {
+	ctx := context.Background()
+	db, _ := openTestDB(t)
+
+	const workers = 8
+	errs := make(chan error, workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			for i := 0; i < 25; i++ {
+				c, err := db.Create(ctx, int64(i), 0, 1, 1, "hammer")
+				if err != nil {
+					errs <- err
+					return
+				}
+				if _, err := db.SetFraming(ctx, c.ID, 1, 2, 0.5); err != nil {
+					errs <- err
+					return
+				}
+			}
+			errs <- nil
+		}()
+	}
+	for w := 0; w < workers; w++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent write failed: %v", err)
+		}
+	}
+}
