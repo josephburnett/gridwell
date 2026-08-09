@@ -103,3 +103,29 @@ func BarInset(r pane.Rect, focused bool, barH float64) pane.Rect {
 	r.H -= barH
 	return r
 }
+
+// ModalCardPos places a modal card CENTERED ON THE ACTIVE PANE (issue #251)
+// rather than the screen: the pane you acted in is where the dialog appears.
+// Returns the card's top-left. Clamped so the card stays fully on-screen
+// (a small pane near an edge must not push the card off the window); when
+// the card is larger than the window on an axis, it pins to 0 so the
+// top-left — where the first input lives — stays reachable.
+func ModalCardPos(paneRect pane.Rect, cardW, cardH, winW, winH float64) (x, y float64) {
+	x = paneRect.X + paneRect.W/2 - cardW/2
+	y = paneRect.Y + paneRect.H/2 - cardH/2
+	x = clampAxis(x, cardW, winW)
+	y = clampAxis(y, cardH, winH)
+	return x, y
+}
+
+// clampAxis keeps [pos, pos+size] inside [0, limit], preferring 0 when size
+// exceeds limit.
+func clampAxis(pos, size, limit float64) float64 {
+	if pos+size > limit {
+		pos = limit - size
+	}
+	if pos < 0 {
+		pos = 0
+	}
+	return pos
+}

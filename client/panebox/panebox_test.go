@@ -172,3 +172,29 @@ func TestBarInset(t *testing.T) {
 		t.Fatal("degenerate rect must not go negative")
 	}
 }
+
+// Pane-centered modals (issue #251): the dialog appears where you acted.
+func TestModalCardPos_CentersOnThePane(t *testing.T) {
+	// Right half of a 1000×800 window; a 400×200 card.
+	r := pane.Rect{X: 500, Y: 0, W: 500, H: 800}
+	x, y := ModalCardPos(r, 400, 200, 1000, 800)
+	if x != 550 || y != 300 {
+		t.Errorf("pos = (%v,%v), want (550,300) — the pane's center", x, y)
+	}
+}
+
+func TestModalCardPos_ClampsToTheWindow(t *testing.T) {
+	// A narrow pane hugging the right edge: naive centering would push the
+	// card past the window; it must clamp flush instead.
+	r := pane.Rect{X: 900, Y: 700, W: 100, H: 100}
+	x, y := ModalCardPos(r, 400, 200, 1000, 800)
+	if x != 600 || y != 600 {
+		t.Errorf("pos = (%v,%v), want (600,600) — flush against the window edge", x, y)
+	}
+	// And never negative: a card wider than the window pins to 0 so the
+	// form's first field stays reachable.
+	x, y = ModalCardPos(r, 1200, 900, 1000, 800)
+	if x != 0 || y != 0 {
+		t.Errorf("oversized card pos = (%v,%v), want (0,0)", x, y)
+	}
+}

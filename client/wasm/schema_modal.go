@@ -141,6 +141,7 @@ func (a *App) openSchemaModal(title string, form *schemaform.Form, onSubmit func
 	card.Call("appendChild", btnRow)
 	modal.Call("appendChild", card)
 	modal.Get("style").Set("display", "flex")
+	a.centerCardOnActivePane(card)
 
 	var submitCb, cancelCb, keyCb, backdropCb js.Func
 	close := func() {

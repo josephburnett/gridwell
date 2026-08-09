@@ -102,6 +102,7 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 	input.Set("value", "")
 	errEl.Set("textContent", "")
 	modal.Get("classList").Call("add", "open")
+	a.centerCardOnActivePane(form) // the card IS the form element
 	input.Call("focus")
 	refreshSuggest() // empty input → most-recent few, so a pick is one key away
 
