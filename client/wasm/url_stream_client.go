@@ -321,7 +321,7 @@ func (a *App) liveOverlaysHidden() bool {
 	// hiding what you type (issue #131) — so it parks the views too. The
 	// rename input does NOT park anymore: it opens in the bottom bar (issue
 	// #213), outside every live view's rect.
-	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.urlModalOpen || a.schemaModalOpen || a.instPickerOpen
+	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.urlModalOpen || a.instPickerOpen
 }
 
 // isURLDescent reports whether pane p is currently descended into a URL

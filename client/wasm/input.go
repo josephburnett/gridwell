@@ -1391,12 +1391,6 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 			a.reportErr(errsurface.Info, "descend", "this well's plugin is not available")
 			return
 		}
-		// A still-unconfigured schema-kind tile (a connection well dropped
-		// bare — issue #209): the first descent is where the parameters get
-		// asked for.
-		if a.openConfigureTile(p, well) {
-			return
-		}
 		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
 		return
 	}
@@ -2212,12 +2206,7 @@ func (a *App) createPluginWellAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 
 // createWellAtCell fires CreateWell at the given cell. Footprint is 1×1.
 // Wells are created UNNAMED (naming happens from inside, via the name
-// bubble — issue #118) and UNCONFIGURED: even on a grid whose plugin
-// declares a creation schema (Grid.CreateSchemas, issue #198 — an ssh
-// connection's user/host), the drop commits immediately and the parameter
-// form opens on the first DESCENT instead (issue #209; a param-less
-// connection well is a legal, inert state — dashed and childless until its
-// params commit).
+// bubble — issue #118).
 func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	gid := a.gridIDForPane(p)
 	req := &rpc.CreateWellRequest{
@@ -2226,32 +2215,6 @@ func (a *App) createWellAtCell(p *pane.Pane, cellX, cellY int64) {
 	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateWell(ctx, req)
 	}, nil)
-}
-
-// openConfigureTile opens the creation-schema form for a still-unconfigured
-// tile on its first descent (issue #209: drop first, prompt on descent).
-// Submit commits the params as the tile's CONTENT — the plugin validates
-// authoritatively; a refusal surfaces and the empty tile stays visible and
-// deletable, never silent. Returns false when the tile's grid declares no
-// schema for its kind (the caller falls through to its generic notice);
-// true when the prompt opened or an unrenderable schema was surfaced.
-func (a *App) openConfigureTile(p *pane.Pane, t *rpc.Tile) bool {
-	gid := a.gridIDForPane(p)
-	form, ok := a.createSchemaFor(gid, t.Kind)
-	if !ok {
-		return true // unrenderable schema: already surfaced loudly
-	}
-	if form == nil {
-		return false
-	}
-	id, version := t.ID, t.Version
-	a.openSchemaModal("configure", form, func(params []byte) {
-		if len(params) == 0 {
-			return
-		}
-		go a.postWriteContent(gid, id, version, params)
-	}, nil)
-	return true
 }
 
 // createTextAtCell fires CreateText at the given cell with the given
@@ -2281,8 +2244,8 @@ func (a *App) createURLAtCell(p *pane.Pane, cellX, cellY int64) {
 }
 
 // openConfigureURL prompts for a bare url tile's address on its first
-// descent (issue #209) — the url twin of openConfigureTile, reusing the
-// url modal with its visited-url suggestions. Submit writes the address as
+// descent (issue #209: drop first, prompt on descent), reusing the url
+// modal with its visited-url suggestions. Submit writes the address as
 // the tile's content (the store's url arm: versioned, validated, bumps) and
 // then descends, so the fill-in flows straight into the page. EVERY descent
 // goes live (issue #202), so no special go-live handling.

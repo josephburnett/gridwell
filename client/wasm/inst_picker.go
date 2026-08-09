@@ -80,6 +80,65 @@ func (a *App) openPluginVisitPicker(p *pane.Pane, well *rpc.Tile, pl rpc.PluginI
 	}, nil)
 }
 
+// buildSchemaFieldRows appends one labeled input row per schema field to
+// card and returns the inputs by field name — the one rendering of a
+// creation schema (the picker's new-instance form is its only consumer
+// since the configure-on-descent modal was retired with #251's flip).
+func buildSchemaFieldRows(doc js.Value, card js.Value, form *schemaform.Form) map[string]js.Value {
+	inputs := map[string]js.Value{}
+	for _, fd := range form.Fields {
+		row := doc.Call("createElement", "label")
+		rs := row.Get("style")
+		rs.Set("display", "block")
+		rs.Set("margin", "6px 0")
+		lbl := fd.Title
+		if fd.Required {
+			lbl += " *"
+		}
+		span := doc.Call("createElement", "span")
+		span.Set("textContent", lbl)
+		span.Get("style").Set("display", "inline-block")
+		span.Get("style").Set("minWidth", "110px")
+		row.Call("appendChild", span)
+		var in js.Value
+		if len(fd.Enum) > 0 {
+			in = doc.Call("createElement", "select")
+			empty := doc.Call("createElement", "option")
+			empty.Set("value", "")
+			empty.Set("textContent", "")
+			in.Call("appendChild", empty)
+			for _, e := range fd.Enum {
+				opt := doc.Call("createElement", "option")
+				opt.Set("value", e)
+				opt.Set("textContent", e)
+				in.Call("appendChild", opt)
+			}
+		} else {
+			in = doc.Call("createElement", "input")
+			switch {
+			case fd.Secret:
+				in.Set("type", "password") // masks INPUT only (schemaform doc)
+			case fd.Type == "number":
+				in.Set("type", "number")
+			default:
+				in.Set("type", "text")
+			}
+		}
+		in.Set("name", fd.Name)
+		is := in.Get("style")
+		is.Set("background", "#1a1b20")
+		is.Set("color", colorPlusFg)
+		is.Set("border", "1px solid "+colorPaneBorder)
+		is.Set("borderRadius", "4px")
+		is.Set("padding", "3px 6px")
+		is.Set("width", "170px")
+		row.Call("appendChild", in)
+		card.Call("appendChild", row)
+		inputs[fd.Name] = in
+	}
+	return inputs
+}
+
 // instPickerEl lazily creates the shared modal container.
 func (a *App) instPickerEl() js.Value {
 	if a.instPicker.Truthy() {
