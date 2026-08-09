@@ -307,6 +307,15 @@ type App struct {
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
 
+	// instPicker is the lazily-created instance-picker container (issue
+	// #251); instPickerOpen gates re-entry and parks live views;
+	// instPickerFuncs collects the current render's js callbacks so a
+	// re-render or close releases them (the no-leak discipline every
+	// modal here follows).
+	instPicker      js.Value
+	instPickerOpen  bool
+	instPickerFuncs []js.Func
+
 	// lastTextareaTileID tracks which text-tile id the singleton
 	// textarea is currently bound to (i.e., whose blob it holds in its
 	// value). "" means "bound to nothing" (textarea is hidden or never
