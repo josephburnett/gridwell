@@ -9,7 +9,6 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
-	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 
@@ -55,20 +54,14 @@ func RunInit(args []string) int {
 		fmt.Fprintln(os.Stderr, "init: --kind and --name are required")
 		return 2
 	}
-	// Kind-specific config validation, BEFORE anything is minted or written.
-	// An ssh plugin with broken keys would otherwise register fine and then
-	// die at first spawn as a cryptic subprocess exit; the required-key rule
-	// has one owner (sshdial.FromPluginConfig) — init just asks it early.
-	// Since #199 the no-config form is CONNECTIONS MODE (remotes are wells
-	// the user drops, params as content), so validation applies only when a
-	// config-pinned mount is being described (any of its keys present).
-	// (fs is deliberately not gated: no config.root is the valid Rootless
-	// state, visible on the node grid, fixable later.)
+	// Connections are DATA, never config (#199, #251): an ssh plugin takes
+	// no connection keys — machines are added from inside Gridwell (drag
+	// the ssh plugin onto a grid, fill in the picker). Refuse the retired
+	// config-pinned shape up front; old server.yaml entries that predate
+	// this are migrated automatically by `gridwell serve`.
 	if *kind == "ssh" && sshConfigPinned(conf) {
-		if _, err := sshdial.FromPluginConfig(conf); err != nil {
-			fmt.Fprintf(os.Stderr, "init: %v\n", err)
-			return 2
-		}
+		fmt.Fprintln(os.Stderr, "init: ssh connection config keys are retired (#251) — connections are data: register the plugin with no config, then add machines from inside Gridwell")
+		return 2
 	}
 
 	home, err := config.Home()
@@ -117,12 +110,12 @@ func RunInit(args []string) int {
 	return 0
 }
 
-// sshConfigPinned reports whether an ssh plugin's config describes a
-// config-pinned single-host mount (the pre-#199 shape). Any of the mount
-// keys present selects it — a PARTIAL set is then a validation error, not a
-// silent fall-through to connections mode that would strand the typo'd keys.
+// sshConfigPinned reports whether an ssh plugin's config carries any of the
+// retired connection keys (the pre-#199 config-pinned shape, removed with
+// #251). Any key present is refused — a PARTIAL set must not silently
+// strand typo'd keys either.
 func sshConfigPinned(conf map[string]string) bool {
-	for _, k := range []string{"host", "user", "key", "known_hosts", "addr", "remote_plugin"} {
+	for _, k := range sshConnKeys {
 		if conf[k] != "" {
 			return true
 		}

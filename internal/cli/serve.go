@@ -203,6 +203,14 @@ func RunServe(args []string) int {
 		return 1
 	}
 
+	// The #251 config→data migration runs before anything spawns: an ssh
+	// entry still carrying connection config keys becomes a connection row
+	// in its plugin's DB and the keys leave server.yaml.
+	if err := migrateSSHConfigConnections(home, cfgPath); err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
+
 	// The config is mandatory and authoritative: it lists every plugin and the
 	// id+kind the server verifies against each DB. No synthesized fallback.
 	cfg, err := buildServeConfig(home, cfgPath)

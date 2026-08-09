@@ -229,24 +229,3 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 }
-
-func TestFromPluginConfigNamesEveryMissingKey(t *testing.T) {
-	_, err := sshdial.FromPluginConfig(map[string]string{"host": "h:22"})
-	if err == nil {
-		t.Fatalf("want error for missing keys")
-	}
-	// The exact missing-key list: every absent key named, the provided one not.
-	msg := err.Error()
-	list := msg[strings.Index(msg, ": ")+2:]
-	if list != "user, key, known_hosts, addr" {
-		t.Errorf("missing keys = %q, want %q", list, "user, key, known_hosts, addr")
-	}
-	// A complete config passes; an obsolete remote_plugin key is tolerated
-	// (warned, not fatal) so yesterday's configs keep starting.
-	if _, err := sshdial.FromPluginConfig(map[string]string{
-		"host": "h:22", "user": "u", "key": "/k", "known_hosts": "/kh", "addr": "127.0.0.1:8080",
-		"remote_plugin": "obsolete",
-	}); err != nil {
-		t.Fatalf("complete config rejected: %v", err)
-	}
-}

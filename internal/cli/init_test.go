@@ -70,27 +70,28 @@ func TestRunInitRequiresKindAndName(t *testing.T) {
 	}
 }
 
-// TestRunInitSSHCarriesConfig proves init works for a transport kind too: the
-// DB is created with kind=ssh and the --config pairs land in the entry.
-func TestRunInitSSHCarriesConfig(t *testing.T) {
+// TestRunInitSSHRefusesConnectionConfig: connections are data (#251) — the
+// retired config-pinned keys are refused at init, with the plain no-config
+// registration still working for the transport kind.
+func TestRunInitSSHRefusesConnectionConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	rc := RunInit([]string{"--kind", "ssh", "--name", "remote",
-		"--config", "host=example.com:22", "--config", "user=joe",
-		"--config", "key=/home/joe/.ssh/id_ed25519",
-		"--config", "known_hosts=/home/joe/.ssh/known_hosts",
-		"--config", "addr=127.0.0.1:8080"})
+	if rc := RunInit([]string{"--kind", "ssh", "--name", "remote",
+		"--config", "host=example.com:22", "--config", "user=joe"}); rc == 0 {
+		t.Fatal("init ssh with connection config keys must be refused")
+	}
+	rc := RunInit([]string{"--kind", "ssh", "--name", "remote"})
 	if rc != 0 {
-		t.Fatalf("init ssh returned %d", rc)
+		t.Fatalf("plain init ssh returned %d", rc)
 	}
 	cfg, err := config.Load(filepath.Join(home, "server.yaml"))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	p := cfg.Plugins[0]
-	if p.Kind != "ssh" || p.Config["host"] != "example.com:22" || p.Config["user"] != "joe" {
-		t.Fatalf("ssh entry: %+v", p)
+	if p.Kind != "ssh" || len(p.Config) != 0 {
+		t.Fatalf("ssh entry: %+v, want kind ssh with no config", p)
 	}
 	m, _ := pluginmeta.Verify(config.DBFile(home, p.ID), "", "")
 	if m.Kind != "ssh" {
@@ -98,22 +99,20 @@ func TestRunInitSSHCarriesConfig(t *testing.T) {
 	}
 }
 
-// TestRunInitSSHValidatesConfigUpFront: an ssh plugin missing required config
-// keys must fail AT INIT with every missing key named — not later, as a
-// cryptic subprocess exit when the server first spawns the plugin binary.
-// Nothing may be written: no server.yaml entry, no DB directory.
-func TestRunInitSSHValidatesConfigUpFront(t *testing.T) {
+// TestRunInitSSHRefusalWritesNothing: a refused ssh init (retired connection
+// keys, #251) must leave no trace — no server.yaml entry, no DB directory.
+func TestRunInitSSHRefusalWritesNothing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
 	rc := RunInit([]string{"--kind", "ssh", "--name", "remote", "--config", "host=example.com:22"})
 	if rc == 0 {
-		t.Fatalf("init ssh with missing config keys succeeded")
+		t.Fatalf("init ssh with a connection config key succeeded")
 	}
 	if _, err := os.Stat(filepath.Join(home, "server.yaml")); !os.IsNotExist(err) {
-		t.Errorf("server.yaml written despite invalid config")
+		t.Errorf("server.yaml written despite the refusal")
 	}
 	if _, err := os.Stat(filepath.Join(home, "db")); !os.IsNotExist(err) {
-		t.Errorf("db dir created despite invalid config")
+		t.Errorf("db dir created despite the refusal")
 	}
 }

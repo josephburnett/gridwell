@@ -31,7 +31,7 @@ type directTCPIP struct {
 }
 
 // Creds is everything a dialer needs to reach the test sshd: the file paths
-// FromPluginConfig-style config wants, plus the sshd's address.
+// connection params document wants, plus the sshd's address.
 type Creds struct {
 	Addr           string // the sshd's "host:port"
 	KeyPath        string // client private key file

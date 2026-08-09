@@ -1,11 +1,12 @@
 // Package proxy is a transparent Gridwell node: a GridwellServer that forwards
 // every RPC — unary, server-stream, client-stream, and the bidirectional
-// OpenShell — to a remote GridwellClient with full fidelity. It is what makes
-// "remote" work: the ssh plugin wraps one of these around a connection tunneled
-// to a remote gridwell node, so a remote plugin's entire service (incl. live
-// shell PTY and the session blob) reaches the local server over the same
-// interface as a local plugin. The transport (SSH, in-process, …) is supplied
-// as the client; this package is pure forwarding.
+// OpenShell — to a remote GridwellClient with full fidelity.
+//
+// TEST HARNESS ONLY since the #251 removal of the config-pinned ssh mode
+// (its one production consumer): the internal/server transit seam tests wrap
+// an in-process remote in one of these to exercise the server's chain
+// qualification without standing up sshhost + an sshd. Production forwarding
+// through a connection lives in sshhost's own per-connection routing.
 package proxy
 
 import (

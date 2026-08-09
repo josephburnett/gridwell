@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,37 +36,6 @@ type Config struct {
 	KeyPath    string // private key file
 	KnownHosts string // known_hosts file (mandatory — no blind trust)
 	Addr       string // the remote node's HTTP/h2c address AS SEEN ON THE REMOTE HOST (e.g. its `bind:`, 127.0.0.1:8080)
-}
-
-// FromPluginConfig validates the plugin's server.yaml config map. Every
-// missing key is named in one error so a misconfiguration reads as a recipe,
-// not a scavenger hunt. A leftover remote_plugin key (the pre-node-mount
-// design selected one remote plugin) is reported as obsolete rather than
-// silently ignored — the mount is the whole node now.
-func FromPluginConfig(cfg map[string]string) (Config, error) {
-	c := Config{
-		Host:       cfg["host"],
-		User:       cfg["user"],
-		KeyPath:    cfg["key"],
-		KnownHosts: cfg["known_hosts"],
-		Addr:       cfg["addr"],
-	}
-	var missing []string
-	for _, kv := range []struct{ k, v string }{
-		{"host", c.Host}, {"user", c.User}, {"key", c.KeyPath},
-		{"known_hosts", c.KnownHosts}, {"addr", c.Addr},
-	} {
-		if kv.v == "" {
-			missing = append(missing, kv.k)
-		}
-	}
-	if len(missing) > 0 {
-		return Config{}, fmt.Errorf("ssh plugin config missing required keys: %s", strings.Join(missing, ", "))
-	}
-	if _, ok := cfg["remote_plugin"]; ok {
-		fmt.Fprintln(os.Stderr, "gridwell-ssh: config key remote_plugin is obsolete and ignored — the mount is the whole remote node; descend into it to reach every remote plugin")
-	}
-	return c, nil
 }
 
 // redialer is THE owner of "is the ssh session up" — the fact that used to

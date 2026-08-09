@@ -168,31 +168,81 @@ func TestFederationSpawn(t *testing.T) {
 	// test uses, here with the PRODUCTION gridwell-ssh dialing it).
 	creds := sshdialtest.Server(t, t.TempDir())
 
-	// Local node: one localdb + the ssh mount.
+	// Local node: one localdb + the ssh plugin. The connection is written as
+	// an OLD-STYLE config-pinned entry (the retired pre-#251 shape, appended
+	// to server.yaml by hand exactly as an old install would have it — init
+	// refuses these keys now), so this test crosses the #251 config→data
+	// MIGRATION with the production binaries: `gridwell serve` must import
+	// the entry as a named connection and strip the keys from the file.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "localdb", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "rtb",
-		"--config", "host="+creds.Addr, "--config", "user=joe",
-		"--config", "key="+creds.KeyPath, "--config", "known_hosts="+creds.KnownHostsPath,
-		"--config", "addr="+remoteAddr)
+	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "rtb")
+	cfgPath := filepath.Join(localHome, "server.yaml")
+	cfgRaw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStyle := strings.Replace(string(cfgRaw), "kind: ssh\n",
+		"kind: ssh\n      config:\n"+
+			"        host: "+creds.Addr+"\n"+
+			"        user: joe\n"+
+			"        key: "+creds.KeyPath+"\n"+
+			"        known_hosts: "+creds.KnownHostsPath+"\n"+
+			"        addr: "+remoteAddr+"\n", 1)
+	if oldStyle == string(cfgRaw) {
+		t.Fatalf("failed to write the old-style ssh entry into:\n%s", cfgRaw)
+	}
+	if err := os.WriteFile(cfgPath, []byte(oldStyle), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The ssh plugin SPAWNED and mounted the whole node: its root is the
-	//    remote's node grid, a chained id.
+	// 1. The migration ran: the yaml lost the connection keys; the plugin
+	//    spawned PARAMETERIZED (no root, an instance grid); the instance
+	//    grid holds one connection named rtb whose child — the remote's
+	//    node grid, learned through the real tunnel — is the chained
+	//    <ssh>/<conn>/<rnode>/0 mount root the rest of this test drives.
+	migrated, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(migrated), "host:") {
+		t.Fatalf("server.yaml still carries connection config after the boot migration:\n%s", migrated)
+	}
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	var sshRoot, homeRoot string
+	var instGrid, homeRoot string
 	for _, p := range lp["plugins"].([]any) {
 		pm := p.(map[string]any)
 		switch pm["label"] {
 		case "rtb":
-			sshRoot, _ = pm["rootGridId"].(string)
+			instGrid, _ = pm["instanceGridId"].(string)
+			if root, _ := pm["rootGridId"].(string); root != "" {
+				t.Fatalf("ssh rootGridId = %q, want empty (parameterized)", root)
+			}
 		case "home":
 			homeRoot, _ = pm["rootGridId"].(string)
 		}
 	}
-	if strings.Count(sshRoot, "/") != 2 {
-		t.Fatalf("ssh mount root = %q, want a chained <ssh>/<rnode>/0 id — did gridwell-ssh spawn?", sshRoot)
+	if instGrid == "" {
+		t.Fatal("ssh plugin declared no instance grid — did the flip + spawn happen?")
+	}
+	var sshRoot string
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) && sshRoot == "" {
+		ig := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": instGrid})
+		for _, ti := range ig["tiles"].([]any) {
+			tm := ti.(map[string]any)
+			if tm["altText"] == "rtb" {
+				sshRoot, _ = tm["childGridId"].(string)
+			}
+		}
+		if sshRoot == "" {
+			time.Sleep(300 * time.Millisecond)
+		}
+	}
+	if strings.Count(sshRoot, "/") != 3 {
+		t.Fatalf("migrated connection child = %q, want the chained <ssh>/<conn>/<rnode>/0 id learned through the tunnel", sshRoot)
 	}
 
 	// 2. The remote node grid lists both remote plugins through the tunnel.
@@ -326,7 +376,9 @@ func TestFederationSpawn(t *testing.T) {
 		}
 	}()
 
-	// The remote-direct ids are the chained ids with the ssh hop peeled.
+	// The remote-direct ids are the chained ids with the ssh plugin AND
+	// connection hops peeled (two segments since the #251 migration turned
+	// the mount into a connection).
 	peel := func(id string) string { return strings.SplitN(id, "/", 2)[1] }
 	// protojson omits zero fields, so a fresh tile's "version" key is absent.
 	txtID := txt["id"].(string)
@@ -348,7 +400,7 @@ func TestFederationSpawn(t *testing.T) {
 			// The foreign writer speaks the one content write, directly
 			// against the REMOTE node (another device, not this mount).
 			wt, werr := gwrpc.NewDefaultClient(remoteOrigin).WriteContent(
-				context.Background(), peel(txtID), version, []byte(body))
+				context.Background(), peel(peel(txtID)), version, []byte(body))
 			if werr != nil {
 				t.Fatalf("remote WriteContent: %v", werr)
 			}
