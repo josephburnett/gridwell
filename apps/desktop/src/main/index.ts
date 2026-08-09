@@ -43,7 +43,9 @@ const MIRROR_INTERVAL_MS = 250;
 //   2. open the root window pointing at the sidecar's loopback origin
 //   3. tear the sidecar down on quit
 //
-// Single-tenant, loopback-only: there is no remote endpoint and no auth.
+// Single-tenant. A server.yaml password gates OTHER browsers on a shared
+// origin; this window authenticates itself from the serve banner's token
+// (see boot below) and never prompts.
 
 let sidecar: Sidecar | null = null;
 let registry: WebviewRegistry | null = null;
@@ -98,6 +100,23 @@ async function boot(): Promise<void> {
     dialog.showErrorBox('Gridwell failed to start', message);
     app.exit(1);
     return;
+  }
+  // A configured web-UI password (server.yaml password:) must never prompt
+  // THIS window — the gate is for other browsers on a shared origin. The
+  // serve banner carries the derived auth token; set it as the cookie the
+  // server checks, before the window's first load. Cookies scope by host,
+  // not port, so it also survives the ephemeral-port churn across launches.
+  if (sidecar.auth) {
+    await session.defaultSession.cookies.set({
+      url: sidecar.origin,
+      name: 'gridwell_auth',
+      value: sidecar.auth,
+      // Mirror the server's own cookie shape (server/auth.go): 400 days,
+      // the longest browsers honor; re-set on every boot anyway.
+      expirationDate: Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60,
+      httpOnly: true,
+      sameSite: 'lax',
+    });
   }
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;

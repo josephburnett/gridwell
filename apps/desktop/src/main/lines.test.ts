@@ -27,6 +27,19 @@ test('parseServingLine extracts the bound address from the serve banner', () => 
   });
 });
 
+test('parseServingLine extracts the auth token when a password is configured', () => {
+  const token = 'a'.repeat(64);
+  assert.deepEqual(
+    parseServingLine(`gridwell: serving on 100.64.0.7:8080 (static=./web plugins=2 auth=${token})`),
+    { host: '100.64.0.7', port: 8080, auth: token },
+  );
+  // A non-token-shaped auth= is ignored rather than trusted.
+  assert.deepEqual(
+    parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1 auth=nope)'),
+    { host: '127.0.0.1', port: 8099 },
+  );
+});
+
 test('parseServingLine rejects every other line', () => {
   assert.equal(parseServingLine('gridwell: opening sqlite store at /x/gridwell.db'), null);
   assert.equal(parseServingLine('gridwell: orphan cleanup killed 1 stale shell session(s)'), null);

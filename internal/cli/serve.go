@@ -80,12 +80,12 @@ func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault st
 }
 
 // bindWarning returns a prominent startup warning when addr exposes the server
-// beyond loopback, or "" when the bind is loopback-only. Gridwell's API has no
-// authentication: anyone who can reach the port can read and write every tile,
-// open live shell PTYs on this machine, and copy plugin session blobs — so a
-// non-loopback bind should be a VPN-only address (e.g. a Tailscale IP), never
-// 0.0.0.0 on an untrusted network.
-func bindWarning(addr string) string {
+// beyond loopback, or "" when the bind is loopback-only. Without a password
+// the whole API is open; with one, the browser surface is gated but the gRPC
+// node export sharing the port (federation, the shell PTY relay) is not — so
+// either way a non-loopback bind should be a VPN-only address (e.g. a
+// Tailscale IP), never 0.0.0.0 on an untrusted network.
+func bindWarning(addr string, hasPassword bool) string {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr // no port part — judge the host as given
@@ -96,10 +96,32 @@ func bindWarning(addr string) string {
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return ""
 	}
+	if hasPassword {
+		return fmt.Sprintf(`gridwell: WARNING: listening on %s — this is NOT a loopback address.
+gridwell: WARNING: the web UI requires the configured password, but the gRPC node export
+gridwell: WARNING: on the same port is UNAUTHENTICATED: anyone who can reach that address
+gridwell: WARNING: can read and write every tile and open live shell PTYs on this machine.
+gridwell: WARNING: bind a VPN-only address (e.g. your Tailscale IP), never an open network.`, addr)
+	}
 	return fmt.Sprintf(`gridwell: WARNING: listening on %s — this is NOT a loopback address.
 gridwell: WARNING: the API is UNAUTHENTICATED: anyone who can reach that address can read
 gridwell: WARNING: and write every tile and open live shell PTYs on this machine.
-gridwell: WARNING: bind a VPN-only address (e.g. your Tailscale IP), never an open network.`, addr)
+gridwell: WARNING: bind a VPN-only address (e.g. your Tailscale IP), never an open network.
+gridwell: WARNING: (set password: in server.yaml to at least gate the web UI.)`, addr)
+}
+
+// servingBanner is the one-line boot contract with the desktop sidecar
+// (apps/desktop/src/main/lines.ts parses it): the ACTUAL bound address,
+// printed only once Listen has succeeded. With a password configured it also
+// carries the derived auth token (server.AuthToken — the cookie value), so
+// the sidecar can authenticate its own window without ever prompting: local
+// stdout is same-trust as server.yaml, which holds the password itself.
+func servingBanner(addr, staticDir string, plugins int, password string) string {
+	if password == "" {
+		return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d)", addr, staticDir, plugins)
+	}
+	return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d auth=%s)",
+		addr, staticDir, plugins, server.AuthToken(password))
 }
 
 // buildServeConfig loads the mandatory server.yaml at cfgPath and prepares it
@@ -258,6 +280,8 @@ func RunServe(args []string) int {
 		// The landing page's viewport survives restarts in a small state
 		// file beside the config ("things stay as you left them").
 		NodeStatePath: filepath.Join(home, "node-view.json"),
+		// The browser surface's password gate (server/auth.go). Empty = open.
+		Password: cfg.Password,
 	})
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
@@ -287,10 +311,10 @@ func RunServe(args []string) int {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
-	if w := bindWarning(ln.Addr().String()); w != "" {
+	if w := bindWarning(ln.Addr().String(), cfg.Password != ""); w != "" {
 		fmt.Fprintln(os.Stderr, w)
 	}
-	fmt.Printf("gridwell: serving on %s (static=%s plugins=%d)\n", ln.Addr(), cfg.StaticDir, len(cfg.Plugins))
+	fmt.Println(servingBanner(ln.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Password))
 
 	errCh := make(chan error, 1)
 	go func() {

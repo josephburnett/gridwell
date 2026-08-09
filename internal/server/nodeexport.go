@@ -35,17 +35,20 @@ import (
 
 // NodeHandler wraps the server's HTTP mux in h2c and routes gRPC to the node
 // export. One port then serves every caller: browsers / the Electron shell
-// (HTTP/1.1 Connect, WS, static) hit the mux; raw gRPC (a remote mounter's
-// tunnel) hits the export.
+// (HTTP/1.1 Connect, WS, static) hit the mux — behind the password gate when
+// one is configured (auth.go); raw gRPC (a remote mounter's tunnel, the
+// Electron shell PTY relay) hits the export, which the gate deliberately
+// does not cover — federation's transport trust model is the VPN-only bind.
 func (s *Server) NodeHandler() http.Handler {
 	g := grpc.NewServer()
 	pb.RegisterGridwellServer(g, &nodeExport{srv: s, h: newConnectHandler(s)})
+	browser := s.authWrap(s.mux)
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			g.ServeHTTP(w, r)
 			return
 		}
-		s.mux.ServeHTTP(w, r)
+		browser.ServeHTTP(w, r)
 	})
 	return h2c.NewHandler(root, &http2.Server{})
 }

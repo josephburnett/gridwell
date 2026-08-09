@@ -141,11 +141,22 @@ then run `gridwell serve`. In a browser, live url tiles stay frozen.
 Everything else — grids, text, wells, live shells, navigation — works,
 touch included.
 
-Note: **the API is unauthenticated.** Anyone who can reach the bound
-address can read and write every tile and open shells on your machine. Bind
-loopback or a VPN-only address (Tailscale is the intended transport), never
-an open interface. `gridwell serve` warns loudly when the bind is not
-loopback.
+The browser UI can require a password — add one to `server.yaml`:
+
+```yaml
+password: "something long"
+```
+
+A browser gets a login page once, then holds a cookie that never expires —
+but the cookie is checked against the *current* password, so changing the
+password signs every browser out. The desktop app never prompts: it
+authenticates its own window automatically.
+
+Note: the password gates only the web UI. **The gRPC node export on the
+same port (federation, shell transport) is unauthenticated**, as is
+everything when no password is set. Bind loopback or a VPN-only address
+(Tailscale is the intended transport), never an open interface. `gridwell
+serve` warns loudly when the bind is not loopback.
 
 To mount remote nodes, the remote just runs `gridwell serve` on loopback.
 On the mounting machine, register the ssh plugin once:

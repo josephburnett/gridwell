@@ -88,6 +88,39 @@ func TestAppendPlugin(t *testing.T) {
 	}
 }
 
+// TestPasswordRoundTrip pins two facts about the web-UI password: it loads
+// from server.yaml, and it SURVIVES the config rewriters (AppendPlugin /
+// EnsureNodeID re-marshal the whole struct — a field without a yaml tag
+// would be silently dropped on the first `gridwell init` after the user set
+// a password).
+func TestPasswordRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "server.yaml")
+	if err := os.WriteFile(path, []byte("password: \"hunter2\"\nplugins:\n  - id: id-a\n    name: home\n    kind: localdb\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Password != "hunter2" {
+		t.Fatalf("password: got %q, want hunter2", cfg.Password)
+	}
+	if err := AppendPlugin(home, PluginConfig{ID: "id-b", Name: "files", Kind: "fs"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if _, err := EnsureNodeID(home, func() string { return "n0deidx" }); err != nil {
+		t.Fatalf("ensure node id: %v", err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if cfg.Password != "hunter2" {
+		t.Fatalf("password dropped by a config rewrite: got %q", cfg.Password)
+	}
+}
+
 func TestLoad_full(t *testing.T) {
 	dir := t.TempDir()
 	yml := `

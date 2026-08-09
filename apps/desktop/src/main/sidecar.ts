@@ -10,6 +10,10 @@ export interface Sidecar {
   // (e.g. a Tailscale IP shared with a phone browser).
   port: number;
   origin: string;
+  // The web-UI auth token from the banner, when server.yaml sets a password.
+  // index.ts pre-sets it as the auth cookie so this window never prompts —
+  // the password gate is for OTHER browsers reaching the shared origin.
+  auth?: string;
   child: ChildProcess;
   stop: () => void;
 }
@@ -82,7 +86,7 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
       if (served) {
         settled = true;
         clearTimeout(timer);
-        resolve({ port: served.port, origin: windowOrigin(served), child, stop });
+        resolve({ port: served.port, origin: windowOrigin(served), auth: served.auth, child, stop });
       }
     };
 

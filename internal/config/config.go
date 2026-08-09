@@ -31,9 +31,17 @@ type ServerConfig struct {
 	// address in server.yaml" from "Bind holds the built-in default", which is
 	// what lets `serve --bind-default` (the desktop sidecar's ephemeral
 	// loopback port) fill in only when the config is silent.
-	BindSet   bool           `yaml:"-"`
-	StaticDir string         `yaml:"static,omitempty"` // "" → headless (no static files served)
-	Plugins   []PluginConfig `yaml:"plugins"`
+	BindSet   bool   `yaml:"-"`
+	StaticDir string `yaml:"static,omitempty"` // "" → headless (no static files served)
+	// Password, when non-empty, gates the browser-served web UI: every HTTP
+	// request must carry the auth cookie (obtained by entering this password
+	// on the login page), and the cookie is checked against the CURRENT
+	// password — change it and every browser must log in again. Plaintext by
+	// design (single-tenant; the file is the secret). The desktop app
+	// authenticates itself from the serve banner and never prompts, and the
+	// gRPC node export (federation) is not gated — see server/auth.go.
+	Password string         `yaml:"password,omitempty"`
+	Plugins  []PluginConfig `yaml:"plugins"`
 }
 
 // PluginConfig describes one plugin instance. ID is the UUID assigned once

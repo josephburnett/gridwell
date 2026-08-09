@@ -47,6 +47,16 @@ test('resolves on the serving banner with the ANNOUNCED address, not the request
   assert.deepEqual(child.signals, ['SIGTERM']);
 });
 
+test('passes the banner auth token through so the window can authenticate', async () => {
+  const child = new FakeChild();
+  const p = boot(child);
+  const token = 'b'.repeat(64);
+  child.stdout.write(`gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1 auth=${token})\n`);
+  const sc = await p;
+  assert.equal(sc.auth, token, 'index.ts pre-sets this as the auth cookie — no prompt in the desktop app');
+  sc.stop();
+});
+
 test('rejects with the exit cause when the child dies before announcing', async () => {
   const child = new FakeChild();
   const p = boot(child);

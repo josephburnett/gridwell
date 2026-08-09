@@ -6,8 +6,9 @@
 // main process's gRPC OpenShell stream against the node export — the
 // browser-facing surface is pure Connect.
 //
-// Single-tenant: no auth, no sessions, no cookies. Callers should bind
-// the listener to loopback only.
+// Single-tenant. The browser surface can be gated behind the server.yaml
+// password (auth.go: one cookie derived from the current password); the
+// gRPC node export is not gated — bind loopback or a VPN-only address.
 package server
 
 import (
@@ -39,6 +40,9 @@ type Config struct {
 	// restart — the landing page stays as you left it. Empty = in-memory
 	// only (tests).
 	NodeStatePath string
+	// Password, when non-empty, gates the browser surface (the mux) behind
+	// the login-page cookie — see auth.go. Empty = open (today's behavior).
+	Password string
 }
 
 // Server is the wired-up HTTP server. It holds NO Gridwell state of its own —

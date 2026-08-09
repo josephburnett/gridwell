@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/server"
 )
 
 func TestReorderFlagsFirst(t *testing.T) {
@@ -116,25 +117,47 @@ func TestResolveBind(t *testing.T) {
 }
 
 // TestBindWarning pins the exposure warning: a non-loopback bind must produce
-// a prominent notice (the API is unauthenticated — every byte, including live
-// shell PTYs, is open on that interface), and a loopback bind must not.
+// a prominent notice (without a password every byte is open on that
+// interface; with one, the gRPC node export still is), and a loopback bind
+// must not, either way.
 func TestBindWarning(t *testing.T) {
 	loopback := []string{"127.0.0.1:8080", "127.1.2.3:9000", "[::1]:8080", "localhost:8080"}
 	for _, addr := range loopback {
-		if w := bindWarning(addr); w != "" {
-			t.Errorf("bindWarning(%q) = %q, want none (loopback)", addr, w)
+		for _, hasPW := range []bool{false, true} {
+			if w := bindWarning(addr, hasPW); w != "" {
+				t.Errorf("bindWarning(%q, %v) = %q, want none (loopback)", addr, hasPW, w)
+			}
 		}
 	}
 	exposed := []string{"0.0.0.0:8080", "[::]:8080", ":8080", "100.64.0.7:8080", "192.168.1.5:8080"}
 	for _, addr := range exposed {
-		w := bindWarning(addr)
+		w := bindWarning(addr, false)
 		if w == "" {
-			t.Errorf("bindWarning(%q) = none, want a warning (non-loopback)", addr)
+			t.Errorf("bindWarning(%q, false) = none, want a warning (non-loopback)", addr)
 			continue
 		}
 		if !strings.Contains(w, addr) || !strings.Contains(strings.ToLower(w), "unauthenticated") {
-			t.Errorf("bindWarning(%q) should name the address and say the API is unauthenticated; got %q", addr, w)
+			t.Errorf("bindWarning(%q, false) should name the address and say the API is unauthenticated; got %q", addr, w)
 		}
+		wp := bindWarning(addr, true)
+		if wp == "" || !strings.Contains(wp, addr) || !strings.Contains(wp, "node export") {
+			t.Errorf("bindWarning(%q, true) should still warn about the ungated node export; got %q", addr, wp)
+		}
+	}
+}
+
+// TestServingBanner pins the sidecar boot contract (lines.ts parses this):
+// the address leads, and a configured password rides along as the derived
+// auth token so the desktop window can authenticate without prompting.
+func TestServingBanner(t *testing.T) {
+	plain := servingBanner("127.0.0.1:8080", "./web", 2, "")
+	if plain != "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2)" {
+		t.Errorf("bare banner drifted: %q", plain)
+	}
+	withPW := servingBanner("127.0.0.1:8080", "./web", 2, "hunter2")
+	want := "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2 auth=" + server.AuthToken("hunter2") + ")"
+	if withPW != want {
+		t.Errorf("auth banner = %q, want %q", withPW, want)
 	}
 }
 

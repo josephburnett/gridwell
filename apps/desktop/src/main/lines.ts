@@ -5,15 +5,19 @@
 // ServingAddr is the address announced by the serve banner. host is the raw
 // listener host: it may be a wildcard ("0.0.0.0", "::", or "") — Go announces
 // a wildcard bind as its dual-stack listener address "[::]:<port>".
+// auth, when present, is the web-UI auth token (server.AuthToken — the value
+// of the gridwell_auth cookie): the server prints it when server.yaml sets a
+// password, so this window can authenticate without prompting.
 export interface ServingAddr {
   host: string;
   port: number;
+  auth?: string;
 }
 
 // parseServingLine extracts the bound address from the serve banner, or null
 // for any other line. This is the boot contract with `gridwell serve`
-// (internal/cli/serve.go): the server prints
-//   "gridwell: serving on <host>:<port> (static=... plugins=N)"
+// (internal/cli/serve.go servingBanner): the server prints
+//   "gridwell: serving on <host>:<port> (static=... plugins=N [auth=<hex>])"
 // with the listener's ACTUAL bound address, only once Listen has succeeded.
 // The server — not this spawner — owns the "where am I listening" fact,
 // because server.yaml `bind:` may override the sidecar's --bind-default
@@ -28,7 +32,8 @@ export function parseServingLine(line: string): ServingAddr | null {
   if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
   let host = addr.slice(0, i);
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1); // net.JoinHostPort IPv6 form
-  return { host, port };
+  const auth = /\bauth=([0-9a-f]{64})\b/.exec(line)?.[1];
+  return auth ? { host, port, auth } : { host, port };
 }
 
 // windowOrigin maps the announced address to the origin the local Electron
