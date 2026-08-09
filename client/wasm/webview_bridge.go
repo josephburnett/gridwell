@@ -232,6 +232,20 @@ func bridgeGoBack(paneID string) {
 	g.Call("goBack", args)
 }
 
+// bridgeShowMenu pops the live view's context menu (Freeze Page included)
+// with no in-page context — the bar circle's right-click. A page that
+// hijacks contextmenu makes the in-page menu unreachable; the circle sits
+// on the canvas outside the view's rect, so this door always opens.
+func bridgeShowMenu(paneID string) {
+	g := bridge()
+	if !g.Truthy() {
+		return
+	}
+	args := js.Global().Get("Object").New()
+	args.Set("paneId", paneID)
+	g.Call("showMenu", args)
+}
+
 // installWebviewListeners registers the main→renderer push handlers (frame
 // mirroring and navigation). Frames update the per-tile preview cache so
 // every other pane showing the tile reflects live navigation; nav events

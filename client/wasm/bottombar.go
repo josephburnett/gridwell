@@ -430,10 +430,13 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 // crumb lands you INSIDE that workspace (deeper ones close; the current
 // boundary is where you are — a no-op), and a chain crumb pops to its
 // tree and ascends within it — one verb, whether the target is above,
-// beside, or outside the current workspace. RIGHT-click renames: the
-// title, or a pane-tile crumb's workspace. Left clicks in the band never
-// fall through to a pane below; right clicks outside the rename surfaces
-// DO, so the pane border gestures under the band stay reachable (#220).
+// beside, or outside the current workspace. RIGHT-click renames (the
+// title, or a pane-tile crumb's workspace) — and on the circle slot of a
+// LIVE url descent it pops the view's context menu (Freeze Page): the
+// page can hijack contextmenu inside the view, but the circle sits on
+// the canvas, so this door always opens. Left clicks in the band never
+// fall through to a pane below; right clicks outside those surfaces DO,
+// so the pane border gestures under the band stay reachable (#220).
 func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
@@ -441,6 +444,13 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	}
 	chain := a.navChain()
 	if button == 2 {
+		if sx >= bx+bw-wsbar.SlotW {
+			if p := a.tree.FocusedPane(); p != nil && a.isURLDescent(p) && a.urlViewFor(p.ID) != nil {
+				bridgeShowMenu(p.ID)
+				return true
+			}
+			return false
+		}
 		if tx, tw, _, _, _, tOK := a.barTitleGeom(); tOK && sx >= tx && sx < tx+tw {
 			a.openRenameInput()
 			return true

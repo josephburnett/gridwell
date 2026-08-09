@@ -1,5 +1,5 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
-import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron';
+import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
 import type { Bounds, FreezeResult, NavEvent, ErrorEvent, OpenBelowEvent, FreezeURLEvent, ZoomKeyEvent } from './ipc';
 import {
@@ -135,7 +135,19 @@ export class WebviewRegistry {
   // policy (which items, what each does) lives in the pure urlContextMenuTemplate
   // (unit-tested); here we only translate Electron's params + bind the actions
   // to the real clipboard and webContents, then pop the menu over the window.
-  private showContextMenu(paneId: string, view: WebContentsView, params: ContextMenuParams): void {
+  // params is the subset of Electron's ContextMenuParams the template reads
+  // (ContextMenuParams satisfies it structurally); showMenu supplies an empty
+  // one — the bar-circle path has no in-page context.
+  private showContextMenu(
+    paneId: string,
+    view: WebContentsView,
+    params: {
+      linkURL: string;
+      selectionText: string;
+      isEditable: boolean;
+      editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
+    },
+  ): void {
     const wc = view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(
@@ -172,6 +184,22 @@ export class WebviewRegistry {
     );
     const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
     menu.popup({ window: this.win });
+  }
+
+  // showMenu pops the SAME context menu a right-click inside the view shows,
+  // with no in-page context (no link, no selection, not editable). This is
+  // the bar circle's right-click door: a page can hijack contextmenu and
+  // make the in-page path unreachable, but the circle sits on the canvas,
+  // outside the view's rect, so this path always reaches Freeze Page.
+  showMenu(paneId: string): void {
+    const e = this.entries.get(paneId);
+    if (!e) return;
+    this.showContextMenu(paneId, e.view, {
+      linkURL: '',
+      selectionText: '',
+      isEditable: false,
+      editFlags: { canCut: false, canCopy: false, canPaste: false },
+    });
   }
 
   has(paneId: string): boolean {

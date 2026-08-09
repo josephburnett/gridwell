@@ -50,6 +50,12 @@ const api = {
   goBack(args: PaneRef): Promise<void> {
     return ipcRenderer.invoke(CH.goBack, args);
   },
+  // showMenu pops the live view's context menu (Freeze Page included) with
+  // no in-page context — the bar circle's right-click, which stays reachable
+  // when the page itself hijacks contextmenu.
+  showMenu(args: PaneRef): Promise<void> {
+    return ipcRenderer.invoke(CH.showMenu, args);
+  },
 
   // Shell transport (2026-07-26): the renderer's xterm speaks to the
   // main-process gRPC OpenShell stream through these four calls plus the

@@ -23,6 +23,10 @@ export const CH = {
   setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom, issue #82)
   remove: 'gw:remove',     // RemoveArgs → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
+  showMenu: 'gw:showMenu', // PaneRef → void — pop the live view's context
+                           // menu with no in-page context: the bar circle's
+                           // right-click, reachable even when the page
+                           // hijacks contextmenu.
 
   // Shell transport (2026-07-26: the WS bridge is gone; PTY bytes ride a
   // main-process gRPC OpenShell stream, relayed here per pane).

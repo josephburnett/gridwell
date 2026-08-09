@@ -123,6 +123,10 @@ export function registerWebviewIpc(
     registry.goBack(a.paneId);
   });
 
+  ipcMain.handle(CH.showMenu, (_e, a: PaneRef): void => {
+    registry.showMenu(a.paneId);
+  });
+
 }
 
 // makeNavForwarder returns a registry onNav callback that ships nav events
