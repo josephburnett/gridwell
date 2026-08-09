@@ -407,3 +407,89 @@ func TestRemoteEventsArrivePrefixed(t *testing.T) {
 		}
 	}
 }
+
+// The #251 flip: ssh is a PARAMETERIZED plugin — no root grid, an instance
+// grid instead. The grid itself keeps serving under the same id (legacy
+// links, the picker's reads), only the declaration changed.
+func TestInfoDeclaresInstanceGridNotRoot(t *testing.T) {
+	ctx := context.Background()
+	h := newChainHarness(t)
+	pls, err := h.localCl.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ssh *rpc.PluginInfo
+	for i := range pls {
+		if pls[i].Kind == "ssh" {
+			ssh = &pls[i]
+		}
+	}
+	if ssh == nil {
+		t.Fatal("ssh plugin not listed")
+	}
+	if ssh.RootGridID != "" {
+		t.Errorf("RootGridID = %q, want empty — ssh has no landing page", ssh.RootGridID)
+	}
+	if ssh.InstanceGridID != "sshc/0" {
+		t.Errorf("InstanceGridID = %q, want the qualified connection list sshc/0", ssh.InstanceGridID)
+	}
+	// The instance grid still serves.
+	if _, err := h.localCl.GetGrid(ctx, "sshc/0"); err != nil {
+		t.Errorf("the instance grid must keep serving: %v", err)
+	}
+}
+
+// The #251 dedup refusal: identical details ARE an existing connection.
+// Canonical comparison (key order, empty values irrelevant); different
+// details commit fine; and a TOMBSTONED connection never blocks reuse —
+// recreating identical details after a delete mints a fresh segment.
+func TestDuplicateParamsRefusedByName(t *testing.T) {
+	ctx := context.Background()
+	h := newChainHarness(t)
+
+	first, err := h.localCl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: "sshc/0", X: 0, Y: 0, W: 1, H: 1, Label: "gpu-box"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.localCl.WriteContent(ctx, first.ID, first.Version, []byte(connParams)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Same details, different key order, plus an empty value: refused, and
+	// the refusal NAMES the existing connection.
+	dup := `{"user":"joe","host":"rtb","addr":"10.0.0.5:9999","port":2222,"known_hosts":"/kh","key":"/kp","extra":""}`
+	second, err := h.localCl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: "sshc/0", X: 3, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.localCl.WriteContent(ctx, second.ID, second.Version, []byte(dup))
+	if err == nil {
+		t.Fatal("identical params must be refused — one param-set, one connection")
+	}
+	if !strings.Contains(err.Error(), "gpu-box") {
+		t.Errorf("the refusal must name the existing connection: %v", err)
+	}
+
+	// Different details are a different connection.
+	other := `{"host":"other","user":"joe","key":"/kp","known_hosts":"/kh"}`
+	if _, err := h.localCl.WriteContent(ctx, second.ID, second.Version, []byte(other)); err != nil {
+		t.Fatalf("different params must commit: %v", err)
+	}
+
+	// Tombstone the first, then its details become mintable again (a NEW
+	// segment — the old one is dead forever, which is the point).
+	cur, err := h.localCl.GetTile(ctx, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.localCl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: first.ID, Version: cur.Version}); err != nil {
+		t.Fatal(err)
+	}
+	third, err := h.localCl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: "sshc/0", X: 6, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.localCl.WriteContent(ctx, third.ID, third.Version, []byte(connParams)); err != nil {
+		t.Fatalf("a tombstoned connection must not block recreating its details: %v", err)
+	}
+}

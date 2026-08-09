@@ -122,3 +122,25 @@ func autoLabel(paramsDoc string) string {
 	}
 	return p.User + "@" + p.Host
 }
+
+// CanonicalParams reduces a params document to a comparable form: parsed as
+// a JSON object, empty-string values dropped, keys sorted (json.Marshal of
+// a map sorts). Two documents that canonicalize equal name THE SAME
+// connection — the dedup rule behind the #251 refusal (and the client
+// picker's pre-match, which mirrors it as UX).
+func CanonicalParams(data []byte) (string, error) {
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return "", fmt.Errorf("connection params: %w", err)
+	}
+	for k, v := range m {
+		if s, isStr := v.(string); isStr && s == "" {
+			delete(m, k)
+		}
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}

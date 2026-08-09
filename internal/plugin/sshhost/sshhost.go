@@ -19,8 +19,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
-// rootGridID is the plugin's own root grid — the connection list.
-const rootGridID = "0"
+// connGridID is the plugin's connection-list grid. Since the #251 flip it
+// is declared as the INSTANCE grid, not the root: a storage address the
+// instance picker reads and writes, never a landing page. It keeps serving
+// under the same id forever — existing connection rows appear in the picker
+// automatically, and any legacy exit-well link to the list still resolves.
+const connGridID = "0"
 
 // Dialer builds a client of a remote node's export from a resolved config.
 // Production is sshdial.Dial (whose ssh session is itself lazy and
@@ -240,7 +244,7 @@ func tileFromConn(c *Conn) *gridwellv1.Tile {
 	}
 	t := &gridwellv1.Tile{
 		Id:        strconv.FormatInt(c.ID, 10),
-		GridId:    rootGridID,
+		GridId:    connGridID,
 		ObjectId:  c.ObjectID,
 		Kind:      "well",
 		X:         c.X,
@@ -283,9 +287,13 @@ func (s *Server) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	return &gridwellv1.InfoResponse{
 		Kind:        "ssh",
 		DisplayName: "connections",
-		RootGridId:  rootGridID,
-		Watch:       true,
-		Writable:    true,
+		// The #251 flip: no root grid — the connection list is the INSTANCE
+		// grid, and the client's gestures open the instance picker instead
+		// of landing here. The grid itself still serves (legacy links, the
+		// picker's reads/writes).
+		InstanceGridId: connGridID,
+		Watch:          true,
+		Writable:       true,
 		CreateSchemas: map[string]string{
 			"well": CreateSchemaWell,
 		},
@@ -334,7 +342,7 @@ func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewReq
 		out.RootGridId = local
 		return fw.client.SetRootView(ctx, &out)
 	}
-	if local != rootGridID {
+	if local != connGridID {
 		return nil, status.Errorf(codes.NotFound, "sshhost: no root grid %q", local)
 	}
 	if err := s.db.SetRootView(ctx, req.Cx, req.Cy, req.Zoom); err != nil {
@@ -370,7 +378,7 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 			Tiles: rpc.TransitQualifyTiles(fw.ns, resp.Tiles),
 		}, nil
 	}
-	if local != rootGridID {
+	if local != connGridID {
 		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", local)
 	}
 	conns, err := s.db.List(ctx)
@@ -391,7 +399,7 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 	}
 	return &gridwellv1.GetGridResponse{
 		Grid: &gridwellv1.Grid{
-			Id:       rootGridID,
+			Id:       connGridID,
 			Version:  gv,
 			Writable: true,
 			CreateSchemas: map[string]string{
@@ -485,7 +493,7 @@ func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		}
 		return prependTileResp(fw.ns, resp), nil
 	}
-	if local != rootGridID {
+	if local != connGridID {
 		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", local)
 	}
 	t := req.Tile
@@ -596,7 +604,7 @@ func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest
 		}
 		return prependTileResp(fwTile.ns, resp), nil
 	}
-	if localGrid != rootGridID {
+	if localGrid != connGridID {
 		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", localGrid)
 	}
 	c, err := s.localConn(ctx, localTile)
@@ -693,7 +701,7 @@ func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	s.dropLive(c.NS)
 	_ = s.db.BumpGridVersion(ctx)
 	s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{
-		TileRemoved: &gridwellv1.TileRemoved{GridId: rootGridID, TileId: local}}})
+		TileRemoved: &gridwellv1.TileRemoved{GridId: connGridID, TileId: local}}})
 	return &gridwellv1.DeleteTileResponse{}, nil
 }
 
@@ -787,6 +795,31 @@ func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.Write
 	}
 	if _, err := ParseParams(data); err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	// The #251 dedup refusal — identical details ARE an existing connection
+	// (one param-set, one minted segment); the caller should select it, not
+	// mint a twin. The plugin is the authority; the picker's pre-match is
+	// only UX.
+	want, err := CanonicalParams(data)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	live, err := s.db.List(ctx)
+	if err != nil {
+		return dbErr(err)
+	}
+	for _, other := range live {
+		if other.ID == c.ID || other.Params == "" {
+			continue
+		}
+		if got, cerr := CanonicalParams([]byte(other.Params)); cerr == nil && got == want {
+			name := other.AltText
+			if name == "" {
+				name = autoLabel(other.Params)
+			}
+			return status.Errorf(codes.AlreadyExists,
+				"sshhost: these details already exist as %q — select that connection instead", name)
+		}
 	}
 	row, err := s.db.SetParams(ctx, c.ID, first.Version, string(data))
 	if err != nil {

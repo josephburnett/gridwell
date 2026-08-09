@@ -205,9 +205,16 @@ func (a *App) drawPluginHealthTint(n *rpc.Tile, x, y, w, h float64) {
 	if n.Reference && rpc.IsWellKind(n.Kind) && n.ChildGridID == "" {
 		color := colorLauncherRootlessTint
 		// The LOCAL node grid knows more: broken (Info failed) gets the
-		// alarm tint, rootless the softer one.
-		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.ID)); ok && pluginhealth.Classify(pl) == pluginhealth.Broken {
-			color = colorLauncherBrokenTint
+		// alarm tint, rootless the softer one — and a PARAMETERIZED plugin
+		// (issue #251) gets no tint at all: childless is its healthy shape
+		// (the click opens the instance picker).
+		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.ID)); ok {
+			switch pluginhealth.Classify(pl) {
+			case pluginhealth.Parameterized:
+				return
+			case pluginhealth.Broken:
+				color = colorLauncherBrokenTint
+			}
 		}
 		a.cctx.Set("fillStyle", color)
 		a.cctx.Call("fillRect", x, y, w, h)
