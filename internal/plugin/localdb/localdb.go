@@ -296,9 +296,18 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// allocated; the cross-plugin reference is stored verbatim. alt_text is
 		// the exit well's label. On an interior well, alt_text is the
 		// user-given grid name (the + palette's name field); empty = unnamed.
+		// configure_plugin_id (childless) → an unconfigured plugin well
+		// (issue #251), waiting for its instance picker.
+		if t.ChildGridId != "" && t.ConfigurePluginId != "" {
+			return nil, status.Error(codes.InvalidArgument,
+				"create: a well is born configured (child_grid_id) or configurable (configure_plugin_id), not both")
+		}
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 				t.ChildGridId, t.AltText, t.ViewX, t.ViewY, t.ViewZoom, t.ObjectId))
+		}
+		if t.ConfigurePluginId != "" {
+			return tileResp(p.st.CreatePluginWell(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.ConfigurePluginId))
 		}
 		return tileResp(p.st.CreateWell(ctx, &rpc.CreateWellRequest{GridID: req.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H, Label: t.AltText, ObjectID: t.ObjectId}))
 	case rpc.KindText:
@@ -361,15 +370,25 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	if req.UrlFrozen != nil {
 		ops++
 	}
+	if req.AdoptChildGrid != nil {
+		ops++
+	}
 	if req.Tile != nil {
 		ops++
 	}
 	if ops > 1 {
 		return nil, status.Error(codes.InvalidArgument,
-			"set: one operation per call (rename, content_zoom, url_frozen, or tile writeback)")
+			"set: one operation per call (rename, content_zoom, url_frozen, adopt_child_grid, or tile writeback)")
 	}
 	if req.Rename != "" {
 		return tileResp(p.st.RenameTile(ctx, req.TileId, req.Version, req.Rename))
+	}
+	if a := req.AdoptChildGrid; a != nil {
+		return tileResp(p.st.AdoptChildGrid(ctx, &rpc.AdoptChildGridRequest{
+			TileID: req.TileId, Version: req.Version,
+			ChildGridID: a.ChildGridId, Label: a.Label,
+			ViewX: a.ViewX, ViewY: a.ViewY, ViewZoom: a.ViewZoom,
+		}))
 	}
 	if req.ContentZoom != nil {
 		return tileResp(p.st.SetContentZoom(ctx, &rpc.SetContentZoomRequest{

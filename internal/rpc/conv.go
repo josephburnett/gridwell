@@ -81,6 +81,8 @@ func TileToProto(t *Tile) *pb.Tile {
 		UrlHistory:    t.URLHistory,
 		LinkTargetId:  t.LinkTargetID,
 		UrlFrozen:     t.URLFrozen,
+
+		ConfigurePluginId: t.ConfigurePluginID,
 	}
 }
 
@@ -117,6 +119,8 @@ func TileFromProto(t *pb.Tile) *Tile {
 		URLHistory:    t.UrlHistory,
 		LinkTargetID:  t.LinkTargetId,
 		URLFrozen:     t.UrlFrozen,
+
+		ConfigurePluginID: t.ConfigurePluginId,
 	}
 }
 
@@ -200,7 +204,15 @@ func EventFromProto(e *pb.Event) Event {
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label,
-			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID}}
+			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID,
+			ConfigurePluginId: r.ConfigurePluginID}}
+}
+
+// AdoptChildGridToProto builds the SetTile adopt arm (issue #251).
+func AdoptChildGridToProto(r *AdoptChildGridRequest) *pb.SetTileRequest {
+	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
+		AdoptChildGrid: &pb.AdoptChildGrid{ChildGridId: r.ChildGridID, Label: r.Label,
+			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
 }
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,

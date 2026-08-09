@@ -188,11 +188,19 @@ CREATE TABLE IF NOT EXISTS ` + name + ` (
     -- clears it. Framing, never bumps version. Added post-v1 (schema v7,
     -- additive).
     url_frozen    INTEGER NOT NULL DEFAULT 0,
+    -- configure_plugin_id marks a CHILDLESS well as an UNCONFIGURED PLUGIN
+    -- WELL (issue #251): the uuid of the parameterized plugin whose
+    -- instance will fill it. Adoption sets child_grid_id and the uuid
+    -- stays as provenance. '' for every other tile. Added post-v1 (schema
+    -- v8, rebuild — the well CHECK branch gained the childless variant).
+    configure_plugin_id TEXT NOT NULL DEFAULT '',
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     CHECK (
        (link_target_id IS NULL AND (
-          (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL    AND preview_blob_id IS NULL AND text_mode IS NULL)
+          -- well: an interior/exit well has a child grid; the one childless
+          -- shape is the unconfigured plugin well (configure_plugin_id set).
+          (kind = 'well'  AND (child_grid_id IS NOT NULL OR configure_plugin_id != '') AND blob_id IS NULL AND url_string IS NULL AND preview_blob_id IS NULL AND text_mode IS NULL)
        OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
        OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
        OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)

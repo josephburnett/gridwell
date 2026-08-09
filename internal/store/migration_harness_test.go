@@ -635,4 +635,59 @@ func init() {
 			}
 		},
 	})
+
+	// v8: configure_plugin_id — the unconfigured plugin well (issue #251).
+	// A REBUILD reading a v7 table: the trap it pins is the copy list — the
+	// v5-era list would silently reset every post-v5 column, so the seed
+	// plants a LINK row and a FROZEN url (the two post-v5 facts) and the
+	// verify proves both survive alongside the new column's default.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 8,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
+				VALUES ('fixt-v8-link', ` + rootID + `, 'text', 40, 6, 1, 1, 'aplugin/77', 'v7 link', 100, 100)`); err != nil {
+				t.Fatalf("seed v7 link tile: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, url_string, url_frozen, created_at, updated_at)
+				VALUES ('fixt-v8-frozen', ` + rootID + `, 'url', 42, 6, 1, 1, 'https://v7.example', 1, 100, 100)`); err != nil {
+				t.Fatalf("seed v7 frozen url tile: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var target, cfg string
+			if err := db.QueryRow(`SELECT link_target_id, configure_plugin_id
+				FROM tiles WHERE object_id = 'fixt-v8-link'`).Scan(&target, &cfg); err != nil {
+				t.Fatalf("read v7 link tile: %v", err)
+			}
+			if target != "aplugin/77" {
+				t.Errorf("link_target_id = %q, want the v7 link to survive the rebuild", target)
+			}
+			if cfg != "" {
+				t.Errorf("configure_plugin_id = %q, want the '' default on an old row", cfg)
+			}
+			var frozen int
+			if err := db.QueryRow(`SELECT url_frozen
+				FROM tiles WHERE object_id = 'fixt-v8-frozen'`).Scan(&frozen); err != nil {
+				t.Fatalf("read v7 frozen url tile: %v", err)
+			}
+			if frozen != 1 {
+				t.Errorf("url_frozen = %d, want the v7 standing freeze to survive the rebuild", frozen)
+			}
+			// The new well shape is accepted: childless + configure_plugin_id.
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, configure_plugin_id, alt_text, created_at, updated_at)
+				SELECT 'fixt-v8-plugin-well', grid_id, 'well', 44, 6, 1, 1, 'sshpluginuuid', '', 100, 100
+				FROM tiles WHERE object_id = 'fixt-v8-link'`); err != nil {
+				t.Fatalf("insert unconfigured plugin well post-migration: %v", err)
+			}
+			// And the old refusal still holds: a childless well with NO
+			// configure_plugin_id stays a CHECK violation.
+			if _, err := db.Exec(`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				SELECT 'fixt-v8-bad-well', grid_id, 'well', 46, 6, 1, 1, '', 100, 100
+				FROM tiles WHERE object_id = 'fixt-v8-link'`); err == nil {
+				t.Error("a childless well with no configure_plugin_id must still violate the CHECK")
+			}
+		},
+	})
 }

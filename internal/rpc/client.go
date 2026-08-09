@@ -162,6 +162,9 @@ func (c *Client) SetShellPreview(ctx context.Context, req *SetShellPreviewReques
 func (c *Client) SetURLState(ctx context.Context, req *SetURLStateRequest) (*Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(SetURLStateToProto(req))))
 }
+func (c *Client) AdoptChildGrid(ctx context.Context, req *AdoptChildGridRequest) (*Tile, error) {
+	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(AdoptChildGridToProto(req))))
+}
 
 // SetRootView persists the plugin root-grid framing. The server routes on
 // root_grid_id; framing only — never bumps a content version.

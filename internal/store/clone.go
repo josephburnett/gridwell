@@ -103,6 +103,7 @@ var tileCopyColumns = []string{
 	"text_x", "text_y", "text_w", "text_h", "text_mode", "blob_id",
 	"url_string", "preview_blob_id", "alt_text", "alt_user",
 	"content_zoom", "url_history", "link_target_id", "url_frozen",
+	"configure_plugin_id",
 	"created_at", "updated_at",
 }
 
@@ -182,6 +183,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		n.TextX, n.TextY, n.TextW, n.TextH, textMode, blob,
 		urlStr, previewBlob, n.AltText, altUser,
 		n.ContentZoom, urlHist, linkTarget, boolToInt(n.URLFrozen),
+		n.ConfigurePluginID,
 		now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert tile copy: %w", err)

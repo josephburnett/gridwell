@@ -29,7 +29,7 @@ const applicationID = 0x4757654C // "GWeL"
 // shape; TestSchemaEquivalence proves a fresh Open equals tablesV1 + the full
 // chain, which is what makes the fresh-DB stamp shortcut in applyMigrations
 // sound. See internal/store/CLAUDE.md for the full contract.
-const schemaVersion = 7
+const schemaVersion = 8
 
 // migration is one additive, non-destructive step that brings a DB from
 // version to-1 up to version to. Migrations must only add columns/tables
@@ -69,18 +69,32 @@ var migrations = []migration{
 	// If-missing because the v6 REBUILD materializes the current template.
 	{to: 7, run: addColumnIfMissingDDL("tiles", "url_frozen",
 		`ALTER TABLE tiles ADD COLUMN url_frozen INTEGER NOT NULL DEFAULT 0`)},
+	// v8: configure_plugin_id — the unconfigured plugin well (issue #251):
+	// a childless well waiting for a parameterized plugin's instance. The
+	// well CHECK branch gains the childless variant, so this is a rebuild.
+	// Old rows all have child grids and copy through unchanged; the new
+	// column fills with its '' default.
+	{to: 8, run: rebuildTilesForConfigurePlugin},
 }
 
 // tilesRebuildColumns is the explicit column list a rebuild copies — every
 // tiles column as of v5, id included (identity is preserved byte-for-byte;
-// a rebuild changes the CHECK, never the data). Both executed rebuilds (v5,
-// v6) copy this same list: the v6 rebuild reads a v5-shaped table, and the
-// new link_target_id column fills with its NULL default.
+// a rebuild changes the CHECK, never the data). The v5 and v6 rebuilds copy
+// this same list: the v6 rebuild reads a v5-shaped table, and the new
+// link_target_id column fills with its NULL default.
 const tilesRebuildColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 	view_x, view_y, view_zoom, child_grid_id,
 	text_x, text_y, text_w, text_h, text_mode, blob_id,
 	url_string, preview_blob_id, alt_text, alt_user, content_zoom, url_history,
 	created_at, updated_at`
+
+// tilesRebuildColumnsV8 is the copy list for the v8 rebuild, which reads a
+// v7-shaped table — so it must ALSO carry the post-v5 columns
+// (link_target_id, url_frozen) or every link row and standing freeze would
+// be silently reset to defaults. A rebuild's copy list is always "every
+// column of the version it reads", never the shared v5 list.
+const tilesRebuildColumnsV8 = tilesRebuildColumns + `,
+	link_target_id, url_frozen`
 
 // rebuildTilesForPaneKind is the v5 rebuild (adds the 'pane' kind to the
 // CHECK). Note the chain's convergence contract: a rebuild always creates
@@ -89,13 +103,20 @@ const tilesRebuildColumns = `id, object_id, version, grid_id, kind, x, y, w, h,
 // idempotent re-runs — TestSchemaEquivalence proves the chain and a fresh
 // Open converge either way.
 func rebuildTilesForPaneKind(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx)
+	return rebuildTiles(ctx, tx, tilesRebuildColumns)
 }
 
 // rebuildTilesForLinkTarget is the v6 rebuild (adds link_target_id and the
 // CHECK's link branch).
 func rebuildTilesForLinkTarget(ctx context.Context, tx *sql.Tx) error {
-	return rebuildTiles(ctx, tx)
+	return rebuildTiles(ctx, tx, tilesRebuildColumns)
+}
+
+// rebuildTilesForConfigurePlugin is the v8 rebuild (adds
+// configure_plugin_id and the well CHECK's childless variant — issue #251).
+// It reads a v7-shaped table, so it copies the v7 column list.
+func rebuildTilesForConfigurePlugin(ctx context.Context, tx *sql.Tx) error {
+	return rebuildTiles(ctx, tx, tilesRebuildColumnsV8)
 }
 
 // rebuildTiles rebuilds the tiles table into the current shape: create
@@ -109,7 +130,7 @@ func rebuildTilesForLinkTarget(ctx context.Context, tx *sql.Tx) error {
 // REUSED after the migration, violating the "ids are never reused" invariant
 // (embeds, deep links, and client caches are keyed by id and would resolve to
 // the wrong tile). The fixture in migration_harness_test.go pins this trap.
-func rebuildTiles(ctx context.Context, tx *sql.Tx) error {
+func rebuildTiles(ctx context.Context, tx *sql.Tx, columns string) error {
 	var seq sql.NullInt64
 	err := tx.QueryRowContext(ctx,
 		`SELECT seq FROM sqlite_sequence WHERE name = 'tiles'`).Scan(&seq)
@@ -118,8 +139,8 @@ func rebuildTiles(ctx context.Context, tx *sql.Tx) error {
 	}
 	for _, ddl := range []string{
 		tilesTableDDL("tiles_new"),
-		`INSERT INTO tiles_new (` + tilesRebuildColumns + `)
-			SELECT ` + tilesRebuildColumns + ` FROM tiles`,
+		`INSERT INTO tiles_new (` + columns + `)
+			SELECT ` + columns + ` FROM tiles`,
 		`DROP TABLE tiles`,
 		`ALTER TABLE tiles_new RENAME TO tiles`,
 	} {

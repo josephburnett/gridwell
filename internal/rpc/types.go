@@ -276,6 +276,12 @@ type Tile struct {
 	// descending does not auto-go-live. Framing — written by the SetTile
 	// url_frozen arm only, never bumps version.
 	URLFrozen bool `json:"url_frozen,omitempty"`
+	// ConfigurePluginID marks a CHILDLESS well as an UNCONFIGURED PLUGIN
+	// WELL (issue #251): the uuid of the parameterized plugin whose
+	// instance will fill it. First descent opens that plugin's instance
+	// picker; adopting sets ChildGridID and the uuid stays as provenance.
+	// "" for every other tile.
+	ConfigurePluginID string `json:"configure_plugin_id,omitempty"`
 }
 
 // ContentID returns the tile id that OWNS this tile's content: a leaf link's
@@ -370,6 +376,25 @@ type CreateWellRequest struct {
 	// to an existing well, or a deep-copied interior well (#200) — "" = mint
 	// fresh.
 	ObjectID string `json:"object_id,omitempty"`
+	// ConfigurePluginID, when set (with ChildGridID empty), creates an
+	// UNCONFIGURED PLUGIN WELL (issue #251): childless, inert, waiting for
+	// the named parameterized plugin's instance picker on first descent.
+	ConfigurePluginID string `json:"configure_plugin_id,omitempty"`
+}
+
+// AdoptChildGridRequest is the SetTile adopt arm (issue #251): a versioned
+// user edit turning a CHILDLESS well into a link by setting its child grid.
+// Label applies only when the well is unnamed (the copy-from-source-at-birth
+// naming rule links follow); ViewX/Y/Zoom seed the framing like an exit
+// well's birth fields.
+type AdoptChildGridRequest struct {
+	TileID      string  `json:"tile_id"`
+	Version     int64   `json:"version"`
+	ChildGridID string  `json:"child_grid_id"`
+	Label       string  `json:"label,omitempty"`
+	ViewX       int64   `json:"view_x,omitempty"`
+	ViewY       int64   `json:"view_y,omitempty"`
+	ViewZoom    float64 `json:"view_zoom,omitempty"`
 }
 
 // CreateLeafLinkRequest creates a LEAF LINK: a text/url/shell/pane tile whose
