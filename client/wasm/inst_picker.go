@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/instpick"
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/schemaform"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -33,6 +34,51 @@ import (
 // instance's chain to be learned (the remote's first Info answer) before
 // giving up and leaving the entry pending.
 const pickReadyWait = 15 * time.Second
+
+// openWellConfigurePicker is the descent gesture on an UNCONFIGURED plugin
+// well: pick (or create) an instance, adopt its chain into the well, then
+// complete the descent the user asked for. Dismissing leaves the well
+// unconfigured — a legal, retryable state.
+func (a *App) openWellConfigurePicker(p *pane.Pane, well *rpc.Tile, pl rpc.PluginInfo) {
+	gid := a.gridIDForPane(p)
+	paneID := p.ID
+	wellID, wellVersion := well.ID, well.Version
+	a.openInstancePicker(pl, func(e instpick.Entry) {
+		req := &rpc.AdoptChildGridRequest{
+			TileID: wellID, Version: wellVersion,
+			ChildGridID: e.ChildGridID, Label: e.Name,
+			ViewX: e.ViewX, ViewY: e.ViewY, ViewZoom: e.ViewZoom,
+		}
+		a.postTileMutate("AdoptChildGrid", gid, func(ctx context.Context) (*rpc.Tile, error) {
+			return a.cl.AdoptChildGrid(ctx, req)
+		}, func(t rpc.Tile) {
+			if vp := a.tree.FindPane(paneID); vp != nil {
+				a.startDescent(vp, &t)
+			}
+		})
+	}, nil)
+}
+
+// openPluginVisitPicker is the menu-click / node-grid-click gesture on a
+// PARAMETERIZED plugin: pick (or create) an instance and descend straight
+// into it — a portal through a synthetic link well, exactly the shape a
+// rooted plugin's click-enter uses, so ascent lands back here.
+func (a *App) openPluginVisitPicker(p *pane.Pane, well *rpc.Tile, pl rpc.PluginInfo) {
+	paneID := p.ID
+	synthetic := *well
+	a.openInstancePicker(pl, func(e instpick.Entry) {
+		synthetic.ChildGridID = e.ChildGridID
+		if e.Name != "" {
+			synthetic.AltText = e.Name
+		}
+		synthetic.ViewX, synthetic.ViewY, synthetic.ViewZoom = e.ViewX, e.ViewY, e.ViewZoom
+		synthetic.Reference = true // a portal crossing, like every plugin link
+		if vp := a.tree.FindPane(paneID); vp != nil {
+			a.flushFramingSave() // portal is a place change (issue #190)
+			a.startDescent(vp, &synthetic)
+		}
+	}, nil)
+}
 
 // instPickerEl lazily creates the shared modal container.
 func (a *App) instPickerEl() js.Value {
