@@ -189,6 +189,13 @@ message InfoResponse {
   double root_view_cx   = 10;
   double root_view_cy   = 11;
   double root_view_zoom = 12;
+  // instance_grid_id is the off-grid grid holding this plugin's PARAMETERIZED
+  // instances (issue #251) — e.g. ssh's connection wells. A plugin declaring
+  // this with an empty root_grid_id is a parameterized plugin: the menu/drop
+  // gestures open the instance picker instead of descending. Like
+  // scratch_grid_id, it is a storage address, never a landing page. Empty for
+  // rooted plugins.
+  string instance_grid_id = 14;
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -369,6 +376,11 @@ message PluginInfo {
   // rootless" — both otherwise present identically as root_grid_id == "".
   // Empty when Info succeeded, regardless of whether it declared a root.
   string info_error = 10;
+  // instance_grid_id: qualified <uuid>/<id> of the plugin's parameterized-
+  // instance grid (issue #251), forwarded from InfoResponse. Set with an
+  // empty root_grid_id it marks the plugin PARAMETERIZED: click/drop opens
+  // the instance picker. "" for rooted plugins.
+  string instance_grid_id = 11;
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;

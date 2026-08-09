@@ -574,11 +574,18 @@ type InfoResponse struct {
 	// its system KV table; fs/proc return zero (no persistent root view). The
 	// client seeds the portal-well framing on enterPlugin so re-entry restores
 	// exactly the left-off view. Purely a read: the write path is SetRootView.
-	RootViewCx    float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
-	RootViewCy    float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
-	RootViewZoom  float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
+	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
+	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
+	// instance_grid_id is the off-grid grid holding this plugin's PARAMETERIZED
+	// instances (issue #251) — e.g. ssh's connection wells. A plugin declaring
+	// this with an empty root_grid_id is a parameterized plugin: the menu/drop
+	// gestures open the instance picker instead of descending. Like
+	// scratch_grid_id, it is a storage address, never a landing page. Empty for
+	// rooted plugins.
+	InstanceGridId string `protobuf:"bytes,14,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InfoResponse) Reset() {
@@ -686,6 +693,13 @@ func (x *InfoResponse) GetRootViewZoom() float64 {
 		return x.RootViewZoom
 	}
 	return 0
+}
+
+func (x *InfoResponse) GetInstanceGridId() string {
+	if x != nil {
+		return x.InstanceGridId
+	}
+	return ""
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -1695,9 +1709,14 @@ type PluginInfo struct {
 	// (a crashed/hung plugin), distinguishing "broken" from "healthy but
 	// rootless" — both otherwise present identically as root_grid_id == "".
 	// Empty when Info succeeded, regardless of whether it declared a root.
-	InfoError     string `protobuf:"bytes,10,opt,name=info_error,json=infoError,proto3" json:"info_error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	InfoError string `protobuf:"bytes,10,opt,name=info_error,json=infoError,proto3" json:"info_error,omitempty"`
+	// instance_grid_id: qualified <uuid>/<id> of the plugin's parameterized-
+	// instance grid (issue #251), forwarded from InfoResponse. Set with an
+	// empty root_grid_id it marks the plugin PARAMETERIZED: click/drop opens
+	// the instance picker. "" for rooted plugins.
+	InstanceGridId string `protobuf:"bytes,11,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PluginInfo) Reset() {
@@ -1796,6 +1815,13 @@ func (x *PluginInfo) GetRootViewZoom() float64 {
 func (x *PluginInfo) GetInfoError() string {
 	if x != nil {
 		return x.InfoError
+	}
+	return ""
+}
+
+func (x *PluginInfo) GetInstanceGridId() string {
+	if x != nil {
+		return x.InstanceGridId
 	}
 	return ""
 }
@@ -2877,7 +2903,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0elink_target_id\x18\x1d \x01(\tR\flinkTargetId\x12\x1d\n" +
 	"\n" +
 	"url_frozen\x18\x1e \x01(\bR\turlFrozen\"\r\n" +
-	"\vInfoRequest\"\xf5\x03\n" +
+	"\vInfoRequest\"\x9f\x04\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -2893,7 +2919,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCx\x12 \n" +
 	"\froot_view_cy\x18\v \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
-	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x1a@\n" +
+	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12(\n" +
+	"\x10instance_grid_id\x18\x0e \x01(\tR\x0einstanceGridId\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x06\x10\aJ\x04\b\a\x10\b\"'\n" +
@@ -2955,7 +2982,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\"E\n" +
 	"\x0eSearchResponse\x123\n" +
 	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"\x14\n" +
-	"\x12ListPluginsRequest\"\xb9\x02\n" +
+	"\x12ListPluginsRequest\"\xe3\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
@@ -2972,7 +2999,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eroot_view_zoom\x18\t \x01(\x01R\frootViewZoom\x12\x1d\n" +
 	"\n" +
 	"info_error\x18\n" +
-	" \x01(\tR\tinfoError\"\x90\x01\n" +
+	" \x01(\tR\tinfoError\x12(\n" +
+	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\"\x90\x01\n" +
 	"\x13ListPluginsResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12\x1b\n" +
 	"\tnode_uuid\x18\x02 \x01(\tR\bnodeUuid\x12)\n" +

@@ -29,6 +29,45 @@ func TestClassify_Rootless(t *testing.T) {
 	}
 }
 
+// TestClassify_Parameterized: an instance grid with no root grid is the
+// parameterized-plugin declaration (issue #251) — healthy and clickable,
+// never the "set config.root" gap.
+func TestClassify_Parameterized(t *testing.T) {
+	pl := rpc.PluginInfo{Label: "connections", InstanceGridID: "s/0"}
+	if got := Classify(pl); got != Parameterized {
+		t.Errorf("Classify(%+v) = %v, want Parameterized", pl, got)
+	}
+}
+
+// TestClassify_RootWinsOverInstanceGrid: a plugin declaring BOTH grids is
+// rooted — the root grid is where a click lands; the instance grid is
+// storage. (No current plugin does this, but the precedence must be pinned
+// so adding an instance grid can never un-root a plugin.)
+func TestClassify_RootWinsOverInstanceGrid(t *testing.T) {
+	pl := rpc.PluginInfo{Label: "X", RootGridID: "u/1", InstanceGridID: "u/9"}
+	if got := Classify(pl); got != Enterable {
+		t.Errorf("Classify(%+v) = %v, want Enterable", pl, got)
+	}
+}
+
+// TestClassify_BrokenWinsOverInstanceGrid: InfoError set means Broken even
+// if a (cached/stale) instance grid id is present.
+func TestClassify_BrokenWinsOverInstanceGrid(t *testing.T) {
+	pl := rpc.PluginInfo{Label: "X", InstanceGridID: "s/0", InfoError: "boom"}
+	if got := Classify(pl); got != Broken {
+		t.Errorf("Classify(%+v) = %v, want Broken", pl, got)
+	}
+}
+
+// TestClickNotice_ParameterizedIsSilent: clicking a parameterized plugin
+// opens the picker — no strip notice.
+func TestClickNotice_ParameterizedIsSilent(t *testing.T) {
+	pl := rpc.PluginInfo{Label: "connections", InstanceGridID: "s/0"}
+	if _, _, _, ok := ClickNotice(pl); ok {
+		t.Fatal("ClickNotice for a parameterized plugin must return ok=false (the click opens the picker)")
+	}
+}
+
 // TestClassify_BrokenTakesPrecedenceOverEmptyRoot: a plugin can only be
 // Broken when Info truly failed (InfoError set); RootGridID empty on its own
 // (with InfoError empty) must always mean Rootless, never Broken.

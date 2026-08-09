@@ -26,17 +26,26 @@ const (
 	// Rootless: Info succeeded, but the plugin has no root grid configured
 	// (e.g. an fs plugin with no config.root). Healthy, just nothing to enter.
 	Rootless
+	// Parameterized: Info succeeded, no root grid, but an instance grid is
+	// declared (issue #251 — e.g. ssh's connections). Healthy and clickable:
+	// the click opens the instance picker instead of descending.
+	Parameterized
 )
 
-// Classify decides pl's status from the two facts the server's Info handshake
-// produces: whether it failed (InfoError != "") and whether it declared a
-// root (RootGridID != ""). InfoError is the ONLY signal that distinguishes
-// Broken from Rootless — both otherwise leave RootGridID == "".
+// Classify decides pl's status from the facts the server's Info handshake
+// produces: whether it failed (InfoError != ""), whether it declared a root
+// (RootGridID != ""), and whether it declared an instance grid instead
+// (InstanceGridID != "" — issue #251). InfoError is the ONLY signal that
+// distinguishes Broken from the healthy rootless states — all three
+// otherwise leave RootGridID == "".
 func Classify(pl rpc.PluginInfo) Status {
 	if pl.InfoError != "" {
 		return Broken
 	}
 	if pl.RootGridID == "" {
+		if pl.InstanceGridID != "" {
+			return Parameterized
+		}
 		return Rootless
 	}
 	return Enterable
@@ -45,8 +54,9 @@ func Classify(pl rpc.PluginInfo) Status {
 // ClickNotice returns the errsurface.Surface.Report arguments for clicking a
 // non-enterable launcher tile: severity, a per-plugin source key (so a second
 // click updates the same notice rather than scrolling the strip), and a
-// human-readable message. ok is false for Enterable, telling the caller to
-// descend instead of reporting anything.
+// human-readable message. ok is false for Enterable (the caller descends)
+// and for Parameterized (the caller opens the instance picker, issue #251) —
+// neither click reports anything.
 //
 // The source namespace is "launcher:", not "plugin:" — "plugin:<uuid>" is the
 // sticky ongoing-condition namespace (errsurface.Sticky) used by health

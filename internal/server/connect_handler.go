@@ -193,7 +193,7 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 // travels while a kind check would strand it read-only.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	label := configLabel
-	var rootGridID, scratchGridID, infoError string
+	var rootGridID, scratchGridID, instanceGridID, infoError string
 	var writable bool
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
@@ -204,6 +204,11 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		// that don't support ephemeral visits.
 		if info.ScratchGridId != "" {
 			scratchGridID = rpc.QualifyID(uuid, info.ScratchGridId)
+		}
+		// Qualified parameterized-instance grid (issue #251); empty for
+		// rooted plugins.
+		if info.InstanceGridId != "" {
+			instanceGridID = rpc.QualifyID(uuid, info.InstanceGridId)
 		}
 		if label == "" {
 			label = info.DisplayName
@@ -221,16 +226,17 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		label = kind
 	}
 	return &pb.PluginInfo{
-		Uuid:          uuid,
-		Kind:          kind,
-		Label:         label,
-		Writable:      writable,
-		RootGridId:    rootGridID,
-		ScratchGridId: scratchGridID,
-		RootViewCx:    rootViewCx,
-		RootViewCy:    rootViewCy,
-		RootViewZoom:  rootViewZoom,
-		InfoError:     infoError,
+		Uuid:           uuid,
+		Kind:           kind,
+		Label:          label,
+		Writable:       writable,
+		RootGridId:     rootGridID,
+		ScratchGridId:  scratchGridID,
+		InstanceGridId: instanceGridID,
+		RootViewCx:     rootViewCx,
+		RootViewCy:     rootViewCy,
+		RootViewZoom:   rootViewZoom,
+		InfoError:      infoError,
 	}
 }
 

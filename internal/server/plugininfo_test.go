@@ -66,6 +66,22 @@ func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
 	}
 }
 
+// The parameterized-plugin declaration (issue #251): an instance grid rides
+// the same handshake and gets the same qualification as the root grid, and
+// declaring it never invents a root.
+func TestBuildPluginInfo_InstanceGridQualified(t *testing.T) {
+	got := buildPluginInfo("u", "ssh", "connections", &pb.InfoResponse{
+		InstanceGridId: "0",
+		Writable:       true,
+	}, nil)
+	if got.InstanceGridId != "u/0" {
+		t.Errorf("InstanceGridId = %q, want qualified u/0", got.InstanceGridId)
+	}
+	if got.RootGridId != "" {
+		t.Errorf("RootGridId = %q, want empty — an instance grid is not a root", got.RootGridId)
+	}
+}
+
 func TestBuildPluginInfo_LabelFallsBackToDisplayName(t *testing.T) {
 	got := buildPluginInfo("u", "fs", "", &pb.InfoResponse{DisplayName: "Files"}, nil)
 	if got.Label != "Files" {

@@ -75,16 +75,17 @@ func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 	out := make([]PluginInfo, len(r.Msg.Plugins))
 	for i, p := range r.Msg.Plugins {
 		out[i] = PluginInfo{
-			UUID:          p.Uuid,
-			Kind:          p.Kind,
-			Label:         p.Label,
-			Writable:      p.Writable,
-			RootGridID:    p.RootGridId,
-			ScratchGridID: p.ScratchGridId,
-			RootViewCx:    p.RootViewCx,
-			RootViewCy:    p.RootViewCy,
-			RootViewZoom:  p.RootViewZoom,
-			InfoError:     p.InfoError,
+			UUID:           p.Uuid,
+			Kind:           p.Kind,
+			Label:          p.Label,
+			Writable:       p.Writable,
+			RootGridID:     p.RootGridId,
+			ScratchGridID:  p.ScratchGridId,
+			InstanceGridID: p.InstanceGridId,
+			RootViewCx:     p.RootViewCx,
+			RootViewCy:     p.RootViewCy,
+			RootViewZoom:   p.RootViewZoom,
+			InfoError:      p.InfoError,
 		}
 	}
 	return out, nil

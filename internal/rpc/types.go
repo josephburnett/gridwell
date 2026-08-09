@@ -325,6 +325,12 @@ type PluginInfo struct {
 	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral
 	// url tiles in ("descend into a url"); "" if the plugin has none.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`
+	// InstanceGridID is the qualified off-grid grid holding this plugin's
+	// parameterized instances (issue #251 — e.g. ssh's connection wells).
+	// Set with an empty RootGridID it marks the plugin PARAMETERIZED: the
+	// menu click and the drop-then-descend gestures open the instance picker
+	// instead of descending. A storage address, never a landing page.
+	InstanceGridID string `json:"instance_grid_id,omitempty"`
 	// RootViewCx/Cy/Zoom is the plugin root grid's last-saved viewport from
 	// the Info handshake (center in world cell coords, live zoom). Zero means
 	// "never visited"; the client substitutes the default calibrated zoom.
