@@ -136,6 +136,12 @@ func (a *App) openInstancePicker(pl rpc.PluginInfo, onPick func(instpick.Entry),
 	modal.Call("appendChild", card)
 	modal.Get("style").Set("display", "flex")
 	a.centerCardOnActivePane(card)
+	// Focus INSIDE the modal so Escape reaches its keydown listener even
+	// before (or without) any field being focused — a click-opened picker
+	// otherwise leaves focus on the canvas and can't be dismissed.
+	card.Set("tabIndex", -1)
+	card.Get("style").Set("outline", "none")
+	card.Call("focus")
 
 	done := false
 	var keyCb, backdropCb js.Func
@@ -541,11 +547,21 @@ func (a *App) createInstance(pl rpc.PluginInfo, name string, params []byte,
 	}
 	x, y := instpick.FreeCell(resp.Tiles)
 	tile, err := a.cl.CreateWell(ctx, &rpc.CreateWellRequest{
-		GridID: pl.InstanceGridID, X: x, Y: y, W: 1, H: 1, Label: name,
+		GridID: pl.InstanceGridID, X: x, Y: y, W: 1, H: 1,
 	})
 	if err != nil {
 		errEl.Set("textContent", err.Error())
 		return
+	}
+	if name != "" {
+		// A typed name is a USER name: it must ride the rename gesture so
+		// the alt_user latch holds it over the plugin's automatic label
+		// (ssh's "user@host" capture at params commit).
+		tile, err = a.cl.RenameTile(ctx, tile.ID, tile.Version, name)
+		if err != nil {
+			errEl.Set("textContent", err.Error())
+			return
+		}
 	}
 	tile, err = a.cl.WriteContent(ctx, tile.ID, tile.Version, params)
 	if err != nil {

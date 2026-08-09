@@ -493,3 +493,20 @@ func TestDuplicateParamsRefusedByName(t *testing.T) {
 		t.Fatalf("a tombstoned connection must not block recreating its details: %v", err)
 	}
 }
+
+// The instance grid accepts only wells (a connection IS a well). Anything
+// else is refused loudly — the refusal crosses the wire so the client's
+// generic error surfacing (pinned by errsurface.spec.ts) can show it. This
+// used to ride the schema-create e2e spec, whose land-on-the-grid flow the
+// #251 flip retired.
+func TestNonWellCreateRefused(t *testing.T) {
+	ctx := context.Background()
+	h := newChainHarness(t)
+	_, err := h.localCl.CreateText(ctx, &rpc.CreateTextRequest{GridID: "sshc/0", X: 0, Y: 0, W: 1, H: 1})
+	if err == nil {
+		t.Fatal("a text create on the connection grid must be refused")
+	}
+	if !strings.Contains(err.Error(), "well") {
+		t.Errorf("the refusal should say what the grid holds: %v", err)
+	}
+}

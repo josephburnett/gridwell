@@ -419,19 +419,24 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "connections")
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The plugin spawned in connections mode: its root is its OWN grid
-	//    (one segment + "0"), not a remote chain, and it declares the #198
-	//    creation schema for wells.
+	// 1. The plugin spawned in connections mode: PARAMETERIZED since the
+	//    #251 flip — no root grid, its connection list declared as the
+	//    INSTANCE grid (one segment + "0", its own space, not a remote
+	//    chain), still stamping the #198 creation schema for wells.
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	var connRoot string
+	var connRoot, declaredRoot string
 	for _, p := range lp["plugins"].([]any) {
 		pm := p.(map[string]any)
 		if pm["label"] == "connections" {
-			connRoot, _ = pm["rootGridId"].(string)
+			connRoot, _ = pm["instanceGridId"].(string)
+			declaredRoot, _ = pm["rootGridId"].(string)
 		}
 	}
+	if declaredRoot != "" {
+		t.Fatalf("connections rootGridId = %q, want empty — parameterized plugins have no landing page", declaredRoot)
+	}
 	if strings.Count(connRoot, "/") != 1 || !strings.HasSuffix(connRoot, "/0") {
-		t.Fatalf("connections root = %q, want <ssh>/0 (its own grid) — did connections mode spawn?", connRoot)
+		t.Fatalf("connections instance grid = %q, want <ssh>/0 (its own grid) — did connections mode spawn?", connRoot)
 	}
 	rg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": connRoot})
 	schemas, _ := rg["grid"].(map[string]any)["createSchemas"].(map[string]any)

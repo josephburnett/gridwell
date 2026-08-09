@@ -64,6 +64,7 @@ export interface PluginDescriptor {
   uuid: string;
   rootGridID: string;
   scratchGridID: string;
+  instanceGridID: string;
   infoError: string;
   status: string;
 }
