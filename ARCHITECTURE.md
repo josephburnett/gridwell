@@ -151,7 +151,7 @@ stored reference carries is the id the store answers with.
   rule: a failed read never deletes a tile row — only a definite GONE does.
   An unreadable source serves its stored rows verbatim until it's readable
   again.
-- **ssh** has two modes. Default (#199, #251): the multi-connection plugin
+- **ssh** (#199, #251): the multi-connection plugin
   (`internal/plugin/sshhost`) — PARAMETERIZED: no root grid; its connection
   list is declared as its INSTANCE grid (`PluginInfo.instance_grid_id`),
   the storage address the client's instance picker reads and writes, never
@@ -161,8 +161,10 @@ stored reference carries is the id the store answers with.
   transit rule the server applies one level up. A params document that
   canonicalizes equal to a live connection's is refused at commit — one
   param-set, one connection. Connections dial lazily and self-heal;
-  deleting one tombstones its segment forever. A `host:`-configured entry
-  instead runs the transparent single-mount proxy of one whole remote node.
+  deleting one tombstones its segment forever. Connections are NEVER
+  config: `init` refuses the old host: keys, and `gridwell serve` migrates
+  a pre-#251 config entry into a connection row at boot (the config→data
+  twin of a schema migration).
 
 ### 4.1 Framing ≠ content — the best-enforced invariant
 
