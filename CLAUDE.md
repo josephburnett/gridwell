@@ -141,6 +141,17 @@ Re-litigating them silently is how churn happens.
   (#220/#222).** Bar contents are per-pane facts. The old right-click
   ascends (corner circle, empty bar, slot) are gone; middle-click remains
   the in-pane shortcut.
+- **Parameterized plugins: the picker, not a synthetic root (#251,
+  2026-08-08).** A plugin declares a root grid OR an instance grid — ssh's
+  connection list is an instance grid, a storage address, never a landing
+  page. Dragging a parameterized plugin drops an unconfigured plugin well
+  (childless, OWNED — solid border; dashed stays reserved for links);
+  descending it, or clicking the plugin in the menu, opens the instance
+  picker. Selecting an entry means THE SAME instance, never a copy;
+  deleting an entry is the tombstone gesture, forever (recreating the
+  details mints a new segment); a name copies from the instance at adopt
+  and is independent afterward (rename-where-you-stand, like links).
+  Modals center on the active pane, not the screen.
 - **Id shape (2026-07-25).** New plugin/node ids are 7-char lowercase
   base36 with a leading letter (`store.NewShortID`); an id is immutable
   once minted, and both shapes (short + legacy 32-hex) are valid forever.

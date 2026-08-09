@@ -151,14 +151,18 @@ stored reference carries is the id the store answers with.
   rule: a failed read never deletes a tile row — only a definite GONE does.
   An unreadable source serves its stored rows verbatim until it's readable
   again.
-- **ssh** has two modes. Default (#199): the multi-connection plugin
-  (`internal/plugin/sshhost`) — its root grid is a connection list, each
-  remote node a well whose params are its CONTENT and whose minted short id
-  is a sub-namespace segment (`<ssh>/<conn>/<remote-plugin>/<id>`), peeled
-  and prepended with the same transit rule the server applies one level up.
-  Connections dial lazily and self-heal; deleting one tombstones its
-  segment forever. A `host:`-configured entry instead runs the transparent
-  single-mount proxy of one whole remote node.
+- **ssh** has two modes. Default (#199, #251): the multi-connection plugin
+  (`internal/plugin/sshhost`) — PARAMETERIZED: no root grid; its connection
+  list is declared as its INSTANCE grid (`PluginInfo.instance_grid_id`),
+  the storage address the client's instance picker reads and writes, never
+  a landing page. Each connection is a well whose params are its CONTENT
+  and whose minted short id is a sub-namespace segment
+  (`<ssh>/<conn>/<remote-plugin>/<id>`), peeled and prepended with the same
+  transit rule the server applies one level up. A params document that
+  canonicalizes equal to a live connection's is refused at commit — one
+  param-set, one connection. Connections dial lazily and self-heal;
+  deleting one tombstones its segment forever. A `host:`-configured entry
+  instead runs the transparent single-mount proxy of one whole remote node.
 
 ### 4.1 Framing ≠ content — the best-enforced invariant
 
