@@ -195,6 +195,11 @@ func (n *nodeGrid) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Til
 	if err != nil {
 		return nil, err
 	}
+	if info.RootGridId == "" {
+		// A parameterized plugin (#251) has no root grid and so no root
+		// view; there is nothing to write back.
+		return n.GetTile(ctx, &pb.GetTileRequest{TileId: req.TileId})
+	}
 	if _, err := c.SetRootView(ctx, &pb.SetRootViewRequest{
 		RootGridId: info.RootGridId,
 		Cx:         float64(t.ViewX), Cy: float64(t.ViewY), Zoom: t.ViewZoom,

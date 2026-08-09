@@ -140,22 +140,6 @@ func TestTombstoneReservesTheNamespaceForever(t *testing.T) {
 	}
 }
 
-func TestRootViewRoundTrip(t *testing.T) {
-	ctx := context.Background()
-	db, _ := openTestDB(t)
-	cx, cy, zoom, err := db.RootView(ctx)
-	if err != nil || cx != 0 || cy != 0 || zoom != 0 {
-		t.Fatalf("fresh root view: %v %v %v %v", cx, cy, zoom, err)
-	}
-	if err := db.SetRootView(ctx, 1.5, -2.25, 0.75); err != nil {
-		t.Fatal(err)
-	}
-	cx, cy, zoom, err = db.RootView(ctx)
-	if err != nil || cx != 1.5 || cy != -2.25 || zoom != 0.75 {
-		t.Fatalf("root view round trip: %v %v %v %v", cx, cy, zoom, err)
-	}
-}
-
 // TestConcurrentWritesNeverBusy reproduces the 2026-08-08 `make check` flake:
 // OpenDB used database/sql's default pool, so two pooled connections to the
 // one SQLite file raced the write lock, and with no busy_timeout the loser

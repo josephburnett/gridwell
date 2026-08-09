@@ -280,26 +280,20 @@ func dbErr(err error) error {
 // ── lifecycle ────────────────────────────────────────────────────────────────
 
 func (s *Server) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	cx, cy, zoom, err := s.db.RootView(ctx)
-	if err != nil {
-		return nil, err
-	}
 	return &gridwellv1.InfoResponse{
 		Kind:        "ssh",
 		DisplayName: "connections",
 		// The #251 flip: no root grid — the connection list is the INSTANCE
 		// grid, and the client's gestures open the instance picker instead
-		// of landing here. The grid itself still serves (legacy links, the
-		// picker's reads/writes).
+		// of landing here. Writable is FALSE deliberately: it is the "+
+		// palette shows here" gate, and instances are created through the
+		// picker (CreateTile/WriteContent directly), never the palette. No
+		// root grid means no root view to report either.
 		InstanceGridId: connGridID,
 		Watch:          true,
-		Writable:       true,
 		CreateSchemas: map[string]string{
 			"well": CreateSchemaWell,
 		},
-		RootViewCx:   cx,
-		RootViewCy:   cy,
-		RootViewZoom: zoom,
 	}, nil
 }
 
@@ -342,13 +336,11 @@ func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewReq
 		out.RootGridId = local
 		return fw.client.SetRootView(ctx, &out)
 	}
-	if local != connGridID {
-		return nil, status.Errorf(codes.NotFound, "sshhost: no root grid %q", local)
-	}
-	if err := s.db.SetRootView(ctx, req.Cx, req.Cy, req.Zoom); err != nil {
-		return nil, err
-	}
-	return &gridwellv1.SetRootViewResponse{}, nil
+	// Local: the plugin has no root grid (#251 — the connection list is an
+	// instance grid, never a landing page), so there is no root view to
+	// persist. The transit branch above still forwards root-view writes to
+	// remote plugins reached through a connection.
+	return nil, status.Error(codes.Unimplemented, "sshhost: no root grid (parameterized plugin)")
 }
 
 // ── reads ────────────────────────────────────────────────────────────────────
@@ -399,9 +391,13 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 	}
 	return &gridwellv1.GetGridResponse{
 		Grid: &gridwellv1.Grid{
-			Id:       connGridID,
-			Version:  gv,
-			Writable: true,
+			Id:      connGridID,
+			Version: gv,
+			// NOT writable: that's the "+ palette shows here" gate, and
+			// instances are created through the picker (CreateTile /
+			// WriteContent directly), never the palette (#251). The plugin
+			// stamps its own grid because it is registered TRANSIT — the
+			// server forwards this stamp verbatim.
 			CreateSchemas: map[string]string{
 				"well": CreateSchemaWell,
 			},

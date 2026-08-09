@@ -124,8 +124,8 @@ func TestConnectionLifecycleThroughTheChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !g.Grid.Writable {
-		t.Error("the connection list must be writable")
+	if g.Grid.Writable {
+		t.Error("the instance grid must NOT read writable — that's the + palette gate, and instances are created through the picker, never the palette")
 	}
 	if !strings.Contains(g.Grid.CreateSchemas["well"], `"host"`) {
 		t.Fatalf("root grid must declare the well creation schema, got %v", g.Grid.CreateSchemas)

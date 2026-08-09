@@ -1,10 +1,11 @@
-// Package sshhost is the multi-connection ssh plugin (issue #199): one plugin
-// process hosting MANY remote-node mounts, each a connection WELL the user
-// drops on the plugin's root grid. The connection's parameters (host, user,
-// key path, …) are the well's CONTENT — committed through the one content
-// door (WriteContent) via the #198 creation schema — and its child is the
-// remote's node grid, reached through a per-connection sub-namespace segment
-// the plugin mints and routes: `<ssh-plugin>/<conn>/<remote-plugin>/<id>`.
+// Package sshhost is the multi-connection ssh plugin (issues #199, #251):
+// one plugin process hosting MANY remote-node mounts, each a connection WELL
+// on the plugin's INSTANCE grid — created and managed through the client's
+// instance picker, never a landing page. The connection's parameters (host,
+// user, key path, …) are the well's CONTENT — committed through the one
+// content door (WriteContent) via the #198 creation schema — and its child
+// is the remote's node grid, reached through a per-connection sub-namespace
+// segment the plugin mints and routes: `<ssh-plugin>/<conn>/<remote-plugin>/<id>`.
 // The plugin peels its connection segment exactly as a node peels a plugin
 // segment (rpc.TransitQualifyTiles — the same one transit rule), so
 // namespaces recurse and server.yaml stops naming hosts.
@@ -269,29 +270,6 @@ func (d *DB) Tombstone(ctx context.Context, id, claim int64) error {
 	}
 	_, err := d.db.ExecContext(ctx,
 		`UPDATE ssh_connections SET deleted = 1 WHERE id = ?`, id)
-	return err
-}
-
-// RootView reads the plugin root grid's persisted viewport (zeros = unset).
-func (d *DB) RootView(ctx context.Context) (cx, cy, zoom float64, err error) {
-	row := d.db.QueryRowContext(ctx, `SELECT v FROM ssh_meta WHERE k = 'root_view'`)
-	var v string
-	if err := row.Scan(&v); err != nil {
-		if err == sql.ErrNoRows {
-			return 0, 0, 0, nil
-		}
-		return 0, 0, 0, err
-	}
-	_, err = fmt.Sscanf(v, "%g %g %g", &cx, &cy, &zoom)
-	return cx, cy, zoom, err
-}
-
-// SetRootView persists the plugin root grid's viewport (framing only).
-func (d *DB) SetRootView(ctx context.Context, cx, cy, zoom float64) error {
-	_, err := d.db.ExecContext(ctx,
-		`INSERT INTO ssh_meta (k, v) VALUES ('root_view', ?)
-		 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
-		fmt.Sprintf("%g %g %g", cx, cy, zoom))
 	return err
 }
 
