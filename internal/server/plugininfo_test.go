@@ -311,10 +311,10 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPlugins: %v", err)
 	}
-	if len(plugins) != 1 {
-		t.Fatalf("got %d plugins, want 1: %+v", len(plugins), plugins)
+	if len(plugins.Plugins) != 1 {
+		t.Fatalf("got %d plugins, want 1: %+v", len(plugins.Plugins), plugins.Plugins)
 	}
-	p := plugins[0]
+	p := plugins.Plugins[0]
 	if p.RootGridID != "" {
 		t.Errorf("broken plugin RootGridID = %q, want empty", p.RootGridID)
 	}

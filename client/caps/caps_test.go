@@ -8,11 +8,20 @@ import (
 )
 
 func TestDerive(t *testing.T) {
-	if !Derive(true).LiveURL {
+	if !Derive(true, false).LiveURL {
 		t.Errorf("bridge present must enable live URL views")
 	}
-	if Derive(false).LiveURL {
+	if Derive(false, false).LiveURL {
 		t.Errorf("no bridge must disable live URL views")
+	}
+	if c := Derive(true, false); !c.Shells || !c.LiveShell {
+		t.Errorf("shells enabled + bridge: want Shells and LiveShell, got %+v", c)
+	}
+	if c := Derive(true, true); c.Shells || c.LiveShell {
+		t.Errorf("shells_disabled must kill both Shells and LiveShell, got %+v", c)
+	}
+	if c := Derive(false, false); c.LiveShell || !c.Shells {
+		t.Errorf("browser host: shells exist (frozen) but never live, got %+v", c)
 	}
 }
 

@@ -67,10 +67,19 @@ func (c *Client) NodeIdentity(ctx context.Context) (nodeUUID, nodeRootGridID str
 	return r.Msg.NodeUuid, r.Msg.NodeRootGridId, nil
 }
 
-func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
+// PluginList is the node handshake: the plugin roster plus the node-level
+// facts that ride it (shells_disabled — see data.proto).
+type PluginList struct {
+	Plugins []PluginInfo
+	// ShellsDisabled: this node refuses shell tiles outright; the client
+	// derives caps from it (no shell primitive in the + palette).
+	ShellsDisabled bool
+}
+
+func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
 	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
 	if err != nil {
-		return nil, err
+		return PluginList{}, err
 	}
 	out := make([]PluginInfo, len(r.Msg.Plugins))
 	for i, p := range r.Msg.Plugins {
@@ -88,7 +97,7 @@ func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 			InfoError:      p.InfoError,
 		}
 	}
-	return out, nil
+	return PluginList{Plugins: out, ShellsDisabled: r.Msg.ShellsDisabled}, nil
 }
 
 // GetTile reads a single tile's metadata by id.

@@ -282,6 +282,8 @@ func RunServe(args []string) int {
 		NodeStatePath: filepath.Join(home, "node-view.json"),
 		// The browser surface's password gate (server/auth.go). Empty = open.
 		Password: cfg.Password,
+		// Node-wide shell refusal (server.yaml disable_shells).
+		DisableShells: cfg.DisableShells,
 	})
 
 	requestCtx, cancelRequests := context.WithCancel(context.Background())

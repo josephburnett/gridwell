@@ -182,7 +182,7 @@ func TestMenuAndMountLabelAgree(t *testing.T) {
 		t.Fatalf("ListPlugins: %v", err)
 	}
 	var menuLabel string
-	for _, p := range plugins {
+	for _, p := range plugins.Plugins {
 		if p.UUID == fsPluginUUID {
 			menuLabel = p.Label
 		}
@@ -380,10 +380,11 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 // order, with kind, label, and writability (only localdb accepts new tiles).
 func TestListPlugins(t *testing.T) {
 	cl, _, _ := newTestServerWithPlugins(t)
-	plugins, err := cl.ListPlugins(context.Background())
+	list, err := cl.ListPlugins(context.Background())
 	if err != nil {
 		t.Fatalf("ListPlugins: %v", err)
 	}
+	plugins := list.Plugins
 	// Registration order: primary localdb, then fs, then proc.
 	if len(plugins) != 3 {
 		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
@@ -426,7 +427,7 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPlugins: %v", err)
 	}
-	scratch := plugins[0].ScratchGridID
+	scratch := plugins.Plugins[0].ScratchGridID
 	if scratch == "" {
 		t.Fatal("localdb advertised no scratch grid")
 	}

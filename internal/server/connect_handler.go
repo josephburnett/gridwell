@@ -164,7 +164,7 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
 		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 	}
-	resp := &pb.ListPluginsResponse{Plugins: out}
+	resp := &pb.ListPluginsResponse{Plugins: out, ShellsDisabled: h.srv.cfg.DisableShells}
 	if h.srv.cfg.NodeID != "" {
 		resp.NodeUuid = h.srv.cfg.NodeID
 		resp.NodeRootGridId = h.srv.cfg.NodeID + "/" + nodeGridID
@@ -327,6 +327,13 @@ func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.Searc
 // qualified.
 func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb.CreateTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
+	// The node-wide shell refusal (server.yaml disable_shells) lives at the
+	// router, BEFORE plugin resolution, so no plugin — local or mounted —
+	// can serve one. The palette hides the swatch; this is the authority.
+	if h.srv.cfg.DisableShells && m.Tile.GetKind() == rpc.KindShell {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("shell tiles are disabled on this node (server.yaml disable_shells)"))
+	}
 	c, local, uuid, err := h.route(m.GridId)
 	if err != nil {
 		return nil, err
@@ -655,6 +662,12 @@ func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[p
 // error is reported as not-alive rather than a Connect error — the wasm only
 // cares whether the refresh button should hide.
 func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
+	// disable_shells: every session is unreachable by design, so answer
+	// "gone" — the wasm hides the refresh/reconnect affordance exactly as it
+	// does for a dead tmux session.
+	if h.srv.cfg.DisableShells {
+		return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: false}), nil
+	}
 	c, local, _, err := h.route(req.Msg.TileId)
 	if err != nil {
 		return connect.NewResponse(&pb.ShellSessionAliveResponse{Alive: false}), nil

@@ -78,6 +78,8 @@ func statusErr(err error) error {
 			return status.Error(gcodes.InvalidArgument, ce.Message())
 		case connect.CodeFailedPrecondition:
 			return status.Error(gcodes.FailedPrecondition, ce.Message())
+		case connect.CodePermissionDenied:
+			return status.Error(gcodes.PermissionDenied, ce.Message())
 		default:
 			return status.Error(gcodes.Internal, ce.Message())
 		}
@@ -211,6 +213,12 @@ func (n *nodeExport) Subscribe(_ *pb.SubscribeRequest, stream pb.Gridwell_Subscr
 // OpenShell peeks the bind message for the tile id, routes to the owning
 // plugin with the id peeled one segment, and pipes both directions.
 func (n *nodeExport) OpenShell(stream pb.Gridwell_OpenShellServer) error {
+	// The node-wide shell refusal (server.yaml disable_shells): every PTY
+	// door on this node is closed, whichever plugin (local or mounted)
+	// would hold the session.
+	if n.srv.cfg.DisableShells {
+		return status.Error(gcodes.PermissionDenied, "shell tiles are disabled on this node (server.yaml disable_shells)")
+	}
 	first, err := stream.Recv()
 	if err != nil {
 		return err

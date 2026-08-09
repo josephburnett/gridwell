@@ -1850,6 +1850,12 @@ type ListPluginsResponse struct {
 	// its launcher exactly like the local one.
 	NodeUuid       string `protobuf:"bytes,2,opt,name=node_uuid,json=nodeUuid,proto3" json:"node_uuid,omitempty"`
 	NodeRootGridId string `protobuf:"bytes,3,opt,name=node_root_grid_id,json=nodeRootGridId,proto3" json:"node_root_grid_id,omitempty"`
+	// shells_disabled: this node refuses shell tiles outright (server.yaml
+	// disable_shells) — the client removes the shell primitive from the +
+	// palette, and the server refuses CreateTile(kind=shell) and OpenShell no
+	// matter which plugin would serve them. A node-level operator fact, so it
+	// rides the node handshake, not any per-plugin Info.
+	ShellsDisabled bool `protobuf:"varint,4,opt,name=shells_disabled,json=shellsDisabled,proto3" json:"shells_disabled,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1903,6 +1909,13 @@ func (x *ListPluginsResponse) GetNodeRootGridId() string {
 		return x.NodeRootGridId
 	}
 	return ""
+}
+
+func (x *ListPluginsResponse) GetShellsDisabled() bool {
+	if x != nil {
+		return x.ShellsDisabled
+	}
+	return false
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.
@@ -3109,11 +3122,12 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12(\n" +
-	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\"\x90\x01\n" +
+	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\"\xb9\x01\n" +
 	"\x13ListPluginsResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12\x1b\n" +
 	"\tnode_uuid\x18\x02 \x01(\tR\bnodeUuid\x12)\n" +
-	"\x11node_root_grid_id\x18\x03 \x01(\tR\x0enodeRootGridId\"5\n" +
+	"\x11node_root_grid_id\x18\x03 \x01(\tR\x0enodeRootGridId\x12'\n" +
+	"\x0fshells_disabled\x18\x04 \x01(\bR\x0eshellsDisabled\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"_\n" +
 	"\x11CreateTileRequest\x12\x17\n" +

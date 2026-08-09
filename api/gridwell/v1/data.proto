@@ -399,6 +399,12 @@ message ListPluginsResponse {
   // its launcher exactly like the local one.
   string node_uuid = 2;
   string node_root_grid_id = 3;
+  // shells_disabled: this node refuses shell tiles outright (server.yaml
+  // disable_shells) — the client removes the shell primitive from the +
+  // palette, and the server refuses CreateTile(kind=shell) and OpenShell no
+  // matter which plugin would serve them. A node-level operator fact, so it
+  // rides the node handshake, not any per-plugin Info.
+  bool shells_disabled = 4;
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.

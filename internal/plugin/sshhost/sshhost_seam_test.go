@@ -419,9 +419,9 @@ func TestInfoDeclaresInstanceGridNotRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ssh *rpc.PluginInfo
-	for i := range pls {
-		if pls[i].Kind == "ssh" {
-			ssh = &pls[i]
+	for i := range pls.Plugins {
+		if pls.Plugins[i].Kind == "ssh" {
+			ssh = &pls.Plugins[i]
 		}
 	}
 	if ssh == nil {

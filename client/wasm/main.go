@@ -640,7 +640,7 @@ func main() {
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
 		errs:              errsurface.New(),
-		caps:              caps.Derive(bridgeAvailable()),
+		caps:              caps.Derive(bridgeAvailable(), false),
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
 		contentInflight:   map[string]bool{},
@@ -734,7 +734,12 @@ func main() {
 func (a *App) bootstrap() {
 	plugins, err := a.cl.ListPlugins(context.Background())
 	if err == nil {
-		a.plugins = plugins
+		a.plugins = plugins.Plugins
+		// Fold the node's shells_disabled fact into the capability set —
+		// still boot-time (nothing has rendered or accepted input yet),
+		// immutable afterward. caps stays the ONE owner of "what can this
+		// client do"; nothing else reads the handshake flag.
+		a.caps = caps.Derive(bridgeAvailable(), plugins.ShellsDisabled)
 	} else {
 		// The landing page will render empty — say why, or it reads as "all
 		// my plugins vanished" (charter §6).

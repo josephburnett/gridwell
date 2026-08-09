@@ -28,6 +28,13 @@ import (
 // QUALIFIED ids it carries; there is no scoping header and no name-based
 // selection.
 func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient) {
+	return nodeServerCfg(t, server.Config{NodeID: "node1"})
+}
+
+// nodeServerCfg is nodeServer with the server config under test control
+// (shells_disabled_test.go flips DisableShells; everything else uses the
+// plain nodeServer default).
+func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, gridwellv1.GridwellClient) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -44,7 +51,7 @@ func nodeServer(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellCli
 	reg := plugin.NewRegistry()
 	reg.Register("ur1", "localdb", direct, nil)
 	reg.SetLabel("ur1", "personal")
-	srv := server.New(reg, server.Config{NodeID: "node1"})
+	srv := server.New(reg, cfg)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

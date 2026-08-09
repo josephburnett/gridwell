@@ -27,13 +27,24 @@ type Caps struct {
 	// WS bridge is gone, and a plain browser shows the frozen preview like a
 	// url tile).
 	LiveShell bool
+	// Shells: shell tiles exist on this node at all. False when the server
+	// declares shells_disabled (server.yaml disable_shells): the + palette
+	// offers no shell primitive and the server refuses shell creates and
+	// PTY attaches regardless of what any client asks.
+	Shells bool
 }
 
-// Derive computes the capability set from the one environmental fact that
-// distinguishes the hosts: whether the Electron preload bridge
-// (window.gridwell) is present.
-func Derive(bridgePresent bool) Caps {
-	return Caps{LiveURL: bridgePresent, LiveShell: bridgePresent}
+// Derive computes the capability set from the two boot facts: whether the
+// Electron preload bridge (window.gridwell) is present, and whether the node
+// disabled shells (the ListPlugins handshake's shells_disabled). Called once
+// with false before the handshake and re-derived once when it lands —
+// still strictly boot-time, immutable afterward.
+func Derive(bridgePresent, shellsDisabled bool) Caps {
+	return Caps{
+		LiveURL:   bridgePresent,
+		LiveShell: bridgePresent && !shellsDisabled,
+		Shells:    !shellsDisabled,
+	}
 }
 
 // GoLiveNotice returns the errsurface report for a gesture that asked a URL

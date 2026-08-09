@@ -241,7 +241,10 @@ type paletteItem struct {
 // every configured plugin first (server.yaml order, the palette's top
 // row), then — only when the pane's current grid is writable — the tile
 // primitives. Read-only grids (the node grid, fs/proc grids) therefore
-// show plugins only.
+// show plugins only. A shells-disabled node (caps.Shells false) offers no
+// shell primitive: every palette consumer — layout, hit-testing, drag
+// ghosts, the test hook — reads this one list, so the swatch is gone from
+// all of them at once.
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	items := make([]paletteItem, 0, len(a.plugins)+len(primitiveKinds))
 	for _, pl := range a.plugins {
@@ -249,6 +252,9 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	}
 	if a.gridWritable(a.gridIDForPane(p)) {
 		for _, k := range primitiveKinds {
+			if k == tplShell && !a.caps.Shells {
+				continue
+			}
 			items = append(items, paletteItem{primitive: k})
 		}
 	}

@@ -40,8 +40,14 @@ type ServerConfig struct {
 	// design (single-tenant; the file is the secret). The desktop app
 	// authenticates itself from the serve banner and never prompts, and the
 	// gRPC node export (federation) is not gated — see server/auth.go.
-	Password string         `yaml:"password,omitempty"`
-	Plugins  []PluginConfig `yaml:"plugins"`
+	Password string `yaml:"password,omitempty"`
+	// DisableShells, when true, removes shell tiles from this node entirely:
+	// the + palette offers no shell primitive, and the server refuses
+	// CreateTile(kind=shell) and every OpenShell — whichever plugin (local or
+	// mounted) would serve it. Existing shell tiles keep their frozen
+	// previews (placement is sacred); they just can never attach a PTY here.
+	DisableShells bool           `yaml:"disable_shells,omitempty"`
+	Plugins       []PluginConfig `yaml:"plugins"`
 }
 
 // PluginConfig describes one plugin instance. ID is the UUID assigned once

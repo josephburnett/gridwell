@@ -43,6 +43,13 @@ type Config struct {
 	// Password, when non-empty, gates the browser surface (the mux) behind
 	// the login-page cookie — see auth.go. Empty = open (today's behavior).
 	Password string
+	// DisableShells refuses shell tiles node-wide: CreateTile(kind=shell)
+	// and OpenShell are denied for every plugin (local or mounted),
+	// ShellSessionAlive answers "gone", and ListPlugins carries the flag so
+	// the client drops the shell primitive from the + palette. The one
+	// server-side owner of the fact is this field (from server.yaml
+	// disable_shells).
+	DisableShells bool
 }
 
 // Server is the wired-up HTTP server. It holds NO Gridwell state of its own —

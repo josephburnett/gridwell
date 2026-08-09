@@ -152,6 +152,17 @@ but the cookie is checked against the *current* password, so changing the
 password signs every browser out. The desktop app never prompts: it
 authenticates its own window automatically.
 
+Shell tiles can be switched off node-wide:
+
+```yaml
+disable_shells: true
+```
+
+The + menu stops offering the shell primitive, and the server refuses
+shell creation and every PTY attach — whichever plugin, local or mounted,
+would serve it. Existing shell tiles keep their frozen previews (placement
+is sacred); they just can never attach a terminal here.
+
 Note: the password gates only the web UI. **The gRPC node export on the
 same port (federation, shell transport) is unauthenticated**, as is
 everything when no password is set. Bind loopback or a VPN-only address
