@@ -245,6 +245,10 @@ see I11.)
 **The rendered view is a DOM overlay.** A focused text pane in rendered
 mode shows sanitized HTML in a div (`markdown.RenderHTML`: goldmark, go-org
 for `.org` names, bluemonday); the editing textarea is another overlay.
+Task-list checkboxes are the overlay's one interactive control (2026-08-09):
+a click maps DOM index → source marker (`markdown.ToggleTask`, one shared
+parser, parity-pinned by unit test) and the edit rides the same content
+entry + flush as a keystroke.
 Every other view paints raw soft-wrapped source on canvas, wrapped to the
 same columns the textarea shows (`markdown.WrapRawText`), so nothing
 reflows when focus moves. Grid previews render at constant scale

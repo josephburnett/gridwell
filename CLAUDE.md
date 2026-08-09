@@ -129,7 +129,10 @@ Re-litigating them silently is how churn happens.
 - **The rendered view is a sanitized-HTML overlay (#218).** goldmark +
   go-org + bluemonday. Embeds, tile-links-in-docs, and rendered-mode
   editing were deleted with the custom canvas engine; a doc link is just a
-  link.
+  link. ONE carve-out (2026-08-09): task-list checkboxes are interactive —
+  clicking one flips its `[ ]`/`[x]` source marker through the normal
+  text-edit door (`markdown.ToggleTask`, parity-pinned); everything else
+  stays read-only.
 - **The Chromium session is host-local (2026-07-26).** One partition
   (`persist:gridwell`) for every live url tile, local or mounted; live
   tiles browse from the host's own network. Nothing about sessions or

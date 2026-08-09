@@ -7,7 +7,11 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/niklasfasching/go-org/org"
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	east "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/util"
 )
 
 // The read-only rendered view (issue #218): source bytes → sanitized HTML
@@ -18,9 +22,38 @@ import (
 // safe-by-default: raw HTML in markdown is omitted, not passed through).
 
 // gmRenderer shares the GFM configuration with gmParser: ONE dialect,
-// whether the bytes are being lowered for alt-text derivation or rendered
-// for the overlay.
-var gmRenderer = goldmark.New(goldmark.WithExtensions(extension.GFM))
+// whether the bytes are being lowered for alt-text derivation, rendered
+// for the overlay, or scanned for task markers (tasklist.go).
+var gmRenderer = goldmark.New(
+	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithRendererOptions(renderer.WithNodeRenderers(
+		util.Prioritized(taskCheckboxRenderer{}, 100),
+	)),
+)
+
+// taskCheckboxRenderer overrides GFM's task-list checkbox renderer to emit
+// the input WITHOUT `disabled`: the rendered view's checkboxes are
+// interactive — clicking one toggles the source marker through the normal
+// text-edit door (owner decision 2026-08-09, carving this one control out
+// of #218's read-only rendered view; tasklist.go owns the mapping). A
+// disabled input swallows clicks entirely, so it could never be a control.
+type taskCheckboxRenderer struct{}
+
+func (taskCheckboxRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(east.KindTaskCheckBox, renderTaskCheckbox)
+}
+
+func renderTaskCheckbox(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	if node.(*east.TaskCheckBox).IsChecked {
+		_, _ = w.WriteString(`<input checked="" type="checkbox"> `)
+	} else {
+		_, _ = w.WriteString(`<input type="checkbox"> `)
+	}
+	return ast.WalkContinue, nil
+}
 
 // htmlPolicy is bluemonday's user-generated-content policy plus the class/
 // id attributes go-org's output leans on (outline containers, headline

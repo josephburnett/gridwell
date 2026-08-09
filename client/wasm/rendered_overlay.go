@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -42,13 +43,19 @@ func (a *App) ensureRenderedView() {
 
 	// Links: never navigate the app page. An http(s) link opens as an
 	// ephemeral visit in a split below — the one live-link vocabulary
-	// (issue #207); everything else is inert.
+	// (issue #207); everything else is inert. Task-list checkboxes are the
+	// one interactive control (owner decision 2026-08-09): clicking one
+	// toggles its source marker through the normal text-edit door.
 	clickCb := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) == 0 {
 			return nil
 		}
 		ev := args[0]
 		t := ev.Get("target")
+		if t.Truthy() && t.Get("tagName").String() == "INPUT" {
+			a.onRenderedCheckboxClick(ev, t)
+			return nil
+		}
 		for t.Truthy() && t.Get("tagName").String() != "A" {
 			t = t.Get("parentElement")
 		}
@@ -137,6 +144,64 @@ func (a *App) refreshRenderedOverlay() {
 		div.Set("scrollLeft", p.TextScrollX)
 	}
 	a.renderedReady = true
+}
+
+// onRenderedCheckboxClick toggles the task marker behind a clicked
+// checkbox: the input's DOM position among the overlay's checkboxes is its
+// document-order index, markdown.ToggleTask maps that index to the ONE
+// source byte to flip (unit-tested, parity-pinned), and the edit rides the
+// same content-store entry + debounced flush a keystroke does — no second
+// write path. The overlay then re-renders from the toggled source, so what
+// the checkbox shows is always the document's truth, never bare DOM state.
+// A refused toggle preventDefaults so the native flip reverts (charter §6:
+// the box must not LOOK saved when nothing was).
+func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
+	p := a.tree.FocusedPane()
+	if p == nil || p.TextFocus == "" {
+		ev.Call("preventDefault")
+		return
+	}
+	t, ok := a.descendedTile(p)
+	if !ok || t.Kind != rpc.KindText || markdown.IsOrg(t.AltText) {
+		// Org checkboxes render via go-org and have no source mapping here.
+		ev.Call("preventDefault")
+		return
+	}
+	if a.tileReadOnly(&t) {
+		ev.Call("preventDefault")
+		a.reportErr(errsurface.Info, "textedit",
+			"this document is read-only — the checkbox was not changed")
+		return
+	}
+	body, ok := a.tileBody(&t)
+	if !ok {
+		ev.Call("preventDefault")
+		return
+	}
+	inputs := a.renderedView.Call("querySelectorAll", `input[type="checkbox"]`)
+	idx := -1
+	for i := 0; i < inputs.Length(); i++ {
+		if inputs.Index(i).Equal(input) {
+			idx = i
+			break
+		}
+	}
+	toggled, ok := markdown.ToggleTask(body, idx)
+	if !ok {
+		// The DOM index found no matching source marker — refuse loudly
+		// rather than flip the wrong byte (isTaskMarker's whole point).
+		ev.Call("preventDefault")
+		a.reportErr(errsurface.Error, "textedit",
+			"checkbox did not map to a task marker — nothing was changed")
+		return
+	}
+	a.c.PutEditedContent(t.ContentID(), toggled)
+	a.scheduleFileSave()
+	// Re-render from the toggled source: the render key won't change (same
+	// tile, same version, same length), so force it.
+	a.lastRenderedKey = ""
+	a.refreshRenderedOverlay()
+	a.draw()
 }
 
 // The overlay's stylesheet lives in markdown.RenderedCSS — one stylesheet
