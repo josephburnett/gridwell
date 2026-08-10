@@ -656,28 +656,34 @@ func (a *App) drawURLRefreshButton() {
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 }
 
-// drawURLNoLiveButton paints the bar-slot button on a frozen URL-tile descent
-// when this host cannot go live (caps.LiveURL false — a plain browser, no
-// Electron bridge): the refresh glyph, dimmed, with a slash through it.
-// Click → an Info notice explaining why (caps.GoLiveNotice), never a silent
-// dead tap.
-func (a *App) drawURLNoLiveButton() {
+// drawURLOpenTabButton paints the bar-slot button on a frozen URL-tile
+// descent when this host cannot go live (caps.LiveURL false — a plain
+// browser, no Electron bridge): the external-link glyph (a box with an
+// arrow out its corner). Click → open the tile's address in a NEW BROWSER
+// TAB (owner decision 2026-08-09) — the browser host's next-best descent;
+// the tile itself stays frozen and untouched. (This replaced the slashed
+// no-live glyph, whose only answer was an explanatory notice.)
+func (a *App) drawURLOpenTabButton() {
 	cx, cy := a.plusButtonCenter()
 	a.drawCircleButtonChrome(cx, cy)
 
+	c := a.cctx
 	band, _ := a.barTheme()
-	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
-	// The slash: corner-to-corner over the glyph, same dim color, so the
-	// shape reads as "refresh — crossed out" at a glance.
-	a.cctx.Set("strokeStyle", band)
-	a.cctx.Set("lineWidth", 2.0)
-	a.cctx.Set("lineCap", "round")
-	a.cctx.Call("beginPath")
-	a.cctx.Call("moveTo", cx-8, cy+8)
-	a.cctx.Call("lineTo", cx+8, cy-8)
-	a.cctx.Call("stroke")
-	a.cctx.Set("lineWidth", 1.0)
-	a.cctx.Set("lineCap", "butt")
+	c.Set("strokeStyle", band)
+	c.Set("lineWidth", 2.0)
+	c.Set("lineCap", "round")
+	// The tab: a box toward the lower left.
+	c.Call("strokeRect", cx-7, cy-1, 8.0, 8.0)
+	// The arrow, leaving through the box's upper-right corner.
+	c.Call("beginPath")
+	c.Call("moveTo", cx+0, cy+0)
+	c.Call("lineTo", cx+7, cy-7)
+	c.Call("moveTo", cx+2, cy-7)
+	c.Call("lineTo", cx+7, cy-7)
+	c.Call("lineTo", cx+7, cy-2)
+	c.Call("stroke")
+	c.Set("lineWidth", 1.0)
+	c.Set("lineCap", "butt")
 }
 
 // drawGridLines paints faint lines at integer cell boundaries within the

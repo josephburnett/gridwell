@@ -22,9 +22,10 @@ test('an ephemeral url visit explains itself instead of opening a dead modal', a
   await expect.poll(async () => livecapMessage(window)).toContain('desktop');
 });
 
-test('a frozen url tile shows the no-live corner button and it explains on tap', async ({
+test('a frozen url tile: the circle button opens the address in a new tab', async ({
   gw,
   window,
+  serve,
 }) => {
   await gw.enterPlugin('e2e');
   const f = await gw.focused();
@@ -35,21 +36,34 @@ test('a frozen url tile shows the no-live corner button and it explains on tap',
   // persisted thing (the desktop can visit it later); it just stays frozen.
   // The drop lands it bare (#209); the first descent prompts for the
   // address and, with no live capability, lands on the frozen descent.
+  const addr = `${serve.origin}/wasm_exec.js?newtab=1`;
   await gw.openPalette();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
-  await window.fill('#gw-url-input', 'https://example.com/');
+  await window.fill('#gw-url-input', addr);
   await window.locator('#gw-url-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
   await gw.waitIdle();
   const t = tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)!;
   expect(t, 'url tile created (frozen) from a plain browser').toBeTruthy();
+  const versionBefore = t.version;
 
-  // The submit descended; the corner button is the slashed no-live
-  // affordance. Tapping it must post the explanatory notice, not silently
-  // no-op (and certainly not try to place a native view).
+  // The submit descended; the circle is the open-in-new-tab affordance
+  // (owner decision 2026-08-09): a browser host can't place a live view,
+  // so the click opens the frozen address in a NEW TAB — the context
+  // 'page' event, since noopener severs the popup relationship.
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
   const pal = await gw.palette();
-  await window.mouse.click(pal.plusX, pal.plusY);
-  await expect.poll(async () => livecapMessage(window)).toContain('desktop');
+  const [popup] = await Promise.all([
+    window.context().waitForEvent('page', { timeout: 10_000 }),
+    window.mouse.click(pal.plusX, pal.plusY),
+  ]);
+  await popup.waitForURL(/newtab=1/, { timeout: 10_000 });
+  expect(popup.url()).toBe(addr);
+  await popup.close();
+
+  // The gesture persisted NOTHING: the tile row is byte-for-byte as it
+  // was — still frozen, same version.
+  const after = tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)!;
+  expect(after.version, 'opening a tab must not touch the tile').toBe(versionBefore);
 });

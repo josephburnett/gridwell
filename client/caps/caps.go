@@ -48,10 +48,12 @@ func Derive(bridgePresent, shellsDisabled bool) Caps {
 }
 
 // GoLiveNotice returns the errsurface report for a gesture that asked a URL
-// tile to go live when LiveURL is false — the tap on the slashed corner
-// button, or a visit gesture that can only end frozen. Info severity: a
-// missing capability is an expected property of this host, not a failure.
-// The stable source coalesces repeated taps into one row.
+// tile to go live when LiveURL is false — the ephemeral-visit gesture,
+// which can only end frozen. (The bar slot no longer posts this: on a
+// browser host it opens the address in a new tab instead — 2026-08-09.)
+// Info severity: a missing capability is an expected property of this
+// host, not a failure. The stable source coalesces repeated taps into one
+// row.
 func GoLiveNotice() (sev errsurface.Severity, source, message string) {
 	return errsurface.Info, "livecap", "live web views need the desktop app — showing the frozen preview"
 }

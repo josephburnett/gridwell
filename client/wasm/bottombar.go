@@ -6,7 +6,7 @@ import (
 	"slices"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/client/caps"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/internal/rpc"
@@ -293,7 +293,7 @@ func (a *App) drawBarSlot() {
 			} else if a.caps.LiveURL {
 				a.drawURLRefreshButton()
 			} else {
-				a.drawURLNoLiveButton()
+				a.drawURLOpenTabButton()
 			}
 		case a.isShellDescent(p) && !a.hasShellStream(p.ID):
 			// Frozen shell descent: refresh either creates a fresh tmux
@@ -341,9 +341,12 @@ func (a *App) barSlotClick(button int) {
 		if a.urlViewFor(p.ID) != nil {
 			bridgeGoBack(p.ID)
 		} else if !a.caps.LiveURL {
-			// The slashed button: this host can't place a live view.
-			// Explain instead of a silent dead tap (charter §6).
-			a.reportErr(caps.GoLiveNotice())
+			// A browser host can't place a live view; the next-best descent
+			// is the browser's own: open the address in a NEW TAB (owner
+			// decision 2026-08-09). The tile stays frozen and untouched —
+			// nothing is persisted by this gesture. Synchronous within the
+			// click, so the popup rides the user-gesture allowance.
+			a.openURLInNewTab(p)
 		} else {
 			// Frozen: go live (place the native view).
 			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
@@ -359,6 +362,28 @@ func (a *App) barSlotClick(button int) {
 		a.menu.Toggle(p.ID)
 		a.draw()
 	}
+}
+
+// openURLInNewTab opens the focused pane's url-tile address in a new
+// browser tab — the frozen-host answer to "descend live". The address is
+// the tile's own frozen URLString (a link resolves to its target's); a
+// tile with no address yet says so instead of a silent dead tap (§6).
+func (a *App) openURLInNewTab(p *pane.Pane) {
+	t, ok := a.descendedTile(p)
+	if !ok {
+		return
+	}
+	url := t.URLString
+	if url == "" {
+		if ct := a.cachedTileByID(a.contentKey(t.ID)); ct != nil {
+			url = ct.URLString
+		}
+	}
+	if url == "" {
+		a.reportErr(errsurface.Info, "urlopen", "this url tile has no address yet")
+		return
+	}
+	js.Global().Get("window").Call("open", url, "_blank", "noopener")
 }
 
 // drawChainCrumb paints one descent-chain square: the tile's own preview
