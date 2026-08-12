@@ -290,6 +290,24 @@ type Tile struct {
 	ServesPage bool `json:"serves_page,omitempty"`
 }
 
+// WebContent reports whether this tile PRESENTS as web content: a url tile
+// (its own address) or a serves_page tile (the /content/ door address). The
+// single classification every url-tile semantic keys off — live native view
+// on a desktop host, open-in-new-tab on a browser host, preview-image
+// frozen face — so the two shapes can never diverge gesture by gesture.
+func (t *Tile) WebContent() bool {
+	return t.Kind == KindURL || t.ServesPage
+}
+
+// PageURL builds the /content/ door address for a tile — the ONE place the
+// URL grammar is written on the client side (the server's parseContentPath
+// is its mirror; a seam test pins that they agree). The trailing slash is
+// load-bearing: relative subresource URLs inside a served page resolve
+// against the directory.
+func PageURL(origin, contentToken, tileID string) string {
+	return origin + "/content/" + contentToken + "/" + tileID + "/"
+}
+
 // ContentID returns the tile id that OWNS this tile's content: a leaf link's
 // target, or the tile's own id. Every client content operation — body fetch,
 // edit buffer, save routing, preview fetch, shell session, workspace layout —

@@ -120,6 +120,12 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 // applyContentZoom updates the cache (the one client copy every reader uses),
 // pokes the live surface for the kinds that hold native state, and persists.
 func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
+	if t.ServesPage {
+		// A serves_page descent has no persisted content_zoom (the owning
+		// plugin stores no url state), and a client-only zoom would violate
+		// the no-client-state rule — the chord is simply inert here.
+		return
+	}
 	nt := *t
 	nt.ContentZoom = z
 	a.c.UpdateTile(nt.GridID, nt)

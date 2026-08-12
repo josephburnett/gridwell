@@ -504,16 +504,18 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			// descendedTile (not g.Tiles[...]) so an ephemeral url visit — focused
 			// off the pane's grid, in the scratch grid — still renders.
 			if file, ok := a.descendedTile(p); ok {
-				switch file.Kind {
-				case rpc.KindText:
+				switch {
+				case file.Kind == rpc.KindText && !file.ServesPage:
 					ix, iy, iw, ih := textInnerBox(r)
 					a.cctx.Set("fillStyle", colorFileInnerBg)
 					a.cctx.Call("fillRect", ix, iy, iw, ih)
 					a.drawMarkdownInPane(p, &file, ix, iy, iw, ih)
-				case rpc.KindURL:
+				case file.WebContent():
+					// url tiles AND serves_page tiles: the same web-content
+					// descent — preview when frozen, native view when live.
 					ix, iy, iw, ih := paneContentBox(r)
 					a.drawURLTileInPane(&file, ix, iy, iw, ih)
-				case rpc.KindShell:
+				case file.Kind == rpc.KindShell:
 					ix, iy, iw, ih := paneContentBox(r)
 					a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
 				default:
@@ -758,6 +760,14 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
 	case rpc.KindText:
+		if n.ServesPage {
+			// A page tile's grid face is its content's image (fs: the
+			// file's thumbnail), in the text family's border — it IS a
+			// file; only its presentation is web content.
+			a.drawPageTile(n, x, y, w, h, selected, outside, dashed)
+			a.drawTileBannerLabel(n, x, y, w, h, outside)
+			return
+		}
 		a.drawMarkdownNode(n, x, y, w, h, selected, outside, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return

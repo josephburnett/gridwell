@@ -36,6 +36,27 @@ func drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
 	c.Call("drawImage", img, dx, dy, dw, dh)
 }
 
+// pagePreviewBlobID is the cache/fetch key for a serves_page tile's preview
+// (2026-08-11). Page tiles have no preview_blob_id — the owning plugin
+// DERIVES the frozen face from the content itself (fs: a thumbnail of the
+// file), so there is no server-side generation counter to key freshness by.
+// A fixed sentinel means: fetch once per session, keep until reload.
+const pagePreviewBlobID = -1
+
+// previewBlobKey resolves the urlPreview cache key for a tile: the stored
+// preview blob id when there is one, the page sentinel for a serves_page
+// tile, 0 (= no preview, no fetch) otherwise. The one keying rule for every
+// preview draw and fetch.
+func previewBlobKey(n *rpc.Tile) int64 {
+	if n.PreviewBlobID != 0 {
+		return n.PreviewBlobID
+	}
+	if n.ServesPage {
+		return pagePreviewBlobID
+	}
+	return 0
+}
+
 // drawURLTileInPane renders a URL tile that's currently the pane's
 // TextFocus (i.e., the user descended into it). The pane's inner-rect
 // (x, y, w, h) gets the cached preview image letterboxed to fit. While the
@@ -57,17 +78,66 @@ func (a *App) drawURLTileInPane(n *rpc.Tile, x, y, w, h float64) {
 	a.cctx.Set("fillStyle", colorFileInnerBg)
 	a.cctx.Call("fillRect", x, y, w, h)
 
-	if cached, ok := a.urlPreview.Get(n.ContentID(), n.PreviewBlobID); ok {
+	if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
 		if img, ok := previewImage(cached); ok {
 			drawImageContain(a.cctx, img, x, y, w, h)
 		}
 	} else {
-		a.fetchURLPreview(n.ContentID(), n.PreviewBlobID)
+		a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
+		label := n.URLString
+		if label == "" {
+			label = n.AltText // a page tile has no address; its name says what it is
+		}
 		a.cctx.Set("fillStyle", colorMuted)
 		a.cctx.Set("font", "16px monospace")
-		a.cctx.Call("fillText", n.URLString, x+16, y+32, w-32)
+		a.cctx.Call("fillText", label, x+16, y+32, w-32)
 	}
 
+	a.cctx.Call("restore")
+}
+
+// drawPageTile renders a serves_page tile in the parent grid view (the
+// text-kind arm of drawNodeWithPreview): the plugin-derived preview image
+// letterboxed into the footprint — an image file looks like the image —
+// inside the text family's border (it IS a file; only its presentation is
+// web content). Falls back to the file name while the thumbnail loads (or
+// when the plugin serves none).
+func (a *App) drawPageTile(n *rpc.Tile, x, y, w, h float64, selected, outside, dashed bool) {
+	a.cctx.Call("save")
+	a.cctx.Call("beginPath")
+	a.cctx.Call("rect", x, y, w, h)
+	a.cctx.Call("clip")
+
+	a.cctx.Set("fillStyle", colorFileInnerBg)
+	a.cctx.Call("fillRect", x, y, w, h)
+
+	if cached, ok := a.urlPreview.Get(n.ContentID(), previewBlobKey(n)); ok {
+		if img, ok := previewImage(cached); ok {
+			drawImageContain(a.cctx, img, x, y, w, h)
+		}
+	} else {
+		if w > 20 && h > 20 {
+			a.cctx.Set("fillStyle", colorMuted)
+			a.cctx.Set("font", "12px monospace")
+			a.cctx.Call("fillText", n.AltText, x+8, y+18, w-16)
+		}
+		a.fetchURLPreview(n.ContentID(), previewBlobKey(n))
+	}
+
+	line := colorMarkdownLine
+	if outside {
+		line = colorMarkdownLineFaded
+	}
+	if dashed {
+		setTileDash(a.cctx)
+	}
+	strokeTileBorder(a.cctx, x, y, w, h, line, tileBorderPx)
+	if dashed {
+		clearTileDash(a.cctx)
+	}
+	if selected {
+		drawSelectedTileOutline(a.cctx, x, y, w, h)
+	}
 	a.cctx.Call("restore")
 }
 

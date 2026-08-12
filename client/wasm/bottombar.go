@@ -364,19 +364,20 @@ func (a *App) barSlotClick(button int) {
 	}
 }
 
-// openURLInNewTab opens the focused pane's url-tile address in a new
+// openURLInNewTab opens the focused pane's web-content address in a new
 // browser tab — the frozen-host answer to "descend live". The address is
-// the tile's own frozen URLString (a link resolves to its target's); a
-// tile with no address yet says so instead of a silent dead tap (§6).
+// the tile's own: a url tile's frozen URLString or a serves_page tile's
+// derived /content/ door URL (a link resolves to its target's); a tile
+// with no address yet says so instead of a silent dead tap (§6).
 func (a *App) openURLInNewTab(p *pane.Pane) {
 	t, ok := a.descendedTile(p)
 	if !ok {
 		return
 	}
-	url := t.URLString
+	url := a.webAddress(&t)
 	if url == "" {
 		if ct := a.cachedTileByID(a.contentKey(t.ID)); ct != nil {
-			url = ct.URLString
+			url = a.webAddress(ct)
 		}
 	}
 	if url == "" {

@@ -1517,8 +1517,9 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 
 	// Eagerly fetch the blob so it's likely cached by the time the
 	// transition lands. URL tiles don't have a blob; their preview
-	// path goes through urlPreview instead.
-	if file.Kind == rpc.KindText {
+	// path goes through urlPreview instead — and so does a serves_page
+	// tile's (its descent is the page, not the document body).
+	if file.Kind == rpc.KindText && !file.ServesPage {
 		a.fetchTileContent(file.ID)
 		// Source-backed text tiles (the @info tile in a proc-well, fs
 		// file metadata) are reconciled server-side from live host
@@ -1541,13 +1542,14 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	initialScrollX := float64(file.TextX)
 	// URL tiles have no text/rendered modes; mode is "" for them so
 	// the textarea overlay (gated on TextMode == "text") never shows.
+	// serves_page tiles present as web content the same way — mode "".
 	// For text tiles the mode is the one persisted on the tile (server),
 	// defaulting to raw text for a never-opened tile. Source-backed text
 	// tiles (the @info tile, fs file metadata) are read-only — descent
 	// always shows the rendered markdown so the user never sees a
 	// blinking caret over content they can't change.
 	var mode string
-	if file.Kind == rpc.KindText {
+	if file.Kind == rpc.KindText && !file.ServesPage {
 		if a.tileReadOnly(file) {
 			mode = rpc.TextModeRendered
 		} else {
@@ -1688,7 +1690,7 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 	cid := tile.ContentID()
 	alive, known := a.shellAlive[cid]
 	verdict := shellconn.DecideAutoLive(
-		tile.Kind == rpc.KindURL, tile.Kind == rpc.KindShell,
+		tile.Kind == rpc.KindURL, tile.Kind == rpc.KindShell, tile.ServesPage,
 		a.caps.LiveURL, a.caps.LiveShell,
 		tile.PreviewBlobID != 0, known, alive, tile.URLFrozen)
 	switch verdict {
@@ -1769,8 +1771,9 @@ func (a *App) startTextAscent(p *pane.Pane) {
 	// row goes away (for a shell, the plugin kills its tmux session too).
 	ephemeral := a.isEphemeralTile(p, &file) && !a.otherPaneShowsTile(p.ID, file.ID)
 
-	// If we're ascending out of a URL tile, close the live stream (if any).
-	if file.Kind == rpc.KindURL {
+	// If we're ascending out of web content (a url tile or a serves_page
+	// tile), close the live view (if any).
+	if file.WebContent() {
 		a.closeURLStream(p.ID, !ephemeral)
 	}
 	// Shell ascent: capture the JPEG, persist it as the frozen
@@ -1932,8 +1935,9 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// concerns — URL and shell tiles don't carry text_x/text_y/text_w
 	// /text_h, and the server's SetTextView rejects non-text kinds with
 	// InvalidArgument. Routing them through would surface as a 400 plus
-	// a spurious "version conflict" refetch in the wasm dispatcher.
-	if file.Kind != rpc.KindText {
+	// a spurious "version conflict" refetch in the wasm dispatcher. A
+	// serves_page descent is web content — no text framing either.
+	if file.Kind != rpc.KindText || file.ServesPage {
 		return
 	}
 	gid := a.gridIDForPane(p)

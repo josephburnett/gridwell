@@ -55,28 +55,32 @@ func TestDecodeJPEGDataURL(t *testing.T) {
 // The auto-live descent decision (issue #202): descending engages — url
 // opens, an alive or fresh shell opens, a dead shell stays frozen, a
 // capability-gated host stays silently frozen, unknown aliveness probes.
+// A serves_page tile (2026-08-11) gets exactly the url verdict: a page
+// tile and a url tile must engage identically.
 func TestDecideAutoLive(t *testing.T) {
 	cases := []struct {
-		name                                                                        string
-		kindURL, kindShell, liveURL, liveShell, hasPreview, known, alive, urlFrozen bool
-		want                                                                        AutoLive
+		name                                                                                    string
+		kindURL, kindShell, servesPage, liveURL, liveShell, hasPreview, known, alive, urlFrozen bool
+		want                                                                                    AutoLive
 	}{
-		{"url on Electron opens", true, false, true, true, true, false, false, false, AutoLiveURL},
-		{"url in a browser stays frozen", true, false, false, false, true, false, false, false, AutoLiveNone},
+		{"url on Electron opens", true, false, false, true, true, true, false, false, false, AutoLiveURL},
+		{"url in a browser stays frozen", true, false, false, false, false, true, false, false, false, AutoLiveNone},
 		// #237: the user's standing freeze beats the engagement default —
 		// re-descending a deliberately frozen url stays frozen until the
 		// reconnect gesture clears the intent.
-		{"user-frozen url stays frozen", true, false, true, true, true, false, false, true, AutoLiveNone},
-		{"fresh shell creates", false, true, true, true, false, false, false, false, AutoLiveShell},
-		{"alive shell reconnects", false, true, true, true, true, true, true, false, AutoLiveShell},
-		{"dead shell stays frozen", false, true, true, true, true, true, false, false, AutoLiveNone},
-		{"unknown shell probes", false, true, true, true, true, false, false, false, AutoLiveProbeShell},
-		{"shell in a browser stays frozen", false, true, false, false, true, true, true, false, AutoLiveNone},
-		{"text does nothing", false, false, true, true, true, true, true, false, AutoLiveNone},
+		{"user-frozen url stays frozen", true, false, false, true, true, true, false, false, true, AutoLiveNone},
+		{"page tile on Electron opens", false, false, true, true, true, false, false, false, false, AutoLiveURL},
+		{"page tile in a browser stays frozen", false, false, true, false, false, false, false, false, false, AutoLiveNone},
+		{"fresh shell creates", false, true, false, true, true, false, false, false, false, AutoLiveShell},
+		{"alive shell reconnects", false, true, false, true, true, true, true, true, false, AutoLiveShell},
+		{"dead shell stays frozen", false, true, false, true, true, true, true, false, false, AutoLiveNone},
+		{"unknown shell probes", false, true, false, true, true, true, false, false, false, AutoLiveProbeShell},
+		{"shell in a browser stays frozen", false, true, false, false, false, true, true, true, false, AutoLiveNone},
+		{"text does nothing", false, false, false, true, true, true, true, true, false, AutoLiveNone},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := DecideAutoLive(c.kindURL, c.kindShell, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive, c.urlFrozen)
+			got := DecideAutoLive(c.kindURL, c.kindShell, c.servesPage, c.liveURL, c.liveShell, c.hasPreview, c.known, c.alive, c.urlFrozen)
 			if got != c.want {
 				t.Errorf("DecideAutoLive = %v, want %v", got, c.want)
 			}

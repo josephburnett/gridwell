@@ -40,10 +40,10 @@ func TestParseContentPath(t *testing.T) {
 		{"/content/tok/uf1/5/img/cat.png", "tok", "uf1/5", "img/cat.png", false, true},
 		{"/content/tok/ssh1/conn/uf1/5/a.css", "tok", "ssh1/conn/uf1/5", "a.css", false, true},
 		{"/content/tok/uf1/5/../secret", "", "", "", false, false},
-		{"/content/tok/uf1/", "", "", "", false, false},      // no numeric local id
-		{"/content/tok/uf1/abc/", "", "", "", false, false},  // ditto
-		{"/content/tok", "", "", "", false, false},           // token alone
-		{"/elsewhere/tok/uf1/5/", "", "", "", false, false},  // wrong prefix
+		{"/content/tok/uf1/", "", "", "", false, false},     // no numeric local id
+		{"/content/tok/uf1/abc/", "", "", "", false, false}, // ditto
+		{"/content/tok", "", "", "", false, false},          // token alone
+		{"/elsewhere/tok/uf1/5/", "", "", "", false, false}, // wrong prefix
 	}
 	for _, c := range cases {
 		token, tileID, subpath, needSlash, ok := parseContentPath(c.path)
@@ -51,6 +51,23 @@ func TestParseContentPath(t *testing.T) {
 			t.Errorf("parse(%q) = (%q,%q,%q,%v,%v), want (%q,%q,%q,%v,%v)",
 				c.path, token, tileID, subpath, needSlash, ok,
 				c.token, c.tileID, c.subpath, c.needSlash, c.ok)
+		}
+	}
+}
+
+// TestPageURLMatchesDoorGrammar pins the two sides of the URL contract to
+// each other: rpc.PageURL (what the client builds) must parse back through
+// parseContentPath (what the door accepts) with nothing lost — the same
+// derive-once discipline as every other seam, so the grammar can never
+// drift apart silently.
+func TestPageURLMatchesDoorGrammar(t *testing.T) {
+	for _, id := range []string{"uf1/5", "ssh1/conn/uf1/5", "1b467bbd65466256f8a64c538cabdac8/12"} {
+		u := rpc.PageURL("https://host:1234", ContentToken("pw"), id)
+		path := strings.TrimPrefix(u, "https://host:1234")
+		token, tileID, subpath, needSlash, ok := parseContentPath(path)
+		if !ok || needSlash || token != ContentToken("pw") || tileID != id || subpath != "" {
+			t.Errorf("PageURL(%q) = %q does not round-trip: (%q,%q,%q,%v,%v)",
+				id, u, token, tileID, subpath, needSlash, ok)
 		}
 	}
 }

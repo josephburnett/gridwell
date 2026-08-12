@@ -35,6 +35,11 @@ type urlView struct {
 	// lives in a foreign grid the client may never have loaded). 0 = rely
 	// on the cache lookup (the ordinary same-plugin case).
 	version int64
+	// page marks a serves_page view (2026-08-11): the address is the
+	// derived /content/ door URL, and the close skips the SetURLState
+	// freeze writeback — the owning plugin (fs) derives its frozen face
+	// from the content itself (GetTilePreview) and stores nothing.
+	page bool
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -53,19 +58,34 @@ func contentViewBounds(r pane.Rect) viewBounds {
 	return viewBounds{X: b.X, Y: b.Y, W: b.W, H: b.H}
 }
 
-// urlTileForPane resolves the URL tile a pane is descended into.
+// urlTileForPane resolves the web-content tile a pane is descended into —
+// a url tile or a serves_page tile; both go live through the same view.
 func (a *App) urlTileForPane(p *pane.Pane, tileID string) (rpc.Tile, bool) {
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if t, ok := g.Tiles[tileID]; ok && t.Kind == rpc.KindURL {
+		if t, ok := g.Tiles[tileID]; ok && t.WebContent() {
 			return t, true
 		}
 	}
 	// Off-grid (ephemeral) tile — focused in the scratch grid without
 	// re-anchoring the pane onto it: resolve by id from any cached grid.
-	if t := a.findTileByID(tileID); t != nil && t.Kind == rpc.KindURL {
+	if t := a.findTileByID(tileID); t != nil && t.WebContent() {
 		return *t, true
 	}
 	return rpc.Tile{}, false
+}
+
+// webAddress resolves the address a web-content tile presents at: a url
+// tile's own frozen URLString, or the /content/ door address for a
+// serves_page tile — derived here at use time (rpc.PageURL), never
+// persisted, because the desktop origin is an ephemeral port.
+func (a *App) webAddress(t *rpc.Tile) string {
+	if t.Kind == rpc.KindURL {
+		return t.URLString
+	}
+	if t.ServesPage {
+		return rpc.PageURL(a.origin, a.contentToken, t.ID)
+	}
+	return ""
 }
 
 // tileVersionAt returns the cached version of the tile at (anchor, path,
@@ -161,15 +181,20 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	}
 	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
-	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version}
+	page := t.Kind != rpc.KindURL && t.ServesPage
+	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version, page: page}
 	// durable = the DESCENDED row survives ascent: false for an ephemeral
 	// visit, which gets no Freeze Page in the context menu (issue #240).
-	durable := true
+	// A page view is never durable in this sense either: it carries no
+	// standing freeze and no history writeback — its frozen face is the
+	// plugin's own derivation.
+	durable := !page
 	if tile, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &tile) {
 		durable = false
 	}
-	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, t.URLString)
-	bridgePlace(p.ID, t.ID, t.ObjectID, t.URLString, b, contentZoomOf(&t), t.URLHistory, durable)
+	addr := a.webAddress(&t)
+	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, addr)
+	bridgePlace(p.ID, t.ID, t.ObjectID, addr, b, contentZoomOf(&t), t.URLHistory, durable)
 	a.draw()
 }
 
@@ -190,7 +215,11 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
 	bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
-		if freeze && (len(jpeg) > 0 || url != "" || title != "") {
+		// A page view persists NOTHING on close: the plugin owns the frozen
+		// face (fs derives a thumbnail from the file), and its store has no
+		// url state to write. The wildcard put below still shows the final
+		// frame for the rest of the session.
+		if freeze && !v.page && (len(jpeg) > 0 || url != "" || title != "") {
 			// Look up the tile's current version from cache so the freeze is
 			// a versioned, in-place content edit (copy-on-clone: nothing is
 			// shared, so there is no fork — the write lands on this tile's row).
@@ -324,9 +353,11 @@ func (a *App) liveOverlaysHidden() bool {
 	return a.dragging != nil || a.rightDrag != nil || a.leftResize != nil || a.menu.IsOpen() || a.urlModalOpen || a.instPickerOpen
 }
 
-// isURLDescent reports whether pane p is currently descended into a URL
-// tile. Drives the input handlers' branch between gridwell-native gestures
-// and (now-native) URL interaction.
+// isURLDescent reports whether pane p is currently descended into WEB
+// CONTENT — a url tile or a serves_page tile (2026-08-11; the two present
+// identically). Drives the input handlers' branch between gridwell-native
+// gestures and (now-native) URL interaction, and the bar slot's url-family
+// affordances.
 func (a *App) isURLDescent(p *pane.Pane) bool {
 	if p == nil {
 		return false
@@ -337,11 +368,13 @@ func (a *App) isURLDescent(p *pane.Pane) bool {
 	if !ok {
 		return false
 	}
-	return t.Kind == rpc.KindURL
+	return t.WebContent()
 }
 
 // updateCachedTileURL walks every cached grid and rewrites the URLString
 // field on a tile with the given id. Driven by nav events from the bridge.
+// URL tiles only: a page view's navigations are within plugin-served
+// content — the tile row has no url_string fact to shadow.
 func (a *App) updateCachedTileURL(tileID string, newURL string) {
 	for _, gid := range a.c.KnownGridIDs() {
 		g, ok := a.c.Grid(gid)
@@ -349,7 +382,7 @@ func (a *App) updateCachedTileURL(tileID string, newURL string) {
 			continue
 		}
 		t, ok := g.Tiles[tileID]
-		if !ok {
+		if !ok || t.Kind != rpc.KindURL {
 			continue
 		}
 		t.URLString = newURL

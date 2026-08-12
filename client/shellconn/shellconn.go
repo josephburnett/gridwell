@@ -53,16 +53,19 @@ const (
 
 // DecideAutoLive maps a descent's facts to its liveness action. kindURL /
 // kindShell classify the tile (both false = a text tile or other inert
-// kind); liveURL/liveShell are the host capabilities; hasPreview and the
-// aliveness pair are the shell tile's state (same inputs as
-// DecideShellRefreshVisible — the two decisions must agree about what a
-// dead session means, so they read the same facts). urlFrozen is the
-// user's standing freeze on a url tile (issue #237): a deliberate freeze
-// beats the engagement default, so re-descending stays frozen until the
-// reconnect gesture clears the stored intent.
-func DecideAutoLive(kindURL, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive, urlFrozen bool) AutoLive {
+// kind); servesPage is the plugin's "this tile's content IS a web page"
+// declaration (2026-08-11) — it gets the url verdict, because a page tile
+// and a url tile must engage identically; liveURL/liveShell are the host
+// capabilities; hasPreview and the aliveness pair are the shell tile's
+// state (same inputs as DecideShellRefreshVisible — the two decisions must
+// agree about what a dead session means, so they read the same facts).
+// urlFrozen is the user's standing freeze on a url tile (issue #237): a
+// deliberate freeze beats the engagement default, so re-descending stays
+// frozen until the reconnect gesture clears the stored intent (page tiles
+// carry no standing freeze; the input is always false for them).
+func DecideAutoLive(kindURL, kindShell, servesPage, liveURL, liveShell, hasPreview, aliveKnown, alive, urlFrozen bool) AutoLive {
 	switch {
-	case kindURL:
+	case kindURL || servesPage:
 		if liveURL && !urlFrozen {
 			return AutoLiveURL
 		}

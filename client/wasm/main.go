@@ -144,6 +144,16 @@ type App struct {
 	// bridgeAvailable() to make a behavior decision.
 	caps caps.Caps
 
+	// origin is the serving origin (location.origin), captured once at boot —
+	// the base every derived address builds on. contentToken is the
+	// /content/ door's path capability from the ListPlugins handshake
+	// (2026-08-11): rpc.PageURL(origin, contentToken, tileID) is a
+	// serves_page tile's address, derived at use time and never persisted
+	// (the desktop origin is an ephemeral port). webAddress is the one
+	// reader.
+	origin       string
+	contentToken string
+
 	// touch is the touch→mouse gesture classifier (client/touchgest);
 	// touchTimerCb is its retained long-press timer callback;
 	// touchDownTarget is the element the current gesture started on — where
@@ -634,6 +644,7 @@ func main() {
 	app = &App{
 		doc:               js.Global().Get("document"),
 		win:               js.Global().Get("window"),
+		origin:            origin,
 		cl:                rpc.NewDefaultClient(origin),
 		c:                 cache.New(),
 		textSaves:         textedit.NewSaveQueue(),
@@ -740,6 +751,9 @@ func (a *App) bootstrap() {
 		// immutable afterward. caps stays the ONE owner of "what can this
 		// client do"; nothing else reads the handshake flag.
 		a.caps = caps.Derive(bridgeAvailable(), plugins.ShellsDisabled)
+		// The /content/ door capability rides the same handshake; boot-time,
+		// immutable, read only by webAddress.
+		a.contentToken = plugins.ContentToken
 	} else {
 		// The landing page will render empty — say why, or it reads as "all
 		// my plugins vanished" (charter §6).
