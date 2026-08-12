@@ -42,8 +42,10 @@ func TestProtoMatchesDDL(t *testing.T) {
 			storageOnly: []string{"created_at", "updated_at", "alt_user"},
 			// reference is derived by the server (qualifyTiles) from a tile's
 			// child_grid_id shape, never persisted — wire-only, so it has no
-			// DDL column by design.
-			protoOnly: []string{"reference"},
+			// DDL column by design. serves_page is likewise derived, by the
+			// owning plugin from its own content (fs: the filename's media
+			// type) — wire-only; localdb tiles never declare it.
+			protoOnly: []string{"reference", "serves_page"},
 		},
 	}
 	for _, c := range cases {

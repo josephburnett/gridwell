@@ -282,6 +282,12 @@ type Tile struct {
 	// picker; adopting sets ChildGridID and the uuid stays as provenance.
 	// "" for every other tile.
 	ConfigurePluginID string `json:"configure_plugin_id,omitempty"`
+	// ServesPage: the owning plugin serves this tile's content as WEB
+	// CONTENT through the /content/ door (2026-08-11) — the client gives
+	// the descent url-tile semantics at the derived address
+	// <origin>/content/<token>/<ContentID>/. Plugin-declared, derived from
+	// the content itself; never a stored column.
+	ServesPage bool `json:"serves_page,omitempty"`
 }
 
 // ContentID returns the tile id that OWNS this tile's content: a leaf link's

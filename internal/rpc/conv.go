@@ -81,6 +81,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		UrlHistory:    t.URLHistory,
 		LinkTargetId:  t.LinkTargetID,
 		UrlFrozen:     t.URLFrozen,
+		ServesPage:    t.ServesPage,
 
 		ConfigurePluginId: t.ConfigurePluginID,
 	}
@@ -119,6 +120,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		URLHistory:    t.UrlHistory,
 		LinkTargetID:  t.LinkTargetId,
 		URLFrozen:     t.UrlFrozen,
+		ServesPage:    t.ServesPage,
 
 		ConfigurePluginID: t.ConfigurePluginId,
 	}

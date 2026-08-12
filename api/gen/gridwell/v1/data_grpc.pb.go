@@ -42,6 +42,7 @@ const (
 	Gridwell_Search_FullMethodName            = "/gridwell.v1.Gridwell/Search"
 	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
 	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
+	Gridwell_ServeContent_FullMethodName      = "/gridwell.v1.Gridwell/ServeContent"
 	Gridwell_PlaceTile_FullMethodName         = "/gridwell.v1.Gridwell/PlaceTile"
 	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
 	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
@@ -76,6 +77,8 @@ type GridwellClient interface {
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
 	WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error)
+	// ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+	ServeContent(ctx context.Context, in *ServeContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServeContentChunk], error)
 	// PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
 	PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
@@ -215,6 +218,25 @@ func (c *gridwellClient) WriteContent(ctx context.Context, opts ...grpc.CallOpti
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_WriteContentClient = grpc.ClientStreamingClient[WriteContentRequest, TileResponse]
 
+func (c *gridwellClient) ServeContent(ctx context.Context, in *ServeContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServeContentChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[3], Gridwell_ServeContent_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ServeContentRequest, ServeContentChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gridwell_ServeContentClient = grpc.ServerStreamingClient[ServeContentChunk]
+
 func (c *gridwellClient) PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
@@ -287,7 +309,7 @@ func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSession
 
 func (c *gridwellClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[3], Gridwell_Subscribe_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[4], Gridwell_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +350,8 @@ type GridwellServer interface {
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
 	WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error
+	// ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+	ServeContent(*ServeContentRequest, grpc.ServerStreamingServer[ServeContentChunk]) error
 	// PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
 	PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
@@ -381,6 +405,9 @@ func (UnimplementedGridwellServer) ReadContent(*ReadContentRequest, grpc.ServerS
 }
 func (UnimplementedGridwellServer) WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error {
 	return status.Error(codes.Unimplemented, "method WriteContent not implemented")
+}
+func (UnimplementedGridwellServer) ServeContent(*ServeContentRequest, grpc.ServerStreamingServer[ServeContentChunk]) error {
+	return status.Error(codes.Unimplemented, "method ServeContent not implemented")
 }
 func (UnimplementedGridwellServer) PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PlaceTile not implemented")
@@ -577,6 +604,17 @@ func _Gridwell_WriteContent_Handler(srv interface{}, stream grpc.ServerStream) e
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_WriteContentServer = grpc.ClientStreamingServer[WriteContentRequest, TileResponse]
+
+func _Gridwell_ServeContent_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ServeContentRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GridwellServer).ServeContent(m, &grpc.GenericServerStream[ServeContentRequest, ServeContentChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gridwell_ServeContentServer = grpc.ServerStreamingServer[ServeContentChunk]
 
 func _Gridwell_PlaceTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PlaceTileRequest)
@@ -795,6 +833,11 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WriteContent",
 			Handler:       _Gridwell_WriteContent_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "ServeContent",
+			Handler:       _Gridwell_ServeContent_Handler,
+			ServerStreams: true,
 		},
 		{
 			StreamName:    "Subscribe",

@@ -153,6 +153,16 @@ message Tile {
   // instance sets child_grid_id (the SetTile adopt_child_grid arm) and the
   // uuid stays as provenance. "" for every other tile.
   string configure_plugin_id = 31;
+
+  // serves_page (2026-08-11): the owning plugin serves this tile's content
+  // as WEB CONTENT through the /content/ door (rpc ServeContent) — an image
+  // file, an HTML page. The client gives the descent url-tile semantics (a
+  // live native view on a desktop host, open-in-new-tab on a browser host)
+  // at the DERIVED address /content/<content-token>/<tile-id>/ — derived at
+  // render time from the current origin, never persisted (ports are
+  // ephemeral). Plugin-declared, derived from the content itself (fs: the
+  // filename's media type) — never a stored column.
+  bool serves_page = 32;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -290,6 +300,31 @@ message WriteContentRequest {
   bytes data = 3;
 }
 
+// ServeContent is the plugin-as-web-server door (2026-08-11): the RPC
+// carrier behind the server's HTTP /content/ endpoint. A GET of
+// /content/<token>/<tile-id>/<subpath> becomes one ServeContent call routed
+// to the tile's owning plugin — through transit hops exactly like
+// ReadContent — and the response streams back as the HTTP body. It exists so
+// a plugin can present ANY content as web content (an image file, a whole
+// HTML page with its relative subresources); the browser side is sandboxed
+// by the server (CSP sandbox — opaque origin, no cookies, no RPC reach), so
+// a plugin-served page can never act on the user's Gridwell.
+//
+// GET-only by design. subpath "" is the tile's root page; a non-empty
+// subpath is a page-relative resource ("img/cat.png") whose meaning the
+// plugin defines. Chunk 1 carries status and media_type; later chunks carry
+// data only. A plugin that does not serve web content leaves the RPC
+// unimplemented and the door answers 404.
+message ServeContentRequest {
+  string tile_id = 1;
+  string subpath = 2;
+}
+message ServeContentChunk {
+  int64 status = 1;      // chunk 1 only; HTTP status code
+  string media_type = 2; // chunk 1 only
+  bytes data = 3;
+}
+
 // PlaceTile is the single placement writeback: placement is one fact,
 // (grid_id, x, y, w, h), and one verb owns it (replaces MoveTile + ResizeTile;
 // both coexist during migration). grid_id is the DESTINATION grid — same as
@@ -405,6 +440,17 @@ message ListPluginsResponse {
   // matter which plugin would serve them. A node-level operator fact, so it
   // rides the node handshake, not any per-plugin Info.
   bool shells_disabled = 4;
+  // content_token gates the HTTP /content/ door (the ServeContent carrier).
+  // Pages served there run sandboxed with an OPAQUE origin, so neither their
+  // subresource requests nor the desktop's native views carry the auth
+  // cookie — the token rides in the path instead:
+  // /content/<content_token>/<tile-id>/<subpath>. Derived from the server
+  // password (sha256, its own domain prefix — it can never double as the
+  // auth cookie), handed out only on this authenticated handshake, and
+  // checked against the CURRENT password like the cookie is. A node-level
+  // fact of the LOCAL origin: content URLs are always built against the
+  // serving node; federation happens behind the door, over the RPC.
+  string content_token = 5;
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.
@@ -607,6 +653,9 @@ service Gridwell {
   // ── Content streams (the one way content bytes move; see the messages) ────
   rpc ReadContent(ReadContentRequest)        returns (stream ContentChunk);
   rpc WriteContent(stream WriteContentRequest) returns (TileResponse);
+
+  // ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+  rpc ServeContent(ServeContentRequest) returns (stream ServeContentChunk);
 
   // PlaceTile is the single placement writeback (⇐ MoveTile + ResizeTile).
   rpc PlaceTile(PlaceTileRequest) returns (TileResponse);

@@ -38,6 +38,32 @@ func (h *connectHandler) ReadContent(ctx context.Context, req *connect.Request[p
 	}
 }
 
+// ServeContent on the Connect surface mirrors the HTTP /content/ door's RPC
+// hop (the door itself calls the plugin client directly; this front keeps
+// the Connect data plane total, so a CLI or test can drive the same verb).
+func (h *connectHandler) ServeContent(ctx context.Context, req *connect.Request[pb.ServeContentRequest], stream *connect.ServerStream[pb.ServeContentChunk]) error {
+	c, local, err := h.srv.contentRoute(ctx, req.Msg.TileId)
+	if err != nil {
+		return asConnectError(err)
+	}
+	up, err := c.ServeContent(ctx, &pb.ServeContentRequest{TileId: local, Subpath: req.Msg.Subpath})
+	if err != nil {
+		return asConnectError(err)
+	}
+	for {
+		chunk, err := up.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return asConnectError(err)
+		}
+		if err := stream.Send(chunk); err != nil {
+			return err
+		}
+	}
+}
+
 // WriteContent relays the client stream to the owning plugin, preserving
 // commit-at-close: the upstream CloseAndRecv happens only after the inbound
 // stream ended cleanly, and a broken inbound returns without closing

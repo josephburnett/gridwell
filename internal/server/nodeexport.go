@@ -296,6 +296,33 @@ func (n *nodeExport) ReadContent(r *pb.ReadContentRequest, stream pb.Gridwell_Re
 	}
 }
 
+// ServeContent forwards a web-content request one hop, resolving links via
+// contentRoute like ReadContent — this is how a mounted remote node's pages
+// reach the local /content/ door: HTTP terminates at the LOCAL door and the
+// request rides this RPC through the tunnel.
+func (n *nodeExport) ServeContent(r *pb.ServeContentRequest, stream pb.Gridwell_ServeContentServer) error {
+	c, local, err := n.srv.contentRoute(stream.Context(), r.TileId)
+	if err != nil {
+		return err
+	}
+	up, err := c.ServeContent(stream.Context(), &pb.ServeContentRequest{TileId: local, Subpath: r.Subpath})
+	if err != nil {
+		return err
+	}
+	for {
+		chunk, err := up.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(chunk); err != nil {
+			return err
+		}
+	}
+}
+
 // WriteContent peeks the bind message for the tile id, peels one segment, and
 // relays upstream; the upstream close — and so the commit — happens only after
 // a clean inbound end-of-stream. The TileResponse carries ids, so it is

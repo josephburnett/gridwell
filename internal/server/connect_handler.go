@@ -164,7 +164,14 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
 		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 	}
-	resp := &pb.ListPluginsResponse{Plugins: out, ShellsDisabled: h.srv.cfg.DisableShells}
+	resp := &pb.ListPluginsResponse{
+		Plugins:        out,
+		ShellsDisabled: h.srv.cfg.DisableShells,
+		// The /content/ door's path capability, handed out only here — on
+		// the cookie-authenticated mux — so only a logged-in client learns
+		// it (content_door.go).
+		ContentToken: ContentToken(h.srv.cfg.Password),
+	}
 	if h.srv.cfg.NodeID != "" {
 		resp.NodeUuid = h.srv.cfg.NodeID
 		resp.NodeRootGridId = h.srv.cfg.NodeID + "/" + nodeGridID

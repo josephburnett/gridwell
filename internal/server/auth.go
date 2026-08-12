@@ -23,6 +23,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -59,6 +60,14 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == authLoginPath {
 			s.handleLogin(w, r, token)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, contentPathPrefix) {
+			// The /content/ door can never see the cookie (sandboxed pages
+			// have opaque origins; the desktop's native views live on their
+			// own session partition) — it gates itself by the content token
+			// in the path (content_door.go).
+			next.ServeHTTP(w, r)
 			return
 		}
 		if authed(r, token) {

@@ -74,6 +74,10 @@ type PluginList struct {
 	// ShellsDisabled: this node refuses shell tiles outright; the client
 	// derives caps from it (no shell primitive in the + palette).
 	ShellsDisabled bool
+	// ContentToken: the /content/ door's path capability — the client builds
+	// every plugin-served page URL as
+	// <origin>/content/<ContentToken>/<tile-id>/ (see data.proto).
+	ContentToken string
 }
 
 func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
@@ -97,7 +101,7 @@ func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
 			InfoError:      p.InfoError,
 		}
 	}
-	return PluginList{Plugins: out, ShellsDisabled: r.Msg.ShellsDisabled}, nil
+	return PluginList{Plugins: out, ShellsDisabled: r.Msg.ShellsDisabled, ContentToken: r.Msg.ContentToken}, nil
 }
 
 // GetTile reads a single tile's metadata by id.

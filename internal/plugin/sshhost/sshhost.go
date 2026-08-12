@@ -729,6 +729,25 @@ func (s *Server) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.Ser
 	})
 }
 
+// ServeContent forwards web-content requests to the remote node; the
+// connection-well tiles themselves serve no pages (a well's content is its
+// params document, not a web page).
+func (s *Server) ServeContent(req *gridwellv1.ServeContentRequest, stream grpc.ServerStreamingServer[gridwellv1.ServeContentChunk]) error {
+	ctx := stream.Context()
+	fw, local, err := s.route(ctx, req.TileId)
+	if err != nil {
+		return err
+	}
+	if fw == nil {
+		return status.Error(codes.Unimplemented, "sshhost: connection wells serve no web content")
+	}
+	cs, err := fw.client.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: local, Subpath: req.Subpath})
+	if err != nil {
+		return err
+	}
+	return relay(cs, stream)
+}
+
 func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.WriteContentRequest, gridwellv1.TileResponse]) error {
 	ctx := stream.Context()
 	first, err := stream.Recv()

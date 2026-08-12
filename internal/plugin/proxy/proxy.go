@@ -74,6 +74,14 @@ func (p *Plugin) ReadContent(r *gridwellv1.ReadContentRequest, ss grpc.ServerStr
 	return relay(cs, ss)
 }
 
+func (p *Plugin) ServeContent(r *gridwellv1.ServeContentRequest, ss grpc.ServerStreamingServer[gridwellv1.ServeContentChunk]) error {
+	cs, err := p.c.ServeContent(ss.Context(), r)
+	if err != nil {
+		return err
+	}
+	return relay(cs, ss)
+}
+
 func (p *Plugin) Subscribe(r *gridwellv1.SubscribeRequest, ss grpc.ServerStreamingServer[gridwellv1.Event]) error {
 	cs, err := p.c.Subscribe(ss.Context(), r)
 	if err != nil {

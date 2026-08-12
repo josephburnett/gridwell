@@ -25,6 +25,14 @@ func fullTile() *Tile {
 		URLString:     "https://19",
 		PreviewBlobID: 20,
 		AltText:       "alt-21",
+		Reference:     true,
+		ContentZoom:   22,
+		URLHistory:    "hist-23",
+		LinkTargetID:  "target-24",
+		URLFrozen:     true,
+		ServesPage:    true,
+
+		ConfigurePluginID: "cfg-25",
 	}
 }
 

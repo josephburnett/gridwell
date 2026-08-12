@@ -186,6 +186,11 @@ func (s *Server) routes() {
 	// (The /session/ door is gone — 2026-07-26: the Chromium session is
 	// host-local; nothing hydrates or dehydrates a plugin session blob.)
 
+	// The /content/ door: plugin-served web content (see content_door.go).
+	// Registered on the mux but exempted from the cookie gate — the content
+	// token in the path is the credential there.
+	s.mux.Handle(contentPathPrefix, s.contentDoor())
+
 	if s.cfg.StaticDir != "" {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticDir))
 	}
