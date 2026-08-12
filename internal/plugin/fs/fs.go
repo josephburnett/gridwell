@@ -258,6 +258,7 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 			if err != nil {
 				return nil, err
 			}
+			stampServesPage(tiles)
 			grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
 			return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
 		}
@@ -271,6 +272,7 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 	if err != nil {
 		return nil, err
 	}
+	stampServesPage(tiles)
 
 	grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
 	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
@@ -280,7 +282,11 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 // the source plugin when a tile is right-dragged into another plugin's grid
 // (issue #171). The row was materialized by the GetGrid that rendered it.
 func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
-	return griddb.ApplyGetTile(p.db, fsLabelCol, req)
+	resp, err := griddb.ApplyGetTile(p.db, fsLabelCol, req)
+	if err == nil && resp.GetTile() != nil {
+		stampServesPage([]*gridwellv1.Tile{resp.Tile})
+	}
+	return resp, err
 }
 
 // PlaceTile is the single placement writeback: in-grid only (a cross-grid
