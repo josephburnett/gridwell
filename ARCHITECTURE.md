@@ -79,6 +79,7 @@ The surface, one method per concept:
 | Lifecycle | `Info`, `Probe`, `ListPlugins`, `SetRootView` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview` |
 | Content bytes | `ReadContent` / `WriteContent` — the ONE way content moves. Versioned; a write commits at close (a broken stream leaves the old value intact); a read on a leaf link resolves to the target at the serving node |
+| Web content | `ServeContent` — the RPC carrier behind the HTTP `/content/<token>/<tile-id>/<subpath>` door: a plugin serves ANY content as web content (an image, a whole HTML page with relative subresources). GET-only; routes/link-resolves/federates exactly like `ReadContent`. The door stamps `CSP: sandbox allow-scripts` (opaque origin — no cookies, no RPC reach) and gates by the content token (its own password derivation, handed out on the authenticated `ListPlugins`). `Tile.serves_page` (wire-only, plugin-derived) tells the client to present the descent with url-tile semantics at the derived address |
 | Mutations | `CreateTile` (metadata only — a body follows as a WriteContent), `SetTile` (framing/preview + rename + content_zoom, one op per call), `PlaceTile` (the one placement writeback), `CloneTile`, `DeleteTile` |
 | Live bytes | `OpenShell` (a PTY both ways — deliberately the one live wire), `ShellSessionAlive` |
 | Events | `Subscribe` |

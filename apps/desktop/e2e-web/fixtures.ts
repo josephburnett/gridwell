@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import * as net from 'node:net';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { seedHome } from '../e2e/fixtures';
+import { seedHome, PluginSpec } from '../e2e/fixtures';
 import { GridwellDriver } from '../e2e/driver';
 
 // Browser-mode e2e fixtures: the SAME wasm client and Go server as the
@@ -32,13 +32,18 @@ type Fixtures = {
   serve: { origin: string; home: string };
   window: Page;
   gw: GridwellDriver;
+  // extraPlugins mirrors the Electron fixture's option: plugins seedHome
+  // registers beyond the default localdb (e.g. an fs plugin with a root).
+  extraPlugins: PluginSpec[];
 };
 
 export const test = base.extend<Fixtures>({
+  extraPlugins: [[], { option: true }],
+
   // serve seeds a throwaway home (same `gridwell init` path as the Electron
   // suite) and runs the real server on an ephemeral loopback port.
-  serve: async ({}, use) => {
-    const home = seedHome();
+  serve: async ({ extraPlugins }, use) => {
+    const home = seedHome(extraPlugins);
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
     const child = spawn(

@@ -155,6 +155,18 @@ Re-litigating them silently is how churn happens.
   details mints a new segment); a name copies from the instance at adopt
   and is independent afterward (rename-where-you-stand, like links).
   Modals center on the active pane, not the screen.
+- **Plugins serve web content through the /content/ door (2026-08-11).**
+  `ServeContent` is the one RPC carrier behind
+  `/content/<token>/<tile-id>/<subpath>`; it routes/link-resolves/federates
+  exactly like ReadContent. Every response is SANDBOXED by the server (CSP
+  `sandbox allow-scripts` — opaque origin, no cookies, no RPC reach); the
+  door is exempt from the cookie gate and gated by the content token (its
+  own sha256 domain, never interchangeable with the auth cookie — pinned by
+  test). `Tile.serves_page` (wire-only, plugin-derived) gives the descent
+  url-tile semantics at the DERIVED address (`rpc.PageURL`, never
+  persisted); page views skip the SetURLState freeze writeback — the
+  plugin derives the frozen face (fs: GetTilePreview thumbnails). The
+  client/server URL grammar is pinned to itself by a round-trip seam test.
 - **Id shape (2026-07-25).** New plugin/node ids are 7-char lowercase
   base36 with a leading letter (`store.NewShortID`); an id is immutable
   once minted, and both shapes (short + legacy 32-hex) are valid forever.
