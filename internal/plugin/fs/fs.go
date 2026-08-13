@@ -37,14 +37,33 @@ const autoGridWidth = 8
 // migrations, never delete the DB to absorb a change.
 const (
 	fsApplicationID = 0x47576673 // "GWfs"
-	fsSchemaVersion = 1
+	fsSchemaVersion = 2
 )
 
 // fsMigrations is the ordered additive chain; entry i brings a DB from
-// version i+1 to i+2. Empty until the first post-v1 change. Every change
-// bumps fsSchemaVersion by one, appends one entry here, and updates
-// schemaTemplate — TestFSSchemaEquivalence proves template == v1 + chain.
-var fsMigrations []dbformat.Migration
+// version i+1 to i+2. Every change bumps fsSchemaVersion by one, appends
+// one entry here, and updates schemaTemplate — TestFSSchemaEquivalence
+// proves template == v1 + chain.
+var fsMigrations = []dbformat.Migration{
+	// v2 (2026-08-13, framing audit): the ROOT grid's persisted viewport —
+	// SetRootView was silently swallowed before (fs never implemented it),
+	// so panning an fs root was lost on every re-entry. NULLABLE on
+	// purpose: NULL = never set, distinguishable from any real framing
+	// (the legacy grids.view_* columns default to values a fresh row
+	// already has, so they cannot say "unset" and stay dead).
+	{To: 2, Run: func(ctx context.Context, tx *sql.Tx) error {
+		for _, ddl := range []string{
+			`ALTER TABLE grids ADD COLUMN root_cx REAL`,
+			`ALTER TABLE grids ADD COLUMN root_cy REAL`,
+			`ALTER TABLE grids ADD COLUMN root_zoom REAL`,
+		} {
+			if _, err := tx.ExecContext(ctx, ddl); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
+}
 
 // fsLabelCol is the tiles-table column holding a tile's display label for the
 // fs plugin (the directory entry name). Passed to the shared griddb helpers.
@@ -136,7 +155,11 @@ CREATE TABLE IF NOT EXISTS grids (
     path      TEXT NOT NULL UNIQUE,
     view_x    INTEGER NOT NULL DEFAULT 0,
     view_y    INTEGER NOT NULL DEFAULT 0,
-    view_zoom REAL NOT NULL DEFAULT 1.0
+    view_zoom REAL NOT NULL DEFAULT 1.0,
+    -- The ROOT grid's persisted viewport (v2). NULL = never set.
+    root_cx   REAL,
+    root_cy   REAL,
+    root_zoom REAL
 );
 CREATE TABLE IF NOT EXISTS tiles (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,7 +246,26 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 	if label := filepath.Base(path); label != "/" && label != "." {
 		resp.DisplayName = label
 	}
+	// The root's persisted viewport (v2; framing audit 2026-08-13) — the
+	// read side of SetRootView, so re-entry lands where the user left.
+	if cx, cy, zoom, ok, err := griddb.RootView(p.db, gridID); err == nil && ok {
+		resp.RootViewCx, resp.RootViewCy, resp.RootViewZoom = cx, cy, zoom
+	}
 	return resp, nil
+}
+
+// SetRootView persists the root grid's viewport (framing audit 2026-08-13:
+// this was silently swallowed before — pan an fs root, gone on re-entry).
+// Framing-class; the server routes here by root_grid_id.
+func (p *Plugin) SetRootView(_ context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
+	gridID, err := strconv.ParseInt(req.RootGridId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("fs SetRootView: invalid root_grid_id %q", req.RootGridId)
+	}
+	if err := griddb.SetRootView(p.db, gridID, req.Cx, req.Cy, req.Zoom); err != nil {
+		return nil, err
+	}
+	return &gridwellv1.SetRootViewResponse{}, nil
 }
 
 // GetGrid reads the directory for the given grid_id, reconciles tile rows

@@ -175,6 +175,14 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 	if h.srv.cfg.NodeID != "" {
 		resp.NodeUuid = h.srv.cfg.NodeID
 		resp.NodeRootGridId = h.srv.cfg.NodeID + "/" + nodeGridID
+		// The node grid's OWN persisted viewport (2026-08-13): its Info is
+		// the owner (node-view.json behind it); the handshake mirrors it so
+		// a client anchored at the node grid boots back where it left.
+		if info, err := h.srv.pluginInfo(ctx, h.srv.cfg.NodeID); err == nil && info != nil {
+			resp.NodeRootViewCx = info.RootViewCx
+			resp.NodeRootViewCy = info.RootViewCy
+			resp.NodeRootViewZoom = info.RootViewZoom
+		}
 	}
 	return connect.NewResponse(resp), nil
 }

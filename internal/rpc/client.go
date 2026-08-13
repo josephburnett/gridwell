@@ -78,6 +78,11 @@ type PluginList struct {
 	// every plugin-served page URL as
 	// <origin>/content/<ContentToken>/<tile-id>/ (see data.proto).
 	ContentToken string
+	// NodeRootView*: the node grid's own persisted viewport (2026-08-13);
+	// zero zoom = never set. The boot restore for a node-grid anchor.
+	NodeRootViewCx   float64
+	NodeRootViewCy   float64
+	NodeRootViewZoom float64
 }
 
 func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
@@ -101,7 +106,14 @@ func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
 			InfoError:      p.InfoError,
 		}
 	}
-	return PluginList{Plugins: out, ShellsDisabled: r.Msg.ShellsDisabled, ContentToken: r.Msg.ContentToken}, nil
+	return PluginList{
+		Plugins:          out,
+		ShellsDisabled:   r.Msg.ShellsDisabled,
+		ContentToken:     r.Msg.ContentToken,
+		NodeRootViewCx:   r.Msg.NodeRootViewCx,
+		NodeRootViewCy:   r.Msg.NodeRootViewCy,
+		NodeRootViewZoom: r.Msg.NodeRootViewZoom,
+	}, nil
 }
 
 // GetTile reads a single tile's metadata by id.
@@ -182,13 +194,19 @@ func (c *Client) AdoptChildGrid(ctx context.Context, req *AdoptChildGridRequest)
 // SetRootView persists the plugin root-grid framing. The server routes on
 // root_grid_id; framing only — never bumps a content version.
 func (c *Client) SetRootView(ctx context.Context, req *SetRootViewRequest) error {
-	_, err := c.cl.SetRootView(ctx, connect.NewRequest(&pb.SetRootViewRequest{
+	_, err := c.cl.SetRootView(ctx, connect.NewRequest(SetRootViewToProto(req)))
+	return err
+}
+
+// SetRootViewToProto is the one wire conversion for the root-view write —
+// shared by the ordinary call above and its unload beacon form.
+func SetRootViewToProto(req *SetRootViewRequest) *pb.SetRootViewRequest {
+	return &pb.SetRootViewRequest{
 		RootGridId: req.RootGridID,
 		Cx:         req.Cx,
 		Cy:         req.Cy,
 		Zoom:       req.Zoom,
-	}))
-	return err
+	}
 }
 
 // ReadContent fetches a tile's content bytes — the one content read

@@ -72,3 +72,31 @@ func (s *State) PeekAscent() *Saved {
 
 // AscentDepth is the number of saved levels (matches the pane's descent depth).
 func (s *State) AscentDepth() int { return len(s.ascent) }
+
+// PaneGrid names one pane and the grid it currently shows — the input to
+// the framing-ownership rule.
+type PaneGrid struct {
+	PaneID string
+	GridID string
+}
+
+// FramingWriters applies the ONE-ACTIVE-SURFACE rule to grid framing
+// (owner decision 2026-08-13, extending #249 from url/shell tiles to
+// grids): when several panes show the SAME grid, exactly one — the
+// focused pane — owns the framing writeback; the others are passive
+// viewers. A pane that shares its grid with nobody always writes (it is
+// trivially the active surface). Focusing a shared grid's sibling IS the
+// takeover, exactly as opening a live tile elsewhere takes the stream.
+// Before this rule every sibling wrote its own rect-derived values each
+// settle tick, so the persisted framing thrashed nondeterministically.
+func FramingWriters(panes []PaneGrid, focusedID string) map[string]bool {
+	byGrid := map[string]int{}
+	for _, p := range panes {
+		byGrid[p.GridID]++
+	}
+	out := map[string]bool{}
+	for _, p := range panes {
+		out[p.PaneID] = byGrid[p.GridID] == 1 || p.PaneID == focusedID
+	}
+	return out
+}

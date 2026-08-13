@@ -74,3 +74,26 @@ func TestSavedJSONKeysArePinned(t *testing.T) {
 		t.Fatalf("Saved JSON vocabulary changed:\n got %s\nwant %s", b, want)
 	}
 }
+
+// The one-active-surface rule for grid framing (owner decision 2026-08-13,
+// extending #249): among panes showing the same grid, only the FOCUSED one
+// writes; sole viewers always write.
+func TestFramingWriters(t *testing.T) {
+	panes := []PaneGrid{
+		{PaneID: "a", GridID: "g1"},
+		{PaneID: "b", GridID: "g1"}, // shares g1 with a
+		{PaneID: "c", GridID: "g2"}, // sole viewer
+	}
+	w := FramingWriters(panes, "a")
+	if !w["a"] || w["b"] || !w["c"] {
+		t.Errorf("focused=a: got %+v, want a and c writing, b passive", w)
+	}
+	w = FramingWriters(panes, "c")
+	if w["a"] || w["b"] || !w["c"] {
+		t.Errorf("focused=c: got %+v, want only c writing (g1 has no active surface)", w)
+	}
+	w = FramingWriters(nil, "x")
+	if len(w) != 0 {
+		t.Errorf("no panes: got %+v", w)
+	}
+}

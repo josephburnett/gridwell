@@ -154,6 +154,15 @@ type App struct {
 	origin       string
 	contentToken string
 
+	// unloading marks the beforeunload flush: framing writes switch to
+	// navigator.sendBeacon so they survive the dying page (unload.go).
+	unloading bool
+
+	// nodeRootView* is the node grid's own persisted viewport from the
+	// handshake (zero zoom = never set) — read by persistedGridView for a
+	// node-grid anchor and reconciled by persistPluginRootView's node arm.
+	nodeRootViewCx, nodeRootViewCy, nodeRootViewZoom float64
+
 	// touch is the touch→mouse gesture classifier (client/touchgest);
 	// touchTimerCb is its retained long-press timer callback;
 	// touchDownTarget is the element the current gesture started on — where
@@ -382,13 +391,20 @@ type scheduler struct {
 // here to keep the many `paneState{...}` construction sites unchanged.
 type paneState = panestate.Saved
 
-// wellWheelDrift is one well's in-flight hover-wheel state: the grid to
-// persist under, and the FLOAT view center accumulated across the wheel
+// wellWheelDrift is one well's in-flight hover-wheel state — the ONE owner
+// of the not-yet-persisted view (framing-audit decision 2026-08-13): the
+// grid to persist under, the FLOAT view center accumulated across the
 // burst (issue #219 — per-notch integer quantization rounded the cursor-
-// anchor drift away; the quantization happens once, at cache-patch/flush).
+// anchor drift away), and the ratio/size/version the flush posts FROM. The
+// flush must never re-read the cache row: any refetch inside the settle
+// window (a conflict resync, an SSE row) replaces the patch with server
+// values, and a cache-reading flush then faithfully reverted the wheel.
 type wellWheelDrift struct {
-	gridID string
-	cx, cy float64
+	gridID  string
+	cx, cy  float64
+	ratio   float64
+	w, h    int64
+	version int64
 }
 
 // paneLocal is the single owner of one pane's session-local client state:
@@ -704,8 +720,10 @@ func main() {
 		// is async and may not finish before teardown, but firing it here
 		// beats guaranteeing the loss by never firing at all.
 		app.flushDirtyText()
-		// Same for grid framing still inside its settle window (issue #190).
-		app.flushFramingSave()
+		// Grid framing still inside its settle window (issue #190) rides
+		// BEACONS so it survives the dying page, and an animating
+		// transition lands on its destination first (unload.go).
+		app.flushOnUnload()
 		app.closeAllURLStreams()
 		app.closeAllShellStreams()
 		return nil
@@ -754,6 +772,10 @@ func (a *App) bootstrap() {
 		// The /content/ door capability rides the same handshake; boot-time,
 		// immutable, read only by webAddress.
 		a.contentToken = plugins.ContentToken
+		// The node grid's own persisted viewport (2026-08-13).
+		a.nodeRootViewCx = plugins.NodeRootViewCx
+		a.nodeRootViewCy = plugins.NodeRootViewCy
+		a.nodeRootViewZoom = plugins.NodeRootViewZoom
 	} else {
 		// The landing page will render empty — say why, or it reads as "all
 		// my plugins vanished" (charter §6).

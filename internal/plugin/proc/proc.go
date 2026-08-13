@@ -100,14 +100,29 @@ func Open(dbPath, procRoot string, killer Killer) (*Plugin, error) {
 // absorb a change.
 const (
 	procApplicationID = 0x47577063 // "GWpc"
-	procSchemaVersion = 1
+	procSchemaVersion = 2
 )
 
 // procMigrations is the ordered additive chain; entry i brings a DB from
-// version i+1 to i+2. Empty until the first post-v1 change. Every change
-// bumps procSchemaVersion by one, appends one entry here, and updates
-// schemaTemplate — TestProcSchemaEquivalence proves template == v1 + chain.
-var procMigrations []dbformat.Migration
+// version i+1 to i+2. Every change bumps procSchemaVersion by one, appends
+// one entry here, and updates schemaTemplate — TestProcSchemaEquivalence
+// proves template == v1 + chain.
+var procMigrations = []dbformat.Migration{
+	// v2 (2026-08-13, framing audit): the ROOT grid's persisted viewport —
+	// same shape and rationale as the fs v2 migration (NULL = never set).
+	{To: 2, Run: func(ctx context.Context, tx *sql.Tx) error {
+		for _, ddl := range []string{
+			`ALTER TABLE grids ADD COLUMN root_cx REAL`,
+			`ALTER TABLE grids ADD COLUMN root_cy REAL`,
+			`ALTER TABLE grids ADD COLUMN root_zoom REAL`,
+		} {
+			if _, err := tx.ExecContext(ctx, ddl); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
+}
 
 // schemaTemplate is the always-current schema a fresh Open materializes
 // directly. Every column added here after v1 must be matched by an entry in
@@ -118,7 +133,11 @@ CREATE TABLE IF NOT EXISTS grids (
     pid       INTEGER NOT NULL UNIQUE,
     view_x    INTEGER NOT NULL DEFAULT 0,
     view_y    INTEGER NOT NULL DEFAULT 0,
-    view_zoom REAL NOT NULL DEFAULT 1.0
+    view_zoom REAL NOT NULL DEFAULT 1.0,
+    -- The ROOT grid's persisted viewport (v2). NULL = never set.
+    root_cx   REAL,
+    root_cy   REAL,
+    root_zoom REAL
 );
 CREATE TABLE IF NOT EXISTS tiles (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,12 +226,30 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 	if pid != 1 {
 		label = fmt.Sprintf("pid %d", pid)
 	}
-	return &gridwellv1.InfoResponse{
+	resp := &gridwellv1.InfoResponse{
 		Kind:          "proc",
 		DisplayName:   label,
 		SchemaVersion: procSchemaVersion,
 		RootGridId:    strconv.FormatInt(gridID, 10),
-	}, nil
+	}
+	// The root's persisted viewport (v2; framing audit 2026-08-13).
+	if cx, cy, zoom, ok, err := griddb.RootView(p.db, gridID); err == nil && ok {
+		resp.RootViewCx, resp.RootViewCy, resp.RootViewZoom = cx, cy, zoom
+	}
+	return resp, nil
+}
+
+// SetRootView persists the root grid's viewport (framing audit 2026-08-13
+// — it was silently swallowed before). Framing-class.
+func (p *Plugin) SetRootView(_ context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
+	gridID, err := strconv.ParseInt(req.RootGridId, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("proc SetRootView: invalid root_grid_id %q", req.RootGridId)
+	}
+	if err := griddb.SetRootView(p.db, gridID, req.Cx, req.Cy, req.Zoom); err != nil {
+		return nil, err
+	}
+	return &gridwellv1.SetRootViewResponse{}, nil
 }
 
 // GetGrid reads the process's children, reconciles tile rows, and returns tiles.

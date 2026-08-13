@@ -266,7 +266,10 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		updated.ViewY = zoomtrans.ViewOriginFromCenter(cy1, hoverWell.H)
 		updated.ViewZoom = ratio
 		a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: updated}})
-		a.wellWheelPending[hoverWell.ID] = wellWheelDrift{gridID: a.gridIDForPane(p), cx: cx1, cy: cy1}
+		a.wellWheelPending[hoverWell.ID] = wellWheelDrift{
+			gridID: a.gridIDForPane(p), cx: cx1, cy: cy1,
+			ratio: ratio, w: hoverWell.W, h: hoverWell.H, version: hoverWell.Version,
+		}
 		a.draw()
 		return nil
 	}
@@ -1123,6 +1126,13 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 	if len(p.Path) > 0 || p.TextFocus != "" {
 		return
 	}
+	// The NODE GRID's own viewport (2026-08-13): its provider implements
+	// SetRootView like any plugin root — the client just never called it
+	// for the node anchor, so the landing page's pan/zoom evaporated.
+	if p.Anchor != "" && p.Anchor == a.nodeGrid {
+		a.persistNodeRootView(p)
+		return
+	}
 	pl, ok := a.pluginByUUID(uuidOf(p.Anchor))
 	if !ok || pl.RootGridID != p.Anchor {
 		return
@@ -1148,6 +1158,40 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 		Cx:         float64(newViewX),
 		Cy:         float64(newViewY),
 		Zoom:       newViewZoom,
+	}
+	if a.unloading && a.sendBeacon(rpc.SetRootViewBeacon(req)) {
+		return
+	}
+	a.postVoidPersist("SetRootView", p.Anchor, func(ctx context.Context) error {
+		return a.cl.SetRootView(ctx, req)
+	})
+}
+
+// persistNodeRootView is persistPluginRootView's node-grid arm: identical
+// intrinsic math over the 1×1 synthetic root well, written through the
+// same SetRootView door (the node-grid provider persists it to
+// node-view.json), with the handshake copy reconciled like a PluginInfo's.
+func (a *App) persistNodeRootView(p *pane.Pane) {
+	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, 1)
+	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, 1)
+	r := paneRectFor(a, p)
+	overtake := zoomtrans.OvertakeZoom(zoomtrans.Well{W: 1, H: 1}, r.W, r.H, cellPx)
+	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
+	if newViewX == int64(a.nodeRootViewCx) && newViewY == int64(a.nodeRootViewCy) &&
+		math.Abs(newViewZoom-a.nodeRootViewZoom) < 0.001 {
+		return
+	}
+	a.nodeRootViewCx = float64(newViewX)
+	a.nodeRootViewCy = float64(newViewY)
+	a.nodeRootViewZoom = newViewZoom
+	req := &rpc.SetRootViewRequest{
+		RootGridID: p.Anchor,
+		Cx:         float64(newViewX),
+		Cy:         float64(newViewY),
+		Zoom:       newViewZoom,
+	}
+	if a.unloading && a.sendBeacon(rpc.SetRootViewBeacon(req)) {
+		return
 	}
 	a.postVoidPersist("SetRootView", p.Anchor, func(ctx context.Context) error {
 		return a.cl.SetRootView(ctx, req)
@@ -1360,14 +1404,20 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx,
 		return 0, 0, 0, false
 	}
 	if len(path) == 0 {
-		// A plugin root: the read side of persistPluginRootView — the same
-		// 1×1 synthetic well, inverted.
-		pl, found := a.pluginByUUID(uuidOf(anchor))
-		if !found || pl.RootGridID != anchor || pl.RootViewZoom <= 0 {
+		// A root grid: the read side of persistPluginRootView — the same
+		// 1×1 synthetic well, inverted. The node grid's own view rides the
+		// handshake (2026-08-13); a plugin root's rides its PluginInfo.
+		var vcx, vcy, vzoom float64
+		if anchor != "" && anchor == a.nodeGrid {
+			vcx, vcy, vzoom = a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom
+		} else if pl, found := a.pluginByUUID(uuidOf(anchor)); found && pl.RootGridID == anchor {
+			vcx, vcy, vzoom = pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom
+		}
+		if vzoom <= 0 {
 			return 0, 0, 0, false
 		}
 		w := zoomtrans.Well{W: 1, H: 1,
-			ViewX: int64(pl.RootViewCx), ViewY: int64(pl.RootViewCy), ViewZoom: pl.RootViewZoom}
+			ViewX: int64(vcx), ViewY: int64(vcy), ViewZoom: vzoom}
 		cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
 		return cx, cy, zoom, true
 	}
@@ -1972,18 +2022,22 @@ func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string,
 	})
 
 	parentGridID := a.gridIDForPathFrom(parentAnchor, parentPath)
+	// Framing dispatcher: one conflict retry with a fresh claim, then the
+	// optimistic reaction (roll back the patch above on remaining failure).
+	// During beforeunload the write rides a beacon instead (unload.go).
+	tileID := well.ID
 	req := &rpc.SetWellViewRequest{
-		TileID:   well.ID,
-		Version:  well.Version,
-		ViewX:    newViewX,
-		ViewY:    newViewY,
-		ViewZoom: newViewZoom,
+		TileID: tileID, Version: well.Version,
+		ViewX: newViewX, ViewY: newViewY, ViewZoom: newViewZoom,
 	}
-	// Optimistic dispatcher: the cache patch above must roll back on ANY
-	// failure, not just a conflict (issue #156).
-	a.postOptimisticPersist("SetWellView", parentGridID, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.SetWellView(ctx, req)
-	})
+	if a.unloading && a.sendBeacon(rpc.SetWellViewBeacon(req)) {
+		return
+	}
+	a.postFramingPersist("SetWellView", parentGridID, tileID, well.Version,
+		func(ctx context.Context, version int64) (*rpc.Tile, error) {
+			req.Version = version
+			return a.cl.SetWellView(ctx, req)
+		})
 }
 
 // saveTextBeforeAscent posts the editor buffer (if text mode is active)

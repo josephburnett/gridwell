@@ -9,9 +9,11 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/urlwalk"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -52,34 +54,55 @@ func (a *App) flushFramingSave() {
 		return
 	}
 	a.framingFlushes++
-	a.tree.Walk(func(p *pane.Pane) { a.persistPaneFraming(p) })
+	// One active surface per grid (owner decision 2026-08-13, #249
+	// extended): among panes showing the same grid only the FOCUSED one
+	// writes its framing — panestate.FramingWriters is the pure rule.
+	var pgs []panestate.PaneGrid
+	a.tree.Walk(func(p *pane.Pane) {
+		pgs = append(pgs, panestate.PaneGrid{PaneID: p.ID, GridID: a.gridIDForPane(p)})
+	})
+	writers := panestate.FramingWriters(pgs, a.tree.Focus)
+	a.tree.Walk(func(p *pane.Pane) {
+		if writers[p.ID] {
+			a.persistPaneFraming(p)
+		}
+	})
 	a.flushWellWheelSaves()
 }
 
 // flushWellWheelSaves posts the settled hover-wheel well zooms (issue
-// #210): one SetWellView per touched tile, from the CACHED row — the same
-// values the per-notch patches accumulated and the renderer already shows.
+// #210): one SetWellView per touched tile, from the PENDING drift state —
+// the one owner of the not-yet-persisted view (decision 2026-08-13). It
+// used to re-read the cache row, and any refetch inside the settle window
+// replaced the patch with server values, so the flush silently reverted
+// the wheel. The version claim prefers the cache row's (fresher when an
+// event landed); the drift's wheel-time claim is the fallback, and the
+// framing dispatcher's conflict retry covers both being stale.
 func (a *App) flushWellWheelSaves() {
 	for id, st := range a.wellWheelPending {
 		gid := st.gridID
 		delete(a.wellWheelPending, id)
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
+		version := st.version
+		if g, ok := a.c.Grid(gid); ok {
+			if t, ok := g.Tiles[id]; ok {
+				version = t.Version
+			}
 		}
-		t, ok := g.Tiles[id]
-		if !ok {
-			continue
-		}
+		tileID := id
 		req := &rpc.SetWellViewRequest{
-			TileID: t.ID, Version: t.Version,
-			ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom,
+			TileID: tileID, Version: version,
+			ViewX:    zoomtrans.ViewOriginFromCenter(st.cx, st.w),
+			ViewY:    zoomtrans.ViewOriginFromCenter(st.cy, st.h),
+			ViewZoom: st.ratio,
 		}
-		// Optimistic dispatcher (issue #156): the per-notch cache patches
-		// must reconcile back to server truth on ANY failure.
-		a.postOptimisticPersist("SetWellView", gid, func(ctx context.Context) (*rpc.Tile, error) {
-			return a.cl.SetWellView(ctx, req)
-		})
+		if a.unloading && a.sendBeacon(rpc.SetWellViewBeacon(req)) {
+			continue
+		}
+		a.postFramingPersist("SetWellView", gid, tileID, version,
+			func(ctx context.Context, version int64) (*rpc.Tile, error) {
+				req.Version = version
+				return a.cl.SetWellView(ctx, req)
+			})
 	}
 }
 
@@ -90,11 +113,13 @@ func (a *App) flushWellWheelSaves() {
 //     frame's anchor (a node-grid tile write routes onto SetRootView);
 //   - at a plugin root with no containing tile: the root view directly.
 //
-// Text-descent framing (SetTextView) stays with the text machinery. No-op
-// when the place is unresolvable (uncached parent grid) — the next settle
-// retries.
+// A text descent settle-persists its SCROLL (decision 2026-08-13 — it
+// used to survive only an ascent, so a reload lost your place in the
+// doc). No-op when the place is unresolvable (uncached parent grid) —
+// the next settle retries.
 func (a *App) persistPaneFraming(p *pane.Pane) {
 	if p.TextFocus != "" {
+		a.persistTextScroll(p)
 		return
 	}
 	if len(p.Path) > 0 {
@@ -121,6 +146,48 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 		}
 	}
 	a.persistPluginRootView(p)
+}
+
+// persistTextScroll is the settle persister's text arm (framing-audit
+// decision 2026-08-13): a text descent's scroll position persists like
+// grid framing does — framing-class, no version bump, one SetTextView
+// when it actually moved. Content stays with the keystroke save queue;
+// read-only host tiles keep session-only scroll (their plugins refuse
+// text framing — the existing #236 decision); url/shell/page descents
+// carry no text framing at all.
+func (a *App) persistTextScroll(p *pane.Pane) {
+	file, ok := a.descendedTile(p)
+	if !ok || file.Kind != rpc.KindText || file.ServesPage ||
+		a.tileReadOnly(&file) || a.isEphemeralTile(p, &file) {
+		return
+	}
+	scrollX := int64(p.TextScrollX + 0.5)
+	scrollY := int64(p.TextScrollY + 0.5)
+	if scrollX == file.TextX && scrollY == file.TextY && p.TextMode == file.TextMode {
+		return
+	}
+	gid := a.gridIDForPane(p)
+	r := paneRectFor(a, p)
+	_, _, iw, ih := textInnerBox(r)
+	req := &rpc.SetTextViewRequest{
+		TileID: file.ID, Version: file.Version,
+		TextX: scrollX, TextY: scrollY,
+		TextW: int64(iw + 0.5), TextH: int64(ih + 0.5),
+		TextMode: p.TextMode,
+	}
+	patched := file
+	patched.TextX, patched.TextY = scrollX, scrollY
+	patched.TextW, patched.TextH = req.TextW, req.TextH
+	patched.TextMode = p.TextMode
+	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
+	if a.unloading && a.sendBeacon(rpc.SetTextViewBeacon(req)) {
+		return
+	}
+	a.postFramingPersist("SetTextView", gid, file.ID, file.Version,
+		func(ctx context.Context, version int64) (*rpc.Tile, error) {
+			req.Version = version
+			return a.cl.SetTextView(ctx, req)
+		})
 }
 
 // scheduleURLUpdate marks that the URL is out of date and arranges for

@@ -123,6 +123,32 @@ func (a *App) postOptimisticPersist(label string, gid string, call tileCall) {
 	}()
 }
 
+// postFramingPersist dispatches a versioned FRAMING write with the freeze
+// path's one-retry rule (framing-audit decision 2026-08-13, "less cases,
+// less code"): on a version conflict, re-claim ONCE via GetTile and retry
+// — a racing version-bumping writer (a rename, a resize, a title capture)
+// must not silently cost the user's settled viewport. The caller already
+// patched the cache, so any REMAINING failure follows ClassifyOptimistic:
+// refetch (roll the patch back to server truth) and surface.
+func (a *App) postFramingPersist(label, gid, tileID string, version int64, call func(ctx context.Context, version int64) (*rpc.Tile, error)) {
+	a.persistPosts[label]++
+	go func() {
+		_, err := call(context.Background(), version)
+		if err != nil && isVersionConflict(err) {
+			if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
+				_, err = call(context.Background(), fresh.Version)
+			}
+		}
+		r := clientsync.ClassifyOptimistic(err, isVersionConflict(err))
+		if r.Refetch {
+			a.refetchGridOnConflict(gid, label)
+		}
+		if r.Log {
+			a.surfaceRPCError(label, err)
+		}
+	}()
+}
+
 // doFreezeWrite runs a leaving-gesture freeze writeback (url page / shell
 // terminal preview) with the one retry rule: claim `version`; on a version
 // conflict re-claim ONCE via GetTile and retry — an automatic writer racing

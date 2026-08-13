@@ -451,6 +451,13 @@ message ListPluginsResponse {
   // fact of the LOCAL origin: content URLs are always built against the
   // serving node; federation happens behind the door, over the RPC.
   string content_token = 5;
+  // node_root_view_cx/cy/zoom: the NODE GRID's own persisted viewport
+  // (2026-08-13, framing audit) — the read side of the node grid's
+  // SetRootView, so a client anchored at the node grid can boot back to
+  // the framing it left. Zero zoom = never set.
+  double node_root_view_cx = 6;
+  double node_root_view_cy = 7;
+  double node_root_view_zoom = 8;
 }
 
 // TileResponse is the shape returned by every tile-producing mutation.
