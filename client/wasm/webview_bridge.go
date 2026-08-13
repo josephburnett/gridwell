@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
@@ -30,6 +31,27 @@ func bridge() js.Value {
 // bridgeAvailable reports whether the native webview bridge is present.
 func bridgeAvailable() bool {
 	return bridge().Truthy()
+}
+
+// bridgeCaps reads the host's OWN capability declaration
+// (window.gridwell.caps — 2026-08-13): which bridge halves it implements.
+// A bridge without the field is the legacy Electron preload, the only
+// shape that ever shipped without one — it has both halves. caps.Derive
+// is the one reader.
+func bridgeCaps() caps.Bridge {
+	g := bridge()
+	if !g.Truthy() {
+		return caps.NoBridge()
+	}
+	c := g.Get("caps")
+	if !c.Truthy() {
+		return caps.LegacyBridge()
+	}
+	return caps.Bridge{
+		Present:   true,
+		LiveURL:   c.Get("liveUrl").Truthy(),
+		LiveShell: c.Get("liveShell").Truthy(),
+	}
 }
 
 // viewBounds is a content-box rectangle in CSS px relative to the window's

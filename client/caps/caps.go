@@ -34,15 +34,40 @@ type Caps struct {
 	Shells bool
 }
 
-// Derive computes the capability set from the two boot facts: whether the
-// Electron preload bridge (window.gridwell) is present, and whether the node
-// disabled shells (the ListPlugins handshake's shells_disabled). Called once
-// with false before the handshake and re-derived once when it lands —
-// still strictly boot-time, immutable afterward.
-func Derive(bridgePresent, shellsDisabled bool) Caps {
+// Bridge is what the native host DECLARES it can do (2026-08-13): the
+// window.gridwell object's own caps field, read once at boot. A host that
+// exposes the bridge no longer implies every native feature — a mobile
+// shell can place live url views without carrying the shell PTY relay.
+// A legacy bridge with no caps field (an older Electron preload under a
+// newer wasm client) declares both — exactly what that host supports.
+type Bridge struct {
+	// Present: window.gridwell exists at all (false = plain browser).
+	Present bool
+	// LiveURL / LiveShell: the host implements the url-view half
+	// (placeWebview/setBounds/…) / the shell relay half (shellOpen/…).
+	LiveURL   bool
+	LiveShell bool
+}
+
+// LegacyBridge is the declaration imputed to a bridge without a caps
+// field: the full Electron feature set, which is the only host that shape
+// ever shipped in.
+func LegacyBridge() Bridge {
+	return Bridge{Present: true, LiveURL: true, LiveShell: true}
+}
+
+// NoBridge is a plain browser host.
+func NoBridge() Bridge { return Bridge{} }
+
+// Derive computes the capability set from the boot facts: what the native
+// bridge declares (window.gridwell.caps), and whether the node disabled
+// shells (the ListPlugins handshake's shells_disabled). Called once with
+// the node fact unknown before the handshake and re-derived once when it
+// lands — still strictly boot-time, immutable afterward.
+func Derive(bridge Bridge, shellsDisabled bool) Caps {
 	return Caps{
-		LiveURL:   bridgePresent,
-		LiveShell: bridgePresent && !shellsDisabled,
+		LiveURL:   bridge.Present && bridge.LiveURL,
+		LiveShell: bridge.Present && bridge.LiveShell && !shellsDisabled,
 		Shells:    !shellsDisabled,
 	}
 }

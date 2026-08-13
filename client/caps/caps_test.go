@@ -8,20 +8,27 @@ import (
 )
 
 func TestDerive(t *testing.T) {
-	if !Derive(true, false).LiveURL {
+	if !Derive(LegacyBridge(), false).LiveURL {
 		t.Errorf("bridge present must enable live URL views")
 	}
-	if Derive(false, false).LiveURL {
+	if Derive(NoBridge(), false).LiveURL {
 		t.Errorf("no bridge must disable live URL views")
 	}
-	if c := Derive(true, false); !c.Shells || !c.LiveShell {
+	if c := Derive(LegacyBridge(), false); !c.Shells || !c.LiveShell {
 		t.Errorf("shells enabled + bridge: want Shells and LiveShell, got %+v", c)
 	}
-	if c := Derive(true, true); c.Shells || c.LiveShell {
+	if c := Derive(LegacyBridge(), true); c.Shells || c.LiveShell {
 		t.Errorf("shells_disabled must kill both Shells and LiveShell, got %+v", c)
 	}
-	if c := Derive(false, false); c.LiveShell || !c.Shells {
+	if c := Derive(NoBridge(), false); c.LiveShell || !c.Shells {
 		t.Errorf("browser host: shells exist (frozen) but never live, got %+v", c)
+	}
+	// The mobile shape (2026-08-13): a bridge that declares live url views
+	// but NOT the shell relay must never light up shell attach — a
+	// dead-click is the launcher lesson (§6).
+	mobile := Bridge{Present: true, LiveURL: true, LiveShell: false}
+	if c := Derive(mobile, false); !c.LiveURL || c.LiveShell || !c.Shells {
+		t.Errorf("url-only bridge: want LiveURL only (+Shells frozen), got %+v", c)
 	}
 }
 

@@ -28,6 +28,12 @@ import {
 
 const api = {
   version: 1,
+  // The host's OWN capability declaration (2026-08-13): which bridge
+  // halves this preload implements. caps.Derive reads it — a host
+  // exposing the bridge no longer implies every native feature (the
+  // mobile shell places url views without the shell relay). Electron
+  // implements both.
+  caps: { liveUrl: true, liveShell: true },
   platform: process.platform,
 
   placeWebview(args: PlaceArgs): Promise<void> {

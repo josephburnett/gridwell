@@ -651,7 +651,7 @@ func main() {
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
 		errs:              errsurface.New(),
-		caps:              caps.Derive(bridgeAvailable(), false),
+		caps:              caps.Derive(bridgeCaps(), false),
 		gridLoadFailed:    map[string]bool{},
 		gridInflight:      map[string]bool{},
 		contentInflight:   map[string]bool{},
@@ -750,7 +750,7 @@ func (a *App) bootstrap() {
 		// still boot-time (nothing has rendered or accepted input yet),
 		// immutable afterward. caps stays the ONE owner of "what can this
 		// client do"; nothing else reads the handshake flag.
-		a.caps = caps.Derive(bridgeAvailable(), plugins.ShellsDisabled)
+		a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)
 		// The /content/ door capability rides the same handshake; boot-time,
 		// immutable, read only by webAddress.
 		a.contentToken = plugins.ContentToken
