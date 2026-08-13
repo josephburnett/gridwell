@@ -14,10 +14,11 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
+	"io/fs"
 	"mime"
 	"net/http"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 
@@ -29,8 +30,11 @@ import (
 
 // Config configures the server.
 type Config struct {
-	// StaticDir is the directory served at /. Empty disables static files.
-	StaticDir string
+	// StaticFS is the filesystem served at / — normally the EMBEDDED web
+	// client (web.FS: the binary is self-contained, 2026-08-12), or an
+	// os.DirFS over a dev checkout when server.yaml/--static overrides.
+	// Nil disables static files (headless: some tests, pure RPC probing).
+	StaticFS fs.FS
 	// NodeID is this node's durable identity (server.yaml node_id). It
 	// qualifies the node grid — the plugin-list landing page every client
 	// anchors at and every remote mounter descends into. Empty disables the
@@ -192,64 +196,69 @@ func (s *Server) routes() {
 	// token in the path is the credential there.
 	s.mux.Handle(contentPathPrefix, s.contentDoor())
 
-	if s.cfg.StaticDir != "" {
-		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticDir))
+	if s.cfg.StaticFS != nil {
+		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticFS))
 	}
 }
 
-// staticOrSPA serves files from dir, falling back to index.html for any
-// request that doesn't match an on-disk file (the SPA path grammar). The
-// /rpc/ prefix — the pre-Connect RPC namespace — stays a hard 404 so a
-// stale caller gets an error, never HTML.
-func (s *Server) staticOrSPA(dir string) http.Handler {
-	fs := http.FileServer(http.Dir(dir))
+// staticOrSPA serves files from fsys — the embedded web client or a dev
+// checkout — falling back to index.html for any request that doesn't match
+// a file (the SPA path grammar). The /rpc/ prefix — the pre-Connect RPC
+// namespace — stays a hard 404 so a stale caller gets an error, never HTML.
+func (s *Server) staticOrSPA(fsys fs.FS) http.Handler {
+	files := http.FileServerFS(fsys)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/rpc/") {
 			http.NotFound(w, r)
 			return
 		}
 		if r.URL.Path != "/" {
-			full := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(r.URL.Path, "/")))
-			if info, err := os.Stat(full); err == nil && !info.IsDir() {
-				if serveGzipSidecar(w, r, full, info) {
+			name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+			if info, err := fs.Stat(fsys, name); err == nil && !info.IsDir() {
+				if serveGzipSidecar(w, r, fsys, name, info) {
 					return
 				}
-				fs.ServeHTTP(w, r)
+				files.ServeHTTP(w, r)
 				return
 			}
 		}
-		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+		http.ServeFileFS(w, r, fsys, "index.html")
 	})
 }
 
 // serveGzipSidecar serves <file>.gz with Content-Encoding: gzip when the
 // client accepts it and the sidecar is FRESH (at least as new as the raw
 // file — a stale sidecar from an older build must never shadow the real
-// bytes). The build precompresses the one asset that matters:
-// gridwell.wasm is ~33 MB raw and ~8 MB gzipped, and a phone on a relayed
-// tailscale link downloads it on every boot — uncompressed, that is
-// minutes of blank page. Content-Type comes from the RAW file's extension
-// (instantiateStreaming requires application/wasm); ServeContent still
-// handles If-Modified-Since so browser caching keeps working.
-func serveGzipSidecar(w http.ResponseWriter, r *http.Request, full string, raw os.FileInfo) bool {
+// bytes; embedded files share one zero modtime, so the pair is always
+// same-aged there). The build precompresses the one asset that matters:
+// gridwell.wasm is ~33 MB raw and ~6.5 MB gzipped, and a phone on a
+// relayed tailscale link downloads it on every boot — uncompressed, that
+// is minutes of blank page. Content-Type comes from the RAW file's
+// extension (instantiateStreaming requires application/wasm); ServeContent
+// still handles If-Modified-Since so browser caching keeps working.
+func serveGzipSidecar(w http.ResponseWriter, r *http.Request, fsys fs.FS, name string, raw fs.FileInfo) bool {
 	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		return false
 	}
-	gzInfo, err := os.Stat(full + ".gz")
+	gzInfo, err := fs.Stat(fsys, name+".gz")
 	if err != nil || gzInfo.IsDir() || gzInfo.ModTime().Before(raw.ModTime()) {
 		return false
 	}
-	f, err := os.Open(full + ".gz")
+	f, err := fsys.Open(name + ".gz")
 	if err != nil {
 		return false
 	}
 	defer f.Close()
-	if ct := mime.TypeByExtension(filepath.Ext(full)); ct != "" {
+	rs, ok := f.(io.ReadSeeker)
+	if !ok {
+		return false // ServeContent needs seeking; embed.FS and os.DirFS both provide it
+	}
+	if ct := mime.TypeByExtension(path.Ext(name)); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
 	w.Header().Set("Content-Encoding", "gzip")
 	w.Header().Set("Vary", "Accept-Encoding")
-	http.ServeContent(w, r, filepath.Base(full), gzInfo.ModTime(), f)
+	http.ServeContent(w, r, path.Base(name), gzInfo.ModTime(), rs)
 	return true
 }
 

@@ -40,7 +40,7 @@ func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string)
 	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte(spaMarker), 0o644); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
-	srv := New(reg, Config{StaticDir: staticDir, Password: password})
+	srv := New(reg, Config{StaticFS: os.DirFS(staticDir), Password: password})
 	hs := httptest.NewServer(srv.NodeHandler())
 	t.Cleanup(hs.Close)
 	return hs, root

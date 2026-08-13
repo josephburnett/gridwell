@@ -159,7 +159,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, Config{StaticDir: dir})
+	srv := New(reg, Config{StaticFS: os.DirFS(dir)})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 

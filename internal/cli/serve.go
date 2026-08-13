@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/web"
 )
 
 // serveFlags holds the parsed `serve` subcommand options. Split out from
@@ -40,7 +41,7 @@ func parseServeFlags(args []string, defStatic string) (serveFlags, error) {
 	var f serveFlags
 	fs.StringVar(&f.Bind, "bind", "", "HTTP listen address (hard override: beats server.yaml bind:)")
 	fs.StringVar(&f.BindDefault, "bind-default", "", "HTTP listen address used only when server.yaml has no bind: (the desktop sidecar passes its ephemeral loopback port here)")
-	fs.StringVar(&f.StaticDir, "static", defStatic, "directory of static files served at / (empty = headless)")
+	fs.StringVar(&f.StaticDir, "static", defStatic, "serve static files from this directory instead of the embedded web client (dev override; empty = embedded)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
 		case "bind", "bind-default", "static":
@@ -117,11 +118,24 @@ gridwell: WARNING: (set password: in server.yaml to at least gate the web UI.)`,
 // the sidecar can authenticate its own window without ever prompting: local
 // stdout is same-trust as server.yaml, which holds the password itself.
 func servingBanner(addr, staticDir string, plugins int, password string) string {
+	if staticDir == "" {
+		staticDir = "embedded"
+	}
 	if password == "" {
 		return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d)", addr, staticDir, plugins)
 	}
 	return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d auth=%s)",
 		addr, staticDir, plugins, server.AuthToken(password))
+}
+
+// staticFS resolves the static override: "" is the embedded web client
+// (the distributed-binary default, web.FS — the gridwell binary is fully
+// self-contained since 2026-08-12), a path is a dev checkout on disk.
+func staticFS(dir string) fs.FS {
+	if dir == "" {
+		return web.FS
+	}
+	return os.DirFS(dir)
 }
 
 // buildServeConfig loads the mandatory server.yaml at cfgPath and prepares it
@@ -275,8 +289,11 @@ func RunServe(args []string) int {
 	// bridge. tmux, the session lifecycle, and orphan cleanup all moved behind
 	// the interface — the localdb plugin binary owns them.
 	srv := server.New(reg, server.Config{
-		StaticDir: f.StaticDir,
-		NodeID:    nodeID,
+		// The embedded web client by default — the binary is self-contained
+		// (web.FS); server.yaml static:/--static is the dev override that
+		// serves a checkout from disk instead.
+		StaticFS: staticFS(f.StaticDir),
+		NodeID:   nodeID,
 		// The landing page's viewport survives restarts in a small state
 		// file beside the config ("things stay as you left them").
 		NodeStatePath: filepath.Join(home, "node-view.json"),

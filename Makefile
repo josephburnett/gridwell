@@ -28,10 +28,12 @@ export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 build: bin plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
-# pure Go, so nothing pulls cgo and the result has no libc-version coupling.
-# The AppImage bundles this binary as-is — it's the one piece of Gridwell that
-# genuinely has zero system dependencies.
-bin:
+# pure Go, so nothing pulls cgo and the result has no libc-version coupling —
+# and since the web client (index.html, wasm, vendor) is EMBEDDED (web/embed.go),
+# the built gridwell + gridwell-<kind> binaries are the whole distribution:
+# copy them anywhere and the browser client serves from the binary itself.
+# bin depends on wasm so the embed always carries the current client.
+bin: wasm
 	CGO_ENABLED=0 go build -o $(BIN) ./cmd/gridwell
 
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/josephburnett/gridwell/web"
 )
 
 // The compressed-static class (2026-08-12): any static file with a FRESH
@@ -44,7 +46,7 @@ func gzipStaticServer(t *testing.T) (hs *httptest.Server, dir string, raw []byte
 		t.Fatal(err)
 	}
 
-	srv := New(nil, Config{StaticDir: dir})
+	srv := New(nil, Config{StaticFS: os.DirFS(dir)})
 	hs = httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return hs, dir, raw
@@ -112,6 +114,40 @@ func TestStaticGzipSidecar(t *testing.T) {
 	res = getEncoded(t, hs.URL+"/index.html", "gzip")
 	if res.Header.Get("Content-Encoding") != "" {
 		t.Errorf("no-sidecar Content-Encoding = %q, want none", res.Header.Get("Content-Encoding"))
+	}
+}
+
+// TestEmbeddedWebClientServes pins self-containedness (2026-08-12): the
+// server, handed the EMBEDDED web.FS (the distributed binary's default),
+// serves the SPA and the wasm — gzipped when accepted, with the type
+// instantiateStreaming requires — with no files on disk at all. This is
+// the "copy the binaries to another machine" contract.
+func TestEmbeddedWebClientServes(t *testing.T) {
+	srv := New(nil, Config{StaticFS: web.FS})
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+
+	res := getEncoded(t, hs.URL+"/", "")
+	body := new(bytes.Buffer)
+	if _, err := body.ReadFrom(res.Body); err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK || !bytes.Contains(body.Bytes(), []byte("gridwell.wasm")) {
+		t.Fatalf("GET / = %d, want the embedded index.html (got %d bytes)", res.StatusCode, body.Len())
+	}
+
+	res = getEncoded(t, hs.URL+"/gridwell.wasm", "gzip")
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Encoding") != "gzip" {
+		t.Errorf("embedded wasm GET = %d enc=%q, want 200 gzip (the sidecar is embedded too)",
+			res.StatusCode, res.Header.Get("Content-Encoding"))
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "application/wasm" {
+		t.Errorf("embedded wasm Content-Type = %q, want application/wasm", ct)
+	}
+
+	// The vendored xterm assets ride along — the whole client, one binary.
+	if res := getEncoded(t, hs.URL+"/vendor/xterm/xterm.min.js", ""); res.StatusCode != http.StatusOK {
+		t.Errorf("embedded vendor asset = %d, want 200", res.StatusCode)
 	}
 }
 

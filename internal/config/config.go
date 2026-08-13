@@ -32,7 +32,7 @@ type ServerConfig struct {
 	// what lets `serve --bind-default` (the desktop sidecar's ephemeral
 	// loopback port) fill in only when the config is silent.
 	BindSet   bool   `yaml:"-"`
-	StaticDir string `yaml:"static,omitempty"` // "" → headless (no static files served)
+	StaticDir string `yaml:"static,omitempty"` // "" → the embedded web client; a path → dev override from disk
 	// Password, when non-empty, gates the browser-served web UI: every HTTP
 	// request must carry the auth cookie (obtained by entering this password
 	// on the login page), and the cookie is checked against the CURRENT
@@ -67,7 +67,7 @@ type PluginConfig struct {
 // config file or no config file exists.
 var Defaults = ServerConfig{
 	Bind:      "127.0.0.1:8080",
-	StaticDir: "./web",
+	StaticDir: "", // embedded web client (web.FS); a path serves a dev checkout from disk
 }
 
 // Home returns the Gridwell home directory: GRIDWELL_HOME if set, else
