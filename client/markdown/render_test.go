@@ -61,3 +61,18 @@ func TestIsOrg(t *testing.T) {
 		}
 	}
 }
+
+// RenderPlainHTML shows a body verbatim: escaped (inert by construction)
+// and never interpreted as markdown — a shell comment stays a comment.
+func TestRenderPlainHTML(t *testing.T) {
+	out := RenderPlainHTML([]byte("# not a heading\n<script>x</script>"))
+	if !strings.Contains(out, "# not a heading") {
+		t.Errorf("plain body mangled: %q", out)
+	}
+	if strings.Contains(out, "<script>") || !strings.Contains(out, "&lt;script&gt;") {
+		t.Errorf("plain body not escaped: %q", out)
+	}
+	if !strings.HasPrefix(out, "<pre") {
+		t.Errorf("plain body not preformatted: %q", out)
+	}
+}

@@ -641,7 +641,7 @@ func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, owner pb.G
 
 // SetRootView persists the plugin root-grid framing (the same fact as SetTile
 // for a well, but for the synthetic plugin root which has no tile row). Routes
-// on root_grid_id; localdb stores to the system KV table; fs/proc are no-ops
+// on root_grid_id; localdb stores to the system KV table; a plugin without a root view store answers Unimplemented
 // (the UnimplementedGridwellServer returns Unimplemented — ignored here so a
 // read-only plugin's ascent doesn't surface an error to the user).
 // After a successful write, the per-plugin Info cache is invalidated so the
@@ -659,7 +659,7 @@ func (h *connectHandler) SetRootView(ctx context.Context, req *connect.Request[p
 		Zoom:       m.Zoom,
 	})
 	if err != nil {
-		// Unimplemented is not an error — fs/proc don't persist a root view.
+		// Unimplemented is not an error — some plugins may not persist a root view.
 		if isUnimplemented(err) {
 			return connect.NewResponse(&pb.SetRootViewResponse{}), nil
 		}
@@ -868,7 +868,7 @@ func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, hea
 
 // isUnimplemented reports whether a gRPC/Connect error carries an Unimplemented
 // code. Used to treat a plugin's "method not supported" as a silent no-op
-// (e.g. SetRootView on fs/proc which have no persistent root view).
+// (e.g. SetRootView on a plugin with no persistent root view).
 func isUnimplemented(err error) bool {
 	if err == nil {
 		return false

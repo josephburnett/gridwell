@@ -163,6 +163,15 @@ message Tile {
   // ephemeral). Plugin-declared, derived from the content itself (fs: the
   // filename's media type) — never a stored column.
   bool serves_page = 32;
+
+  // text_presentation (2026-08-13): the owning plugin's declaration of how
+  // a text tile's body PRESENTS — "plain" (monospace, no markdown
+  // interpretation: source code, logs), "rendered" (document renderer
+  // only), or "both" (rendered by default, user may toggle to the raw
+  // source). "" = no declaration: the stored user text_mode rules, as it
+  // always has for localdb docs. Plugin-derived from the content itself
+  // (fs: the filename/sniff) — wire-only, never a stored column.
+  string text_presentation = 33;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

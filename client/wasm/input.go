@@ -1630,17 +1630,17 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	// path goes through urlPreview instead — and so does a serves_page
 	// tile's (its descent is the page, not the document body).
 	if file.Kind == rpc.KindText && !file.ServesPage {
-		a.fetchTileContent(file.ID)
-		// Source-backed text tiles (the @info tile in a proc-well, fs
-		// file metadata) are reconciled server-side from live host
-		// state. Trigger a parent GetGrid so the reconciler runs again
-		// — the response (and the TileChanged event it fires) repoints
-		// the tile at the freshest blob, which the next render frame
-		// fetches automatically. The user briefly sees the previous
-		// snapshot, then it snaps to current.
+		// Source-backed bodies (fs files, the proc @info tile) are host
+		// state, not versioned content: their version is always 0, so the
+		// cache entry from the FIRST open matched forever and the descent
+		// showed stale bytes no matter how the file changed on disk
+		// (decision 2026-08-13: every open re-reads — it is all
+		// read-only). Drop before fetching so the fetch really refetches.
 		if a.tileReadOnly(file) {
+			a.c.DropTileContent(file.ContentID())
 			a.fetchGrid(a.gridIDForPane(p))
 		}
+		a.fetchTileContent(file.ID)
 	}
 
 	fileID := file.ID
@@ -1800,7 +1800,7 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 	cid := tile.ContentID()
 	alive, known := a.shellAlive[cid]
 	verdict := shellconn.DecideAutoLive(
-		tile.Kind == rpc.KindURL, tile.Kind == rpc.KindShell, tile.ServesPage,
+		tile.WebContent(), tile.Kind == rpc.KindShell,
 		a.caps.LiveURL, a.caps.LiveShell,
 		tile.PreviewBlobID != 0, known, alive, tile.URLFrozen)
 	switch verdict {

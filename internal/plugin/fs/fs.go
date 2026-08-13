@@ -300,7 +300,7 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 			if err != nil {
 				return nil, err
 			}
-			stampServesPage(tiles)
+			stampServesPage(tiles, path)
 			grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
 			return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
 		}
@@ -314,7 +314,7 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 	if err != nil {
 		return nil, err
 	}
-	stampServesPage(tiles)
+	stampServesPage(tiles, path)
 
 	grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
 	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
@@ -326,7 +326,11 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
 	resp, err := griddb.ApplyGetTile(p.db, fsLabelCol, req)
 	if err == nil && resp.GetTile() != nil {
-		stampServesPage([]*gridwellv1.Tile{resp.Tile})
+		dir := ""
+		if gid, perr := strconv.ParseInt(resp.Tile.GridId, 10, 64); perr == nil {
+			dir, _ = p.gridPath(gid)
+		}
+		stampServesPage([]*gridwellv1.Tile{resp.Tile}, dir)
 	}
 	return resp, err
 }
@@ -384,8 +388,11 @@ func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, e
 	if err != nil {
 		return nil, "", nil
 	}
-	if markdown.Renderable(name) && entry.Size <= renderableBodyCap {
+	if (markdown.Renderable(name) || isPlainText(name)) && entry.Size <= renderableBodyCap {
 		if body, readErr := os.ReadFile(fullPath); readErr == nil {
+			if isPlainText(name) && !markdown.Renderable(name) {
+				return body, "text/plain", nil
+			}
 			return body, "text/markdown", nil
 		}
 		// Unreadable despite the stat: the metadata summary still tells

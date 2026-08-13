@@ -288,6 +288,13 @@ type Tile struct {
 	// <origin>/content/<token>/<ContentID>/. Plugin-declared, derived from
 	// the content itself; never a stored column.
 	ServesPage bool `json:"serves_page,omitempty"`
+	// TextPresentation: the plugin's declaration of how a text body
+	// presents — TextPresentationPlain (monospace, no markdown
+	// interpretation), TextPresentationRendered, or TextPresentationBoth
+	// (rendered by default, user may toggle to the raw source). "" = the
+	// stored user text_mode rules (localdb docs). Wire-only,
+	// plugin-derived.
+	TextPresentation string `json:"text_presentation,omitempty"`
 }
 
 // WebContent reports whether this tile PRESENTS as web content: a url tile
@@ -307,6 +314,13 @@ func (t *Tile) WebContent() bool {
 func PageURL(origin, contentToken, tileID string) string {
 	return origin + "/content/" + contentToken + "/" + tileID + "/"
 }
+
+// The text_presentation vocabulary (decision 2026-08-13).
+const (
+	TextPresentationPlain    = "plain"
+	TextPresentationRendered = "rendered"
+	TextPresentationBoth     = "both"
+)
 
 // ContentID returns the tile id that OWNS this tile's content: a leaf link's
 // target, or the tile's own id. Every client content operation — body fetch,

@@ -9,6 +9,9 @@ package rpc
 // builder, two transports), as proto-JSON, which the Connect handler
 // accepts on its unary POSTs. Framing writes only: they are unary and
 // idempotent-at-rest; content writes stream and stay with the save queue.
+// Known tradeoff: a beacon cannot retry a version conflict (the page is
+// gone) — a version bump racing the final instant of a session can still
+// cost that one write; the settle persister covers every earlier one.
 
 import (
 	"google.golang.org/protobuf/encoding/protojson"

@@ -67,7 +67,7 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 	// output (unclosed <br>, <img>) becomes well-formed XML — the SVG
 	// foreignObject is an XML context.
 	div := a.doc.Call("createElement", "div")
-	div.Set("innerHTML", markdown.RenderHTML(body, isOrg))
+	div.Set("innerHTML", presentationHTML(n, body))
 	xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
 	svg := markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, colorFileInnerBg)
 

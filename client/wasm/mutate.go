@@ -28,6 +28,20 @@ type tileCall func(ctx context.Context) (*rpc.Tile, error)
 // (DeleteTile, SetRootView).
 type voidCall func(ctx context.Context) error
 
+// isUnimplemented reports a plugin's "I don't serve this" answer — a
+// normal capability property (no previews, no pages), never a failure to
+// surface.
+func isUnimplemented(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		return ce.Code() == connect.CodeUnimplemented
+	}
+	return false
+}
+
 // isVersionConflict reports whether an RPC error came back with the
 // FailedPrecondition code Connect uses for both ErrVersionConflict and
 // ErrOverlap. Either case warrants a cache-resync via grid refetch.

@@ -402,12 +402,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	if a.tileReadOnly(&file) && !markdown.Renderable(file.AltText) {
-		// A non-renderable source-backed tile has nothing to flip: its
-		// body IS the metadata summary. A renderable host file (fs .md /
-		// .org — issue #236) keeps the toggle: the flip is rendered vs raw
-		// SOURCE, a presentation choice — the textarea guard still keeps
-		// raw mode read-only.
+	if !textToggleVisible(&file, a.tileReadOnly(&file)) {
 		hide()
 		return
 	}
@@ -595,7 +590,7 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	// host file flips rendered/raw source (issue #236) — the textarea
 	// guard in refreshFileOverlay keeps raw mode caret-free either way.
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
-		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) && !markdown.Renderable(file.AltText) {
+		if file, ok := g.Tiles[p.TextFocus]; ok && !textToggleVisible(&file, a.tileReadOnly(&file)) {
 			return
 		}
 	}
@@ -623,3 +618,21 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 // saveTextFromTextarea is GONE. Text bytes reach the server through exactly
 // one door — client/wasm/text_flush.go — which reads the content store by
 // tile id and never the DOM. See that file for why (the cross-tile stomp).
+
+// textToggleVisible decides whether the rendered/raw toggle exists for a
+// text tile. The owning plugin's text_presentation is the one authority
+// when declared (decision 2026-08-13): "both" keeps the flip (rendered vs
+// raw source — the textarea guard still keeps raw read-only), "plain" and
+// "rendered" are single-presentation. Undeclared tiles keep the legacy
+// rule: writable docs always toggle; a read-only tile toggles only when
+// its name is renderable (fs .md/.org — issue #236), because a metadata
+// summary has nothing to flip.
+func textToggleVisible(file *rpc.Tile, readOnly bool) bool {
+	switch file.TextPresentation {
+	case rpc.TextPresentationBoth:
+		return true
+	case rpc.TextPresentationPlain, rpc.TextPresentationRendered:
+		return false
+	}
+	return !readOnly || markdown.Renderable(file.AltText)
+}

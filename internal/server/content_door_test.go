@@ -346,3 +346,49 @@ func TestContentDoorUnimplemented(t *testing.T) {
 		t.Errorf("localdb page GET = %d, want 404 (ServeContent unimplemented)", res.StatusCode)
 	}
 }
+
+// TestHandshakeCarriesTokensAndNodeView pins the ListPlugins seam facts
+// that only ever had producer-side coverage: the content token (must be
+// the CONTENT derivation, never the auth token) and the node grid's own
+// root view — including through a raw BEACON post, the exact wire the
+// unload flush uses (application/json unary, no Connect header), so the
+// last-pan-survives-quit path rests on a tested seam.
+func TestHandshakeCarriesTokensAndNodeView(t *testing.T) {
+	hs, _, _ := contentDoorServer(t, "")
+	cl := rpc.NewClient(hs.Client(), hs.URL)
+	ctx := context.Background()
+
+	pl, err := cl.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pl.ContentToken != ContentToken("") {
+		t.Errorf("handshake content token = %q, want ContentToken(password)", pl.ContentToken)
+	}
+	if pl.ContentToken == AuthToken("") {
+		t.Errorf("content token must never equal the auth token (domain separation)")
+	}
+	if pl.NodeRootViewZoom != 0 {
+		t.Errorf("fresh node root view zoom = %v, want 0 (never set)", pl.NodeRootViewZoom)
+	}
+
+	path, body := rpc.SetRootViewBeacon(&rpc.SetRootViewRequest{
+		RootGridID: "node1/0", Cx: 3, Cy: 4, Zoom: 0.5,
+	})
+	res, err := hs.Client().Post(hs.URL+path, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("beacon-shaped SetRootView POST = %d, want 200", res.StatusCode)
+	}
+	pl2, err := cl.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pl2.NodeRootViewCx != 3 || pl2.NodeRootViewCy != 4 || pl2.NodeRootViewZoom != 0.5 {
+		t.Errorf("node root view after beacon = (%v,%v,%v), want (3,4,0.5)",
+			pl2.NodeRootViewCx, pl2.NodeRootViewCy, pl2.NodeRootViewZoom)
+	}
+}

@@ -23,6 +23,8 @@ import (
 	"strings"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/internal/rpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -79,13 +81,72 @@ func pageMediaType(name string) string {
 	return pageMediaTypes[strings.ToLower(filepath.Ext(name))]
 }
 
+// plainTextExts marks extensions whose bodies present as PLAIN text
+// (monospace, no markdown interpretation — source, config, logs, data).
+// Deliberately a list, not a sniff: presentation stamps onto every tile
+// row at grid load, which must never stat or read the files.
+var plainTextExts = map[string]bool{
+	".txt": true, ".log": true, ".csv": true, ".tsv": true, ".json": true,
+	".yaml": true, ".yml": true, ".toml": true, ".ini": true, ".cfg": true,
+	".conf": true, ".env": true, ".xml": true, ".sql": true, ".proto": true,
+	".go": true, ".py": true, ".js": true, ".ts": true, ".tsx": true,
+	".jsx": true, ".c": true, ".h": true, ".cpp": true, ".hpp": true,
+	".cc": true, ".rs": true, ".java": true, ".rb": true, ".sh": true,
+	".bash": true, ".zsh": true, ".fish": true, ".pl": true, ".lua": true,
+	".css": true, ".scss": true, ".dart": true, ".kt": true, ".swift": true,
+	".diff": true, ".patch": true, ".lock": true, ".mod": true, ".sum": true,
+	".service": true, ".gitignore": true, ".dockerignore": true,
+}
+
+// plainTextNames covers the extensionless classics.
+var plainTextNames = map[string]bool{
+	"makefile": true, "dockerfile": true, "license": true, "readme": true,
+	"changelog": true, "authors": true, "notice": true, "todo": true,
+	"vagrantfile": true, "gemfile": true, "rakefile": true, "procfile": true,
+	".gitignore": true, ".dockerignore": true, ".gitattributes": true,
+	".editorconfig": true, ".profile": true, ".bashrc": true, ".zshrc": true,
+}
+
+// textPresentation classifies a file tile's text-body presentation
+// (decision 2026-08-13): markdown/org render (with the raw-source
+// toggle); the plain-text families show verbatim; everything else has no
+// declaration — the metadata summary renders as it always has.
+func textPresentation(name string) string {
+	if markdown.Renderable(name) {
+		return rpc.TextPresentationBoth
+	}
+	lower := strings.ToLower(name)
+	if plainTextExts[filepath.Ext(lower)] || plainTextNames[lower] {
+		return rpc.TextPresentationPlain
+	}
+	return ""
+}
+
+// isPlainText reports the plain-text classification (the same rule
+// textPresentation applies, minus the renderable arm).
+func isPlainText(name string) bool {
+	lower := strings.ToLower(name)
+	return plainTextExts[filepath.Ext(lower)] || plainTextNames[lower]
+}
+
 // stampServesPage derives the serves_page bit onto loaded tile rows — from
 // the one fact that owns it, the filename (AltText carries it; fs's label
-// column). Derived at read time, never stored.
-func stampServesPage(tiles []*gridwellv1.Tile) {
+// column). Derived at read time, never stored. dirPath, when non-empty,
+// lets IMAGE tiles carry a preview GENERATION in preview_blob_id (the
+// file's mtime): the client keys its thumbnail cache by that field, so an
+// edited image invalidates naturally instead of showing last session's
+// face forever.
+func stampServesPage(tiles []*gridwellv1.Tile, dirPath string) {
 	for _, t := range tiles {
-		if t.Kind == "text" {
-			t.ServesPage = servesPage(t.AltText)
+		if t.Kind != "text" {
+			continue
+		}
+		t.ServesPage = servesPage(t.AltText)
+		t.TextPresentation = textPresentation(t.AltText)
+		if dirPath != "" && strings.HasPrefix(pageMediaType(t.AltText), "image/") {
+			if fi, err := os.Stat(filepath.Join(dirPath, t.AltText)); err == nil {
+				t.PreviewBlobId = fi.ModTime().Unix()
+			}
 		}
 	}
 }

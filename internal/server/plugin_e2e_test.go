@@ -63,13 +63,15 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 		t.Errorf("subdir child_grid_id = %q, want %q prefix", sub.ChildGridID, fsPluginUUID)
 	}
 
-	// 2b. The file tile's descent body (its metadata) routes to the plugin.
-	body, _, _, err := cl.ReadContent(ctx, alpha.ID)
+	// 2b. The file tile's descent body routes to the plugin — and since the
+	// content-types program (2026-08-13) a .txt file's body is the FILE
+	// ITSELF, verbatim, not a metadata summary.
+	body, media, _, err := cl.ReadContent(ctx, alpha.ID)
 	if err != nil {
-		t.Fatalf("GetTileContent: %v", err)
+		t.Fatalf("ReadContent: %v", err)
 	}
-	if !strings.Contains(string(body), "alpha.txt") {
-		t.Errorf("file content %q does not mention the file name", body)
+	if string(body) != "a" || media != "text/plain" {
+		t.Errorf("file content = (%q, %q), want the file's own bytes as text/plain", body, media)
 	}
 
 	// 3. Move alpha.txt and confirm the new position survives a re-descent.

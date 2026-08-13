@@ -71,15 +71,17 @@ func TestFSReadContentAndPlaceOverGRPC(t *testing.T) {
 		}
 		if first {
 			version = ch.Version
-			if ch.MediaType != "text/markdown" {
-				t.Errorf("media = %q, want text/markdown", ch.MediaType)
+			// hello.txt is PLAIN TEXT now (decision 2026-08-13): its body
+			// is the file's own bytes, presented verbatim.
+			if ch.MediaType != "text/plain" {
+				t.Errorf("media = %q, want text/plain", ch.MediaType)
 			}
 			first = false
 		}
 		data = append(data, ch.Data...)
 	}
-	if len(data) == 0 {
-		t.Error("empty descent body for a file tile")
+	if string(data) != "hi" {
+		t.Errorf("descent body = %q, want the file's own bytes (plain text shows verbatim)", data)
 	}
 	if version != 0 {
 		t.Errorf("fs bodies are not version-edited; version = %d, want 0", version)

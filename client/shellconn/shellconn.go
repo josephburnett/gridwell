@@ -51,11 +51,11 @@ const (
 	AutoLiveProbeShell
 )
 
-// DecideAutoLive maps a descent's facts to its liveness action. kindURL /
-// kindShell classify the tile (both false = a text tile or other inert
-// kind); servesPage is the plugin's "this tile's content IS a web page"
-// declaration (2026-08-11) — it gets the url verdict, because a page tile
-// and a url tile must engage identically; liveURL/liveShell are the host
+// DecideAutoLive maps a descent's facts to its liveness action. webContent
+// is rpc.Tile.WebContent() — the ONE classification of "presents as web
+// content" (a url tile or a serves_page tile; the two must engage
+// identically), fed by the caller so this package never re-derives it;
+// kindShell classifies the shell arm; liveURL/liveShell are the host
 // capabilities; hasPreview and the aliveness pair are the shell tile's
 // state (same inputs as DecideShellRefreshVisible — the two decisions must
 // agree about what a dead session means, so they read the same facts).
@@ -63,9 +63,9 @@ const (
 // deliberate freeze beats the engagement default, so re-descending stays
 // frozen until the reconnect gesture clears the stored intent (page tiles
 // carry no standing freeze; the input is always false for them).
-func DecideAutoLive(kindURL, kindShell, servesPage, liveURL, liveShell, hasPreview, aliveKnown, alive, urlFrozen bool) AutoLive {
+func DecideAutoLive(webContent, kindShell, liveURL, liveShell, hasPreview, aliveKnown, alive, urlFrozen bool) AutoLive {
 	switch {
-	case kindURL || servesPage:
+	case webContent:
 		if liveURL && !urlFrozen {
 			return AutoLiveURL
 		}

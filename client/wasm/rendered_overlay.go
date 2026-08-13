@@ -138,7 +138,7 @@ func (a *App) refreshRenderedOverlay() {
 	key := t.ID + "\x00" + strconv.FormatInt(t.Version, 10) + "\x00" +
 		strconv.FormatBool(markdown.IsOrg(t.AltText)) + "\x00" + fmt.Sprint(len(body))
 	if key != a.lastRenderedKey {
-		div.Set("innerHTML", markdown.RenderHTML(body, markdown.IsOrg(t.AltText)))
+		div.Set("innerHTML", presentationHTML(&t, body))
 		a.lastRenderedKey = key
 		div.Set("scrollTop", p.TextScrollY)
 		div.Set("scrollLeft", p.TextScrollX)
@@ -206,3 +206,15 @@ func (a *App) onRenderedCheckboxClick(ev, input js.Value) {
 
 // The overlay's stylesheet lives in markdown.RenderedCSS — one stylesheet
 // shared with the rasterized grid preview (issue #233), scoped per surface.
+
+// presentationHTML routes a text body to its declared renderer: the
+// plugin's text_presentation "plain" shows verbatim preformatted text
+// (markdown.RenderPlainHTML); everything else is the document renderer.
+// ONE router for the descent overlay and the grid preview rasterizer, so
+// the two faces of a tile can never disagree.
+func presentationHTML(t *rpc.Tile, body []byte) string {
+	if t.TextPresentation == rpc.TextPresentationPlain {
+		return markdown.RenderPlainHTML(body)
+	}
+	return markdown.RenderHTML(body, markdown.IsOrg(t.AltText))
+}

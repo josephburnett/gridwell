@@ -83,7 +83,9 @@ func (a *App) webAddress(t *rpc.Tile) string {
 		return t.URLString
 	}
 	if t.ServesPage {
-		return rpc.PageURL(a.origin, a.contentToken, t.ID)
+		// ContentID: the one client-side link resolution — the door would
+		// re-resolve server-side, but every content op keys by the owner.
+		return rpc.PageURL(a.origin, a.contentToken, t.ContentID())
 	}
 	return ""
 }
@@ -211,6 +213,13 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 	v := pl.urlView
 	pl.urlView = nil
 	tileID := v.tileID
+	// The freeze-frame cache is read by ContentID (a link and its target
+	// share one face); the put must use the same key or a link's final
+	// frame lands where nobody reads.
+	previewKey := tileID
+	if ct := a.cachedTileByID(tileID); ct != nil {
+		previewKey = ct.ContentID()
+	}
 	anchor := v.anchor
 	path := slices.Clone(v.path)
 	urlLog("close pane=%s tile=%s", paneID, tileID)
@@ -254,7 +263,7 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 			// Reflect the just-frozen frame immediately so the pane (and
 			// any mirror) shows the final state without waiting for the
 			// SetURLState round-trip + preview re-fetch.
-			a.urlPreview.PutWildcard(tileID, jpeg, func() { a.draw() })
+			a.urlPreview.PutWildcard(previewKey, jpeg, func() { a.draw() })
 		}
 		a.draw()
 	})

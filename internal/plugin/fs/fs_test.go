@@ -584,11 +584,14 @@ func TestMoveTile_CrossGridRejected(t *testing.T) {
 	}
 }
 
-// TestGetTileContent_FileMetadata: a file tile's content is a markdown
-// summary of the file's metadata (parity with the legacy source reconciler);
-// a directory tile has empty content.
+// TestGetTileContent_FileMetadata: a PLAIN-TEXT file's content is the file
+// itself, verbatim (decision 2026-08-13); a BINARY file keeps the markdown
+// metadata summary; a directory tile has empty content.
 func TestGetTileContent_FileMetadata(t *testing.T) {
 	dir := tempTree(t)
+	if err := os.WriteFile(filepath.Join(dir, "blob.bin"), []byte{0, 1, 2}, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	p := openPlugin(t)
 	att, _ := attachAt(p, dir)
 	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
@@ -598,11 +601,23 @@ func TestGetTileContent_FileMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("contentBody: %v", err)
 	}
-	if !strings.Contains(string(data), "note.txt") {
-		t.Errorf("content %q does not mention the file name", data)
+	if string(data) != "hello" || mediaType != "text/plain" {
+		t.Errorf("plain text body = (%q, %q), want the file's bytes as text/plain", data, mediaType)
 	}
-	if mediaType != "text/markdown" {
-		t.Errorf("media_type = %q, want text/markdown", mediaType)
+	if got := tileByName(t, r.Tiles, "note.txt").TextPresentation; got != "plain" {
+		t.Errorf("note.txt text_presentation = %q, want plain", got)
+	}
+
+	bin := tileByName(t, r.Tiles, "blob.bin")
+	bdata, bmedia, err := p.ContentBody(bin.Id)
+	if err != nil {
+		t.Fatalf("contentBody bin: %v", err)
+	}
+	if !strings.Contains(string(bdata), "blob.bin") || bmedia != "text/markdown" {
+		t.Errorf("binary body = (%q, %q), want the metadata summary", bdata, bmedia)
+	}
+	if got := bin.TextPresentation; got != "" {
+		t.Errorf("blob.bin text_presentation = %q, want empty (no declaration)", got)
 	}
 
 	sub := tileByName(t, r.Tiles, "sub")

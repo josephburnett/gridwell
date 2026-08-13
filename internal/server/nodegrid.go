@@ -204,7 +204,7 @@ func (n *nodeGrid) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Til
 		RootGridId: info.RootGridId,
 		Cx:         float64(t.ViewX), Cy: float64(t.ViewY), Zoom: t.ViewZoom,
 	}); err != nil && !isUnimplemented(err) {
-		// fs/proc keep no root view; their ascent must not surface an error.
+		// a plugin may keep no root view; their ascent must not surface an error.
 		return nil, err
 	}
 	// root_view_* ride the Info handshake — drop the cache so the next

@@ -298,9 +298,17 @@ type Tile struct {
 	// render time from the current origin, never persisted (ports are
 	// ephemeral). Plugin-declared, derived from the content itself (fs: the
 	// filename's media type) — never a stored column.
-	ServesPage    bool `protobuf:"varint,32,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ServesPage bool `protobuf:"varint,32,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
+	// text_presentation (2026-08-13): the owning plugin's declaration of how
+	// a text tile's body PRESENTS — "plain" (monospace, no markdown
+	// interpretation: source code, logs), "rendered" (document renderer
+	// only), or "both" (rendered by default, user may toggle to the raw
+	// source). "" = no declaration: the stored user text_mode rules, as it
+	// always has for localdb docs. Plugin-derived from the content itself
+	// (fs: the filename/sniff) — wire-only, never a stored column.
+	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Tile) Reset() {
@@ -534,6 +542,13 @@ func (x *Tile) GetServesPage() bool {
 		return x.ServesPage
 	}
 	return false
+}
+
+func (x *Tile) GetTextPresentation() string {
+	if x != nil {
+		return x.TextPresentation
+	}
+	return ""
 }
 
 // Info is the whole plugin handshake: a plugin loaded from server.yaml is
@@ -3180,7 +3195,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\x8d\x06\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xba\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3215,7 +3230,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"url_frozen\x18\x1e \x01(\bR\turlFrozen\x12.\n" +
 	"\x13configure_plugin_id\x18\x1f \x01(\tR\x11configurePluginId\x12\x1f\n" +
 	"\vserves_page\x18  \x01(\bR\n" +
-	"servesPage\"\r\n" +
+	"servesPage\x12+\n" +
+	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\"\r\n" +
 	"\vInfoRequest\"\x9f\x04\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +

@@ -12,6 +12,7 @@ import (
 	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
+	"html"
 )
 
 // The read-only rendered view (issue #218): source bytes → sanitized HTML
@@ -111,4 +112,14 @@ func RenderHTML(src []byte, isOrg bool) string {
 func renderFallback(src []byte) string {
 	esc := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 	return "<pre>" + esc.Replace(string(src)) + "</pre>"
+}
+
+// RenderPlainHTML presents a PLAIN-TEXT body (decision 2026-08-13: source
+// code, logs, config — anything the owning plugin declares
+// text_presentation "plain") verbatim in a preformatted block: no
+// markdown interpretation, so a shell comment can never become a
+// heading. Escaped, so it is inert HTML by construction.
+func RenderPlainHTML(src []byte) string {
+	return `<pre class="gw-plain" style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:0.9em;">` +
+		html.EscapeString(string(src)) + `</pre>`
 }

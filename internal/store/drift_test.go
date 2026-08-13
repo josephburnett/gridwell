@@ -45,7 +45,7 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// DDL column by design. serves_page is likewise derived, by the
 			// owning plugin from its own content (fs: the filename's media
 			// type) — wire-only; localdb tiles never declare it.
-			protoOnly: []string{"reference", "serves_page"},
+			protoOnly: []string{"reference", "serves_page", "text_presentation"},
 		},
 	}
 	for _, c := range cases {
