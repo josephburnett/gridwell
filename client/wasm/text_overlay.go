@@ -450,7 +450,7 @@ func (a *App) refreshFileOverlay() {
 		ta.Get("style").Set("display", "none")
 		// Move focus back to the canvas so ascent and other gestures
 		// continue to work.
-		a.canvas.Call("focus")
+		a.focusCanvas()
 		return
 	}
 	// Source-backed text tiles are read-only — never show the textarea
@@ -460,7 +460,7 @@ func (a *App) refreshFileOverlay() {
 	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 		if file, ok := g.Tiles[p.TextFocus]; ok && a.tileReadOnly(&file) {
 			ta.Get("style").Set("display", "none")
-			a.canvas.Call("focus")
+			a.focusCanvas()
 			return
 		}
 	}
@@ -521,6 +521,19 @@ func (a *App) refreshFileOverlay() {
 		ta.Set("scrollTop", p.TextScrollY)
 	}
 	ta.Call("focus")
+}
+
+// focusCanvas returns keyboard focus to the canvas — UNLESS the inline
+// rename input is open. This runs on every async overlay refresh (a
+// content fetch landing, a TileChanged event), and unconditional
+// canvas.focus() here yanked focus out of the rename input moments after
+// it opened — typing landed on the canvas, and (now that blur commits)
+// it would also close the input mid-thought.
+func (a *App) focusCanvas() {
+	if a.renameEditing {
+		return
+	}
+	a.canvas.Call("focus")
 }
 
 // syncTextOverlayPosition is the lightweight version of refreshFileOverlay

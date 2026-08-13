@@ -563,9 +563,9 @@ func (a *App) openWorkspaceRenameInput(level int) {
 
 // openRenameInput swaps the centered bar title for the shared inline input
 // (issue #213 — the name lives in the bar, not a pill over pane content, so
-// this works identically over live views with no native help). Enter
-// commits the versioned rename; Escape or blur cancels. A no-op on
-// read-only contexts.
+// this works identically over live views with no native help). Enter or
+// blur commits the versioned rename; Escape cancels. A no-op on read-only
+// contexts.
 func (a *App) openRenameInput() {
 	p := a.tree.FocusedPane()
 	if p == nil {

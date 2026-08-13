@@ -20,8 +20,9 @@ import (
 // inline rename input work identically over canvas, shells, and live url
 // panes with no native twin.
 // RIGHT-click on the title opens the rename input when the name is
-// user-editable (Enter commits the versioned SetTile rename — a USER-owned
-// name the automatic captures never overwrite; Escape/blur cancels);
+// user-editable (Enter or blur commits the versioned SetTile rename — a
+// USER-owned name the automatic captures never overwrite; Escape cancels,
+// and an unchanged value never writes);
 // read-only contexts (the node grid, a plugin root, an ephemeral visit, a
 // text tile's derived name) just show their label. LEFT-click on the title
 // toggles the tmux-style pane zoom (Tree.ToggleZoom).
@@ -128,7 +129,10 @@ func (a *App) togglePaneZoom() {
 // openNameInputAt spawns the ONE inline rename input — the same DOM shape
 // and commit/cancel keys for every rename surface (the current-pane crumb,
 // the workspace bar crumb). position sets the placement styles; onCommit
-// receives the trimmed value on Enter (Escape/blur cancels).
+// receives the trimmed value on Enter OR blur (2026-08-13: on a phone the
+// keyboard's done key blurs, and "typed a name, tapped elsewhere" must
+// not silently discard). Escape cancels; an UNCHANGED value never writes
+// (a no-op close must not bump the version — reading never mutates).
 func (a *App) openNameInputAt(value string, width float64, position func(st js.Value), onCommit func(string)) {
 	doc := js.Global().Get("document")
 	in := doc.Call("createElement", "input")
@@ -148,6 +152,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	position(st)
 	a.renameEditing = true
 
+	orig := strings.TrimSpace(value)
 	closed := false
 	var keyCb, blurCb js.Func
 	closeInput := func(commit bool) {
@@ -160,7 +165,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		keyCb.Release()
 		blurCb.Release()
 		a.renameEditing = false
-		if commit {
+		if commit && val != orig {
 			onCommit(val)
 		}
 		a.draw()
@@ -177,7 +182,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		return nil
 	})
 	blurCb = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		closeInput(false)
+		closeInput(true) // blur commits — see the doc comment
 		return nil
 	})
 	in.Call("addEventListener", "keydown", keyCb)

@@ -39,6 +39,86 @@ test('the bar crumb names the grid you are in', async ({ gw, window }) => {
   await expect.poll(async () => (await gw.barName()).label).toBe('kitchen');
 });
 
+test('clicking away commits a rename; untouched closes write nothing; Escape cancels', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+
+  // Blur COMMITS (2026-08-13): on a phone the keyboard's done key blurs,
+  // and "I typed a name and tapped elsewhere" must not silently discard.
+  await gw.clickBarName('right');
+  const input = window.locator('#gw-rename-input');
+  await expect(input).toBeVisible();
+  await input.fill('porch');
+  await window.mouse.click(200, 200); // click away — no Enter
+  await expect
+    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? ''))
+    .toBe('porch');
+  const named = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+
+  // An UNTOUCHED input closed by clicking away writes nothing — reading
+  // never mutates, and a no-op close must not bump the version.
+  await gw.clickBarName('right');
+  await expect(input).toBeVisible();
+  await window.mouse.click(200, 200);
+  await expect(input).toHaveCount(0);
+  const after = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  expect(after.version, 'no-op close must not write').toBe(named.version);
+
+  // Escape still cancels an edit in progress.
+  await gw.clickBarName('right');
+  await expect(input).toBeVisible();
+  await input.fill('discarded');
+  await input.press('Escape');
+  await expect(input).toHaveCount(0);
+  expect(String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? '')).toBe('porch');
+});
+
+test('an async tile event never steals the rename input focus', async ({ gw, window }) => {
+  await gw.enterPlugin('localdb');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+  const inside = await gw.focused();
+  const icx = Math.round(inside.cx);
+  const icy = Math.round(inside.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', icx, icy);
+  const doc = tileAt(await gw.getGrid(inside.gridID), 'text', icx, icy)!;
+
+  // Open the rename, then land a FOREIGN write on the text tile: the
+  // TileChanged event refreshes the file overlay, whose focus-return arm
+  // used to call canvas.focus() unconditionally — yanking focus out of
+  // the input, so typing silently went to the canvas ("it doesn't always
+  // focus"). The guard must keep the input focused through it.
+  await gw.clickBarName('right');
+  const input = window.locator('#gw-rename-input');
+  await expect(input).toBeVisible();
+  const { updateText } = await import('./oracle');
+  await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# poked from outside');
+  await window.waitForTimeout(400); // let the event apply + overlay refresh
+  await expect
+    .poll(() => window.evaluate(() => document.activeElement?.id ?? ''))
+    .toBe('gw-rename-input');
+  await window.keyboard.type('den');
+  await window.keyboard.press('Enter');
+  await expect
+    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? ''))
+    .toBe('den');
+});
+
 test('a user-set shell name survives the detach command capture', async ({ gw, window }) => {
   await gw.enterPlugin('localdb');
   const home = await gw.focused();
