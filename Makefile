@@ -42,9 +42,16 @@ plugins:
 	CGO_ENABLED=0 go build -o $(PROC_BIN) ./cmd/plugin/proc
 	CGO_ENABLED=0 go build -o $(SSH_BIN) ./cmd/plugin/ssh
 
+# The .gz sidecar rides along: the server serves it with
+# Content-Encoding: gzip when the client accepts it (staticOrSPA's
+# serveGzipSidecar) — the wasm is ~33 MB raw, ~8 MB gzipped, and a phone
+# on a relayed tailscale link downloads it every boot. gzip runs after the
+# build so the sidecar is always at least as new as the raw file (the
+# server refuses a stale one).
 wasm: $(WASM_EXEC)
 	mkdir -p web
 	GOOS=js GOARCH=wasm go build -o $(WASM) ./client/wasm
+	gzip -9 -kf $(WASM)
 
 $(WASM_EXEC):
 	mkdir -p web

@@ -14,6 +14,7 @@ package server
 import (
 	"context"
 	"errors"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -210,12 +211,46 @@ func (s *Server) staticOrSPA(dir string) http.Handler {
 		if r.URL.Path != "/" {
 			full := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(r.URL.Path, "/")))
 			if info, err := os.Stat(full); err == nil && !info.IsDir() {
+				if serveGzipSidecar(w, r, full, info) {
+					return
+				}
 				fs.ServeHTTP(w, r)
 				return
 			}
 		}
 		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 	})
+}
+
+// serveGzipSidecar serves <file>.gz with Content-Encoding: gzip when the
+// client accepts it and the sidecar is FRESH (at least as new as the raw
+// file — a stale sidecar from an older build must never shadow the real
+// bytes). The build precompresses the one asset that matters:
+// gridwell.wasm is ~33 MB raw and ~8 MB gzipped, and a phone on a relayed
+// tailscale link downloads it on every boot — uncompressed, that is
+// minutes of blank page. Content-Type comes from the RAW file's extension
+// (instantiateStreaming requires application/wasm); ServeContent still
+// handles If-Modified-Since so browser caching keeps working.
+func serveGzipSidecar(w http.ResponseWriter, r *http.Request, full string, raw os.FileInfo) bool {
+	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		return false
+	}
+	gzInfo, err := os.Stat(full + ".gz")
+	if err != nil || gzInfo.IsDir() || gzInfo.ModTime().Before(raw.ModTime()) {
+		return false
+	}
+	f, err := os.Open(full + ".gz")
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	if ct := mime.TypeByExtension(filepath.Ext(full)); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.Header().Set("Content-Encoding", "gzip")
+	w.Header().Set("Vary", "Accept-Encoding")
+	http.ServeContent(w, r, filepath.Base(full), gzInfo.ModTime(), f)
+	return true
 }
 
 // The sentinel→class table lives in internal/store (store.ClassifyError),
