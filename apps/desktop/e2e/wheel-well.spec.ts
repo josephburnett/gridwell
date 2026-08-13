@@ -142,8 +142,15 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
   // and the well's stored preview framing is untouched — byte-identical.
   const c = await gw.cellCenter((await gw.focused()).id, cx, cy);
   await window.mouse.move(c.x, c.y);
-  await window.mouse.wheel(0, 120);
-  await expect.poll(async () => (await gw.focused()).zoom).toBeLessThan(zoomedIn);
+  // Repeat the gesture inside the poll (a single synthetic wheel event is
+  // occasionally dropped under xvfb load); a broken redirect keeps the
+  // pane at 1 no matter how many notches, so this stays discriminating.
+  await expect
+    .poll(async () => {
+      await window.mouse.wheel(0, 120);
+      return (await gw.focused()).zoom;
+    })
+    .toBeLessThan(zoomedIn);
   await gw.waitIdle();
   const wellAfter = tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5)!;
   expect(wellAfter.viewZoom ?? 0, 'the well framing must not move on a redirected zoom-out').toEqual(
