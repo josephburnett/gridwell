@@ -12,6 +12,11 @@ export interface ServingAddr {
   host: string;
   port: number;
   auth?: string;
+  // external: the banner came from the "gridwell: already serving on ..."
+  // reprint — a server SOMEONE ELSE started holds this home's serve lock
+  // (one serve per home; internal/cli/servelock.go). The app connects to
+  // it and must never treat its own exited probe child as the server.
+  external?: boolean;
 }
 
 // parseServingLine extracts the bound address from the serve banner, or null
@@ -22,10 +27,14 @@ export interface ServingAddr {
 // The server — not this spawner — owns the "where am I listening" fact,
 // because server.yaml `bind:` may override the sidecar's --bind-default
 // (one stable origin shared with a phone over e.g. Tailscale).
+// "already serving on" is the same banner re-emitted by a serve (or
+// `gridwell status`) that found the home's lock held: the address/auth are
+// the RUNNING holder's, and external marks that this process is not it.
 export function parseServingLine(line: string): ServingAddr | null {
-  const m = /^gridwell: serving on (\S+) /.exec(line);
+  const m = /^gridwell: (already )?serving on (\S+) /.exec(line);
   if (!m) return null;
-  const addr = m[1];
+  const external = !!m[1];
+  const addr = m[2];
   const i = addr.lastIndexOf(':');
   if (i < 0) return null;
   const port = Number(addr.slice(i + 1));
@@ -33,7 +42,10 @@ export function parseServingLine(line: string): ServingAddr | null {
   let host = addr.slice(0, i);
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1); // net.JoinHostPort IPv6 form
   const auth = /\bauth=([0-9a-f]{64})\b/.exec(line)?.[1];
-  return auth ? { host, port, auth } : { host, port };
+  const out: ServingAddr = { host, port };
+  if (auth) out.auth = auth;
+  if (external) out.external = true;
+  return out;
 }
 
 // windowOrigin maps the announced address to the origin the local Electron
@@ -41,9 +53,19 @@ export function parseServingLine(line: string): ServingAddr | null {
 // concrete host (e.g. a Tailscale IP) is kept as-is so the desktop window and
 // a phone browser share one origin.
 export function windowOrigin(a: ServingAddr): string {
+  return `http://${reachableHost(a)}:${a.port}`;
+}
+
+// dialAddr is the gRPC node-export target for the shell transport — the
+// SAME reachable-host decision as windowOrigin (one deriver of "where is
+// the server"), in host:port form.
+export function dialAddr(a: ServingAddr): string {
+  return `${reachableHost(a)}:${a.port}`;
+}
+
+function reachableHost(a: ServingAddr): string {
   const wildcard = a.host === '' || a.host === '0.0.0.0' || a.host === '::';
-  const host = wildcard ? '127.0.0.1' : a.host.includes(':') ? `[${a.host}]` : a.host;
-  return `http://${host}:${a.port}`;
+  return wildcard ? '127.0.0.1' : a.host.includes(':') ? `[${a.host}]` : a.host;
 }
 
 // makeLineSplitter returns a function you feed raw stream chunks; it calls

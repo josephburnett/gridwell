@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -262,6 +263,21 @@ func RunServe(args []string) int {
 	cfg.Bind = resolveBind(f.Bind, cfg.Bind, cfg.BindSet, f.BindDefault)
 	cfg.StaticDir = f.StaticDir
 
+	// ONE serve per home (servelock.go): taken before any plugin spawns so a
+	// second server never touches the DBs. On conflict, re-emit the running
+	// holder's banner as "already serving" — the desktop app parses it and
+	// connects to the existing server instead of starting its own.
+	lock, err := acquireServeLock(home)
+	if err != nil {
+		var held *errServeLockHeld
+		if errors.As(err, &held) && strings.HasPrefix(held.banner, "gridwell: serving on ") {
+			fmt.Println("gridwell: already " + strings.TrimPrefix(held.banner, "gridwell: "))
+		}
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
+	defer lock.Release()
+
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
 	// each kind's binary (server.yaml may pin an explicit path instead).
 	if err := resolvePluginBinaries(cfg); err != nil {
@@ -333,7 +349,11 @@ func RunServe(args []string) int {
 	if w := bindWarning(ln.Addr().String(), cfg.Password != ""); w != "" {
 		fmt.Fprintln(os.Stderr, w)
 	}
-	fmt.Println(servingBanner(ln.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Password))
+	banner := servingBanner(ln.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Password)
+	fmt.Println(banner)
+	// Record the banner in the lock file — the "already serving" reprint a
+	// conflicting serve hands to the desktop app.
+	lock.WriteBanner(banner)
 
 	errCh := make(chan error, 1)
 	go func() {

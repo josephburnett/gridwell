@@ -19,6 +19,8 @@ func main() {
 		os.Exit(cli.RunInit(args))
 	case "serve":
 		os.Exit(cli.RunServe(args))
+	case "status":
+		os.Exit(cli.RunStatus(args))
 	case "backup":
 		os.Exit(cli.RunBackup(args))
 	case "clear-browser-data":
@@ -41,6 +43,9 @@ Usage:
                                               create + register a plugin
     gridwell serve [--bind ADDR] [--bind-default ADDR] [--static DIR]
                                               run the backend server
+    gridwell status                           report the running server for this
+                                              home (exit 0 + banner) or "not
+                                              serving" (exit 1)
     gridwell backup DEST                      snapshot every plugin DB + server.yaml
                                               (VACUUM INTO; safe while serving)
     gridwell clear-browser-data [--user-data DIR]

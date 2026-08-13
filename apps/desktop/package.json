@@ -61,8 +61,8 @@
         "to": "gridwell-ssh"
       },
       {
-        "from": "../../web",
-        "to": "web"
+        "from": "../../api/gridwell/v1/data.proto",
+        "to": "data.proto"
       }
     ],
     "linux": {
@@ -78,7 +78,7 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "portable"
       ]
     }
   },

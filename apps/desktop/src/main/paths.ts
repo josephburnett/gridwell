@@ -29,14 +29,14 @@ export function sidecarBinary(): string {
   return dev;
 }
 
-export function staticDir(): string {
+// staticDir is the OVERRIDE only (null = none): the gridwell binary embeds
+// the web client (web/embed.go), so the server serves it with no --static
+// at all — packaged and dev alike. GRIDWELL_STATIC remains the pin for the
+// e2e harness (and anyone iterating on web/ without rebuilding the binary).
+export function staticDir(): string | null {
   const env = process.env.GRIDWELL_STATIC;
   if (env && fs.existsSync(env)) return env;
-
-  const packaged = path.join(process.resourcesPath ?? '', 'web');
-  if (fs.existsSync(packaged)) return packaged;
-
-  return path.join(repoRoot(), 'web');
+  return null;
 }
 
 // dataProtoPath resolves the ONE gridwell proto definition (the shell

@@ -1,4 +1,4 @@
-import { app, dialog, session } from 'electron';
+import { app, BrowserWindow, dialog, session } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
@@ -87,7 +87,11 @@ async function boot(): Promise<void> {
     wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
   try {
-    sidecar = await startSidecar();
+    // --no-server / GRIDWELL_NO_SERVER: never start a server — discover a
+    // separately-run one via `gridwell status` (the advanced split; the
+    // server owns the per-home lock and the discovery banner).
+    const noServer = process.argv.includes('--no-server') || process.env.GRIDWELL_NO_SERVER === '1';
+    sidecar = await startSidecar({ noServer });
   } catch (err) {
     // No renderer exists yet at this point (the window is created below, only
     // after the sidecar is up), so there is nowhere to draw a notice-strip
@@ -138,7 +142,9 @@ async function boot(): Promise<void> {
   // (2026-07-26 — the /rpc/ShellStream WS bridge is gone). A dial failure
   // surfaces on the ONE error wire like every other main-process failure.
   shells = new ShellStreams(
-    makeShellDialer(`127.0.0.1:${sidecar.port}`, dataProtoPath()),
+    // dialAddr shares windowOrigin's host decision: a server bound to a
+    // Tailscale IP gets its shells dialed there too, not at loopback.
+    makeShellDialer(sidecar.dialAddr, dataProtoPath()),
     (paneId, data) => sendShellData(rootWC, paneId, data),
     (ev) => {
       sendShellExit(rootWC, ev.paneId, ev.message, ev.sessionGone);
@@ -158,10 +164,15 @@ async function boot(): Promise<void> {
   // (child_process fires 'exit' to every registered listener, not just one),
   // so it sees the same event and reports it — unless we're already quitting,
   // in which case the exit is expected (our own SIGTERM in before-quit).
-  sidecar.child.on('exit', (code, signal) => {
-    if (quitting) return;
-    sendError(rootWC, 'electron:backend', sidecarExitMessage(code, signal));
-  });
+  // An EXTERNAL server's probe child has already exited by design (it only
+  // re-emitted the running holder's banner) — watching it would report a
+  // phantom crash for a perfectly healthy backend.
+  if (!sidecar.external) {
+    sidecar.child.on('exit', (code, signal) => {
+      if (quitting) return;
+      sendError(rootWC, 'electron:backend', sidecarExitMessage(code, signal));
+    });
+  }
 
   // Under the e2e harness only (GRIDWELL_E2E=1), expose the registry so a
   // Playwright spec running in the main process can place a real live URL view
@@ -190,7 +201,23 @@ async function boot(): Promise<void> {
   pump.start();
 }
 
-app.whenReady().then(boot);
+// ONE app instance per user (Electron's own lock — complementing the
+// server's per-home flock): a second launch hands off to the first and
+// exits; the first focuses its window. Skipped under the e2e harness,
+// where many isolated instances run concurrently on purpose (each has its
+// own home + user-data dir; the serve flock still guards each home).
+if (process.env.GRIDWELL_E2E !== '1' && !app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+  app.whenReady().then(boot);
+}
 
 // Keep the process alive while the sidecar runs even if all windows close;
 // on macOS the dock can reopen a window. (Window recreation is Phase 5

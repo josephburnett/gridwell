@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseServingLine, windowOrigin, makeLineSplitter } from './lines';
+import { dialAddr, parseServingLine, windowOrigin, makeLineSplitter } from './lines';
 
 test('parseServingLine extracts the bound address from the serve banner', () => {
   assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), {
@@ -38,6 +38,27 @@ test('parseServingLine extracts the auth token when a password is configured', (
     parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1 auth=nope)'),
     { host: '127.0.0.1', port: 8099 },
   );
+});
+
+test('parseServingLine marks the "already serving" reprint external', () => {
+  // A serve (or `gridwell status`) that found the home's lock held re-emits
+  // the RUNNING holder's banner — same fields, external so the app connects
+  // instead of treating its exited probe child as the server.
+  const token = 'd'.repeat(64);
+  assert.deepEqual(
+    parseServingLine(`gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 auth=${token})`),
+    { host: '127.0.0.1', port: 10010, auth: token, external: true },
+  );
+  assert.deepEqual(
+    parseServingLine('gridwell: already serving on [::]:8080 (static=embedded plugins=1)'),
+    { host: '::', port: 8080, external: true },
+  );
+});
+
+test('dialAddr shares windowOrigin\'s host decision (one deriver of "where is the server")', () => {
+  assert.equal(dialAddr({ host: '0.0.0.0', port: 8080 }), '127.0.0.1:8080');
+  assert.equal(dialAddr({ host: '100.64.0.7', port: 8080 }), '100.64.0.7:8080');
+  assert.equal(dialAddr({ host: '::1', port: 9000 }), '[::1]:9000');
 });
 
 test('parseServingLine rejects every other line', () => {
