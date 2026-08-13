@@ -1301,9 +1301,14 @@ func (a *App) startAscent(p *pane.Pane) {
 
 	saved := a.popPaneState(p.ID)
 	if saved == nil {
-		// No in-session saved state (e.g., user reloaded mid-descent and
-		// is now ascending). Land on the parent well centered at zoom 1.
-		saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
+		// No in-session saved state (e.g., user reloaded mid-descent and is
+		// now ascending). Restore the parent's PERSISTED framing — what a
+		// fresh descent into it would show — not an arbitrary zoom 1.
+		if cx, cy, zoom, ok := a.persistedGridView(p, p.Anchor, parentPath); ok {
+			saved = &paneState{Cx: cx, Cy: cy, Zoom: zoom}
+		} else {
+			saved = &paneState{Cx: switchTo.Cx, Cy: switchTo.Cy, Zoom: 1.0}
+		}
 	}
 
 	// Distances in shared px-equivalent units so SplitN can apportion
@@ -1341,6 +1346,45 @@ func (a *App) startAscent(p *pane.Pane) {
 	})
 }
 
+// persistedGridView resolves the framing the grid at (anchor, path) was
+// LEFT at, from the row that owns it: the containing well's view_* for a
+// nested grid, the plugin's persisted root view for a root. The restore
+// for every ascent with no session state (a reload mid-descent) and the
+// boot viewport — before this, those paths landed on 0,0,zoom-1, a
+// framing the user never set (the guiding rule, violated on the way
+// out). ok=false when nothing is persisted or the owning row isn't
+// cached; callers keep their legacy fallback then.
+func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (cx, cy, zoom float64, ok bool) {
+	r := paneRectFor(a, p)
+	if r.W <= 0 || r.H <= 0 {
+		return 0, 0, 0, false
+	}
+	if len(path) == 0 {
+		// A plugin root: the read side of persistPluginRootView — the same
+		// 1×1 synthetic well, inverted.
+		pl, found := a.pluginByUUID(uuidOf(anchor))
+		if !found || pl.RootGridID != anchor || pl.RootViewZoom <= 0 {
+			return 0, 0, 0, false
+		}
+		w := zoomtrans.Well{W: 1, H: 1,
+			ViewX: int64(pl.RootViewCx), ViewY: int64(pl.RootViewCy), ViewZoom: pl.RootViewZoom}
+		cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
+		return cx, cy, zoom, true
+	}
+	g, found := a.c.Grid(a.gridIDForPathFrom(anchor, path[:len(path)-1]))
+	if !found {
+		return 0, 0, 0, false
+	}
+	t, found := g.Tiles[path[len(path)-1]]
+	if !found {
+		return 0, 0, 0, false
+	}
+	w := zoomtrans.Well{X: t.X, Y: t.Y, W: t.W, H: t.H,
+		ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom}
+	cx, cy, zoom = zoomtrans.StoredView(w, r.W, r.H, cellPx)
+	return cx, cy, zoom, true
+}
+
 // instantAscend is the fallback path when the parent grid isn't cached or
 // the well row vanished. We just drop the last entry of the path; the user
 // can wait for the parent to load and reposition manually.
@@ -1351,7 +1395,11 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
 	a.persistPaneFraming(p)
 	a.popPaneState(p.ID) // discard whatever was saved; we can't honor it.
 	p.Path = parentPath
-	p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
+	if cx, cy, zoom, ok := a.persistedGridView(p, p.Anchor, parentPath); ok {
+		p.Cx, p.Cy, p.Zoom = cx, cy, zoom
+	} else {
+		p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
+	}
 	a.clearSelected(p.ID)
 	a.draw()
 	a.scheduleURLUpdate()

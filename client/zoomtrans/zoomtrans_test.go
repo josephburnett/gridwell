@@ -596,3 +596,24 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 		t.Errorf("burst drift too small: center moved (%v, %v) cells; the drift must compound", ccx-cx0, ccy-cy0)
 	}
 }
+
+// StoredView must be exactly the framing Descent's final lands on — one
+// conversion, two readers (the descent transition and the reload-safe
+// ascent/boot fallbacks); a drift between them would make "come back
+// later" land differently than "descend now".
+func TestStoredViewMatchesDescentFinal(t *testing.T) {
+	wells := []Well{
+		{X: 2, Y: 3, W: 2, H: 2, ViewX: 5, ViewY: 7, ViewZoom: 0.4},
+		{X: 0, Y: 0, W: 1, H: 1},                // unvisited: default ratio
+		{X: 1, Y: 1, W: 3, H: 1, ViewZoom: 1.0}, // max ratio
+	}
+	for _, w := range wells {
+		from := Endpoints{Cx: 1, Cy: 1, Zoom: 1}
+		_, _, final := Descent(from, w, 1280, 800, 64)
+		cx, cy, zoom := StoredView(w, 1280, 800, 64)
+		if cx != final.Cx || cy != final.Cy || zoom != final.Zoom {
+			t.Errorf("StoredView(%+v) = (%v,%v,%v), Descent final = (%v,%v,%v)",
+				w, cx, cy, zoom, final.Cx, final.Cy, final.Zoom)
+		}
+	}
+}

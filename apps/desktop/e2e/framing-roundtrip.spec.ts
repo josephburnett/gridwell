@@ -185,3 +185,127 @@ test('ascending restores the parent viewport unchanged', async ({ gw }) => {
   expect(after.cx, 'parent center x unchanged').toBeCloseTo(before.cx, 1);
   expect(after.cy, 'parent center y unchanged').toBeCloseTo(before.cy, 1);
 });
+
+// A fresh page at bare "/" (what every app relaunch loads) must open home
+// at the PERSISTED root view — the boot path passed literal 0,0,1 for the
+// root fallback since the parameter existed, so every relaunch opened
+// home at the origin no matter what the user left (2026-08-13).
+test('a bare-URL boot restores the persisted home viewport', async ({ gw, window }) => {
+  // Reframe HOME's root grid (the boot anchor), then let the settle
+  // persister write the root view.
+  await gw.wheelAtFocusedCenter(-300);
+  const zc = await gw.focused();
+  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
+  const left = await gw.focused();
+  expect(left.zoom, 'reframe changed the zoom').not.toBeCloseTo(1.0, 2);
+  await gw.waitIdle();
+  // Wait on SERVER truth, not a sleep: the settle persister's SetRootView
+  // shows up as the home plugin's node-grid link framing.
+  const nodeGrid1 = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  await expect
+    .poll(
+      async () => {
+        const ng = await gw.getGrid(nodeGrid1);
+        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'e2e');
+        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+      },
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
+
+  // A bare URL is the fresh-launch shape: no viewport params to win over
+  // the stored root view.
+  await window.evaluate(() => {
+    window.location.href = '/?e2e=1';
+  });
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await window.waitForFunction(
+    () => {
+      try {
+        return ((window as any).__gridwellTest.panes() as Array<{ focused: boolean; anchor: string }>).some(
+          (p) => p.focused && p.anchor !== '',
+        );
+      } catch {
+        return false;
+      }
+    },
+    null,
+    { timeout: 30_000 },
+  );
+  // Poll: a slow boot applies the viewport late (fetch + handshake).
+  await expect
+    .poll(async () => (await gw.focused()).zoom, { timeout: 10_000 })
+    .toBeCloseTo(left.zoom, 1);
+  const back = await gw.focused();
+  // Root-view origins are stored as INTEGER cells (the schema is additive-
+  // only), so the center round-trips within half a cell — the storage
+  // resolution, not a framing loss.
+  expect(Math.abs(back.cx - left.cx), 'boot restored the persisted center x').toBeLessThan(0.51);
+  expect(Math.abs(back.cy - left.cy), 'boot restored the persisted center y').toBeLessThan(0.51);
+});
+
+// Ascending after a RELOAD (empty session ascent stack) must land on the
+// parent's persisted framing — what a fresh descent into it would show —
+// not an arbitrary zoom-1 origin (2026-08-13).
+test('a post-reload ascent restores the parent framing it was left at', async ({ gw, window }) => {
+  // Home (the boot anchor) IS a plugin root — reframe the plugin ROOT first (this is the framing the ascent must
+  // come back to), then descend into a well and reload.
+  await gw.wheelAtFocusedCenter(-240);
+  const zc = await gw.focused();
+  await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy));
+  const parentLeft = await gw.focused();
+  const cx = Math.round(parentLeft.cx);
+  const cy = Math.round(parentLeft.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+  // Server truth before reloading: the root view landed (the descent
+  // flush posts it; the node grid mirrors it).
+  const nodeGrid2 = await window.evaluate(() => (window as any).__gridwellTest.nodeGrid());
+  await expect
+    .poll(
+      async () => {
+        const ng = await gw.getGrid(nodeGrid2);
+        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'e2e');
+        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+      },
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
+
+  // The URL writer is debounced: reload only after the descent path is
+  // actually IN the URL, or the reload lands at the root with nothing to
+  // ascend from.
+  await expect
+    .poll(() => window.evaluate(() => window.location.pathname), { timeout: 10_000 })
+    .not.toBe('/');
+
+  await window.reload();
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await window.waitForFunction(
+    () => {
+      try {
+        return ((window as any).__gridwellTest.panes() as Array<{ focused: boolean; textFocus: string; path: string[] }>).some(
+          (p) => p.focused,
+        );
+      } catch {
+        return false;
+      }
+    },
+    null,
+    { timeout: 30_000 },
+  );
+  await gw.waitIdle();
+  expect((await gw.focused()).path.length, 'the reload restored the descent').toBe(1);
+
+  await gw.ascendViaCrumb();
+  await expect
+    .poll(async () => (await gw.focused()).zoom, { timeout: 10_000 })
+    .toBeCloseTo(parentLeft.zoom, 1);
+  const back = await gw.focused();
+  expect(back.zoom, 'the parent zoom is the persisted one, not 1.0').toBeCloseTo(parentLeft.zoom, 1);
+  // Same half-cell storage resolution as the boot spec above.
+  expect(Math.abs(back.cx - parentLeft.cx), 'the parent center x came back').toBeLessThan(0.51);
+  expect(Math.abs(back.cy - parentLeft.cy), 'the parent center y came back').toBeLessThan(0.51);
+});

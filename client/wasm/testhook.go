@@ -568,6 +568,9 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 			"instanceGridID": pl.InstanceGridID,
 			"infoError":      pl.InfoError,
 			"status":         pluginStatusName(pl),
+			"rootViewCx":     pl.RootViewCx,
+			"rootViewCy":     pl.RootViewCy,
+			"rootViewZoom":   pl.RootViewZoom,
 		})
 	}
 	return out

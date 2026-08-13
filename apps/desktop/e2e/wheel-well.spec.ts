@@ -114,8 +114,25 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
   // content box at zoom 1 — the "no visible outer context" state the
   // redirect exists for, with no zoom gymnastics.
   const fresh = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  const sigBefore = await window.evaluate(
+    (args) => JSON.stringify((window as any).__gridwellTest.gridSigs(args.gid)[args.id] ?? ''),
+    { gid: home.gridID, id: fresh.id },
+  );
   const { placeTile } = await import('./oracle');
   await placeTile(gw.origin, fresh.id, fresh.version as number, home.gridID, cx - 7, cy - 5, 15, 11);
+  // The resize is a FOREIGN write: wait until the client's cache applied
+  // the TileChanged event, or the wheel below still sees a 1x1 well
+  // (coverage ~0) and routes to the well zoom.
+  await expect
+    .poll(
+      () =>
+        window.evaluate(
+          (args) => JSON.stringify((window as any).__gridwellTest.gridSigs(args.gid)[args.id] ?? ''),
+          { gid: home.gridID, id: fresh.id },
+        ),
+      { timeout: 10_000 },
+    )
+    .not.toBe(sigBefore);
   await gw.waitIdle();
 
   const zoomedIn = (await gw.focused()).zoom;

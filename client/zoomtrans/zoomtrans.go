@@ -264,6 +264,19 @@ func Descent(from Endpoints, w Well, paneW, paneH, cellPx float64) (mid, swap, f
 	return
 }
 
+// StoredView is the live framing a well's persisted view describes — the
+// same numbers Descent's `final` lands on, without the transition. The
+// ONE read-side conversion for "what did the user leave this grid at":
+// boot and the no-session-state ascent fallbacks read it, so a reload
+// never lands a pane on a framing the user didn't set (the guiding rule
+// applied on the way OUT, not just the way in).
+func StoredView(w Well, paneW, paneH, cellPx float64) (cx, cy, zoom float64) {
+	ratio := EffectiveViewZoom(w.ViewZoom, DefaultWellViewZoom)
+	return float64(w.ViewX) + float64(w.W)/2,
+		float64(w.ViewY) + float64(w.H)/2,
+		LiveFromIntrinsic(ratio, OvertakeZoom(w, paneW, paneH, cellPx))
+}
+
 // Ascent computes the transition endpoints for ascending from the child
 // grid back into the parent grid, given the parent's well that we
 // descended through. The animation interpolates from `from` to `mid` in

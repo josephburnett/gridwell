@@ -647,6 +647,10 @@ func (a *App) ascendOneLevelInstant(p *pane.Pane) {
 		p.Path = parentPath
 		if saved != nil {
 			p.Cx, p.Cy, p.Zoom = saved.Cx, saved.Cy, saved.Zoom
+		} else if cx, cy, zoom, ok := a.persistedGridView(p, p.Anchor, parentPath); ok {
+			// Post-reload ascent: the parent's persisted framing, never an
+			// arbitrary origin (see persistedGridView).
+			p.Cx, p.Cy, p.Zoom = cx, cy, zoom
 		} else {
 			p.Cx, p.Cy, p.Zoom = 0, 0, 1.0
 		}

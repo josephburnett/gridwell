@@ -357,10 +357,16 @@ func (a *App) applyURLState(raw string) {
 		qualified[i] = rpc.QualifyID(anchorPrefix, id)
 	}
 
-	// No path → sit at the anchor's root grid.
+	// No path → sit at the anchor's root grid, at its PERSISTED root view
+	// (SetRootView's writeback) unless the URL carries its own viewport —
+	// this call site passed literal 0,0,1 for years, so every relaunch
+	// opened home at the origin no matter what the user left behind (the
+	// guiding rule, violated at boot; the parameters were even unit-tested,
+	// just never fed).
 	if len(qualified) == 0 {
 		a.fetchGridSync(state.Anchor)
-		if bv := url.BootViewport(state.X, state.Y, state.Zoom, 0, 0, 1); bv.Apply {
+		rcx, rcy, rz, _ := a.persistedGridView(p, state.Anchor, nil)
+		if bv := url.BootViewport(state.X, state.Y, state.Zoom, rcx, rcy, rz); bv.Apply {
 			p.Cx = bv.Cx
 			p.Cy = bv.Cy
 			if bv.SetZoom {
