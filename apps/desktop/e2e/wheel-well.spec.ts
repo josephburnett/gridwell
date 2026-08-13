@@ -99,3 +99,59 @@ test('an off-center wheel burst drifts the well view toward the cursor (#219)', 
     )
     .toBeGreaterThan(vx0 + vy0);
 });
+
+test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well (2026-08-13)', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('localdb');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  // A 15x11 well placed around the viewport center covers ~2/3 of the
+  // content box at zoom 1 — the "no visible outer context" state the
+  // redirect exists for, with no zoom gymnastics.
+  const fresh = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  const { placeTile } = await import('./oracle');
+  await placeTile(gw.origin, fresh.id, fresh.version as number, home.gridID, cx - 7, cy - 5, 15, 11);
+  await gw.waitIdle();
+
+  const zoomedIn = (await gw.focused()).zoom;
+  const wellBefore = tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5)!;
+
+  // Wheel OUT over the well's center: the PANE zooms out (the redirect),
+  // and the well's stored preview framing is untouched — byte-identical.
+  const c = await gw.cellCenter((await gw.focused()).id, cx, cy);
+  await window.mouse.move(c.x, c.y);
+  await window.mouse.wheel(0, 120);
+  await expect.poll(async () => (await gw.focused()).zoom).toBeLessThan(zoomedIn);
+  await gw.waitIdle();
+  const wellAfter = tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5)!;
+  expect(wellAfter.viewZoom ?? 0, 'the well framing must not move on a redirected zoom-out').toEqual(
+    wellBefore.viewZoom ?? 0,
+  );
+  expect(wellAfter.version, 'no write rode the redirect').toEqual(wellBefore.version);
+
+  // Wheel IN over the same dominant well: the well-preview zoom (#210)
+  // still wins for zoom-in at any coverage.
+  const paneZoom = (await gw.focused()).zoom;
+  await window.mouse.move(c.x, c.y);
+  for (let i = 0; i < 4; i++) await window.mouse.wheel(0, -120);
+  await expect
+    .poll(
+      async () =>
+        Number(
+          (tileAt(await gw.getGrid(home.gridID), 'well', cx - 7, cy - 5) as {
+            viewZoom?: number | string;
+          })?.viewZoom ?? 0,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0.125);
+  expect((await gw.focused()).zoom, 'zoom-in over the well leaves the pane alone').toBeCloseTo(
+    paneZoom,
+    5,
+  );
+});

@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/wsbar"
@@ -186,11 +187,20 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	}
 	// Routing is the pure gesture.ClassifyWheel: this handler only resolves
 	// the impure facts (live view attached? cursor in the content box? an
-	// enterable well under the cursor?) and executes the verdict.
+	// enterable well under the cursor, and how much of the view it covers?)
+	// and executes the verdict.
 	var hoverWell *rpc.Tile
+	wellCoverage := 0.0
 	if p.TextFocus == "" {
 		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsWellKind(t.Kind) && t.ChildGridID != "" {
 			hoverWell = t
+			ps := paneToDragdrop(p, r)
+			x0, y0 := ps.CellToScreen(float64(t.X), float64(t.Y))
+			x1, _ := ps.CellToScreen(float64(t.X)+1, float64(t.Y))
+			cell := x1 - x0
+			b := panebox.ContentBox(r, paneBorderPx)
+			wellCoverage = gesture.RectCoverage(
+				x0, y0, float64(t.W)*cell, float64(t.H)*cell, b.X, b.Y, b.W, b.H)
 		}
 	}
 	switch gesture.ClassifyWheel(gesture.WheelInput{
@@ -200,6 +210,8 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		InContentBox:      pointInPaneContent(r, sx, sy),
 		TextModeRendered:  p.TextMode == rpc.TextModeRendered,
 		OverEnterableWell: hoverWell != nil,
+		ZoomOut:           dy > 0,
+		WellCoverage:      wellCoverage,
 	}) {
 	case gesture.WheelSwallow:
 		// A live URL view owns the content box and scrolls itself; a stray
