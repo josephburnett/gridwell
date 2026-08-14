@@ -57,6 +57,7 @@ func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPrevie
 	if !ok {
 		return nil, false // blob fetch in flight; the raw path warms it too
 	}
+	// (dropRenderedPreview is the deletion twin of this replace-time revoke.)
 	if old, ok := a.renderedPrev[n.ID]; ok && old.url != "" {
 		js.Global().Get("URL").Call("revokeObjectURL", old.url)
 	}
@@ -119,4 +120,20 @@ func (a *App) drawRenderedPreview(n *rpc.Tile, frame markdown.PreviewFrame,
 	a.cctx.Call("drawImage", e.img, 0, sy, e.rasterW, sh,
 		x, y+topInset, w, sh*s)
 	return true
+}
+
+// dropRenderedPreview releases a removed tile's rendered-preview entry:
+// the blob object URL is revoked and the decoded raster freed with the
+// map entry. Fired from the TileRemoved event arm, beside urlPreview.Drop
+// — the two preview caches must age out together or deleting text tiles
+// leaks image resources for the life of the page.
+func (a *App) dropRenderedPreview(tileID string) {
+	e, ok := a.renderedPrev[tileID]
+	if !ok {
+		return
+	}
+	if e.url != "" {
+		js.Global().Get("URL").Call("revokeObjectURL", e.url)
+	}
+	delete(a.renderedPrev, tileID)
 }

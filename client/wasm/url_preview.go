@@ -300,9 +300,12 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		jpeg, err := a.cl.GetTilePreview(context.Background(), tileID)
 		a.urlPreview.ClearFetching(tileID)
 		if err != nil {
-			// The thumbnail will just never appear — say why. An empty body
-			// (below) is legitimate: no preview captured yet.
-			a.surfaceRPCError("GetTilePreview", err)
+			// A plugin that serves no previews answers Unimplemented — a
+			// normal capability property (the tile shows its label), not a
+			// failure. Anything else surfaces (charter §6).
+			if !isUnimplemented(err) {
+				a.surfaceRPCError("GetTilePreview", err)
+			}
 			return
 		}
 		if len(jpeg) == 0 {

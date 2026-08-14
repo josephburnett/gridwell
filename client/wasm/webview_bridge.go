@@ -148,9 +148,13 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 	args.Set("paneId", paneID)
 	promise := g.Call("removeWebview", args)
 
-	var then js.Func
+	// Exactly ONE of then/catch fires, so each arm must release BOTH — the
+	// old per-arm defer leaked the other js.Func on every close (the
+	// rendered_preview onload/onerror release() pattern).
+	var then, catch js.Func
+	release := func() { then.Release(); catch.Release() }
 	then = js.FuncOf(func(_ js.Value, p []js.Value) any {
-		defer then.Release()
+		defer release()
 		res := p[0]
 		jpeg := decodeBase64(res.Get("jpegBase64"))
 		url := jsString(res.Get("url"))
@@ -159,9 +163,8 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 		onFreeze(jpeg, url, title, history)
 		return nil
 	})
-	var catch js.Func
 	catch = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		defer catch.Release()
+		defer release()
 		onFreeze(nil, "", "", "")
 		return nil
 	})

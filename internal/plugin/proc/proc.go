@@ -458,20 +458,20 @@ func (p *Plugin) reconcileTiles(gridID, rootPID int64) error {
 	defer tx.Rollback()
 
 	// Load existing tile rows (key → {id, pid, x, y}).
-	rows, err := tx.Query(`SELECT id, key, pid, x, y FROM tiles WHERE grid_id = ?`, gridID)
+	rows, err := tx.Query(`SELECT id, key, pid, x, y, w, h FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
-	type existing struct{ id, pid, x, y int64 }
+	type existing struct{ id, pid, x, y, w, h int64 }
 	existingByKey := map[string]existing{}
 	for rows.Next() {
-		var id, pid, x, y int64
+		var id, pid, x, y, w, h int64
 		var key string
-		if err := rows.Scan(&id, &key, &pid, &x, &y); err != nil {
+		if err := rows.Scan(&id, &key, &pid, &x, &y, &w, &h); err != nil {
 			rows.Close()
 			return err
 		}
-		existingByKey[key] = existing{id, pid, x, y}
+		existingByKey[key] = existing{id, pid, x, y, w, h}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -481,7 +481,9 @@ func (p *Plugin) reconcileTiles(gridID, rootPID int64) error {
 	// Auto-layout tracker.
 	occupied := map[[2]int64]bool{}
 	for _, e := range existingByKey {
-		occupied[[2]int64{e.x, e.y}] = true
+		// Full footprint (griddb.OccupyRect): a resized tile's interior is
+		// NOT free — seeding only origins dropped new processes inside it.
+		griddb.OccupyRect(occupied, e.x, e.y, e.w, e.h)
 	}
 	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth) }
 

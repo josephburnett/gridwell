@@ -13,6 +13,8 @@ import (
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
 	"html"
+
+	"github.com/josephburnett/gridwell/internal/doctype"
 )
 
 // The read-only rendered view (issue #218): source bytes → sanitized HTML
@@ -69,19 +71,13 @@ var htmlPolicy = func() *bluemonday.Policy {
 // IsOrg reports whether a tile's name marks it as an org-mode document —
 // the one detection rule (a tile has no filename; its user-visible name is
 // the alt text).
-func IsOrg(name string) bool {
-	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)), ".org")
-}
+func IsOrg(name string) bool { return doctype.IsOrg(name) }
 
-// Renderable reports whether a name marks content this package can render
-// (issue #236) — THE renderability rule: the fs plugin serves a
-// renderable file's real bytes as the descent body (metadata otherwise),
-// and the client colors file tiles by the same verdict (green vs grey),
-// so what looks renderable and what actually renders can never disagree.
-func Renderable(name string) bool {
-	n := strings.ToLower(strings.TrimSpace(name))
-	return strings.HasSuffix(n, ".md") || strings.HasSuffix(n, ".markdown") || IsOrg(n)
-}
+// Renderable / IsOrg are re-exports of internal/doctype — the neutral
+// home both sides of the plugin seam import (the fs plugin must not
+// depend on a client rendering package). One rule, re-exported so this
+// package's render pipeline and the classification can never disagree.
+func Renderable(name string) bool { return doctype.Renderable(name) }
 
 // RenderHTML renders source bytes to sanitized HTML for the read-only
 // rendered view. org selects the org-mode renderer; anything else is

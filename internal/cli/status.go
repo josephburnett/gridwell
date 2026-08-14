@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -23,18 +22,20 @@ func RunStatus(_ []string) int {
 		fmt.Fprintf(os.Stderr, "status: %v\n", err)
 		return 2
 	}
-	lock, err := acquireServeLock(home)
+	banner, running, err := probeServeLock(home)
 	if err != nil {
-		var held *errServeLockHeld
-		if errors.As(err, &held) && strings.HasPrefix(held.banner, "gridwell: serving on ") {
-			fmt.Println("gridwell: already " + strings.TrimPrefix(held.banner, "gridwell: "))
-			return 0
-		}
 		fmt.Fprintf(os.Stderr, "status: %v\n", err)
 		return 2
 	}
-	// We could take the lock, so nobody holds it.
-	lock.Release()
+	if running && strings.HasPrefix(banner, "gridwell: serving on ") {
+		fmt.Println("gridwell: already " + strings.TrimPrefix(banner, "gridwell: "))
+		return 0
+	}
+	if running {
+		// Held but no banner yet: a serve is mid-start.
+		fmt.Println("gridwell: a serve is starting up")
+		return 0
+	}
 	fmt.Println("gridwell: not serving")
 	return 1
 }

@@ -55,10 +55,9 @@ func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Jpeg, nil
 }
 
-// ListPlugins returns the node's configured plugins in config order, for the
-// node grid / + menu.
 // NodeIdentity returns the node's own uuid and the qualified id of its node
-// grid (the plugin-list landing page) — the anchor panes boot at.
+// grid. A convenience wrapper over the ONE handshake (ListPlugins carries
+// the same fields); production boot reads PluginList directly.
 func (c *Client) NodeIdentity(ctx context.Context) (nodeUUID, nodeRootGridID string, err error) {
 	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
 	if err != nil {
@@ -78,6 +77,12 @@ type PluginList struct {
 	// every plugin-served page URL as
 	// <origin>/content/<ContentToken>/<tile-id>/ (see data.proto).
 	ContentToken string
+	// NodeUUID / NodeRootGridID: the node's durable identity and its
+	// plugin-list grid — the SAME facts NodeIdentity returns; carried here
+	// so boot needs ONE handshake (it used to fire ListPlugins twice, and
+	// the server re-ran every plugin Info both times).
+	NodeUUID       string
+	NodeRootGridID string
 	// NodeRootView*: the node grid's own persisted viewport (2026-08-13);
 	// zero zoom = never set. The boot restore for a node-grid anchor.
 	NodeRootViewCx   float64
@@ -110,6 +115,8 @@ func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
 		Plugins:          out,
 		ShellsDisabled:   r.Msg.ShellsDisabled,
 		ContentToken:     r.Msg.ContentToken,
+		NodeUUID:         r.Msg.NodeUuid,
+		NodeRootGridID:   r.Msg.NodeRootGridId,
 		NodeRootViewCx:   r.Msg.NodeRootViewCx,
 		NodeRootViewCy:   r.Msg.NodeRootViewCy,
 		NodeRootViewZoom: r.Msg.NodeRootViewZoom,

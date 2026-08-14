@@ -16,9 +16,9 @@ import (
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/dbformat"
+	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/trash"
@@ -357,7 +357,7 @@ func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gr
 const renderableBodyCap = 4 << 20
 
 // ContentBody returns the descent body for a file tile. A RENDERABLE file
-// (markdown.Renderable — the same rule the client colors tiles by, issue
+// (doctype.Renderable — the same rule the client colors tiles by, issue
 // #236) serves its real bytes, so descending shows the document itself;
 // everything else serves the small metadata summary. Directories,
 // unreadable paths, and unknown ids return empty content rather than an
@@ -388,9 +388,9 @@ func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, e
 	if err != nil {
 		return nil, "", nil
 	}
-	if (markdown.Renderable(name) || isPlainText(name)) && entry.Size <= renderableBodyCap {
+	if (doctype.Renderable(name) || isPlainText(name)) && entry.Size <= renderableBodyCap {
 		if body, readErr := os.ReadFile(fullPath); readErr == nil {
-			if isPlainText(name) && !markdown.Renderable(name) {
+			if isPlainText(name) && !doctype.Renderable(name) {
 				return body, "text/plain", nil
 			}
 			return body, "text/markdown", nil
@@ -522,20 +522,20 @@ func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource
 	defer tx.Rollback()
 
 	// Load existing tile rows (name → id).
-	rows, err := tx.Query(`SELECT id, name, x, y FROM tiles WHERE grid_id = ?`, gridID)
+	rows, err := tx.Query(`SELECT id, name, x, y, w, h FROM tiles WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
-	type existing struct{ id, x, y int64 }
+	type existing struct{ id, x, y, w, h int64 }
 	existingByName := map[string]existing{}
 	for rows.Next() {
-		var id, x, y int64
+		var id, x, y, w, h int64
 		var name string
-		if err := rows.Scan(&id, &name, &x, &y); err != nil {
+		if err := rows.Scan(&id, &name, &x, &y, &w, &h); err != nil {
 			rows.Close()
 			return err
 		}
-		existingByName[name] = existing{id, x, y}
+		existingByName[name] = existing{id, x, y, w, h}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -545,7 +545,9 @@ func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource
 	// Build occupied-cell set for auto-layout.
 	occupied := map[[2]int64]bool{}
 	for _, e := range existingByName {
-		occupied[[2]int64{e.x, e.y}] = true
+		// Full footprint (griddb.OccupyRect): a resized tile's interior is
+		// NOT free — seeding only origins dropped new files inside it.
+		griddb.OccupyRect(occupied, e.x, e.y, e.w, e.h)
 	}
 	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth) }
 

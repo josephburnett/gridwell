@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/rpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -112,7 +112,7 @@ var plainTextNames = map[string]bool{
 // toggle); the plain-text families show verbatim; everything else has no
 // declaration — the metadata summary renders as it always has.
 func textPresentation(name string) string {
-	if markdown.Renderable(name) {
+	if doctype.Renderable(name) {
 		return rpc.TextPresentationBoth
 	}
 	lower := strings.ToLower(name)

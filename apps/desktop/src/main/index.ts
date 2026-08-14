@@ -10,6 +10,7 @@ import { MirrorPump } from './capture';
 import { sanitizeUserAgent, allowPermission, SESSION_PARTITION } from './viewutil';
 import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
+import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
 
 // Belt: redirect Electron's userData (and, for Electron ≥28, sessionData) to a
 // per-run private directory when GRIDWELL_HOME is set.
@@ -113,11 +114,11 @@ async function boot(): Promise<void> {
   if (sidecar.auth) {
     await session.defaultSession.cookies.set({
       url: sidecar.origin,
-      name: 'gridwell_auth',
+      name: AUTH_COOKIE_NAME,
       value: sidecar.auth,
-      // Mirror the server's own cookie shape (server/auth.go): 400 days,
-      // the longest browsers honor; re-set on every boot anyway.
-      expirationDate: Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60,
+      // Mirror the server's own cookie shape (server/auth.go, pinned by
+      // authconst.test.ts); re-set on every boot anyway.
+      expirationDate: Math.floor(Date.now() / 1000) + AUTH_COOKIE_MAX_AGE_S,
       httpOnly: true,
       sameSite: 'lax',
     });

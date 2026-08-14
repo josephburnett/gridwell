@@ -72,6 +72,32 @@ func (l *serveLock) WriteBanner(banner string) {
 	_ = l.f.Sync()
 }
 
+// probeServeLock answers "is anyone serving this home?" WITHOUT acquiring:
+// a shared (LOCK_SH) non-blocking flock, which coexists with other probes
+// and never truncates or unlinks. The old status probe took the EXCLUSIVE
+// lock for its test, so it could beat a starting serve to the flock and
+// manufacture a "already starting up" failure — a read-only question must
+// never win a write race.
+func probeServeLock(home string) (banner string, held bool, err error) {
+	path := filepath.Join(home, "serve.lock")
+	f, oerr := os.Open(path)
+	if oerr != nil {
+		if os.IsNotExist(oerr) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("serve lock: %w", oerr)
+	}
+	defer f.Close()
+	if flerr := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); flerr != nil {
+		// Exclusively held: a serve is running (or mid-start).
+		b, _ := os.ReadFile(path)
+		return strings.TrimSpace(string(b)), true, nil
+	}
+	// We got a shared lock — nobody holds the exclusive one. Drop it with
+	// the close; the file stays (it is the crashed-holder breadcrumb).
+	return "", false, nil
+}
+
 // Release drops the lock and removes the file; a leftover serve.lock
 // therefore means the holder crashed (informational only — the flock is
 // what actually gates, and a dead holder's flock is already gone).

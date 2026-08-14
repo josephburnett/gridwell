@@ -22,6 +22,16 @@ const PAGE =
     (async () => {
       try {
         if (!window.gridwell) { console.log('BRIDGE_RESULT ' + JSON.stringify({err:'no window.gridwell'})); return; }
+        // The caps declaration is a three-way string contract (preload /
+        // wasm bridgeCaps / the mobile shell): the KEYS must exist as
+        // booleans, or the wasm silently degrades — and a misspelled caps
+        // object falls into the legacy full-feature imputation, claiming
+        // live shells a host may not implement.
+        const caps = window.gridwell.caps;
+        if (!caps || typeof caps.liveUrl !== 'boolean' || typeof caps.liveShell !== 'boolean') {
+          console.log('BRIDGE_RESULT ' + JSON.stringify({ err: 'caps contract broken: ' + JSON.stringify(caps) }));
+          return;
+        }
         await window.gridwell.placeWebview({
           paneId: 'p1', tileId: 7, objectId: 'obj-bridge',
           url: 'data:text/html,' + encodeURIComponent('<title>Inner</title><body style="margin:0;background:#2980b9">y</body>'),

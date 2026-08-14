@@ -25,3 +25,22 @@ func NextEmptyCell(occupied map[[2]int64]bool, width int64) (int64, int64) {
 		}
 	}
 }
+
+// OccupyRect marks a tile's FULL w×h footprint occupied — the same rule
+// the localdb's overlap check enforces (store/place.go). Seeding only the
+// origin cell (the old fs/proc habit) left a resized tile's interior
+// "free", so reconcile dropped newly discovered entries INSIDE existing
+// tiles.
+func OccupyRect(occupied map[[2]int64]bool, x, y, w, h int64) {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	for dx := int64(0); dx < w; dx++ {
+		for dy := int64(0); dy < h; dy++ {
+			occupied[[2]int64{x + dx, y + dy}] = true
+		}
+	}
+}

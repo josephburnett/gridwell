@@ -1126,64 +1126,48 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 	if len(p.Path) > 0 || p.TextFocus != "" {
 		return
 	}
-	// The NODE GRID's own viewport (2026-08-13): its provider implements
-	// SetRootView like any plugin root — the client just never called it
-	// for the node anchor, so the landing page's pan/zoom evaporated.
+	// The NODE GRID's own viewport (2026-08-13) writes through the same
+	// core: its provider implements SetRootView like any plugin root, and
+	// the handshake copy reconciles like a PluginInfo's.
 	if p.Anchor != "" && p.Anchor == a.nodeGrid {
-		a.persistNodeRootView(p)
+		a.persistRootViewCore(p, a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom,
+			func(vx, vy int64, zoom float64) {
+				a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom = float64(vx), float64(vy), zoom
+			})
 		return
 	}
 	pl, ok := a.pluginByUUID(uuidOf(p.Anchor))
 	if !ok || pl.RootGridID != p.Anchor {
 		return
 	}
-	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, 1)
-	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, 1)
-	r := paneRectFor(a, p)
-	overtake := zoomtrans.OvertakeZoom(zoomtrans.Well{W: 1, H: 1}, r.W, r.H, cellPx)
-	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
-	if newViewX == int64(pl.RootViewCx) && newViewY == int64(pl.RootViewCy) &&
-		math.Abs(newViewZoom-pl.RootViewZoom) < 0.001 {
-		return
-	}
-	for i := range a.plugins {
-		if a.plugins[i].UUID == pl.UUID {
-			a.plugins[i].RootViewCx = float64(newViewX)
-			a.plugins[i].RootViewCy = float64(newViewY)
-			a.plugins[i].RootViewZoom = newViewZoom
-		}
-	}
-	req := &rpc.SetRootViewRequest{
-		RootGridID: p.Anchor,
-		Cx:         float64(newViewX),
-		Cy:         float64(newViewY),
-		Zoom:       newViewZoom,
-	}
-	if a.unloading && a.sendBeacon(rpc.SetRootViewBeacon(req)) {
-		return
-	}
-	a.postVoidPersist("SetRootView", p.Anchor, func(ctx context.Context) error {
-		return a.cl.SetRootView(ctx, req)
-	})
+	a.persistRootViewCore(p, pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom,
+		func(vx, vy int64, zoom float64) {
+			for i := range a.plugins {
+				if a.plugins[i].UUID == pl.UUID {
+					a.plugins[i].RootViewCx = float64(vx)
+					a.plugins[i].RootViewCy = float64(vy)
+					a.plugins[i].RootViewZoom = zoom
+				}
+			}
+		})
 }
 
-// persistNodeRootView is persistPluginRootView's node-grid arm: identical
-// intrinsic math over the 1×1 synthetic root well, written through the
-// same SetRootView door (the node-grid provider persists it to
-// node-view.json), with the handshake copy reconciled like a PluginInfo's.
-func (a *App) persistNodeRootView(p *pane.Pane) {
+// persistRootViewCore is the ONE root-view writeback (the coupling audit
+// found the node arm had grown into a line-for-line twin): the 1×1
+// synthetic-well intrinsic math, the no-op guard against the caller's
+// cached copy, the local reconcile (commit), and the SetRootView post —
+// beacon during unload, ordinary void persist otherwise.
+func (a *App) persistRootViewCore(p *pane.Pane, curCx, curCy, curZoom float64, commit func(vx, vy int64, zoom float64)) {
 	newViewX := zoomtrans.ViewOriginFromCenter(p.Cx, 1)
 	newViewY := zoomtrans.ViewOriginFromCenter(p.Cy, 1)
 	r := paneRectFor(a, p)
 	overtake := zoomtrans.OvertakeZoom(zoomtrans.Well{W: 1, H: 1}, r.W, r.H, cellPx)
 	newViewZoom := zoomtrans.IntrinsicFromLive(p.Zoom, overtake)
-	if newViewX == int64(a.nodeRootViewCx) && newViewY == int64(a.nodeRootViewCy) &&
-		math.Abs(newViewZoom-a.nodeRootViewZoom) < 0.001 {
+	if newViewX == int64(curCx) && newViewY == int64(curCy) &&
+		math.Abs(newViewZoom-curZoom) < 0.001 {
 		return
 	}
-	a.nodeRootViewCx = float64(newViewX)
-	a.nodeRootViewCy = float64(newViewY)
-	a.nodeRootViewZoom = newViewZoom
+	commit(newViewX, newViewY, newViewZoom)
 	req := &rpc.SetRootViewRequest{
 		RootGridID: p.Anchor,
 		Cx:         float64(newViewX),

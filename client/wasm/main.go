@@ -781,10 +781,10 @@ func (a *App) bootstrap() {
 		// my plugins vanished" (charter §6).
 		a.reportErr(errsurface.Error, "rpc:ListPlugins", "plugin list failed: "+rpcErrText(err))
 	}
-	if _, nodeRoot, err := a.cl.NodeIdentity(context.Background()); err == nil && nodeRoot != "" {
-		a.nodeGrid = nodeRoot
-	} else if err != nil {
-		a.reportErr(errsurface.Error, "rpc:ListPlugins", "node identity failed: "+rpcErrText(err))
+	// Node identity rides the SAME handshake (no second ListPlugins — the
+	// old NodeIdentity call re-ran every plugin Info server-side per boot).
+	if plugins.NodeRootGridID != "" {
+		a.nodeGrid = plugins.NodeRootGridID
 	}
 	a.home = rpc.HomeGrid(a.plugins, a.nodeGrid)
 	a.afterBootstrap()
@@ -1118,9 +1118,12 @@ func (a *App) startSSE() {
 			}
 			// A removed tile's decoded preview image (and its backing object
 			// URL) must be released, or deleting URL/shell tiles leaks browser
-			// image resources for the life of the page.
+			// image resources for the life of the page. The rendered-markdown
+			// preview holds the same pair (blob URL + decoded raster) and
+			// leaked identically until 2026-08-13.
 			if ev.Kind == rpc.EventTileRemoved && ev.TileRemoved != nil {
 				a.urlPreview.Drop(ev.TileRemoved.TileID)
+				a.dropRenderedPreview(ev.TileRemoved.TileID)
 			}
 			// GridChanged: refetch the affected grid if any pane is looking at it.
 			if ev.Kind == rpc.EventGridChanged && ev.GridChanged != nil {

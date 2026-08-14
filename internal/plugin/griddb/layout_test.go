@@ -61,3 +61,24 @@ func TestNextEmptyCellWidthOne(t *testing.T) {
 		}
 	}
 }
+
+// A resized tile occupies its WHOLE footprint: auto-layout must never
+// drop a new entry inside an existing 2x2 (the fs/proc reconcile bug —
+// only the origin cell was seeded).
+func TestOccupyRectFootprint(t *testing.T) {
+	occ := map[[2]int64]bool{}
+	OccupyRect(occ, 0, 0, 2, 2)
+	x, y := NextEmptyCell(occ, 8)
+	if x == 1 && y == 0 || x == 0 && y == 1 || x == 1 && y == 1 {
+		t.Fatalf("NextEmptyCell landed inside the 2x2 footprint: (%d,%d)", x, y)
+	}
+	if x != 2 || y != 0 {
+		t.Errorf("NextEmptyCell = (%d,%d), want (2,0)", x, y)
+	}
+	// Degenerate sizes count as 1x1.
+	occ2 := map[[2]int64]bool{}
+	OccupyRect(occ2, 3, 3, 0, 0)
+	if !occ2[[2]int64{3, 3}] || len(occ2) != 1 {
+		t.Errorf("degenerate footprint = %v", occ2)
+	}
+}
