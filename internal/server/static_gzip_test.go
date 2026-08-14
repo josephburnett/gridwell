@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -84,6 +85,9 @@ func TestStaticGzipSidecar(t *testing.T) {
 	}
 	if v := res.Header.Get("Vary"); v != "Accept-Encoding" {
 		t.Errorf("Vary = %q, want Accept-Encoding (a shared cache must key on it)", v)
+	}
+	if us := res.Header.Get("X-Uncompressed-Size"); us != fmt.Sprintf("%d", len(raw)) {
+		t.Errorf("X-Uncompressed-Size = %q, want %d (the boot percent counter reads it)", us, len(raw))
 	}
 	zr, err := gzip.NewReader(res.Body)
 	if err != nil {

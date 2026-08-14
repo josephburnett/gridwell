@@ -26,6 +26,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/rpc"
+	"strconv"
 )
 
 // Config configures the server.
@@ -258,6 +259,11 @@ func serveGzipSidecar(w http.ResponseWriter, r *http.Request, fsys fs.FS, name s
 	}
 	w.Header().Set("Content-Encoding", "gzip")
 	w.Header().Set("Vary", "Accept-Encoding")
+	// The DECODED size: with Content-Encoding the browser only knows the
+	// compressed length, so the boot overlay could count bytes but not a
+	// percentage. The raw file's size is sitting right here — hand it over
+	// (index.html reads it for "loading gridwell… N%").
+	w.Header().Set("X-Uncompressed-Size", strconv.FormatInt(raw.Size(), 10))
 	http.ServeContent(w, r, path.Base(name), gzInfo.ModTime(), rs)
 	return true
 }

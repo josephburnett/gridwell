@@ -129,11 +129,11 @@
   <script>
     // Boot with a visible pulse: the wasm is tens of MB, and on a slow link
     // the old silent instantiateStreaming looked like a dead black page.
-    // The byte counter reads the DECODED stream (with Content-Encoding:
-    // gzip the encoded total isn't knowable client-side), so it counts up
-    // rather than showing a percentage — honest, and enough to prove
-    // progress. Failures paint into the same overlay: a boot that dies
-    // must say so, never just sit black.
+    // The counter reads the DECODED stream and shows a real percentage —
+    // the server hands over the raw size in X-Uncompressed-Size, since
+    // with Content-Encoding the browser only knows the compressed length.
+    // Failures paint into the same overlay: a boot that dies must say so,
+    // never just sit black.
     (async () => {
       const boot = document.getElementById("gw-boot");
       const msg = document.getElementById("gw-boot-msg");
@@ -141,6 +141,15 @@
         const resp = await fetch("/gridwell.wasm");
         if (!resp.ok) throw new Error("wasm fetch failed: HTTP " + resp.status);
         let received = 0;
+        // The DECODED total: the gzip response carries it in
+        // X-Uncompressed-Size (Content-Length is the compressed size); an
+        // identity response's Content-Length IS the decoded size. With a
+        // total we can show a real percentage; without, count megabytes.
+        const total = Number(
+          resp.headers.get("X-Uncompressed-Size") ||
+          (resp.headers.get("Content-Encoding") ? 0 : resp.headers.get("Content-Length")) ||
+          0
+        );
         const counted = new Response(new ReadableStream({
           async start(controller) {
             const reader = resp.body.getReader();
@@ -148,7 +157,9 @@
               const { done, value } = await reader.read();
               if (done) break;
               received += value.length;
-              msg.textContent = "loading gridwell… " + (received / 1048576).toFixed(1) + " MB";
+              msg.textContent = total > 0
+                ? "loading gridwell… " + Math.min(100, Math.round((received / total) * 100)) + "%"
+                : "loading gridwell… " + (received / 1048576).toFixed(1) + " MB";
               controller.enqueue(value);
             }
             msg.textContent = "starting…";
