@@ -8,8 +8,7 @@ import (
 	"strings"
 
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/internal/node"
 )
 
 // kvFlag collects repeated `--config key=value` options into a config map.
@@ -70,43 +69,19 @@ func RunInit(args []string) int {
 		return 1
 	}
 
-	// The id is the durable, globally-routable identity; mint it once here.
-	// Short human-scale form (7-char base36, leading letter) since 2026-07-25;
-	// plugins minted earlier keep their 32-hex ids — both shapes are valid
-	// everywhere, and an id never changes once minted.
-	id := store.NewShortID()
-	dbDir := config.DBDir(home, id)
-	if err := os.MkdirAll(dbDir, 0o755); err != nil {
+	// The one init door (node.InitPlugin — shared with the mobile bind's
+	// first-run auto-init): mint the durable id (7-char base36, leading
+	// letter, since 2026-07-25; earlier 32-hex ids stay valid forever),
+	// create the identity-stamped DB, append the config entry, ensure the
+	// node id.
+	id, err := node.InitPlugin(home, *kind, *name, map[string]string(conf))
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
-		return 1
-	}
-	dbFile := config.DBFile(home, id)
-	if err := pluginmeta.Create(dbFile, id, *kind); err != nil {
-		fmt.Fprintf(os.Stderr, "init: %v\n", err)
-		return 1
-	}
-
-	entry := config.PluginConfig{ID: id, Name: *name, Kind: *kind}
-	if len(conf) > 0 {
-		entry.Config = map[string]string(conf)
-	}
-	if err := config.AppendPlugin(home, entry); err != nil {
-		// The DB dir we just created is keyed by this run's fresh id and is not
-		// referenced by any config entry, so it is safe to remove on failure.
-		_ = os.RemoveAll(dbDir)
-		fmt.Fprintf(os.Stderr, "init: %v\n", err)
-		return 1
-	}
-
-	// The node's own identity rides in the same file; mint it with the first
-	// plugin so a fresh home is fully identified before the first serve.
-	if _, err := config.EnsureNodeID(home, store.NewShortID); err != nil {
-		fmt.Fprintf(os.Stderr, "init: node id: %v\n", err)
 		return 1
 	}
 
 	fmt.Printf("gridwell: initialized %s plugin %q (id %s)\n  db:     %s\n  config: %s\n",
-		*kind, *name, id, dbFile, filepath.Join(home, "server.yaml"))
+		*kind, *name, id, config.DBFile(home, id), filepath.Join(home, "server.yaml"))
 	return 0
 }
 

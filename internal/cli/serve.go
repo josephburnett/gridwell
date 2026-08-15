@@ -1,25 +1,21 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/store"
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -139,40 +135,11 @@ func staticFS(dir string) fs.FS {
 	return os.DirFS(dir)
 }
 
-// buildServeConfig loads the mandatory server.yaml at cfgPath and prepares it
-// for launch: the file must exist and list at least one plugin (no synthesized
-// fallback), and every plugin gets its derived db_file injected (the path is
-// never stored in the config — it is fixed at <home>/db/<id>/store.db). Split
-// out from RunServe so the load/validate/inject path is unit-testable.
+// buildServeConfig is node.BuildConfig (the load/validate/inject path
+// moved to the embeddable core so the CLI and the mobile bind share ONE
+// serve wiring); this thin name keeps the CLI's tests and call sites.
 func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no config at %s; run `gridwell init --kind localdb --name <name>` to create one", cfgPath)
-		}
-		return nil, err
-	}
-	if len(cfg.Plugins) == 0 {
-		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind localdb --name <name>`", cfgPath)
-	}
-	// The mount cache lives beside (never inside) the plugin DBs:
-	// disposable, excluded from backup, per-mount files under one dir.
-	cfg.CacheDir = filepath.Join(home, "cache")
-	for i := range cfg.Plugins {
-		pc := &cfg.Plugins[i]
-		if pc.Config == nil {
-			pc.Config = map[string]string{}
-		}
-		dbFile := config.DBFile(home, pc.ID)
-		pc.Config["db_file"] = dbFile
-		// The DB must already exist: it is created once by `gridwell init`. serve
-		// never creates one — otherwise a changed id (whose derived path doesn't
-		// exist) would silently spawn a fresh, empty store instead of failing.
-		if _, err := os.Stat(dbFile); err != nil {
-			return nil, fmt.Errorf("plugin %q (%s): no database at %s; run `gridwell init` to create it", pc.Name, pc.ID, dbFile)
-		}
-	}
-	return cfg, nil
+	return node.BuildConfig(home, cfgPath)
 }
 
 // resolvePluginBinary finds the go-plugin binary for a built-in kind:
@@ -288,83 +255,43 @@ func RunServe(args []string) int {
 		return 1
 	}
 
-	reg, err := plugin.LoadAll(cfg, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: load plugins: %v\n", err)
-		return 1
-	}
-	defer reg.Close()
-
-	// The node's own durable identity qualifies the node grid (the plugin-list
-	// landing page). Minted once and persisted into server.yaml; a pre-node
-	// config gains the field on first serve without touching any plugin id.
-	nodeID, err := config.EnsureNodeID(home, store.NewShortID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "serve: node id: %v\n", err)
-		return 1
-	}
-
-	// Shell PTYs now live in the owning plugin (OpenShell); the server is a pure
-	// bridge. tmux, the session lifecycle, and orphan cleanup all moved behind
-	// the interface — the localdb plugin binary owns them.
-	srv := server.New(reg, server.Config{
+	// The node core (internal/node — shared with the mobile bind): plugin
+	// loading, identity, the server assembly (NodeHandler: browsers, gRPC
+	// front door, and the node export on ONE port), and the listener. The
+	// CLI's own concerns wrap it: the lock above, the banner below,
+	// signals.
+	n, err := node.Start(node.Options{
+		Home: home,
+		Cfg:  cfg,
 		// The embedded web client by default — the binary is self-contained
 		// (web.FS); server.yaml static:/--static is the dev override that
 		// serves a checkout from disk instead.
 		StaticFS: staticFS(f.StaticDir),
-		NodeID:   nodeID,
-		// The landing page's viewport survives restarts in a small state
-		// file beside the config ("things stay as you left them").
-		NodeStatePath: filepath.Join(home, "node-view.json"),
-		// The browser surface's password gate (server/auth.go). Empty = open.
-		Password: cfg.Password,
-		// Node-wide shell refusal (server.yaml disable_shells).
-		DisableShells: cfg.DisableShells,
 	})
-
-	requestCtx, cancelRequests := context.WithCancel(context.Background())
-	defer cancelRequests()
-
-	// NodeHandler = the browser mux wrapped in h2c plus the per-plugin gRPC
-	// node export, so this one port serves every caller: browsers (HTTP/1.1),
-	// gRPC front-door calls, and a remote mounter's plugin-scoped gRPC (the
-	// ssh plugin through its tunnel). See internal/server/nodeexport.go.
-	httpSrv := &http.Server{
-		Handler:           srv.NodeHandler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return requestCtx },
-	}
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	// Listen before announcing: the "serving on" banner is a contract — the
-	// desktop sidecar parses the address out of this exact line
-	// (apps/desktop/src/main/lines.ts) to learn the origin its window should
-	// load, so it must carry the listener's ACTUAL bound address and appear
-	// only once the listener is really up. The server, not its spawner, owns
-	// the "where am I listening" fact.
-	ln, err := net.Listen("tcp", cfg.Bind)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
-	if w := bindWarning(ln.Addr().String(), cfg.Password != ""); w != "" {
+	defer n.Close()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// Listen-before-announce is node.Start's contract: the "serving on"
+	// banner is parsed by the desktop sidecar
+	// (apps/desktop/src/main/lines.ts) to learn the origin its window
+	// should load, so it must carry the listener's ACTUAL bound address
+	// and appear only once the listener is really up.
+	if w := bindWarning(n.Ln.Addr().String(), cfg.Password != ""); w != "" {
 		fmt.Fprintln(os.Stderr, w)
 	}
-	banner := servingBanner(ln.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Password)
+	banner := servingBanner(n.Ln.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Password)
 	fmt.Println(banner)
 	// Record the banner in the lock file — the "already serving" reprint a
 	// conflicting serve hands to the desktop app.
 	lock.WriteBanner(banner)
 
-	errCh := make(chan error, 1)
-	go func() {
-		if err := httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
-
+	errCh := n.ServeBackground()
 	select {
 	case <-stop:
 		fmt.Println("gridwell: shutting down")
@@ -372,10 +299,7 @@ func RunServe(args []string) int {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
-	cancelRequests()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := httpSrv.Shutdown(ctx); err != nil {
+	if err := n.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "shutdown: %v\n", err)
 		return 1
 	}

@@ -1,8 +1,10 @@
 // Package plugin — loader builds the plugin registry from server config.
-// In production every plugin (localdb, fs, proc, ssh) is a separately-compiled
-// go-plugin binary, spawned because its config sets binary != "". The
-// in-process factory path (loopback TCP gRPC, no subprocess) is a TEST-ONLY
-// fallback used when no binary is configured — see loadOne.
+// On desktop/server, every plugin (localdb, fs, proc, ssh) is a
+// separately-compiled go-plugin binary, spawned because its config sets
+// binary != "". The in-process factory path (loopback TCP gRPC, no
+// subprocess) serves two callers: tests, and the MOBILE node (mobile/ —
+// owner decision, offline-plan phase 2: iOS forbids fork/exec, so the
+// same gRPC surface runs in-process there) — see loadOne.
 package plugin
 
 import (
@@ -22,12 +24,13 @@ import (
 
 // LoadAll constructs a Registry from the server config. Each PluginConfig
 // entry becomes one Registry entry keyed by its ID (UUID). A plugin with a
-// binary path is spawned as a subprocess via go-plugin (the production path);
-// the in-process factory path is the test-only fallback.
+// binary path is spawned as a subprocess via go-plugin (the desktop/server
+// path); a plugin without one constructs in-process from factories (tests,
+// and the mobile node — no fork/exec on iOS).
 //
-// factories maps plugin kind strings to constructors used ONLY on the in-process
-// (test) path. For kinds not in factories, a binary path must be provided in
-// PluginConfig.Binary.
+// factories maps plugin kind strings to constructors used only on the
+// in-process path. For kinds not in factories, a binary path must be
+// provided in PluginConfig.Binary.
 func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Registry, error) {
 	reg := NewRegistry()
 	for i := range cfg.Plugins {
@@ -86,7 +89,8 @@ func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridw
 		return LoadPlugin(pc.Binary, cfg)
 	}
 
-	// In-process factory: a test-only path (production always sets Binary).
+	// In-process factory: tests and the mobile node (desktop/server always
+	// sets Binary).
 	factory, ok := factories[pc.Kind]
 	if !ok {
 		return nil, nil, fmt.Errorf("no factory for kind %q and no binary path", pc.Kind)
@@ -100,7 +104,8 @@ func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridw
 
 // ServeInProcess starts a gRPC server in a goroutine on a loopback TCP port
 // and returns a client connected to it. closer stops the server and closes
-// the connection. Test-only: production plugins are subprocesses (see loadOne).
+// the connection. Used by tests and the mobile node (desktop/server plugins
+// are subprocesses — see loadOne).
 func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, func(), error) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
