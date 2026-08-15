@@ -15,9 +15,11 @@ import (
 
 // This file is the mutation dispatch layer: the handful of helpers every
 // tile RPC funnels through so the optimistic-cache / conflict-resync / error
-// surfacing policy lives in exactly one place. The *decision* (resync vs
-// surface) is the pure clientsync.Classify; this layer detects the
-// transport-specific conflict and applies the reaction against App state.
+// surfacing policy lives in exactly one place. The *decision* — what the
+// outcome was and what it permits — is the pure clientsync package
+// (Of + the React* tables); this layer applies the reaction against App
+// state. The one rule (2026-08-14): local state is dropped only on a
+// server verdict, never on a transport failure.
 
 // tileCall is the closure shape every tile-producing mutation takes.
 // Callers wrap the matching a.cl method (CreateText, MoveTile, etc.)
@@ -42,18 +44,11 @@ func isUnimplemented(err error) bool {
 	return false
 }
 
-// isVersionConflict reports whether an RPC error came back with the
-// FailedPrecondition code Connect uses for both ErrVersionConflict and
-// ErrOverlap. Either case warrants a cache-resync via grid refetch.
+// isVersionConflict reports whether an RPC error came back as a
+// version/overlap conflict (the one-retry loops re-claim on exactly this).
+// The classification itself is owned by clientsync.Of.
 func isVersionConflict(err error) bool {
-	if err == nil {
-		return false
-	}
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return ce.Code() == connect.CodeFailedPrecondition
-	}
-	return false
+	return clientsync.Of(err) == clientsync.OutcomeConflict
 }
 
 // surfaceRPCError surfaces a non-nil RPC error as an on-canvas notice (the
@@ -78,14 +73,12 @@ func rpcErrText(err error) string {
 	return err.Error()
 }
 
-// reactToErr applies the clientsync resync policy to an RPC error: a
-// version/overlap conflict refetches the grid (cache resync), any other
-// error is surfaced to the console. Conflict detection is transport-specific
-// (Connect status), so it is computed here and handed to clientsync.Classify,
-// which owns the pure decision. Returns true when err was nil (success), so
-// callers can early-out on failure.
+// reactToErr applies the plain-mutation policy (clientsync.React) to an
+// RPC error: a version/overlap conflict refetches the grid (cache resync);
+// a rejection or a transport failure is surfaced. Returns true when err
+// was nil (success), so callers can early-out on failure.
 func (a *App) reactToErr(label string, gid string, err error) bool {
-	r := clientsync.Classify(err, isVersionConflict(err))
+	r := clientsync.React(clientsync.Of(err))
 	if r.Refetch {
 		a.refetchGridOnConflict(gid, label)
 	}
@@ -93,6 +86,22 @@ func (a *App) reactToErr(label string, gid string, err error) bool {
 		a.surfaceRPCError(label, err)
 	}
 	return err == nil
+}
+
+// reactOptimistic applies the optimistic-writer policy
+// (clientsync.ReactOptimistic) for a caller that patched the cache BEFORE
+// the RPC: a server verdict rolls the cache back to truth (refetch —
+// issue #156); a transport failure KEEPS the patch (it is the user's
+// value, and a refetch against a flapping link could succeed and silently
+// revert it) and surfaces the failure.
+func (a *App) reactOptimistic(label, gid string, err error) {
+	r := clientsync.ReactOptimistic(clientsync.Of(err))
+	if r.Refetch {
+		a.refetchGridOnConflict(gid, label)
+	}
+	if r.Log {
+		a.surfaceRPCError(label, err)
+	}
 }
 
 // postCrossGridMutate is the shared body of left-drag (MoveTile) and
@@ -120,20 +129,14 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, cal
 
 // postOptimisticPersist is postPersist for a caller that ALREADY patched the
 // cache before the RPC (e.g. persistWellView's framing patch). The reaction
-// table differs: ANY failure refetches, because a rejected optimistic patch
-// left the cache ahead of server truth (clientsync.ClassifyOptimistic,
-// issue #156).
+// table differs: a server VERDICT refetches, because a rejected optimistic
+// patch left the cache ahead of server truth (issue #156); a transport
+// failure keeps the patch and surfaces (clientsync.ReactOptimistic).
 func (a *App) postOptimisticPersist(label string, gid string, call tileCall) {
 	a.persistPosts[label]++
 	go func() {
 		_, err := call(context.Background())
-		r := clientsync.ClassifyOptimistic(err, isVersionConflict(err))
-		if r.Refetch {
-			a.refetchGridOnConflict(gid, label)
-		}
-		if r.Log {
-			a.surfaceRPCError(label, err)
-		}
+		a.reactOptimistic(label, gid, err)
 	}()
 }
 
@@ -142,8 +145,9 @@ func (a *App) postOptimisticPersist(label string, gid string, call tileCall) {
 // less code"): on a version conflict, re-claim ONCE via GetTile and retry
 // — a racing version-bumping writer (a rename, a resize, a title capture)
 // must not silently cost the user's settled viewport. The caller already
-// patched the cache, so any REMAINING failure follows ClassifyOptimistic:
-// refetch (roll the patch back to server truth) and surface.
+// patched the cache, so any REMAINING failure follows ReactOptimistic:
+// a verdict refetches (rolls the patch back to server truth), a transport
+// failure keeps the patch; either surfaces.
 func (a *App) postFramingPersist(label, gid, tileID string, version int64, call func(ctx context.Context, version int64) (*rpc.Tile, error)) {
 	a.persistPosts[label]++
 	go func() {
@@ -153,13 +157,7 @@ func (a *App) postFramingPersist(label, gid, tileID string, version int64, call 
 				_, err = call(context.Background(), fresh.Version)
 			}
 		}
-		r := clientsync.ClassifyOptimistic(err, isVersionConflict(err))
-		if r.Refetch {
-			a.refetchGridOnConflict(gid, label)
-		}
-		if r.Log {
-			a.surfaceRPCError(label, err)
-		}
+		a.reactOptimistic(label, gid, err)
 	}()
 }
 
@@ -215,22 +213,40 @@ func (a *App) postTwoGridMutate(label string, srcGridID, dstGridID string, call 
 // should stop further work).
 func (a *App) postWriteContent(gid, tileID string, version int64, newContent []byte) (rpc.Tile, bool) {
 	tile, err := a.cl.WriteContent(context.Background(), tileID, version, newContent)
-	if !a.reactToErr("WriteContent", gid, err) {
-		// Reconcile the rejected optimistic edit: callers wrote newContent
-		// into the cache before this RPC, so on any rejection the screen is
-		// showing bytes the server refused. Drop them so the next render
-		// refetches server truth (grid refetch alone never evicts content),
-		// and refetch the grid on the non-conflict path (the conflict path
-		// already refetched via reactToErr). The reactToErr notice tells the
-		// user why their text just reverted; without this the rejected edit
-		// lingers looking saved, then vanishes on some later refetch —
-		// the silent-disappearance class (charter §6).
-		a.c.DropTileContent(tileID)
-		if !isVersionConflict(err) {
-			a.fetchGrid(gid)
+	if err != nil {
+		o := clientsync.Of(err)
+		r := clientsync.ReactSave(o)
+		if r.Log {
+			a.surfaceRPCError("WriteContent", err)
 		}
-		a.refreshFileOverlay()
-		a.scheduleFrame()
+		if r.DropLocal {
+			// The server gave a VERDICT: the screen is showing bytes it
+			// refused. Drop them so the next render refetches server truth
+			// (grid refetch alone never evicts content) — without this the
+			// rejected edit lingers looking saved, then vanishes on some
+			// later refetch: the silent-disappearance class (charter §6).
+			// The conflict/reject notice tells the user why their text
+			// just reverted.
+			a.c.DropTileContent(tileID)
+			if o == clientsync.OutcomeConflict {
+				a.refetchGridOnConflict(gid, "WriteContent")
+			} else {
+				a.fetchGrid(gid)
+			}
+			a.refreshFileOverlay()
+			a.scheduleFrame()
+		} else {
+			// Transport: the server never spoke. The content entry stays
+			// DIRTY — it is the ONLY copy of the user's unsaved words
+			// (the textarea is a view of it, not an owner) — so the flush
+			// sweep re-posts it on the next tick and the retry kick drains
+			// it on reconnect. Dropping it here was the archetype
+			// data-loss bug (2026-08-14): a wifi blip during autosave
+			// destroyed the paragraph and repainted the textarea from
+			// stale server bytes.
+			a.reportErr(errsurface.Info, "textsave",
+				"unsaved changes kept — server unreachable, will retry")
+		}
 		return rpc.Tile{}, false
 	}
 	// Advance the cached tile AND the save basis to the response row NOW —
