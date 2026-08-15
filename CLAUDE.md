@@ -172,6 +172,23 @@ Re-litigating them silently is how churn happens.
   once minted, and both shapes (short + legacy 32-hex) are valid forever.
   The leading letter is load-bearing: it is how URL paths tell a namespace
   segment from a tile id.
+- **Plugins are the third-party door; the host must not know its plugins
+  (2026-08-15).** The plugin system exists so OTHER PEOPLE can build
+  plugins: hashicorp go-plugin was chosen for process isolation AND a
+  separate dependency graph (Go's own plugin package offers neither).
+  Everything else the seam provides — id-space isolation, the wire
+  contract — could be had with discipline alone; the subprocess door is
+  the part that admits strangers, and it is judged by how good a door it
+  is for them. Therefore: the host (server, CLI, loader) and the client
+  never import a plugin implementation and never switch on a plugin
+  KIND — every plugin-specific behavior rides a wire DECLARATION (Info
+  capabilities, `Grid.source_kind`, tile fields), the shapes that already
+  work. The included plugins are the standard library, shipped in-repo
+  for convenience, never special cases; only a LEAF BINARY (the mobile
+  bind, a future bundled main) may enumerate what it ships. This
+  separation has ERODED REPEATEDLY when left to intention — it must be
+  exercised by machinery; the coupling inventory and the enforcement
+  options are `docs/plugin.md`.
 - **The storage format is frozen and additive-only.** The contract is
   `internal/store/CLAUDE.md`. Never delete a DB to absorb a schema change.
 
@@ -218,6 +235,9 @@ Before you commit, every one of these is true:
       unacknowledged writes park (`client/pending` / the dirty content
       ledger) and the retry kick lands them.
 - [ ] Nothing the user can change lives only on the client.
+- [ ] No new host/client import of a plugin implementation and no new
+      switch on a plugin kind — plugin-specific behavior rides a wire
+      declaration; leaf binaries alone enumerate what they ship.
 - [ ] I committed this logical change on its own and fixed any stale
       comment in the files I touched.
 - [ ] The guiding rule still holds: everything the user didn't touch is
