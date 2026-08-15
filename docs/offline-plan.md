@@ -196,6 +196,45 @@ reads whichever the node serves. No new client state, no second writer.
   connect (warmth vs. bandwidth). Start with touched-only.
 - Byte caps and LRU defaults.
 
+### The supported offline-edit scenario (owner decision, 2026-08-14)
+
+The scenario this phase must carry end-to-end: read from a remote node,
+go offline (plane, camping), read everything the cache has seen — and
+when editing is wanted, the gesture is **clone, edit, clone back later**.
+The partial-cache problem (you clone a whole remote grid but only part
+of it is cached) is decided:
+
+- **Missing data becomes LINKS, never a hole and never a refusal.** An
+  offline deep clone degrades per tile: bytes in cache → a real copy;
+  not cached → a LINK naming the remote original (link creation is a
+  purely local write, so it works offline; the tile ids are known —
+  a visited grid's `GetGrid` response is its complete tile list). The
+  dashed border already means "the content lives elsewhere," so the
+  incompleteness is visible by the existing vocabulary instead of
+  silent. A partial copy that LOOKS whole is the one unacceptable
+  outcome; a copy that shows its seams is just honest.
+- **The degrade gates on transport-unavailable ONLY.** A tile the remote
+  says is GONE (NotFound, a tombstoned namespace) must never become a
+  link — links are for content that exists but isn't reachable right
+  now. Same Phase 0 taxonomy, applied server-side.
+- **Back online, it all resolves.** The links point at the originals and
+  work again the moment the mount heals; right-dragging one completes
+  the copy with the same gesture. **Links clone as links, both
+  directions**: cloning the edited grid back to the remote turns each
+  link into a same-node reference to the original it always named —
+  never a materialized copy of content the user never touched.
+- **Clone-back is a NEW subtree, not a merge.** There is no cross-plugin
+  move and no sync-back; reconciling the edited copy with the original
+  stays a set of explicit, visible gestures. Copies are new identities.
+- **Prerequisite: deep cross-plugin copy.** Today a solid well is
+  refused across a plugin boundary ("until deep cross-plugin copy
+  exists"); this scenario IS that feature, with the per-tile
+  degrade-to-link rule riding on top. It lands in this phase, tested
+  against a fake remote that goes dark mid-walk.
+- **Pinning becomes an optimization, not a prerequisite**: a "keep
+  offline" prefetch guarantees a FULL copy is possible; without it the
+  clone still succeeds, with links marking what wasn't there.
+
 ---
 
 ## Phase 2 — the Flutter node (every device is a node)
