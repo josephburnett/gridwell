@@ -5,10 +5,13 @@
 // driven through the same window.gridwell bridge contract Electron
 // implements (declared caps: liveUrl only; shells stay frozen).
 //
-// No sidecar here: the app connects to a server you run elsewhere
-// (typically over a tailnet). First launch asks for the server URL; the
-// server's own login page handles the password, and the webview's cookie
-// store keeps it.
+// The PHONE IS A NODE (offline-plan phase 2): boot first asks the
+// embedded Go node (lib/node.dart → mobile/mobile.go via the platform
+// shim) for its loopback origin — the phone's own durable localdb, no
+// network involved. On builds where the shim isn't wired yet, the
+// remote-server flow below is the unchanged fallback: first launch asks
+// for the server URL; the server's own login page handles the password,
+// and the webview's cookie store keeps it.
 
 import 'dart:collection';
 import 'dart:convert';
@@ -18,6 +21,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'bridge.dart';
+import 'node.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,16 +51,24 @@ class _Root extends StatefulWidget {
 
 class _RootState extends State<_Root> {
   String? _serverUrl;
+  String? _localOrigin;
   bool _loaded = false;
 
   @override
   void initState() {
     super.initState();
-    SharedPreferences.getInstance().then((p) {
-      setState(() {
-        _serverUrl = p.getString('server_url');
-        _loaded = true;
-      });
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    // The embedded node first (null when this build has no shim), then
+    // the stored remote server — decideBoot owns the order.
+    final local = await GwNode.start();
+    final p = await SharedPreferences.getInstance();
+    setState(() {
+      _localOrigin = local;
+      _serverUrl = p.getString('server_url');
+      _loaded = true;
     });
   }
 
@@ -75,9 +87,14 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return const Scaffold(body: SizedBox.shrink());
-    final url = _serverUrl;
-    if (url == null) return ServerForm(onSubmit: _setServer);
-    return GridwellScreen(origin: url, onLeaveServer: _clearServer);
+    final target = decideBoot(_localOrigin, _serverUrl);
+    if (target.origin == null) return ServerForm(onSubmit: _setServer);
+    // On the local node there is no server to leave — the phone IS the
+    // node; other machines are mounts from inside.
+    return GridwellScreen(
+      origin: target.origin!,
+      onLeaveServer: target.local ? null : _clearServer,
+    );
   }
 }
 
@@ -156,7 +173,10 @@ String? normalizeServerUrl(String input) {
 /// live url views stacked over it at their pane bounds.
 class GridwellScreen extends StatefulWidget {
   final String origin;
-  final Future<void> Function() onLeaveServer;
+  /// onLeaveServer clears the stored remote server (the "change server"
+  /// affordance). Null on the embedded LOCAL node: the phone is the node,
+  /// there is no server to leave.
+  final Future<void> Function()? onLeaveServer;
   const GridwellScreen({super.key, required this.origin, required this.onLeaveServer});
 
   @override
@@ -290,9 +310,14 @@ class _GridwellScreenState extends State<GridwellScreen> implements ViewHost {
 
   void _showServerError(String description) {
     if (!mounted) return;
+    final leave = widget.onLeaveServer;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('server unreachable: $description'),
-      action: SnackBarAction(label: 'change server', onPressed: () => widget.onLeaveServer()),
+      // The local node has no server to change; a load failure there is
+      // its own bug and the message stands alone.
+      action: leave == null
+          ? null
+          : SnackBarAction(label: 'change server', onPressed: () => leave()),
       duration: const Duration(seconds: 10),
     ));
   }
