@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/pending"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -88,14 +89,22 @@ func (a *App) reactToErr(label string, gid string, err error) bool {
 	return err == nil
 }
 
-// reactOptimistic applies the optimistic-writer policy
+// reactFraming applies the optimistic-writer policy
 // (clientsync.ReactOptimistic) for a caller that patched the cache BEFORE
-// the RPC: a server verdict rolls the cache back to truth (refetch —
-// issue #156); a transport failure KEEPS the patch (it is the user's
-// value, and a refetch against a flapping link could succeed and silently
-// revert it) and surfaces the failure.
-func (a *App) reactOptimistic(label, gid string, err error) {
-	r := clientsync.ReactOptimistic(clientsync.Of(err))
+// the RPC, and keeps the pending ledger honest: EVERY completed attempt
+// (success or server verdict) acks the key, a transport failure parks the
+// retry. A verdict rolls the cache back to truth (refetch — issue #156);
+// transport KEEPS the patch (it is the user's value, and a refetch
+// against a flapping link could succeed and silently revert it), parks
+// the write for the retry kick, and surfaces the failure.
+func (a *App) reactFraming(label, gid string, k pending.Key, retry func(), err error) {
+	o := clientsync.Of(err)
+	if o == clientsync.OutcomeTransport {
+		a.pend.Put(k, retry)
+	} else {
+		a.pend.Ack(k)
+	}
+	r := clientsync.ReactOptimistic(o)
 	if r.Refetch {
 		a.refetchGridOnConflict(gid, label)
 	}
@@ -127,27 +136,16 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, cal
 	}()
 }
 
-// postOptimisticPersist is postPersist for a caller that ALREADY patched the
-// cache before the RPC (e.g. persistWellView's framing patch). The reaction
-// table differs: a server VERDICT refetches, because a rejected optimistic
-// patch left the cache ahead of server truth (issue #156); a transport
-// failure keeps the patch and surfaces (clientsync.ReactOptimistic).
-func (a *App) postOptimisticPersist(label string, gid string, call tileCall) {
-	a.persistPosts[label]++
-	go func() {
-		_, err := call(context.Background())
-		a.reactOptimistic(label, gid, err)
-	}()
-}
-
 // postFramingPersist dispatches a versioned FRAMING write with the freeze
 // path's one-retry rule (framing-audit decision 2026-08-13, "less cases,
 // less code"): on a version conflict, re-claim ONCE via GetTile and retry
 // — a racing version-bumping writer (a rename, a resize, a title capture)
 // must not silently cost the user's settled viewport. The caller already
-// patched the cache, so any REMAINING failure follows ReactOptimistic:
-// a verdict refetches (rolls the patch back to server truth), a transport
-// failure keeps the patch; either surfaces.
+// patched the cache, so any REMAINING failure follows reactFraming: a
+// verdict refetches (rolls the patch back to server truth); a transport
+// failure keeps the patch and PARKS the write in the pending ledger — the
+// retry kick re-enters here, where the conflict re-claim absorbs any
+// version the world moved while the link was down.
 func (a *App) postFramingPersist(label, gid, tileID string, version int64, call func(ctx context.Context, version int64) (*rpc.Tile, error)) {
 	a.persistPosts[label]++
 	go func() {
@@ -157,7 +155,8 @@ func (a *App) postFramingPersist(label, gid, tileID string, version int64, call 
 				_, err = call(context.Background(), fresh.Version)
 			}
 		}
-		a.reactOptimistic(label, gid, err)
+		a.reactFraming(label, gid, pending.Key{Op: label, ID: tileID},
+			func() { a.postFramingPersist(label, gid, tileID, version, call) }, err)
 	}()
 }
 
@@ -176,6 +175,20 @@ func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, fa
 			err = write(fresh.Version)
 		}
 	}
+	k := pending.Key{Op: label, ID: tileID}
+	if clientsync.Of(err) == clientsync.OutcomeTransport {
+		// Park the freeze: the write closure holds the captured payload
+		// (jpeg frame, url, title, history) — the ONLY copy once the live
+		// surface is gone. Abandoning it here was audit bug #2 (2026-08-14):
+		// one blip at ascent cost the tile its page, its trail, and its
+		// frozen face until the next live visit.
+		a.pend.Put(k, func() {
+			go a.doFreezeWrite(label, gid, tileID, version, source, failText, write)
+		})
+		a.reportErr(errsurface.Info, source, failText+": server unreachable — will retry")
+		return
+	}
+	a.pend.Ack(k)
 	if err != nil {
 		a.reportErr(errsurface.Error, source, failText+": "+rpcErrText(err))
 		a.reactToErr(label, gid, err)
@@ -183,10 +196,19 @@ func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, fa
 }
 
 // postVoidPersist is postPersist for RPCs that return no tile — used by
-// SetRootView, the plugin-root framing writeback of a + menu portal ascent.
+// SetRootView, the plugin-root framing writeback of a + menu portal
+// ascent. Framing-class, so it rides the pending ledger like every other
+// framing write: transport parks a retry, any completion acks.
 func (a *App) postVoidPersist(label string, gid string, call voidCall) {
 	go func() {
-		a.reactToErr(label, gid, call(context.Background()))
+		err := call(context.Background())
+		k := pending.Key{Op: label, ID: gid}
+		if clientsync.Of(err) == clientsync.OutcomeTransport {
+			a.pend.Put(k, func() { a.postVoidPersist(label, gid, call) })
+		} else {
+			a.pend.Ack(k)
+		}
+		a.reactToErr(label, gid, err)
 	}()
 }
 

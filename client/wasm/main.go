@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
+	"github.com/josephburnett/gridwell/client/pending"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/touchgest"
@@ -310,6 +311,13 @@ type App struct {
 	// rejected-writeback spec) could not say WHICH stage went quiet.
 	persistPosts   map[string]int
 	framingFlushes int
+
+	// pend is the ONE owner of durable writes the server has not
+	// acknowledged (client/pending, 2026-08-14): a framing/freeze write
+	// that fails on TRANSPORT parks its retry here instead of being
+	// abandoned; the retry kick drains it when the link returns. Content
+	// bytes are not here — the cache's dirty entries are their ledger.
+	pend *pending.Ledger
 
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
@@ -682,6 +690,7 @@ func main() {
 		paneLayouts:       map[string]*paneLayoutEntry{},
 		renderedPrev:      map[string]*renderedPreview{},
 		persistPosts:      map[string]int{},
+		pend:              pending.New(),
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")

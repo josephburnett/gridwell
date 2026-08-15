@@ -6,7 +6,6 @@ import (
 	"context"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -141,17 +140,19 @@ func (a *App) applyContentZoom(p *pane.Pane, t *rpc.Tile, z float64) {
 	}
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode
 	a.draw()
+	// Through the framing dispatcher like every other framing write (this
+	// call site used to fire-and-forget: no conflict re-claim, no verdict
+	// reconcile, and a transport failure silently left the zoom
+	// client-only until the next descent snapped it back — audit #7,
+	// 2026-08-14). The cache patch above is the optimistic write the
+	// dispatcher's policy expects.
 	tileID, version := t.ID, t.Version
-	go func() {
-		_, err := a.cl.SetContentZoom(context.Background(), &rpc.SetContentZoomRequest{
-			TileID: tileID, Version: version, ContentZoom: z,
+	a.postFramingPersist("SetContentZoom", nt.GridID, tileID, version,
+		func(ctx context.Context, version int64) (*rpc.Tile, error) {
+			return a.cl.SetContentZoom(ctx, &rpc.SetContentZoomRequest{
+				TileID: tileID, Version: version, ContentZoom: z,
+			})
 		})
-		if err != nil {
-			// The zoom the user sees is not persisted — the next descent
-			// would silently snap back (charter §6).
-			a.reportErr(errsurface.Error, "zoom", "content zoom save failed: "+rpcErrText(err))
-		}
-	}()
 }
 
 // applyShellZooms sets the live terminal's font for the pane; the per-draw

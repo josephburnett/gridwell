@@ -24,8 +24,10 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/pending"
 	"github.com/josephburnett/gridwell/client/workspace"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
@@ -621,10 +623,25 @@ func (a *App) postPaneLayout(tileID string, version int64, data []byte) {
 			tile, err = a.cl.WriteContent(context.Background(), tileID, fresh.Version, data)
 		}
 	}
+	k := pending.Key{Op: "PaneLayout", ID: tileID}
 	if err != nil {
+		if clientsync.Of(err) == clientsync.OutcomeTransport {
+			// Park the encoded layout. Inside the workspace the debounce
+			// diff retries naturally, but the ASCENT-BOUNDARY flush fires
+			// once and then pops the frame — by the time this error lands
+			// the inner tree is gone and `data` is the only copy of the
+			// arrangement (audit #3, 2026-08-14). The retry kick re-posts
+			// it; a newer successful save acks it away (LWW).
+			a.pend.Put(k, func() { go a.postPaneLayout(tileID, version, data) })
+			a.reportErr(errsurface.Info, "layout:"+tileID,
+				"workspace layout unsaved — server unreachable, will retry")
+			return
+		}
+		a.pend.Ack(k)
 		a.surfaceRPCError("WriteContent", err)
 		return
 	}
+	a.pend.Ack(k)
 	if top := a.ws.Top(); top != nil && top.TileID == tileID {
 		workspace.MarkSaved(top, data)
 		top.TileVersion = tile.Version
