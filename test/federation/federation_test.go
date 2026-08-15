@@ -55,6 +55,14 @@ func repoRoot(t *testing.T) string {
 // startServe launches the real `gridwell serve` for a home and returns its
 // origin once the banner announces the bound address.
 func startServe(t *testing.T, bin, home, bind string) string {
+	origin, _ := startServeProc(t, bin, home, bind)
+	return origin
+}
+
+// startServeProc is startServe returning a stop() as well, for tests that
+// PARTITION a node mid-session (kill it hard) and bring it back on the
+// same address. stop is idempotent with the registered cleanup.
+func startServeProc(t *testing.T, bin, home, bind string) (string, func()) {
 	t.Helper()
 	cmd := exec.Command(bin, "serve", "--bind", bind, "--static", "")
 	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+home, "GRIDWELL_PLUGIN_DIR="+filepath.Dir(bin))
@@ -70,10 +78,11 @@ func startServe(t *testing.T, bin, home, bind string) string {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start serve: %v", err)
 	}
-	t.Cleanup(func() {
+	stop := func() {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
-	})
+	}
+	t.Cleanup(stop)
 
 	// The "serving on <addr>" banner is the readiness contract (the desktop
 	// sidecar parses this exact line).
@@ -95,10 +104,13 @@ func startServe(t *testing.T, bin, home, bind string) string {
 			if i := strings.Index(line, "serving on "); i >= 0 {
 				addr := strings.Fields(line[i+len("serving on "):])[0]
 				go func() { // keep draining so the child never blocks on stderr
-					for range lines {
+					for l := range lines {
+						if os.Getenv("GW_FED_DEBUG") != "" {
+							fmt.Fprintln(os.Stderr, "[serve]", l)
+						}
 					}
 				}()
-				return "http://" + addr
+				return "http://" + addr, stop
 			}
 		case <-deadline:
 			t.Fatalf("serve for %s never announced", home)

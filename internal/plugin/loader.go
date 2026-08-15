@@ -7,13 +7,17 @@ package plugin
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"os"
+	"path/filepath"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
 )
 
 // LoadAll constructs a Registry from the server config. Each PluginConfig
@@ -32,6 +36,28 @@ func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Reg
 		if err != nil {
 			reg.Close()
 			return nil, fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, err)
+		}
+		// A MOUNT gets the read-through cache in front of it (mountcache,
+		// offline-plan phase 1): the remote going dark degrades to
+		// stale-but-readable instead of blank. A cache that cannot open
+		// degrades to the uncached client — loudly, never fatally: the
+		// cache is an availability layer, and refusing to serve because
+		// the OPTIMIZATION broke would invert its purpose.
+		if TransitKind(pc.Kind) && cfg.CacheDir != "" {
+			if mkErr := os.MkdirAll(cfg.CacheDir, 0o700); mkErr != nil {
+				log.Printf("gridwell: mount cache dir %s: %v (mount %q runs uncached)", cfg.CacheDir, mkErr, pc.Name)
+			} else if cached, cacheClose, cErr := mountcache.Open(client, filepath.Join(cfg.CacheDir, pc.ID+".db")); cErr != nil {
+				log.Printf("gridwell: mount cache for %q: %v (mount runs uncached)", pc.Name, cErr)
+			} else {
+				client = cached
+				inner := closer
+				closer = func() {
+					cacheClose()
+					if inner != nil {
+						inner()
+					}
+				}
+			}
 		}
 		reg.Register(pc.ID, pc.Kind, client, closer)
 		reg.SetLabel(pc.ID, pc.Name)

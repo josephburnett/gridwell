@@ -31,7 +31,12 @@ type ServerConfig struct {
 	// address in server.yaml" from "Bind holds the built-in default", which is
 	// what lets `serve --bind-default` (the desktop sidecar's ephemeral
 	// loopback port) fill in only when the config is silent.
-	BindSet   bool   `yaml:"-"`
+	BindSet bool `yaml:"-"`
+	// CacheDir is derived by serve (never stored): <home>/cache, where the
+	// loader keeps each MOUNT's read-through cache DB (mountcache — the
+	// offline-plan phase-1 layer). Empty disables caching (tests, headless
+	// probes). Cache files are disposable and excluded from backup.
+	CacheDir  string `yaml:"-"`
 	StaticDir string `yaml:"static,omitempty"` // "" → the embedded web client; a path → dev override from disk
 	// Password, when non-empty, gates the browser-served web UI: every HTTP
 	// request must carry the auth cookie (obtained by entering this password

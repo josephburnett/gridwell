@@ -155,6 +155,9 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	if len(cfg.Plugins) == 0 {
 		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind localdb --name <name>`", cfgPath)
 	}
+	// The mount cache lives beside (never inside) the plugin DBs:
+	// disposable, excluded from backup, per-mount files under one dir.
+	cfg.CacheDir = filepath.Join(home, "cache")
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Config == nil {
