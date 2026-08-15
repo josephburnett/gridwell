@@ -192,9 +192,15 @@ reads whichever the node serves. No new client state, no second writer.
 
 ### Open decisions (small)
 
-- Cache-everything-touched vs. also prefetching a mount's grids on
-  connect (warmth vs. bandwidth). Start with touched-only.
-- Byte caps and LRU defaults.
+- Cache-everything-touched vs. prefetching the whole mount on connect.
+  The data here is SMALL — text, previews, metadata, megabytes not
+  gigabytes (noted 2026-08-14) — so whole-mount prefetch is realistic
+  and makes "everything is readable offline" literally true rather than
+  everything-touched. Leaning prefetch; decide at build time.
+- Byte caps: generous, with eviction as an emergency valve only — LRU
+  sophistication is not worth building at these sizes. The one genuinely
+  large class is fs-served content (photos through the /content/ door),
+  which stays bounded per entry.
 
 ### The supported offline-edit scenario (owner decision, 2026-08-14)
 

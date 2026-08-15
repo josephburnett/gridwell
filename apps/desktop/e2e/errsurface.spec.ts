@@ -176,18 +176,16 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
   expect(notice.message).toContain('127.0.0.1:9');
 });
 
-test('a rejected framing writeback rolls the optimistic patch back (issue #156)', async ({
-  gw,
-  window,
-}) => {
-  // persistWellView patches the cache BEFORE posting SetWellView (so the
-  // parent preview updates instantly). If the server rejects the write for a
-  // NON-conflict reason, the patch must roll back — otherwise a sibling
-  // pane's well preview shows framing the server refused, silently snapping
-  // back on the next reload (charter §7). The observable seam is the
-  // MID-DESCENT settle persist: the ascent path refetches the parent anyway,
-  // but the 600ms settle persister patches and posts while you stay
-  // descended — so the sibling preview is where the rejected patch lives.
+// setupWellReframe is the shared body of the two framing-writeback failure
+// specs (#156 + the 2026-08-14 transport split): create a well, descend,
+// note the parent's cached signature, install `route` over SetTile, then
+// reframe so the settle persister posts into it. Returns what the
+// assertions need.
+async function setupWellReframe(
+  gw: any,
+  window: any,
+  route: (r: any) => void,
+): Promise<{ parentGrid: string; wellID: string; sig0: Record<string, string> }> {
   await gw.enterPlugin('localdb');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
@@ -207,8 +205,8 @@ test('a rejected framing writeback rolls the optimistic patch back (issue #156)'
   const wellID = Object.keys(sig0)[0];
   expect(wellID, 'the parent grid holds the well').toBeTruthy();
 
-  // Every framing writeback now fails (non-conflict).
-  await window.route('**/gridwell.v1.Gridwell/SetTile', (r: any) => r.abort());
+  // Every framing writeback now fails, in the shape `route` decides.
+  await window.route('**/gridwell.v1.Gridwell/SetTile', route);
 
   // Reframe inside the well — with a delivery ack: a synthetic wheel under
   // xvfb can be dropped, and a lost gesture leaves the settle persister
@@ -248,6 +246,29 @@ test('a rejected framing writeback rolls the optimistic patch back (issue #156)'
     }, { timeout: 10_000 })
     .toBe(true);
 
+  return { parentGrid, wellID, sig0 };
+}
+
+test('a framing writeback REJECTED by the server rolls the optimistic patch back (issue #156)', async ({
+  gw,
+  window,
+}) => {
+  // persistWellView patches the cache BEFORE posting SetWellView (so the
+  // parent preview updates instantly). If the SERVER REJECTS the write for
+  // a non-conflict reason — it spoke, and said no — the patch must roll
+  // back: otherwise a sibling pane's well preview shows framing the server
+  // refused, silently snapping back on the next reload (charter §7). The
+  // rejection is a real Connect error body (the wire shape the client
+  // classifies as OutcomeRejected); a network ABORT is the OTHER contract,
+  // pinned by the transport spec below.
+  const { parentGrid, wellID, sig0 } = await setupWellReframe(gw, window, (r: any) =>
+    r.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'invalid_argument', message: 'e2e: framing write refused' }),
+    }),
+  );
+
   // The rejected patch must not stick: the parent cache reconciles back to
   // server truth (the original view_*). Pre-fix this never reconciles — the
   // patched framing sits in the cache until an unrelated gesture refetches.
@@ -263,5 +284,31 @@ test('a rejected framing writeback rolls the optimistic patch back (issue #156)'
       { timeout: 10_000 },
     )
     .toBe(true);
+  await window.unroute('**/gridwell.v1.Gridwell/SetTile');
+});
+
+test('a framing writeback lost to TRANSPORT keeps the patch (2026-08-14)', async ({
+  gw,
+  window,
+}) => {
+  // The other half of the contract: an ABORTED request means the server
+  // NEVER SPOKE — the patched framing is the user's settled viewport and
+  // the only copy of it, so rolling it back would lose the value (the old
+  // behavior: any failure refetched, and against a flapping link the
+  // refetch could succeed and silently revert the wheel). The patch stays
+  // on screen and the write parks in the pending ledger; the reborn-server
+  // drain is proven end-to-end by web-outage.spec.ts.
+  const { parentGrid, wellID, sig0 } = await setupWellReframe(gw, window, (r: any) => r.abort());
+
+  // The patch STAYS: the parent's cached signature keeps the reframed
+  // view_* (checked steadily, not just once — a late rollback is the bug).
+  for (let i = 0; i < 5; i++) {
+    const sigs = await window.evaluate(
+      (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
+      parentGrid,
+    );
+    expect(sigs[wellID], 'the transport-failed patch must stay').not.toBe(sig0[wellID]);
+    await window.waitForTimeout(300);
+  }
   await window.unroute('**/gridwell.v1.Gridwell/SetTile');
 });

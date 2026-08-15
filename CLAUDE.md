@@ -212,6 +212,11 @@ Before you commit, every one of these is true:
 - [ ] `make check` is green. If I touched the native/live layer, the
       electron/e2e gates are green and a spec covers the behavior.
 - [ ] No error is swallowed to the console; failures surface and reconcile.
+- [ ] For every RPC call site I touched: what happens to local state on a
+      TRANSPORT failure (`clientsync.OutcomeTransport` — the server never
+      spoke)? Nothing user-made may be dropped without a server verdict;
+      unacknowledged writes park (`client/pending` / the dirty content
+      ledger) and the retry kick lands them.
 - [ ] Nothing the user can change lives only on the client.
 - [ ] I committed this logical change on its own and fixed any stale
       comment in the files I touched.
