@@ -4,8 +4,26 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
+
+// sourceUnreachable reports a TRANSPORT-shaped failure from the source
+// plugin: the mount is dark (tunnel down, box asleep) — the source never
+// spoke. The offline degrade (below) keys on exactly this and nothing
+// else: NotFound, a tombstoned namespace, InvalidArgument are all answers,
+// and an answer must never turn into a link (gone is not "elsewhere").
+// Same taxonomy as the client's clientsync.Of, in this hop's dialect
+// (plugin hops are gRPC).
+func sourceUnreachable(err error) bool {
+	switch status.Code(err) {
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return true
+	}
+	return false
+}
 
 // Cross-plugin DEEP COPY of a solid well (issue #200) — the standing punt
 // from the 2026-07-19 link/clone decision, unblocked by the content streams.
@@ -39,8 +57,17 @@ import (
 
 // deepCopyWell copies the qualified source well st (whose plugin-local row
 // is srcLocalTile) into destination grid dstGrid (dest-local id) at (x, y).
-// Returns the created well (dest-local response).
+// Returns the created well (dest-local response). The source child grid is
+// read BEFORE anything is created: an unreachable room must degrade to a
+// LINK (the caller's decision, keyed on sourceUnreachable of the nil-out
+// error), not to an empty solid well pretending to be a copy.
 func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst pb.GridwellClient, dstGrid string, x, y int64) (*pb.TileResponse, error) {
+	srcChild := srcLocalTile.ChildGridId
+	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
+	if err != nil {
+		return nil, fmt.Errorf("read source grid %s: %w", srcChild, err)
+	}
+
 	created, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
 		GridId: dstGrid,
 		Tile: &pb.Tile{Kind: "well", X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
@@ -61,12 +88,7 @@ func (h *connectHandler) deepCopyWell(ctx context.Context, src pb.GridwellClient
 	}
 	created = framed
 
-	srcChild := srcLocalTile.ChildGridId
 	dstChild := created.GetTile().GetChildGridId()
-	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
-	if err != nil {
-		return created, fmt.Errorf("read source grid %s: %w", srcChild, err)
-	}
 	for _, child := range g.Tiles {
 		if err := h.deepCopyTile(ctx, src, srcTransit, srcUUID, child, dst, dstChild); err != nil {
 			return created, fmt.Errorf("copy tile %s: %w", child.Id, err)
@@ -96,6 +118,21 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		return err
 	case q.Kind == "well":
 		_, err := h.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, t.X, t.Y)
+		if sourceUnreachable(err) {
+			// The room is DARK, not gone (offline-plan owner decision
+			// 2026-08-14): degrade to a LINK to the original — the dashed
+			// border says "lives elsewhere" in the vocabulary that already
+			// means it, instead of failing the whole walk or leaving an
+			// empty solid well that lies about being a copy. Back online,
+			// the link resolves and a right-drag completes the copy.
+			_, lerr := dst.CreateTile(ctx, &pb.CreateTileRequest{
+				GridId: dstGrid,
+				Tile: &pb.Tile{Kind: "well", X: t.X, Y: t.Y, W: t.W, H: t.H,
+					AltText: t.AltText, ObjectId: t.ObjectId, ChildGridId: q.ChildGridId,
+					ViewX: t.ViewX, ViewY: t.ViewY, ViewZoom: t.ViewZoom},
+			})
+			return lerr
+		}
 		return err
 	case q.LinkTargetId != "":
 		_, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
@@ -104,6 +141,26 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 				AltText: t.AltText, ObjectId: t.ObjectId, LinkTargetId: q.LinkTargetId},
 		})
 		return err
+	}
+
+	// Leaf bytes are read BEFORE the copy row is created, so an unreachable
+	// source degrades to a link instead of leaving an empty copy that looks
+	// whole (the silent-incompleteness class the offline decision forbids).
+	var body []byte
+	if (t.Kind == "text" || t.Kind == "pane") && t.BlobId != 0 {
+		var err error
+		body, err = readAllContent(ctx, src, t.Id)
+		if sourceUnreachable(err) {
+			_, lerr := dst.CreateTile(ctx, &pb.CreateTileRequest{
+				GridId: dstGrid,
+				Tile: &pb.Tile{Kind: t.Kind, X: t.X, Y: t.Y, W: t.W, H: t.H,
+					AltText: t.AltText, ObjectId: t.ObjectId, LinkTargetId: q.Id},
+			})
+			return lerr
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	created, err := dst.CreateTile(ctx, &pb.CreateTileRequest{
@@ -119,13 +176,6 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 
 	switch t.Kind {
 	case "text", "pane":
-		if t.BlobId == 0 {
-			return nil
-		}
-		body, err := readAllContent(ctx, src, t.Id)
-		if err != nil {
-			return err
-		}
 		if len(body) == 0 {
 			return nil
 		}
@@ -135,11 +185,17 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		// The frozen face travels with the copy: preview jpeg (+ url
 		// history) through the kind's own freeze writeback. An absent
 		// preview skips — the writeback's empty-fields rule would treat a
-		// zero-byte jpeg as "skip" anyway.
+		// zero-byte jpeg as "skip" anyway. An UNREACHABLE preview also
+		// skips: the copy's fact (the address / the label) is present, the
+		// face is derived and re-freezes on the next live visit — a link
+		// here would deny the copy of content the walk actually has.
 		if t.PreviewBlobId == 0 {
 			return nil
 		}
 		pv, err := src.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: t.Id})
+		if sourceUnreachable(err) {
+			return nil
+		}
 		if err != nil || len(pv.GetJpeg()) == 0 {
 			return err
 		}

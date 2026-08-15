@@ -395,8 +395,10 @@ file. What remains:
   `Subscribe` event → `cache.Apply` → redraw. Across a plugin boundary
   there is no move: a left-drag creates a LINK in the destination (exit
   well or `link_target_id`), a right-drag CLONES (leaves copy bytes; a
-  solid well is refused until deep cross-plugin copy exists). Relocation is
-  the explicit two-step: clone, then delete.
+  solid well deep-copies its subtree — `internal/server/deepcopy.go`,
+  issue #200 — degrading any unreachable piece to a LINK to the original,
+  never a silent hole; a source that answers "gone" still aborts).
+  Relocation is the explicit two-step: clone, then delete.
 - **Open a live URL tile.** The canvas places a rect; IPC asks the native
   layer for a `WebContentsView` on the shared partition; `syncURLViews`
   tracks its bounds every frame and parks it during overlays.

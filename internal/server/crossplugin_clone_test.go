@@ -20,9 +20,9 @@ import (
 // Cross-plugin gesture semantics (owner decision 2026-07-19): LEFT-drag
 // across a plugin boundary creates a LINK (one copy of the content — an exit
 // well for a grid, a leaf link via link_target_id for text/url/shell/pane),
-// and RIGHT-drag creates a CLONE (a real copy: leaves copy bytes; a well's
-// deep copy is not yet implemented and must refuse loudly rather than
-// silently substituting a link). The left-drag arrives at the server as a
+// and RIGHT-drag creates a CLONE (a real copy: leaves copy bytes; a solid
+// well deep-copies — deepcopy.go, with the offline degrade-to-links rule
+// pinned in deepcopy_dark_test.go). The left-drag arrives at the server as a
 // plain CreateTile carrying a qualified reference — the same request shape a
 // + menu plugin-swatch drop uses — so these tests drive both faces through
 // the real router seam. Provenance (object_id, globally unique) rides every

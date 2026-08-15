@@ -364,10 +364,11 @@ func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb
 // a DIFFERENT plugin — applies the cross-plugin clone contract (owner decision
 // 2026-07-19: right-drag = COPY everywhere, left-drag across a boundary =
 // LINK): a leaf copies its bytes into the destination plugin (provenance
-// object_id carried); a well's deep cross-plugin copy is not yet implemented
-// and is refused loudly (the LINK gesture is the left-drag, which arrives
+// object_id carried); a solid well deep-copies (deepcopy.go, issue #200),
+// degrading to a LINK when the source is unreachable (the offline-plan
+// decision, 2026-08-14). The LINK gesture is the left-drag, which arrives
 // here as a plain CreateTile carrying a qualified child_grid_id or
-// link_target_id — never as a clone). The source plugin is never asked to
+// link_target_id — never as a clone. The source plugin is never asked to
 // write into a grid it doesn't own.
 func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
 	m := req.Msg
@@ -453,6 +454,17 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 				return nil, connect.NewError(connect.CodeAborted,
 					fmt.Errorf("deep copy incomplete (the partial copy remains, delete it if unwanted): %w", err))
 			}
+			if sourceUnreachable(err) {
+				// The whole room is dark: degrade the TOP-LEVEL well to a
+				// link (offline-plan decision 2026-08-14) — st.ChildGridId
+				// is already the qualified target, so this is exactly the
+				// exit well a left-drag would have made, framing included.
+				create.Tile.ChildGridId = st.ChildGridId
+				create.Tile.ViewX = st.ViewX
+				create.Tile.ViewY = st.ViewY
+				create.Tile.ViewZoom = st.ViewZoom
+				break
+			}
 			return nil, asConnectError(err)
 		}
 		return h.tileResp(dstUUID, out, nil)
@@ -462,8 +474,15 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		create.Tile.LinkTargetId = st.LinkTargetId
 	case st.Kind == "text":
 		// The body bytes follow the create as a WriteContent (below) — one
-		// way to write bytes, even inside the router.
+		// way to write bytes, even inside the router. An UNREACHABLE source
+		// degrades the copy to a link to the original (offline-plan
+		// decision, 2026-08-14) — same rule as inside a deep walk.
 		if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
+			if sourceUnreachable(err) {
+				create.Tile.LinkTargetId = st.Id
+				copyBody = nil
+				break
+			}
 			return nil, asConnectError(err)
 		}
 	case st.Kind == "url":
@@ -480,6 +499,12 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// never-arranged pane tile (no blob) copies with no body.
 		if st.BlobId != 0 {
 			if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
+				if sourceUnreachable(err) {
+					// Degrade to a link, like text above.
+					create.Tile.LinkTargetId = st.Id
+					copyBody = nil
+					break
+				}
 				return nil, asConnectError(err)
 			}
 		}
