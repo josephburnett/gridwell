@@ -40,6 +40,20 @@ type urlView struct {
 	// freeze writeback — the owning plugin (fs) derives its frozen face
 	// from the content itself (GetTilePreview) and stores nothing.
 	page bool
+	// durable mirrors placeURLView's freeze eligibility: false for a page
+	// view or an ephemeral visit. The unload beacon reads it — an
+	// ephemeral tile's state must never be persisted by a tab close.
+	durable bool
+	// navDirty marks that the live page navigated since place — the tile
+	// row's url on the server is stale. Read by the unload beacon
+	// (SetURLStateBeacon): navigation state used to persist exactly once,
+	// at a teardown whose IPC reply never arrives during unload (audit
+	// #2, 2026-08-14), so closing the tab lost the trail every time.
+	navDirty bool
+	// lastTitle is the most recent page title from the nav events, for
+	// the unload beacon (the freeze path gets its title from the bridge
+	// reply, which the unload path cannot wait for).
+	lastTitle string
 }
 
 // urlLog writes a tagged debug message to the browser console.
@@ -194,6 +208,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	if tile, ok := a.descendedTile(p); ok && a.isEphemeralTile(p, &tile) {
 		durable = false
 	}
+	a.local(p.ID).urlView.durable = durable
 	addr := a.webAddress(&t)
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, addr)
 	bridgePlace(p.ID, t.ID, t.ObjectID, addr, b, contentZoomOf(&t), t.URLHistory, durable)

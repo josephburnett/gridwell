@@ -293,8 +293,18 @@ func (a *App) installWebviewListeners() {
 		ev := p[0]
 		tileID := jsString(ev.Get("tileId"))
 		url := jsString(ev.Get("url"))
+		title := jsString(ev.Get("title"))
 		if url != "" {
 			a.updateCachedTileURL(tileID, url)
+			// Mark the live view nav-dirty so the unload beacon knows the
+			// server row is behind, and remember the title (the unload path
+			// cannot wait for the bridge's freeze reply).
+			for _, pl := range a.locals {
+				if pl.urlView != nil && pl.urlView.tileID == tileID {
+					pl.urlView.navDirty = true
+					pl.urlView.lastTitle = title
+				}
+			}
 			a.draw()
 		}
 		return nil

@@ -227,22 +227,61 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+// Quit is TWO-PHASE (audit #2c, 2026-08-14). The old handler tore the
+// native views down (removeAll — discarding every FreezeResult) and
+// SIGTERMed the sidecar synchronously, all BEFORE any renderer's
+// beforeunload ran — so the renderer's unload flush found no live views
+// and no server, and quitting the app while a url tile was live lost
+// that tile's page, trail, and unsaved text every time. Now the first
+// before-quit closes the windows and waits: each renderer's beforeunload
+// runs its full flush (text + framing + url-state beacons against a
+// still-alive sidecar, bridge IPC against still-alive views); then the
+// views' own teardown flushes DOM storage; only then does the sidecar
+// stop and the quit proceed. A watchdog caps the wait so a wedged
+// renderer can never hold quit hostage.
+let quitFlushed = false;
+app.on('before-quit', (e) => {
   quitting = true;
-  if (pump) {
-    pump.stop();
-    pump = null;
-  }
-  if (shells) {
-    shells.closeAll();
-    shells = null;
-  }
-  if (registry) {
-    void registry.removeAll();
+  if (quitFlushed) return;
+  e.preventDefault();
+  const finish = (): void => {
+    if (quitFlushed) return;
+    quitFlushed = true;
+    if (pump) {
+      pump.stop();
+      pump = null;
+    }
+    if (shells) {
+      shells.closeAll();
+      shells = null;
+    }
+    const reg = registry;
     registry = null;
-  }
-  if (sidecar) {
-    sidecar.stop();
-    sidecar = null;
-  }
+    const done = (): void => {
+      if (sidecar) {
+        sidecar.stop();
+        sidecar = null;
+      }
+      app.quit();
+    };
+    // removeAll still runs for its localStorage flush; its captures are
+    // moot — the renderers already beaconed their state.
+    if (reg) void reg.removeAll().then(done, done);
+    else done();
+  };
+  const watchdog = setTimeout(finish, 2000);
+  const wins = BrowserWindow.getAllWindows();
+  void Promise.all(
+    wins.map(
+      (w) =>
+        new Promise<void>((res) => {
+          if (w.isDestroyed()) return res();
+          w.once('closed', () => res());
+          w.close();
+        }),
+    ),
+  ).then(() => {
+    clearTimeout(watchdog);
+    finish();
+  });
 });

@@ -726,13 +726,13 @@ func main() {
 	// cleanup runs after a small delay and the user's final state
 	// might miss the preview write.
 	app.win.Call("addEventListener", "beforeunload", js.FuncOf(func(this js.Value, args []js.Value) any {
-		// Post any typing still inside the save-debounce window. The enqueue
-		// is async and may not finish before teardown, but firing it here
-		// beats guaranteeing the loss by never firing at all.
-		app.flushDirtyText()
-		// Grid framing still inside its settle window (issue #190) rides
-		// BEACONS so it survives the dying page, and an animating
-		// transition lands on its destination first (unload.go).
+		// Everything durable rides BEACONS (unload.go) so it survives the
+		// dying page: framing in its settle window, dirty text (the
+		// streaming-envelope beacon — audit #8, 2026-08-14: text used to
+		// get an async enqueue that died with the page, losing up to the
+		// whole debounce window on every tab close), a live page's
+		// navigation state (audit #2), and an animating transition lands
+		// on its destination first.
 		app.flushOnUnload()
 		app.closeAllURLStreams()
 		app.closeAllShellStreams()

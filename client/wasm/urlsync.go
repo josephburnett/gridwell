@@ -95,7 +95,7 @@ func (a *App) flushWellWheelSaves() {
 			ViewY:    zoomtrans.ViewOriginFromCenter(st.cy, st.h),
 			ViewZoom: st.ratio,
 		}
-		if a.unloading && a.sendBeacon(rpc.SetWellViewBeacon(req)) {
+		if a.unloading && a.sendBeaconJSON(rpc.SetWellViewBeacon(req)) {
 			continue
 		}
 		a.postFramingPersist("SetWellView", gid, tileID, version,
@@ -180,7 +180,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	patched.TextW, patched.TextH = req.TextW, req.TextH
 	patched.TextMode = p.TextMode
 	a.c.Apply(rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: patched}})
-	if a.unloading && a.sendBeacon(rpc.SetTextViewBeacon(req)) {
+	if a.unloading && a.sendBeaconJSON(rpc.SetTextViewBeacon(req)) {
 		return
 	}
 	a.postFramingPersist("SetTextView", gid, file.ID, file.Version,

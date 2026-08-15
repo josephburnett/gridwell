@@ -8,8 +8,10 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/pending"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -196,14 +198,34 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 // commitRename posts the user-owned name and patches the cache so the pill
 // (and any banner) reflects it immediately; the TileChanged event confirms.
 func (a *App) commitRename(tileID, alt string) {
+	a.commitRenameRetained(tileID, alt, func(t *rpc.Tile) {
+		a.c.UpdateTile(t.GridID, *t)
+	})
+}
+
+// commitRenameRetained is the one rename commit: postRename (versioned,
+// one conflict re-claim), then `apply` on success. The TYPED NAME is
+// retained on a transport failure (audit #10, 2026-08-14): the input
+// element is gone by the time the RPC fails, so the closure parked in
+// the pending ledger is the only copy of what the user typed — it lands
+// on the retry kick. A server verdict surfaces and stands.
+func (a *App) commitRenameRetained(tileID, alt string, apply func(*rpc.Tile)) {
 	go func() {
 		tile, err := a.postRename(tileID, alt)
+		k := pending.Key{Op: "Rename", ID: tileID}
 		if err != nil {
-			a.reportErr(errsurface.Error, "rename", "rename failed: "+rpcErrText(err))
+			if clientsync.Of(err) == clientsync.OutcomeTransport {
+				a.pend.Put(k, func() { a.commitRenameRetained(tileID, alt, apply) })
+				a.reportErr(errsurface.Info, "rename", "rename kept — server unreachable, will retry")
+			} else {
+				a.pend.Ack(k)
+				a.reportErr(errsurface.Error, "rename", "rename failed: "+rpcErrText(err))
+			}
 			return
 		}
+		a.pend.Ack(k)
 		if tile != nil {
-			a.c.UpdateTile(tile.GridID, *tile)
+			apply(tile)
 		}
 		a.draw()
 	}()

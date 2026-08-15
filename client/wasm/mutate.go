@@ -168,7 +168,7 @@ func (a *App) postFramingPersist(label, gid, tileID string, version int64, call 
 // `source`/`failText` AND goes through the conflict-reconcile dispatcher so
 // the cache resyncs instead of drifting (issue #156 — these paths used to
 // bypass reactToErr). Blocking; callers run it from a goroutine.
-func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, failText string, write func(version int64) error) {
+func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, failText string, write func(version int64) error) error {
 	err := write(version)
 	if err != nil && isVersionConflict(err) {
 		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
@@ -186,13 +186,14 @@ func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, fa
 			go a.doFreezeWrite(label, gid, tileID, version, source, failText, write)
 		})
 		a.reportErr(errsurface.Info, source, failText+": server unreachable — will retry")
-		return
+		return err
 	}
 	a.pend.Ack(k)
 	if err != nil {
 		a.reportErr(errsurface.Error, source, failText+": "+rpcErrText(err))
 		a.reactToErr(label, gid, err)
 	}
+	return err
 }
 
 // postVoidPersist is postPersist for RPCs that return no tile — used by

@@ -513,19 +513,16 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 		return
 	}
 	tileID := f.TileID
-	go func() {
-		tile, err := a.postRename(tileID, alt)
-		if err != nil {
-			a.reportErr(errsurface.Error, "rename", "rename failed: "+rpcErrText(err))
-			return
-		}
+	a.commitRenameRetained(tileID, alt, func(tile *rpc.Tile) {
+		// The frame may be gone by the time a parked retry lands (the user
+		// left the workspace) — the rename still landed on the tile row;
+		// only the crumb update is conditional.
 		if fr := a.ws.At(level); fr != nil && fr.TileID == tileID {
 			fr.Name = tile.AltText
 			fr.TileVersion = tile.Version
 		}
 		a.c.UpdateTile(tile.GridID, *tile)
-		a.draw()
-	}()
+	})
 }
 
 // fallbackTreeFor builds the post-reload ascent landing: a fresh single pane

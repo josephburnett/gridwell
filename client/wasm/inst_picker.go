@@ -435,15 +435,12 @@ func (a *App) instanceRenameButton(idx int, e instpick.Entry, refresh func()) js
 			ev.Call("stopPropagation")
 			switch ev.Get("key").String() {
 			case "Enter":
-				val := in.Get("value").String()
-				go func() {
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-					if _, err := a.cl.RenameTile(ctx, e.TileID, e.Version, val); err != nil {
-						a.reportErr(errsurface.Error, "rpc:SetTile", "rename failed: "+rpcErrText(err))
-					}
-					refresh()
-				}()
+				// Through the one retained-rename commit (audit #10): a
+				// transport failure parks the typed name for the retry kick
+				// instead of discarding it with the input; the refresh runs
+				// on success so the list shows the landed name.
+				a.commitRenameRetained(e.TileID, in.Get("value").String(),
+					func(*rpc.Tile) { refresh() })
 			case "Escape":
 				refresh()
 			}

@@ -1174,7 +1174,7 @@ func (a *App) persistRootViewCore(p *pane.Pane, curCx, curCy, curZoom float64, c
 		Cy:         float64(newViewY),
 		Zoom:       newViewZoom,
 	}
-	if a.unloading && a.sendBeacon(rpc.SetRootViewBeacon(req)) {
+	if a.unloading && a.sendBeaconJSON(rpc.SetRootViewBeacon(req)) {
 		return
 	}
 	a.postVoidPersist("SetRootView", p.Anchor, func(ctx context.Context) error {
@@ -2014,7 +2014,7 @@ func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string,
 		TileID: tileID, Version: well.Version,
 		ViewX: newViewX, ViewY: newViewY, ViewZoom: newViewZoom,
 	}
-	if a.unloading && a.sendBeacon(rpc.SetWellViewBeacon(req)) {
+	if a.unloading && a.sendBeaconJSON(rpc.SetWellViewBeacon(req)) {
 		return
 	}
 	a.postFramingPersist("SetWellView", parentGridID, tileID, well.Version,
@@ -2357,10 +2357,25 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	candidates := a.urlSuggestCandidates(uuidOf(gid))
 	a.openURLModal(candidates, func(url string) {
 		go func() {
-			tile, ok := a.postWriteContent(gid, id, version, []byte(url))
-			if !ok {
+			// Through doFreezeWrite, not postWriteContent: the typed url has
+			// no cache entry backing it (the modal is the only holder), so
+			// the save path's dirty-ledger retry can't cover it — the
+			// dispatcher parks the closure itself on a transport failure
+			// (audit #10, 2026-08-14) and the address lands on the retry
+			// kick; only the descend is skipped.
+			var tile rpc.Tile
+			err := a.doFreezeWrite("ConfigureURL", gid, id, version, "url", "url save failed",
+				func(v int64) error {
+					t, werr := a.cl.WriteContent(context.Background(), id, v, []byte(url))
+					if werr == nil {
+						tile = *t
+					}
+					return werr
+				})
+			if err != nil {
 				return
 			}
+			a.c.UpdateTile(tile.GridID, tile)
 			fp := a.tree.FindPane(paneID)
 			if fp == nil || fp.TextFocus != "" {
 				return
