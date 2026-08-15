@@ -322,11 +322,13 @@ Deliberately last; Phases 0–2 make the states *correct*, this makes them
 
 ## Sequencing and gates
 
-| Phase | Depends on | Gates |
-|---|---|---|
-| 0 hardening | — | check + electron + e2e (new outage specs) |
-| 1 mountcache | 0 (taxonomy) | check (unit vs fake remote) + federation (partition spec) |
-| 2 flutter node | spike; 1 for cache value | check + mobile build in CI; real-hardware pass |
-| 3 UX | 0–2 | e2e + web |
+| Phase | Depends on | Gates | Status |
+|---|---|---|---|
+| 0 hardening | — | check + electron + e2e (new outage specs) | **LANDED** 2026-08-15 (`938d4f2..c4213cf`) |
+| 1 mountcache | 0 (taxonomy) | check (unit vs fake remote) + federation (partition spec) | **LANDED** 2026-08-15 (`2d3def3`; deep-copy degrade `98f266a`) |
+| 2 flutter node | spike; 1 for cache value | check + mobile build in CI; real-hardware pass | Go half + Dart half **LANDED** (`9fa9510`, mobile-app boot commit); REMAINING: gomobile packaging (AAR/xcframework), the Kotlin/Swift `gridwell/node` channel shim (contract in `apps/mobile/lib/node.dart`), and the real-hardware pass |
+| 3 UX | 0–2 | e2e + web | largely absorbed: cache-served grids render normally under the existing plugin-health sticky notice; remaining polish (per-tile stale affordances, pin gesture) waits on real usage |
 
-Each phase lands and ships alone. Phase 0 is in progress now.
+Each phase lands and ships alone. Also landed along the way: the
+mid-session partition federation gate (`test/federation/partition_test.go`)
+and the offline deep-copy degrade end to end over real binaries.
