@@ -771,26 +771,43 @@ func main() {
 // plugin's root grid (node grid fallback, rpc.HomeGrid) — so panes anchor
 // there; plugins are reached from the + menu.
 func (a *App) bootstrap() {
-	plugins, err := a.cl.ListPlugins(context.Background())
-	if err == nil {
-		a.plugins = plugins.Plugins
-		// Fold the node's shells_disabled fact into the capability set —
-		// still boot-time (nothing has rendered or accepted input yet),
-		// immutable afterward. caps stays the ONE owner of "what can this
-		// client do"; nothing else reads the handshake flag.
-		a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)
-		// The /content/ door capability rides the same handshake; boot-time,
-		// immutable, read only by webAddress.
-		a.contentToken = plugins.ContentToken
-		// The node grid's own persisted viewport (2026-08-13).
-		a.nodeRootViewCx = plugins.NodeRootViewCx
-		a.nodeRootViewCy = plugins.NodeRootViewCy
-		a.nodeRootViewZoom = plugins.NodeRootViewZoom
-	} else {
-		// The landing page will render empty — say why, or it reads as "all
-		// my plugins vanished" (charter §6).
-		a.reportErr(errsurface.Error, "rpc:ListPlugins", "plugin list failed: "+rpcErrText(err))
+	// The handshake RETRIES until it lands (2026-08-14 audit: it used to
+	// fire exactly once, and one blip at boot left a permanently empty
+	// shell — no plugins, no home, no content token — until a manual
+	// reload). Runs on its own goroutine before anything renders content,
+	// so backing off here blocks nothing but the empty landing page, which
+	// carries the notice explaining itself.
+	backoff := time.Second
+	var plugins rpc.PluginList
+	for {
+		var err error
+		plugins, err = a.cl.ListPlugins(context.Background())
+		if err == nil {
+			a.resolveErr("rpc:ListPlugins")
+			break
+		}
+		// The landing page renders empty meanwhile — say why, or it reads
+		// as "all my plugins vanished" (charter §6).
+		a.reportErr(errsurface.Error, "rpc:ListPlugins", "plugin list failed — retrying: "+rpcErrText(err))
+		a.draw()
+		time.Sleep(backoff)
+		if backoff < 15*time.Second {
+			backoff *= 2
+		}
 	}
+	a.plugins = plugins.Plugins
+	// Fold the node's shells_disabled fact into the capability set —
+	// still boot-time (nothing has rendered or accepted input yet),
+	// immutable afterward. caps stays the ONE owner of "what can this
+	// client do"; nothing else reads the handshake flag.
+	a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)
+	// The /content/ door capability rides the same handshake; boot-time,
+	// immutable, read only by webAddress.
+	a.contentToken = plugins.ContentToken
+	// The node grid's own persisted viewport (2026-08-13).
+	a.nodeRootViewCx = plugins.NodeRootViewCx
+	a.nodeRootViewCy = plugins.NodeRootViewCy
+	a.nodeRootViewZoom = plugins.NodeRootViewZoom
 	// Node identity rides the SAME handshake (no second ListPlugins — the
 	// old NodeIdentity call re-ran every plugin Info server-side per boot).
 	if plugins.NodeRootGridID != "" {
@@ -836,6 +853,9 @@ func (a *App) afterBootstrap() {
 
 	// Subscribe to SSE.
 	go a.startSSE()
+
+	// The slow retry net behind the reconnect kick.
+	go a.retryBackstop()
 
 	// Apply whatever the URL says (path / viewport / cursor). On a
 	// fresh page load with `/`, this is a no-op aside from fetching
@@ -1104,9 +1124,13 @@ func (a *App) popPaneState(paneID string) *paneState {
 
 // startSSE opens the Connect-streaming Subscribe RPC and applies each
 // inbound event to the local cache. Reconnects after a brief backoff on
-// stream termination so a transient server hiccup doesn't leave the UI
-// stale.
+// stream termination — and a RECONNECT AFTER A GAP fires the retry kick:
+// Subscribe has no cursor, so every event that happened during the gap is
+// gone forever, and before the kick existed the client silently rendered
+// stale state under a freshly-cleared notice (2026-08-14 audit). The kick
+// resyncs the cache and drains everything the gap left pending.
 func (a *App) startSSE() {
+	gap := false
 	for {
 		stream, err := a.cl.Subscribe(context.Background())
 		if err != nil {
@@ -1114,17 +1138,26 @@ func (a *App) startSSE() {
 			// is silently going stale. Coalesces (one source), and resolves
 			// itself on reconnect below.
 			a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
+			gap = true
 			time.Sleep(time.Second)
 			continue
 		}
 		a.resolveErr("events")
+		if gap {
+			gap = false
+			a.retryKick(true)
+		}
 		for {
 			ev, ok, err := stream.Recv()
 			if err != nil {
 				a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
+				gap = true
 				break
 			}
 			if !ok {
+				// Clean EOF is still a gap: events between now and the
+				// reconnect are lost (no cursor to resume from).
+				gap = true
 				break
 			}
 			if a.c.Apply(ev) {
@@ -1155,6 +1188,44 @@ func (a *App) startSSE() {
 		}
 		stream.Close()
 		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// retryKick drains everything a transport gap left behind. Fired on SSE
+// reconnect-after-gap (with resync — the gap's events are unrecoverable,
+// so cached grids must refetch), on a mount's health recovery, and by the
+// slow backstop timer (without resync — nothing says the cache is stale,
+// only that parked writes exist). Order: latches clear and refetches
+// launch first, then parked writes re-post, then dirty text sweeps; the
+// async pieces converge through the cache's one Apply door (a refetch
+// racing a parked write's echo lands whichever finishes last, and the
+// echo of the NEWER write is what the server then holds).
+func (a *App) retryKick(resync bool) {
+	if resync {
+		// Failure latches are gap state: a grid that failed while the link
+		// was down deserves a fresh attempt, and a tile id latched by a
+		// verdict re-verifies once per reconnect (cheap — one GetTile).
+		clear(a.tileLoadFailed)
+		for _, gid := range a.c.KnownGridIDs() {
+			a.fetchGrid(gid)
+		}
+	}
+	for _, retry := range a.pend.Drain() {
+		retry()
+	}
+	a.flushDirtyText()
+}
+
+// retryBackstop is the slow safety net behind the reconnect kick: if
+// anything is parked or dirty (a transport failure with no SSE gap — the
+// stream can survive a blip that a unary write did not), re-post it
+// without waiting for a reconnect that may never come.
+func (a *App) retryBackstop() {
+	for {
+		time.Sleep(30 * time.Second)
+		if a.pend.Len() > 0 || len(a.c.DirtyTileIDs()) > 0 {
+			a.retryKick(false)
+		}
 	}
 }
 
@@ -1260,7 +1331,14 @@ func (a *App) resolveErr(source string) {
 func (a *App) reportPluginHealth(h rpc.PluginHealth) {
 	source := "plugin:" + h.PluginUUID
 	if h.Healthy {
+		// A recovered plugin is a healed gap for ITS tiles: the server-side
+		// fan-in resumed with no backlog, so this client missed that
+		// plugin's events too. The kick resyncs and drains — same reasoning
+		// as the SSE reconnect kick, one plugin narrower in cause but the
+		// same cure (a per-plugin resync would need routing state the
+		// client deliberately doesn't keep).
 		a.resolveErr(source)
+		a.retryKick(true)
 		return
 	}
 	label := h.PluginUUID
