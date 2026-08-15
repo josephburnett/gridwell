@@ -150,6 +150,49 @@ func TestApplyTileRemoved(t *testing.T) {
 	}
 }
 
+// TestTileRemovedSparesDirtyBuffer reproduces the move-eats-typing bug
+// (2026-08-14 transport-loss audit, #5): a cross-grid MOVE emits
+// TileRemoved(src) then TileChanged(dst) for the SAME tile, and Apply used
+// to delete the content entry unconditionally — the unsaved keystrokes
+// vanished and the textarea repainted from stale server bytes. A dirty
+// entry must survive TileRemoved (it is the only copy of the user's
+// typing); a clean one is still swept.
+func TestTileRemovedSparesDirtyBuffer(t *testing.T) {
+	c := seedCache(t)
+	c.PutFetchedContent("101", []byte("saved words"), 3)
+	c.PutEditedContent("101", []byte("saved words plus unsaved typing"))
+
+	c.Apply(rpc.Event{
+		Kind:        rpc.EventTileRemoved,
+		TileRemoved: &rpc.TileRemoved{GridID: "1", TileID: "101"},
+	})
+
+	b, dirty := c.DirtyContent("101")
+	if !dirty || string(b) != "saved words plus unsaved typing" {
+		t.Fatalf("dirty buffer after TileRemoved = (%q, %v), want the unsaved typing kept", b, dirty)
+	}
+	// The move's second half: the tile reappears in its destination grid.
+	// The surviving entry keeps its basis, so the next flush claims it.
+	c.PutGrid(rpc.Grid{ID: "2"}, nil)
+	c.Apply(rpc.Event{
+		Kind:        rpc.EventTileChanged,
+		TileChanged: &rpc.TileChanged{Tile: rpc.Tile{ID: "101", GridID: "2", Kind: rpc.KindText, Version: 3}},
+	})
+	if base, ok := c.SaveBasis("101"); !ok || base != 3 {
+		t.Errorf("basis after move = (%d, %v), want (3, true)", base, ok)
+	}
+
+	// A CLEAN entry is still dropped — a delete must not strand bodies.
+	c.PutFetchedContent("100", []byte("clean"), 1)
+	c.Apply(rpc.Event{
+		Kind:        rpc.EventTileRemoved,
+		TileRemoved: &rpc.TileRemoved{GridID: "1", TileID: "100"},
+	})
+	if _, ok := c.TileContent("100"); ok {
+		t.Error("clean body survived TileRemoved — delete should sweep it")
+	}
+}
+
 func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	c := seedCache(t)
 	ok := c.Apply(rpc.Event{
@@ -238,14 +281,15 @@ func TestUpdateTile(t *testing.T) {
 	}
 }
 
-// TestRemoveTileFreesContent is the regression for a body leak: editing a text
-// tile stores its body in the content map keyed by tile id. If the tile is then
-// removed (e.g. dragged onto the + trashcan), its cached body must be dropped —
-// otherwise it strands in the map forever.
+// TestRemoveTileFreesContent is the regression for a body leak: a text
+// tile's CLEAN cached body must be dropped when the tile is removed
+// (dragged onto the + trashcan) — otherwise it strands in the map forever.
+// Only clean bodies: a DIRTY buffer is the sole copy of unsaved typing and
+// survives TileRemoved (TestTileRemovedSparesDirtyBuffer, 2026-08-14).
 func TestRemoveTileFreesContent(t *testing.T) {
 	c := New()
 	c.PutGrid(rpc.Grid{ID: "1"}, []rpc.Tile{{ID: "10", GridID: "1", Kind: rpc.KindText}})
-	c.PutEditedContent("10", []byte("Goodbye"))
+	c.PutFetchedContent("10", []byte("Goodbye"), 2)
 	if _, ok := c.TileContent("10"); !ok {
 		t.Fatal("content not stored")
 	}

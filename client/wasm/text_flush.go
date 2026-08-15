@@ -51,12 +51,24 @@ func (a *App) flushTileContent(tileID string) {
 		return
 	}
 	t := a.cachedTileByID(tileID)
+	if t == nil && cid != tileID {
+		t = a.cachedTileByID(cid)
+	}
 	if t == nil {
-		// The row vanished from every cached grid while its edit was still
-		// pending (the grid was evicted, or the tile deleted elsewhere).
-		// Nothing routes the save; say so rather than dropping it silently.
-		a.reportErr(errsurface.Error, "textedit",
-			"unsaved text edit has no destination — its tile is no longer known")
+		// The owner row is in no cached grid. That is NOT a dead end
+		// (2026-08-14 audit #6): a leaf link's target lives in a foreign
+		// plugin's grid this client may never have fetched, and the sweep
+		// used to report "no destination" every tick, forever, while the
+		// edit silently never saved. The edit stays dirty; resolve the row
+		// in the background (GetTile + its grid) and the next sweep tick
+		// flushes through it. Only a DEFINITIVE server answer ("no such
+		// tile") reports the orphan — a transport failure retries quietly.
+		if a.tileLoadFailed[cid] {
+			a.reportErr(errsurface.Error, "textedit",
+				"unsaved text edit has no destination — its tile is no longer known")
+			return
+		}
+		a.fetchTileByID(cid)
 		return
 	}
 	if t.Kind != rpc.KindText || a.tileReadOnly(t) {

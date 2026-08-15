@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/caps"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gridpath"
 	"github.com/josephburnett/gridwell/client/menu"
@@ -896,10 +897,14 @@ func (a *App) fetchTileByID(tileID string) {
 		defer delete(a.tileInflight, tileID)
 		tile, err := a.cl.GetTile(context.Background(), tileID)
 		if err != nil || tile == nil {
-			// Broken reference (deleted tile / unmounted plugin): stop
-			// re-firing so the per-frame draw doesn't dogpile the server.
-			// Cleared by a reload.
-			a.tileLoadFailed[tileID] = true
+			// Latch only on a server VERDICT — a broken reference (deleted
+			// tile / unmounted plugin) will answer the same way every time,
+			// and the latch stops the per-frame draw dogpiling the server.
+			// A transport failure latches nothing: the server never spoke,
+			// and the next caller (a draw, a flush sweep tick) retries.
+			if clientsync.Of(err) != clientsync.OutcomeTransport {
+				a.tileLoadFailed[tileID] = true
+			}
 			return
 		}
 		a.fetchGrid(tile.GridID)

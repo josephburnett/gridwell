@@ -338,9 +338,16 @@ func (c *Cache) Apply(ev rpc.Event) bool {
 			return false
 		}
 		_, present := g.Tiles[ev.TileRemoved.TileID]
-		// Drop the removed tile's cached body so deleting a tile mid-edit doesn't
-		// strand its content in the map forever.
-		delete(c.content, ev.TileRemoved.TileID)
+		// Drop the removed tile's CLEAN cached body so a delete doesn't
+		// strand content in the map forever — but SPARE a dirty one. A
+		// cross-grid MOVE emits TileRemoved(src) then TileChanged(dst) for
+		// the SAME tile (store/place.go), so unsaved keystrokes must survive
+		// the hop; and even for a genuine delete, silently discarding the
+		// user's unsaved words is the transport-loss class (2026-08-14) —
+		// the flush sweep surfaces the orphan visibly instead.
+		if e, ok := c.content[ev.TileRemoved.TileID]; !ok || !e.dirty {
+			delete(c.content, ev.TileRemoved.TileID)
+		}
 		delete(g.Tiles, ev.TileRemoved.TileID)
 		return present
 	case rpc.EventGridChanged:
