@@ -35,7 +35,7 @@ async function workspaceState(window: any): Promise<{ depth: number; tileID?: st
 }
 
 test('re-entering a workspace rebinds the editor; leaving it never saves a foreign buffer', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const cx = Math.round(f.cx);

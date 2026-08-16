@@ -203,7 +203,7 @@ func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.
 // only in the broken case, always empty in the rootless one.
 //
 // writable comes from the Info handshake, NEVER from the kind string: a remote
-// localdb reached through the ssh proxy has local kind "ssh" but is every bit
+// localdb reached through the ssh proxy has local kind "remote" but is every bit
 // as writable — the proxy forwards its Info verbatim, so the capability
 // travels while a kind check would strand it read-only.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
@@ -910,7 +910,7 @@ func isUnimplemented(err error) bool {
 // asConnectError maps an error returned from a plugin (or, on the borrowed
 // store paths, a raw store sentinel) to a Connect status code. Plugin errors
 // arrive as gRPC status errors — the plugins translate store sentinels into
-// codes (see localdb.errToStatus) so NotFound / InvalidArgument / overlap and
+// codes (see local.errToStatus) so NotFound / InvalidArgument / overlap and
 // version conflicts survive the routing hop; a non-gRPC error falls through to
 // the same gwerr.ClassifyError categorization used by the raw-HTTP endpoints.
 func asConnectError(err error) error {

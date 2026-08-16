@@ -12,9 +12,9 @@ use (
 	./mobile
 	./plugins/fs
 	./plugins/griddb
-	./plugins/localdb
+	./plugins/local
 	./plugins/proc
-	./plugins/ssh
+	./plugins/remote
 	./test/boundary
 	./test/federation
 )

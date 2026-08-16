@@ -124,10 +124,10 @@ test('first run: "no config" exits → gridwell init → one respawn → ready',
     },
     binaryPath: '/fake/gridwell',
   });
-  children[0].stderr.write('serve: no config at /h/server.yaml; run `gridwell init --kind localdb --name <name>` to create one\n');
+  children[0].stderr.write('serve: no config at /h/server.yaml; run `gridwell init --kind local --name <name>` to create one\n');
   children[0].emit('exit', 1, null);
   await new Promise((r) => setTimeout(r, 10)); // let the init child spawn
-  assert.deepEqual(argvs[1], ['init', '--kind', 'localdb', '--name', 'home']);
+  assert.deepEqual(argvs[1], ['init', '--kind', 'local', '--name', 'home']);
   children[1].emit('exit', 0, null);
   await new Promise((r) => setTimeout(r, 10)); // let the retry serve spawn
   assert.equal(argvs[2][0], 'serve', 'after init, serve is retried once');

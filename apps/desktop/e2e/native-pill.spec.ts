@@ -14,7 +14,7 @@ test('the bar crumb renames and zooms a live url pane; no native pill exists', a
   window,
   gw,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

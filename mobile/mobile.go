@@ -3,7 +3,7 @@
 // app-private directory; a full Gridwell node — plugins, node identity,
 // the embedded web client, the mount cache — comes up on a loopback port
 // and the host webview loads the returned origin. The phone's own tiles
-// live in its own localdb, durable with no network anywhere; other
+// live in its own local plugin DB, durable with no network anywhere; other
 // machines are what they are everywhere else — mounts, stale-readable
 // through the phase-1 cache when the tailnet is down.
 //
@@ -13,11 +13,11 @@
 //     Same wire contract, same id discipline, no process boundary —
 //     promoted from the loader's test-only path to the supported mobile
 //     mode. Desktop keeps subprocesses.
-//   - Shells are OFF (no PTY, no tmux); the localdb plugin runs with no
+//   - Shells are OFF (no PTY, no tmux); the local plugin runs with no
 //     shell manager and the server refuses shell tiles node-wide.
 //   - No password (loopback inside an app sandbox; the webview is the
 //     only client) and no serve lock (the OS gives each app one process).
-//   - First run auto-inits a localdb named "home" through the SAME init
+//   - First run auto-inits a "local" plugin named "home" through the SAME init
 //     door the CLI uses (node.InitPlugin), so a phone home is
 //     byte-compatible with every other home.
 //
@@ -38,10 +38,10 @@ import (
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/local"
 	"github.com/josephburnett/gridwell/plugins/proc"
-	"github.com/josephburnett/gridwell/plugins/ssh"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial"
+	"github.com/josephburnett/gridwell/plugins/remote"
+	"github.com/josephburnett/gridwell/plugins/remote/dial"
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -71,7 +71,7 @@ func Start(home string) (string, error) {
 	if _, err := os.Stat(cfgPath); errors.Is(err, gofs.ErrNotExist) {
 		// First run: one localdb named "home", exactly the heal the
 		// desktop sidecar performs — same door, same resulting bytes.
-		if _, err := node.InitPlugin(home, "localdb", "home", nil); err != nil {
+		if _, err := node.InitPlugin(home, "local", "home", nil); err != nil {
 			return "", fmt.Errorf("mobile: first-run init: %w", err)
 		}
 	}
@@ -127,21 +127,21 @@ func Stop() {
 // tmux manager; the server refuses shell tiles anyway).
 func inProcessFactories(home string) map[string]plugin.ServerFactory {
 	return map[string]plugin.ServerFactory{
-		"localdb": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			st, err := localdb.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
+		"local": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+			st, err := local.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
 			if err != nil {
 				return nil, err
 			}
-			return localdb.New(st, nil), nil
+			return local.New(st, nil), nil
 		},
 		"fs":   fsplugin.NewFactory,
 		"proc": proc.NewFactory,
-		"ssh": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			db, err := sshhost.OpenDB(cfg["db_file"])
+		"remote": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+			db, err := remote.OpenDB(cfg["db_file"])
 			if err != nil {
 				return nil, err
 			}
-			return sshhost.New(db, sshdial.Dial, home), nil
+			return remote.New(db, dial.Dial, home), nil
 		},
 	}
 }

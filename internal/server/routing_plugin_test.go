@@ -13,7 +13,7 @@ func TestRoute(t *testing.T) {
 	reg := plugin.NewRegistry()
 	// nil clients are fine — the test only checks the routing decision.
 	reg.Register("fsuuid", "fs", nil, nil)
-	reg.Register("localuuid", "localdb", nil, nil)
+	reg.Register("localuuid", "local", nil, nil)
 	h := &connectHandler{srv: &Server{pluginReg: reg}}
 
 	cases := []struct {

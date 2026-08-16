@@ -30,7 +30,7 @@ export function seedHome(extra: PluginSpec[] = []): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
   const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
   const env = { ...process.env, GRIDWELL_HOME: home };
-  execFileSync(bin, ['init', '--kind', 'localdb', '--name', 'e2e'], { env, stdio: 'ignore' });
+  execFileSync(bin, ['init', '--kind', 'local', '--name', 'e2e'], { env, stdio: 'ignore' });
   for (const p of extra) {
     const args = ['init', '--kind', p.kind, '--name', p.name];
     for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);

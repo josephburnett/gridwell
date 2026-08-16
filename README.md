@@ -95,7 +95,7 @@ arrangement you care about is the pane tile.
 ## Plugins and federation
 
 Every space is a plugin: a separate binary with its own SQLite database and
-its own id space. `localdb` holds your content. `fs` and `proc` project the
+its own id space. `local` holds your content. `fs` and `proc` project the
 filesystem and process table in as read-only grids — honest views of a
 world Gridwell doesn't own (files and processes come and go, but their
 placement stays stable while they exist). `ssh` mounts other machines.
@@ -135,7 +135,7 @@ The full experience is the Electron desktop app (live url tiles need it):
 
 ```sh
 make vendor   # once, online: deps + caches
-make init     # once: register a localdb plugin in ~/.gridwell
+make init     # once: register a local plugin in ~/.gridwell
 make launch   # build and run
 ```
 
@@ -180,11 +180,17 @@ everything when no password is set. Bind loopback or a VPN-only address
 serve` warns loudly when the bind is not loopback.
 
 To mount remote nodes, the remote just runs `gridwell serve` on loopback.
-On the mounting machine, register the ssh plugin once:
+On the mounting machine, register the remote plugin once:
 
 ```sh
-gridwell init --kind ssh --name connections
+gridwell init --kind remote
 ```
+
+A connection reaches the other node one of two ways, chosen by what you
+fill in: an SSH host + user bridges over ssh (the authenticated
+transport), or an address alone connects DIRECTLY — another gridwell on
+this machine, or across the tailnet, where the network is the trust
+boundary.
 
 The plugin has no grid of its own. Drag it from the + menu onto any grid
 and descend the dropped well: a picker lists your named connections —

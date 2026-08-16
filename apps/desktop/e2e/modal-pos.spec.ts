@@ -6,7 +6,7 @@ import { test, expect } from './fixtures';
 // modal card; this spec crosses it through the url modal in a split, where
 // pane-center and screen-center are far apart.
 test('the url modal centers on the active pane, not the screen', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   await gw.splitFocusedPaneVertical();
   const ps = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   const right = ps[1];

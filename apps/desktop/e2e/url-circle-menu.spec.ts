@@ -16,7 +16,7 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

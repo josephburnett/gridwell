@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // backupTestHome builds a real home via RunInit (a localdb plugin with a DB)
@@ -16,7 +16,7 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
-	if code := RunInit([]string{"--kind", "localdb", "--name", "home"}); code != 0 {
+	if code := RunInit([]string{"--kind", "local", "--name", "home"}); code != 0 {
 		t.Fatalf("init exit = %d", code)
 	}
 	cfg, err := config.Load(filepath.Join(home, "server.yaml"))

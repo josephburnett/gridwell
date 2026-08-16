@@ -5,7 +5,7 @@ gRPC service — the same 17-RPC contract the server, the browser client,
 and every federated node speak. The host never knows your name: every
 behavior you want rides a declaration on the wire.
 
-The four in-repo plugins (`plugins/{localdb,fs,proc,ssh}`) are held to
+The four in-repo plugins (`plugins/{local,fs,proc,remote}`) are held to
 the same door you are — each is its own Go module importing only the
 api — so `plugins/fs` is the worked example for everything below.
 
@@ -60,7 +60,7 @@ capabilities gray out.
 - `WriteContent` commits at close: a broken stream leaves the old value
   byte-for-byte.
 - The storage format promise, if you persist: additive-only evolution
-  (`dbformat` gives you the versioning engine; `plugins/localdb/store`'s
+  (`dbformat` gives you the versioning engine; `plugins/local/store`'s
   CLAUDE.md is the worked contract).
 
 ## Running in-process instead

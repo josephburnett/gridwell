@@ -35,7 +35,7 @@ lists where that still needs doing.
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  go-plugin gRPC  (the SAME Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Plugins        internal/plugin/{localdb,fs,proc,sshhost,proxy}       │
+│ Plugins        plugins/{local,fs,proc,remote} + proxy       │
 │   each a separate binary owning one SQLite DB + one id space         │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
@@ -140,10 +140,10 @@ plugin declares once in `Info`, never re-derived from its kind string.
 spawned as a go-plugin subprocess — the only production path; the
 in-process loader survives solely as a test harness. Each plugin owns one
 SQLite DB and one id space; identity is verified at spawn and injected into
-the store in one fused step (`localdb.OpenVerified`), so the id every
+the store in one fused step (`local.OpenVerified`), so the id every
 stored reference carries is the id the store answers with.
 
-- **localdb** owns all user content (text, urls, wells, pane tiles) plus
+- **local** (né localdb, 2026-08-16) owns all user content (text, urls, wells, pane tiles) plus
   shells and the event stream. The only writable plugin. Shell tiles are
   tmux sessions on a private per-DB socket, so they survive plugin
   restarts.
@@ -316,7 +316,7 @@ same truth twice. The templates:
 | `client/menu` | "is the menu open, on which pane" | one state machine | every gesture path (was 14 scattered writes) |
 | `cache` content entries + `text_flush.go` | "the bytes, their version, and whether they're edited" | one entry per tile id | every save path |
 | `shellconn.DecideAutoLive` | "does this descent go live" | one decision | every descent/restore path |
-| `localdb.OpenVerified` | the plugin's identity | verify+open+inject fused | every identity read |
+| `local.OpenVerified` | the plugin's identity | verify+open+inject fused | every identity read |
 
 Each makes a bug class unrepresentable. That is the goal of every change:
 prefer the design where the bug cannot be written over the design where it
@@ -340,7 +340,7 @@ for the §7 cure.
    `urlview-preload.ts`, which cannot import). Drift-linted by
    `gesture-threshold.test.ts`.
 4. **The `SetTile` kind→operation mapping** — described in the proto,
-   implemented in the localdb switch, and again in `conv.go`.
+   implemented in the local plugin switch, and again in `conv.go`.
 5. **Text scroll of a rendered descent** — the canvas wheel handler writes
    `p.TextScrollY` and the rendered overlay's own scroll listener writes it
    too; the canvas path never syncs the div's scrollTop. Two writers, found

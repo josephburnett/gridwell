@@ -18,7 +18,7 @@ test('a captured shell takes over the live session; leaving hands it back', asyn
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

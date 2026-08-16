@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
 	"github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // The /content/ door crosses every seam at once: HTTP URL grammar → token
@@ -294,7 +294,7 @@ func TestContentDoorTransit(t *testing.T) {
 	t.Cleanup(proxClose)
 
 	reg := plugin.NewRegistry()
-	reg.Register("ssh1", "ssh", proxied, nil)
+	reg.Register("ssh1", "remote", proxied, nil)
 	reg.SetTransit("ssh1", true) // the declaration the loader reads from Info in production
 	srv := New(reg, Config{NodeID: "node1"})
 	hs := httptest.NewServer(srv.NodeHandler())

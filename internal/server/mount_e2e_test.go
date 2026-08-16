@@ -10,8 +10,8 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // TestSecondDBMountE2E proves the federated model end to end: with the server
@@ -43,12 +43,12 @@ func TestSecondDBMountE2E(t *testing.T) {
 	if secondUUID == primaryUUID {
 		t.Fatal("two stores produced the same plugin uuid")
 	}
-	client2, closer2, err := plugin.ServeInProcess(localdb.New(st2, nil))
+	client2, closer2, err := plugin.ServeInProcess(local.New(st2, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(closer2)
-	reg.Register(secondUUID, "localdb", client2, nil)
+	reg.Register(secondUUID, "local", client2, nil)
 	secondBareRoot, err := st2.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

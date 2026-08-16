@@ -13,11 +13,11 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
 }) => {
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
-  const local = (await gw.plugins()).find((l) => l.kind === 'localdb');
+  const local = (await gw.plugins()).find((l) => l.kind === 'local');
   const scratchGridID = local!.scratchGridID;
   expect(scratchGridID, 'localdb advertises a scratch grid').toBeTruthy();
 
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const homeBefore = await gw.getGrid(home.gridID);
 

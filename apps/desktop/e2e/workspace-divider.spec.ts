@@ -26,7 +26,7 @@ async function barClick(gw: any, window: any): Promise<void> {
 }
 
 test('stacked-pane divider left-resizes inside a workspace; right-drag splits', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

@@ -12,7 +12,7 @@ import (
 type Registry struct {
 	mu      sync.RWMutex
 	clients map[string]gridwellv1.GridwellClient
-	// kinds maps plugin UUID → kind ("fs", "proc", "localdb", …) so callers
+	// kinds maps plugin UUID → kind ("fs", "proc", "local", …) so callers
 	// that need "the fs plugin" can resolve one by kind.
 	kinds map[string]string
 	// labels maps plugin UUID → the server.yaml display name. This is the

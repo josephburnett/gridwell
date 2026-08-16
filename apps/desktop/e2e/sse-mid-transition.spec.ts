@@ -16,7 +16,7 @@ async function hook<T>(window: any, expr: string): Promise<T> {
 }
 
 test('an SSE event mid-descent updates data without deflecting the landing framing', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;

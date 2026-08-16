@@ -42,7 +42,7 @@ async function seedTile(
 }
 
 test('collapsing a text-descended pane never saves another tile\'s buffer into it', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

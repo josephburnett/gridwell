@@ -6,7 +6,7 @@ import { tileAt } from './oracle';
 // and empty — not seeded with a previously-edited tile's body. Asserted at the
 // store (GetTileContent), the system of record.
 test('a newly created text tile is empty, not the previously edited content', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

@@ -13,7 +13,7 @@ async function errors(window: any) {
 }
 
 test('a failed mutation RPC surfaces a dismissible notice on the strip', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -64,7 +64,7 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
 // (plugin health, backend exit persist until resolved/dismissed) is pinned by
 // the errsurface unit tests; this proves the live wiring actually fires.
 test('a one-shot notice expires off the strip once its source goes quiet', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -101,7 +101,7 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -123,7 +123,16 @@ test('a rejected text save surfaces and reconciles instead of lingering as saved
   // VISIBLY: before issue #45 this was the literal "it just disappeared"
   // mechanism — the rejected bytes kept rendering as saved with no signal.
   await gw.descendCell(cx, cy);
-  await window.route('**/gridwell.v1.Gridwell/WriteContent', (r: any) => r.abort());
+  // A REAL Connect rejection body (OutcomeRejected): an aborted request is
+  // the TRANSPORT contract — kept and retried, pinned by web-outage — and
+  // would eventually land the suffix, inverting this spec's assertion.
+  await window.route('**/gridwell.v1.Gridwell/WriteContent', (r: any) =>
+    r.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'invalid_argument', message: 'e2e: write refused' }),
+    }),
+  );
   await gw.typeText(' rejected-suffix');
   await expect
     .poll(async () => {
@@ -151,7 +160,7 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
 
   // The ephemeral-visit modal (clicking, not dragging, the url palette swatch)
   // descends straight into a live url tile — see ephemeral-url.spec.ts. Port 9
@@ -186,7 +195,7 @@ async function setupWellReframe(
   window: any,
   route: (r: any) => void,
 ): Promise<{ parentGrid: string; wellID: string; sig0: Record<string, string> }> {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);

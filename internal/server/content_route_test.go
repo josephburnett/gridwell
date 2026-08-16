@@ -9,8 +9,8 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // The link-resolution seam (owner decision 8, 2026-07-26): ReadContent and
@@ -42,12 +42,12 @@ func twoPluginHTTPServer(t *testing.T) (cl *rpc.Client, baseURL, rootA, rootB st
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientB, closerB, err := plugin.ServeInProcess(localdb.New(stB, nil))
+	clientB, closerB, err := plugin.ServeInProcess(local.New(stB, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(closerB)
-	reg.Register(uuidB, "localdb", clientB, nil)
+	reg.Register(uuidB, "local", clientB, nil)
 	bareRootB, err := stB.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

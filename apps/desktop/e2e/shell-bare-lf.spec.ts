@@ -12,7 +12,7 @@ const shellText = (window: any): Promise<string> =>
   window.evaluate(() => (window as any).__gridwellTest.shellText());
 
 test('a bare LF keeps the cursor column (#211)', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const sx = Math.round(home.cx);
   const sy = Math.round(home.cy);

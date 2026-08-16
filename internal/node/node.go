@@ -35,12 +35,12 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no config at %s; run `gridwell init --kind localdb --name <name>` to create one", cfgPath)
+			return nil, fmt.Errorf("no config at %s; run `gridwell init --kind local --name <name>` to create one", cfgPath)
 		}
 		return nil, err
 	}
 	if len(cfg.Plugins) == 0 {
-		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind localdb --name <name>`", cfgPath)
+		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind local --name <name>`", cfgPath)
 	}
 	// The mount cache lives beside (never inside) the plugin DBs:
 	// disposable, excluded from backup, per-mount files under one dir.

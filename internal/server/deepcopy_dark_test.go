@@ -14,8 +14,8 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // The OFFLINE deep-copy seam (offline-plan owner decision, 2026-08-14):
@@ -79,7 +79,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientA, closerA, err := plugin.ServeInProcess(localdb.New(stA, nil))
+	clientA, closerA, err := plugin.ServeInProcess(local.New(stA, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	dark = &darkSource{GridwellClient: clientA,
 		darkContent: map[string]bool{}, darkGrids: map[string]bool{},
 		darkPreviews: map[string]bool{}, verdict: map[string]error{}}
-	reg.Register(uuidA, "localdb", dark, nil)
+	reg.Register(uuidA, "local", dark, nil)
 	bareRootA, err := stA.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -103,12 +103,12 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientB, closerB, err := plugin.ServeInProcess(localdb.New(stB, nil))
+	clientB, closerB, err := plugin.ServeInProcess(local.New(stB, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(closerB)
-	reg.Register(uuidB, "localdb", clientB, nil)
+	reg.Register(uuidB, "local", clientB, nil)
 	bareRootB, err := stB.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

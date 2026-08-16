@@ -270,5 +270,5 @@ func serveGzipSidecar(w http.ResponseWriter, r *http.Request, fsys fs.FS, name s
 
 // The sentinel→class table lives in internal/store (gwerr.ClassifyError),
 // next to the sentinel declarations, so every transport — Connect
-// (asConnectError) and the plugin gRPC hop (localdb.errToStatus) — maps
+// (asConnectError) and the plugin gRPC hop (local.errToStatus) — maps
 // from the one classification. Do not re-enumerate the sentinels here.

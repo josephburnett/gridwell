@@ -26,7 +26,7 @@ async function createTextTile(
   gw: GridwellDriver,
   seed: string,
 ): Promise<{ tileID: string; gridID: string; cx: number; cy: number }> {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

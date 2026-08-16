@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 	procplugin "github.com/josephburnett/gridwell/plugins/proc"
 )
 
@@ -389,7 +389,7 @@ func TestListPlugins(t *testing.T) {
 	if len(plugins) != 3 {
 		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
 	}
-	if plugins[0].Kind != "localdb" || !plugins[0].Writable {
+	if plugins[0].Kind != "local" || !plugins[0].Writable {
 		t.Errorf("plugin[0] = %+v, want writable localdb", plugins[0])
 	}
 	// Each plugin advertises its qualified root grid id (for click-enter).

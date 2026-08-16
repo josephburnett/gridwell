@@ -11,8 +11,8 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // nodeGridServer wires a server WITH a node id and two localdb plugins,
@@ -40,12 +40,12 @@ func nodeGridServer(t *testing.T) (cl *rpc.Client, nodeRoot, uuidA, rootA string
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientB, closerB, err := plugin.ServeInProcess(localdb.New(stB, nil))
+	clientB, closerB, err := plugin.ServeInProcess(local.New(stB, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(closerB)
-	reg.Register(uuidB, "localdb", clientB, nil)
+	reg.Register(uuidB, "local", clientB, nil)
 	reg.SetLabel(uuidB, "work")
 
 	srv := New(reg, Config{NodeID: "node1"})

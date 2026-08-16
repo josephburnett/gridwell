@@ -30,7 +30,7 @@ import (
 	"time"
 
 	gwrpc "github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial/sshdialtest"
+	"github.com/josephburnett/gridwell/plugins/remote/dial/dialtest"
 )
 
 // repoRoot walks up from the test binary's source dir to the REPO root —
@@ -174,14 +174,14 @@ func TestFederationSpawn(t *testing.T) {
 	// Remote node: two localdb plugins.
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "localdb", "--name", "personal")
-	run(t, renv, bin, "init", "--kind", "localdb", "--name", "work")
+	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
+	run(t, renv, bin, "init", "--kind", "local", "--name", "work")
 	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
 
 	// A real ssh server fronting it (shared helper — the same sshd the seam
 	// test uses, here with the PRODUCTION gridwell-ssh dialing it).
-	creds := sshdialtest.Server(t, t.TempDir())
+	creds := dialtest.Server(t, t.TempDir())
 
 	// Local node: one localdb + the ssh plugin, no per-host config anywhere
 	// — connections are DATA (#199/#251): a well dropped in the instance
@@ -189,8 +189,8 @@ func TestFederationSpawn(t *testing.T) {
 	// migration bridge is deleted — 2026-08-15, single-user cut.)
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "localdb", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "rtb")
+	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
+	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 
 	// 1. The plugin spawned PARAMETERIZED (no root, an instance grid);
@@ -424,12 +424,12 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	// Remote node: one localdb, served for real.
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "localdb", "--name", "personal")
+	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
 	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
 
 	// A real sshd fronting it.
-	creds := sshdialtest.Server(t, t.TempDir())
+	creds := dialtest.Server(t, t.TempDir())
 	sshHost, sshPort, ok := strings.Cut(creds.Addr, ":")
 	if !ok {
 		t.Fatalf("bad sshd addr %q", creds.Addr)
@@ -438,8 +438,8 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	// Local node: a home localdb plus ONE ssh plugin with no per-host config.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "localdb", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "connections")
+	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
+	run(t, lenv, bin, "init", "--kind", "remote", "--name", "connections")
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 
 	// 1. The plugin spawned in connections mode: PARAMETERIZED since the
@@ -520,7 +520,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	}
 
 	// 4. Descend to the remote plugin and move real bytes through all three
-	//    peels: local server → connection segment → remote node → localdb.
+	//    peels: local server → connection segment → remote node → local.
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": child})
 	ngTiles := ng["tiles"].([]any)
 	if len(ngTiles) != 1 {
@@ -571,12 +571,21 @@ func TestConnectionsModeSpawn(t *testing.T) {
 // deleted), and waits for the well to gain its child: the remote's node
 // grid through the minted segment. Returns the chained
 // <ssh>/<conn>/<rnode>/0 mount root.
-func commitConnection(t *testing.T, origin, instGrid string, creds sshdialtest.Creds, remoteAddr string) string {
+func commitConnection(t *testing.T, origin, instGrid string, creds dialtest.Creds, remoteAddr string) string {
 	t.Helper()
 	sshHost, sshPort, ok := strings.Cut(creds.Addr, ":")
 	if !ok {
 		t.Fatalf("bad sshd addr %q", creds.Addr)
 	}
+	params := fmt.Sprintf(`{"host":%q,"user":"joe","port":%s,"key":%q,"known_hosts":%q,"addr":%q}`,
+		sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
+	return commitConnectionParams(t, origin, instGrid, params)
+}
+
+// commitConnectionParams commits an arbitrary params document — the shared
+// tail of the ssh and DIRECT connection flows.
+func commitConnectionParams(t *testing.T, origin, instGrid, params string) string {
+	t.Helper()
 	well := rpc(t, origin, "CreateTile", map[string]any{
 		"gridId": instGrid,
 		"tile":   map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1},
@@ -588,8 +597,6 @@ func commitConnection(t *testing.T, origin, instGrid string, creds sshdialtest.C
 	case string:
 		version, _ = strconv.ParseInt(v, 10, 64)
 	}
-	params := fmt.Sprintf(`{"host":%q,"user":"joe","port":%s,"key":%q,"known_hosts":%q,"addr":%q}`,
-		sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
 	if _, err := gwrpc.NewDefaultClient(origin).WriteContent(context.Background(),
 		well["id"].(string), version, []byte(params)); err != nil {
 		t.Fatalf("params commit: %v", err)

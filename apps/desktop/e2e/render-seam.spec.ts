@@ -11,7 +11,7 @@ import { tileAt } from './oracle';
 // pane's tileIds is exactly the owner's "it just disappeared".
 
 test('a text tile created in a descended grid is rendered, not just persisted', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   let f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -50,7 +50,7 @@ test('a text tile created in a descended grid is rendered, not just persisted', 
 // independent copy (CLAUDE.md), so after the gesture BOTH tiles must exist on the
 // server AND both must be rendered — neither vanishes.
 test('cloning a tile leaves both the original and the copy rendered', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -78,7 +78,7 @@ test('cloning a tile leaves both the original and the copy rendered', async ({ g
 // Moving a tile must not lose it from the render (the owner's "I pick it up and
 // it disappears"): after a move it is still drawn, now at the destination cell.
 test('a moved tile stays rendered at its destination', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -102,7 +102,7 @@ test('a moved tile stays rendered at its destination', async ({ gw }) => {
 // Deleting a tile must remove it from the render too — the delete reflects, it
 // doesn't leave a ghost the cache still draws.
 test('a deleted tile is removed from the render', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

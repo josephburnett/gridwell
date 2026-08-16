@@ -10,9 +10,9 @@ import (
 // TestConfigDecodesEnv: a JSON object in GRIDWELL_PLUGIN_CONFIG decodes to the
 // config map the plugin reads at spawn (db_file, uuid, kind, …).
 func TestConfigDecodesEnv(t *testing.T) {
-	t.Setenv(gplug.ConfigEnvVar, `{"db_file":"/x/store.db","uuid":"abc","kind":"localdb"}`)
+	t.Setenv(gplug.ConfigEnvVar, `{"db_file":"/x/store.db","uuid":"abc","kind":"local"}`)
 	got := Config()
-	want := map[string]string{"db_file": "/x/store.db", "uuid": "abc", "kind": "localdb"}
+	want := map[string]string{"db_file": "/x/store.db", "uuid": "abc", "kind": "local"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Config() = %v, want %v", got, want)
 	}

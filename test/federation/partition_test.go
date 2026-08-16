@@ -22,7 +22,7 @@ import (
 	"time"
 
 	gwrpc "github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial/sshdialtest"
+	"github.com/josephburnett/gridwell/plugins/remote/dial/dialtest"
 )
 
 func TestMountPartitionServesCache(t *testing.T) {
@@ -34,21 +34,21 @@ func TestMountPartitionServesCache(t *testing.T) {
 	ctx := context.Background()
 	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
 
-	// Remote node: one localdb. Keep its address — the revival must land on
+	// Remote node: one local. Keep its address — the revival must land on
 	// the SAME addr the connection dials.
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
-	run(t, renv, bin, "init", "--kind", "localdb", "--name", "personal")
+	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
 	remoteOrigin, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
-	creds := sshdialtest.Server(t, t.TempDir())
+	creds := dialtest.Server(t, t.TempDir())
 
 	// Local node: localdb + ssh; the connection is committed the DATA way
 	// (commitConnection — the only way since the config bridge was deleted).
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
-	run(t, lenv, bin, "init", "--kind", "localdb", "--name", "home")
-	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "rtb")
+	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
+	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 	cl := gwrpc.NewDefaultClient(localOrigin)
 

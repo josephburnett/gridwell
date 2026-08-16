@@ -27,10 +27,10 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
-	"github.com/josephburnett/gridwell/plugins/ssh"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
+	"github.com/josephburnett/gridwell/plugins/remote"
+	"github.com/josephburnett/gridwell/plugins/remote/dial"
 )
 
 // chainHarness wires remote node ⇐ sshhost plugin ⇐ local server.
@@ -38,7 +38,7 @@ type chainHarness struct {
 	localCl   *rpc.Client               // the local node's front door
 	remoteCl  *rpc.Client               // the remote node's own front door (for direct remote mutations)
 	sshClient gridwellv1.GridwellClient // the sshhost plugin, in process (plugin-seam asserts)
-	dialed    []sshdial.Config          // every config the fake dialer saw
+	dialed    []dial.Config             // every config the fake dialer saw
 	rootBare  string                    // the remote localdb's bare root grid id
 }
 
@@ -52,13 +52,13 @@ func newChainHarness(t *testing.T) *chainHarness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = remoteStore.Close() })
-	remoteClient, remoteCloser, err := compose.ServeInProcess(localdb.New(remoteStore, nil))
+	remoteClient, remoteCloser, err := compose.ServeInProcess(local.New(remoteStore, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
-	remoteReg.Register("rp1", "localdb", remoteClient, nil)
+	remoteReg.Register("rp1", "local", remoteClient, nil)
 	remoteSrv := server.New(remoteReg, server.Config{NodeID: "rnodex"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
@@ -76,14 +76,14 @@ func newChainHarness(t *testing.T) *chainHarness {
 
 	// The plugin under test, with the ssh transport faked out: every dial
 	// lands on the one remote export, and the resolved config is recorded so
-	// the params → sshdial.Config plumbing is assertable.
+	// the params → dial.Config plumbing is assertable.
 	h := &chainHarness{}
-	db, err := sshhost.OpenDB(t.TempDir() + "/ssh.db")
+	db, err := remote.OpenDB(t.TempDir() + "/ssh.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	srv := sshhost.New(db, func(cfg sshdial.Config) (gridwellv1.GridwellClient, func(), error) {
+	srv := remote.New(db, func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error) {
 		h.dialed = append(h.dialed, cfg)
 		return remoteExport, func() {}, nil
 	}, "")
@@ -95,10 +95,10 @@ func newChainHarness(t *testing.T) *chainHarness {
 	t.Cleanup(sshCloser)
 	h.sshClient = sshClient
 
-	// The local node, registering the plugin as kind "ssh" — the transit
+	// The local node, registering the plugin as kind "remote" — the transit
 	// classification the real server applies.
 	localReg := plugin.NewRegistry()
-	localReg.Register("sshc", "ssh", sshClient, nil)
+	localReg.Register("sshc", "remote", sshClient, nil)
 	localReg.SetTransit("sshc", true) // the declaration the loader reads from Info in production
 	localSrv := server.New(localReg, server.Config{NodeID: "lnodex"})
 	localHTTP := httptest.NewServer(localSrv.Handler())
@@ -422,7 +422,7 @@ func TestInfoDeclaresInstanceGridNotRoot(t *testing.T) {
 	}
 	var ssh *rpc.PluginInfo
 	for i := range pls.Plugins {
-		if pls.Plugins[i].Kind == "ssh" {
+		if pls.Plugins[i].Kind == "remote" {
 			ssh = &pls.Plugins[i]
 		}
 	}

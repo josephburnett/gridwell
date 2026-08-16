@@ -10,7 +10,7 @@ import { tileAt } from './oracle';
 // a name the user chose.
 
 test('the bar crumb names the grid you are in', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -43,7 +43,7 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -83,7 +83,7 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
 });
 
 test('an async tile event never steals the rename input focus', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -120,7 +120,7 @@ test('an async tile event never steals the rename input focus', async ({ gw, win
 });
 
 test('a user-set shell name survives the detach command capture', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

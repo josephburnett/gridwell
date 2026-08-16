@@ -31,7 +31,7 @@ async function barClick(gw: any, window: any): Promise<void> {
 }
 
 test('workspace round trip: outer panes byte-identical, inner layout restored', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

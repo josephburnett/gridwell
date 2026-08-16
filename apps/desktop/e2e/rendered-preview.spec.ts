@@ -12,7 +12,7 @@ test('ascending in rendered mode persists it, renders the preview, and restores 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

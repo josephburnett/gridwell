@@ -35,8 +35,8 @@ func (m kvFlag) Set(s string) error {
 //	gridwell init --kind <kind> --name <name> [--config k=v ...]
 func RunInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	kind := fs.String("kind", "", "plugin kind (localdb, fs, proc, ssh)")
-	name := fs.String("name", "", "display name shown in the launcher")
+	kind := fs.String("kind", "", "plugin kind (local, fs, proc, remote)")
+	name := fs.String("name", "", "display name shown in the launcher (default: the kind)")
 	conf := kvFlag{}
 	fs.Var(conf, "config", "plugin config as key=value (repeatable)")
 	args = reorderFlagsFirst(args, func(n string) bool {
@@ -49,9 +49,14 @@ func RunInit(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *kind == "" || *name == "" {
-		fmt.Fprintln(os.Stderr, "init: --kind and --name are required")
+	if *kind == "" {
+		fmt.Fprintln(os.Stderr, "init: --kind is required")
 		return 2
+	}
+	// The name is a display alias; unset defaults to the kind — "fs is
+	// called fs" is the right default for a single instance of anything.
+	if *name == "" {
+		*name = *kind
 	}
 	home, err := config.Home()
 	if err != nil {

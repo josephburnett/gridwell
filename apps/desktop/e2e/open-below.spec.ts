@@ -10,10 +10,10 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   window,
   gw,
 }) => {
-  const local = (await gw.plugins()).find((l) => l.kind === 'localdb');
+  const local = (await gw.plugins()).find((l) => l.kind === 'local');
   const scratchGridID = local!.scratchGridID;
 
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const panesBefore = (await gw.panes()).length;
 
   // A live ephemeral visit to the local origin. Poll for the NAVIGATED

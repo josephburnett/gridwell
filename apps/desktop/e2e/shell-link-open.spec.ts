@@ -14,7 +14,7 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

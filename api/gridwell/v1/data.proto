@@ -185,7 +185,7 @@ message Tile {
 // connection, opened at load and closed at unload, is the only lifecycle.
 message InfoRequest {}
 message InfoResponse {
-  string kind           = 1;   // e.g. "localdb", "fs", "proc", "ssh"
+  string kind           = 1;   // e.g. "local", "fs", "proc", "remote"
   string display_name   = 2;
   int64  schema_version = 3;
   bool   watch          = 4;   // implements Subscribe for live change events
@@ -424,7 +424,7 @@ message SearchResponse {
 message ListPluginsRequest {}
 message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
-  string kind          = 2;   // "localdb", "fs", "proc", "ssh"
+  string kind          = 2;   // "local", "fs", "proc", "remote"
   string label         = 3;   // display name
   bool   writable      = 4;   // accepts new tiles (primitives can be created in it)
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root

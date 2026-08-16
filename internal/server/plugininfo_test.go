@@ -15,8 +15,8 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -27,7 +27,7 @@ import (
 // plugin can't blank or freeze the launcher.
 
 func TestBuildPluginInfo_InfoPresent(t *testing.T) {
-	got := buildPluginInfo("uuid-1", "localdb", "Home", &pb.InfoResponse{
+	got := buildPluginInfo("uuid-1", "local", "Home", &pb.InfoResponse{
 		RootGridId:    "7",
 		ScratchGridId: "9",
 		DisplayName:   "ignored-when-config-label-set",
@@ -48,11 +48,11 @@ func TestBuildPluginInfo_InfoPresent(t *testing.T) {
 }
 
 // The point of handshake-declared capabilities: a remote localdb reached
-// through the ssh proxy has local kind "ssh", but its forwarded Info still
+// through the ssh proxy has local kind "remote", but its forwarded Info still
 // says writable — it must be presented writable, not stranded read-only by a
 // kind check.
 func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
-	got := buildPluginInfo("u", "ssh", "Remote", &pb.InfoResponse{
+	got := buildPluginInfo("u", "remote", "Remote", &pb.InfoResponse{
 		RootGridId: "1",
 		Writable:   true,
 	}, nil)
@@ -60,7 +60,7 @@ func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
 		t.Error("an ssh-kind plugin whose Info declares writable must be writable")
 	}
 	// And the inverse: kind alone earns nothing.
-	got = buildPluginInfo("u", "localdb", "Local", &pb.InfoResponse{RootGridId: "1"}, nil)
+	got = buildPluginInfo("u", "local", "Local", &pb.InfoResponse{RootGridId: "1"}, nil)
 	if got.Writable {
 		t.Error("writable must come from the Info handshake, not the kind string")
 	}
@@ -70,7 +70,7 @@ func TestBuildPluginInfo_WritableFromHandshakeNotKind(t *testing.T) {
 // the same handshake and gets the same qualification as the root grid, and
 // declaring it never invents a root.
 func TestBuildPluginInfo_InstanceGridQualified(t *testing.T) {
-	got := buildPluginInfo("u", "ssh", "connections", &pb.InfoResponse{
+	got := buildPluginInfo("u", "remote", "connections", &pb.InfoResponse{
 		InstanceGridId: "0",
 		Writable:       true,
 	}, nil)
@@ -110,8 +110,8 @@ func TestBuildPluginInfo_NilInfoStillListedWithConfigLabel(t *testing.T) {
 }
 
 func TestBuildPluginInfo_NilInfoNoLabelFallsBackToKind(t *testing.T) {
-	got := buildPluginInfo("u", "ssh", "", nil, errors.New("timeout"))
-	if got.Label != "ssh" {
+	got := buildPluginInfo("u", "remote", "", nil, errors.New("timeout"))
+	if got.Label != "remote" {
 		t.Errorf("Label = %q, want the kind when neither config nor Info supplies one", got.Label)
 	}
 }
@@ -176,7 +176,7 @@ func TestBuildPluginInfo_EmptyGridIdsNotQualified(t *testing.T) {
 // enterPlugin. Zero (never visited) must pass through too — the client
 // distinguishes it from an explicit user view.
 func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
-	got := buildPluginInfo("uuid-1", "localdb", "Home", &pb.InfoResponse{
+	got := buildPluginInfo("uuid-1", "local", "Home", &pb.InfoResponse{
 		RootGridId:   "7",
 		RootViewCx:   3.5,
 		RootViewCy:   -2.25,
@@ -193,7 +193,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 	}
 
 	// Zero (never visited) passes through unchanged.
-	zero := buildPluginInfo("u", "localdb", "X", &pb.InfoResponse{
+	zero := buildPluginInfo("u", "local", "X", &pb.InfoResponse{
 		RootGridId:   "1",
 		RootViewZoom: 0,
 	}, nil)
@@ -341,7 +341,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = remoteStore.Close() })
 	remotePlugin := &schemaPlugin{
-		Plugin: localdb.New(remoteStore, nil),
+		Plugin: local.New(remoteStore, nil),
 		schemas: map[string]string{
 			"well": `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`,
 		},
@@ -352,7 +352,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	}
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
-	remoteReg.Register("rp1", "localdb", remoteClient, nil)
+	remoteReg.Register("rp1", "local", remoteClient, nil)
 	remoteSrv := New(remoteReg, Config{NodeID: "rnode"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
@@ -390,7 +390,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	}
 	t.Cleanup(mountCloser)
 	localReg := plugin.NewRegistry()
-	localReg.Register("sshm", "ssh", mountClient, nil)
+	localReg.Register("sshm", "remote", mountClient, nil)
 	localReg.SetTransit("sshm", true) // the declared transit (loader reads it from Info in production)
 	localSrv := New(localReg, Config{NodeID: "lnode"})
 	localHTTP := httptest.NewServer(localSrv.Handler())
@@ -408,7 +408,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 
 // schemaPlugin wraps a localdb with a create_schemas declaration.
 type schemaPlugin struct {
-	*localdb.Plugin
+	*local.Plugin
 	schemas map[string]string
 }
 

@@ -9,7 +9,7 @@ import { tileAt } from './oracle';
 // Info), so the adopt/descend half is pinned by the store, dispatch, and
 // sshhost seam tests instead.
 
-test.use({ extraPlugins: [{ kind: 'ssh', name: 'connections' }] });
+test.use({ extraPlugins: [{ kind: 'remote', name: 'connections' }] });
 
 const HOST_FIELDS: Record<string, string> = {
   host: '127.0.0.1',
@@ -29,12 +29,12 @@ test('drop → picker: create, list as connecting, dedup by name, tombstone fore
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  const ssh = (await gw.plugins()).find((p) => p.kind === 'ssh')!;
+  const ssh = (await gw.plugins()).find((p) => p.kind === 'remote')!;
   expect(ssh.status, 'ssh classifies as parameterized after the flip').toBe('parameterized');
   expect(ssh.rootGridID, 'no root grid — no landing page').toBe('');
   expect(ssh.instanceGridID).toBe(`${ssh.uuid}/0`);
@@ -42,7 +42,7 @@ test('drop → picker: create, list as connecting, dedup by name, tombstone fore
   // The menu drag drops an UNCONFIGURED plugin well: childless, marked with
   // the plugin's uuid, in the HOST grid (localdb).
   await gw.openPalette();
-  await gw.dragPluginLink('ssh', cx, cy);
+  await gw.dragPluginLink('remote', cx, cy);
   let g = await gw.getGrid(f.gridID);
   const well = tileAt(g, 'well', cx, cy)!;
   expect(well, 'the drop lands a well in the host grid').toBeTruthy();
@@ -100,10 +100,10 @@ test('the menu click opens the picker in place; Escape changes nothing', async (
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const before = await gw.focused();
 
-  await gw.clickPluginSwatch('ssh');
+  await gw.clickPluginSwatch('remote');
   await window.locator('#gw-inst-picker #gw-pick-body').waitFor({ timeout: 10_000 });
   await expect(window.locator('#gw-pick-body')).toContainText('no connections yet');
 

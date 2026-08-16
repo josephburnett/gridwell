@@ -13,7 +13,7 @@ import { tileAt } from './oracle';
 // (the shellStandin hook reads the same shellStandinRect the draw path
 // uses) must match the live xterm canvas's own screen rect.
 test('the parked shell stand-in sits exactly where the live canvas was', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
 
   // Two panes: the shell lives in A; the + menu will open on B.
   await gw.splitFocusedPaneVertical();

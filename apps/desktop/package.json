@@ -45,8 +45,8 @@
         "to": "gridwell"
       },
       {
-        "from": "../../gridwell-plugin-localdb",
-        "to": "gridwell-plugin-localdb"
+        "from": "../../gridwell-plugin-local",
+        "to": "gridwell-plugin-local"
       },
       {
         "from": "../../gridwell-plugin-fs",
@@ -57,8 +57,8 @@
         "to": "gridwell-plugin-proc"
       },
       {
-        "from": "../../gridwell-plugin-ssh",
-        "to": "gridwell-plugin-ssh"
+        "from": "../../gridwell-plugin-remote",
+        "to": "gridwell-plugin-remote"
       },
       {
         "from": "../../api/gridwell/v1/data.proto",

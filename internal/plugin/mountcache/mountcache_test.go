@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // serveInProcess is plugin.ServeInProcess's shape, inlined: the loader now
@@ -104,7 +104,7 @@ func fixture(t *testing.T) (cc *Client, upstream *darkable, root string, dbPath 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	raw := serveInProcess(t, localdb.New(st, nil))
+	raw := serveInProcess(t, local.New(st, nil))
 	root, err = st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +264,7 @@ func TestStaleServedWhenStreamFailsAtFirstRecv(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	raw := serveInProcess(t, localdb.New(st, nil))
+	raw := serveInProcess(t, local.New(st, nil))
 	root, err := st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatal(err)

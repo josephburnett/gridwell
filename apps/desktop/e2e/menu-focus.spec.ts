@@ -11,7 +11,7 @@ import { test, expect } from './fixtures';
 // to end through the real app: the live menu must not survive a focus excursion.
 
 test('the + menu closes when focus leaves its pane', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   await gw.splitFocusedPaneVertical();
   const panes = await gw.panes();
   expect(panes.length, 'split produced two panes').toBe(2);

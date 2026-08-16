@@ -197,3 +197,17 @@ func readKey(db *sql.DB, k string) (string, error) {
 	}
 	return v, nil
 }
+
+// UpdateKind rewrites the stamped kind in a plugin DB's identity metadata
+// — the host-driven half of a kind RENAME (the id never changes). Generic
+// on purpose: which names map to which lives with the caller's migration,
+// never here.
+func UpdateKind(dbPath, kind string) error {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE _gridwell_meta SET v = ? WHERE k = 'kind'`, kind)
+	return err
+}

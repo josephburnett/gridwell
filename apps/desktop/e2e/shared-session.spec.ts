@@ -10,7 +10,7 @@ import { test, expect } from './fixtures';
 // tile owned by PLUGIN B. Under the old model these were different
 // partitions by construction and this spec would fail.
 
-test.use({ extraPlugins: [{ kind: 'localdb', name: 'second' }] });
+test.use({ extraPlugins: [{ kind: 'local', name: 'second' }] });
 
 test('live tiles in different plugins share the one local session', async ({
   electronApp,
@@ -37,7 +37,7 @@ test('live tiles in different plugins share the one local session', async ({
   };
 
   // A live tile in the FIRST plugin sets a cookie in-page.
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   await goLiveURL('plug=one');
   await electronApp.evaluate(async ({ webContents }) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('plug=one'));

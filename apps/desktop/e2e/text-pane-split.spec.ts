@@ -42,7 +42,7 @@ async function splitWithBothPanesOnGrid(gw: any): Promise<[any, any]> {
 }
 
 test('split pane text tiles: overlay covers only focused pane, not preview', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f0 = await gw.focused();
   const grid = f0.gridID;
   const cx = Math.round(f0.cx);
@@ -121,7 +121,7 @@ test('split pane text tiles: overlay covers only focused pane, not preview', asy
 });
 
 test('split pane: focus switch between two text descents preserves both tiles', async ({ gw }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f0 = await gw.focused();
   const grid = f0.gridID;
   const cx = Math.round(f0.cx);

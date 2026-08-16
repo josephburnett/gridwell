@@ -9,7 +9,7 @@ test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -44,7 +44,7 @@ test('Ctrl+= zooms a live url view (composed with the layout zoom)', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
@@ -93,9 +93,9 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
 }) => {
   // The scratch grid id (where the ephemeral url tile lands) is advertised
   // on the plugin's entry.
-  const scratch = (await gw.plugins()).find((l) => l.kind === 'localdb')!.scratchGridID;
+  const scratch = (await gw.plugins()).find((l) => l.kind === 'local')!.scratchGridID;
   expect(scratch, 'localdb advertises a scratch grid').toBeTruthy();
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );

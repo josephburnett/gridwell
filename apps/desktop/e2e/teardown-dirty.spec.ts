@@ -12,7 +12,7 @@ import { test, expect } from './fixtures';
 // the test timeout, and the leak checks (sidecar assert, tmux kill) run.
 
 test('a spec ending with a live shell attached does not hang teardown', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -28,7 +28,7 @@ test('a spec ending with a live shell attached does not hang teardown', async ({
 });
 
 test('a spec ending with a live url view does not hang teardown', async ({ gw, window, electronApp }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
   await gw.clickPaletteSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

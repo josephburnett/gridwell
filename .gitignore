@@ -1,8 +1,8 @@
 /gridwell
-/gridwell-plugin-localdb
+/gridwell-plugin-local
 /gridwell-plugin-fs
 /gridwell-plugin-proc
-/gridwell-plugin-ssh
+/gridwell-plugin-remote
 /web/gridwell.wasm
 /web/gridwell.wasm.gz
 /web/wasm_exec.js

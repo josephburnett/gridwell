@@ -35,10 +35,10 @@ var modules = map[string][]string{
 	"plugins/griddb": {"api"},
 	// Plugins: the api, the shared neutral homes — never the host, never
 	// each other.
-	"plugins/localdb": {"api", "internal/doctype"},
-	"plugins/fs":      {"api", "internal/doctype", "plugins/griddb"},
-	"plugins/proc":    {"api", "plugins/griddb"},
-	"plugins/ssh":     {"api"},
+	"plugins/local":  {"api", "internal/doctype"},
+	"plugins/fs":     {"api", "internal/doctype", "plugins/griddb"},
+	"plugins/proc":   {"api", "plugins/griddb"},
+	"plugins/remote": {"api"},
 	// The root module is the SERVER LIBRARY (+ its embedded client): the
 	// api and the neutral homes — never a plugin implementation.
 	"": {"api", "internal/doctype"},

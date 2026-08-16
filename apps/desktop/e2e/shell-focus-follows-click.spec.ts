@@ -14,7 +14,7 @@ test('left-click into a live shell transfers pane focus', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
 
   // Two panes: left keeps the grid, focus moves to the new right pane.
   await gw.splitFocusedPaneVertical();

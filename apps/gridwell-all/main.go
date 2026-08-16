@@ -16,10 +16,10 @@ import (
 	"github.com/josephburnett/gridwell/internal/cli"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/local"
 	"github.com/josephburnett/gridwell/plugins/proc"
-	sshhost "github.com/josephburnett/gridwell/plugins/ssh"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial"
+	"github.com/josephburnett/gridwell/plugins/remote"
+	"github.com/josephburnett/gridwell/plugins/remote/dial"
 )
 
 func main() { os.Exit(cli.Main(os.Args[1:], factories())) }
@@ -28,25 +28,25 @@ func main() { os.Exit(cli.Main(os.Args[1:], factories())) }
 // its subprocess main would, minus the process boundary. Shells work
 // in-process too (the tmux manager is not wired here — a bundled desktop
 // binary wanting live shells would add it exactly as
-// plugins/localdb/cmd/gridwell-plugin-localdb does).
+// plugins/local/cmd/gridwell-plugin-local does).
 func factories() map[string]plugin.ServerFactory {
 	return map[string]plugin.ServerFactory{
-		"localdb": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			st, err := localdb.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
+		"local": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+			st, err := local.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
 			if err != nil {
 				return nil, err
 			}
-			return localdb.New(st, nil), nil
+			return local.New(st, nil), nil
 		},
 		"fs":   fsplugin.NewFactory,
 		"proc": proc.NewFactory,
-		"ssh": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			db, err := sshhost.OpenDB(cfg["db_file"])
+		"remote": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+			db, err := remote.OpenDB(cfg["db_file"])
 			if err != nil {
 				return nil, err
 			}
 			home := os.Getenv("GRIDWELL_HOME")
-			return sshhost.New(db, sshdial.Dial, home), nil
+			return remote.New(db, dial.Dial, home), nil
 		},
 	}
 }

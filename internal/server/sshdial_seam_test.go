@@ -13,19 +13,19 @@ import (
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc"
-	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial"
-	"github.com/josephburnett/gridwell/plugins/ssh/sshdial/sshdialtest"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/shellsvc"
+	"github.com/josephburnett/gridwell/plugins/local/shellsvc/shellsvctest"
+	"github.com/josephburnett/gridwell/plugins/local/store"
+	"github.com/josephburnett/gridwell/plugins/remote/dial"
+	"github.com/josephburnett/gridwell/plugins/remote/dial/dialtest"
 )
 
 // This is the ssh plugin's REAL transport seam, in-process: a genuine
 // x/crypto/ssh server (public-key auth, host-key verification against a
 // known_hosts file, direct-tcpip channel forwarding) in front of a genuine
 // `gridwell serve` node handler (h2c + id-routed node export + node grid +
-// TWO in-process localdbs). sshdial.Dial crosses every layer the production
+// TWO in-process localdbs). dial.Dial crosses every layer the production
 // binary crosses except the network itself.
 
 // remoteNode stands up the "remote gridwell serve": node id "rnode" with two
@@ -41,13 +41,13 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 			t.Fatalf("store.Open: %v", err)
 		}
 		t.Cleanup(func() { st.Close() })
-		direct, closer, err := compose.ServeInProcess(localdb.New(st, shellsvc.NewManager(shellsvctest.New())))
+		direct, closer, err := compose.ServeInProcess(local.New(st, shellsvc.NewManager(shellsvctest.New())))
 		if err != nil {
 			t.Fatalf("serve localdb: %v", err)
 		}
 		t.Cleanup(closer)
 		uuid := fmt.Sprintf("ur%d", i+1)
-		reg.Register(uuid, "localdb", direct, nil)
+		reg.Register(uuid, "local", direct, nil)
 		reg.SetLabel(uuid, name)
 	}
 	direct, _ := reg.Get("ur1")
@@ -66,9 +66,9 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 func dialThroughSSH(t *testing.T) (gridwellv1.GridwellClient, gridwellv1.GridwellClient, error) {
 	t.Helper()
 	nodeAddr, direct := remoteNode(t)
-	creds := sshdialtest.Server(t, t.TempDir())
+	creds := dialtest.Server(t, t.TempDir())
 
-	client, closer, err := sshdial.Dial(sshdial.Config{
+	client, closer, err := dial.Dial(dial.Config{
 		Host:       creds.Addr,
 		User:       "joe",
 		KeyPath:    creds.KeyPath,
@@ -183,9 +183,9 @@ func writeThenRead(t *testing.T, ctx context.Context, c gridwellv1.GridwellClien
 // forever against a transport that could never recover.
 func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 	nodeAddr, _ := remoteNode(t)
-	creds, sshd := sshdialtest.Restartable(t, t.TempDir())
+	creds, sshd := dialtest.Restartable(t, t.TempDir())
 
-	client, closer, err := sshdial.Dial(sshdial.Config{
+	client, closer, err := dial.Dial(dial.Config{
 		Host:       creds.Addr,
 		User:       "joe",
 		KeyPath:    creds.KeyPath,

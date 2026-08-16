@@ -70,7 +70,7 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   // No --db: the server derives every plugin's DB path from its id under the
   // Gridwell home (GRIDWELL_HOME, inherited from this process's env, else
   // ~/.gridwell). A missing server.yaml is healed below: the one no-config
-  // retry runs `gridwell init --kind localdb --name home` — first-run
+  // retry runs `gridwell init --kind local --name home` — first-run
   // friendliness in the app, while the server keeps its strict contract.
   // --bind-default (not --bind): the ephemeral loopback port applies only when
   // ~/.gridwell/server.yaml declares no bind: of its own. A declared bind:
@@ -182,15 +182,15 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   });
 }
 
-// initThenRetry runs `gridwell init --kind localdb --name home` (the app's
+// initThenRetry runs `gridwell init --kind local --name home` (the app's
 // first-run heal) and restarts the boot with the retry latch set.
 async function initThenRetry(
   bin: string,
   opts: StartOptions,
   onLog: (line: string) => void,
 ): Promise<Sidecar> {
-  onLog('[first run] no config — running gridwell init --kind localdb --name home');
-  const initArgs = ['init', '--kind', 'localdb', '--name', 'home'];
+  onLog('[first run] no config — running gridwell init --kind local --name home');
+  const initArgs = ['init', '--kind', 'local', '--name', 'home'];
   await new Promise<void>((resolve, reject) => {
     const child = opts.spawnFn
       ? opts.spawnFn(bin, initArgs)

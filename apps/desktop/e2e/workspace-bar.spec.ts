@@ -25,7 +25,7 @@ async function panesBottom(gw: any): Promise<number> {
 }
 
 test('the bar is always reserved; workspace crumbs appear only inside; in-pane ascent never crosses', async ({ gw, window }) => {
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

@@ -41,7 +41,7 @@ func TestHelperPluginHost(t *testing.T) {
 	_, closer, err := compose.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "hostdeath-uuid",
-		"kind":    "localdb",
+		"kind":    "local",
 	})
 	if err != nil {
 		fmt.Printf("HELPER-ERR %v\n", err)
@@ -63,9 +63,9 @@ func TestPluginExitsWhenHostDiesHard(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a plugin binary; skipped under -short")
 	}
-	bin := buildPluginBinary(t, "localdb")
+	bin := buildPluginBinary(t, "local")
 	dbPath := filepath.Join(t.TempDir(), "test.gwdb")
-	if err := pluginmeta.Create(dbPath, "hostdeath-uuid", "localdb"); err != nil {
+	if err := pluginmeta.Create(dbPath, "hostdeath-uuid", "local"); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
 

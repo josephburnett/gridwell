@@ -15,10 +15,10 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc"
-	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/shellsvc"
+	"github.com/josephburnett/gridwell/plugins/local/shellsvc/shellsvctest"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // nodeServer stands up a full Server (node id "node1", one in-process localdb
@@ -41,7 +41,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	impl := localdb.New(st, shellsvc.NewManager(shellsvctest.New()))
+	impl := local.New(st, shellsvc.NewManager(shellsvctest.New()))
 	direct, closer, err := plugin.ServeInProcess(impl)
 	if err != nil {
 		t.Fatalf("serve localdb: %v", err)
@@ -49,7 +49,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 	t.Cleanup(closer)
 
 	reg := plugin.NewRegistry()
-	reg.Register("ur1", "localdb", direct, nil)
+	reg.Register("ur1", "local", direct, nil)
 	reg.SetLabel("ur1", "personal")
 	srv := server.New(reg, cfg)
 

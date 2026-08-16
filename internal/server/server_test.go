@@ -16,8 +16,8 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // registerPrimaryLocaldb serves st as a localdb plugin in reg under its stable
@@ -29,12 +29,12 @@ func registerPrimaryLocaldb(t *testing.T, reg *plugin.Registry, st *store.Store)
 	if err != nil {
 		t.Fatalf("plugin uuid: %v", err)
 	}
-	client, closer, err := plugin.ServeInProcess(localdb.New(st, nil))
+	client, closer, err := plugin.ServeInProcess(local.New(st, nil))
 	if err != nil {
 		t.Fatalf("serve primary localdb: %v", err)
 	}
 	t.Cleanup(closer)
-	reg.Register(uuid, "localdb", client, nil)
+	reg.Register(uuid, "local", client, nil)
 	bareRoot, err := st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatalf("root grid id: %v", err)
@@ -203,8 +203,8 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 // a plugin declares watch in its Info handshake, and the server must fan in
 // its events REGARDLESS of the local kind string. This is the remote shape —
 // the ssh plugin serves a transparent proxy around a remote node, so its local
-// kind is "ssh" while the proxied Info (forwarded verbatim) says watch=true.
-// Before the fix, Subscribe skipped every plugin whose kind wasn't "localdb",
+// kind is "remote" while the proxied Info (forwarded verbatim) says watch=true.
+// Before the fix, Subscribe skipped every plugin whose kind wasn't "local",
 // so a remote localdb's events never reached the client.
 func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	st, err := store.Open(":memory:")
@@ -218,13 +218,13 @@ func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	}
 
 	// The "remote node": a localdb served over gRPC.
-	inner, innerClose, err := plugin.ServeInProcess(localdb.New(st, nil))
+	inner, innerClose, err := plugin.ServeInProcess(local.New(st, nil))
 	if err != nil {
 		t.Fatalf("serve inner localdb: %v", err)
 	}
 	t.Cleanup(innerClose)
 	// The local ssh plugin: a transparent proxy around the remote client,
-	// registered under kind "ssh" exactly as production would.
+	// registered under kind "remote" exactly as production would.
 	proxied, proxClose, err := plugin.ServeInProcess(proxy.New(inner))
 	if err != nil {
 		t.Fatalf("serve proxy: %v", err)
@@ -232,7 +232,7 @@ func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	t.Cleanup(proxClose)
 
 	reg := plugin.NewRegistry()
-	reg.Register(uuid, "ssh", proxied, nil)
+	reg.Register(uuid, "remote", proxied, nil)
 	reg.SetTransit(uuid, true) // the declaration the loader reads from Info in production
 
 	srv := New(reg, Config{})

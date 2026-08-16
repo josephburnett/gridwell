@@ -16,7 +16,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	if rc := RunInit([]string{"--kind", "localdb", "--name", "home"}); rc != 0 {
+	if rc := RunInit([]string{"--kind", "local", "--name", "home"}); rc != 0 {
 		t.Fatalf("init returned %d", rc)
 	}
 
@@ -28,7 +28,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 		t.Fatalf("plugins: got %d, want 1", len(cfg.Plugins))
 	}
 	p := cfg.Plugins[0]
-	if p.Name != "home" || p.Kind != "localdb" || p.ID == "" {
+	if p.Name != "home" || p.Kind != "local" || p.ID == "" {
 		t.Fatalf("plugin entry: %+v", p)
 	}
 
@@ -41,7 +41,7 @@ func TestRunInitCreatesPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read meta: %v", err)
 	}
-	if m.ID != p.ID || m.Kind != "localdb" {
+	if m.ID != p.ID || m.Kind != "local" {
 		t.Errorf("DB metadata %+v does not match config id %q", m, p.ID)
 	}
 }
@@ -50,23 +50,32 @@ func TestRunInitRejectsDuplicateName(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	if rc := RunInit([]string{"--kind", "localdb", "--name", "home"}); rc != 0 {
+	if rc := RunInit([]string{"--kind", "local", "--name", "home"}); rc != 0 {
 		t.Fatal("first init failed")
 	}
-	if rc := RunInit([]string{"--kind", "localdb", "--name", "home"}); rc == 0 {
+	if rc := RunInit([]string{"--kind", "local", "--name", "home"}); rc == 0 {
 		t.Error("duplicate name should be rejected")
 	}
 }
 
-func TestRunInitRequiresKindAndName(t *testing.T) {
+func TestRunInitRequiresKindNameDefaultsToIt(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	if rc := RunInit([]string{"--kind", "localdb"}); rc == 0 {
-		t.Error("missing --name should fail")
-	}
 	if rc := RunInit([]string{"--name", "home"}); rc == 0 {
 		t.Error("missing --kind should fail")
+	}
+	// --name is optional (owner decision 2026-08-16): it defaults to the
+	// kind — "fs is called fs" for a single instance of anything.
+	if rc := RunInit([]string{"--kind", "local"}); rc != 0 {
+		t.Fatalf("init without --name returned %d", rc)
+	}
+	cfg, err := config.Load(filepath.Join(home, "server.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Plugins[0].Name != "local" {
+		t.Errorf("default name = %q, want the kind", cfg.Plugins[0].Name)
 	}
 }
 
@@ -79,7 +88,7 @@ func TestRunInitSSH(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	rc := RunInit([]string{"--kind", "ssh", "--name", "remote"})
+	rc := RunInit([]string{"--kind", "remote", "--name", "remote"})
 	if rc != 0 {
 		t.Fatalf("plain init ssh returned %d", rc)
 	}
@@ -88,11 +97,11 @@ func TestRunInitSSH(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	p := cfg.Plugins[0]
-	if p.Kind != "ssh" || len(p.Config) != 0 {
+	if p.Kind != "remote" || len(p.Config) != 0 {
 		t.Fatalf("ssh entry: %+v, want kind ssh with no config", p)
 	}
 	m, _ := pluginmeta.Verify(config.DBFile(home, p.ID), "", "")
-	if m.Kind != "ssh" {
+	if m.Kind != "remote" {
 		t.Errorf("DB kind = %q, want ssh", m.Kind)
 	}
 }

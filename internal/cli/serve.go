@@ -222,6 +222,13 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int 
 		return 1
 	}
 
+	// DELETE AFTER 2026-09-16 with kindmigrate.go: the one-shot kind
+	// rename (localdb→local, ssh→remote).
+	if err := migrateRenamedKinds(home, cfgPath); err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
+
 	// The config is mandatory and authoritative: it lists every plugin and the
 	// id+kind the server verifies against each DB. No synthesized fallback.
 	cfg, err := buildServeConfig(home, cfgPath)

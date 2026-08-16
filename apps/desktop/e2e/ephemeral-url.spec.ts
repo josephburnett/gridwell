@@ -17,12 +17,12 @@ test('clicking the menu url swatch descends into an off-grid ephemeral visit', a
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
   // The localdb's scratch grid id is advertised on its plugin entry.
-  const local = (await gw.plugins()).find((l) => l.kind === 'localdb');
+  const local = (await gw.plugins()).find((l) => l.kind === 'local');
   expect(local, 'localdb plugin configured').toBeTruthy();
   const scratchGridID = local!.scratchGridID;
   expect(scratchGridID, 'localdb advertises a scratch grid').toBeTruthy();
 
-  await gw.enterPlugin('localdb');
+  await gw.enterPlugin('local');
   const home = await gw.focused();
   const homeBefore = await gw.getGrid(home.gridID);
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);

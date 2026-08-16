@@ -8,10 +8,10 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
-	"github.com/josephburnett/gridwell/plugins/localdb"
-	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc"
-	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	"github.com/josephburnett/gridwell/plugins/local"
+	"github.com/josephburnett/gridwell/plugins/local/shellsvc"
+	"github.com/josephburnett/gridwell/plugins/local/shellsvc/shellsvctest"
+	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // proxied stands up an in-process "remote" localdb (with a fake shell host),
@@ -25,7 +25,7 @@ func proxied(t *testing.T) gridwellv1.GridwellClient {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	remote := localdb.New(st, shellsvc.NewManager(shellsvctest.New()))
+	remote := local.New(st, shellsvc.NewManager(shellsvctest.New()))
 	remoteClient, remoteCloser, err := plugin.ServeInProcess(remote)
 	if err != nil {
 		t.Fatalf("serve remote: %v", err)
@@ -48,7 +48,7 @@ func TestProxy_UnaryForwards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	if info.Kind != "localdb" || info.RootGridId == "" {
+	if info.Kind != "local" || info.RootGridId == "" {
 		t.Fatalf("Info through proxy = %+v, want the remote's", info)
 	}
 

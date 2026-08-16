@@ -3,8 +3,8 @@
 BIN := ./gridwell
 FS_BIN := ./gridwell-plugin-fs
 PROC_BIN := ./gridwell-plugin-proc
-LOCALDB_BIN := ./gridwell-plugin-localdb
-SSH_BIN := ./gridwell-plugin-ssh
+LOCAL_BIN := ./gridwell-plugin-local
+REMOTE_BIN := ./gridwell-plugin-remote
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -45,10 +45,10 @@ bin-all:
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);
 # file-target rules would skip the build whenever the binary already existed.
 plugins:
-	cd plugins/localdb && CGO_ENABLED=0 go build -o ../../gridwell-plugin-localdb ./cmd/gridwell-plugin-localdb
+	cd plugins/local && CGO_ENABLED=0 go build -o ../../gridwell-plugin-local ./cmd/gridwell-plugin-local
 	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-plugin-fs ./cmd/gridwell-plugin-fs
 	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-plugin-proc ./cmd/gridwell-plugin-proc
-	cd plugins/ssh && CGO_ENABLED=0 go build -o ../../gridwell-plugin-ssh ./cmd/gridwell-plugin-ssh
+	cd plugins/remote && CGO_ENABLED=0 go build -o ../../gridwell-plugin-remote ./cmd/gridwell-plugin-remote
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's
@@ -111,7 +111,7 @@ proto-check:
 # shared nested modules, and each plugin (its own module: the in-repo
 # strangers, docs/plugin.md). check builds and tests each one STANDALONE
 # (GOWORK=off) so no module can quietly lean on the workspace.
-MODULES := api internal/doctype plugins/griddb plugins/localdb plugins/fs plugins/proc plugins/ssh apps/gridwell apps/gridwell-all mobile
+MODULES := api internal/doctype plugins/griddb plugins/local plugins/fs plugins/proc plugins/remote apps/gridwell apps/gridwell-all mobile
 
 check: fmt-check proto-check
 	go build ./...
@@ -241,5 +241,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(LOCALDB_BIN) $(FS_BIN) $(PROC_BIN) $(SSH_BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(LOCAL_BIN) $(FS_BIN) $(PROC_BIN) $(REMOTE_BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out

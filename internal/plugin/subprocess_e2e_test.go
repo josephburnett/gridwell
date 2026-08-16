@@ -34,19 +34,19 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a plugin binary; skipped under -short")
 	}
-	bin := buildPluginBinary(t, "localdb")
+	bin := buildPluginBinary(t, "local")
 	dbPath := filepath.Join(t.TempDir(), "test.gwdb")
 
 	// The plugin verifies (never creates) its identity, so the DB must be
 	// initialized first — exactly what `gridwell init` does.
-	if err := pluginmeta.Create(dbPath, "sub-uuid-1", "localdb"); err != nil {
+	if err := pluginmeta.Create(dbPath, "sub-uuid-1", "local"); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
 
 	client, closer, err := compose.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "sub-uuid-1",
-		"kind":    "localdb",
+		"kind":    "local",
 	})
 	if err != nil {
 		t.Fatalf("LoadPlugin: %v", err)
@@ -58,7 +58,7 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	if info.Kind != "localdb" || info.RootGridId == "" {
+	if info.Kind != "local" || info.RootGridId == "" {
 		t.Fatalf("Info = %+v, want kind=localdb and a root grid id", info)
 	}
 
@@ -78,7 +78,7 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pluginmeta.Verify(read): %v", err)
 	}
-	if stored.ID != "sub-uuid-1" || stored.Kind != "localdb" {
+	if stored.ID != "sub-uuid-1" || stored.Kind != "local" {
 		t.Errorf("persisted identity = %+v, want {sub-uuid-1 localdb}", stored)
 	}
 }
@@ -91,11 +91,11 @@ func TestSubprocessPlugin_IDMismatchRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a plugin binary; skipped under -short")
 	}
-	bin := buildPluginBinary(t, "localdb")
+	bin := buildPluginBinary(t, "local")
 	dbPath := filepath.Join(t.TempDir(), "test.gwdb")
 
 	// Seed the DB's durable identity directly.
-	if err := pluginmeta.Create(dbPath, "id-A", "localdb"); err != nil {
+	if err := pluginmeta.Create(dbPath, "id-A", "local"); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
 
@@ -103,7 +103,7 @@ func TestSubprocessPlugin_IDMismatchRejected(t *testing.T) {
 	client, closer, err := compose.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "id-B",
-		"kind":    "localdb",
+		"kind":    "local",
 	})
 	if err == nil {
 		closer()
