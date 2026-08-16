@@ -8,8 +8,10 @@ package fs
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path/filepath"
@@ -36,7 +38,7 @@ const autoGridWidth = 8
 // migrations, never delete the DB to absorb a change.
 const (
 	fsApplicationID = 0x47576673 // "GWfs"
-	fsSchemaVersion = 2
+	fsSchemaVersion = 3
 )
 
 // fsMigrations is the ordered additive chain; entry i brings a DB from
@@ -55,6 +57,23 @@ var fsMigrations = []dbformat.Migration{
 			`ALTER TABLE grids ADD COLUMN root_cx REAL`,
 			`ALTER TABLE grids ADD COLUMN root_cy REAL`,
 			`ALTER TABLE grids ADD COLUMN root_zoom REAL`,
+		} {
+			if _, err := tx.ExecContext(ctx, ddl); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
+	// v3 (2026-08-16, #258): tool rows — plugin menu entries living in
+	// the SAME tiles table under the reserved "\x00" name prefix.
+	// menu_entry marks the tool (fs: "search"), params holds its
+	// committed document, target_path lets a result row synthesize its
+	// link at read time. All plain TEXT '' defaults: additive-only.
+	{To: 3, Run: func(ctx context.Context, tx *sql.Tx) error {
+		for _, ddl := range []string{
+			`ALTER TABLE tiles ADD COLUMN menu_entry TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE tiles ADD COLUMN params TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE tiles ADD COLUMN target_path TEXT NOT NULL DEFAULT ''`,
 		} {
 			if _, err := tx.ExecContext(ctx, ddl); err != nil {
 				return err
@@ -173,6 +192,11 @@ CREATE TABLE IF NOT EXISTS tiles (
     view_x        INTEGER NOT NULL DEFAULT 0,
     view_y        INTEGER NOT NULL DEFAULT 0,
     view_zoom     REAL NOT NULL DEFAULT 1.0,
+    -- v3 (#258): tool rows (reserved names) — the menu entry that
+    -- minted them, their committed params, a result's link target.
+    menu_entry    TEXT NOT NULL DEFAULT '',
+    params        TEXT NOT NULL DEFAULT '',
+    target_path   TEXT NOT NULL DEFAULT '',
     UNIQUE (grid_id, name)
 );`
 
@@ -234,7 +258,10 @@ func NewFactory(cfg map[string]string) (gridwellv1.GridwellServer, error) {
 // Info is the whole handshake: identity plus the default root grid (the
 // plugin's configured root directory, resolved to a grid id). No Attach/Detach.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: fsSchemaVersion, Glyph: "folder"}
+	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: fsSchemaVersion, Glyph: "folder",
+		// The (+) menu tool fs declares (#258): search, a parameterized
+		// well the server stamps onto every fs grid.
+		MenuEntries: searchMenuEntries()}
 	path := filepath.Clean(p.root)
 	if path == "" || path == "." {
 		return resp, nil // no configured root → no descendable default
@@ -285,6 +312,12 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		return nil, fmt.Errorf("fs GetGrid %d: %w", gridID, err)
 	}
 
+	// A TOOL grid (a search well's results) is not a directory: stored
+	// rows only — never readDir, never sweep (#258).
+	if isToolGridPath(path) {
+		return p.serveToolGrid(gridID, path)
+	}
+
 	entries, readErr := p.readDir(path)
 	if readErr != nil {
 		if errors.Is(readErr, iofs.ErrNotExist) {
@@ -316,9 +349,44 @@ func (p *Plugin) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest) (*gr
 		return nil, err
 	}
 	stampServesPage(tiles, path)
+	if err := p.stampToolRows(tiles); err != nil {
+		return nil, err
+	}
 
 	grid := &gridwellv1.Grid{Id: req.GridId, SourceKind: "fs", SourceId: path}
 	return &gridwellv1.GetGridResponse{Grid: grid, Tiles: tiles}, nil
+}
+
+// stampToolRows overlays the wire facts a TOOL row carries (#258): its
+// menu_entry (so the client prompts for params on first descent) and a
+// human face for the reserved storage name (the entry, plus the query
+// once committed).
+func (p *Plugin) stampToolRows(tiles []*gridwellv1.Tile) error {
+	for _, t := range tiles {
+		if !reservedName(t.AltText) {
+			continue
+		}
+		id, err := strconv.ParseInt(t.Id, 10, 64)
+		if err != nil {
+			continue
+		}
+		_, params, isSearch, err := p.searchTileMeta(id)
+		if err != nil {
+			return err
+		}
+		if !isSearch {
+			continue
+		}
+		t.MenuEntry = MenuEntrySearch
+		t.AltText = "search"
+		var q struct {
+			Query string `json:"query"`
+		}
+		if json.Unmarshal([]byte(params), &q) == nil && q.Query != "" {
+			t.AltText = "search: " + q.Query
+		}
+	}
+	return nil
 }
 
 // GetTile returns one tile row by id — cloneAcrossPlugins' first call against
@@ -332,6 +400,9 @@ func (p *Plugin) GetTile(_ context.Context, req *gridwellv1.GetTileRequest) (*gr
 			dir, _ = p.gridPath(gid)
 		}
 		stampServesPage([]*gridwellv1.Tile{resp.Tile}, dir)
+		if serr := p.stampToolRows([]*gridwellv1.Tile{resp.Tile}); serr != nil {
+			return nil, serr
+		}
 	}
 	return resp, err
 }
@@ -377,6 +448,14 @@ func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, e
 	if err != nil {
 		return nil, "", err
 	}
+	// A search well's content IS its params document (#258) — the
+	// connection-well pattern; the client's entry form reads/edits it.
+	if reservedName(name) {
+		if _, params, isSearch, serr := p.searchTileMeta(tileID); serr == nil && isSearch {
+			return []byte(params), "application/json", nil
+		}
+		return nil, "", nil
+	}
 	if kind != "text" {
 		return nil, "", nil
 	}
@@ -411,6 +490,44 @@ func (p *Plugin) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.Ser
 		return err
 	}
 	return stream.Send(&gridwellv1.ContentChunk{Data: data, MediaType: mediaType})
+}
+
+// WriteContent is fs's one write door — and it opens ONLY for the tiles
+// fs itself minted: a search well's params commit (#258), which runs the
+// snapshot and fills the child grid. Everything else stays refused (the
+// projection is read-only; editing files is not fs's business).
+func (p *Plugin) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.WriteContentRequest, gridwellv1.TileResponse]) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return fmt.Errorf("fs write: empty stream")
+	}
+	tileID, err := strconv.ParseInt(first.GetTileId(), 10, 64)
+	if err != nil {
+		return fmt.Errorf("fs write: invalid tile_id %q", first.GetTileId())
+	}
+	data := append([]byte(nil), first.GetData()...)
+	for {
+		msg, rerr := stream.Recv()
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return rerr
+		}
+		data = append(data, msg.GetData()...)
+	}
+	_, _, isSearch, err := p.searchTileMeta(tileID)
+	if err != nil {
+		return err
+	}
+	if !isSearch {
+		return fmt.Errorf("fs: read-only projection — only fs's own tools accept content")
+	}
+	resp, err := p.commitSearch(tileID, data)
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(resp)
 }
 
 // Probe checks whether the tile at tile_id still has its backing path on disk.
@@ -460,6 +577,21 @@ func (p *Plugin) DeleteTile(_ context.Context, req *gridwellv1.DeleteTileRequest
 	if err != nil {
 		return nil, err
 	}
+
+	// A TOOL row (#258) deletes in the DB alone — it projects no file,
+	// so nothing on disk may be touched. Its child search grid's
+	// snapshot goes with it.
+	if reservedName(name) {
+		if _, err := p.db.Exec(`DELETE FROM tiles WHERE grid_id IN (SELECT id FROM grids WHERE path = ?)`,
+			searchGridPath(tileID)); err != nil {
+			return nil, err
+		}
+		if _, err := p.db.Exec(`DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
+			return nil, err
+		}
+		return &gridwellv1.DeleteTileResponse{}, nil
+	}
+	_ = kind
 
 	dirPath, err := p.gridPath(gridID)
 	if err != nil {
@@ -591,8 +723,13 @@ func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource
 		}
 	}
 
-	// Delete tiles for names no longer on disk.
+	// Delete tiles for names no longer on disk. TOOL rows (reserved
+	// names, #258) are user state, never part of the directory
+	// projection — the sweep must not touch them.
 	for name, ex := range existingByName {
+		if reservedName(name) {
+			continue
+		}
 		if !presentNames[name] {
 			if _, err := tx.Exec(`DELETE FROM tiles WHERE id = ?`, ex.id); err != nil {
 				return err
