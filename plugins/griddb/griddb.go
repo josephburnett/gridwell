@@ -193,6 +193,13 @@ func scanTile(row scanRow) (*gridwellv1.Tile, error) {
 	if err := row.Scan(&id, &gridID, &label, &kind, &x, &y, &w, &h, &childGrid, &vx, &vy, &vz); err != nil {
 		return nil, err
 	}
+	// NULL child_grid_id means NO child: the wire fact is the empty
+	// string, never "0" — a phantom "0" would qualify downstream into
+	// "<ns>/0" (the node grid's id shape) and read as a child that isn't.
+	child := ""
+	if childGrid != 0 {
+		child = strconv.FormatInt(childGrid, 10)
+	}
 	return &gridwellv1.Tile{
 		Id:          strconv.FormatInt(id, 10),
 		GridId:      strconv.FormatInt(gridID, 10),
@@ -202,7 +209,7 @@ func scanTile(row scanRow) (*gridwellv1.Tile, error) {
 		W:           w,
 		H:           h,
 		AltText:     label,
-		ChildGridId: strconv.FormatInt(childGrid, 10),
+		ChildGridId: child,
 		ViewX:       vx,
 		ViewY:       vy,
 		ViewZoom:    vz,

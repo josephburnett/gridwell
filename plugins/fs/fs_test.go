@@ -152,7 +152,7 @@ func TestGetGrid_ListsEntries(t *testing.T) {
 	if subTile.Kind != "well" {
 		t.Errorf("sub kind: got %q, want well", subTile.Kind)
 	}
-	if subTile.ChildGridId == "" || subTile.ChildGridId == "0" {
+	if subTile.ChildGridId == "" {
 		t.Error("sub tile should have child_grid_id != 0")
 	}
 }

@@ -157,3 +157,30 @@ func TestApplyMoveInvalidTileID(t *testing.T) {
 		t.Error("invalid tile id should error")
 	}
 }
+
+// TestLoadTileNullChildIsEmpty pins the NO-CHILD wire shape: a NULL
+// child_grid_id must load as the empty string, never "0" — a phantom "0"
+// qualifies downstream into "<ns>/0" (the node grid's id shape) and reads
+// as a child that does not exist (found via #258's tool wells, the first
+// well-kind rows with no child).
+func TestLoadTileNullChildIsEmpty(t *testing.T) {
+	db := newTestDB(t, "name")
+	id := insertTile(t, db, "name", 1, "tool", "well", 0, 0)
+
+	tl, err := LoadTile(db, "name", mustID(t, id))
+	if err != nil {
+		t.Fatalf("LoadTile: %v", err)
+	}
+	if tl.ChildGridId != "" {
+		t.Errorf("NULL child_grid_id loaded as %q, want empty", tl.ChildGridId)
+	}
+}
+
+func mustID(t *testing.T, s string) int64 {
+	t.Helper()
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
