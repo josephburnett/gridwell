@@ -14,11 +14,11 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/shellsvc"
-	"github.com/josephburnett/gridwell/internal/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc"
+	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc/shellsvctest"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // nodeServer stands up a full Server (node id "node1", one in-process localdb

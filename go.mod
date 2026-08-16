@@ -5,9 +5,25 @@ go 1.26.5
 // The api module lives in this repo (docs/plugin.md): the contract every
 // plugin builds against, carved out so the arrows are structural. The
 // replace makes the in-repo copy authoritative for the app build.
-require github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
+require (
+	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/plugins/fs v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/plugins/griddb v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/plugins/localdb v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/plugins/proc v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/plugins/ssh v0.0.0-00010101000000-000000000000
+)
 
-replace github.com/josephburnett/gridwell/api => ./api
+replace (
+	github.com/josephburnett/gridwell/api => ./api
+	github.com/josephburnett/gridwell/internal/doctype => ./internal/doctype
+	github.com/josephburnett/gridwell/plugins/fs => ./plugins/fs
+	github.com/josephburnett/gridwell/plugins/griddb => ./plugins/griddb
+	github.com/josephburnett/gridwell/plugins/localdb => ./plugins/localdb
+	github.com/josephburnett/gridwell/plugins/proc => ./plugins/proc
+	github.com/josephburnett/gridwell/plugins/ssh => ./plugins/ssh
+)
 
 require (
 	connectrpc.com/connect v1.20.0

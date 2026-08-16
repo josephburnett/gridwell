@@ -143,11 +143,11 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 }
 
 // resolvePluginBinary finds the go-plugin binary for a built-in kind:
-// "gridwell-<kind>". Every plugin runs as a separately-compiled subprocess;
+// "gridwell-plugin-<kind>". Every plugin runs as a separately-compiled subprocess;
 // the host locates the binary via GRIDWELL_PLUGIN_DIR, then beside the running
 // gridwell executable (how `make` lays them out), then on PATH.
 func resolvePluginBinary(kind string) (string, error) {
-	name := "gridwell-" + kind
+	name := "gridwell-plugin-" + kind
 	var tried []string
 	if dir := os.Getenv("GRIDWELL_PLUGIN_DIR"); dir != "" {
 		p := filepath.Join(dir, name)

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	gwrpc "github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/plugin/sshdial/sshdialtest"
+	"github.com/josephburnett/gridwell/plugins/ssh/sshdial/sshdialtest"
 )
 
 func TestMountPartitionServesCache(t *testing.T) {

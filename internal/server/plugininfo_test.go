@@ -14,9 +14,9 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

@@ -1,10 +1,10 @@
 .PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
-FS_BIN := ./gridwell-fs
-PROC_BIN := ./gridwell-proc
-LOCALDB_BIN := ./gridwell-localdb
-SSH_BIN := ./gridwell-ssh
+FS_BIN := ./gridwell-plugin-fs
+PROC_BIN := ./gridwell-plugin-proc
+LOCALDB_BIN := ./gridwell-plugin-localdb
+SSH_BIN := ./gridwell-plugin-ssh
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -24,13 +24,13 @@ export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 # build cache makes this fast when nothing changed, but it guarantees
 # we never serve a stale binary or wasm artifact. Every plugin is its own
 # separately-compiled go-plugin binary, laid out beside $(BIN) so the server
-# resolves them by `gridwell-<kind>`.
+# resolves them by `gridwell-plugin-<kind>`.
 build: bin plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
 # pure Go, so nothing pulls cgo and the result has no libc-version coupling —
 # and since the web client (index.html, wasm, vendor) is EMBEDDED (web/embed.go),
-# the built gridwell + gridwell-<kind> binaries are the whole distribution:
+# the built gridwell + gridwell-plugin-<kind> binaries are the whole distribution:
 # copy them anywhere and the browser client serves from the binary itself.
 # bin depends on wasm so the embed always carries the current client.
 bin: wasm
@@ -39,10 +39,10 @@ bin: wasm
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);
 # file-target rules would skip the build whenever the binary already existed.
 plugins:
-	CGO_ENABLED=0 go build -o $(LOCALDB_BIN) ./cmd/plugin/localdb
-	CGO_ENABLED=0 go build -o $(FS_BIN) ./cmd/plugin/fs
-	CGO_ENABLED=0 go build -o $(PROC_BIN) ./cmd/plugin/proc
-	CGO_ENABLED=0 go build -o $(SSH_BIN) ./cmd/plugin/ssh
+	cd plugins/localdb && CGO_ENABLED=0 go build -o ../../gridwell-plugin-localdb ./cmd/gridwell-plugin-localdb
+	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-plugin-fs ./cmd/gridwell-plugin-fs
+	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-plugin-proc ./cmd/gridwell-plugin-proc
+	cd plugins/ssh && CGO_ENABLED=0 go build -o ../../gridwell-plugin-ssh ./cmd/gridwell-plugin-ssh
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's
@@ -101,10 +101,19 @@ proto-check:
 # `go build ./...` (host arch) misses; the typecheck catches Electron-side TS
 # drift; `npm test` runs the desktop main-process unit tests (menu/geometry logic
 # that never reaches the heavier display-bound gates). No display or network needed.
+# MODULES lists every in-repo Go module beyond the root — the api, the
+# shared nested modules, and each plugin (its own module: the in-repo
+# strangers, docs/plugin.md). check builds and tests each one STANDALONE
+# (GOWORK=off) so no module can quietly lean on the workspace.
+MODULES := api internal/doctype plugins/griddb plugins/localdb plugins/fs plugins/proc plugins/ssh
+
 check: fmt-check proto-check
 	go build ./...
 	go test ./...
-	cd api && GOWORK=off go build ./... && GOWORK=off go test ./...
+	@for m in $(MODULES); do \
+		echo "== module $$m (standalone)"; \
+		(cd $$m && GOWORK=off go build ./... && GOWORK=off go test ./...) || exit 1; \
+	done
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	cd $(DESKTOP) && npm run typecheck
 	cd $(DESKTOP) && npm test

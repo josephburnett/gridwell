@@ -6,4 +6,10 @@ go 1.26.5
 use (
 	.
 	./api
+	./internal/doctype
+	./plugins/fs
+	./plugins/griddb
+	./plugins/localdb
+	./plugins/proc
+	./plugins/ssh
 )

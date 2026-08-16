@@ -10,8 +10,8 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // TestSecondDBMountE2E proves the federated model end to end: with the server

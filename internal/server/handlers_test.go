@@ -10,9 +10,9 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
-	procplugin "github.com/josephburnett/gridwell/internal/plugin/proc"
-	"github.com/josephburnett/gridwell/internal/store"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
+	procplugin "github.com/josephburnett/gridwell/plugins/proc"
 )
 
 // fsPluginUUID / procPluginUUID are the registry keys used by the

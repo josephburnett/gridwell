@@ -45,20 +45,20 @@
         "to": "gridwell"
       },
       {
-        "from": "../../gridwell-localdb",
-        "to": "gridwell-localdb"
+        "from": "../../gridwell-plugin-localdb",
+        "to": "gridwell-plugin-localdb"
       },
       {
-        "from": "../../gridwell-fs",
-        "to": "gridwell-fs"
+        "from": "../../gridwell-plugin-fs",
+        "to": "gridwell-plugin-fs"
       },
       {
-        "from": "../../gridwell-proc",
-        "to": "gridwell-proc"
+        "from": "../../gridwell-plugin-proc",
+        "to": "gridwell-plugin-proc"
       },
       {
-        "from": "../../gridwell-ssh",
-        "to": "gridwell-ssh"
+        "from": "../../gridwell-plugin-ssh",
+        "to": "gridwell-plugin-ssh"
       },
       {
         "from": "../../api/gridwell/v1/data.proto",

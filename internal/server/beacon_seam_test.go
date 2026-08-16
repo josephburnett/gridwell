@@ -12,7 +12,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // The unload-beacon seam (2026-08-14, the transport-loss class): the

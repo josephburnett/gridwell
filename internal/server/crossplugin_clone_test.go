@@ -12,9 +12,9 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
-	"github.com/josephburnett/gridwell/internal/store"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
+	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // Cross-plugin gesture semantics (owner decision 2026-07-19): LEFT-drag

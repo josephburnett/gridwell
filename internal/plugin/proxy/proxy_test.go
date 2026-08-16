@@ -7,11 +7,11 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
-	"github.com/josephburnett/gridwell/internal/shellsvc"
-	"github.com/josephburnett/gridwell/internal/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc"
+	"github.com/josephburnett/gridwell/plugins/localdb/shellsvc/shellsvctest"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // proxied stands up an in-process "remote" localdb (with a fake shell host),

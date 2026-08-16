@@ -23,7 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // BuildConfig loads the mandatory server.yaml at cfgPath and prepares it

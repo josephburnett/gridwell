@@ -1,0 +1,653 @@
+package fs_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/plugins/fs"
+)
+
+// recordHost records remove calls without touching disk.
+type recordHost struct {
+	removed    []string
+	removedAll []string
+}
+
+func (h *recordHost) Remove(p string) error    { h.removed = append(h.removed, p); return nil }
+func (h *recordHost) RemoveAll(p string) error { h.removedAll = append(h.removedAll, p); return nil }
+
+// tempTree creates a directory with "note.txt" and "sub/" subdir.
+func tempTree(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func openPlugin(t *testing.T) *fs.Plugin {
+	t.Helper()
+	p, err := fs.Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { p.Close() })
+	return p
+}
+
+func openPluginWithHost(t *testing.T, h fs.Host) *fs.Plugin {
+	t.Helper()
+	p, err := fs.Open(":memory:", h)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { p.Close() })
+	return p
+}
+
+func TestOpen_InMemory(t *testing.T) {
+	p, err := fs.Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	p.Close()
+}
+
+func TestInfo(t *testing.T) {
+	p := openPlugin(t)
+	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if resp.Kind != "fs" {
+		t.Errorf("Kind: got %q, want %q", resp.Kind, "fs")
+	}
+}
+
+// attachAt sets the plugin's configured root and reads Info — the whole
+// handshake (there is no Attach). Info carries the default root grid id and a
+// label derived from the directory basename.
+func attachAt(p *fs.Plugin, path string) (*gridwellv1.InfoResponse, error) {
+	p.SetRoot(path)
+	return p.Info(context.Background(), &gridwellv1.InfoRequest{})
+}
+
+func TestInfo_ValidPath(t *testing.T) {
+	p := openPlugin(t)
+	resp, err := attachAt(p, "/home/joe")
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if resp.RootGridId == "" {
+		t.Errorf("RootGridId: got %q, want non-empty", resp.RootGridId)
+	}
+	if resp.DisplayName != "joe" {
+		t.Errorf("DisplayName: got %q, want %q", resp.DisplayName, "joe")
+	}
+}
+
+func TestInfo_RootPath(t *testing.T) {
+	p := openPlugin(t)
+	resp, err := attachAt(p, "/")
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if resp.DisplayName != "files" {
+		t.Errorf("DisplayName: got %q, want %q", resp.DisplayName, "files")
+	}
+}
+
+func TestInfo_NoConfiguredRoot(t *testing.T) {
+	p := openPlugin(t)
+	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if resp.RootGridId != "" {
+		t.Errorf("RootGridId: got %q, want empty (no configured root)", resp.RootGridId)
+	}
+}
+
+func TestGetGrid_ListsEntries(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+
+	att, err := attachAt(p, dir)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	resp, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	if len(resp.Tiles) != 2 {
+		t.Fatalf("got %d tiles, want 2: %+v", len(resp.Tiles), resp.Tiles)
+	}
+
+	byName := map[string]*gridwellv1.Tile{}
+	for _, t2 := range resp.Tiles {
+		byName[t2.AltText] = t2
+	}
+
+	noteTile, ok := byName["note.txt"]
+	if !ok {
+		t.Fatal("note.txt tile missing")
+	}
+	if noteTile.Kind != "text" {
+		t.Errorf("note.txt kind: got %q, want text", noteTile.Kind)
+	}
+
+	subTile, ok := byName["sub"]
+	if !ok {
+		t.Fatal("sub tile missing")
+	}
+	if subTile.Kind != "well" {
+		t.Errorf("sub kind: got %q, want well", subTile.Kind)
+	}
+	if subTile.ChildGridId == "" || subTile.ChildGridId == "0" {
+		t.Error("sub tile should have child_grid_id != 0")
+	}
+}
+
+// TestGetTile_ReturnsRow (issue #171): cloneAcrossPlugins' FIRST call against
+// the source plugin is GetTile — without it, right-dragging a directory from
+// an fs grid into another plugin's grid fails "GetTile is not implemented".
+// The row is already materialized by GetGrid; GetTile is a per-tile read.
+func TestGetTile_ReturnsRow(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, err := attachAt(p, dir)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	grid, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	var sub *gridwellv1.Tile
+	for _, t2 := range grid.Tiles {
+		if t2.AltText == "sub" {
+			sub = t2
+		}
+	}
+	if sub == nil {
+		t.Fatal("sub tile missing")
+	}
+	got, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: sub.Id})
+	if err != nil {
+		t.Fatalf("GetTile: %v", err)
+	}
+	if got.Tile.Id != sub.Id || got.Tile.Kind != "well" ||
+		got.Tile.ChildGridId != sub.ChildGridId || got.Tile.AltText != "sub" {
+		t.Errorf("GetTile = %+v, want the GetGrid row %+v", got.Tile, sub)
+	}
+	if _, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: "999999"}); err == nil {
+		t.Error("GetTile for a missing id must error, not fabricate a tile")
+	}
+}
+
+func TestGetGrid_AutoLayout(t *testing.T) {
+	dir := t.TempDir()
+	// Create 3 files: a.txt, b.txt, c.txt
+	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644)
+	}
+
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	resp, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	if len(resp.Tiles) != 3 {
+		t.Fatalf("got %d tiles, want 3", len(resp.Tiles))
+	}
+	// All tiles should be at distinct (x,y) positions.
+	positions := map[[2]int64]bool{}
+	for _, tile := range resp.Tiles {
+		pos := [2]int64{tile.X, tile.Y}
+		if positions[pos] {
+			t.Errorf("duplicate position (%d,%d)", tile.X, tile.Y)
+		}
+		positions[pos] = true
+	}
+}
+
+func TestGetGrid_StableIDs(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	gridID := att.RootGridId
+
+	r1, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if err != nil {
+		t.Fatalf("GetGrid 1: %v", err)
+	}
+	r2, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if err != nil {
+		t.Fatalf("GetGrid 2: %v", err)
+	}
+
+	ids1 := map[string]string{}
+	for _, tile := range r1.Tiles {
+		ids1[tile.AltText] = tile.Id
+	}
+	for _, tile := range r2.Tiles {
+		if ids1[tile.AltText] != tile.Id {
+			t.Errorf("tile %q: id changed %s→%s", tile.AltText, ids1[tile.AltText], tile.Id)
+		}
+	}
+}
+
+func TestGetGrid_NewFileAppearsStably(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	gridID := att.RootGridId
+
+	r1, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	ids1 := map[string]string{}
+	for _, tile := range r1.Tiles {
+		ids1[tile.AltText] = tile.Id
+	}
+
+	// Add a new file.
+	os.WriteFile(filepath.Join(dir, "new.md"), []byte("new"), 0o644)
+
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if len(r2.Tiles) != 3 {
+		t.Fatalf("after add: got %d tiles, want 3", len(r2.Tiles))
+	}
+	for _, tile := range r2.Tiles {
+		if tile.AltText == "new.md" {
+			continue // new tile, no prior id
+		}
+		if ids1[tile.AltText] != tile.Id {
+			t.Errorf("existing tile %q id changed: %s→%s", tile.AltText, ids1[tile.AltText], tile.Id)
+		}
+	}
+}
+
+func TestGetGrid_RemovesTilesForDeletedFiles(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	gridID := att.RootGridId
+
+	p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+
+	// Delete file from disk.
+	os.Remove(filepath.Join(dir, "note.txt"))
+
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	for _, tile := range r2.Tiles {
+		if tile.AltText == "note.txt" {
+			t.Error("note.txt tile should be removed after file deleted")
+		}
+	}
+	if len(r2.Tiles) != 1 {
+		t.Errorf("got %d tiles after delete, want 1", len(r2.Tiles))
+	}
+}
+
+func TestGetGrid_MissingDir_ReturnsEmptyNotError(t *testing.T) {
+	p := openPlugin(t)
+	att, err := attachAt(p, "/nonexistent/path/that/doesnt/exist")
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	resp, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid missing dir: %v", err)
+	}
+	if len(resp.Tiles) != 0 {
+		t.Errorf("got %d tiles for missing dir, want 0", len(resp.Tiles))
+	}
+}
+
+func TestProbe_Present(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+
+	var noteID string
+	for _, tile := range resp.Tiles {
+		if tile.AltText == "note.txt" {
+			noteID = tile.Id
+		}
+	}
+	if noteID == "" {
+		t.Fatal("note.txt tile not found")
+	}
+
+	probeResp, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: noteID})
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if probeResp.Presence != gridwellv1.ProbeResponse_PRESENCE_PRESENT {
+		t.Errorf("Presence: got %v, want PRESENT", probeResp.Presence)
+	}
+}
+
+func TestProbe_Gone(t *testing.T) {
+	p := openPlugin(t)
+	// Non-existent tile_id.
+	probeResp, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: "99999"})
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if probeResp.Presence != gridwellv1.ProbeResponse_PRESENCE_GONE {
+		t.Errorf("Presence: got %v, want GONE", probeResp.Presence)
+	}
+}
+
+func TestDeleteTile_File(t *testing.T) {
+	// Use a real host (nil) so the file is actually removed from disk,
+	// which lets the subsequent GetGrid see it gone via reconcile.
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+
+	var noteID string
+	for _, tile := range resp.Tiles {
+		if tile.AltText == "note.txt" {
+			noteID = tile.Id
+		}
+	}
+	if noteID == "" {
+		t.Fatal("note.txt tile not found")
+	}
+
+	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: noteID})
+	if err != nil {
+		t.Fatalf("DeleteTile: %v", err)
+	}
+
+	// File should be removed from disk and from GetGrid.
+	if _, statErr := os.Lstat(filepath.Join(dir, "note.txt")); statErr == nil {
+		t.Error("note.txt should have been removed from disk")
+	}
+	resp2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	for _, tile := range resp2.Tiles {
+		if tile.AltText == "note.txt" {
+			t.Error("note.txt still appears after DeleteTile")
+		}
+	}
+}
+
+func TestDeleteTile_CallsRemoveMethod(t *testing.T) {
+	// Verify the Remove method is called with the correct path.
+	dir := tempTree(t)
+	h := &recordHost{}
+	p := openPluginWithHost(t, h)
+	att, _ := attachAt(p, dir)
+	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+
+	var noteID string
+	for _, tile := range resp.Tiles {
+		if tile.AltText == "note.txt" {
+			noteID = tile.Id
+		}
+	}
+	if noteID == "" {
+		t.Fatal("note.txt tile not found")
+	}
+
+	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: noteID})
+	if err != nil {
+		t.Fatalf("DeleteTile: %v", err)
+	}
+	if len(h.removed) != 1 || h.removed[0] != filepath.Join(dir, "note.txt") {
+		t.Errorf("removed = %v, want [%s]", h.removed, filepath.Join(dir, "note.txt"))
+	}
+}
+
+func TestDeleteTile_Dir(t *testing.T) {
+	dir := tempTree(t)
+	h := &recordHost{}
+	p := openPluginWithHost(t, h)
+	att, _ := attachAt(p, dir)
+	resp, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+
+	var subID string
+	for _, tile := range resp.Tiles {
+		if tile.AltText == "sub" {
+			subID = tile.Id
+		}
+	}
+	if subID == "" {
+		t.Fatal("sub tile not found")
+	}
+
+	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: subID})
+	if err != nil {
+		t.Fatalf("DeleteTile dir: %v", err)
+	}
+	if len(h.removedAll) != 1 {
+		t.Errorf("expected 1 RemoveAll call, got %d", len(h.removedAll))
+	}
+}
+
+func TestDeleteTile_MissingIsOK(t *testing.T) {
+	p := openPlugin(t)
+	_, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: "99999"})
+	if err != nil {
+		t.Fatalf("DeleteTile missing: %v", err)
+	}
+}
+
+// openFilePlugin opens a plugin backed by a real file (not :memory:) so a
+// reopen test can verify positions survive a process restart. Returns the
+// plugin and the db path.
+func openFilePlugin(t *testing.T) (*fs.Plugin, string) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "fs.db")
+	p, err := fs.Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { p.Close() })
+	return p, dbPath
+}
+
+// tileByName returns the tile with the given AltText (directory entry name).
+func tileByName(t *testing.T, tiles []*gridwellv1.Tile, name string) *gridwellv1.Tile {
+	t.Helper()
+	for _, tile := range tiles {
+		if tile.AltText == name {
+			return tile
+		}
+	}
+	t.Fatalf("tile %q not found", name)
+	return nil
+}
+
+// TestMoveTile_Persists: a moved tile keeps its new position across a
+// subsequent GetGrid (reconcile must not re-lay-out an existing entry). This
+// is the "placement is persistent" face of the primary rule.
+func TestMoveTile_Persists(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	note := tileByName(t, r.Tiles, "note.txt")
+
+	moved, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 5, Y: 7, W: 1, H: 1})
+	if err != nil {
+		t.Fatalf("MoveTile: %v", err)
+	}
+	if moved.Tile.X != 5 || moved.Tile.Y != 7 {
+		t.Fatalf("MoveTile returned (%d,%d), want (5,7)", moved.Tile.X, moved.Tile.Y)
+	}
+
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	note2 := tileByName(t, r2.Tiles, "note.txt")
+	if note2.X != 5 || note2.Y != 7 {
+		t.Errorf("after GetGrid note.txt at (%d,%d), want (5,7)", note2.X, note2.Y)
+	}
+	if note2.Id != note.Id {
+		t.Errorf("note.txt id changed %s→%s (must never re-row)", note.Id, note2.Id)
+	}
+}
+
+// TestMoveTile_SurvivesReopen: a moved tile keeps its position after the
+// plugin DB is closed and reopened — placement persists across a restart.
+func TestMoveTile_SurvivesReopen(t *testing.T) {
+	dir := tempTree(t)
+	p, dbPath := openFilePlugin(t)
+	att, _ := attachAt(p, dir)
+	gridID := att.RootGridId
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	note := tileByName(t, r.Tiles, "note.txt")
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 3, Y: 4, W: 1, H: 1}); err != nil {
+		t.Fatalf("MoveTile: %v", err)
+	}
+	p.Close()
+
+	p2, err := fs.Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer p2.Close()
+	r2, err := p2.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: gridID})
+	if err != nil {
+		t.Fatalf("GetGrid after reopen: %v", err)
+	}
+	note2 := tileByName(t, r2.Tiles, "note.txt")
+	if note2.X != 3 || note2.Y != 4 {
+		t.Errorf("after reopen note.txt at (%d,%d), want (3,4)", note2.X, note2.Y)
+	}
+}
+
+// TestResizeTile_Persists: a resized tile keeps its footprint across GetGrid.
+func TestResizeTile_Persists(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub := tileByName(t, r.Tiles, "sub")
+
+	if _, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: sub.Id, X: 2, Y: 2, W: 3, H: 4}); err != nil {
+		t.Fatalf("ResizeTile: %v", err)
+	}
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub2 := tileByName(t, r2.Tiles, "sub")
+	if sub2.X != 2 || sub2.Y != 2 || sub2.W != 3 || sub2.H != 4 {
+		t.Errorf("resized sub = (%d,%d,%d,%d), want (2,2,3,4)", sub2.X, sub2.Y, sub2.W, sub2.H)
+	}
+}
+
+// TestSetWellView_Persists: a well's preview framing persists across GetGrid,
+// so descent restores the same view (preview = descent target = ascent return).
+func TestSetWellView_Persists(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub := tileByName(t, r.Tiles, "sub")
+
+	if _, err := p.SetTile(context.Background(), &gridwellv1.SetTileRequest{
+		TileId: sub.Id,
+		Tile:   &gridwellv1.Tile{Kind: "well", ViewX: 6, ViewY: 8, ViewZoom: 2.5},
+	}); err != nil {
+		t.Fatalf("SetTile: %v", err)
+	}
+	r2, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	sub2 := tileByName(t, r2.Tiles, "sub")
+	if sub2.ViewX != 6 || sub2.ViewY != 8 || sub2.ViewZoom != 2.5 {
+		t.Errorf("well view = (%d,%d,%v), want (6,8,2.5)", sub2.ViewX, sub2.ViewY, sub2.ViewZoom)
+	}
+}
+
+// TestMoveTile_CrossGridRejected: moving a tile to a different grid is not
+// supported (it would require an on-disk mv) and must error rather than
+// silently corrupt placement.
+func TestMoveTile_CrossGridRejected(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+	note := tileByName(t, r.Tiles, "note.txt")
+	_, err := p.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{TileId: note.Id, GridId: "999999", X: 1, Y: 1, W: 1, H: 1})
+	if err == nil {
+		t.Error("expected error for cross-grid move, got nil")
+	}
+}
+
+// TestGetTileContent_FileMetadata: a PLAIN-TEXT file's content is the file
+// itself, verbatim (decision 2026-08-13); a BINARY file keeps the markdown
+// metadata summary; a directory tile has empty content.
+func TestGetTileContent_FileMetadata(t *testing.T) {
+	dir := tempTree(t)
+	if err := os.WriteFile(filepath.Join(dir, "blob.bin"), []byte{0, 1, 2}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := openPlugin(t)
+	att, _ := attachAt(p, dir)
+	r, _ := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: att.RootGridId})
+
+	note := tileByName(t, r.Tiles, "note.txt")
+	data, mediaType, err := p.ContentBody(note.Id)
+	if err != nil {
+		t.Fatalf("contentBody: %v", err)
+	}
+	if string(data) != "hello" || mediaType != "text/plain" {
+		t.Errorf("plain text body = (%q, %q), want the file's bytes as text/plain", data, mediaType)
+	}
+	if got := tileByName(t, r.Tiles, "note.txt").TextPresentation; got != "plain" {
+		t.Errorf("note.txt text_presentation = %q, want plain", got)
+	}
+
+	bin := tileByName(t, r.Tiles, "blob.bin")
+	bdata, bmedia, err := p.ContentBody(bin.Id)
+	if err != nil {
+		t.Fatalf("contentBody bin: %v", err)
+	}
+	if !strings.Contains(string(bdata), "blob.bin") || bmedia != "text/markdown" {
+		t.Errorf("binary body = (%q, %q), want the metadata summary", bdata, bmedia)
+	}
+	if got := bin.TextPresentation; got != "" {
+		t.Errorf("blob.bin text_presentation = %q, want empty (no declaration)", got)
+	}
+
+	sub := tileByName(t, r.Tiles, "sub")
+	ddata, _, err := p.ContentBody(sub.Id)
+	if err != nil {
+		t.Fatalf("contentBody dir: %v", err)
+	}
+	if len(ddata) != 0 {
+		t.Errorf("directory tile content = %q, want empty", ddata)
+	}
+}
+
+// TestInfo_DefaultsToConfiguredRoot: Info resolves the plugin's configured root
+// directory to a grid (the launcher-mount path).
+func TestInfo_DefaultsToConfiguredRoot(t *testing.T) {
+	dir := tempTree(t)
+	p := openPlugin(t)
+	p.SetRoot(dir)
+	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if resp.RootGridId == "" {
+		t.Error("RootGridId empty")
+	}
+	r, err := p.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: resp.RootGridId})
+	if err != nil {
+		t.Fatalf("GetGrid: %v", err)
+	}
+	if len(r.Tiles) != 2 { // note.txt + sub/
+		t.Errorf("default-root grid has %d tiles, want 2 (the temp tree)", len(r.Tiles))
+	}
+}

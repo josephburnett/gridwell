@@ -24,59 +24,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/josephburnett/gridwell/api/panelayout"
 	"strconv"
 	"strings"
 )
 
-// LayoutMediaType tags the layout blob in the store.
-const LayoutMediaType = "application/vnd.gridwell.pane-layout+json"
+// The persisted format itself — structs, media type, version — is
+// api/panelayout (CONTRACT: the localdb store reads the same blobs for
+// its reap's protection set; one definition, no second decoder to
+// drift). This file is the CLIENT half: Tree <-> LayoutV1 conversion.
+const LayoutMediaType = panelayout.LayoutMediaType
 
-// layoutVersion is the current wire version. Bump only with a new DTO type
-// and a decoder that still accepts every older version.
-const layoutVersion = 1
+const layoutVersion = panelayout.Version
 
-// ErrLayoutVersion reports a layout blob written by a newer Gridwell than
-// this one. Callers must treat the workspace as read-only: never overwrite
-// a newer format with a downgrade.
-var ErrLayoutVersion = errors.New("pane layout: unsupported version")
+// ErrLayoutVersion re-exports panelayout.ErrLayoutVersion.
+var ErrLayoutVersion = panelayout.ErrLayoutVersion
 
-// LayoutV1 is wire version 1 of a persisted pane tree.
-type LayoutV1 struct {
-	V      int        `json:"v"`
-	Root   LayoutNode `json:"root"`
-	Focus  string     `json:"focus,omitempty"`
-	Zoomed string     `json:"zoomed,omitempty"`
-}
-
-// LayoutNode mirrors TreeNode: exactly one of Pane or Split is non-nil.
-type LayoutNode struct {
-	Pane  *LayoutPane  `json:"pane,omitempty"`
-	Split *LayoutSplit `json:"split,omitempty"`
-}
-
-// LayoutSplit mirrors Split.
-type LayoutSplit struct {
-	Dir   string     `json:"dir"`
-	Ratio float64    `json:"ratio"`
-	A     LayoutNode `json:"a"`
-	B     LayoutNode `json:"b"`
-}
-
-// LayoutPane is a leaf's persisted place: anchor + path + viewport, plus the
-// text-descent state. All ids are in the owning node's namespace frame.
-type LayoutPane struct {
-	ID          string   `json:"id"`
-	Anchor      string   `json:"anchor,omitempty"`
-	Path        []string `json:"path,omitempty"`
-	Cx          float64  `json:"cx,omitempty"`
-	Cy          float64  `json:"cy,omitempty"`
-	Zoom        float64  `json:"zoom,omitempty"`
-	TextFocus   string   `json:"text_focus,omitempty"`
-	TextMode    string   `json:"text_mode,omitempty"`
-	TextScrollX float64  `json:"text_scroll_x,omitempty"`
-	TextScrollY float64  `json:"text_scroll_y,omitempty"`
-	TextZoom    float64  `json:"text_zoom,omitempty"`
-}
+// Wire DTO aliases — the one format definition lives in api/panelayout.
+type (
+	LayoutV1    = panelayout.LayoutV1
+	LayoutNode  = panelayout.LayoutNode
+	LayoutSplit = panelayout.LayoutSplit
+	LayoutPane  = panelayout.LayoutPane
+)
 
 // EncodeLayout serializes the tree as a LayoutV1 blob.
 //

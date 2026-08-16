@@ -37,11 +37,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
-	"github.com/josephburnett/gridwell/internal/plugin/localdb"
-	"github.com/josephburnett/gridwell/internal/plugin/proc"
-	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
-	"github.com/josephburnett/gridwell/internal/plugin/sshhost"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
+	"github.com/josephburnett/gridwell/plugins/localdb"
+	"github.com/josephburnett/gridwell/plugins/proc"
+	"github.com/josephburnett/gridwell/plugins/ssh"
+	"github.com/josephburnett/gridwell/plugins/ssh/sshdial"
 	"github.com/josephburnett/gridwell/web"
 )
 

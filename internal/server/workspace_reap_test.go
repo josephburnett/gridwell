@@ -10,7 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // TestDeletePaneTileReapsItsEphemerals (issue #174): a pane tile's layout
