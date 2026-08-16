@@ -377,7 +377,7 @@ func (c *Controller) HasSession(tileID string) (bool, error) {
 	if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
 		return false, nil
 	}
-	return false, fmt.Errorf("tmux has-session %s: %w", name, err)
+	return false, fmt.Errorf("tmux has-session %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
 }
 
 // KillSession terminates the session for tileID. No-op if the
@@ -392,7 +392,7 @@ func (c *Controller) KillSession(tileID string) error {
 	if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
 		return nil
 	}
-	return fmt.Errorf("tmux kill-session %s: %w", name, err)
+	return fmt.Errorf("tmux kill-session %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
 }
 
 // ListSessions returns the tile ids of all gridwell-prefixed
@@ -406,7 +406,7 @@ func (c *Controller) ListSessions() ([]string, error) {
 		if isNoServerErr(out, err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("tmux list-sessions: %w", err)
+		return nil, fmt.Errorf("tmux list-sessions: %w (output: %q)", err, strings.TrimSpace(string(out)))
 	}
 	var ids []string
 	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
@@ -432,7 +432,7 @@ func (c *Controller) PaneCommand(tileID string) (string, error) {
 		if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
 			return "", nil
 		}
-		return "", fmt.Errorf("tmux display-message %s: %w", name, err)
+		return "", fmt.Errorf("tmux display-message %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
 	}
 	return strings.TrimSpace(string(out)), nil
 }
