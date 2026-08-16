@@ -65,20 +65,11 @@ func TestMountPartitionServesCache(t *testing.T) {
 			homeRoot, _ = pm["rootGridId"].(string)
 		}
 	}
-	sshRoot := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
+	// The connection lands on the remote HOME — personal's root grid
+	// (remote-menu, 2026-08-16) — writable directly.
+	personalChild := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
 
 	// Through the chain: a well holding a WARMED text, a NEVER-READ text.
-	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
-	personalChild := ""
-	for _, ti := range ng["tiles"].([]any) {
-		tm := ti.(map[string]any)
-		if tm["altText"] == "personal" {
-			personalChild, _ = tm["childGridId"].(string)
-		}
-	}
-	if personalChild == "" {
-		t.Fatal("no 'personal' tile on the remote node grid")
-	}
 	well := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": personalChild,
 		"tile":   map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1, "altText": "trip"},

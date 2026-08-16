@@ -59,23 +59,41 @@ func TestDirectConnectSpawn(t *testing.T) {
 	}
 
 	// A DIRECT connection: addr only, host empty — no sshd exists in this
-	// entire test.
+	// entire test. The connection's child is the remote's HOME (remote-menu,
+	// 2026-08-16): personal's root grid, exactly where a direct client of
+	// that node boots — writable, immediately usable.
 	sshRoot := commitConnectionParams(t, localOrigin, instGrid,
 		fmt.Sprintf(`{"addr":%q}`, remoteAddr))
 
-	// One write/read through the chain proves the whole route.
-	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
-	var personalChild string
-	for _, ti := range ng["tiles"].([]any) {
-		if tm := ti.(map[string]any); tm["altText"] == "personal" {
-			personalChild, _ = tm["childGridId"].(string)
-		}
+	hg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
+	gm := hg["grid"].(map[string]any)
+	if w, _ := gm["writable"].(bool); !w {
+		t.Fatalf("the landing must be the remote HOME (writable), got %v", gm)
 	}
-	if personalChild == "" {
-		t.Fatal("no 'personal' tile on the node grid over direct connect")
+	nodeNS, _ := gm["nodeNs"].(string)
+	if strings.Count(nodeNS, "/") != 1 {
+		t.Fatalf("home grid nodeNs = %q, want the two-segment <remote>/<conn> chain", nodeNS)
 	}
+
+	// The ROUTED MENU: asking with the home grid's node_ns answers the
+	// REMOTE node's plugins — the + menu a pane inside this node shows.
+	menu := rpc(t, localOrigin, "ListPlugins", map[string]any{"namespace": nodeNS})
+	mp := menu["plugins"].([]any)
+	if len(mp) != 1 {
+		t.Fatalf("routed menu = %d plugins, want the remote's one", len(mp))
+	}
+	if lbl := mp[0].(map[string]any)["label"]; lbl != "personal" {
+		t.Fatalf("routed menu plugin = %v, want personal", lbl)
+	}
+	if root, _ := mp[0].(map[string]any)["rootGridId"].(string); root != sshRoot {
+		t.Fatalf("routed menu root = %q, want the landing %q", root, sshRoot)
+	}
+	if tok, _ := menu["contentToken"].(string); tok != "" {
+		t.Fatal("node-local fields must be zeroed on a routed plugin list")
+	}
+
 	txt := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": personalChild,
+		"gridId": sshRoot,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }

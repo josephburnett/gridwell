@@ -47,11 +47,22 @@ func (a *App) isNodeGridPane(p *pane.Pane) bool {
 	return a.nodeGrid != "" && p.Anchor == a.nodeGrid && len(p.Path) == 0 && p.TextFocus == ""
 }
 
-// pluginByUUID returns the configured plugin with the given uuid, or false.
+// pluginByUUID returns the plugin with the given (possibly chain-
+// qualified) namespace: the local list first, then every fetched remote
+// menu context (remote-menu, 2026-08-16 — a remote plugin's descent
+// guards and picker need its PluginInfo, and its uuid arrives
+// chain-qualified so the spaces can never collide).
 func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 	for i := range a.plugins {
 		if a.plugins[i].UUID == u {
 			return a.plugins[i], true
+		}
+	}
+	for _, ctx := range a.menuCtxs {
+		for i := range ctx.plugins {
+			if ctx.plugins[i].UUID == u {
+				return ctx.plugins[i], true
+			}
 		}
 	}
 	return rpc.PluginInfo{}, false

@@ -216,27 +216,33 @@ func TestFederationSpawn(t *testing.T) {
 	}
 	sshRoot := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
 
-	// 2. The remote node grid lists both remote plugins through the tunnel.
-	//    (No network context rides the grid anymore — 2026-07-26, owner
-	//    decision 2: live url tiles always browse from the host's network,
-	//    and the tunnel SOCKS proxy is gone.)
+	// 2. The landing is the remote's HOME — its FIRST plugin's root
+	//    (personal), where a direct client of that node boots (remote-menu,
+	//    2026-08-16). The second plugin (work) is reached the way the +
+	//    menu reaches it: the ROUTED plugin list for the landing's node.
+	//    (No network context rides the grid anymore — 2026-07-26.)
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	if pe, ok := ng["grid"].(map[string]any)["proxyEndpoint"]; ok && pe != "" {
 		t.Fatalf("transit grid still carries a proxyEndpoint %v — the network-context surface should be gone", pe)
 	}
-	tiles := ng["tiles"].([]any)
-	if len(tiles) != 2 {
-		t.Fatalf("remote node grid has %d tiles through the tunnel, want 2", len(tiles))
+	nodeNS, _ := ng["grid"].(map[string]any)["nodeNs"].(string)
+	if nodeNS == "" {
+		t.Fatal("the landing grid must carry its serving node's namespace (node_ns)")
+	}
+	menu := rpc(t, localOrigin, "ListPlugins", map[string]any{"namespace": nodeNS})
+	mp := menu["plugins"].([]any)
+	if len(mp) != 2 {
+		t.Fatalf("routed menu has %d plugins through the tunnel, want 2", len(mp))
 	}
 	workChild := ""
-	for _, ti := range tiles {
-		tm := ti.(map[string]any)
-		if tm["altText"] == "work" {
-			workChild, _ = tm["childGridId"].(string)
+	for _, pi := range mp {
+		pm := pi.(map[string]any)
+		if pm["label"] == "work" {
+			workChild, _ = pm["rootGridId"].(string)
 		}
 	}
 	if workChild == "" {
-		t.Fatal("no 'work' tile on the remote node grid")
+		t.Fatal("no 'work' plugin on the routed menu")
 	}
 
 	// 3. Create a named well with content on the remote, through the chain.
@@ -519,19 +525,14 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("child = %q, want the four-segment <ssh>/<conn>/<rnode>/0", child)
 	}
 
-	// 4. Descend to the remote plugin and move real bytes through all three
-	//    peels: local server → connection segment → remote node → local.
-	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": child})
-	ngTiles := ng["tiles"].([]any)
-	if len(ngTiles) != 1 {
-		t.Fatalf("remote node grid: want 1 plugin tile, got %d", len(ngTiles))
-	}
-	personalChild, _ := ngTiles[0].(map[string]any)["childGridId"].(string)
-	if strings.Count(personalChild, "/") != 3 {
-		t.Fatalf("remote plugin child = %q, want four segments", personalChild)
+	// 4. The child IS the remote home (personal's root — remote-menu,
+	//    2026-08-16); move real bytes through all three peels: local
+	//    server → connection segment → remote node → local.
+	if strings.Count(child, "/") != 3 {
+		t.Fatalf("remote home = %q, want four segments", child)
 	}
 	txt := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": personalChild,
+		"gridId": child,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	body := "# through a dropped connection"

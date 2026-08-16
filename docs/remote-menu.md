@@ -180,6 +180,23 @@ differently.
   text remotely; a spec pins the cross-node refusal; web-noshells picks
   up the per-context shell gate.
 
+## Status (2026-08-16): IMPLEMENTED — all five recommendations landed
+
+L1 (connection child = remote HomeGrid, node-grid roots re-resolve once
+per process), M1 (namespace-routed ListPlugins, per-hop requalification
+via rpc.TransitQualifyPluginList, node-local fields zeroed, mountcached
+per namespace), Grid.node_ns stamped at both hop kinds, the per-pane
+menu context (paletteItems + TopRow from one list; ctx-scoped shell
+gating), and the gesture rules (same-node primitives with a visible
+refusal; cross-node rooted-plugin links allowed; parameterized drops
+same-node). Pinned by: the chain seam test (internal/server/
+sshhost_seam_test.go), the federation gates (spawn/direct/partition all
+land on remote homes; direct exercises the routed menu), and
+web-remote-menu.spec.ts — two real nodes over direct connect: descend →
+remote home, + menu = remote plugins, markdown from that menu lands on
+the far node, cross-node drop refuses visibly. Parity gate green
+(in-process plugins serve remote menus identically).
+
 ## Recommendation, in one line each
 
 1. L1 — the connection's child becomes the remote HOME (HomeGrid rule,

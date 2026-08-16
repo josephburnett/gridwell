@@ -21,14 +21,15 @@ import (
 // pour the inputs in.
 func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
 	cx, cy := a.plusButtonCenter()
+	items := a.paletteItems(p)
 	return palette.Layout{
 		Cfg:      palette.Default(),
 		PlusX:    cx,
 		PlusY:    cy,
-		NumTiles: len(a.paletteItems(p)),
+		NumTiles: len(items),
 		// Plugins fill the top row; the primitives (if any) drop to a second
-		// row below. paletteItems always lists the plugins first.
-		TopRow: len(a.plugins),
+		// row below. Both counts come from the ONE item list.
+		TopRow: paletteTopRow(items),
 	}
 }
 

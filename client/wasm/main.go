@@ -319,6 +319,10 @@ type App struct {
 	// bytes are not here — the cache's dirty entries are their ledger.
 	pend *pending.Ledger
 
+	// menuCtxs caches each remote node's + menu (menuctx.go), keyed by
+	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
+	menuCtxs map[string]*menuContext
+
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
 	// the textarea overlay — letting the text content fill the pane
@@ -613,6 +617,9 @@ type ghost struct {
 // we can render a smooth ghost at the cursor and animate snap-back to the
 // original position if the drop is rejected.
 type dragState struct {
+	// menuNS is the node whose menu offered a template item (remote-menu):
+	// primitives create same-node only; parameterized plugin drops too.
+	menuNS       string
 	originPaneID string
 	// originFocused records whether the origin pane was ALREADY focused when
 	// the press landed. A bare click on an unfocused pane is focus-only: it
@@ -691,6 +698,7 @@ func main() {
 		renderedPrev:      map[string]*renderedPreview{},
 		persistPosts:      map[string]int{},
 		pend:              pending.New(),
+		menuCtxs:          map[string]*menuContext{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")

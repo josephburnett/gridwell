@@ -2156,6 +2156,9 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 		originFocused: true, // the palette only opens on the focused pane
 		isTemplate:    true,
 		item:          item,
+		// The menu belongs to the pane's NODE (remote-menu): the drop
+		// rules compare this against the destination's node.
+		menuNS:        a.paneNodeNS(p),
 		startScreenX:  sx,
 		startScreenY:  sy,
 		curScreenX:    sx,
@@ -2232,6 +2235,20 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 			a.cancelDragSnapBack(d)
 			return
 		}
+		// A ROOTED plugin dropped across nodes is fine — the drop is a
+		// LINK and the routed menu's RootGridID is already qualified for
+		// this receiver (links are the standing cross-boundary vocabulary,
+		// 2026-07-19). A PARAMETERIZED plugin is same-node only for now:
+		// its unconfigured well stores a bare configure_plugin_id that
+		// resolves against the serving node's registry, so a cross-node
+		// drop would mint a well nothing can configure. Visible refusal,
+		// never a silent no-op (charter §6).
+		if status == pluginhealth.Parameterized && a.paneNodeNS(destPane) != d.menuNS {
+			a.reportErr(errsurface.Info, "menu",
+				"this plugin belongs to another node — configure it in a grid on that node")
+			a.cancelDragSnapBack(d)
+			return
+		}
 		targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
 		if a.ghost != nil {
 			a.ghost.paneID = destPane.ID
@@ -2243,6 +2260,18 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 			a.createPluginLinkAtCell(destPane, d.item.plugin, dropX, dropY)
 		}
 		a.menu.Close()
+		return
+	}
+
+	// A primitive belongs to the node whose menu offered it (remote-menu,
+	// 2026-08-16): the swatch was gated by THAT node's grids and policy,
+	// and creating "a remote node's text tile" inside a local grid is a
+	// category error. Same-node drops only; a cross-node drop refuses
+	// VISIBLY (charter §6) and snaps back.
+	if a.paneNodeNS(destPane) != d.menuNS {
+		a.reportErr(errsurface.Info, "menu",
+			"this menu belongs to another node — drop into a grid on that node, or open the menu here")
+		a.cancelDragSnapBack(d)
 		return
 	}
 

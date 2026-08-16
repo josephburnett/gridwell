@@ -246,19 +246,39 @@ type paletteItem struct {
 // ghosts, the test hook — reads this one list, so the swatch is gone from
 // all of them at once.
 func (a *App) paletteItems(p *pane.Pane) []paletteItem {
-	items := make([]paletteItem, 0, len(a.plugins)+len(primitiveKinds))
-	for _, pl := range a.plugins {
+	// The menu belongs to the pane's NODE (remote-menu, 2026-08-16): a
+	// remote pane's top row is the REMOTE node's plugins — exactly what
+	// a direct client of that node sees — and the shell primitive obeys
+	// THAT node's policy. "" (local, or grid not yet cached) is the boot
+	// handshake, unchanged.
+	ctx := a.menuCtx(p)
+	items := make([]paletteItem, 0, len(ctx.plugins)+len(primitiveKinds))
+	for _, pl := range ctx.plugins {
 		items = append(items, paletteItem{isPlugin: true, plugin: pl})
 	}
 	if a.gridWritable(a.gridIDForPane(p)) {
 		for _, k := range primitiveKinds {
-			if k == tplShell && !a.caps.Shells {
+			if k == tplShell && ctx.shellsDisabled {
 				continue
 			}
 			items = append(items, paletteItem{primitive: k})
 		}
 	}
 	return items
+}
+
+// paletteTopRow counts the plugin swatches in items — the layout's row
+// split. Derived from the ONE item list (it used to read a.plugins
+// independently, which desynchronized the moment the plugin row became
+// contextual).
+func paletteTopRow(items []paletteItem) int {
+	n := 0
+	for _, it := range items {
+		if it.isPlugin {
+			n++
+		}
+	}
+	return n
 }
 
 // ghostSizeLerpAlpha is the per-frame fraction by which the ghost's
