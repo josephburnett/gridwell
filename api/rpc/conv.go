@@ -27,6 +27,7 @@ func GridToProto(g *Grid) *pb.Grid {
 		SourceId:      g.SourceID,
 		Writable:      g.Writable,
 		ScratchGridId: g.ScratchGridID,
+		NodeNs:        g.NodeNS,
 		CreateSchemas: g.CreateSchemas,
 	}
 }
@@ -44,6 +45,7 @@ func GridFromProto(g *pb.Grid) *Grid {
 		SourceID:      g.SourceId,
 		Writable:      g.Writable,
 		ScratchGridID: g.ScratchGridId,
+		NodeNS:        g.NodeNs,
 		CreateSchemas: g.CreateSchemas,
 	}
 }

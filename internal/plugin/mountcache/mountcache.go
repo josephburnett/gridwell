@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS info (
     k     TEXT PRIMARY KEY,
     proto BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pluginlists (
+    ns    TEXT PRIMARY KEY,
+    proto BLOB NOT NULL
+);
 CREATE TABLE IF NOT EXISTS grids (
     id         TEXT PRIMARY KEY,
     proto      BLOB NOT NULL,
@@ -171,6 +175,34 @@ func (c *Client) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.Call
 		return nil, err // miss: the original transport error stands
 	}
 	cached := &pb.InfoResponse{}
+	if uerr := proto.Unmarshal(b, cached); uerr != nil {
+		return nil, err
+	}
+	return cached, nil
+}
+
+// ListPlugins forwards the ROUTED plugin list (remote-menu, 2026-08-16)
+// and remembers the answer per namespace, so a remote pane's + menu is
+// readable while the mount is dark — same contract as every other read:
+// serve-stale on transport only, verdicts pass through.
+func (c *Client) ListPlugins(ctx context.Context, in *pb.ListPluginsRequest, opts ...grpc.CallOption) (*pb.ListPluginsResponse, error) {
+	resp, err := c.GridwellClient.ListPlugins(ctx, in, opts...)
+	if err == nil {
+		if b, merr := proto.Marshal(resp); merr == nil {
+			_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
+				ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
+			logErr("store pluginlist", werr)
+		}
+		return resp, nil
+	}
+	if !unreachable(err) {
+		return nil, err
+	}
+	var b []byte
+	if serr := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, in.GetNamespace()).Scan(&b); serr != nil {
+		return nil, err
+	}
+	cached := &pb.ListPluginsResponse{}
 	if uerr := proto.Unmarshal(b, cached); uerr != nil {
 		return nil, err
 	}

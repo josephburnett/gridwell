@@ -78,3 +78,46 @@ func TransitQualifyEvent(prefix string, ev *pb.Event) *pb.Event {
 		return TransitQualifyTiles(prefix, []*pb.Tile{t})[0]
 	})
 }
+
+// TransitQualifyPluginList re-qualifies a FORWARDED ListPlugins response
+// with one hop segment (remote-menu, 2026-08-16): every id the answer
+// carries — the plugin namespaces themselves and their grid addresses —
+// gains the hop prefix, so the receiving side holds ids routable from
+// ITS perspective, exactly like every other transit response. Node-local
+// fields are ZEROED: the content token, node identity, and node view
+// answer only for the node asked directly (they are capabilities of THAT
+// handshake, meaningless — and unsafe to forward — through a chain).
+// shells_disabled and per-plugin InfoError ride verbatim: they describe
+// the answering node. Chains compose: each hop calls this once.
+func TransitQualifyPluginList(prefix string, resp *pb.ListPluginsResponse) *pb.ListPluginsResponse {
+	if resp == nil {
+		return nil
+	}
+	out := &pb.ListPluginsResponse{
+		ShellsDisabled: resp.ShellsDisabled,
+	}
+	for _, p := range resp.Plugins {
+		q := &pb.PluginInfo{
+			Uuid:         QualifyID(prefix, p.Uuid),
+			Kind:         p.Kind,
+			Label:        p.Label,
+			Writable:     p.Writable,
+			RootViewCx:   p.RootViewCx,
+			RootViewCy:   p.RootViewCy,
+			RootViewZoom: p.RootViewZoom,
+			InfoError:    p.InfoError,
+			Glyph:        p.Glyph,
+		}
+		if p.RootGridId != "" {
+			q.RootGridId = QualifyID(prefix, p.RootGridId)
+		}
+		if p.ScratchGridId != "" {
+			q.ScratchGridId = QualifyID(prefix, p.ScratchGridId)
+		}
+		if p.InstanceGridId != "" {
+			q.InstanceGridId = QualifyID(prefix, p.InstanceGridId)
+		}
+		out.Plugins = append(out.Plugins, q)
+	}
+	return out
+}

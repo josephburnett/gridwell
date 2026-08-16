@@ -110,6 +110,10 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 			}
 			// create_schemas rides verbatim: the remote node stamped its
 			// owning plugin's declaration; a chain adds nothing (#198).
+			// node_ns gains this hop's segment — the serving NODE, seen
+			// from here, is one segment further away (remote-menu: the
+			// one owner of "which node is this pane inside").
+			g.NodeNs = rpc.QualifyNS(uuid, g.NodeNs)
 		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
 			g.Writable = info.Writable
 			if info.ScratchGridId != "" {
@@ -148,7 +152,25 @@ const pluginInfoTimeout = 3 * time.Second
 // can build the launcher / + menu. label comes from each plugin's Info, and so
 // does writable (accepts new tiles) — a capability the handshake declares,
 // never derived from the kind string.
-func (h *connectHandler) ListPlugins(ctx context.Context, _ *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
+func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[pb.ListPluginsRequest]) (*connect.Response[pb.ListPluginsResponse], error) {
+	// A namespaced request ROUTES (remote-menu, 2026-08-16): peel one
+	// segment, forward the rest, re-qualify the answer with this hop —
+	// the same shape as every routed read. "" stays the local handshake.
+	if ns := req.Msg.GetNamespace(); ns != "" {
+		hop, rest, ok := rpc.SplitID(ns)
+		if !ok {
+			hop, rest = ns, ""
+		}
+		c, found := h.srv.routeClient(hop)
+		if !found {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no plugin %q", hop))
+		}
+		resp, err := c.ListPlugins(ctx, &pb.ListPluginsRequest{Namespace: rest})
+		if err != nil {
+			return nil, asConnectError(err)
+		}
+		return connect.NewResponse(rpc.TransitQualifyPluginList(hop, resp)), nil
+	}
 	var out []*pb.PluginInfo
 	for _, p := range h.srv.pluginReg.Ordered() {
 		// The server.yaml display name is authoritative (the menu and a mounted

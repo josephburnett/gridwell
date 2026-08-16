@@ -91,7 +91,16 @@ type PluginList struct {
 }
 
 func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
-	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
+	return c.ListPluginsNS(ctx, "")
+}
+
+// ListPluginsNS is the ROUTED plugin list (remote-menu, 2026-08-16):
+// ns "" answers for the node this client talks to (the boot handshake);
+// a namespace chain answers for the node it names, ids re-qualified per
+// hop and node-local fields zeroed. The + menu inside a remote pane is
+// built from this.
+func (c *Client) ListPluginsNS(ctx context.Context, ns string) (PluginList, error) {
+	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{Namespace: ns}))
 	if err != nil {
 		return PluginList{}, err
 	}

@@ -118,6 +118,14 @@ type Grid struct {
 	// authoritatively at commit (the client's form is UX, never authority).
 	// Wire-only, never persisted.
 	CreateSchemas map[string]string `protobuf:"bytes,9,rep,name=create_schemas,json=createSchemas,proto3" json:"create_schemas,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// node_ns is the namespace chain of the NODE serving this grid, from
+	// the receiver's perspective: "" for a grid served by the node you are
+	// talking to; "<transit>/<conn>" (or deeper) through mounts — each
+	// transit hop prepends its segment, exactly like scratch_grid_id. The
+	// one owner of "which node is this pane inside" (remote-menu,
+	// 2026-08-16): the client keys its per-pane + menu context by it and
+	// routes ListPlugins with it. Wire-only, never persisted.
+	NodeNs        string `protobuf:"bytes,10,opt,name=node_ns,json=nodeNs,proto3" json:"node_ns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -206,6 +214,13 @@ func (x *Grid) GetCreateSchemas() map[string]string {
 		return x.CreateSchemas
 	}
 	return nil
+}
+
+func (x *Grid) GetNodeNs() string {
+	if x != nil {
+		return x.NodeNs
+	}
+	return ""
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -1854,7 +1869,18 @@ func (x *SearchResponse) GetResults() []*SearchResult {
 // ListPlugins enumerates the plugins a node hosts, in config order. The client
 // builds the launcher / + menu from it. A leaf plugin returns an empty list.
 type ListPluginsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// namespace routes the request (remote-menu, 2026-08-16): "" answers
+	// for THIS node (the boot handshake, unchanged); a namespace chain
+	// ("<transit>" or "<transit>/<conn>/...") peels one segment per hop and
+	// forwards to the node it names, so a client can ask "what plugins does
+	// the node serving this pane have?" — the + menu inside a remote pane
+	// shows THAT node's plugins, exactly as a direct client would see them.
+	// Each hop RE-QUALIFIES the response's grid ids with its prefix, like
+	// every other transit response; node-local fields (content token, node
+	// identity/view) are zeroed on forward — they answer only for the node
+	// you asked directly.
+	Namespace     string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1887,6 +1913,13 @@ func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListPluginsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type PluginInfo struct {
@@ -3220,7 +3253,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xe4\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xfd\x02\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3230,7 +3263,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12K\n" +
-	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x1a@\n" +
+	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x12\x17\n" +
+	"\anode_ns\x18\n" +
+	" \x01(\tR\x06nodeNs\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xba\x06\n" +
@@ -3358,8 +3393,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\"E\n" +
 	"\x0eSearchResponse\x123\n" +
-	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"\x14\n" +
-	"\x12ListPluginsRequest\"\xf9\x02\n" +
+	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"2\n" +
+	"\x12ListPluginsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xf9\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +

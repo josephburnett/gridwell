@@ -59,6 +59,11 @@ type liveConn struct {
 	cancel context.CancelFunc // stops the root-fetch/fan-in goroutines
 	// rootFetching single-flights the remote-root learn.
 	rootFetching bool
+	// homeChecked marks that this process already re-resolved a stored
+	// node-grid root ("<rnode>/0") to the remote HOME — bounded to once
+	// per connection per process so a remote with no rooted plugins
+	// (home IS the node grid) doesn't refetch on every list read.
+	homeChecked bool
 }
 
 // New builds the plugin server. home is the host's home directory ("" =
@@ -116,6 +121,58 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	return &forward{ns: first, client: lc.client}, rest, nil
 }
 
+// remoteHome resolves where a descent into this connection LANDS: the
+// remote's HOME — the same rule a direct client's boot applies (first
+// plugin with a root grid; the node grid as the fallback) — so entering
+// a node through a mount and connecting to it directly land in the same
+// place ("when I descend into a node, I am there", 2026-08-16). The
+// node grid stays addressable; it just is not the landing page, same as
+// locally (owner decision 2026-07-19).
+func (s *Server) remoteHome(ctx context.Context, lc *liveConn) (string, error) {
+	lp, err := lc.client.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{})
+	if err == nil {
+		for _, p := range lp.Plugins {
+			if p.RootGridId != "" {
+				return p.RootGridId, nil
+			}
+		}
+	}
+	// No rooted plugin (or a pre-remote-menu node that doesn't serve the
+	// list on its export): the node grid, from Info — the old behavior.
+	info, ierr := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
+	if ierr != nil {
+		return "", ierr
+	}
+	return info.RootGridId, nil
+}
+
+// ListPlugins forwards a NAMESPACED request through the named connection
+// (remote-menu, 2026-08-16): peel the connection segment, forward the
+// rest to its node export, and re-qualify the answer with the segment —
+// the same hop rule as every routed read, so the + menu inside a remote
+// pane shows THAT node's plugins with ids routable from here. A request
+// with no namespace is refused: a parameterized transit plugin has no
+// plugin list of its own.
+func (s *Server) ListPlugins(ctx context.Context, req *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
+	ns := req.GetNamespace()
+	if ns == "" {
+		return nil, status.Error(codes.InvalidArgument, "remote: ListPlugins needs a connection namespace")
+	}
+	first, rest, ok := rpc.SplitID(ns)
+	if !ok {
+		first, rest = ns, ""
+	}
+	fw, _, err := s.route(ctx, first+"/0")
+	if err != nil {
+		return nil, err
+	}
+	resp, err := fw.client.ListPlugins(ctx, &gridwellv1.ListPluginsRequest{Namespace: rest})
+	if err != nil {
+		return nil, err
+	}
+	return rpc.TransitQualifyPluginList(first, resp), nil
+}
+
 // ensureLive returns the connection's transport, constructing it on first
 // use. Params must be committed and valid; a config-shaped problem (bad key
 // path) surfaces here, loudly, on every attempt.
@@ -166,7 +223,15 @@ func (s *Server) dropLive(ns string) {
 // remote_root — the moment the connection well gains its child — and emits
 // the change so open clients refresh.
 func (s *Server) kickRootFetch(c *Conn) {
-	if c.Params == "" || c.RemoteRoot != "" || c.Deleted {
+	if c.Params == "" || c.Deleted {
+		return
+	}
+	// A stored NODE-GRID root ("<rnode>/0" — the pre-remote-menu landing)
+	// re-resolves to the remote HOME, once per process; a resolved home
+	// (or a checked node-grid-only remote) is final for this run.
+	refreshNodeGridRoot := c.RemoteRoot != "" && strings.HasSuffix(c.RemoteRoot, "/0") &&
+		strings.Count(c.RemoteRoot, "/") == 1
+	if c.RemoteRoot != "" && !refreshNodeGridRoot {
 		return
 	}
 	lc, err := s.ensureLive(c)
@@ -174,7 +239,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 		return // params problem; surfaces on the direct paths
 	}
 	s.mu.Lock()
-	if lc.rootFetching {
+	if lc.rootFetching || (refreshNodeGridRoot && lc.homeChecked) {
 		s.mu.Unlock()
 		return
 	}
@@ -192,11 +257,19 @@ func (s *Server) kickRootFetch(c *Conn) {
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
-		if err != nil || info.RootGridId == "" {
+		root, err := s.remoteHome(ctx, lc)
+		if err != nil || root == "" {
 			return // remote unreachable; retried on the next root-grid read
 		}
-		row, err := s.db.SetRemoteRoot(ctx, id, info.RootGridId)
+		s.mu.Lock()
+		if l, ok := s.live[ns]; ok {
+			l.homeChecked = true
+		}
+		s.mu.Unlock()
+		if root == c.RemoteRoot {
+			return // the remote's home IS its node grid; nothing to store
+		}
+		row, err := s.db.SetRemoteRoot(ctx, id, root)
 		if err != nil {
 			return
 		}
@@ -367,6 +440,9 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 			if g.ScratchGridId != "" {
 				out.ScratchGridId = rpc.QualifyID(fw.ns, g.ScratchGridId)
 			}
+			// node_ns gains the connection segment — this hop, like the
+			// server's transit hop above it (remote-menu, 2026-08-16).
+			out.NodeNs = rpc.QualifyNS(fw.ns, g.NodeNs)
 			g = out
 		}
 		return &gridwellv1.GetGridResponse{

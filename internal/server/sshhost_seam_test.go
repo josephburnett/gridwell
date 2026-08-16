@@ -195,22 +195,25 @@ func TestConnectionLifecycleThroughTheChain(t *testing.T) {
 		cfg.KnownHosts != "/kh" || cfg.Addr != "10.0.0.5:9999" {
 		t.Errorf("dial config not plumbed from params: %+v", cfg)
 	}
-	// The child chains: sshc is stripped by the server before the plugin saw
-	// the request, so from the client the chain is sshc/<ns>/rnodex/0.
+	// The child chains — and lands on the remote's HOME (remote-menu,
+	// 2026-08-16: "when I descend into a node, I am there"): the first
+	// rooted plugin's root grid, exactly where a direct client boots.
+	// sshc is stripped by the server before the plugin saw the request,
+	// so from the client the chain is sshc/<ns>/rp1/<root>.
 	parts := strings.Split(child, "/")
-	if len(parts) != 4 || parts[0] != "sshc" || parts[2] != "rnodex" || parts[3] != "0" {
-		t.Fatalf("child = %q, want sshc/<conn-ns>/rnodex/0", child)
+	if len(parts) != 4 || parts[0] != "sshc" || parts[2] != "rp1" || parts[3] != h.rootBare {
+		t.Fatalf("child = %q, want sshc/<conn-ns>/rp1/%s (the remote HOME, not its node grid)", child, h.rootBare)
 	}
 	ns := parts[1]
 	if ns[0] < 'a' || ns[0] > 'z' {
 		t.Errorf("minted connection segment %q must start with a letter (the URL grammar's namespace rule)", ns)
 	}
 
-	// Descend: the remote's node grid, reached through the chain. Its plugin
-	// link tile re-chains one level deeper.
-	nodeGrid, err := h.localCl.GetGrid(ctx, child)
+	// The remote's NODE GRID stays addressable through the chain — it just
+	// is not the landing page anymore (same rule as locally, 2026-07-19).
+	nodeGrid, err := h.localCl.GetGrid(ctx, "sshc/"+ns+"/rnodex/0")
 	if err != nil {
-		t.Fatalf("GetGrid(%s): %v", child, err)
+		t.Fatalf("GetGrid(node grid): %v", err)
 	}
 	if len(nodeGrid.Tiles) != 1 {
 		t.Fatalf("remote node grid: want 1 plugin tile, got %d", len(nodeGrid.Tiles))
@@ -222,6 +225,33 @@ func TestConnectionLifecycleThroughTheChain(t *testing.T) {
 	}
 	if !pluginTile.Reference {
 		t.Error("a node-grid plugin tile must stay a link through the chain (Reference verbatim)")
+	}
+
+	// The ROUTED plugin list (remote-menu): asking through the chain
+	// answers the REMOTE node's plugins, ids re-qualified per hop and
+	// node-local fields zeroed — the + menu inside a remote pane is
+	// exactly what a direct client of that node would see.
+	menu, err := h.localCl.ListPluginsNS(ctx, "sshc/"+ns)
+	if err != nil {
+		t.Fatalf("routed ListPlugins: %v", err)
+	}
+	if len(menu.Plugins) != 1 || menu.Plugins[0].RootGridID != wantPluginChild {
+		t.Fatalf("routed menu = %+v, want one plugin rooted at %s", menu.Plugins, wantPluginChild)
+	}
+	if menu.Plugins[0].UUID != "sshc/"+ns+"/rp1" {
+		t.Errorf("routed plugin uuid = %q, want the chain-qualified namespace", menu.Plugins[0].UUID)
+	}
+	if menu.ContentToken != "" || menu.NodeUUID != "" {
+		t.Error("node-local fields must be ZEROED on a forwarded plugin list")
+	}
+	// The grid's node_ns names the serving node from this receiver — the
+	// menu-context key the client routes by.
+	homeGrid, err := h.localCl.GetGrid(ctx, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if homeGrid.Grid.NodeNS != "sshc/"+ns {
+		t.Errorf("home grid node_ns = %q, want %q", homeGrid.Grid.NodeNS, "sshc/"+ns)
 	}
 
 	// Content crosses both peels: create a text tile in the remote localdb

@@ -42,6 +42,17 @@ func IsWellKind(kind string) bool {
 // QualifyID builds a qualified id "<uuid>/<local>" from its parts.
 func QualifyID(uuid, local string) string { return uuid + "/" + local }
 
+// QualifyNS prepends one hop segment to a NAMESPACE chain — the node_ns
+// stamping rule: an empty chain ("the node you asked") gains just the
+// hop; a non-empty chain gains "<hop>/" in front. Distinct from
+// QualifyID because a namespace may legitimately be empty.
+func QualifyNS(hop, ns string) string {
+	if ns == "" {
+		return hop
+	}
+	return hop + "/" + ns
+}
+
 // SplitID splits a qualified id at its FIRST separator — the one-hop routing
 // peel. uuid names the plugin this hop routes to; rest is the id from that
 // plugin's perspective (itself possibly a chain). ok is false when the id has
@@ -213,6 +224,12 @@ type Grid struct {
 	// gate reads this — per grid, because one local mount (ssh) can front
 	// many remote plugins with differing capabilities.
 	Writable bool `json:"writable,omitempty"`
+	// NodeNS is the namespace chain of the NODE serving this grid, from
+	// this receiver's perspective: "" = the node you are talking to;
+	// "<transit>" or deeper through mounts. The one owner of "which node
+	// is this pane inside" — the + menu context key and the ListPlugins
+	// routing namespace (remote-menu, 2026-08-16).
+	NodeNS string `json:"node_ns,omitempty"`
 	// ScratchGridID is the owning plugin's ephemeral-url scratch grid,
 	// qualified for this receiver (chained through mounts); "" = none.
 	// Same stamping rule as Writable — the fact rides ON the grid.

@@ -56,6 +56,14 @@ message Grid {
   // authoritatively at commit (the client's form is UX, never authority).
   // Wire-only, never persisted.
   map<string, string> create_schemas = 9;
+  // node_ns is the namespace chain of the NODE serving this grid, from
+  // the receiver's perspective: "" for a grid served by the node you are
+  // talking to; "<transit>/<conn>" (or deeper) through mounts — each
+  // transit hop prepends its segment, exactly like scratch_grid_id. The
+  // one owner of "which node is this pane inside" (remote-menu,
+  // 2026-08-16): the client keys its per-pane + menu context by it and
+  // routes ListPlugins with it. Wire-only, never persisted.
+  string node_ns = 10;
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -421,7 +429,19 @@ message SearchResponse {
 
 // ListPlugins enumerates the plugins a node hosts, in config order. The client
 // builds the launcher / + menu from it. A leaf plugin returns an empty list.
-message ListPluginsRequest {}
+message ListPluginsRequest {
+  // namespace routes the request (remote-menu, 2026-08-16): "" answers
+  // for THIS node (the boot handshake, unchanged); a namespace chain
+  // ("<transit>" or "<transit>/<conn>/...") peels one segment per hop and
+  // forwards to the node it names, so a client can ask "what plugins does
+  // the node serving this pane have?" — the + menu inside a remote pane
+  // shows THAT node's plugins, exactly as a direct client would see them.
+  // Each hop RE-QUALIFIES the response's grid ids with its prefix, like
+  // every other transit response; node-local fields (content token, node
+  // identity/view) are zeroed on forward — they answer only for the node
+  // you asked directly.
+  string namespace = 1;
+}
 message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
   string kind          = 2;   // "local", "fs", "proc", "remote"
