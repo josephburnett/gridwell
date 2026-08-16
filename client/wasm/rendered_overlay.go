@@ -8,9 +8,9 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // The read-only rendered view (issue #218): a singleton DOM overlay div —

@@ -24,8 +24,8 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/rpc"
 	"strconv"
 )
 
@@ -268,7 +268,7 @@ func serveGzipSidecar(w http.ResponseWriter, r *http.Request, fsys fs.FS, name s
 	return true
 }
 
-// The sentinel→class table lives in internal/store (store.ClassifyError),
+// The sentinel→class table lives in internal/store (gwerr.ClassifyError),
 // next to the sentinel declarations, so every transport — Connect
 // (asConnectError) and the plugin gRPC hop (localdb.errToStatus) — maps
 // from the one classification. Do not re-enumerate the sentinels here.

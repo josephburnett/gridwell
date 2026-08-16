@@ -20,7 +20,7 @@ import (
 	"os"
 
 	"github.com/josephburnett/gridwell/api/guest"
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
 	"github.com/josephburnett/gridwell/internal/plugin/sshhost"
 )

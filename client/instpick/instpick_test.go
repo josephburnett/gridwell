@@ -3,8 +3,8 @@ package instpick
 import (
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/schemaform"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 func sshForm(t *testing.T) *schemaform.Form {

@@ -10,10 +10,10 @@ package main
 import (
 	"context"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // paneLayoutEntry memoizes one pane tile's decoded workspace tree, keyed by

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // gridRowCount returns how many grid rows exist — the witness that an exit-well

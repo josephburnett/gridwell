@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // seedDeterministic pins a fixed clock and counter-based object_ids so tests

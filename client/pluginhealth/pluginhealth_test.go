@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 func TestClassify_Enterable(t *testing.T) {

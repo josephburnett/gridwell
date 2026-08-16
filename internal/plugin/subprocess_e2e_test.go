@@ -8,7 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 	_ "modernc.org/sqlite" // register the sqlite driver for pluginmeta.Ensure
 )
 

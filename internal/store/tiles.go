@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/doctype"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // urlSchemeAllowed reports whether u is one of the schemes accepted by

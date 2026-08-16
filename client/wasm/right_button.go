@@ -6,10 +6,10 @@ import (
 	"context"
 	"math"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // colorTileResize is the preview outline of an in-flight tile resize.

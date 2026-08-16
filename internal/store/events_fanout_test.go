@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func gridEvent(id string) rpc.Event {

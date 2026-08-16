@@ -11,7 +11,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // Cache stores grids and their tiles keyed by grid id. Concurrency-safe.

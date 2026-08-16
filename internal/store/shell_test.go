@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // TestCreateShellCreatesFrozenTile: a brand-new shell tile must

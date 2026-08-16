@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // GetGrid returns the grid plus all of its tiles. It is a pure read: the

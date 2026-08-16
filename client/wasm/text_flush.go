@@ -3,8 +3,8 @@
 package main
 
 import (
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file is the ONE way text content reaches the server.

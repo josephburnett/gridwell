@@ -8,11 +8,11 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pending"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Naming — "name the room you're in" (issues #61, #118, #213). The focused

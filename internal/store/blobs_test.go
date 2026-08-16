@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func TestGetBlobReturnsBytes(t *testing.T) {

@@ -8,10 +8,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pending"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file is the mutation dispatch layer: the handful of helpers every

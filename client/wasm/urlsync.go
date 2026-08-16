@@ -8,13 +8,13 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/textcursor"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/urlwalk"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // urlUpdateDebounceMs is how long we wait after the last state change

@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/doctype"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // CloneTile duplicates a tile into a destination grid at (x, y) as an eager,

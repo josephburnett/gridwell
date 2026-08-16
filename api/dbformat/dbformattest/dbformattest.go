@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/dbformat"
+	"github.com/josephburnett/gridwell/api/dbformat"
 	_ "modernc.org/sqlite"
 )
 

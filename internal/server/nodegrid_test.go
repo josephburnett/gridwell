@@ -9,9 +9,9 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
-	"github.com/josephburnett/gridwell/internal/rpc"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // The id: selector subsumes LocateTile (issue #244 over #234): an exact

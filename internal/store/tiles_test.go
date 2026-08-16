@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func TestCreateWellHappyPath(t *testing.T) {

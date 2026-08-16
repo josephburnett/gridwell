@@ -8,6 +8,7 @@ import (
 	"slices"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -15,7 +16,6 @@ import (
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/urlnorm"
 	"github.com/josephburnett/gridwell/client/wsbar"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // shellStreamConn is one live shell attachment: the pane's slot on the

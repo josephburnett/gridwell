@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // The PlaceTile suite (2026-07-26 redesign): placement is one verb owning one

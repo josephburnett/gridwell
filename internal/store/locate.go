@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // searchDefaultLimit caps a query that doesn't bring its own limit.

@@ -15,8 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // connGridID is the plugin's connection-list grid. Since the #251 flip it

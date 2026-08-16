@@ -16,8 +16,8 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/josephburnett/gridwell/api/dbformat"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/procsource"
 	"google.golang.org/grpc"

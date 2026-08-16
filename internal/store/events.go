@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // subscriber is one Subscribe stream connected to the store. Events flow

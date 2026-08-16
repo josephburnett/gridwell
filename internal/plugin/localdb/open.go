@@ -1,7 +1,7 @@
 package localdb
 
 import (
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/store"
 )
 

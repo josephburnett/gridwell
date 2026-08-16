@@ -13,6 +13,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/caps"
@@ -28,7 +29,6 @@ import (
 	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/client/url"
 	"github.com/josephburnett/gridwell/client/workspace"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 const (

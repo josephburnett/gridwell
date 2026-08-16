@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/schemaform"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Status classifies what the picker can do with an entry.

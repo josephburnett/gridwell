@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
+	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin/sshdial/sshdialtest"
-	gwrpc "github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // repoRoot walks up from the test binary's source dir to the module root.

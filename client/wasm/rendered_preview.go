@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/markdown"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Rendered grid previews (issue #233): a text tile whose stored text_mode

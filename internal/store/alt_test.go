@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // Issue #61: a USER-set name (the rename gesture) owns alt_text — the

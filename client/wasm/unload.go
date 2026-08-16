@@ -21,7 +21,7 @@ import (
 	"slices"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // sendBeacon posts one write so it survives the page (contentType picks

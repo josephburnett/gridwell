@@ -6,8 +6,8 @@ import (
 	"context"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Content zoom (issue #82): Ctrl/Cmd +/‑/0 while descended into a text,

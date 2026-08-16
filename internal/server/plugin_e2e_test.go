@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // TestFileWellLifecycleE2E exercises the whole new path through the public RPC

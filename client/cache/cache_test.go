@@ -3,7 +3,7 @@ package cache
 import (
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func seedCache(t *testing.T) *Cache {

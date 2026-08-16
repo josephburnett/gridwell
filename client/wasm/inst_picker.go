@@ -8,11 +8,11 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/instpick"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/schemaform"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // The instance picker (issue #251): the one dialog for a PARAMETERIZED

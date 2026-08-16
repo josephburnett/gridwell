@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // TestScratchGridStableAndDistinct: the scratch grid id is created once and

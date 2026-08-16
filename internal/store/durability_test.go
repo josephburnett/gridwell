@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // TestSynchronousPinned confirms Open pins PRAGMA synchronous to NORMAL (1).

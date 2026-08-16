@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/josephburnett/gridwell/api/dbformat"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/fssource"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 )
 
 // The #196 seam: the store-side SetPluginID existed and was unit-tested,

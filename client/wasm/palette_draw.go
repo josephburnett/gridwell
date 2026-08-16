@@ -5,11 +5,11 @@ package main
 import (
 	"math"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/wsbar"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // This file holds the creation-palette: the screen-space layout adapters

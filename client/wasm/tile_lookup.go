@@ -3,8 +3,8 @@
 package main
 
 import (
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Tile-by-id resolution — general helpers that survived the embed

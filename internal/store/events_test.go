@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // drainEvents collects every event published in the next short window

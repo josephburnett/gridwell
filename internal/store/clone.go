@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // isWellKind reports whether a tile kind has a child grid that can be

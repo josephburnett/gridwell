@@ -3,8 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"sort"
 	"strings"
 )
@@ -26,7 +26,7 @@ import (
 // ErrSchemaDivergence reports that an opened database's table shape does not
 // match the schema this binary materializes — an out-of-contract DB (typically
 // one created before the v1 freeze) that must be recreated, not silently used.
-var ErrSchemaDivergence = errors.New("database schema diverges from this binary's schema")
+var ErrSchemaDivergence = gwerr.ErrSchemaDivergence
 
 // colFP is a column's identity for equivalence: the column name is the map key,
 // so only type/notnull/default/pk distinguish two columns of the same name.

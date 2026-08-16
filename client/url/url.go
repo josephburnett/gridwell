@@ -36,7 +36,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // State is the parsed/about-to-be-encoded URL state.

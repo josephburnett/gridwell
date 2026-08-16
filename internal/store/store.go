@@ -19,23 +19,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/rpc"
 
 	_ "modernc.org/sqlite"
 )
 
-// Sentinel errors. Callers should use errors.Is to test for them.
+// Sentinel errors — the CONTRACT's error vocabulary, owned by api/gwerr
+// (2026-08-15: every transport and every plugin classifies from the one
+// table there). These names remain for the store's own call sites and
+// errors.Is identity is preserved (same values).
 var (
-	ErrNotFound        = errors.New("not found")
-	ErrOverlap         = errors.New("footprint overlaps an existing tile")
-	ErrInvalidPath     = errors.New("descent path is invalid")
-	ErrInvalidArgument = errors.New("invalid argument")
-	ErrNotURLTile      = errors.New("not a URL tile")
-	ErrNotTextTile     = errors.New("not a text tile")
-	ErrNotWellTile     = errors.New("not a well tile")
-	ErrNotShellTile    = errors.New("not a shell tile")
-	ErrNotPaneTile     = errors.New("not a pane tile")
-	ErrVersionConflict = errors.New("version mismatch")
+	ErrNotFound        = gwerr.ErrNotFound
+	ErrOverlap         = gwerr.ErrOverlap
+	ErrInvalidPath     = gwerr.ErrInvalidPath
+	ErrInvalidArgument = gwerr.ErrInvalidArgument
+	ErrNotURLTile      = gwerr.ErrNotURLTile
+	ErrNotTextTile     = gwerr.ErrNotTextTile
+	ErrNotWellTile     = gwerr.ErrNotWellTile
+	ErrNotShellTile    = gwerr.ErrNotShellTile
+	ErrNotPaneTile     = gwerr.ErrNotPaneTile
+	ErrVersionConflict = gwerr.ErrVersionConflict
 )
 
 // Store wraps a SQLite database. It is safe for concurrent use.

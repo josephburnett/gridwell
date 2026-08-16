@@ -6,9 +6,9 @@ import (
 	"context"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Live-tab presence is no longer modeled as tile state. A URL tile in

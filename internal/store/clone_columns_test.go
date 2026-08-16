@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // TestClonePreservesAllContentColumns — clone is an EAGER, COMPLETE copy

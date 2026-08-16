@@ -8,10 +8,10 @@ import (
 	"slices"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/wsbar"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // urlView is the renderer-side handle for one live URL tile — a native

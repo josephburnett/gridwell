@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // The content-stream suite (2026-07-26 redesign): WriteContent/ReadContent

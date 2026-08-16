@@ -10,8 +10,8 @@
 package pluginhealth
 
 import (
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Status classifies a launcher plugin tile's interactivity.

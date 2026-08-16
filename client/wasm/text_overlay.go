@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/wsbar"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // textSaveDebounceMs is the delay between the first keystroke since

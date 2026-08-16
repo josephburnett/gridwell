@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // TestCreatePaneDefaultsAndGuards: a fresh pane tile has no layout blob

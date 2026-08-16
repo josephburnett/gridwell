@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // A leaf link (text/url/shell/pane with a link_target_id) is the leaf twin of

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // WriteContent is the single content-bytes write (2026-07-26,

@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // flakyWatchPlugin is a plugin whose Info always succeeds and declares

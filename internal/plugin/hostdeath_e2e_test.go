@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
-	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 )
 
 // The host-death seam (issue #197): a SIGKILLed host must not orphan its

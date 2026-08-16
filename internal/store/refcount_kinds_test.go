@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // blobExists reports whether a blob row is still present (refcount > 0

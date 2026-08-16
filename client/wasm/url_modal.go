@@ -5,8 +5,8 @@ package main
 import (
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/urlnorm"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // maxURLSuggestions caps the autocomplete dropdown — enough to be useful,

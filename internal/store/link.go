@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // leafLinkKinds is the set of tile kinds that have a LINK variant via

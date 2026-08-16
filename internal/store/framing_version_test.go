@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // tileVersion reads a tile's current version straight from the row.

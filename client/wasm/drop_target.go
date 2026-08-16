@@ -3,10 +3,10 @@
 package main
 
 import (
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // dropTarget describes where the cursor is currently pointing as a

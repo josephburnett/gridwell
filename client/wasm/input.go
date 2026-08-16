@@ -8,6 +8,7 @@ import (
 	"slices"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/dragdrop"
@@ -20,7 +21,6 @@ import (
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
-	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
 // Animation durations in milliseconds. Tuned for "stone settling" feel.

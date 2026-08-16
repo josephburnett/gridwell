@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/dbformat/dbformattest"
+	"github.com/josephburnett/gridwell/api/dbformat/dbformattest"
 )
 
 // TestFSSchemaEquivalence proves schemaTemplate == schemaV1 + fsMigrations —

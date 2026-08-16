@@ -2,7 +2,7 @@ package server
 
 import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/rpc"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // The id codec (QualifyID / SplitID / UUIDOf) lives once, in internal/rpc —
