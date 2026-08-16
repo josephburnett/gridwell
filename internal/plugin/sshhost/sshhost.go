@@ -281,6 +281,10 @@ func dbErr(err error) error {
 
 func (s *Server) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	return &gridwellv1.InfoResponse{
+		// The DECLARATIONS the host reads instead of knowing this kind:
+		// transit (ids are chains from another node) and the generic globe
+		// glyph (empty = globe fallback).
+		Transit:     true,
 		Kind:        "ssh",
 		DisplayName: "connections",
 		// The #251 flip: no root grid — the connection list is the INSTANCE

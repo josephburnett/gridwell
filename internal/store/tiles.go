@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -289,7 +289,7 @@ func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rp
 		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
 	}
 	hash := hashBytes(req.Data)
-	alt := markdown.AltFromSource(string(req.Data))
+	alt := doctype.AltFromSource(string(req.Data))
 	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
 		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
 			blobID, err := s.putBlob(ctx, tx, hash, req.Data, mediaMarkdown)

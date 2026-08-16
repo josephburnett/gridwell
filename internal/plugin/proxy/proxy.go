@@ -31,7 +31,16 @@ func New(c gridwellv1.GridwellClient) *Plugin { return &Plugin{c: c} }
 // ── unary forwards ───────────────────────────────────────────────────────────
 
 func (p *Plugin) Info(ctx context.Context, r *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	return p.c.Info(ctx, r)
+	resp, err := p.c.Info(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	// Transit is THIS transport's declaration, never the remote's: the
+	// forwarded ids are chains from the proxy's perspective even though
+	// the remote plugin behind it is a leaf. (The same rule sshhost
+	// applies; the one place a forwarded Info is amended.)
+	resp.Transit = true
+	return resp, nil
 }
 func (p *Plugin) Probe(ctx context.Context, r *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	return p.c.Probe(ctx, r)

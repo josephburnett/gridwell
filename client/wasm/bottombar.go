@@ -412,7 +412,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 		// its menu swatch — bordered in the grid blue, like the grid it is.
 		c.Set("fillStyle", colorBg)
 		c.Call("fillRect", x, y, side, side)
-		a.drawPluginGlyph(a.pluginKind(cr.Anchor), x, y, side, side)
+		a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
 		c.Set("strokeStyle", colorFocusBorder)
 		c.Set("lineWidth", 1.0)
 		c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)

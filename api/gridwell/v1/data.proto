@@ -223,6 +223,20 @@ message InfoResponse {
   // scratch_grid_id, it is a storage address, never a landing page. Empty for
   // rooted plugins.
   string instance_grid_id = 14;
+  // transit declares that this plugin's ids are CHAINS from another node —
+  // a mount, forwarding to a remote gridwell, whose ids arrive already
+  // qualified from the remote's perspective. The host's qualification layer
+  // prepends one segment instead of applying leaf rules, and the mount
+  // cache interposes. Declared by the LOCAL transport binary (which is
+  // alive even when its remote isn't) and cached from the spawn-time
+  // handshake — the host must never re-derive it from the kind string
+  // (charter, 2026-08-15: the host must not know its plugins).
+  bool transit = 15;
+  // glyph is the plugin's identity glyph for the launcher/menu/ghost faces:
+  // "folder", "process", "well", or "" for the generic globe. A declaration,
+  // never a kind switch in the client; unknown values also fall back to the
+  // globe, so a third-party plugin degrades politely.
+  string glyph = 16;
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -433,6 +447,9 @@ message PluginInfo {
   // empty root_grid_id it marks the plugin PARAMETERIZED: click/drop opens
   // the instance picker. "" for rooted plugins.
   string instance_grid_id = 11;
+  // glyph mirrors InfoResponse.glyph for the client's plugin faces
+  // (launcher tile, menu swatch, drag ghost). "" = the generic globe.
+  string glyph = 12;
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;

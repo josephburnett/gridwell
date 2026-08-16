@@ -233,7 +233,7 @@ func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
 // Info is the whole handshake: identity plus the default root grid (the
 // plugin's configured root directory, resolved to a grid id). No Attach/Detach.
 func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: fsSchemaVersion}
+	resp := &gridwellv1.InfoResponse{Kind: "fs", DisplayName: "files", SchemaVersion: fsSchemaVersion, Glyph: "folder"}
 	path := filepath.Clean(p.root)
 	if path == "" || path == "." {
 		return resp, nil // no configured root → no descendable default

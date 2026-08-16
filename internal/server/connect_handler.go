@@ -210,6 +210,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	label := configLabel
 	var rootGridID, scratchGridID, instanceGridID, infoError string
 	var writable bool
+	var glyph string
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
 		if info.RootGridId != "" {
@@ -229,6 +230,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 			label = info.DisplayName
 		}
 		writable = info.Writable
+		glyph = info.Glyph
 		// Root-view viewport forwarded verbatim from Info (localdb fills it;
 		// fs/proc return zero). The client seeds enterPlugin framing from this.
 		rootViewCx = info.RootViewCx
@@ -252,6 +254,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		RootViewCy:     rootViewCy,
 		RootViewZoom:   rootViewZoom,
 		InfoError:      infoError,
+		Glyph:          glyph,
 	}
 }
 

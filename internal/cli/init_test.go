@@ -70,17 +70,15 @@ func TestRunInitRequiresKindAndName(t *testing.T) {
 	}
 }
 
-// TestRunInitSSHRefusesConnectionConfig: connections are data (#251) — the
-// retired config-pinned keys are refused at init, with the plain no-config
-// registration still working for the transport kind.
-func TestRunInitSSHRefusesConnectionConfig(t *testing.T) {
+// TestRunInitSSH: the transport kind registers with no config —
+// connections are DATA (#199/#251), added from inside Gridwell. (The
+// init-time refusal of the retired config keys was deleted with the
+// pre-#251 migration bridge, 2026-08-15: the host no longer knows any
+// plugin's config vocabulary — a plugin's own params door validates.)
+func TestRunInitSSH(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 
-	if rc := RunInit([]string{"--kind", "ssh", "--name", "remote",
-		"--config", "host=example.com:22", "--config", "user=joe"}); rc == 0 {
-		t.Fatal("init ssh with connection config keys must be refused")
-	}
 	rc := RunInit([]string{"--kind", "ssh", "--name", "remote"})
 	if rc != 0 {
 		t.Fatalf("plain init ssh returned %d", rc)
@@ -96,23 +94,5 @@ func TestRunInitSSHRefusesConnectionConfig(t *testing.T) {
 	m, _ := pluginmeta.Verify(config.DBFile(home, p.ID), "", "")
 	if m.Kind != "ssh" {
 		t.Errorf("DB kind = %q, want ssh", m.Kind)
-	}
-}
-
-// TestRunInitSSHRefusalWritesNothing: a refused ssh init (retired connection
-// keys, #251) must leave no trace — no server.yaml entry, no DB directory.
-func TestRunInitSSHRefusalWritesNothing(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("GRIDWELL_HOME", home)
-
-	rc := RunInit([]string{"--kind", "ssh", "--name", "remote", "--config", "host=example.com:22"})
-	if rc == 0 {
-		t.Fatalf("init ssh with a connection config key succeeded")
-	}
-	if _, err := os.Stat(filepath.Join(home, "server.yaml")); !os.IsNotExist(err) {
-		t.Errorf("server.yaml written despite the refusal")
-	}
-	if _, err := os.Stat(filepath.Join(home, "db")); !os.IsNotExist(err) {
-		t.Errorf("db dir created despite the refusal")
 	}
 }

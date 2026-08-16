@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/rpc"
 )
 
@@ -105,7 +105,7 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 		}
 		// alt_text is a deterministic function of the content; write it
 		// alongside (a separate statement from the blob kernel).
-		alt := markdown.AltFromSource(string(data))
+		alt := doctype.AltFromSource(string(data))
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
 			alt, s.now().Unix(), tileID); err != nil {

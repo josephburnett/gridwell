@@ -8,11 +8,13 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -40,13 +42,29 @@ func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Reg
 			reg.Close()
 			return nil, fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, err)
 		}
+		// The spawn-time handshake reads the plugin's DECLARATIONS — the
+		// host never derives behavior from the kind string (charter,
+		// 2026-08-15). Transit-ness is the one declaration the host needs
+		// synchronously (routing reads it per request), so it is cached
+		// here, like identity. The local binary answers even when its
+		// remote is dark; a failed handshake defaults to leaf and logs —
+		// a transport plugin that cannot answer its own Info is broken,
+		// but a broken plugin must not stop the node.
+		transit := false
+		ictx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if info, ierr := client.Info(ictx, &gridwellv1.InfoRequest{}); ierr == nil {
+			transit = info.GetTransit()
+		} else {
+			log.Printf("gridwell: plugin %q (%s): spawn handshake failed: %v (treated as a leaf plugin)", pc.Name, pc.ID, ierr)
+		}
+		cancel()
 		// A MOUNT gets the read-through cache in front of it (mountcache,
 		// offline-plan phase 1): the remote going dark degrades to
 		// stale-but-readable instead of blank. A cache that cannot open
 		// degrades to the uncached client — loudly, never fatally: the
 		// cache is an availability layer, and refusing to serve because
 		// the OPTIMIZATION broke would invert its purpose.
-		if TransitKind(pc.Kind) && cfg.CacheDir != "" {
+		if transit && cfg.CacheDir != "" {
 			if mkErr := os.MkdirAll(cfg.CacheDir, 0o700); mkErr != nil {
 				log.Printf("gridwell: mount cache dir %s: %v (mount %q runs uncached)", cfg.CacheDir, mkErr, pc.Name)
 			} else if cached, cacheClose, cErr := mountcache.Open(client, filepath.Join(cfg.CacheDir, pc.ID+".db")); cErr != nil {
@@ -64,6 +82,7 @@ func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Reg
 		}
 		reg.Register(pc.ID, pc.Kind, client, closer)
 		reg.SetLabel(pc.ID, pc.Name)
+		reg.SetTransit(pc.ID, transit)
 	}
 	return reg, nil
 }

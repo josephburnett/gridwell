@@ -794,11 +794,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 	if n.ChildGridID == "" && n.ConfigurePluginID != "" {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", x, y, w, h)
-		kind := ""
+		glyph := ""
 		if pl, ok := a.pluginByUUID(n.ConfigurePluginID); ok {
-			kind = pl.Kind
+			glyph = pl.Glyph
 		}
-		a.drawPluginGlyph(kind, x, y, w, h)
+		a.drawPluginGlyph(glyph, x, y, w, h)
 		strokeTileBorder(a.cctx, x, y, w, h, colorPluginBorder, tileBorderPx)
 		if selected {
 			drawSelectedTileOutline(a.cctx, x, y, w, h)
@@ -834,7 +834,7 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		// A cross-plugin well with no preview loaded yet shows the plugin's
 		// identity glyph — the same drawing as its menu swatch and drag
 		// ghost, so it reads identically before, during, and after the drop.
-		a.drawPluginGlyph(a.pluginKind(n.ChildGridID), x, y, w, h)
+		a.drawPluginGlyph(a.pluginGlyph(n.ChildGridID), x, y, w, h)
 	} else {
 		a.cctx.Call("save")
 		a.cctx.Call("beginPath")

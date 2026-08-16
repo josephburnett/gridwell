@@ -1,17 +1,26 @@
-// Package markdown is the Gridwell client's markdown engine: alt-text
-// derivation (this file), the read-only rendered view (render.go), raw
-// soft-wrap (wrap.go), and the preview framing helpers (preview.go).
-//
-// The package is pure Go; nothing here touches syscall/js, so everything is
-// exercised entirely by `go test`.
-package markdown
+// alttext.go — alt-text derivation for text tiles. Moved here from
+// client/markdown (2026-08-15): the localdb STORE auto-titles text tiles
+// with it, and persistence importing the client tree was the known
+// layering wrinkle (ARCHITECTURE §4.2) — the same arrow the plugin
+// decoupling forbids. doctype is the neutral home for text-document
+// semantics shared across the seam (Renderable, IsOrg, and now this).
+// The parse dialect is GFM, matching the client renderer's parser, so
+// the derived title always agrees with what the rendered view shows.
+
+package doctype
 
 import (
 	"strings"
 
+	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	gmtext "github.com/yuin/goldmark/text"
 )
+
+// altParser parses with the same dialect the client renders (GFM);
+// renderer options are irrelevant here — only the AST is read.
+var altParser = goldmark.New(goldmark.WithExtensions(extension.GFM))
 
 // AltFromSource derives a short, one-line alt-text from a markdown document:
 // the plain text of the first block, with markdown markers stripped (so
@@ -23,7 +32,7 @@ import (
 // yield a multi-line alt.
 func AltFromSource(src string) string {
 	source := []byte(src)
-	root := gmRenderer.Parser().Parse(gmtext.NewReader(source))
+	root := altParser.Parser().Parse(gmtext.NewReader(source))
 	for b := root.FirstChild(); b != nil; b = b.NextSibling() {
 		s := strings.Join(strings.Fields(blockPlainText(b, source)), " ")
 		if s == "" {

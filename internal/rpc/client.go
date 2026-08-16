@@ -109,6 +109,7 @@ func (c *Client) ListPlugins(ctx context.Context) (PluginList, error) {
 			RootViewCy:     p.RootViewCy,
 			RootViewZoom:   p.RootViewZoom,
 			InfoError:      p.InfoError,
+			Glyph:          p.Glyph,
 		}
 	}
 	return PluginList{

@@ -390,7 +390,8 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	}
 	t.Cleanup(mountCloser)
 	localReg := plugin.NewRegistry()
-	localReg.Register("sshm", "ssh", mountClient, nil) // kind ssh = transit
+	localReg.Register("sshm", "ssh", mountClient, nil)
+	localReg.SetTransit("sshm", true) // the declared transit (loader reads it from Info in production)
 	localSrv := New(localReg, Config{NodeID: "lnode"})
 	localHTTP := httptest.NewServer(localSrv.Handler())
 	t.Cleanup(localHTTP.Close)

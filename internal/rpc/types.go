@@ -171,6 +171,19 @@ func IsWorkspaceKind(kind string) bool {
 const (
 	GridSourceFS   = "fs"
 	GridSourceProc = "proc"
+	// GridSourceNode marks a node grid (a plugin-list landing page —
+	// stamped by nodegrid.go; a mount's landing page arrives with it too).
+	GridSourceNode = "node"
+)
+
+// The plugin glyph vocabulary (InfoResponse.glyph / PluginInfo.Glyph):
+// declared by the plugin, rendered by the client, with anything unknown
+// falling back to the generic globe — a third-party plugin degrades
+// politely without either side learning names.
+const (
+	GlyphFolder  = "folder"
+	GlyphProcess = "process"
+	GlyphWell    = "well"
 )
 
 // Text-tile display modes.
@@ -361,9 +374,13 @@ type TileResponse struct {
 
 // PluginInfo describes one configured plugin for the launcher / + menu.
 type PluginInfo struct {
-	UUID       string `json:"uuid"`
-	Kind       string `json:"kind"`
-	Label      string `json:"label"`
+	UUID  string `json:"uuid"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	// Glyph is the plugin's DECLARED identity glyph (InfoResponse.glyph):
+	// "folder", "process", "well", or "" for the generic globe. The client
+	// renders from this, never from the kind string (charter, 2026-08-15).
+	Glyph      string `json:"glyph,omitempty"`
 	Writable   bool   `json:"writable"`
 	RootGridID string `json:"root_grid_id"` // qualified; click-enter descends here
 	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral

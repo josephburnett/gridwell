@@ -295,6 +295,7 @@ func TestContentDoorTransit(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	reg.Register("ssh1", "ssh", proxied, nil)
+	reg.SetTransit("ssh1", true) // the declaration the loader reads from Info in production
 	srv := New(reg, Config{NodeID: "node1"})
 	hs := httptest.NewServer(srv.NodeHandler())
 	t.Cleanup(hs.Close)

@@ -6,6 +6,7 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -368,6 +369,38 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	evs := make(chan *pb.Event, 64)
+	go func() {
+		for {
+			ev, rerr := sub.Recv()
+			if rerr != nil {
+				close(evs)
+				return
+			}
+			evs <- ev
+		}
+	}()
+	// PRIME the subscription: a gRPC stream open is lazy, so a mutation
+	// fired before the server registers the subscriber is missed forever
+	// (this test hung exactly that way once). Re-fire a framing write (no
+	// version bump — the same claim stays valid) until its event arrives.
+	primed := false
+	for i := 0; i < 50 && !primed; i++ {
+		if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: well.GetTile().GetId(),
+			Version: well.GetTile().GetVersion(),
+			Tile:    &pb.Tile{Kind: "well", ViewX: 1, ViewY: 1, ViewZoom: 2}}); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-evs:
+			primed = true
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if !primed {
+		t.Fatal("subscription never delivered the priming event")
+	}
+
 	if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: well.GetTile().GetId(),
 		Version: well.GetTile().GetVersion(),
 		Tile:    &pb.Tile{Kind: "well", ViewX: 9, ViewY: 9, ViewZoom: 3}}); err != nil {
@@ -378,22 +411,27 @@ func TestEventTeeTracksMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Pump the tee until both mutations have flowed through it.
+	deadline := time.After(15 * time.Second)
 	sawFraming, sawRemove := false, false
 	for !(sawFraming && sawRemove) {
-		ev, err := sub.Recv()
-		if err != nil {
-			t.Fatalf("event recv: %v", err)
-		}
-		switch p := ev.GetPayload().(type) {
-		case *pb.Event_TileChanged:
-			if p.TileChanged.GetTile().GetId() == well.GetTile().GetId() &&
-				p.TileChanged.GetTile().GetViewZoom() == 3 {
-				sawFraming = true
+		select {
+		case ev, ok := <-evs:
+			if !ok {
+				t.Fatal("event stream closed early")
 			}
-		case *pb.Event_TileRemoved:
-			if p.TileRemoved.GetTileId() == doomed.GetTile().GetId() {
-				sawRemove = true
+			switch p := ev.GetPayload().(type) {
+			case *pb.Event_TileChanged:
+				if p.TileChanged.GetTile().GetId() == well.GetTile().GetId() &&
+					p.TileChanged.GetTile().GetViewZoom() == 3 {
+					sawFraming = true
+				}
+			case *pb.Event_TileRemoved:
+				if p.TileRemoved.GetTileId() == doomed.GetTile().GetId() {
+					sawRemove = true
+				}
 			}
+		case <-deadline:
+			t.Fatalf("events never arrived: framing=%v remove=%v", sawFraming, sawRemove)
 		}
 	}
 

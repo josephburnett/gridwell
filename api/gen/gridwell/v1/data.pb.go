@@ -629,8 +629,22 @@ type InfoResponse struct {
 	// scratch_grid_id, it is a storage address, never a landing page. Empty for
 	// rooted plugins.
 	InstanceGridId string `protobuf:"bytes,14,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// transit declares that this plugin's ids are CHAINS from another node —
+	// a mount, forwarding to a remote gridwell, whose ids arrive already
+	// qualified from the remote's perspective. The host's qualification layer
+	// prepends one segment instead of applying leaf rules, and the mount
+	// cache interposes. Declared by the LOCAL transport binary (which is
+	// alive even when its remote isn't) and cached from the spawn-time
+	// handshake — the host must never re-derive it from the kind string
+	// (charter, 2026-08-15: the host must not know its plugins).
+	Transit bool `protobuf:"varint,15,opt,name=transit,proto3" json:"transit,omitempty"`
+	// glyph is the plugin's identity glyph for the launcher/menu/ghost faces:
+	// "folder", "process", "well", or "" for the generic globe. A declaration,
+	// never a kind switch in the client; unknown values also fall back to the
+	// globe, so a third-party plugin degrades politely.
+	Glyph         string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InfoResponse) Reset() {
@@ -743,6 +757,20 @@ func (x *InfoResponse) GetRootViewZoom() float64 {
 func (x *InfoResponse) GetInstanceGridId() string {
 	if x != nil {
 		return x.InstanceGridId
+	}
+	return ""
+}
+
+func (x *InfoResponse) GetTransit() bool {
+	if x != nil {
+		return x.Transit
+	}
+	return false
+}
+
+func (x *InfoResponse) GetGlyph() string {
+	if x != nil {
+		return x.Glyph
 	}
 	return ""
 }
@@ -1887,8 +1915,11 @@ type PluginInfo struct {
 	// empty root_grid_id it marks the plugin PARAMETERIZED: click/drop opens
 	// the instance picker. "" for rooted plugins.
 	InstanceGridId string `protobuf:"bytes,11,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// glyph mirrors InfoResponse.glyph for the client's plugin faces
+	// (launcher tile, menu swatch, drag ghost). "" = the generic globe.
+	Glyph         string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PluginInfo) Reset() {
@@ -1994,6 +2025,13 @@ func (x *PluginInfo) GetInfoError() string {
 func (x *PluginInfo) GetInstanceGridId() string {
 	if x != nil {
 		return x.InstanceGridId
+	}
+	return ""
+}
+
+func (x *PluginInfo) GetGlyph() string {
+	if x != nil {
+		return x.Glyph
 	}
 	return ""
 }
@@ -3232,7 +3270,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\"\r\n" +
-	"\vInfoRequest\"\x9f\x04\n" +
+	"\vInfoRequest\"\xcf\x04\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -3249,7 +3287,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\froot_view_cy\x18\v \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12(\n" +
-	"\x10instance_grid_id\x18\x0e \x01(\tR\x0einstanceGridId\x1a@\n" +
+	"\x10instance_grid_id\x18\x0e \x01(\tR\x0einstanceGridId\x12\x18\n" +
+	"\atransit\x18\x0f \x01(\bR\atransit\x12\x14\n" +
+	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x06\x10\aJ\x04\b\a\x10\b\"'\n" +
@@ -3319,7 +3359,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\"E\n" +
 	"\x0eSearchResponse\x123\n" +
 	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"\x14\n" +
-	"\x12ListPluginsRequest\"\xe3\x02\n" +
+	"\x12ListPluginsRequest\"\xf9\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
@@ -3337,7 +3377,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12(\n" +
-	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\"\xe3\x02\n" +
+	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\x12\x14\n" +
+	"\x05glyph\x18\f \x01(\tR\x05glyph\"\xe3\x02\n" +
 	"\x13ListPluginsResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12\x1b\n" +
 	"\tnode_uuid\x18\x02 \x01(\tR\bnodeUuid\x12)\n" +

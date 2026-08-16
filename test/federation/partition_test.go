@@ -43,27 +43,12 @@ func TestMountPartitionServesCache(t *testing.T) {
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
 	creds := sshdialtest.Server(t, t.TempDir())
 
-	// Local node: localdb + ssh, connection via the config-migration door
-	// (the same injection the spawn test uses — proven and terse).
+	// Local node: localdb + ssh; the connection is committed the DATA way
+	// (commitConnection — the only way since the config bridge was deleted).
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "localdb", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "rtb")
-	cfgPath := filepath.Join(localHome, "server.yaml")
-	cfgRaw, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldStyle := strings.Replace(string(cfgRaw), "kind: ssh\n",
-		"kind: ssh\n      config:\n"+
-			"        host: "+creds.Addr+"\n"+
-			"        user: joe\n"+
-			"        key: "+creds.KeyPath+"\n"+
-			"        known_hosts: "+creds.KnownHostsPath+"\n"+
-			"        addr: "+remoteAddr+"\n", 1)
-	if err := os.WriteFile(cfgPath, []byte(oldStyle), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 	cl := gwrpc.NewDefaultClient(localOrigin)
 
@@ -80,23 +65,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 			homeRoot, _ = pm["rootGridId"].(string)
 		}
 	}
-	var sshRoot string
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) && sshRoot == "" {
-		ig := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": instGrid})
-		for _, ti := range ig["tiles"].([]any) {
-			tm := ti.(map[string]any)
-			if tm["altText"] == "rtb" {
-				sshRoot, _ = tm["childGridId"].(string)
-			}
-		}
-		if sshRoot == "" {
-			time.Sleep(300 * time.Millisecond)
-		}
-	}
-	if sshRoot == "" {
-		t.Fatal("the connection never learned its remote root")
-	}
+	sshRoot := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
 
 	// Through the chain: a well holding a WARMED text, a NEVER-READ text.
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
@@ -146,8 +115,9 @@ func TestMountPartitionServesCache(t *testing.T) {
 
 	// Warmed reads serve STALE (poll: the dial layer needs a beat to start
 	// answering Unavailable instead of hanging on half-open sockets).
-	deadline = time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	var staleBody []byte
+	var err error
 	for time.Now().Before(deadline) {
 		staleBody, _, _, err = cl.ReadContent(ctx, warmT["id"].(string))
 		if err == nil {

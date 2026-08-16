@@ -98,6 +98,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	// classification the real server applies.
 	localReg := plugin.NewRegistry()
 	localReg.Register("sshc", "ssh", sshClient, nil)
+	localReg.SetTransit("sshc", true) // the declaration the loader reads from Info in production
 	localSrv := server.New(localReg, server.Config{NodeID: "lnodex"})
 	localHTTP := httptest.NewServer(localSrv.Handler())
 	t.Cleanup(localHTTP.Close)

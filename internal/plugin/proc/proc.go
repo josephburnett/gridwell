@@ -227,6 +227,7 @@ func (p *Plugin) Info(_ context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 		label = fmt.Sprintf("pid %d", pid)
 	}
 	resp := &gridwellv1.InfoResponse{
+		Glyph:         "process",
 		Kind:          "proc",
 		DisplayName:   label,
 		SchemaVersion: procSchemaVersion,

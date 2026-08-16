@@ -180,48 +180,20 @@ func TestFederationSpawn(t *testing.T) {
 	// test uses, here with the PRODUCTION gridwell-ssh dialing it).
 	creds := sshdialtest.Server(t, t.TempDir())
 
-	// Local node: one localdb + the ssh plugin. The connection is written as
-	// an OLD-STYLE config-pinned entry (the retired pre-#251 shape, appended
-	// to server.yaml by hand exactly as an old install would have it — init
-	// refuses these keys now), so this test crosses the #251 config→data
-	// MIGRATION with the production binaries: `gridwell serve` must import
-	// the entry as a named connection and strip the keys from the file.
+	// Local node: one localdb + the ssh plugin, no per-host config anywhere
+	// — connections are DATA (#199/#251): a well dropped in the instance
+	// grid, its params committed as content. (The pre-#251 config→data
+	// migration bridge is deleted — 2026-08-15, single-user cut.)
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "localdb", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "ssh", "--name", "rtb")
-	cfgPath := filepath.Join(localHome, "server.yaml")
-	cfgRaw, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldStyle := strings.Replace(string(cfgRaw), "kind: ssh\n",
-		"kind: ssh\n      config:\n"+
-			"        host: "+creds.Addr+"\n"+
-			"        user: joe\n"+
-			"        key: "+creds.KeyPath+"\n"+
-			"        known_hosts: "+creds.KnownHostsPath+"\n"+
-			"        addr: "+remoteAddr+"\n", 1)
-	if oldStyle == string(cfgRaw) {
-		t.Fatalf("failed to write the old-style ssh entry into:\n%s", cfgRaw)
-	}
-	if err := os.WriteFile(cfgPath, []byte(oldStyle), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The migration ran: the yaml lost the connection keys; the plugin
-	//    spawned PARAMETERIZED (no root, an instance grid); the instance
-	//    grid holds one connection named rtb whose child — the remote's
-	//    node grid, learned through the real tunnel — is the chained
-	//    <ssh>/<conn>/<rnode>/0 mount root the rest of this test drives.
-	migrated, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(migrated), "host:") {
-		t.Fatalf("server.yaml still carries connection config after the boot migration:\n%s", migrated)
-	}
+	// 1. The plugin spawned PARAMETERIZED (no root, an instance grid);
+	//    drop a connection well, commit params, and the well gains its
+	//    child — the remote's node grid through the minted segment: the
+	//    chained <ssh>/<conn>/<rnode>/0 mount root the rest drives.
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
 	var instGrid, homeRoot string
 	for _, p := range lp["plugins"].([]any) {
@@ -239,23 +211,7 @@ func TestFederationSpawn(t *testing.T) {
 	if instGrid == "" {
 		t.Fatal("ssh plugin declared no instance grid — did the flip + spawn happen?")
 	}
-	var sshRoot string
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) && sshRoot == "" {
-		ig := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": instGrid})
-		for _, ti := range ig["tiles"].([]any) {
-			tm := ti.(map[string]any)
-			if tm["altText"] == "rtb" {
-				sshRoot, _ = tm["childGridId"].(string)
-			}
-		}
-		if sshRoot == "" {
-			time.Sleep(300 * time.Millisecond)
-		}
-	}
-	if strings.Count(sshRoot, "/") != 3 {
-		t.Fatalf("migrated connection child = %q, want the chained <ssh>/<conn>/<rnode>/0 id learned through the tunnel", sshRoot)
-	}
+	sshRoot := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
 
 	// 2. The remote node grid lists both remote plugins through the tunnel.
 	//    (No network context rides the grid anymore — 2026-07-26, owner
@@ -604,4 +560,54 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	}
 
 	fmt.Println("federation spawn gate: connections mode — dropped well, real tunnel, chained bytes, clean unlink OK")
+}
+
+// commitConnection drops a connection well in the ssh plugin's instance
+// grid, commits its params as content (#199: connections are data — the
+// only way a connection is ever made since the pre-#251 config bridge was
+// deleted), and waits for the well to gain its child: the remote's node
+// grid through the minted segment. Returns the chained
+// <ssh>/<conn>/<rnode>/0 mount root.
+func commitConnection(t *testing.T, origin, instGrid string, creds sshdialtest.Creds, remoteAddr string) string {
+	t.Helper()
+	sshHost, sshPort, ok := strings.Cut(creds.Addr, ":")
+	if !ok {
+		t.Fatalf("bad sshd addr %q", creds.Addr)
+	}
+	well := rpc(t, origin, "CreateTile", map[string]any{
+		"gridId": instGrid,
+		"tile":   map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1},
+	})["tile"].(map[string]any)
+	version := int64(0)
+	switch v := well["version"].(type) {
+	case float64:
+		version = int64(v)
+	case string:
+		version, _ = strconv.ParseInt(v, 10, 64)
+	}
+	params := fmt.Sprintf(`{"host":%q,"user":"joe","port":%s,"key":%q,"known_hosts":%q,"addr":%q}`,
+		sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
+	if _, err := gwrpc.NewDefaultClient(origin).WriteContent(context.Background(),
+		well["id"].(string), version, []byte(params)); err != nil {
+		t.Fatalf("params commit: %v", err)
+	}
+	var child string
+	deadline := time.After(30 * time.Second)
+	for child == "" {
+		g := rpc(t, origin, "GetGrid", map[string]any{"gridId": instGrid})
+		for _, ti := range g["tiles"].([]any) {
+			if c, _ := ti.(map[string]any)["childGridId"].(string); c != "" {
+				child = c
+			}
+		}
+		select {
+		case <-deadline:
+			t.Fatal("connection well never gained its child through the real tunnel")
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if strings.Count(child, "/") != 3 {
+		t.Fatalf("connection child = %q, want the chained <ssh>/<conn>/<rnode>/0", child)
+	}
+	return child
 }

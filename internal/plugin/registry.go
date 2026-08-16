@@ -24,6 +24,8 @@ type Registry struct {
 	order []string
 	// closers holds the cleanup function for each managed (subprocess) plugin.
 	closers map[string]func()
+	// transit holds each plugin's DECLARED transit-ness (SetTransit).
+	transit map[string]bool
 }
 
 // NewRegistry returns an empty registry.
@@ -33,6 +35,7 @@ func NewRegistry() *Registry {
 		kinds:   make(map[string]string),
 		labels:  make(map[string]string),
 		closers: make(map[string]func()),
+		transit: make(map[string]bool),
 	}
 }
 
@@ -82,25 +85,27 @@ func (r *Registry) Ordered() []struct{ UUID, Kind string } {
 	return out
 }
 
-// TransitKind reports whether a plugin KIND is a mount — a transit plugin
-// forwarding to another node, whose ids arrive already qualified from the
-// remote's perspective. The one owner of the kind→transit rule: both the
-// registry's per-plugin Transit and the loader's mount-cache interposition
-// read it, so "what counts as a mount" can never fork.
-func TransitKind(kind string) bool { return kind == "ssh" }
+// SetTransit records the plugin's DECLARED transit-ness (InfoResponse.
+// transit, read once from the spawn-time handshake by the loader — the
+// local transport binary is alive even when its remote isn't, so the fact
+// is as stable as identity). The host never derives it from the kind
+// string (charter, 2026-08-15: the host must not know its plugins).
+func (r *Registry) SetTransit(id string, transit bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.transit[id] = transit
+}
 
 // Transit reports whether the plugin's ids are CHAINS from another node — a
 // node mount, where the plugin forwards to a remote gridwell's front door and
 // its ids arrive already qualified from the remote's perspective. The server's
 // qualification layer prepends this plugin's uuid to every id it returns
-// (qualifyTilesTransit) instead of applying leaf-plugin rules. Derived from
-// the configured kind (TransitKind): it is a property of the local
-// transport binary's id discipline (config-time fact), not a remote
-// capability, so it must be known even while the remote is unreachable.
+// (qualifyTilesTransit) instead of applying leaf-plugin rules. The fact is
+// the plugin's own declaration (SetTransit), cached at spawn.
 func (r *Registry) Transit(id string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return TransitKind(r.kinds[id])
+	return r.transit[id]
 }
 
 // Get returns the client for id, or (nil, false) if not registered.

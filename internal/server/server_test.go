@@ -233,6 +233,7 @@ func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	reg.Register(uuid, "ssh", proxied, nil)
+	reg.SetTransit(uuid, true) // the declaration the loader reads from Info in production
 
 	srv := New(reg, Config{})
 	hs := httptest.NewServer(srv.Handler())

@@ -146,7 +146,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		setTileDash(a.cctx)
 		strokeTileBorder(a.cctx, x, y, w, h, colorFocusBorder, tileBorderPx)
 		clearTileDash(a.cctx)
-		a.drawPluginGlyph(item.plugin.Kind, x, y, w, h)
+		a.drawPluginGlyph(item.plugin.Glyph, x, y, w, h)
 		a.drawTileBannerLabel(&n, x, y, w, h, false)
 		// Broken/rootless plugins get the same health tint their node-grid
 		// tiles do; the click guard explains on click.
@@ -172,18 +172,21 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 	}
 }
 
-// drawPluginGlyph overlays a plugin's identity glyph — all in the grid blue —
-// chosen by kind: a folder for fs, a process tree for proc, a well for a
-// localdb plugin, and a globe as the generic fallback (e.g. ssh). Full size
-// (glyphBox). One drawing shared by the menu swatch, the drag ghost, and a
-// cross-plugin well that has no preview yet, so all three read identically.
-func (a *App) drawPluginGlyph(kind string, x, y, w, h float64) {
-	switch kind {
-	case "fs":
+// drawPluginGlyph overlays a plugin's identity glyph — all in the grid
+// blue — chosen by the plugin's own DECLARATION (InfoResponse.glyph:
+// "folder", "process", "well"; anything else — including a third-party
+// plugin's unknown value — falls back to the generic globe). Never a
+// kind switch: the client must not know its plugins (charter,
+// 2026-08-15). Full size (glyphBox). One drawing shared by the menu
+// swatch, the drag ghost, and a cross-plugin well that has no preview
+// yet, so all three read identically.
+func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
+	switch glyph {
+	case rpc.GlyphFolder:
 		drawFolderGlyph(a.cctx, x, y, w, h, colorFocusBorder)
-	case "proc":
+	case rpc.GlyphProcess:
 		drawProcessGlyph(a.cctx, x, y, w, h, colorFocusBorder)
-	case "localdb":
+	case rpc.GlyphWell:
 		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	default:
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorFocusBorder)

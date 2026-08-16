@@ -8,7 +8,7 @@ package markdown
 // The mapping invariant: the N-th checkbox the renderer emits corresponds
 // to the N-th TaskCheckBox node in the parsed AST, because RenderHTML and
 // this scan share ONE parser configuration (gmRenderer — the same "one
-// dialect" rule AltFromSource leans on). A literal "- [ ]" inside a code
+// dialect" rule doctype.AltFromSource leans on). A literal "- [ ]" inside a code
 // fence is not a TaskCheckBox in either place, so it can't shift the
 // numbering. TestToggleTaskRenderParity pins the invariant.
 
