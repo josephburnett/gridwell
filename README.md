@@ -46,9 +46,16 @@ Five tile kinds, created from the **+ menu** in the bottom bar:
   saved exactly as arranged.
 
 Borders carry meaning, everywhere, no exceptions. Solid ⇒ the content lives
-here; delete is real. Dashed ⇒ it's a link; delete only unlinks. Gray ⇒
-ephemeral: a scratch shell or url visit (click a + swatch instead of
-dragging it) that is deleted when you leave.
+here. Dashed ⇒ it's a link; delete only unlinks. Gray ⇒ ephemeral: a
+scratch shell or url visit (click a + swatch instead of dragging it) that
+is deleted when you leave.
+
+On the local plugin, delete is a safety net: the tile moves into the
+**trashcan** (its swatch sits in the + menu beside the plugin), filed
+under the current month. Same tile, same id — links keep resolving, and
+dragging it back out restores it. Deleting something already inside the
+trash is real and forever. Ephemerals and other plugins' projections skip
+the net.
 
 ## Navigation
 
