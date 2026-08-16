@@ -1,4 +1,4 @@
-.PHONY: build bin plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-federation serve init clean launch vendor dist node-modules
+.PHONY: build bin bin-all plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-plugin-fs
@@ -25,7 +25,7 @@ export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 # we never serve a stale binary or wasm artifact. Every plugin is its own
 # separately-compiled go-plugin binary, laid out beside $(BIN) so the server
 # resolves them by `gridwell-plugin-<kind>`.
-build: bin plugins wasm
+build: bin bin-all plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
 # pure Go, so nothing pulls cgo and the result has no libc-version coupling —
@@ -34,7 +34,13 @@ build: bin plugins wasm
 # copy them anywhere and the browser client serves from the binary itself.
 # bin depends on wasm so the embed always carries the current client.
 bin: wasm
-	CGO_ENABLED=0 go build -o $(BIN) ./cmd/gridwell
+	cd apps/gridwell && CGO_ENABLED=0 go build -o ../../gridwell .
+
+# gridwell-all: the bundled example binary (docs/plugin.md) — same server,
+# plugins compiled in through the compose door. Built alongside so the
+# parity gate always has a fresh one.
+bin-all:
+	cd apps/gridwell-all && CGO_ENABLED=0 go build -o ../../gridwell-all .
 
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);
 # file-target rules would skip the build whenever the binary already existed.
@@ -105,7 +111,7 @@ proto-check:
 # shared nested modules, and each plugin (its own module: the in-repo
 # strangers, docs/plugin.md). check builds and tests each one STANDALONE
 # (GOWORK=off) so no module can quietly lean on the workspace.
-MODULES := api internal/doctype plugins/griddb plugins/localdb plugins/fs plugins/proc plugins/ssh
+MODULES := api internal/doctype plugins/griddb plugins/localdb plugins/fs plugins/proc plugins/ssh apps/gridwell apps/gridwell-all mobile
 
 check: fmt-check proto-check
 	go build ./...
@@ -155,7 +161,7 @@ check-web: build node-modules
 # `federation` build tag so make check stays fast. Headless, ~1s after build.
 # Run for any change to plugin spawn, sshdial, the node export, or routing.
 check-federation: build
-	go test -tags federation -count=1 ./test/federation/
+	cd test/federation && go test -tags federation -count=1 .
 
 # serve runs the backend on its own (the desktop app spawns it as a sidecar;
 # this target is for poking at the RPC/SSE surface or loading the wasm client

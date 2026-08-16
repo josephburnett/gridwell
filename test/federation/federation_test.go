@@ -33,7 +33,10 @@ import (
 	"github.com/josephburnett/gridwell/plugins/ssh/sshdial/sshdialtest"
 )
 
-// repoRoot walks up from the test binary's source dir to the module root.
+// repoRoot walks up from the test binary's source dir to the REPO root —
+// the directory holding go.work (this test lives in its own module now,
+// so the nearest go.mod is its own; the binaries land at the workspace
+// root).
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -41,12 +44,12 @@ func repoRoot(t *testing.T) string {
 		t.Fatal(err)
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			t.Fatal("no go.mod above the test dir")
+			t.Fatal("no go.work above the test dir")
 		}
 		dir = parent
 	}

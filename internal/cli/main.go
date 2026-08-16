@@ -1,37 +1,42 @@
-package main
+package cli
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/josephburnett/gridwell/internal/cli"
+	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-func main() {
-	if len(os.Args) < 2 {
+// Main is the shared CLI dispatch for every composed gridwell binary
+// (docs/plugin.md): the stock host passes nil factories (all plugins
+// out-of-process); a bundled binary passes its compiled-in loadout and
+// everything else — init, status, backup, the whole serve wiring — is
+// identical. Returns the process exit code.
+func Main(args []string, factories map[string]plugin.ServerFactory) int {
+	if len(args) < 1 {
 		usage()
-		os.Exit(2)
+		return 2
 	}
-	cmd := os.Args[1]
-	args := os.Args[2:]
+	cmd := args[0]
+	rest := args[1:]
 	switch cmd {
 	case "init":
-		os.Exit(cli.RunInit(args))
+		return RunInit(rest)
 	case "serve":
-		os.Exit(cli.RunServe(args))
+		return RunServeWith(rest, factories)
 	case "status":
-		os.Exit(cli.RunStatus(args))
+		return RunStatus(rest)
 	case "backup":
-		os.Exit(cli.RunBackup(args))
+		return RunBackup(rest)
 	case "clear-browser-data":
-		os.Exit(cli.RunClearBrowserData(args))
+		return RunClearBrowserData(rest)
 	case "-h", "--help", "help":
 		usage()
-		os.Exit(0)
+		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", cmd)
 		usage()
-		os.Exit(2)
+		return 2
 	}
 }
 
@@ -56,9 +61,5 @@ Usage:
 
 init mints a plugin id, creates its DB (at ~/.gridwell/db/<id>/) with identity
 metadata, and appends the entry to ~/.gridwell/server.yaml. serve requires that
-config file — every plugin's DB path is derived from its id, not configured.
-
-The server is the loopback backend for the Gridwell desktop app (see
-apps/desktop). It serves the RPC/SSE data plane, the wasm client, and shell
-PTYs; live URL tiles are hosted natively by the Electron shell.`)
+config file — every plugin's DB path is derived from its id, not configured.`)
 }

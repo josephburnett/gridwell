@@ -15,6 +15,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
+	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/web"
 )
@@ -174,12 +175,17 @@ func isExecutable(path string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
-// resolvePluginBinaries fills in Binary for every plugin that didn't pin one
-// explicitly in server.yaml, by kind. Production always runs subprocess plugins.
-func resolvePluginBinaries(cfg *config.ServerConfig) error {
+// resolvePluginBinaries fills in Binary for every plugin that didn't pin
+// one explicitly in server.yaml, by kind — skipping kinds a bundled
+// binary provides in-process (its factories win: that is the composer's
+// whole choice; an explicit server.yaml binary: still beats both).
+func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin.ServerFactory) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Binary != "" {
+			continue
+		}
+		if _, ok := factories[pc.Kind]; ok {
 			continue
 		}
 		bin, err := resolvePluginBinary(pc.Kind)
@@ -198,7 +204,13 @@ func resolvePluginBinaries(cfg *config.ServerConfig) error {
 // address comes from resolveBind (loopback by default; server.yaml bind: pins
 // it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM trigger
 // graceful shutdown.
-func RunServe(args []string) int {
+// RunServe runs the stock host: every plugin an out-of-process binary.
+func RunServe(args []string) int { return RunServeWith(args, nil) }
+
+// RunServeWith is RunServe for a BUNDLED binary (a leaf composer,
+// docs/plugin.md): kinds present in factories load in-process through the
+// same compose door; everything else spawns. The stock host passes nil.
+func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int {
 	home, err := config.Home()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -242,7 +254,7 @@ func RunServe(args []string) int {
 
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
 	// each kind's binary (server.yaml may pin an explicit path instead).
-	if err := resolvePluginBinaries(cfg); err != nil {
+	if err := resolvePluginBinaries(cfg, factories); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
@@ -253,8 +265,9 @@ func RunServe(args []string) int {
 	// CLI's own concerns wrap it: the lock above, the banner below,
 	// signals.
 	n, err := node.Start(node.Options{
-		Home: home,
-		Cfg:  cfg,
+		Home:      home,
+		Cfg:       cfg,
+		Factories: factories,
 		// The embedded web client by default — the binary is self-contained
 		// (web.FS); server.yaml static:/--static is the dev override that
 		// serves a checkout from disk instead.
