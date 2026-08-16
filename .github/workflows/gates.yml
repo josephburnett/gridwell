@@ -46,8 +46,9 @@ jobs:
       ELECTRON_DISABLE_SANDBOX: "1"
     steps:
       - uses: actions/checkout@v4
-      # Every live shell rides a tmux session (plugins/local/tmux); the
-      # runner image doesn't ship it — without it all 13 shell specs fail.
+      # Every live shell rides a tmux session (plugins/local/tmux); pin it
+      # present rather than trust the image (it shipped preinstalled when
+      # this was added — the shell-spec failures were NOT a missing tmux).
       - name: system deps
         run: sudo apt-get update && sudo apt-get install -y tmux
       - uses: actions/setup-go@v5
@@ -68,3 +69,13 @@ jobs:
         run: cd apps/desktop && xvfb-run -a npm run test:integration && xvfb-run -a npm run test:bridge
       - name: e2e
         run: cd apps/desktop && npm run build && xvfb-run -a npx playwright test --retries=1
+      # Failure evidence: traces + error-context for every failed spec —
+      # the shell-spec failures are runner-only, so the trace is the only
+      # way to see what the app actually did.
+      - name: upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: apps/desktop/test-results/
+          retention-days: 7

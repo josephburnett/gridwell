@@ -16,5 +16,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # web/embed.go embeds the built wasm artifact; the server package the
+      # mobile bind pulls in won't compile without it on a fresh checkout.
+      - name: wasm (embedded by the server package)
+        run: make wasm
       - name: ios build canary
         run: cd mobile && GOWORK=off GOOS=ios GOARCH=arm64 CGO_ENABLED=1 go build ./...
