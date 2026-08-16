@@ -2,6 +2,13 @@ module github.com/josephburnett/gridwell
 
 go 1.26.5
 
+// The api module lives in this repo (docs/plugin.md): the contract every
+// plugin builds against, carved out so the arrows are structural. The
+// replace makes the in-repo copy authoritative for the app build.
+require github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
+
+replace github.com/josephburnett/gridwell/api => ./api
+
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24

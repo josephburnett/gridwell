@@ -35,7 +35,6 @@ import (
 	"sync"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/internal/plugin/fs"
@@ -128,8 +127,8 @@ func Stop() {
 // tmux manager; the server refuses shell tiles anyway).
 func inProcessFactories(home string) map[string]plugin.ServerFactory {
 	return map[string]plugin.ServerFactory{
-		"localdb": func(pc *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-			st, err := localdb.OpenVerified(pc.Config["db_file"], pc.ID, pc.Kind)
+		"localdb": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+			st, err := localdb.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
 			if err != nil {
 				return nil, err
 			}
@@ -137,8 +136,8 @@ func inProcessFactories(home string) map[string]plugin.ServerFactory {
 		},
 		"fs":   fsplugin.NewFactory,
 		"proc": proc.NewFactory,
-		"ssh": func(pc *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-			db, err := sshhost.OpenDB(pc.Config["db_file"])
+		"ssh": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+			db, err := sshhost.OpenDB(cfg["db_file"])
 			if err != nil {
 				return nil, err
 			}

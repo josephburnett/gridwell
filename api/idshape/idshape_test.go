@@ -1,4 +1,4 @@
-package store
+package idshape
 
 import (
 	"strconv"

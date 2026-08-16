@@ -11,14 +11,11 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
+	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
@@ -87,64 +84,37 @@ func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Reg
 	return reg, nil
 }
 
-// ServerFactory is a constructor called for built-in plugin kinds. It receives
-// the plugin config and returns an implementation ready to serve.
-type ServerFactory func(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error)
+// ServerFactory is compose.Factory: an in-process plugin constructor over
+// the ONE config vocabulary both process shapes share.
+type ServerFactory = compose.Factory
+
+// ServeInProcess is compose.ServeInProcess — re-exported for the many
+// seam tests that stand a real plugin up without a subprocess.
+var ServeInProcess = compose.ServeInProcess
 
 func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridwellv1.GridwellClient, func(), error) {
-	// Subprocess binary (the production path): spawn it via go-plugin, handing
-	// it its config — including the uuid, so the plugin persists its own durable
-	// identity (see pluginmeta).
-	if pc.Binary != "" {
-		cfg := make(map[string]string, len(pc.Config)+2)
-		for k, v := range pc.Config {
-			cfg[k] = v
-		}
-		// Inject the identity the plugin persists and the server verifies against
-		// its DB (see pluginmeta): uuid is the durable routing id, kind selects
-		// the schema. Both are config-authoritative; db_file is derived upstream.
-		cfg["uuid"] = pc.ID
-		cfg["kind"] = pc.Kind
-		return LoadPlugin(pc.Binary, cfg)
+	// The one config vocabulary: the plugin's own keys plus the injected
+	// identity it persists and the server verifies against its DB (see
+	// pluginmeta) — uuid is the durable routing id, kind selects the
+	// schema; db_file is derived upstream. Identical for a subprocess (the
+	// spawn env) and an in-process factory (the argument).
+	cfg := make(map[string]string, len(pc.Config)+2)
+	for k, v := range pc.Config {
+		cfg[k] = v
 	}
+	cfg["uuid"] = pc.ID
+	cfg["kind"] = pc.Kind
 
-	// In-process factory: tests and the mobile node (desktop/server always
-	// sets Binary).
+	// The composition door (api/compose): Command for a subprocess binary
+	// (desktop/server production), InProcess for a factory (tests, the
+	// mobile node). Callers cannot tell which they got — that is the door's
+	// contract, and the parity gate pins it.
+	if pc.Binary != "" {
+		return compose.Command(pc.Binary).Open(cfg)
+	}
 	factory, ok := factories[pc.Kind]
 	if !ok {
 		return nil, nil, fmt.Errorf("no factory for kind %q and no binary path", pc.Kind)
 	}
-	impl, err := factory(pc)
-	if err != nil {
-		return nil, nil, fmt.Errorf("factory %q: %w", pc.Kind, err)
-	}
-	return ServeInProcess(impl)
-}
-
-// ServeInProcess starts a gRPC server in a goroutine on a loopback TCP port
-// and returns a client connected to it. closer stops the server and closes
-// the connection. Used by tests and the mobile node (desktop/server plugins
-// are subprocesses — see loadOne).
-func ServeInProcess(impl gridwellv1.GridwellServer) (gridwellv1.GridwellClient, func(), error) {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, nil, fmt.Errorf("in-process listen: %w", err)
-	}
-
-	srv := grpc.NewServer()
-	gridwellv1.RegisterGridwellServer(srv, impl)
-	go srv.Serve(lis)
-
-	addr := lis.Addr().String()
-	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		srv.Stop()
-		return nil, nil, fmt.Errorf("in-process dial %s: %w", addr, err)
-	}
-
-	closer := func() {
-		cc.Close()
-		srv.GracefulStop()
-	}
-	return gridwellv1.NewGridwellClient(cc), closer, nil
+	return compose.InProcess(factory).Open(cfg)
 }

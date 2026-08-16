@@ -16,7 +16,6 @@ import (
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/fssource"
@@ -215,18 +214,20 @@ func createSchema(db *sql.DB) error {
 // Close closes the underlying database.
 func (p *Plugin) Close() error { return p.db.Close() }
 
-// NewFactory returns a ServerFactory for the "fs" kind.
-// config["db_file"] is the path to the plugin's SQLite DB.
-func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-	dbPath := cfg.Config["db_file"]
+// NewFactory is the compose.Factory for the "fs" kind: cfg is the ONE
+// config vocabulary both process shapes share (the same map a subprocess
+// reads from the spawn env). cfg["db_file"] is the plugin's SQLite DB;
+// cfg["root"] the projected directory.
+func NewFactory(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+	dbPath := cfg["db_file"]
 	if dbPath == "" {
-		return nil, fmt.Errorf("fs plugin %q: db_file config key required", cfg.Name)
+		return nil, fmt.Errorf("fs plugin: db_file config key required")
 	}
 	p, err := Open(dbPath, trashHost{})
 	if err != nil {
 		return nil, err
 	}
-	p.SetRoot(cfg.Config["root"])
+	p.SetRoot(cfg["root"])
 	return p, nil
 }
 

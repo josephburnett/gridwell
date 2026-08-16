@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/josephburnett/gridwell/internal/plugin/guest"
+	"github.com/josephburnett/gridwell/api/guest"
 	"github.com/josephburnett/gridwell/internal/plugin/localdb"
 	"github.com/josephburnett/gridwell/internal/shellsvc"
 	"github.com/josephburnett/gridwell/internal/tmux"

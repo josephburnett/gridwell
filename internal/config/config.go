@@ -10,10 +10,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/josephburnett/gridwell/api/idshape"
 )
 
 // ServerConfig is the top-level ~/.gridwell/server.yaml structure. There is no
@@ -163,18 +164,8 @@ func Load(path string) (*ServerConfig, error) {
 // door that catches a hand-edited server.yaml before a bad id gets stored
 // into cross-plugin references it can never be removed from.
 func validateIDs(cfg *ServerConfig) error {
-	check := func(what, id string) error {
-		if id == "" {
-			return nil // node_id may be absent pre-EnsureNodeID
-		}
-		if strings.Contains(id, "/") {
-			return fmt.Errorf("%s %q must not contain '/'", what, id)
-		}
-		if _, err := strconv.ParseInt(id, 10, 64); err == nil {
-			return fmt.Errorf("%s %q must not be purely numeric (indistinguishable from a tile id)", what, id)
-		}
-		return nil
-	}
+	// The rules live with the mint (api/idshape) — one id-shape owner.
+	check := idshape.ValidateSegment
 	if err := check("node_id", cfg.NodeID); err != nil {
 		return err
 	}

@@ -1,0 +1,9 @@
+// Development workspace (docs/plugin.md): stitches the in-repo modules so
+// cross-module edits build immediately. CI also builds every module ALONE
+// (GOWORK=off) — the workspace is convenience, never the contract.
+go 1.26.5
+
+use (
+	.
+	./api
+)

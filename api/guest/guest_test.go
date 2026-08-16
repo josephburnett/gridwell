@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	gplug "github.com/josephburnett/gridwell/internal/plugin"
+	gplug "github.com/josephburnett/gridwell/api/compose"
 )
 
 // TestConfigDecodesEnv: a JSON object in GRIDWELL_PLUGIN_CONFIG decodes to the

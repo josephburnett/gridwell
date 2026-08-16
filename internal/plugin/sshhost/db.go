@@ -16,7 +16,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/josephburnett/gridwell/internal/store"
+	"github.com/josephburnett/gridwell/api/idshape"
 
 	// This package opens its own DB handle; own the driver registration
 	// (the pluginmeta lesson: never rely on another linked package's import).
@@ -132,10 +132,10 @@ func scanConn(row interface{ Scan(...any) error }) (*Conn, error) {
 // Create mints a new connection: a fresh AUTOINCREMENT row id, a fresh
 // letter-leading short id for the sub-namespace, and a provenance object_id.
 func (d *DB) Create(ctx context.Context, x, y, w, h int64, alt string) (*Conn, error) {
-	ns := store.NewShortID()
+	ns := idshape.NewShortID()
 	res, err := d.db.ExecContext(ctx,
 		`INSERT INTO ssh_connections (ns, object_id, x, y, w, h, alt_text) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		ns, store.NewUUID(), x, y, w, h, alt)
+		ns, idshape.NewUUID(), x, y, w, h, alt)
 	if err != nil {
 		return nil, err
 	}

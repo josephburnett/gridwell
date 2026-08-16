@@ -17,7 +17,6 @@ import (
 	"syscall"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/plugin/griddb"
 	"github.com/josephburnett/gridwell/internal/procsource"
@@ -189,22 +188,22 @@ CREATE TABLE IF NOT EXISTS tiles (
 // Close closes the underlying database.
 func (p *Plugin) Close() error { return p.db.Close() }
 
-// NewFactory returns a ServerFactory for the "proc" kind. config["db_file"] is
-// the plugin's SQLite DB; config["pid"] (optional, default 1) is the root pid
-// Info reports as the default root grid.
-func NewFactory(cfg *config.PluginConfig) (gridwellv1.GridwellServer, error) {
-	dbPath := cfg.Config["db_file"]
+// NewFactory is the compose.Factory for the "proc" kind. cfg["db_file"]
+// is the plugin's SQLite DB; cfg["pid"] (optional, default 1) is the root
+// pid Info reports as the default root grid.
+func NewFactory(cfg map[string]string) (gridwellv1.GridwellServer, error) {
+	dbPath := cfg["db_file"]
 	if dbPath == "" {
-		return nil, fmt.Errorf("proc plugin %q: db_file config key required", cfg.Name)
+		return nil, fmt.Errorf("proc plugin: db_file config key required")
 	}
 	p, err := Open(dbPath, "", nil)
 	if err != nil {
 		return nil, err
 	}
-	if pidStr := cfg.Config["pid"]; pidStr != "" {
+	if pidStr := cfg["pid"]; pidStr != "" {
 		pid, err := strconv.ParseInt(pidStr, 10, 64)
 		if err != nil || pid <= 0 {
-			return nil, fmt.Errorf("proc plugin %q: invalid pid %q", cfg.Name, pidStr)
+			return nil, fmt.Errorf("proc plugin: invalid pid %q", pidStr)
 		}
 		p.SetRootPID(pid)
 	}

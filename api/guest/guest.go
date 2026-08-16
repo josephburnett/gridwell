@@ -18,8 +18,8 @@ import (
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 
+	gplug "github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	gplug "github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // Config returns the config map the host handed this plugin at spawn (db_file,

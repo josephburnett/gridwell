@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
 )
 
@@ -38,7 +38,7 @@ func TestHelperPluginHost(t *testing.T) {
 	}
 	bin := os.Getenv("GRIDWELL_TEST_PLUGIN_BIN")
 	dbPath := os.Getenv("GRIDWELL_TEST_PLUGIN_DB")
-	_, closer, err := plugin.LoadPlugin(bin, map[string]string{
+	_, closer, err := compose.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "hostdeath-uuid",
 		"kind":    "localdb",

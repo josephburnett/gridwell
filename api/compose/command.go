@@ -1,4 +1,4 @@
-package plugin
+package compose
 
 import (
 	"encoding/json"

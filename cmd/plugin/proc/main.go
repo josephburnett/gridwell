@@ -10,8 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/plugin/guest"
+	"github.com/josephburnett/gridwell/api/guest"
 	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/plugin/proc"
 )
@@ -24,7 +23,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	impl, err := proc.NewFactory(&config.PluginConfig{Name: "proc", Config: cfg})
+	impl, err := proc.NewFactory(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gridwell-proc: %v\n", err)
 		os.Exit(1)

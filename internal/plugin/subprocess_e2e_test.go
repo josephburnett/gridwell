@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/pluginmeta"
 	_ "modernc.org/sqlite" // register the sqlite driver for pluginmeta.Ensure
 )
@@ -43,7 +43,7 @@ func TestSubprocessPlugin_LocalDB(t *testing.T) {
 		t.Fatalf("seed identity: %v", err)
 	}
 
-	client, closer, err := plugin.LoadPlugin(bin, map[string]string{
+	client, closer, err := compose.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "sub-uuid-1",
 		"kind":    "localdb",
@@ -100,7 +100,7 @@ func TestSubprocessPlugin_IDMismatchRejected(t *testing.T) {
 	}
 
 	// Spawning the plugin against that DB with a different id must fail.
-	client, closer, err := plugin.LoadPlugin(bin, map[string]string{
+	client, closer, err := compose.LoadPlugin(bin, map[string]string{
 		"db_file": dbPath,
 		"uuid":    "id-B",
 		"kind":    "localdb",

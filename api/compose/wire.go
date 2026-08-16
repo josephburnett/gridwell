@@ -1,13 +1,17 @@
-// Package plugin provides the shared constants, handshake config, and
-// go-plugin glue for Gridwell's out-of-process plugin transport. The same
-// gRPC service (api/gridwell/v1/data.proto) used for client↔server is also
-// used for server↔plugin — every node speaks the same wire protocol.
+// Package compose is the api library's COMPOSITION door: how a Gridwell
+// binary gets its plugins, without anything above it knowing which way.
+// A composer declares a Loadout — Command("gridwell-plugin-fs") for an
+// out-of-process binary (go-plugin: process isolation, a separate
+// dependency graph — the third-party door) or InProcess(factory) for a
+// compiled-in plugin (bundled binaries; iOS, where fork/exec does not
+// exist) — and Open materializes either shape behind the SAME
+// gridwellv1.GridwellClient. One gRPC service (api/gridwell/v1) is the
+// whole contract on every path: client↔server, server↔plugin, node↔node.
 //
-// Usage:
-//
-//	Host side: plugin/host.Load(cfg) → gridwellv1.GridwellClient
-//	Guest side: plugin/guest.Serve(impl) in the plugin binary's main()
-package plugin
+// This file is the go-plugin wire glue both sides share; command.go is
+// the host-side spawn; guest.Serve (api/guest) is the plugin binary's
+// main.
+package compose
 
 import (
 	"context"

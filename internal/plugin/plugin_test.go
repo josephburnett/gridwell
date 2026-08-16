@@ -79,7 +79,7 @@ func TestLoadAll(t *testing.T) {
 		},
 	}
 	factories := map[string]plugin.ServerFactory{
-		"stub": func(_ *config.PluginConfig) (gridwellv1.GridwellServer, error) {
+		"stub": func(_ map[string]string) (gridwellv1.GridwellServer, error) {
 			return &stubServer{}, nil
 		},
 	}
