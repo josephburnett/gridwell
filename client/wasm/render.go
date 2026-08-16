@@ -258,7 +258,13 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	}
 	if a.gridWritable(a.gridIDForPane(p)) {
 		for _, k := range primitiveKinds {
-			if k == tplShell && ctx.shellsDisabled {
+			// The shell swatch needs BOTH the context node's policy AND
+			// this host's ATTACH capability (#259): a browser has no PTY
+			// bridge, so a shell created there is dead weight from birth —
+			// unlike url tiles, which stay creatable everywhere (recording
+			// an address is useful without a live view). Viewing frozen
+			// shells created elsewhere is untouched.
+			if k == tplShell && (ctx.shellsDisabled || !a.caps.LiveShell) {
 				continue
 			}
 			items = append(items, paletteItem{primitive: k})
