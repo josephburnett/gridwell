@@ -46,6 +46,10 @@ jobs:
       ELECTRON_DISABLE_SANDBOX: "1"
     steps:
       - uses: actions/checkout@v4
+      # Every live shell rides a tmux session (plugins/local/tmux); the
+      # runner image doesn't ship it — without it all 13 shell specs fail.
+      - name: system deps
+        run: sudo apt-get update && sudo apt-get install -y tmux
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

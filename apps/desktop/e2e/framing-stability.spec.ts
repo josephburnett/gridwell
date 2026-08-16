@@ -1,10 +1,13 @@
 import { test, expect } from './fixtures';
 import { tileAt, placeTile } from './oracle';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 // The framing-audit program (decisions 2026-08-13): saves survive races,
 // unloads, and sibling panes; every root grid persists its viewport.
 
-const FS_ROOT = '/tmp/claude-1000/-home-joe-gridwell/08a127e6-9262-4e6d-9d2f-4e52b8f45f02/scratchpad/fsroot-NnYT';
+const FS_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-framing-'));
 test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: FS_ROOT } }] });
 
 // Gap 9: a framing save that races a version-bumping write retries with a

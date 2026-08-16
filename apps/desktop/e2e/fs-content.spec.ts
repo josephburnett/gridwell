@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 // fs content-types program (decisions 2026-08-13): plain-text files show
@@ -8,7 +9,7 @@ import * as path from 'node:path';
 // the plugin), and a read-only body REFRESHES on every descent (it used
 // to cache at version 0 forever, so edits on disk never appeared).
 
-const ROOT = '/tmp/claude-1000/-home-joe-gridwell/08a127e6-9262-4e6d-9d2f-4e52b8f45f02/scratchpad/fscontent-ToAm';
+const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-fscontent-'));
 test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
 
 test('a source file shows as plain text and refreshes each open', async ({ gw, window }) => {
