@@ -1,182 +1,168 @@
-# Plugins: the third-party door
+# Plugins: the third-party door — the plan of record
 
-An options document (2026-08-15) for the decoupling intent now in the
-charter: the plugin system exists so **other people can build plugins**.
-go-plugin was chosen for exactly the two things a stranger needs —
-process isolation and a **separate dependency graph** (Go's own `plugin`
-package offers neither; it demands the identical toolchain and module
-graph). Everything else the seam happens to provide — id-space
-isolation, a wire contract — could be had with coding discipline alone.
+Decided 2026-08-15 (supersedes the options draft of this file; the
+charter carries the standing rule). The plugin system exists so OTHER
+PEOPLE can build plugins: go-plugin was chosen for process isolation AND
+a separate dependency graph. That separation eroded repeatedly when left
+to intention, so it becomes STRUCTURE — modules whose arrows make the
+breaches unrepresentable — and it is EXERCISED on every build: the
+included plugins themselves become the strangers.
 
-The problem this document exists to solve: **the separation erodes when
-left to intention.** Host↔plugin and client↔plugin coupling has been
-asked out of this codebase several times and has crept back each time,
-in part because the included plugins live in the same repo and nothing
-ever *exercises* the boundary — an in-tree plugin never pays for a
-breach, so breaches are free until a stranger shows up. The fix is
-machinery, not resolve. Options below; nothing here is decided.
+## The decided objectives
 
----
+- ONE gRPC interface for plugins and the server (the proto stays the
+  contract; nothing decays into a Go-interface side channel).
+- An **api library** a plugin author needs and nothing more — and the
+  composition sugar: a binary composer says `InProcess(factory)` or
+  `Command("gridwell-plugin-fs")` and the server cannot tell which it
+  got. In- vs out-of-process is the COMPOSER's choice, invisible above.
+- A **server library**; **apps** that compose it; **plugins** as their
+  own modules importing only the api — the in-repo "examples" every
+  stranger copies.
+- The structure codified and TESTED: wrong arrows fail the build.
 
-## 1. The coupling inventory (audited 2026-08-15)
+Decisions taken in review (Joe, 2026-08-15):
+- Plugin binaries rename to `gridwell-plugin-<kind>`. No fallback lookup
+  — single user, clean cut.
+- The wasm client + web/ stay in the SERVER module (strangers write
+  plugins, not clients; the client is the server's embedded face).
+- `internal/store` moves into the localdb plugin module — it is
+  localdb's persistence. `store.NewShortID` + the id-shape validation
+  lift into the api module: id shape is CONTRACT, not storage.
+- ASSUMPTION to confirm: the pre-#251 sshmigrate bridge (the one
+  host→plugin-impl import) is DELETED outright, not sunset — every
+  existing home is already migrated. init's ssh carve-out goes with it.
 
-What crosses the boundary today, judged:
+## The target tree
 
-| Site | What it does | Verdict |
-|---|---|---|
-| `internal/plugin/registry.go` `TransitKind` | routing semantics by `kind == "ssh"` | **breach** — a third-party mount plugin can never be transit. Should be a wire declaration (see §4) |
-| `internal/cli/sshmigrate.go` | the CLI imports `sshhost` and writes its DB (the #251 config→data migration) | **breach**, historically justified — the host owned the legacy config being migrated. Needs a retirement path (§4) |
-| `internal/cli/init.go` ssh carve-out | refuses retired ssh config keys in the generic init door | **breach**, migration-era guard — ages out with sshmigrate |
-| `client/wasm/palette_draw.go` `drawPluginGlyph` | glyph by kind switch (`fs`/`proc`/`localdb`, globe fallback) | **breach in shape** — degrades politely (strangers get the globe) but no declaration lets a plugin choose its face |
-| `client/wasm/plugin_id.go` `pluginKind` | glyph kind from `Grid.source_kind`, falling back to the plugin-list kind | half-cured: `source_kind` IS a declaration; the fallback re-enumerates |
-| `mobile/mobile.go` `inProcessFactories` | enumerates all four kinds with constructors | **legitimate** — a LEAF BINARY choosing what it ships is the one place enumeration belongs |
-| `internal/cli/serve.go` `resolvePluginBinary` | binary by `gridwell-<kind>` naming | **fine** — convention, not enumeration; any kind resolves if the binary exists |
-| `internal/store` → `client/markdown` (`AltFromSource`) | persistence imports the client tree | the same disease on a different axis (ARCHITECTURE §4.2's known wrinkle) — cure alongside |
-| server/plugin **tests** importing `localdb` etc. | seam tests need a real plugin | **fine** — tests exercise the seam; the rule binds shipped binaries and the client |
+```
+gridwell/
+  go.work                 dev stitching; CI also builds each module ALONE
+  api/                    MODULE github.com/josephburnett/gridwell/api
+  server/                 MODULE .../server   (the node as a library + its client)
+  plugins/
+    localdb/              MODULE .../plugins/localdb   (absorbs internal/store)
+    fs/  proc/  ssh/      MODULES, same shape
+  apps/
+    gridwell/             MODULE — the stock HOST binary
+    gridwell-all/         MODULE — the bundled example binary
+    mobile/               the gomobile leaf (bundled by necessity: iOS)
+    desktop/              electron shell (npm, unchanged)
+  test/
+    boundary/             the codified arrows (see below)
+    federation/           the external-spawn gate (exists; binaries renamed)
+```
 
-What already works declaration-driven — the shapes to copy: Info
-capabilities (`watch`, `writable`, `has_session`), `instance_grid_id`
-(parameterized plugins), `Grid.source_kind` + `writable`,
-`Tile.serves_page`, `Tile.text_presentation`. Every one of these is a
-plugin telling the system what it is, instead of the system recognizing
-a name.
+### The api module (dep-lean — this graph is inherited by every plugin ever written)
 
----
+```
+api/
+  gridwell/v1/            the proto + buf config
+  gen/                    generated Go (moves from api/gen)
+  guest/                  the external-plugin main harness (go-plugin serve,
+                          handshake, config env) — moves from internal/plugin/guest
+  compose/                the sugar: Loadout = InProcess(Factory) | Command(name);
+                          spawn/dial/in-process serve behind ONE constructor,
+                          so composers choose and callers can't tell
+  idshape/                NewShortID + the id validity rules (no '/', never
+                          purely numeric, leading letter)
+```
+Allowed deps: grpc, protobuf, go-plugin. NOTHING else — pinned by test.
 
-## 2. What the door is made of (and what it lacks)
+### The server module
 
-The contract a stranger builds against, today:
+Today's `internal/{server,node,rpc,plugin(host side: registry, loader,
+mountcache),config,cli,dbformat,doctype,...}` plus `client/` and `web/`.
+It knows how to OPEN the door (spawn a Command, accept an InProcess
+loadout) and never what's behind it.
 
-- `api/gridwell/v1/data.proto` — the whole interface, one service. gRPC,
-  so **not Go-only**: any language behind go-plugin's documented
-  handshake works.
-- The spawn contract: `gridwell-<kind>` binary, config via
-  `GRIDWELL_PLUGIN_CONFIG` (uuid + kind + db_file injected), go-plugin
-  handshake. Small, but **documented nowhere a stranger would find it**
-  — it lives in `internal/plugin/guest` and the four mains.
-- Identity discipline: persist the injected uuid (pluginmeta), never a
-  purely-numeric or slash-containing id segment.
+### A plugin module (the example shape, ×4)
 
-Missing for a real stranger: a written spec of the above; a way to
-declare transit-ness, a glyph, and init-time config validation; and any
-proof the door still opens for a binary built outside this module.
+```
+plugins/fs/
+  go.mod                  requires .../api ONLY
+  fs.go ...               the implementation (from internal/plugin/fs)
+  cmd/gridwell-plugin-fs/ main: guest.Serve(fs.New(...))
+```
+localdb additionally absorbs `internal/store` (+ its CLAUDE.md contract,
+unchanged) and the tmux/shellsvc machinery its binary owns.
 
----
+### The apps
 
-## 3. Structural enforcement — the options
+- `apps/gridwell`: server + api. ZERO plugin imports — the host spawns
+  `gridwell-plugin-*` binaries named by config/PATH. This is what dist
+  ships today, minus the knowledge of who it ships with.
+- `apps/gridwell-all`: the bundled example — same server, the four
+  plugins compiled in via `compose.InProcess`. Exists to PROVE the sugar
+  (e2e runs the same suite against both binaries) and as the template
+  for anyone composing their own.
+- `apps/mobile` (the Go bind in `mobile/` moves here or stays — leaf
+  either way): the bundled leaf iOS forces.
 
-### Option A — the import-boundary lint (cheap, immediate)
+## The arrows, and how they are enforced
 
-A `make check` test that walks the import graph (`go list -deps`) and
-fails if `cmd/gridwell`, `internal/server`, `internal/cli`,
-`internal/node`, or `client/...` transitively imports
-`internal/plugin/{localdb,fs,proc,sshhost}` (tests exempt; `mobile/`
-exempt as a leaf binary). ~40 lines, zero workflow friction, and the
-creep becomes a red build instead of a review argument.
+```
+plugins/*  →  api                      (and NOTHING else of ours)
+server     →  api
+apps/gridwell      →  server, api      (NO plugin modules)
+apps/gridwell-all  →  server, api, plugins/*     (leaf enumeration — legal HERE)
+apps/mobile        →  server, api, chosen plugins (same)
+api        →  nothing of ours
+```
 
-*Limit:* it polices imports, not kind switches, and shared deps stay
-shared — the dependency-graph half of go-plugin's value goes unexercised.
-A companion grep-lint for kind literals outside plugin trees is possible
-but blunt; the real cure for switches is retiring them (§4).
+`test/boundary` codifies it:
+1. **Arrow lint**: `go list -deps` per module; any import outside its
+   allowed set fails. (Tests are exempt; they exercise seams.)
+2. **api dep budget**: api's module graph pinned to the allowed three;
+   a new dependency is a loud, deliberate diff.
+3. **Standalone builds**: CI builds every module WITHOUT go.work — the
+   proof each plugin really stands alone on the published-shape api.
+4. **Composition parity**: the e2e suite runs against `gridwell` (all
+   external) and `gridwell-all` (all in-process); identical behavior is
+   the pin that the compose sugar hides the process boundary.
+5. **The federation gate** keeps spawning the renamed binaries — the
+   external path stays exercised end to end.
 
-### Option B — the out-of-tree canary plugin (the "stranger test")
+Versioning: go.work for development; the app modules carry permanent
+`replace` directives for in-repo siblings (legitimate for applications —
+nobody imports the apps as libraries). The api module gets prefixed tags
+(`api/v0.x.y`) only when an out-of-repo consumer exists; until then the
+replace graph is the whole story.
 
-A toy plugin in its **own Go module** (its own `go.mod`, deliberately
-divergent dependency versions, e.g. `test/thirdparty/gridwell-canary/`),
-built and spawned by `make check-federation`: serve a trivial grid,
-assert it lists, routes, reads, and mounts like any other. This is the
-only option that *exercises* what go-plugin was chosen for — a separate
-dependency graph crossing the door — and it doubles as the living spec
-of the spawn contract (§2's missing document, as executable truth).
+## Execution — staged, each stage green and pushed alone
 
-*Limit:* federation-gate cost (one more binary build per run); the
-canary must be kept honest (never let it import the main module except
-the generated proto — which forces the proto-module question in
-Option C).
+1. **Retire the couplings in place** (before any moves — smallest
+   diffs, and the moves then carry no breaches with them):
+   - `TransitKind` → an Info declaration (`InfoResponse.transit`): the
+     transit fact belongs to the LOCAL transport binary, which is alive
+     even when its remote isn't; cached from the spawn handshake like
+     identity. The registry stores what the plugin declared.
+   - Plugin glyph → an Info declaration (`glyph` enum: folder, process,
+     well, globe fallback); `drawPluginGlyph`'s kind switch goes.
+   - DELETE sshmigrate + init's ssh carve-out (the assumption above).
+   - `store.AltFromSource` dependency: derivation moves to
+     `internal/doctype` (the decided neutral home).
+2. **Carve the api module**: `api/go.mod`; move guest → `api/guest`,
+   mint `api/compose` (Loadout; the loader learns to accept one),
+   `api/idshape`; go.work + replaces; dep-budget test lands WITH it.
+3. **Move the plugins out**: `plugins/{localdb,fs,proc,ssh}` as modules
+   (localdb takes `internal/store`); binaries rename to
+   `gridwell-plugin-<kind>` (Makefile, dist/electron-builder, sidecar,
+   GRIDWELL_PLUGIN_DIR conventions, federation fixtures). No fallback.
+4. **Shape the server module + apps**: `server/` module; `cmd/gridwell`
+   → `apps/gridwell` (host, plugin-free); mint `apps/gridwell-all`;
+   mobile rewires to the api compose path.
+5. **Codify**: `test/boundary` (arrows, budget, standalone matrix),
+   e2e composition parity, gates updated; `docs/plugin-authoring.md`
+   written off the fs example's back.
 
-### Option C — separate Go modules for the included plugins
+Each stage keeps every gate green (`check`, electron, e2e, web,
+federation). The storage format, wire contract, and every id are
+untouched throughout — this is a re-shelving, not a migration; homes
+and DBs never notice.
 
-Each plugin (or all four together) becomes its own module; a `go.work`
-stitches development; the main module physically cannot import them.
-The full-strength version of the boundary.
+## What this buys, restated
 
-*Costs, honestly:* the generated proto (`api/gen`) must become an
-importable module of its own (or be published) — it is the one thing
-both sides legitimately share; releases become multi-module
-(tag/version choreography); atomic cross-cutting changes — which this
-repo makes constantly (proto + server + client + plugin in one commit)
-— now span modules, and `go.work` papers over that locally but CI and
-releases feel it. This is heavy machinery to keep a promise that
-Options A+B keep for a fraction of the cost. It earns its keep the day
-a plugin actually wants a dependency the main module refuses, or moves
-to its own repo.
-
-### Option D — the two-binary (leaf enumeration) pattern
-
-Already half-built by the mobile work, worth naming as the rule:
-
-- `cmd/gridwell` — the HOST: spawns whatever binaries the config names,
-  imports **zero** plugin implementations. (True today; Option A pins
-  it.)
-- `mobile/` — a BUNDLED leaf: imports select plugins in-process because
-  iOS forbids fork/exec. Enumeration lives here, on purpose.
-- Optionally later: `cmd/gridwell-all`, a desktop bundled main for
-  single-file distribution, same pattern.
-
-The rule this encodes: **enumeration is a leaf-binary privilege.**
-Anyone can build their own bundled main with their own plugin set; the
-host and the client never need to know. A `database/sql`-style
-side-effect registration could sugar the leaf files, but with two leaf
-binaries a plain map is clearer than an import-order protocol.
-
----
-
-## 4. Retiring the standing breaches (declaration work)
-
-Independent of A–D; each removes an enumeration by moving the fact to
-the wire, the shapes §1 lists as already working:
-
-1. **Transit → Info.** `InfoResponse.transit` declared by the plugin.
-   The current comment argues transit must be config-time ("known while
-   the remote is unreachable") — but the fact belongs to the LOCAL
-   transport binary, which is alive even when its remote isn't; cache
-   it from the spawn-time handshake exactly like identity. Any
-   third-party mount plugin (an S3 mount, an IMAP bridge) then routes
-   chains without the host learning its name.
-2. **Glyph → declaration.** An Info (or root-grid) glyph hint — likely a
-   small enum first (`folder`, `process`, `well`, `globe`, …), an emoji
-   or blob later if wanted. `drawPluginGlyph` keeps its fallback globe;
-   the switch on kind goes.
-3. **sshmigrate → scheduled retirement.** The migration is a bounded
-   legacy bridge (pre-#251 configs). Give it a sunset (one release with
-   a loud "migrated, this path is removed next release" print), then
-   delete the import — rather than generalizing machinery for a
-   one-time event. init's ssh carve-out goes with it, or becomes a
-   generic plugin-declared "refused init keys" if any other plugin ever
-   needs one.
-4. **`internal/store` → `client/markdown`**: move `AltFromSource` to a
-   neutral package (`internal/doctype` already exists as the precedent
-   home for exactly this).
-
----
-
-## 5. A sequence, if the intent is all of it
-
-Not a prescription — a cost-ordered path:
-
-1. **A + the checklist line** (already in the charter): the boundary
-   stops eroding this week.
-2. **§4 retirements**: the standing enumerations go declaration-driven;
-   after this, a kind string appears nowhere outside plugin trees and
-   leaf binaries.
-3. **B, the canary**: the door is now *proven* open to strangers on
-   every federation run, and the spawn contract has an executable spec.
-   Write the human-readable `docs/plugin-authoring.md` off the canary's
-   back.
-4. **C, separate modules**: only when a real dependency divergence or an
-   out-of-repo plugin makes it pay. B will have already forced the
-   proto-module question by then, which is most of C's groundwork.
-
-The end state either way: the host knows *how to open the door*, the
-wire knows *what came through it*, and nothing anywhere knows the
-guests' names.
+The host knows how to open the door. The wire knows what came through
+it. Only leaf binaries know the guests' names — and the four guests we
+ship are held to the same door as everyone else, on every build.
