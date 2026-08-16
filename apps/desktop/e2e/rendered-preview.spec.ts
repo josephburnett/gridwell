@@ -48,7 +48,7 @@ test('ascending in rendered mode persists it, renders the preview, and restores 
         ),
       { timeout: 10_000 },
     )
-    .toEqual({ ready: true, failed: false });
+    .toMatchObject({ ready: true, failed: false });
 
   // Re-descending lands back in rendered mode — the overlay, not the textarea.
   await gw.descendCell(cx, cy);

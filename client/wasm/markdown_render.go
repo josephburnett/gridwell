@@ -67,6 +67,26 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 	// overlays on the focused pane); the ready guard keeps the canvas
 	// painting through the loading race (issue #35).
 	if !textedit.CanvasHiddenByOverlay(true, p.ID == a.tree.Focus, ready) {
+		// A RENDERED-mode pane the overlay isn't covering (an unfocused
+		// sibling; the focused pane during the overlay's load) paints the
+		// rendered RASTER (#233's cache) — the pane must not flip to raw
+		// source just because focus moved (#261: things stay as you leave
+		// them; the overlay-vs-raster swap is an implementation detail the
+		// user never sees). Raw is only the raster's own loading frame.
+		if mode == rpc.TextModeRendered {
+			frame := markdown.PreviewFrame{
+				Scale:    scale,
+				ScrollY:  p.TextScrollY,
+				ContentW: a.textContentWidth(p),
+			}
+			if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
+				// e2e attribution (renderedPreviews testhook): the pane
+				// painted the RENDERED raster, not raw — the #261 pin.
+				a.renderedPanePaints[n.ID]++
+				a.cctx.Call("restore")
+				return
+			}
+		}
 		if body, ok := a.tileBody(n); ok {
 			drawMarkdownText(a.cctx, string(body), originX, originY,
 				a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0)

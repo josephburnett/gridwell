@@ -323,6 +323,12 @@ type App struct {
 	// the grid-stamped node_ns. "" (the local node) is a.plugins/a.caps.
 	menuCtxs map[string]*menuContext
 
+	// renderedPanePaints counts rendered-RASTER paints of a descended pane
+	// by tile id (markdown_render.go) — e2e attribution for #261 (an
+	// unfocused rendered pane must paint the raster, never raw). Exposed
+	// by the renderedPreviews testhook.
+	renderedPanePaints map[string]int
+
 	// textToggleBtn is the floating rendered/raw toggle for a markdown
 	// descent. A DOM element (not a canvas button) so it can sit above
 	// the textarea overlay — letting the text content fill the pane
@@ -674,31 +680,32 @@ const dragThreshold = 4.0
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
 	app = &App{
-		doc:               js.Global().Get("document"),
-		win:               js.Global().Get("window"),
-		origin:            origin,
-		cl:                rpc.NewDefaultClient(origin),
-		c:                 cache.New(),
-		textSaves:         textedit.NewSaveQueue(),
-		locals:            map[string]*paneLocal{},
-		menu:              menu.New(),
-		errs:              errsurface.New(),
-		caps:              caps.Derive(bridgeCaps(), false),
-		gridLoadFailed:    map[string]bool{},
-		gridInflight:      map[string]bool{},
-		contentInflight:   map[string]bool{},
-		tileInflight:      map[string]bool{},
-		tileLoadFailed:    map[string]bool{},
-		urlPreview:        preview.NewCache(preview.NewJSDecoder()),
-		shellAlive:        map[string]bool{},
-		shellAliveProbing: map[string]bool{},
-		wellWheelPending:  map[string]wellWheelDrift{},
-		traces:            map[string]traceState{},
-		paneLayouts:       map[string]*paneLayoutEntry{},
-		renderedPrev:      map[string]*renderedPreview{},
-		persistPosts:      map[string]int{},
-		pend:              pending.New(),
-		menuCtxs:          map[string]*menuContext{},
+		doc:                js.Global().Get("document"),
+		win:                js.Global().Get("window"),
+		origin:             origin,
+		cl:                 rpc.NewDefaultClient(origin),
+		c:                  cache.New(),
+		textSaves:          textedit.NewSaveQueue(),
+		locals:             map[string]*paneLocal{},
+		menu:               menu.New(),
+		errs:               errsurface.New(),
+		caps:               caps.Derive(bridgeCaps(), false),
+		gridLoadFailed:     map[string]bool{},
+		gridInflight:       map[string]bool{},
+		contentInflight:    map[string]bool{},
+		tileInflight:       map[string]bool{},
+		tileLoadFailed:     map[string]bool{},
+		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
+		shellAlive:         map[string]bool{},
+		shellAliveProbing:  map[string]bool{},
+		wellWheelPending:   map[string]wellWheelDrift{},
+		traces:             map[string]traceState{},
+		paneLayouts:        map[string]*paneLayoutEntry{},
+		renderedPrev:       map[string]*renderedPreview{},
+		persistPosts:       map[string]int{},
+		pend:               pending.New(),
+		menuCtxs:           map[string]*menuContext{},
+		renderedPanePaints: map[string]int{},
 	}
 	app.canvas = app.doc.Call("getElementById", "canvas")
 	app.cctx = app.canvas.Call("getContext", "2d")

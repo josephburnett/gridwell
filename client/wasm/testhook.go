@@ -119,8 +119,23 @@ func (a *App) installTestHook() {
 			// Lets a spec prove a rendered-mode tile's preview switched to
 			// the rasterized path (and the raster actually decoded).
 			out := map[string]any{}
-			for id, e := range a.renderedPrev {
-				out[id] = map[string]any{"ready": e.ready, "failed": e.failed}
+			for mk, e := range a.renderedPrev {
+				// The cache keys per (tile, width bucket) since #261; the hook
+				// aggregates per TILE: ready when any bucket's raster decoded.
+				id := mk
+				if i := strings.IndexByte(mk, 0); i >= 0 {
+					id = mk[:i]
+				}
+				prev, _ := out[id].(map[string]any)
+				ready := e.ready && !e.failed
+				if prev != nil {
+					ready = ready || prev["ready"].(bool)
+				}
+				out[id] = map[string]any{
+					"ready":      ready,
+					"failed":     e.failed,
+					"panePaints": a.renderedPanePaints[id],
+				}
 			}
 			return out
 		}),
@@ -474,6 +489,8 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			// The tile this pane is descended into ("" when on a grid) — lets a
 			// test tell a shell descent from the url it descended further into.
 			"textFocus": p.TextFocus,
+			// The descent's live raw/rendered mode (#261's spec reads it).
+			"textMode": p.TextMode,
 			// Viewport center (grid cell coords) + zoom, so a test can drop on a
 			// cell guaranteed to be on-screen regardless of the stored framing.
 			"cx":   p.Cx,

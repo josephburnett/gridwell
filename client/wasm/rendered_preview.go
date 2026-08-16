@@ -5,6 +5,7 @@ package main
 import (
 	"math"
 	"strconv"
+	"strings"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -44,25 +45,47 @@ type renderedPreview struct {
 // logical width contentW, kicking an async rasterization on a cache miss.
 // ok is false until the image has decoded — and stays false on a failed
 // decode — so the caller paints raw source in the meantime.
+//
+// The cache is keyed PER (tile, width bucket), not per tile (#261's
+// investigation): two consumers of the same tile at different widths —
+// two split panes, or two grid previews at different zooms — used to
+// replace a single per-tile entry every frame, each creation revoking
+// the OTHER's still-loading blob URL, so no raster ever decoded (a
+// latent #233 bug; the pane path made it constant). Stale-VERSION
+// entries for the same tile are swept at insert; whole-tile cleanup is
+// dropRenderedPreview (TileRemoved).
 func (a *App) renderedPreviewFor(n *rpc.Tile, contentW float64) (*renderedPreview, bool) {
 	bucket := math.Max(renderedPreviewBucket,
 		math.Round(contentW/renderedPreviewBucket)*renderedPreviewBucket)
 	isOrg := markdown.IsOrg(n.AltText)
+	mapKey := n.ID + "\x00" + strconv.FormatFloat(bucket, 'f', 0, 64)
 	key := n.ID + "\x00" + strconv.FormatInt(n.Version, 10) + "\x00" +
 		strconv.FormatFloat(bucket, 'f', 0, 64) + "\x00" + strconv.FormatBool(isOrg)
-	if e, ok := a.renderedPrev[n.ID]; ok && e.key == key {
+	if e, ok := a.renderedPrev[mapKey]; ok && e.key == key {
 		return e, e.ready && !e.failed
 	}
 	body, ok := a.tileBody(n)
 	if !ok {
 		return nil, false // blob fetch in flight; the raw path warms it too
 	}
-	// (dropRenderedPreview is the deletion twin of this replace-time revoke.)
-	if old, ok := a.renderedPrev[n.ID]; ok && old.url != "" {
+	// Replace a stale same-bucket entry, and sweep OTHER buckets of this
+	// tile whose version moved on (they re-rasterize on next use).
+	// (dropRenderedPreview is the deletion twin of these revokes.)
+	if old, ok := a.renderedPrev[mapKey]; ok && old.url != "" {
 		js.Global().Get("URL").Call("revokeObjectURL", old.url)
 	}
+	stalePrefix := n.ID + "\x00"
+	for mk, old := range a.renderedPrev {
+		if mk != mapKey && strings.HasPrefix(mk, stalePrefix) && old.key != "" &&
+			!strings.HasPrefix(old.key, n.ID+"\x00"+strconv.FormatInt(n.Version, 10)+"\x00") {
+			if old.url != "" {
+				js.Global().Get("URL").Call("revokeObjectURL", old.url)
+			}
+			delete(a.renderedPrev, mk)
+		}
+	}
 	e := &renderedPreview{key: key, rasterW: bucket}
-	a.renderedPrev[n.ID] = e
+	a.renderedPrev[mapKey] = e
 
 	// Serialize the sanitized render through the DOM so goldmark's HTML5
 	// output (unclosed <br>, <img>) becomes well-formed XML — the SVG
@@ -128,12 +151,14 @@ func (a *App) drawRenderedPreview(n *rpc.Tile, frame markdown.PreviewFrame,
 // — the two preview caches must age out together or deleting text tiles
 // leaks image resources for the life of the page.
 func (a *App) dropRenderedPreview(tileID string) {
-	e, ok := a.renderedPrev[tileID]
-	if !ok {
-		return
+	prefix := tileID + "\x00"
+	for mk, e := range a.renderedPrev {
+		if !strings.HasPrefix(mk, prefix) {
+			continue
+		}
+		if e.url != "" {
+			js.Global().Get("URL").Call("revokeObjectURL", e.url)
+		}
+		delete(a.renderedPrev, mk)
 	}
-	if e.url != "" {
-		js.Global().Get("URL").Call("revokeObjectURL", e.url)
-	}
-	delete(a.renderedPrev, tileID)
 }

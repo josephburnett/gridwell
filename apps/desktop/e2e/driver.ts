@@ -23,6 +23,7 @@ export interface PaneInfo {
   anchor: string;
   path: string[];
   textFocus: string;
+  textMode: string;
   cx: number;
   cy: number;
   zoom: number;

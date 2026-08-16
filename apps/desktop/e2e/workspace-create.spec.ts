@@ -42,9 +42,16 @@ test('workspace primitive: drag-create persists a pane tile and its preview trac
   const pt = tileAt(snap, 'pane', wx, wy);
   expect(pt, `a pane tile should be persisted at (${wx},${wy})`).toBeTruthy();
 
-  // Baseline: never-arranged (no layout blob), version 0.
+  // Baseline: never-arranged (no layout blob), version 0. POLLED: the
+  // oracle above proved server truth, but the client cache refresh is
+  // postTileMutate's background fetchGrid — waitIdle can sample the gap
+  // between the RPC completing and that goroutine marking itself
+  // inflight, so a one-shot read raced it under suite load (2×, same
+  // line, isolated-green — the classic shape).
+  await expect
+    .poll(async () => sig(window, pt!.id), { timeout: 10_000 })
+    .toContain('kpane');
   const sig0 = await sig(window, pt!.id);
-  expect(sig0, 'pane tile should appear in the focused grid preview sigs').toContain('kpane');
 
   // Another writer arranges the workspace. The layout write is framing-class
   // (version stays 0), so ONLY the blob-change invalidation can propagate it.
