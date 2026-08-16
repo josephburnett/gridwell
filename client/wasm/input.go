@@ -1476,6 +1476,12 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 		// An UNCONFIGURED PLUGIN WELL (issue #251, the drop-first rule):
 		// this descent is where the instance gets picked or created, and
 		// adoption completes the descent the user asked for.
+		// An entry-minted tool with uncommitted params prompts here —
+		// #209's drop-first rule, the connection-well pattern (#258).
+		if a.entryTileNeedsParams(well) {
+			a.openEntryParamsForm(p, well)
+			return
+		}
 		if well.ConfigurePluginID != "" {
 			if pl, ok := a.pluginByUUID(well.ConfigurePluginID); ok &&
 				pluginhealth.Classify(pl) == pluginhealth.Parameterized {
@@ -2187,6 +2193,12 @@ func paletteItemGhostNode(item paletteItem) rpc.Tile {
 		t.ID = item.plugin.UUID
 		return t
 	}
+	if item.entry != nil {
+		// A creation entry ghosts as its underlying kind carrying the
+		// entry identity + label (#258).
+		return rpc.Tile{Kind: item.entry.Kind, W: 1, H: 1,
+			AltText: item.entry.Label, MenuEntry: item.entry.ID}
+	}
 	switch item.primitive {
 	case tplWell:
 		return rpc.Tile{Kind: rpc.KindWell, W: 1, H: 1}
@@ -2284,6 +2296,12 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 		a.ghost.paneID = destPane.ID
 	}
 	a.startSnap(targetX, targetY, snapMs)
+
+	if d.item.entry != nil {
+		a.createEntryTileAtCell(destPane, *d.item.entry, dropX, dropY)
+		a.menu.Close()
+		return
+	}
 
 	switch d.item.primitive {
 	case tplWell:
@@ -2415,6 +2433,20 @@ func (a *App) openConfigureURL(p *pane.Pane, t *rpc.Tile) {
 	}, func() {
 		a.draw()
 	})
+}
+
+// createEntryTileAtCell mints a plugin menu-entry tile (#258): the
+// entry's underlying kind, carrying MenuEntry so the owning plugin
+// recognizes its tool. Params are asked on first DESCENT (#209), not at
+// the drop.
+func (a *App) createEntryTileAtCell(p *pane.Pane, e rpc.MenuEntry, cellX, cellY int64) {
+	gid := a.gridIDForPane(p)
+	a.postTileMutate("CreateTile", gid, func(ctx context.Context) (*rpc.Tile, error) {
+		return a.cl.CreateEntryTile(ctx, &rpc.CreateEntryTileRequest{
+			GridID: gid, Kind: e.Kind, MenuEntry: e.ID, Label: e.Label,
+			X: cellX, Y: cellY, W: 1, H: 1,
+		})
+	}, nil)
 }
 
 // scratchGridForPane returns the qualified scratch grid id of the plugin the

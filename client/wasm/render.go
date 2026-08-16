@@ -233,8 +233,13 @@ var primitiveKinds = []templateKind{tplWell, tplMarkdown, tplURL, tplShell, tplP
 // of plugin / primitive carries meaning.
 type paletteItem struct {
 	isPlugin  bool
-	plugin    rpc.PluginInfo // when isPlugin
-	primitive templateKind   // when !isPlugin
+	plugin    rpc.PluginInfo // when isPlugin (also set for a root ENTRY's owner)
+	primitive templateKind   // when !isPlugin && entry == nil
+	// entry is a plugin-declared menu entry (#258): with GridID set it is
+	// a ROOT entry riding the plugin row (plugin-swatch semantics over
+	// that grid); with Kind set it is a CREATION entry riding after the
+	// primitives (drop mints a tile carrying MenuEntry = entry.ID).
+	entry *rpc.MenuEntry
 }
 
 // paletteItems returns the palette entries for pane p, in display order:
@@ -255,6 +260,28 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 	items := make([]paletteItem, 0, len(ctx.plugins)+len(primitiveKinds))
 	for _, pl := range ctx.plugins {
 		items = append(items, paletteItem{isPlugin: true, plugin: pl})
+		// The plugin's ROOT entries ride its row (#258): extra doorways
+		// it declares — local's trashcan, a plugin's second surface. Each
+		// becomes a PSEUDO-PLUGIN swatch (the entry's grid as the root,
+		// its label/glyph as the face), so every downstream flow — ghost,
+		// click-descend, drag-link, health — is the battle-tested plugin
+		// path with zero new arms.
+		for i := range pl.MenuEntries {
+			e := &pl.MenuEntries[i]
+			if e.GridID == "" {
+				continue
+			}
+			pseudo := pl
+			pseudo.RootGridID = e.GridID
+			pseudo.InstanceGridID = ""
+			if e.Label != "" {
+				pseudo.Label = e.Label
+			}
+			if e.Glyph != "" {
+				pseudo.Glyph = e.Glyph
+			}
+			items = append(items, paletteItem{isPlugin: true, plugin: pseudo, entry: e})
+		}
 	}
 	if a.gridWritable(a.gridIDForPane(p)) {
 		for _, k := range primitiveKinds {
@@ -268,6 +295,20 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 				continue
 			}
 			items = append(items, paletteItem{primitive: k})
+		}
+	}
+	// The grid's CREATION entries follow the primitives (#258): the
+	// owning plugin's declared tools, stamped per grid like
+	// create_schemas — dropping one mints a tile the plugin recognizes
+	// by MenuEntry. Deliberately OUTSIDE the writable gate: writable is
+	// the "+ palette primitives" capability, and a read-only projection
+	// (fs) declaring a tool is precisely how tools exist there — the
+	// declaration IS the permission.
+	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
+		for i := range g.Meta.MenuEntries {
+			if g.Meta.MenuEntries[i].Kind != "" && g.Meta.MenuEntries[i].GridID == "" {
+				items = append(items, paletteItem{entry: &g.Meta.MenuEntries[i]})
+			}
 		}
 	}
 	return items

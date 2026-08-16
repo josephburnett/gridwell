@@ -80,7 +80,7 @@ func (x ProbeResponse_Presence) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProbeResponse_Presence.Descriptor instead.
 func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{5, 0}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{6, 0}
 }
 
 // Grid is the persistent unit of canvas. Tiles live in grids; wells
@@ -125,7 +125,11 @@ type Grid struct {
 	// one owner of "which node is this pane inside" (remote-menu,
 	// 2026-08-16): the client keys its per-pane + menu context by it and
 	// routes ListPlugins with it. Wire-only, never persisted.
-	NodeNs        string `protobuf:"bytes,10,opt,name=node_ns,json=nodeNs,proto3" json:"node_ns,omitempty"`
+	NodeNs string `protobuf:"bytes,10,opt,name=node_ns,json=nodeNs,proto3" json:"node_ns,omitempty"`
+	// menu_entries is the owning plugin's declared (+) menu additions for
+	// this grid (see MenuEntry) — stamped from Info by the serving node,
+	// verbatim through transit (grid_id prefixed per hop). Wire-only.
+	MenuEntries   []*MenuEntry `protobuf:"bytes,11,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -219,6 +223,121 @@ func (x *Grid) GetCreateSchemas() map[string]string {
 func (x *Grid) GetNodeNs() string {
 	if x != nil {
 		return x.NodeNs
+	}
+	return ""
+}
+
+func (x *Grid) GetMenuEntries() []*MenuEntry {
+	if x != nil {
+		return x.MenuEntries
+	}
+	return nil
+}
+
+// MenuEntry is one plugin-declared (+) menu entry (issue #258) — the
+// generic mechanism behind plugin-specific creation tools (fs "search")
+// and extra plugin roots (local's trashcan, #262). Declared in Info,
+// stamped per grid by the serving node exactly like create_schemas, and
+// passed VERBATIM through transit hops (grid_id gains the hop prefix
+// like every id). Two shapes, by which field is set:
+//
+//   - grid_id set: a ROOT entry — the swatch behaves exactly like a
+//     plugin swatch over that grid (click descends, drag drops an
+//     exit-well link). kind/param_schema are ignored.
+//   - kind set: a CREATION entry — dropping it creates a tile of that
+//     kind carrying menu_entry = id (the plugin recognizes its own
+//     entries); param_schema, when non-empty, is the #198-subset JSON
+//     Schema the client prompts with ON FIRST DESCENT (#209's
+//     drop-first rule) and commits as the tile's CONTENT through
+//     WriteContent — the plugin validates authoritatively.
+type MenuEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                      // entry identity within the plugin; rides created tiles as Tile.menu_entry
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                                // swatch label, verbatim
+	Glyph         string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                                // the declared glyph vocabulary ("" = the kind's default face)
+	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`                                // optional CSS accent for the swatch border/glyph ("" = default)
+	Kind          string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`                                  // creation entries: text | url | shell | well | pane
+	ParamSchema   string                 `protobuf:"bytes,6,opt,name=param_schema,json=paramSchema,proto3" json:"param_schema,omitempty"` // creation entries: the parameter form ("" = no params)
+	GridId        string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`                // root entries: the target grid, qualified per hop
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MenuEntry) Reset() {
+	*x = MenuEntry{}
+	mi := &file_gridwell_v1_data_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MenuEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MenuEntry) ProtoMessage() {}
+
+func (x *MenuEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_gridwell_v1_data_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MenuEntry.ProtoReflect.Descriptor instead.
+func (*MenuEntry) Descriptor() ([]byte, []int) {
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *MenuEntry) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MenuEntry) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MenuEntry) GetGlyph() string {
+	if x != nil {
+		return x.Glyph
+	}
+	return ""
+}
+
+func (x *MenuEntry) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *MenuEntry) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MenuEntry) GetParamSchema() string {
+	if x != nil {
+		return x.ParamSchema
+	}
+	return ""
+}
+
+func (x *MenuEntry) GetGridId() string {
+	if x != nil {
+		return x.GridId
 	}
 	return ""
 }
@@ -322,13 +441,20 @@ type Tile struct {
 	// always has for localdb docs. Plugin-derived from the content itself
 	// (fs: the filename/sniff) — wire-only, never a stored column.
 	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// menu_entry names the plugin MenuEntry a creation-entry drop minted
+	// this tile from (issue #258) — how a plugin recognizes its own tools
+	// (fs's "search" well vs a plain well). Set at CreateTile; plugins
+	// that declare entries persist it; others may ignore it. The client
+	// prompts for the entry's params on first descent when the tile has
+	// no content yet.
+	MenuEntry     string `protobuf:"bytes,34,opt,name=menu_entry,json=menuEntry,proto3" json:"menu_entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Tile) Reset() {
 	*x = Tile{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[1]
+	mi := &file_gridwell_v1_data_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -340,7 +466,7 @@ func (x *Tile) String() string {
 func (*Tile) ProtoMessage() {}
 
 func (x *Tile) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[1]
+	mi := &file_gridwell_v1_data_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -353,7 +479,7 @@ func (x *Tile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tile.ProtoReflect.Descriptor instead.
 func (*Tile) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{1}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Tile) GetId() string {
@@ -566,6 +692,13 @@ func (x *Tile) GetTextPresentation() string {
 	return ""
 }
 
+func (x *Tile) GetMenuEntry() string {
+	if x != nil {
+		return x.MenuEntry
+	}
+	return ""
+}
+
 // Info is the whole plugin handshake: a plugin loaded from server.yaml is
 // simply "there", so Info reports its identity AND its default root grid (the
 // grid the launcher descends into). There is no Attach/Detach — the gRPC
@@ -578,7 +711,7 @@ type InfoRequest struct {
 
 func (x *InfoRequest) Reset() {
 	*x = InfoRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[2]
+	mi := &file_gridwell_v1_data_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -590,7 +723,7 @@ func (x *InfoRequest) String() string {
 func (*InfoRequest) ProtoMessage() {}
 
 func (x *InfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[2]
+	mi := &file_gridwell_v1_data_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -603,7 +736,7 @@ func (x *InfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InfoRequest.ProtoReflect.Descriptor instead.
 func (*InfoRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{2}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{3}
 }
 
 type InfoResponse struct {
@@ -657,14 +790,18 @@ type InfoResponse struct {
 	// "folder", "process", "well", or "" for the generic globe. A declaration,
 	// never a kind switch in the client; unknown values also fall back to the
 	// globe, so a third-party plugin degrades politely.
-	Glyph         string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	Glyph string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	// menu_entries: the plugin's declared (+) menu additions (issue #258;
+	// see MenuEntry). The serving node stamps them onto every grid the
+	// plugin serves.
+	MenuEntries   []*MenuEntry `protobuf:"bytes,17,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InfoResponse) Reset() {
 	*x = InfoResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[3]
+	mi := &file_gridwell_v1_data_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -676,7 +813,7 @@ func (x *InfoResponse) String() string {
 func (*InfoResponse) ProtoMessage() {}
 
 func (x *InfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[3]
+	mi := &file_gridwell_v1_data_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -689,7 +826,7 @@ func (x *InfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InfoResponse.ProtoReflect.Descriptor instead.
 func (*InfoResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{3}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *InfoResponse) GetKind() string {
@@ -790,6 +927,13 @@ func (x *InfoResponse) GetGlyph() string {
 	return ""
 }
 
+func (x *InfoResponse) GetMenuEntries() []*MenuEntry {
+	if x != nil {
+		return x.MenuEntries
+	}
+	return nil
+}
+
 // Probe reports the definitive presence of one tile. Used for non-
 // authoritative listings (proc) where an entry can vanish between List and
 // reconcile. A failed read must never sweep a tile — only GONE does.
@@ -802,7 +946,7 @@ type ProbeRequest struct {
 
 func (x *ProbeRequest) Reset() {
 	*x = ProbeRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[4]
+	mi := &file_gridwell_v1_data_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -814,7 +958,7 @@ func (x *ProbeRequest) String() string {
 func (*ProbeRequest) ProtoMessage() {}
 
 func (x *ProbeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[4]
+	mi := &file_gridwell_v1_data_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -827,7 +971,7 @@ func (x *ProbeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProbeRequest.ProtoReflect.Descriptor instead.
 func (*ProbeRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{4}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProbeRequest) GetTileId() string {
@@ -846,7 +990,7 @@ type ProbeResponse struct {
 
 func (x *ProbeResponse) Reset() {
 	*x = ProbeResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[5]
+	mi := &file_gridwell_v1_data_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +1002,7 @@ func (x *ProbeResponse) String() string {
 func (*ProbeResponse) ProtoMessage() {}
 
 func (x *ProbeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[5]
+	mi := &file_gridwell_v1_data_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +1015,7 @@ func (x *ProbeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProbeResponse.ProtoReflect.Descriptor instead.
 func (*ProbeResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{5}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ProbeResponse) GetPresence() ProbeResponse_Presence {
@@ -892,7 +1036,7 @@ type OpenShellRequest struct {
 
 func (x *OpenShellRequest) Reset() {
 	*x = OpenShellRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[6]
+	mi := &file_gridwell_v1_data_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -904,7 +1048,7 @@ func (x *OpenShellRequest) String() string {
 func (*OpenShellRequest) ProtoMessage() {}
 
 func (x *OpenShellRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[6]
+	mi := &file_gridwell_v1_data_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -917,7 +1061,7 @@ func (x *OpenShellRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenShellRequest.ProtoReflect.Descriptor instead.
 func (*OpenShellRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{6}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *OpenShellRequest) GetTileId() string {
@@ -950,7 +1094,7 @@ type OpenShellResponse struct {
 
 func (x *OpenShellResponse) Reset() {
 	*x = OpenShellResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[7]
+	mi := &file_gridwell_v1_data_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -962,7 +1106,7 @@ func (x *OpenShellResponse) String() string {
 func (*OpenShellResponse) ProtoMessage() {}
 
 func (x *OpenShellResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[7]
+	mi := &file_gridwell_v1_data_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -975,7 +1119,7 @@ func (x *OpenShellResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenShellResponse.ProtoReflect.Descriptor instead.
 func (*OpenShellResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{7}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *OpenShellResponse) GetData() []byte {
@@ -995,7 +1139,7 @@ type PTYSize struct {
 
 func (x *PTYSize) Reset() {
 	*x = PTYSize{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[8]
+	mi := &file_gridwell_v1_data_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1007,7 +1151,7 @@ func (x *PTYSize) String() string {
 func (*PTYSize) ProtoMessage() {}
 
 func (x *PTYSize) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[8]
+	mi := &file_gridwell_v1_data_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1164,7 @@ func (x *PTYSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PTYSize.ProtoReflect.Descriptor instead.
 func (*PTYSize) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{8}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PTYSize) GetCols() int32 {
@@ -1046,7 +1190,7 @@ type GetGridRequest struct {
 
 func (x *GetGridRequest) Reset() {
 	*x = GetGridRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[9]
+	mi := &file_gridwell_v1_data_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1058,7 +1202,7 @@ func (x *GetGridRequest) String() string {
 func (*GetGridRequest) ProtoMessage() {}
 
 func (x *GetGridRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[9]
+	mi := &file_gridwell_v1_data_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1071,7 +1215,7 @@ func (x *GetGridRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGridRequest.ProtoReflect.Descriptor instead.
 func (*GetGridRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{9}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetGridRequest) GetGridId() string {
@@ -1091,7 +1235,7 @@ type GetGridResponse struct {
 
 func (x *GetGridResponse) Reset() {
 	*x = GetGridResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[10]
+	mi := &file_gridwell_v1_data_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1103,7 +1247,7 @@ func (x *GetGridResponse) String() string {
 func (*GetGridResponse) ProtoMessage() {}
 
 func (x *GetGridResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[10]
+	mi := &file_gridwell_v1_data_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1116,7 +1260,7 @@ func (x *GetGridResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGridResponse.ProtoReflect.Descriptor instead.
 func (*GetGridResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{10}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetGridResponse) GetGrid() *Grid {
@@ -1142,7 +1286,7 @@ type GetTilePreviewRequest struct {
 
 func (x *GetTilePreviewRequest) Reset() {
 	*x = GetTilePreviewRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[11]
+	mi := &file_gridwell_v1_data_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1154,7 +1298,7 @@ func (x *GetTilePreviewRequest) String() string {
 func (*GetTilePreviewRequest) ProtoMessage() {}
 
 func (x *GetTilePreviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[11]
+	mi := &file_gridwell_v1_data_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1167,7 +1311,7 @@ func (x *GetTilePreviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTilePreviewRequest.ProtoReflect.Descriptor instead.
 func (*GetTilePreviewRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{11}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetTilePreviewRequest) GetTileId() string {
@@ -1186,7 +1330,7 @@ type GetTilePreviewResponse struct {
 
 func (x *GetTilePreviewResponse) Reset() {
 	*x = GetTilePreviewResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[12]
+	mi := &file_gridwell_v1_data_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1198,7 +1342,7 @@ func (x *GetTilePreviewResponse) String() string {
 func (*GetTilePreviewResponse) ProtoMessage() {}
 
 func (x *GetTilePreviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[12]
+	mi := &file_gridwell_v1_data_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1211,7 +1355,7 @@ func (x *GetTilePreviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTilePreviewResponse.ProtoReflect.Descriptor instead.
 func (*GetTilePreviewResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{12}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetTilePreviewResponse) GetJpeg() []byte {
@@ -1236,7 +1380,7 @@ type ReadContentRequest struct {
 
 func (x *ReadContentRequest) Reset() {
 	*x = ReadContentRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[13]
+	mi := &file_gridwell_v1_data_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1248,7 +1392,7 @@ func (x *ReadContentRequest) String() string {
 func (*ReadContentRequest) ProtoMessage() {}
 
 func (x *ReadContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[13]
+	mi := &file_gridwell_v1_data_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1261,7 +1405,7 @@ func (x *ReadContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadContentRequest.ProtoReflect.Descriptor instead.
 func (*ReadContentRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{13}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ReadContentRequest) GetTileId() string {
@@ -1282,7 +1426,7 @@ type ContentChunk struct {
 
 func (x *ContentChunk) Reset() {
 	*x = ContentChunk{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[14]
+	mi := &file_gridwell_v1_data_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1294,7 +1438,7 @@ func (x *ContentChunk) String() string {
 func (*ContentChunk) ProtoMessage() {}
 
 func (x *ContentChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[14]
+	mi := &file_gridwell_v1_data_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1307,7 +1451,7 @@ func (x *ContentChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContentChunk.ProtoReflect.Descriptor instead.
 func (*ContentChunk) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{14}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ContentChunk) GetData() []byte {
@@ -1351,7 +1495,7 @@ type WriteContentRequest struct {
 
 func (x *WriteContentRequest) Reset() {
 	*x = WriteContentRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[15]
+	mi := &file_gridwell_v1_data_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1363,7 +1507,7 @@ func (x *WriteContentRequest) String() string {
 func (*WriteContentRequest) ProtoMessage() {}
 
 func (x *WriteContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[15]
+	mi := &file_gridwell_v1_data_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1376,7 +1520,7 @@ func (x *WriteContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteContentRequest.ProtoReflect.Descriptor instead.
 func (*WriteContentRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{15}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WriteContentRequest) GetTileId() string {
@@ -1425,7 +1569,7 @@ type ServeContentRequest struct {
 
 func (x *ServeContentRequest) Reset() {
 	*x = ServeContentRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[16]
+	mi := &file_gridwell_v1_data_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1437,7 +1581,7 @@ func (x *ServeContentRequest) String() string {
 func (*ServeContentRequest) ProtoMessage() {}
 
 func (x *ServeContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[16]
+	mi := &file_gridwell_v1_data_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1450,7 +1594,7 @@ func (x *ServeContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServeContentRequest.ProtoReflect.Descriptor instead.
 func (*ServeContentRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{16}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ServeContentRequest) GetTileId() string {
@@ -1478,7 +1622,7 @@ type ServeContentChunk struct {
 
 func (x *ServeContentChunk) Reset() {
 	*x = ServeContentChunk{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[17]
+	mi := &file_gridwell_v1_data_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1490,7 +1634,7 @@ func (x *ServeContentChunk) String() string {
 func (*ServeContentChunk) ProtoMessage() {}
 
 func (x *ServeContentChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[17]
+	mi := &file_gridwell_v1_data_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1503,7 +1647,7 @@ func (x *ServeContentChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServeContentChunk.ProtoReflect.Descriptor instead.
 func (*ServeContentChunk) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{17}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ServeContentChunk) GetStatus() int64 {
@@ -1550,7 +1694,7 @@ type PlaceTileRequest struct {
 
 func (x *PlaceTileRequest) Reset() {
 	*x = PlaceTileRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[18]
+	mi := &file_gridwell_v1_data_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1562,7 +1706,7 @@ func (x *PlaceTileRequest) String() string {
 func (*PlaceTileRequest) ProtoMessage() {}
 
 func (x *PlaceTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[18]
+	mi := &file_gridwell_v1_data_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1575,7 +1719,7 @@ func (x *PlaceTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlaceTileRequest.ProtoReflect.Descriptor instead.
 func (*PlaceTileRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{18}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PlaceTileRequest) GetTileId() string {
@@ -1638,7 +1782,7 @@ type GetTileRequest struct {
 
 func (x *GetTileRequest) Reset() {
 	*x = GetTileRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[19]
+	mi := &file_gridwell_v1_data_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1650,7 +1794,7 @@ func (x *GetTileRequest) String() string {
 func (*GetTileRequest) ProtoMessage() {}
 
 func (x *GetTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[19]
+	mi := &file_gridwell_v1_data_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1663,7 +1807,7 @@ func (x *GetTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTileRequest.ProtoReflect.Descriptor instead.
 func (*GetTileRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{19}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetTileRequest) GetTileId() string {
@@ -1705,7 +1849,7 @@ type SearchRequest struct {
 
 func (x *SearchRequest) Reset() {
 	*x = SearchRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[20]
+	mi := &file_gridwell_v1_data_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1717,7 +1861,7 @@ func (x *SearchRequest) String() string {
 func (*SearchRequest) ProtoMessage() {}
 
 func (x *SearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[20]
+	mi := &file_gridwell_v1_data_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1730,7 +1874,7 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
 func (*SearchRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{20}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SearchRequest) GetQuery() string {
@@ -1766,7 +1910,7 @@ type SearchResult struct {
 
 func (x *SearchResult) Reset() {
 	*x = SearchResult{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[21]
+	mi := &file_gridwell_v1_data_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1778,7 +1922,7 @@ func (x *SearchResult) String() string {
 func (*SearchResult) ProtoMessage() {}
 
 func (x *SearchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[21]
+	mi := &file_gridwell_v1_data_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1791,7 +1935,7 @@ func (x *SearchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResult.ProtoReflect.Descriptor instead.
 func (*SearchResult) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{21}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SearchResult) GetTile() *Tile {
@@ -1831,7 +1975,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[22]
+	mi := &file_gridwell_v1_data_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1843,7 +1987,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[22]
+	mi := &file_gridwell_v1_data_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1856,7 +2000,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{22}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SearchResponse) GetResults() []*SearchResult {
@@ -1887,7 +2031,7 @@ type ListPluginsRequest struct {
 
 func (x *ListPluginsRequest) Reset() {
 	*x = ListPluginsRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[23]
+	mi := &file_gridwell_v1_data_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +2043,7 @@ func (x *ListPluginsRequest) String() string {
 func (*ListPluginsRequest) ProtoMessage() {}
 
 func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[23]
+	mi := &file_gridwell_v1_data_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +2056,7 @@ func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{23}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListPluginsRequest) GetNamespace() string {
@@ -1950,14 +2094,18 @@ type PluginInfo struct {
 	InstanceGridId string `protobuf:"bytes,11,opt,name=instance_grid_id,json=instanceGridId,proto3" json:"instance_grid_id,omitempty"`
 	// glyph mirrors InfoResponse.glyph for the client's plugin faces
 	// (launcher tile, menu swatch, drag ghost). "" = the generic globe.
-	Glyph         string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	Glyph string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
+	// menu_entries mirrors InfoResponse.menu_entries with grid targets
+	// qualified for the receiver (issue #258): root entries join the
+	// plugin's row in the (+) menu.
+	MenuEntries   []*MenuEntry `protobuf:"bytes,13,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PluginInfo) Reset() {
 	*x = PluginInfo{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[24]
+	mi := &file_gridwell_v1_data_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1969,7 +2117,7 @@ func (x *PluginInfo) String() string {
 func (*PluginInfo) ProtoMessage() {}
 
 func (x *PluginInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[24]
+	mi := &file_gridwell_v1_data_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1982,7 +2130,7 @@ func (x *PluginInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginInfo.ProtoReflect.Descriptor instead.
 func (*PluginInfo) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{24}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PluginInfo) GetUuid() string {
@@ -2069,6 +2217,13 @@ func (x *PluginInfo) GetGlyph() string {
 	return ""
 }
 
+func (x *PluginInfo) GetMenuEntries() []*MenuEntry {
+	if x != nil {
+		return x.MenuEntries
+	}
+	return nil
+}
+
 type ListPluginsResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Plugins []*PluginInfo          `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
@@ -2109,7 +2264,7 @@ type ListPluginsResponse struct {
 
 func (x *ListPluginsResponse) Reset() {
 	*x = ListPluginsResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[25]
+	mi := &file_gridwell_v1_data_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2121,7 +2276,7 @@ func (x *ListPluginsResponse) String() string {
 func (*ListPluginsResponse) ProtoMessage() {}
 
 func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[25]
+	mi := &file_gridwell_v1_data_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2134,7 +2289,7 @@ func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{25}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListPluginsResponse) GetPlugins() []*PluginInfo {
@@ -2203,7 +2358,7 @@ type TileResponse struct {
 
 func (x *TileResponse) Reset() {
 	*x = TileResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[26]
+	mi := &file_gridwell_v1_data_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2215,7 +2370,7 @@ func (x *TileResponse) String() string {
 func (*TileResponse) ProtoMessage() {}
 
 func (x *TileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[26]
+	mi := &file_gridwell_v1_data_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2228,7 +2383,7 @@ func (x *TileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TileResponse.ProtoReflect.Descriptor instead.
 func (*TileResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{26}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *TileResponse) GetTile() *Tile {
@@ -2259,7 +2414,7 @@ type CreateTileRequest struct {
 
 func (x *CreateTileRequest) Reset() {
 	*x = CreateTileRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[27]
+	mi := &file_gridwell_v1_data_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2271,7 +2426,7 @@ func (x *CreateTileRequest) String() string {
 func (*CreateTileRequest) ProtoMessage() {}
 
 func (x *CreateTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[27]
+	mi := &file_gridwell_v1_data_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2284,7 +2439,7 @@ func (x *CreateTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTileRequest.ProtoReflect.Descriptor instead.
 func (*CreateTileRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{27}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CreateTileRequest) GetGridId() string {
@@ -2317,7 +2472,7 @@ type ShellSessionAliveRequest struct {
 
 func (x *ShellSessionAliveRequest) Reset() {
 	*x = ShellSessionAliveRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[28]
+	mi := &file_gridwell_v1_data_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2329,7 +2484,7 @@ func (x *ShellSessionAliveRequest) String() string {
 func (*ShellSessionAliveRequest) ProtoMessage() {}
 
 func (x *ShellSessionAliveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[28]
+	mi := &file_gridwell_v1_data_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2342,7 +2497,7 @@ func (x *ShellSessionAliveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShellSessionAliveRequest.ProtoReflect.Descriptor instead.
 func (*ShellSessionAliveRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{28}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ShellSessionAliveRequest) GetTileId() string {
@@ -2361,7 +2516,7 @@ type ShellSessionAliveResponse struct {
 
 func (x *ShellSessionAliveResponse) Reset() {
 	*x = ShellSessionAliveResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[29]
+	mi := &file_gridwell_v1_data_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2373,7 +2528,7 @@ func (x *ShellSessionAliveResponse) String() string {
 func (*ShellSessionAliveResponse) ProtoMessage() {}
 
 func (x *ShellSessionAliveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[29]
+	mi := &file_gridwell_v1_data_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2386,7 +2541,7 @@ func (x *ShellSessionAliveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShellSessionAliveResponse.ProtoReflect.Descriptor instead.
 func (*ShellSessionAliveResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{29}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ShellSessionAliveResponse) GetAlive() bool {
@@ -2411,7 +2566,7 @@ type CloneTileRequest struct {
 
 func (x *CloneTileRequest) Reset() {
 	*x = CloneTileRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[30]
+	mi := &file_gridwell_v1_data_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2423,7 +2578,7 @@ func (x *CloneTileRequest) String() string {
 func (*CloneTileRequest) ProtoMessage() {}
 
 func (x *CloneTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[30]
+	mi := &file_gridwell_v1_data_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2436,7 +2591,7 @@ func (x *CloneTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneTileRequest.ProtoReflect.Descriptor instead.
 func (*CloneTileRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{30}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CloneTileRequest) GetTileId() string {
@@ -2528,7 +2683,7 @@ type SetTileRequest struct {
 
 func (x *SetTileRequest) Reset() {
 	*x = SetTileRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[31]
+	mi := &file_gridwell_v1_data_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2540,7 +2695,7 @@ func (x *SetTileRequest) String() string {
 func (*SetTileRequest) ProtoMessage() {}
 
 func (x *SetTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[31]
+	mi := &file_gridwell_v1_data_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2553,7 +2708,7 @@ func (x *SetTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTileRequest.ProtoReflect.Descriptor instead.
 func (*SetTileRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{31}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetTileRequest) GetTileId() string {
@@ -2629,7 +2784,7 @@ type AdoptChildGrid struct {
 
 func (x *AdoptChildGrid) Reset() {
 	*x = AdoptChildGrid{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[32]
+	mi := &file_gridwell_v1_data_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2641,7 +2796,7 @@ func (x *AdoptChildGrid) String() string {
 func (*AdoptChildGrid) ProtoMessage() {}
 
 func (x *AdoptChildGrid) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[32]
+	mi := &file_gridwell_v1_data_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2654,7 +2809,7 @@ func (x *AdoptChildGrid) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdoptChildGrid.ProtoReflect.Descriptor instead.
 func (*AdoptChildGrid) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{32}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *AdoptChildGrid) GetChildGridId() string {
@@ -2702,7 +2857,7 @@ type DeleteTileRequest struct {
 
 func (x *DeleteTileRequest) Reset() {
 	*x = DeleteTileRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[33]
+	mi := &file_gridwell_v1_data_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2714,7 +2869,7 @@ func (x *DeleteTileRequest) String() string {
 func (*DeleteTileRequest) ProtoMessage() {}
 
 func (x *DeleteTileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[33]
+	mi := &file_gridwell_v1_data_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2727,7 +2882,7 @@ func (x *DeleteTileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTileRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTileRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{33}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *DeleteTileRequest) GetTileId() string {
@@ -2752,7 +2907,7 @@ type DeleteTileResponse struct {
 
 func (x *DeleteTileResponse) Reset() {
 	*x = DeleteTileResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[34]
+	mi := &file_gridwell_v1_data_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2764,7 +2919,7 @@ func (x *DeleteTileResponse) String() string {
 func (*DeleteTileResponse) ProtoMessage() {}
 
 func (x *DeleteTileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[34]
+	mi := &file_gridwell_v1_data_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2777,7 +2932,7 @@ func (x *DeleteTileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTileResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{34}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{35}
 }
 
 // SetRootViewRequest persists the plugin root grid's viewport (the same
@@ -2798,7 +2953,7 @@ type SetRootViewRequest struct {
 
 func (x *SetRootViewRequest) Reset() {
 	*x = SetRootViewRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[35]
+	mi := &file_gridwell_v1_data_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2810,7 +2965,7 @@ func (x *SetRootViewRequest) String() string {
 func (*SetRootViewRequest) ProtoMessage() {}
 
 func (x *SetRootViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[35]
+	mi := &file_gridwell_v1_data_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2823,7 +2978,7 @@ func (x *SetRootViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRootViewRequest.ProtoReflect.Descriptor instead.
 func (*SetRootViewRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{35}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SetRootViewRequest) GetRootGridId() string {
@@ -2862,7 +3017,7 @@ type SetRootViewResponse struct {
 
 func (x *SetRootViewResponse) Reset() {
 	*x = SetRootViewResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[36]
+	mi := &file_gridwell_v1_data_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2874,7 +3029,7 @@ func (x *SetRootViewResponse) String() string {
 func (*SetRootViewResponse) ProtoMessage() {}
 
 func (x *SetRootViewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[36]
+	mi := &file_gridwell_v1_data_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2887,7 +3042,7 @@ func (x *SetRootViewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRootViewResponse.ProtoReflect.Descriptor instead.
 func (*SetRootViewResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{36}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{37}
 }
 
 type SubscribeRequest struct {
@@ -2898,7 +3053,7 @@ type SubscribeRequest struct {
 
 func (x *SubscribeRequest) Reset() {
 	*x = SubscribeRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[37]
+	mi := &file_gridwell_v1_data_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2910,7 +3065,7 @@ func (x *SubscribeRequest) String() string {
 func (*SubscribeRequest) ProtoMessage() {}
 
 func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[37]
+	mi := &file_gridwell_v1_data_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2923,7 +3078,7 @@ func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{37}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{38}
 }
 
 type GridChanged struct {
@@ -2935,7 +3090,7 @@ type GridChanged struct {
 
 func (x *GridChanged) Reset() {
 	*x = GridChanged{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[38]
+	mi := &file_gridwell_v1_data_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2947,7 +3102,7 @@ func (x *GridChanged) String() string {
 func (*GridChanged) ProtoMessage() {}
 
 func (x *GridChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[38]
+	mi := &file_gridwell_v1_data_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2960,7 +3115,7 @@ func (x *GridChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GridChanged.ProtoReflect.Descriptor instead.
 func (*GridChanged) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{38}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GridChanged) GetGridId() string {
@@ -2979,7 +3134,7 @@ type TileChanged struct {
 
 func (x *TileChanged) Reset() {
 	*x = TileChanged{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[39]
+	mi := &file_gridwell_v1_data_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2991,7 +3146,7 @@ func (x *TileChanged) String() string {
 func (*TileChanged) ProtoMessage() {}
 
 func (x *TileChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[39]
+	mi := &file_gridwell_v1_data_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3004,7 +3159,7 @@ func (x *TileChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TileChanged.ProtoReflect.Descriptor instead.
 func (*TileChanged) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{39}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TileChanged) GetTile() *Tile {
@@ -3024,7 +3179,7 @@ type TileRemoved struct {
 
 func (x *TileRemoved) Reset() {
 	*x = TileRemoved{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[40]
+	mi := &file_gridwell_v1_data_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3036,7 +3191,7 @@ func (x *TileRemoved) String() string {
 func (*TileRemoved) ProtoMessage() {}
 
 func (x *TileRemoved) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[40]
+	mi := &file_gridwell_v1_data_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3049,7 +3204,7 @@ func (x *TileRemoved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TileRemoved.ProtoReflect.Descriptor instead.
 func (*TileRemoved) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{40}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *TileRemoved) GetGridId() string {
@@ -3083,7 +3238,7 @@ type EventPluginHealth struct {
 
 func (x *EventPluginHealth) Reset() {
 	*x = EventPluginHealth{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[41]
+	mi := &file_gridwell_v1_data_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3095,7 +3250,7 @@ func (x *EventPluginHealth) String() string {
 func (*EventPluginHealth) ProtoMessage() {}
 
 func (x *EventPluginHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[41]
+	mi := &file_gridwell_v1_data_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3108,7 +3263,7 @@ func (x *EventPluginHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventPluginHealth.ProtoReflect.Descriptor instead.
 func (*EventPluginHealth) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{41}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *EventPluginHealth) GetPluginUuid() string {
@@ -3150,7 +3305,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[42]
+	mi := &file_gridwell_v1_data_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3162,7 +3317,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[42]
+	mi := &file_gridwell_v1_data_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3175,7 +3330,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{42}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *Event) GetPayload() isEvent_Payload {
@@ -3253,7 +3408,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xfd\x02\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xb8\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3265,10 +3420,19 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12K\n" +
 	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x12\x17\n" +
 	"\anode_ns\x18\n" +
-	" \x01(\tR\x06nodeNs\x1a@\n" +
+	" \x01(\tR\x06nodeNs\x129\n" +
+	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xba\x06\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xad\x01\n" +
+	"\tMenuEntry\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
+	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x14\n" +
+	"\x05color\x18\x04 \x01(\tR\x05color\x12\x12\n" +
+	"\x04kind\x18\x05 \x01(\tR\x04kind\x12!\n" +
+	"\fparam_schema\x18\x06 \x01(\tR\vparamSchema\x12\x17\n" +
+	"\agrid_id\x18\a \x01(\tR\x06gridId\"\xd9\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3304,8 +3468,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x13configure_plugin_id\x18\x1f \x01(\tR\x11configurePluginId\x12\x1f\n" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
-	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\"\r\n" +
-	"\vInfoRequest\"\xcf\x04\n" +
+	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12\x1d\n" +
+	"\n" +
+	"menu_entry\x18\" \x01(\tR\tmenuEntry\"\r\n" +
+	"\vInfoRequest\"\x8a\x05\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12%\n" +
@@ -3324,7 +3490,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12(\n" +
 	"\x10instance_grid_id\x18\x0e \x01(\tR\x0einstanceGridId\x12\x18\n" +
 	"\atransit\x18\x0f \x01(\bR\atransit\x12\x14\n" +
-	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x1a@\n" +
+	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
+	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x1a@\n" +
 	"\x12CreateSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x06\x10\aJ\x04\b\a\x10\b\"'\n" +
@@ -3395,7 +3562,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eSearchResponse\x123\n" +
 	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\"2\n" +
 	"\x12ListPluginsRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xf9\x02\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xb4\x03\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
@@ -3414,7 +3581,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12(\n" +
 	"\x10instance_grid_id\x18\v \x01(\tR\x0einstanceGridId\x12\x14\n" +
-	"\x05glyph\x18\f \x01(\tR\x05glyph\"\xe3\x02\n" +
+	"\x05glyph\x18\f \x01(\tR\x05glyph\x129\n" +
+	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\"\xe3\x02\n" +
 	"\x13ListPluginsResponse\x121\n" +
 	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12\x1b\n" +
 	"\tnode_uuid\x18\x02 \x01(\tR\bnodeUuid\x12)\n" +
@@ -3525,118 +3693,122 @@ func file_gridwell_v1_data_proto_rawDescGZIP() []byte {
 }
 
 var file_gridwell_v1_data_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_gridwell_v1_data_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),       // 0: gridwell.v1.ProbeResponse.Presence
 	(*Grid)(nil),                      // 1: gridwell.v1.Grid
-	(*Tile)(nil),                      // 2: gridwell.v1.Tile
-	(*InfoRequest)(nil),               // 3: gridwell.v1.InfoRequest
-	(*InfoResponse)(nil),              // 4: gridwell.v1.InfoResponse
-	(*ProbeRequest)(nil),              // 5: gridwell.v1.ProbeRequest
-	(*ProbeResponse)(nil),             // 6: gridwell.v1.ProbeResponse
-	(*OpenShellRequest)(nil),          // 7: gridwell.v1.OpenShellRequest
-	(*OpenShellResponse)(nil),         // 8: gridwell.v1.OpenShellResponse
-	(*PTYSize)(nil),                   // 9: gridwell.v1.PTYSize
-	(*GetGridRequest)(nil),            // 10: gridwell.v1.GetGridRequest
-	(*GetGridResponse)(nil),           // 11: gridwell.v1.GetGridResponse
-	(*GetTilePreviewRequest)(nil),     // 12: gridwell.v1.GetTilePreviewRequest
-	(*GetTilePreviewResponse)(nil),    // 13: gridwell.v1.GetTilePreviewResponse
-	(*ReadContentRequest)(nil),        // 14: gridwell.v1.ReadContentRequest
-	(*ContentChunk)(nil),              // 15: gridwell.v1.ContentChunk
-	(*WriteContentRequest)(nil),       // 16: gridwell.v1.WriteContentRequest
-	(*ServeContentRequest)(nil),       // 17: gridwell.v1.ServeContentRequest
-	(*ServeContentChunk)(nil),         // 18: gridwell.v1.ServeContentChunk
-	(*PlaceTileRequest)(nil),          // 19: gridwell.v1.PlaceTileRequest
-	(*GetTileRequest)(nil),            // 20: gridwell.v1.GetTileRequest
-	(*SearchRequest)(nil),             // 21: gridwell.v1.SearchRequest
-	(*SearchResult)(nil),              // 22: gridwell.v1.SearchResult
-	(*SearchResponse)(nil),            // 23: gridwell.v1.SearchResponse
-	(*ListPluginsRequest)(nil),        // 24: gridwell.v1.ListPluginsRequest
-	(*PluginInfo)(nil),                // 25: gridwell.v1.PluginInfo
-	(*ListPluginsResponse)(nil),       // 26: gridwell.v1.ListPluginsResponse
-	(*TileResponse)(nil),              // 27: gridwell.v1.TileResponse
-	(*CreateTileRequest)(nil),         // 28: gridwell.v1.CreateTileRequest
-	(*ShellSessionAliveRequest)(nil),  // 29: gridwell.v1.ShellSessionAliveRequest
-	(*ShellSessionAliveResponse)(nil), // 30: gridwell.v1.ShellSessionAliveResponse
-	(*CloneTileRequest)(nil),          // 31: gridwell.v1.CloneTileRequest
-	(*SetTileRequest)(nil),            // 32: gridwell.v1.SetTileRequest
-	(*AdoptChildGrid)(nil),            // 33: gridwell.v1.AdoptChildGrid
-	(*DeleteTileRequest)(nil),         // 34: gridwell.v1.DeleteTileRequest
-	(*DeleteTileResponse)(nil),        // 35: gridwell.v1.DeleteTileResponse
-	(*SetRootViewRequest)(nil),        // 36: gridwell.v1.SetRootViewRequest
-	(*SetRootViewResponse)(nil),       // 37: gridwell.v1.SetRootViewResponse
-	(*SubscribeRequest)(nil),          // 38: gridwell.v1.SubscribeRequest
-	(*GridChanged)(nil),               // 39: gridwell.v1.GridChanged
-	(*TileChanged)(nil),               // 40: gridwell.v1.TileChanged
-	(*TileRemoved)(nil),               // 41: gridwell.v1.TileRemoved
-	(*EventPluginHealth)(nil),         // 42: gridwell.v1.EventPluginHealth
-	(*Event)(nil),                     // 43: gridwell.v1.Event
-	nil,                               // 44: gridwell.v1.Grid.CreateSchemasEntry
-	nil,                               // 45: gridwell.v1.InfoResponse.CreateSchemasEntry
+	(*MenuEntry)(nil),                 // 2: gridwell.v1.MenuEntry
+	(*Tile)(nil),                      // 3: gridwell.v1.Tile
+	(*InfoRequest)(nil),               // 4: gridwell.v1.InfoRequest
+	(*InfoResponse)(nil),              // 5: gridwell.v1.InfoResponse
+	(*ProbeRequest)(nil),              // 6: gridwell.v1.ProbeRequest
+	(*ProbeResponse)(nil),             // 7: gridwell.v1.ProbeResponse
+	(*OpenShellRequest)(nil),          // 8: gridwell.v1.OpenShellRequest
+	(*OpenShellResponse)(nil),         // 9: gridwell.v1.OpenShellResponse
+	(*PTYSize)(nil),                   // 10: gridwell.v1.PTYSize
+	(*GetGridRequest)(nil),            // 11: gridwell.v1.GetGridRequest
+	(*GetGridResponse)(nil),           // 12: gridwell.v1.GetGridResponse
+	(*GetTilePreviewRequest)(nil),     // 13: gridwell.v1.GetTilePreviewRequest
+	(*GetTilePreviewResponse)(nil),    // 14: gridwell.v1.GetTilePreviewResponse
+	(*ReadContentRequest)(nil),        // 15: gridwell.v1.ReadContentRequest
+	(*ContentChunk)(nil),              // 16: gridwell.v1.ContentChunk
+	(*WriteContentRequest)(nil),       // 17: gridwell.v1.WriteContentRequest
+	(*ServeContentRequest)(nil),       // 18: gridwell.v1.ServeContentRequest
+	(*ServeContentChunk)(nil),         // 19: gridwell.v1.ServeContentChunk
+	(*PlaceTileRequest)(nil),          // 20: gridwell.v1.PlaceTileRequest
+	(*GetTileRequest)(nil),            // 21: gridwell.v1.GetTileRequest
+	(*SearchRequest)(nil),             // 22: gridwell.v1.SearchRequest
+	(*SearchResult)(nil),              // 23: gridwell.v1.SearchResult
+	(*SearchResponse)(nil),            // 24: gridwell.v1.SearchResponse
+	(*ListPluginsRequest)(nil),        // 25: gridwell.v1.ListPluginsRequest
+	(*PluginInfo)(nil),                // 26: gridwell.v1.PluginInfo
+	(*ListPluginsResponse)(nil),       // 27: gridwell.v1.ListPluginsResponse
+	(*TileResponse)(nil),              // 28: gridwell.v1.TileResponse
+	(*CreateTileRequest)(nil),         // 29: gridwell.v1.CreateTileRequest
+	(*ShellSessionAliveRequest)(nil),  // 30: gridwell.v1.ShellSessionAliveRequest
+	(*ShellSessionAliveResponse)(nil), // 31: gridwell.v1.ShellSessionAliveResponse
+	(*CloneTileRequest)(nil),          // 32: gridwell.v1.CloneTileRequest
+	(*SetTileRequest)(nil),            // 33: gridwell.v1.SetTileRequest
+	(*AdoptChildGrid)(nil),            // 34: gridwell.v1.AdoptChildGrid
+	(*DeleteTileRequest)(nil),         // 35: gridwell.v1.DeleteTileRequest
+	(*DeleteTileResponse)(nil),        // 36: gridwell.v1.DeleteTileResponse
+	(*SetRootViewRequest)(nil),        // 37: gridwell.v1.SetRootViewRequest
+	(*SetRootViewResponse)(nil),       // 38: gridwell.v1.SetRootViewResponse
+	(*SubscribeRequest)(nil),          // 39: gridwell.v1.SubscribeRequest
+	(*GridChanged)(nil),               // 40: gridwell.v1.GridChanged
+	(*TileChanged)(nil),               // 41: gridwell.v1.TileChanged
+	(*TileRemoved)(nil),               // 42: gridwell.v1.TileRemoved
+	(*EventPluginHealth)(nil),         // 43: gridwell.v1.EventPluginHealth
+	(*Event)(nil),                     // 44: gridwell.v1.Event
+	nil,                               // 45: gridwell.v1.Grid.CreateSchemasEntry
+	nil,                               // 46: gridwell.v1.InfoResponse.CreateSchemasEntry
 }
 var file_gridwell_v1_data_proto_depIdxs = []int32{
-	44, // 0: gridwell.v1.Grid.create_schemas:type_name -> gridwell.v1.Grid.CreateSchemasEntry
-	45, // 1: gridwell.v1.InfoResponse.create_schemas:type_name -> gridwell.v1.InfoResponse.CreateSchemasEntry
-	0,  // 2: gridwell.v1.ProbeResponse.presence:type_name -> gridwell.v1.ProbeResponse.Presence
-	9,  // 3: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
-	1,  // 4: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
-	2,  // 5: gridwell.v1.GetGridResponse.tiles:type_name -> gridwell.v1.Tile
-	2,  // 6: gridwell.v1.SearchResult.tile:type_name -> gridwell.v1.Tile
-	2,  // 7: gridwell.v1.SearchResult.path:type_name -> gridwell.v1.Tile
-	22, // 8: gridwell.v1.SearchResponse.results:type_name -> gridwell.v1.SearchResult
-	25, // 9: gridwell.v1.ListPluginsResponse.plugins:type_name -> gridwell.v1.PluginInfo
-	2,  // 10: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile
-	2,  // 11: gridwell.v1.CreateTileRequest.tile:type_name -> gridwell.v1.Tile
-	2,  // 12: gridwell.v1.SetTileRequest.tile:type_name -> gridwell.v1.Tile
-	33, // 13: gridwell.v1.SetTileRequest.adopt_child_grid:type_name -> gridwell.v1.AdoptChildGrid
-	2,  // 14: gridwell.v1.TileChanged.tile:type_name -> gridwell.v1.Tile
-	39, // 15: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
-	40, // 16: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
-	41, // 17: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
-	42, // 18: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
-	3,  // 19: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
-	5,  // 20: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
-	24, // 21: gridwell.v1.Gridwell.ListPlugins:input_type -> gridwell.v1.ListPluginsRequest
-	7,  // 22: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
-	10, // 23: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
-	20, // 24: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
-	12, // 25: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
-	21, // 26: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
-	14, // 27: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
-	16, // 28: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
-	17, // 29: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
-	19, // 30: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
-	28, // 31: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
-	32, // 32: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
-	31, // 33: gridwell.v1.Gridwell.CloneTile:input_type -> gridwell.v1.CloneTileRequest
-	34, // 34: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
-	36, // 35: gridwell.v1.Gridwell.SetRootView:input_type -> gridwell.v1.SetRootViewRequest
-	29, // 36: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
-	38, // 37: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
-	4,  // 38: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
-	6,  // 39: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
-	26, // 40: gridwell.v1.Gridwell.ListPlugins:output_type -> gridwell.v1.ListPluginsResponse
-	8,  // 41: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
-	11, // 42: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
-	27, // 43: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
-	13, // 44: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
-	23, // 45: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
-	15, // 46: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
-	27, // 47: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
-	18, // 48: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
-	27, // 49: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
-	27, // 50: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
-	27, // 51: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
-	27, // 52: gridwell.v1.Gridwell.CloneTile:output_type -> gridwell.v1.TileResponse
-	35, // 53: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
-	37, // 54: gridwell.v1.Gridwell.SetRootView:output_type -> gridwell.v1.SetRootViewResponse
-	30, // 55: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
-	43, // 56: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
-	38, // [38:57] is the sub-list for method output_type
-	19, // [19:38] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	45, // 0: gridwell.v1.Grid.create_schemas:type_name -> gridwell.v1.Grid.CreateSchemasEntry
+	2,  // 1: gridwell.v1.Grid.menu_entries:type_name -> gridwell.v1.MenuEntry
+	46, // 2: gridwell.v1.InfoResponse.create_schemas:type_name -> gridwell.v1.InfoResponse.CreateSchemasEntry
+	2,  // 3: gridwell.v1.InfoResponse.menu_entries:type_name -> gridwell.v1.MenuEntry
+	0,  // 4: gridwell.v1.ProbeResponse.presence:type_name -> gridwell.v1.ProbeResponse.Presence
+	10, // 5: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
+	1,  // 6: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
+	3,  // 7: gridwell.v1.GetGridResponse.tiles:type_name -> gridwell.v1.Tile
+	3,  // 8: gridwell.v1.SearchResult.tile:type_name -> gridwell.v1.Tile
+	3,  // 9: gridwell.v1.SearchResult.path:type_name -> gridwell.v1.Tile
+	23, // 10: gridwell.v1.SearchResponse.results:type_name -> gridwell.v1.SearchResult
+	2,  // 11: gridwell.v1.PluginInfo.menu_entries:type_name -> gridwell.v1.MenuEntry
+	26, // 12: gridwell.v1.ListPluginsResponse.plugins:type_name -> gridwell.v1.PluginInfo
+	3,  // 13: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile
+	3,  // 14: gridwell.v1.CreateTileRequest.tile:type_name -> gridwell.v1.Tile
+	3,  // 15: gridwell.v1.SetTileRequest.tile:type_name -> gridwell.v1.Tile
+	34, // 16: gridwell.v1.SetTileRequest.adopt_child_grid:type_name -> gridwell.v1.AdoptChildGrid
+	3,  // 17: gridwell.v1.TileChanged.tile:type_name -> gridwell.v1.Tile
+	40, // 18: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
+	41, // 19: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
+	42, // 20: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
+	43, // 21: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
+	4,  // 22: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
+	6,  // 23: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
+	25, // 24: gridwell.v1.Gridwell.ListPlugins:input_type -> gridwell.v1.ListPluginsRequest
+	8,  // 25: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
+	11, // 26: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
+	21, // 27: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
+	13, // 28: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
+	22, // 29: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
+	15, // 30: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
+	17, // 31: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
+	18, // 32: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
+	20, // 33: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
+	29, // 34: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
+	33, // 35: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
+	32, // 36: gridwell.v1.Gridwell.CloneTile:input_type -> gridwell.v1.CloneTileRequest
+	35, // 37: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
+	37, // 38: gridwell.v1.Gridwell.SetRootView:input_type -> gridwell.v1.SetRootViewRequest
+	30, // 39: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
+	39, // 40: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
+	5,  // 41: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
+	7,  // 42: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
+	27, // 43: gridwell.v1.Gridwell.ListPlugins:output_type -> gridwell.v1.ListPluginsResponse
+	9,  // 44: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
+	12, // 45: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
+	28, // 46: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
+	14, // 47: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
+	24, // 48: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
+	16, // 49: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
+	28, // 50: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
+	19, // 51: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
+	28, // 52: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
+	28, // 53: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
+	28, // 54: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
+	28, // 55: gridwell.v1.Gridwell.CloneTile:output_type -> gridwell.v1.TileResponse
+	36, // 56: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
+	38, // 57: gridwell.v1.Gridwell.SetRootView:output_type -> gridwell.v1.SetRootViewResponse
+	31, // 58: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
+	44, // 59: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
+	41, // [41:60] is the sub-list for method output_type
+	22, // [22:41] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_gridwell_v1_data_proto_init() }
@@ -3644,8 +3816,8 @@ func file_gridwell_v1_data_proto_init() {
 	if File_gridwell_v1_data_proto != nil {
 		return
 	}
-	file_gridwell_v1_data_proto_msgTypes[31].OneofWrappers = []any{}
-	file_gridwell_v1_data_proto_msgTypes[42].OneofWrappers = []any{
+	file_gridwell_v1_data_proto_msgTypes[32].OneofWrappers = []any{}
+	file_gridwell_v1_data_proto_msgTypes[43].OneofWrappers = []any{
 		(*Event_GridChanged)(nil),
 		(*Event_TileChanged)(nil),
 		(*Event_TileRemoved)(nil),
@@ -3657,7 +3829,7 @@ func file_gridwell_v1_data_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gridwell_v1_data_proto_rawDesc), len(file_gridwell_v1_data_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   45,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -64,6 +64,36 @@ message Grid {
   // 2026-08-16): the client keys its per-pane + menu context by it and
   // routes ListPlugins with it. Wire-only, never persisted.
   string node_ns = 10;
+  // menu_entries is the owning plugin's declared (+) menu additions for
+  // this grid (see MenuEntry) — stamped from Info by the serving node,
+  // verbatim through transit (grid_id prefixed per hop). Wire-only.
+  repeated MenuEntry menu_entries = 11;
+}
+
+// MenuEntry is one plugin-declared (+) menu entry (issue #258) — the
+// generic mechanism behind plugin-specific creation tools (fs "search")
+// and extra plugin roots (local's trashcan, #262). Declared in Info,
+// stamped per grid by the serving node exactly like create_schemas, and
+// passed VERBATIM through transit hops (grid_id gains the hop prefix
+// like every id). Two shapes, by which field is set:
+//
+//   - grid_id set: a ROOT entry — the swatch behaves exactly like a
+//     plugin swatch over that grid (click descends, drag drops an
+//     exit-well link). kind/param_schema are ignored.
+//   - kind set: a CREATION entry — dropping it creates a tile of that
+//     kind carrying menu_entry = id (the plugin recognizes its own
+//     entries); param_schema, when non-empty, is the #198-subset JSON
+//     Schema the client prompts with ON FIRST DESCENT (#209's
+//     drop-first rule) and commits as the tile's CONTENT through
+//     WriteContent — the plugin validates authoritatively.
+message MenuEntry {
+  string id           = 1; // entry identity within the plugin; rides created tiles as Tile.menu_entry
+  string label        = 2; // swatch label, verbatim
+  string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default face)
+  string color        = 4; // optional CSS accent for the swatch border/glyph ("" = default)
+  string kind         = 5; // creation entries: text | url | shell | well | pane
+  string param_schema = 6; // creation entries: the parameter form ("" = no params)
+  string grid_id      = 7; // root entries: the target grid, qualified per hop
 }
 
 // Tile is the persistent unit of content in a grid. kind selects which
@@ -180,6 +210,14 @@ message Tile {
   // always has for localdb docs. Plugin-derived from the content itself
   // (fs: the filename/sniff) — wire-only, never a stored column.
   string text_presentation = 33;
+
+  // menu_entry names the plugin MenuEntry a creation-entry drop minted
+  // this tile from (issue #258) — how a plugin recognizes its own tools
+  // (fs's "search" well vs a plain well). Set at CreateTile; plugins
+  // that declare entries persist it; others may ignore it. The client
+  // prompts for the entry's params on first descent when the tile has
+  // no content yet.
+  string menu_entry = 34;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -245,6 +283,10 @@ message InfoResponse {
   // never a kind switch in the client; unknown values also fall back to the
   // globe, so a third-party plugin degrades politely.
   string glyph = 16;
+  // menu_entries: the plugin's declared (+) menu additions (issue #258;
+  // see MenuEntry). The serving node stamps them onto every grid the
+  // plugin serves.
+  repeated MenuEntry menu_entries = 17;
 }
 
 // Probe reports the definitive presence of one tile. Used for non-
@@ -470,6 +512,10 @@ message PluginInfo {
   // glyph mirrors InfoResponse.glyph for the client's plugin faces
   // (launcher tile, menu swatch, drag ghost). "" = the generic globe.
   string glyph = 12;
+  // menu_entries mirrors InfoResponse.menu_entries with grid targets
+  // qualified for the receiver (issue #258): root entries join the
+  // plugin's row in the (+) menu.
+  repeated MenuEntry menu_entries = 13;
 }
 message ListPluginsResponse {
   repeated PluginInfo plugins = 1;

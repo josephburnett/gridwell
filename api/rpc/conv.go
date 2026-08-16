@@ -28,6 +28,7 @@ func GridToProto(g *Grid) *pb.Grid {
 		Writable:      g.Writable,
 		ScratchGridId: g.ScratchGridID,
 		NodeNs:        g.NodeNS,
+		MenuEntries:   MenuEntriesToProto(g.MenuEntries),
 		CreateSchemas: g.CreateSchemas,
 	}
 }
@@ -46,6 +47,7 @@ func GridFromProto(g *pb.Grid) *Grid {
 		Writable:      g.Writable,
 		ScratchGridID: g.ScratchGridId,
 		NodeNS:        g.NodeNs,
+		MenuEntries:   MenuEntriesFromProto(g.MenuEntries),
 		CreateSchemas: g.CreateSchemas,
 	}
 }
@@ -85,6 +87,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		UrlFrozen:        t.URLFrozen,
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
+		MenuEntry:        t.MenuEntry,
 
 		ConfigurePluginId: t.ConfigurePluginID,
 	}
@@ -125,6 +128,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		URLFrozen:        t.UrlFrozen,
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
+		MenuEntry:        t.MenuEntry,
 
 		ConfigurePluginID: t.ConfigurePluginId,
 	}
@@ -296,4 +300,30 @@ func DeleteTileFromProto(r *pb.DeleteTileRequest) *DeleteTileRequest {
 }
 func DeleteTileToProto(r *DeleteTileRequest) *pb.DeleteTileRequest {
 	return &pb.DeleteTileRequest{TileId: r.TileID, Version: r.Version}
+}
+
+// MenuEntriesToProto / FromProto convert the plugin menu-entry lists
+// (issue #258) — one pair, shared by the grid and plugin-info paths.
+func MenuEntriesToProto(in []MenuEntry) []*pb.MenuEntry {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*pb.MenuEntry, len(in))
+	for i, e := range in {
+		out[i] = &pb.MenuEntry{Id: e.ID, Label: e.Label, Glyph: e.Glyph,
+			Color: e.Color, Kind: e.Kind, ParamSchema: e.ParamSchema, GridId: e.GridID}
+	}
+	return out
+}
+
+func MenuEntriesFromProto(in []*pb.MenuEntry) []MenuEntry {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]MenuEntry, len(in))
+	for i, e := range in {
+		out[i] = MenuEntry{ID: e.Id, Label: e.Label, Glyph: e.Glyph,
+			Color: e.Color, Kind: e.Kind, ParamSchema: e.ParamSchema, GridID: e.GridId}
+	}
+	return out
 }

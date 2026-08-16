@@ -152,6 +152,22 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		// Broken/rootless plugins get the same health tint their node-grid
 		// tiles do; the click guard explains on click.
 		a.drawPluginHealthTint(&n, x, y, w, h)
+	} else if item.entry != nil {
+		// A CREATION entry (#258): the underlying kind's face, the
+		// plugin's declared glyph and label on top, and its accent color
+		// on the border when declared — a tool reads as itself, not as a
+		// bare primitive.
+		outside := tileOutside(&n, false)
+		drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx, false)
+		if item.entry.Color != "" {
+			strokeTileBorder(a.cctx, x, y, w, h, item.entry.Color, tileBorderPx)
+		}
+		if item.entry.Glyph != "" {
+			a.drawPluginGlyph(item.entry.Glyph, x, y, w, h)
+		} else {
+			drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+		}
+		a.drawTileBannerLabel(&n, x, y, w, h, false)
 	} else {
 		outside := tileOutside(&n, false)
 		drawNode(a.cctx, &n, x, y, w, h, false, outside, tileBorderPx, false)

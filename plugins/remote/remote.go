@@ -443,6 +443,7 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 			// node_ns gains the connection segment — this hop, like the
 			// server's transit hop above it (remote-menu, 2026-08-16).
 			out.NodeNs = rpc.QualifyNS(fw.ns, g.NodeNs)
+			out.MenuEntries = rpc.QualifyMenuEntries(fw.ns, g.MenuEntries)
 			g = out
 		}
 		return &gridwellv1.GetGridResponse{

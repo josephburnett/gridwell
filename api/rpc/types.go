@@ -187,6 +187,31 @@ const (
 	GridSourceNode = "node"
 )
 
+// CreateEntryTileRequest mints a tile from a plugin MenuEntry (#258).
+type CreateEntryTileRequest struct {
+	GridID     string
+	Kind       string
+	MenuEntry  string
+	Label      string
+	X, Y, W, H int64
+}
+
+// MenuEntry is one plugin-declared (+) menu entry (issue #258) — see
+// the proto's MenuEntry for the full contract. GridID set = a ROOT
+// entry (plugin-swatch semantics over that grid); Kind set = a CREATION
+// entry (drop mints a tile carrying Tile.MenuEntry = ID; ParamSchema,
+// when non-empty, is prompted on first descent and committed as
+// content).
+type MenuEntry struct {
+	ID          string `json:"id"`
+	Label       string `json:"label,omitempty"`
+	Glyph       string `json:"glyph,omitempty"`
+	Color       string `json:"color,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	ParamSchema string `json:"param_schema,omitempty"`
+	GridID      string `json:"grid_id,omitempty"`
+}
+
 // The plugin glyph vocabulary (InfoResponse.glyph / PluginInfo.Glyph):
 // declared by the plugin, rendered by the client, with anything unknown
 // falling back to the generic globe — a third-party plugin degrades
@@ -224,6 +249,12 @@ type Grid struct {
 	// gate reads this — per grid, because one local mount (ssh) can front
 	// many remote plugins with differing capabilities.
 	Writable bool `json:"writable,omitempty"`
+	// MenuEntries is the owning plugin's declared (+) menu additions for
+	// this grid (issue #258): root entries (GridID set — a second plugin
+	// root like local's trashcan) and creation entries (Kind set — a
+	// parameterized tool like fs's search). Stamped by the serving node;
+	// verbatim through transit with GridID prefixed per hop.
+	MenuEntries []MenuEntry `json:"menu_entries,omitempty"`
 	// NodeNS is the namespace chain of the NODE serving this grid, from
 	// this receiver's perspective: "" = the node you are talking to;
 	// "<transit>" or deeper through mounts. The one owner of "which node
@@ -325,6 +356,11 @@ type Tile struct {
 	// stored user text_mode rules (localdb docs). Wire-only,
 	// plugin-derived.
 	TextPresentation string `json:"text_presentation,omitempty"`
+	// MenuEntry names the plugin MenuEntry this tile was minted from
+	// (issue #258; "" for ordinary tiles). The plugin recognizes its own
+	// tools by it; the client prompts for the entry's params on first
+	// descent while the tile has no content.
+	MenuEntry string `json:"menu_entry,omitempty"`
 }
 
 // WebContent reports whether this tile PRESENTS as web content: a url tile
@@ -397,9 +433,11 @@ type PluginInfo struct {
 	// Glyph is the plugin's DECLARED identity glyph (InfoResponse.glyph):
 	// "folder", "process", "well", or "" for the generic globe. The client
 	// renders from this, never from the kind string (charter, 2026-08-15).
-	Glyph      string `json:"glyph,omitempty"`
-	Writable   bool   `json:"writable"`
-	RootGridID string `json:"root_grid_id"` // qualified; click-enter descends here
+	Glyph string `json:"glyph,omitempty"`
+	// MenuEntries: the plugin's declared (+) menu additions (issue #258).
+	MenuEntries []MenuEntry `json:"menu_entries,omitempty"`
+	Writable    bool        `json:"writable"`
+	RootGridID  string      `json:"root_grid_id"` // qualified; click-enter descends here
 	// ScratchGridID is the qualified off-grid grid this plugin holds ephemeral
 	// url tiles in ("descend into a url"); "" if the plugin has none.
 	ScratchGridID string `json:"scratch_grid_id,omitempty"`

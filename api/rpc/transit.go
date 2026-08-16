@@ -117,7 +117,27 @@ func TransitQualifyPluginList(prefix string, resp *pb.ListPluginsResponse) *pb.L
 		if p.InstanceGridId != "" {
 			q.InstanceGridId = QualifyID(prefix, p.InstanceGridId)
 		}
+		q.MenuEntries = QualifyMenuEntries(prefix, p.MenuEntries)
 		out.Plugins = append(out.Plugins, q)
+	}
+	return out
+}
+
+// QualifyMenuEntries prepends one hop segment to the grid targets of a
+// plugin's menu entries (issue #258) — root entries chain like every
+// other id; creation entries ride verbatim. Returns fresh values so a
+// hop never mutates the response it forwards.
+func QualifyMenuEntries(prefix string, in []*pb.MenuEntry) []*pb.MenuEntry {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*pb.MenuEntry, len(in))
+	for i, e := range in {
+		q := *e
+		if q.GridId != "" {
+			q.GridId = QualifyID(prefix, q.GridId)
+		}
+		out[i] = &q
 	}
 	return out
 }

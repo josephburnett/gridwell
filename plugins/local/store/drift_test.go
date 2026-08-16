@@ -32,7 +32,9 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// writable is stamped by the serving node from the owning
 			// plugin's Info — wire-only, per-grid capability, never persisted.
 			storageOnly: []string{"created_at", "updated_at"},
-			protoOnly:   []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "create_schemas", "node_ns"},
+			// menu_entries is stamped by the serving node from the owning
+			// plugin's Info (#258) — wire-only, like writable.
+			protoOnly: []string{"source_kind", "source_id", "writable", "scratch_grid_id", "proxy_endpoint", "create_schemas", "node_ns", "menu_entries"},
 		},
 		{
 			table:   "tiles",
@@ -45,7 +47,10 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// DDL column by design. serves_page is likewise derived, by the
 			// owning plugin from its own content (fs: the filename's media
 			// type) — wire-only; localdb tiles never declare it.
-			protoOnly: []string{"reference", "serves_page", "text_presentation"},
+			// menu_entry marks a plugin-minted tool tile (#258); the OWNING
+			// plugin persists it in its own DB (fs does) — the local store
+			// mints no entry tiles today, so for it the field is wire-only.
+			protoOnly: []string{"reference", "serves_page", "text_presentation", "menu_entry"},
 		},
 	}
 	for _, c := range cases {

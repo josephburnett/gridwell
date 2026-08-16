@@ -114,12 +114,17 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 			// from here, is one segment further away (remote-menu: the
 			// one owner of "which node is this pane inside").
 			g.NodeNs = rpc.QualifyNS(uuid, g.NodeNs)
+			// Menu entries ride verbatim, root targets prefixed (#258).
+			g.MenuEntries = rpc.QualifyMenuEntries(uuid, g.MenuEntries)
 		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
 			g.Writable = info.Writable
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			}
 			g.CreateSchemas = info.CreateSchemas
+			// The plugin's declared (+) menu additions (#258), stamped
+			// per grid exactly like create_schemas.
+			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		}
 	}
 	return connect.NewResponse(&pb.GetGridResponse{
@@ -233,6 +238,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	var rootGridID, scratchGridID, instanceGridID, infoError string
 	var writable bool
 	var glyph string
+	var menuEntries []*pb.MenuEntry
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
 		if info.RootGridId != "" {
@@ -253,6 +259,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		}
 		writable = info.Writable
 		glyph = info.Glyph
+		menuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		// Root-view viewport forwarded verbatim from Info (localdb fills it;
 		// fs/proc return zero). The client seeds enterPlugin framing from this.
 		rootViewCx = info.RootViewCx
@@ -277,6 +284,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		RootViewZoom:   rootViewZoom,
 		InfoError:      infoError,
 		Glyph:          glyph,
+		MenuEntries:    menuEntries,
 	}
 }
 
