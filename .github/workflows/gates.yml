@@ -69,6 +69,8 @@ jobs:
         run: cd apps/desktop && xvfb-run -a npm run test:integration && xvfb-run -a npm run test:bridge
       - name: e2e
         run: cd apps/desktop && npm run build && xvfb-run -a npx playwright test --retries=1
+        env:
+          GRIDWELL_E2E_VERBOSE: "1"
       # Failure evidence: traces + error-context for every failed spec —
       # the shell-spec failures are runner-only, so the trace is the only
       # way to see what the app actually did.

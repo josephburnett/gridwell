@@ -215,6 +215,17 @@ export const test = base.extend<Fixtures>({
 
   window: async ({ electronApp }, use) => {
     const win = await electronApp.firstWindow();
+    // GRIDWELL_E2E_VERBOSE=1 (set by CI): mirror the renderer console and
+    // the Electron main/sidecar stdio into the worker's stdout, so a
+    // runner-only failure leaves its app-side story in the job log — the
+    // trace records gestures, never console.
+    if (process.env.GRIDWELL_E2E_VERBOSE === '1') {
+      win.on('console', (msg) => console.log(`[renderer:${msg.type()}] ${msg.text()}`));
+      win.on('pageerror', (err) => console.log(`[renderer:pageerror] ${err.message}`));
+      const proc = electronApp.process();
+      proc.stdout?.on('data', (d: Buffer) => process.stdout.write(`[main] ${d}`));
+      proc.stderr?.on('data', (d: Buffer) => process.stdout.write(`[main:err] ${d}`));
+    }
     // The sidecar must report ready before the window opens, and the wasm must
     // boot and install the hook. Give the whole chain a generous budget.
     await win.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
