@@ -76,8 +76,22 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("DeleteTile(pane): %v", err)
 	}
 
+	// The first delete PARKS the workspace in the local plugin's trash
+	// (#262): its ephemerals stay alive so a restore comes back whole.
+	if _, err := cl.GetTile(ctx, eph.ID); err != nil {
+		t.Fatalf("a trashed workspace must keep its ephemeral shell: %v", err)
+	}
+	cur, err := cl.GetTile(ctx, pt.ID)
+	if err != nil {
+		t.Fatalf("trashed pane tile must still read: %v", err)
+	}
+	// The second delete (inside the trash) DESTROYS — and only then does
+	// the router reap what the arrangement owned.
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt.ID, Version: cur.Version}); err != nil {
+		t.Fatalf("DeleteTile(pane, in trash): %v", err)
+	}
 	if _, err := cl.GetTile(ctx, eph.ID); err == nil {
-		t.Error("ephemeral scratch tile survived the pane-tile delete — its shell would leak until the boot sweep")
+		t.Error("ephemeral scratch tile survived the pane-tile destroy — its shell would leak until the boot sweep")
 	}
 	if _, err := cl.GetTile(ctx, txt.ID); err != nil {
 		t.Errorf("viewed content was deleted with the workspace: %v", err)
@@ -98,6 +112,13 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID, Version: pt2.Version}); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob): %v", err)
+	}
+	cur2, err := cl.GetTile(ctx, pt2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: pt2.ID, Version: cur2.Version}); err != nil {
+		t.Fatalf("DeleteTile(pane, unreadable blob, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph2.ID); err != nil {
 		t.Errorf("unreadable blob must reap NOTHING (never guess), but the scratch tile is gone: %v", err)

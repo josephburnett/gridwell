@@ -464,20 +464,12 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 		t.Fatalf("blob refcount after clone = %d, want 2", rc)
 	}
 
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: clone.ID, Version: clone.Version,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	hardDelete(t, s, clone.ID)
 	if rc := refcount(t, s, "blobs", a.BlobID); rc != 1 {
-		t.Errorf("blob refcount after first delete = %d, want 1", rc)
+		t.Errorf("blob refcount after first destroy = %d, want 1", rc)
 	}
 
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: a.ID, Version: a.Version,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	hardDelete(t, s, a.ID)
 	var rc int64
 	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, a.BlobID).Scan(&rc); err == nil {
 		t.Errorf("blob row still present after final delete (refcount=%d)", rc)
@@ -516,16 +508,7 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 		t.Fatalf("md blob refcount = %d, want 1", rc)
 	}
 
-	outerIDInt, _ := parseID(outer.ID)
-	outerCur, err := s.loadTile(ctx, s.db, outerIDInt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: outer.ID, Version: outerCur.Version,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	hardDelete(t, s, outer.ID)
 
 	outerChildGridID, _ := parseID(outer.ChildGridID)
 	var n int64

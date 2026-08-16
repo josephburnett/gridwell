@@ -79,7 +79,14 @@ test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
 
   const plugins = pal.items.filter((i) => i.isPlugin);
   const primitives = pal.items.filter((i) => !i.isPlugin);
-  expect(plugins.map((i) => i.label), 'both plugins, server.yaml order').toEqual(['e2e', 'second']);
+  // Plugin rows in server.yaml order; each local plugin's declared TRASH
+  // root entry (#262) rides directly after its row.
+  const rows = plugins.filter((i) => !i.entry);
+  expect(rows.map((i) => i.label), 'both plugins, server.yaml order').toEqual(['e2e', 'second']);
+  expect(
+    plugins.map((i) => i.label),
+    'each root entry rides after its declaring plugin',
+  ).toEqual(['e2e', 'trash', 'second', 'trash']);
   expect(primitives.length, 'the primitive swatches are still there').toBeGreaterThanOrEqual(5);
 
   // Plugins come first in index order and sit strictly ABOVE the primitives.

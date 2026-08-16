@@ -83,15 +83,35 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
     })
     .toBe('webgl');
 
-  // Deleting the pane tile terminates what it owns: the scratch tile (and
-  // with it the tmux session — which also leaves teardown clean).
+  // Deleting the pane tile PARKS it in the trash (#262): a trashed
+  // workspace keeps its ephemerals, so a restore comes back whole.
   await barAscend(gw, window);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   await gw.deleteTileCell(wx, wy);
+  await gw.clickPluginSwatch('trash');
+  const troot = await gw.focused();
+  const month = (await gw.getGrid(troot.gridID)).tiles!.find((t) => t.kind === 'well')!;
+  await gw.descendCell(Number(month.x ?? 0), Number(month.y ?? 0));
+  const monthGridID = (await gw.focused()).gridID;
+  let parked: import('./oracle').Tile | undefined;
+  await expect
+    .poll(async () => {
+      parked = ((await gw.getGrid(monthGridID)).tiles ?? []).find((t) => t.kind === 'pane');
+      return !!parked;
+    }, { message: 'the pane tile is parked under the month well', timeout: 10_000 })
+    .toBe(true);
+  expect(
+    ((await gw.getGrid(scratchGridID)).tiles ?? []).length,
+    'a trashed workspace keeps its ephemeral shell',
+  ).toBe(1);
+
+  // Destroying it IN the trash terminates what it owns: the scratch tile
+  // (and with it the tmux session — which also leaves teardown clean).
+  await gw.deleteTileCell(Number(parked!.x ?? 0), Number(parked!.y ?? 0));
   await expect
     .poll(async () => {
       const g = await gw.getGrid(scratchGridID);
       return (g.tiles ?? []).length;
-    }, { message: 'deleting the pane tile must reap its ephemeral shell', timeout: 10_000 })
+    }, { message: 'destroying the pane tile must reap its ephemeral shell', timeout: 10_000 })
     .toBe(0);
 });

@@ -626,12 +626,16 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	// A pane tile's layout blob is the ONLY record of the workspace's
 	// ephemeral leaves (scratch-grid tiles). Deleting the workspace deletes
 	// only the arrangement — but must terminate what the arrangement OWNS,
-	// exactly like closing a pane does (issue #174): reap referenced
-	// scratch tiles BEFORE the pane tile row (and with it the blob) goes
-	// away. Transit tiles skip this hop — the forwarded delete reaches the
-	// owning node's router, whose blob ids are in that node's frame.
+	// exactly like closing a pane does (issue #174). The plugin alone
+	// decides whether this delete DESTROYS or merely parks the tile in its
+	// trash (#262) — so capture the candidates BEFORE the delete (the blob
+	// dies with the row) and reap AFTER, only if the row is actually gone;
+	// a trashed workspace keeps its ephemerals so a restore comes back
+	// whole. Transit tiles skip this hop — the forwarded delete reaches
+	// the owning node's router, whose blob ids are in that node's frame.
+	var candidates []string
 	if !h.srv.pluginReg.Transit(uuid) {
-		h.reapWorkspaceEphemerals(ctx, c, local, m.TileId)
+		candidates = h.workspaceEphemeralCandidates(ctx, c, local, m.TileId)
 	}
 	m.TileId = local
 	// The owning plugin reaps the tile's shell session (if any) as part of
@@ -639,34 +643,47 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 	if _, err := c.DeleteTile(ctx, m); err != nil {
 		return nil, asConnectError(err)
 	}
+	if len(candidates) > 0 {
+		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); err != nil {
+			h.reapWorkspaceEphemerals(ctx, candidates, req.Msg.TileId)
+		}
+	}
 	return connect.NewResponse(&pb.DeleteTileResponse{}), nil
 }
 
-// reapWorkspaceEphemerals deletes the SCRATCH-grid tiles a pane tile's layout
-// blob references (issue #174) — the workspace's ephemeral shells/urls, whose
-// tmux sessions die through the existing DeleteTile chain. Referenced
-// non-scratch tiles are content the workspace merely views and are never
-// touched; an unreadable blob (corrupt, or written by a newer Gridwell) reaps
-// NOTHING — never guess — and the boot sweep reclaims the leftovers once the
-// pane tile (and so the blob that shielded them) is gone. Best-effort: a
-// failure here must not block the user's delete, so errors go to the log.
-func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, owner pb.GridwellClient, localID, qualifiedID string) {
+// workspaceEphemeralCandidates reads a pane tile's layout blob and returns
+// the leaf ids that MIGHT be workspace-owned ephemerals — captured before
+// the delete because the blob dies with the row. Nil for anything that is
+// not a readable pane layout; an unreadable blob (corrupt, or written by a
+// newer Gridwell) yields NOTHING — never guess — and the boot sweep
+// reclaims the leftovers once the pane tile is gone.
+func (h *connectHandler) workspaceEphemeralCandidates(ctx context.Context, owner pb.GridwellClient, localID, qualifiedID string) []string {
 	tr, err := owner.GetTile(ctx, &pb.GetTileRequest{TileId: localID})
 	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindPane || tr.GetTile().BlobId == 0 {
-		return
+		return nil
 	}
 	body, err := readAllContent(ctx, owner, localID)
 	if err != nil || len(body) == 0 {
-		return
+		return nil
 	}
 	// Blob ids are in THIS node's frame (the encoder strips the reader's
 	// transit prefix, which is empty for a locally-owned pane tile).
 	tree, err := pane.DecodeLayout(body, func(id string) string { return id }, "")
 	if err != nil {
 		log.Printf("gridwell: delete %s: layout blob unreadable, reaping nothing: %v", qualifiedID, err)
-		return
+		return nil
 	}
-	for _, id := range pane.LeafTextFocusIDs(tree) {
+	return pane.LeafTextFocusIDs(tree)
+}
+
+// reapWorkspaceEphemerals deletes the SCRATCH-grid tiles among a destroyed
+// pane tile's captured layout leaves (issue #174) — the workspace's
+// ephemeral shells/urls, whose tmux sessions die through the existing
+// DeleteTile chain. Referenced non-scratch tiles are content the workspace
+// merely viewed and are never touched. Best-effort: a failure here must
+// not block the user's delete, so errors go to the log.
+func (h *connectHandler) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) {
+	for _, id := range candidates {
 		ec, elocal, euuid, err := h.route(id)
 		if err != nil {
 			continue

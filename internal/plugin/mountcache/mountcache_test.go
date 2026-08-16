@@ -336,7 +336,16 @@ func TestVerdictNeverMasked(t *testing.T) {
 	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id}); err != nil {
 		t.Fatal(err)
 	}
+	// Two deletes: the first parks the tile in the local plugin's trash
+	// (#262 — it still reads), the second destroys it for real.
 	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id, Version: txt.GetTile().GetVersion()}); err != nil {
+		t.Fatal(err)
+	}
+	cur, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id})
+	if err != nil {
+		t.Fatalf("trashed tile must still read: %v", err)
+	}
+	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id, Version: cur.GetTile().GetVersion()}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: id}); status.Code(err) != codes.NotFound {

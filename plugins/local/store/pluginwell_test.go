@@ -163,9 +163,7 @@ func TestPluginWell_CloneAndDelete(t *testing.T) {
 			clone.ConfigurePluginID, clone.ChildGridID)
 	}
 
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
+	hardDelete(t, s, tile.ID)
 	if _, err := s.GetTile(ctx, tile.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("deleted plugin well still reads: %v", err)
 	}

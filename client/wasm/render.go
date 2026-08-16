@@ -274,6 +274,11 @@ func (a *App) paletteItems(p *pane.Pane) []paletteItem {
 			pseudo := pl
 			pseudo.RootGridID = e.GridID
 			pseudo.InstanceGridID = ""
+			// The handshake root view belongs to the MAIN root grid;
+			// an entry grid opens at the default framing (its own
+			// framing stays session-only — persistPluginRootView's
+			// RootGridID guard keeps it off the main root's fact).
+			pseudo.RootViewCx, pseudo.RootViewCy, pseudo.RootViewZoom = 0, 0, 0
 			if e.Label != "" {
 				pseudo.Label = e.Label
 			}

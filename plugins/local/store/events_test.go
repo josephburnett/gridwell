@@ -171,10 +171,21 @@ func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Park it in the trash first (#262): this test pins the DESTRUCTION
+	// event shape; the trash-move shape is TestDeleteToTrashEmitsMoveShape.
+	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
+		TileID: w.ID, Version: w.Version,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cur, err := s.GetTile(ctx, w.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: w.ID, Version: w.Version,
+		TileID: w.ID, Version: cur.Version,
 	}); err != nil {
 		t.Fatal(err)
 	}

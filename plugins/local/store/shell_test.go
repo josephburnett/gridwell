@@ -173,11 +173,7 @@ func TestDeleteShellDropsPreviewBlob(t *testing.T) {
 	if rc != 1 {
 		t.Errorf("refcount after SetShellPreview = %d, want 1", rc)
 	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: stamped.ID, Version: stamped.Version,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	hardDelete(t, s, stamped.ID)
 	rc, err = blobRefcount(ctx, s, blobID)
 	if errors.Is(err, errBlobGone) {
 		return // blob row collected on rc=0, fine

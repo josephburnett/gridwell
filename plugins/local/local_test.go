@@ -148,6 +148,8 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	tile := createText(t, p, rootGrid(t, p), []byte("bye"))
+	// Two-stage (#262): the first delete PARKS the tile in the trash — it
+	// moved, it didn't die, so Probe still answers PRESENT.
 	_, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
 		TileId:  tile.Id,
 		Version: tile.Version,
@@ -156,8 +158,23 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 		t.Fatalf("DeleteTile: %v", err)
 	}
 	pr, _ := p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: tile.Id})
+	if pr.Presence != gridwellv1.ProbeResponse_PRESENCE_PRESENT {
+		t.Error("trashed tile must still probe PRESENT (it moved, it didn't die)")
+	}
+	cur, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: tile.Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The second delete (inside the trash) destroys for real.
+	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
+		TileId:  tile.Id,
+		Version: cur.Tile.Version,
+	}); err != nil {
+		t.Fatalf("DeleteTile (in trash): %v", err)
+	}
+	pr, _ = p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: tile.Id})
 	if pr.Presence != gridwellv1.ProbeResponse_PRESENCE_GONE {
-		t.Error("tile still PRESENT after DeleteTile")
+		t.Error("tile still PRESENT after the in-trash delete")
 	}
 }
 
@@ -493,14 +510,27 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Error("crash-leaked scratch tile survived the sweep")
 	}
 
-	// Delete the pane tile row (the blob reference dies with it): the next
-	// sweep reclaims the formerly-owned ephemeral. (The server-level delete
-	// reap usually gets there first; the sweep is the net.)
+	// Delete the pane tile: the first delete PARKS it in the trash (#262)
+	// and its workspace layout keeps holding its ephemerals — a restored
+	// workspace must come back whole, so nothing is reclaimable yet.
 	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id, Version: pt.Tile.Version}); err != nil {
 		t.Fatal(err)
 	}
+	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
+		t.Errorf("post-trash sweep = (%d, %v), want (0, nil) — a trashed workspace keeps its ephemerals", swept, err)
+	}
+	// The second delete destroys the pane tile; the reference dies with the
+	// blob and the next sweep reclaims the formerly-owned ephemeral. (The
+	// server-level delete reap usually gets there first; the sweep is the net.)
+	cur, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: pt.Tile.Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id, Version: cur.Tile.Version}); err != nil {
+		t.Fatal(err)
+	}
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 1 {
-		t.Errorf("post-delete sweep = (%d, %v), want (1, nil) — the reference must die with the blob", swept, err)
+		t.Errorf("post-destroy sweep = (%d, %v), want (1, nil) — the reference must die with the blob", swept, err)
 	}
 }
 

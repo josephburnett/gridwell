@@ -493,13 +493,18 @@ func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*
 	return out, err
 }
 
-// DeleteTile removes a single tile by ID, releasing the references it held
-// (its blob, preview blob, and — for an interior well — its child grid). A
-// well whose child lives in another plugin (an exit well) carries a qualified
-// "<uuid>/<id>" child_grid_id that doesn't parse as a local grid id, so no
-// local child is GC'd; only the reference is dropped. Tiles inside fs/proc
-// grids are deleted by the plugin that owns them (the server routes there),
-// never through the local store.
+// DeleteTile is the user's discard gesture, two-stage (issue #262): a tile
+// on an ordinary grid MOVES into the trashcan's current-month subgrid —
+// same id, same row, links keep resolving (it moved, it didn't die) — and
+// only a tile already inside the trash tree (the second delete) is
+// destroyed for real, releasing the references it held (its blob, preview
+// blob, and — for an interior well — its child grid). Scratch-grid tiles
+// (system ephemerals: visited urls, gone-on-ascent shells) always delete
+// for real. A well whose child lives in another plugin (an exit well)
+// carries a qualified "<uuid>/<id>" child_grid_id that doesn't parse as a
+// local grid id, so no local child is GC'd; only the reference is dropped.
+// Tiles inside fs/proc grids are deleted by the plugin that owns them (the
+// server routes there), never through the local store.
 func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
 	tileID, err := parseID(req.TileID)
 	if err != nil {
@@ -509,6 +514,17 @@ func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) erro
 		t, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
 		if err != nil {
 			return err
+		}
+		srcGrid, err := parseID(t.GridID)
+		if err != nil {
+			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, t.GridID, err)
+		}
+		bypass, err := s.deleteBypassesTrash(ctx, tx, srcGrid)
+		if err != nil {
+			return err
+		}
+		if !bypass {
+			return s.moveTileToTrash(ctx, tx, events, t)
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 			return err

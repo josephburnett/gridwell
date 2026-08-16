@@ -72,10 +72,9 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	primeTrash(t, s) // count the delete, not first-use trash minting
 	gridsBefore, blobsBefore := gridRowCount(t, s), blobRowCount(t, s)
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: ln.ID, Version: ln.Version}); err != nil {
-		t.Fatalf("delete leaf link: %v", err)
-	}
+	hardDelete(t, s, ln.ID)
 	if g, b := gridRowCount(t, s), blobRowCount(t, s); g != gridsBefore || b != blobsBefore {
 		t.Errorf("deleting a leaf link touched owned storage: grids %d→%d blobs %d→%d", gridsBefore, g, blobsBefore, b)
 	}

@@ -205,6 +205,8 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 		drawProcessGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	case rpc.GlyphWell:
 		drawWellGlyph(a.cctx, x, y, w, h, colorFocusBorder)
+	case rpc.GlyphTrash:
+		drawTrashGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	default:
 		drawGlobeGlyph(a.cctx, x, y, w, h, colorFocusBorder)
 	}

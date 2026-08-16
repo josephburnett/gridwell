@@ -73,11 +73,10 @@ func TestDeleteExitWellDropsReferenceOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	primeTrash(t, s) // count the delete, not first-use trash minting
 	before := gridRowCount(t, s)
 
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: ew.ID, Version: ew.Version}); err != nil {
-		t.Fatalf("delete exit well: %v", err)
-	}
+	hardDelete(t, s, ew.ID)
 	// No local grid was torn down (the well's own grid count drops by one only
 	// for an interior well; an exit well owns none).
 	if after := gridRowCount(t, s); after != before {

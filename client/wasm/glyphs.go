@@ -258,3 +258,37 @@ func drawPaneGlyph(c js.Value, x, y, w, h float64, color string) {
 	c.Call("stroke")
 	endGlyph(c)
 }
+
+// drawTrashGlyph paints a small trashcan centered in (x, y, w, h): a
+// tapered bin body with a lid line and handle. Declared by the local
+// plugin's trash root entry (issue #262).
+func drawTrashGlyph(c js.Value, x, y, w, h float64, color string) {
+	beginGlyph(c, w, h, color)
+	cx, cy, half := glyphBox(x, y, w, h)
+	bw := half * 1.5
+	bh := half * 1.5
+	topY := cy - bh/2 + half*0.25
+	botY := topY + bh
+	taper := bw * 0.12
+	// Bin body: tapered trapezoid.
+	c.Call("beginPath")
+	c.Call("moveTo", cx-bw/2, topY)
+	c.Call("lineTo", cx+bw/2, topY)
+	c.Call("lineTo", cx+bw/2-taper, botY)
+	c.Call("lineTo", cx-bw/2+taper, botY)
+	c.Call("closePath")
+	c.Call("stroke")
+	// Lid: a wider line just above the body, with a small handle arc.
+	lidY := topY - bh*0.14
+	c.Call("beginPath")
+	c.Call("moveTo", cx-bw*0.62, lidY)
+	c.Call("lineTo", cx+bw*0.62, lidY)
+	c.Call("stroke")
+	c.Call("beginPath")
+	c.Call("moveTo", cx-bw*0.18, lidY)
+	c.Call("lineTo", cx-bw*0.10, lidY-bh*0.16)
+	c.Call("lineTo", cx+bw*0.10, lidY-bh*0.16)
+	c.Call("lineTo", cx+bw*0.18, lidY)
+	c.Call("stroke")
+	endGlyph(c)
+}

@@ -114,6 +114,10 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	if err != nil {
 		return nil, errToStatus(err)
 	}
+	trash, err := p.st.TrashGridID(ctx)
+	if err != nil {
+		return nil, errToStatus(err)
+	}
 	// Root viewport: seed the client's enterPlugin framing so re-entry
 	// restores the left-off view.  Zero on a fresh DB (never visited).
 	cx, cy, zoom, err := p.st.RootView(ctx)
@@ -127,6 +131,15 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		SchemaVersion: int64(p.st.SchemaVersion()),
 		RootGridId:    id,
 		ScratchGridId: scratch,
+		// The trashcan (issue #262): a second root the (+) menu offers
+		// beside the main one — a declared ROOT menu entry (#258), so the
+		// host and client learn only "another grid with a glyph".
+		MenuEntries: []*gridwellv1.MenuEntry{{
+			Id:     "trash",
+			Label:  "trash",
+			Glyph:  "trash",
+			GridId: trash,
+		}},
 		// Capabilities the server reads from this handshake (never from the
 		// kind string): localdb emits change events and accepts creates.
 		Watch:        true,

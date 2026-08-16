@@ -129,9 +129,7 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 	// without the pane arm the kind would silently own nothing and the blobs
 	// would leak forever).
 	for _, tile := range []*rpc.Tile{orig, edited} {
-		if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: tile.ID, Version: tile.Version}); err != nil {
-			t.Fatalf("delete %s: %v", tile.ID, err)
-		}
+		hardDelete(t, s, tile.ID)
 	}
 	if blobExists(t, s, orig.BlobID) || blobExists(t, s, edited.BlobID) {
 		t.Error("layout blobs leaked after both tiles were deleted")

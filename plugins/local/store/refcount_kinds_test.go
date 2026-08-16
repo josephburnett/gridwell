@@ -150,13 +150,10 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 		t.Fatalf("setup: previewBlob=%d", previewBlob)
 	}
 
-	// Delete the only well pointing at the child grid → child grid GCs,
-	// cascading through the shell inside it.
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{
-		TileID: well.ID, Version: well.Version,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	// Destroy the only well pointing at the child grid (two-stage #262
+	// gesture collapsed) → child grid GCs, cascading through the shell
+	// inside it.
+	hardDelete(t, s, well.ID)
 
 	verifyRefcounts(t, s)
 	if blobExists(t, s, previewBlob) {

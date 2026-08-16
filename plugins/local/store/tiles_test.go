@@ -473,9 +473,9 @@ func TestDeleteTile(t *testing.T) {
 	childGridIDStr := w.ChildGridID
 	childGridID, _ := parseID(childGridIDStr)
 	wIDInt, _ := parseID(w.ID)
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: w.Version}); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
+	// Two-stage (#262): the first delete parks it in the trash; the second
+	// destroys. This test is about destruction's reference release.
+	hardDelete(t, s, w.ID)
 	if _, err := s.loadTile(ctx, s.db, wIDInt); !errors.Is(err, ErrNotFound) {
 		t.Errorf("well still exists: %v", err)
 	}
@@ -503,14 +503,7 @@ func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
 	// w may have been bumped by the creation of inner in its child grid?
 	// No: creating inner bumps the inner-grid version, not the outer well's.
 	// Reload w for current version.
-	wIDInt2, _ := parseID(w.ID)
-	wCur, err := s.loadTile(ctx, s.db, wIDInt2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: w.ID, Version: wCur.Version}); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
+	hardDelete(t, s, w.ID)
 	innerIDInt, _ := parseID(inner.ID)
 	if _, err := s.loadTile(ctx, s.db, innerIDInt); !errors.Is(err, ErrNotFound) {
 		t.Errorf("inner well still exists after cascading delete")

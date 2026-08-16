@@ -220,6 +220,7 @@ const (
 	GlyphFolder  = "folder"
 	GlyphProcess = "process"
 	GlyphWell    = "well"
+	GlyphTrash   = "trash"
 )
 
 // Text-tile display modes.
