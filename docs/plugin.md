@@ -129,10 +129,24 @@ nobody imports the apps as libraries). The api module gets prefixed tags
 (`api/v0.x.y`) only when an out-of-repo consumer exists; until then the
 replace graph is the whole story.
 
+## The coupling inventory (audited 2026-08-15 — stage 1's worklist)
+
+| Site | Coupling | Fix |
+|---|---|---|
+| `internal/plugin/registry.go` `TransitKind` | routing semantics by `kind == "ssh"` | Info declaration (`transit`), cached from the spawn handshake |
+| `internal/cli/sshmigrate.go` | the CLI imports `sshhost` and writes its DB (pre-#251 bridge) | DELETE (flagged assumption: every home is migrated) |
+| `internal/cli/init.go` | ssh-specific config-key refusal in the generic init door | goes with sshmigrate |
+| `client/wasm/palette_draw.go` `drawPluginGlyph` | glyph by kind switch (fs/proc/localdb) | Info glyph declaration; globe stays the fallback |
+| `client/wasm/plugin_id.go` `pluginKind` | falls back from `source_kind` (a declaration — fine) to the plugin-list KIND | reads the glyph declaration instead |
+| `internal/store` → `client/markdown` | persistence imports the client tree (`AltFromSource`) | derivation moves to `internal/doctype` |
+| `mobile/` factories; future `apps/gridwell-all` | enumerate plugin kinds | LEGITIMATE — leaf binaries; the only legal place |
+| seam tests importing plugin impls | tests exercise the seam | LEGITIMATE — exempt from the arrow lint |
+
 ## Execution — staged, each stage green and pushed alone
 
-1. **Retire the couplings in place** (before any moves — smallest
-   diffs, and the moves then carry no breaches with them):
+1. **Retire the couplings in place** — the inventory above, top to
+   bottom (before any moves — smallest diffs, and the moves then carry
+   no breaches with them):
    - `TransitKind` → an Info declaration (`InfoResponse.transit`): the
      transit fact belongs to the LOCAL transport binary, which is alive
      even when its remote isn't; cached from the spawn handshake like
