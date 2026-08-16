@@ -1,0 +1,61 @@
+# The heavy gates (issue #260), on PRs and main: the browser suite, the
+# composition-parity suite (gridwell-all — every plugin in-process), the
+# federation spawn/direct/partition gates (self-contained sshd via
+# dialtest), and the full Electron e2e under xvfb. One retry per suite
+# is the CI face of the repo's vindicated-isolated flake discipline.
+name: gates
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  web-and-federation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: node modules + playwright
+        run: |
+          cd apps/desktop && npm ci
+          npx playwright install --with-deps chromium
+      - name: build
+        run: make build
+      - name: federation gate
+        run: make check-federation
+      # The web config drives a chromium by explicit path (the repo's
+      # offline-buildable posture); on the runner, hand it playwright's.
+      - name: resolve chromium path
+        run: echo "GRIDWELL_WEB_CHROMIUM=$(cd apps/desktop && node -e "console.log(require('playwright-core').chromium.executablePath())")" >> "$GITHUB_ENV"
+      - name: web gate
+        run: cd apps/desktop && npx playwright test --config playwright.web.config.ts --retries=1
+      - name: parity gate (gridwell-all, in-process plugins)
+        run: cd apps/desktop && GRIDWELL_SERVE_BIN=gridwell-all npx playwright test --config playwright.web.config.ts --retries=1
+  electron-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: node modules + playwright
+        run: |
+          cd apps/desktop && npm ci
+          npx playwright install --with-deps chromium
+      - name: build
+        run: make build
+      - name: electron harnesses
+        run: cd apps/desktop && xvfb-run -a npm run test:integration && xvfb-run -a npm run test:bridge
+      - name: e2e
+        run: cd apps/desktop && npm run build && xvfb-run -a npx playwright test --retries=1

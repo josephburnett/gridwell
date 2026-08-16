@@ -1,0 +1,20 @@
+# The iOS bind-surface canary (issues #260/#252): GOOS=ios needs a macOS
+# toolchain, and macOS minutes are expensive — main pushes and manual
+# runs only. No signing, no SDK packaging: just proof the mobile module
+# still compiles for the platform that forbids fork/exec.
+name: mobile-ios
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**', 'api/**', 'go.mod', 'internal/**', 'plugins/**']
+  workflow_dispatch:
+jobs:
+  ios-canary:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: ios build canary
+        run: cd mobile && GOWORK=off GOOS=ios GOARCH=arm64 CGO_ENABLED=1 go build ./...

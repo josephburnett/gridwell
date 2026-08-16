@@ -1,0 +1,41 @@
+# The per-commit gate (issue #260): `make check` — fmt, proto drift,
+# every module standalone, the boundary lint, wasm, TS — plus the mobile
+# ANDROID cross-compile canary (the cheap half of #252's CI note; the
+# iOS canary needs a macOS runner, see mobile-ios.yml). Broken code must
+# not be mergeable, let alone releasable.
+name: check
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+            plugins/*/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      # proto-check REGENERATES and diffs, so the generator versions must
+      # match the committed output exactly — pinned to what generated it.
+      - name: install proto toolchain (pinned)
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@v1.72.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.20.0
+      - name: node modules
+        run: cd apps/desktop && npm ci
+      - name: make check
+        run: make check
+      - name: mobile android canary
+        run: cd mobile && GOWORK=off GOOS=android GOARCH=arm64 go build ./...
