@@ -39,6 +39,11 @@ jobs:
         run: cd apps/desktop && GRIDWELL_SERVE_BIN=gridwell-all npx playwright test --config playwright.web.config.ts --retries=1
   electron-e2e:
     runs-on: ubuntu-latest
+    env:
+      # Electron's SUID sandbox helper can't be configured on a runner
+      # (needs root-owned mode-4755); same switch the dev box uses under
+      # its user-namespace xvfb.
+      ELECTRON_DISABLE_SANDBOX: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

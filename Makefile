@@ -113,7 +113,9 @@ proto-check:
 # (GOWORK=off) so no module can quietly lean on the workspace.
 MODULES := api internal/doctype plugins/griddb plugins/local plugins/fs plugins/proc plugins/remote apps/gridwell apps/gridwell-all mobile
 
-check: fmt-check proto-check
+# check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
+# a fresh checkout (CI) cannot even `go build ./...` before one exists.
+check: fmt-check proto-check wasm
 	go build ./...
 	go test ./...
 	cd test/boundary && go test -count=1 .
