@@ -142,6 +142,36 @@ replace graph is the whole story.
 | `mobile/` factories; future `apps/gridwell-all` | enumerate plugin kinds | LEGITIMATE — leaf binaries; the only legal place |
 | seam tests importing plugin impls | tests exercise the seam | LEGITIMATE — exempt from the arrow lint |
 
+## Status (2026-08-16): EXECUTED — all five stages landed
+
+Stages 1–5 are on main (`3b916a5..` through the codify commit): the
+couplings retired, the api module carved (gen + guest + compose +
+idshape + gwerr + rpc + dbformat + pluginmeta + panelayout), every
+plugin its own module with `gridwell-plugin-<kind>` binaries, the stock
+host (`apps/gridwell`) + bundled example (`apps/gridwell-all`) + mobile
+as leaf composers, and the structure codified: `test/boundary` (arrows +
+api dep budget, in `make check`), standalone module builds (in `make
+check`), `make check-parity` (the browser suite against gridwell-all —
+in/out-of-process indistinguishable), the federation gate on the
+renamed externals, and `docs/plugin-authoring.md` for strangers.
+
+Deviations from the letter of the plan, each deliberate:
+- The root module IS the server library (no `server/` directory move —
+  identical arrows, a tenth of the churn). `mobile/` stayed at its path
+  as its own module rather than moving under `apps/`.
+- Shared neutral homes became NESTED modules in place
+  (`internal/doctype`, `plugins/griddb`) instead of relocating; the api
+  absorbed the contract-shaped ones (including `modernc.org/sqlite` in
+  its budget for `pluginmeta`/`dbformat` — pinned, documented in the
+  budget test).
+- The root module still REQUIRES plugin modules for its seam TESTS
+  (server tests build real plugins); the arrow lint polices imports of
+  non-test packages, which is the promise that matters — a leaf's
+  `replace` ceremony and this test-require are the two places module
+  mechanics show through.
+- Cross-seam tests that build a server around a plugin moved to the
+  server side (they are the server's seam tests).
+
 ## Execution — staged, each stage green and pushed alone
 
 1. **Retire the couplings in place** — the inventory above, top to

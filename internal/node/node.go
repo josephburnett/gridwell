@@ -19,11 +19,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/localdb/store"
 )
 
 // BuildConfig loads the mandatory server.yaml at cfgPath and prepares it
@@ -70,7 +70,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 // here, so a home initialized on any platform is byte-compatible with
 // every other.
 func InitPlugin(home, kind, name string, conf map[string]string) (id string, err error) {
-	id = store.NewShortID()
+	id = idshape.NewShortID()
 	dbDir := config.DBDir(home, id)
 	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		return "", err
@@ -91,7 +91,7 @@ func InitPlugin(home, kind, name string, conf map[string]string) (id string, err
 	}
 	// The node's own identity rides in the same file; mint it with the
 	// first plugin so a fresh home is fully identified before first serve.
-	if _, err := config.EnsureNodeID(home, store.NewShortID); err != nil {
+	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
 		return "", fmt.Errorf("node id: %w", err)
 	}
 	return id, nil
@@ -133,7 +133,7 @@ func Start(opts Options) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load plugins: %w", err)
 	}
-	nodeID, err := config.EnsureNodeID(opts.Home, store.NewShortID)
+	nodeID, err := config.EnsureNodeID(opts.Home, idshape.NewShortID)
 	if err != nil {
 		reg.Close()
 		return nil, fmt.Errorf("node id: %w", err)

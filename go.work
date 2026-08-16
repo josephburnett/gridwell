@@ -15,5 +15,6 @@ use (
 	./plugins/localdb
 	./plugins/proc
 	./plugins/ssh
+	./test/boundary
 	./test/federation
 )

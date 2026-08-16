@@ -1,4 +1,4 @@
-.PHONY: build bin bin-all plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-federation serve init clean launch vendor dist node-modules
+.PHONY: build bin bin-all plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-parity check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 FS_BIN := ./gridwell-plugin-fs
@@ -116,6 +116,7 @@ MODULES := api internal/doctype plugins/griddb plugins/localdb plugins/fs plugin
 check: fmt-check proto-check
 	go build ./...
 	go test ./...
+	cd test/boundary && go test -count=1 .
 	@for m in $(MODULES); do \
 		echo "== module $$m (standalone)"; \
 		(cd $$m && GOWORK=off go build ./... && GOWORK=off go test ./...) || exit 1; \
@@ -152,6 +153,15 @@ check-e2e: build node-modules
 # client/touchgest, touch.go, or the browser-serving path.
 check-web: build node-modules
 	cd $(DESKTOP) && npm run test:e2e:web
+
+# check-parity is the COMPOSITION PARITY gate (docs/plugin.md): the same
+# browser suite against gridwell-all — every plugin IN-PROCESS through
+# the compose door. Identical behavior to check-web is the pin that the
+# door hides the process boundary. Also runs the structure lint
+# (test/boundary: arrows + api dependency budget).
+check-parity: build node-modules
+	cd test/boundary && go test -count=1 .
+	cd $(DESKTOP) && GRIDWELL_SERVE_BIN=gridwell-all npm run test:e2e:web
 
 # check-federation is the SPAWN GATE (issue #58): the real binaries —
 # gridwell init/serve and the go-plugin subprocesses including gridwell-ssh —

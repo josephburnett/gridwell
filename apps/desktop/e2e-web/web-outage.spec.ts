@@ -4,6 +4,7 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
+import { serveBin } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
@@ -44,7 +45,7 @@ class RestartableServe {
   }
   async start(): Promise<void> {
     const child = spawn(
-      path.join(REPO_ROOT, 'gridwell'),
+      serveBin(),
       ['serve', '--bind', `127.0.0.1:${this.port}`, '--static', path.join(REPO_ROOT, 'web')],
       { env: { ...process.env, GRIDWELL_HOME: this.home }, stdio: ['ignore', 'pipe', 'pipe'] },
     );

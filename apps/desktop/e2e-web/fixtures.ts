@@ -17,6 +17,13 @@ import { GridwellDriver } from '../e2e/driver';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
+// serveBin picks the server binary: the stock host by default, or the
+// bundled gridwell-all when GRIDWELL_SERVE_BIN says so — the composition
+// PARITY gate (docs/plugin.md) runs this same suite against both and
+// must see identical behavior; that is the pin that the compose door
+// hides the process boundary.
+export const serveBin = () => path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
+
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
@@ -47,7 +54,7 @@ export const test = base.extend<Fixtures>({
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
     const child = spawn(
-      path.join(REPO_ROOT, 'gridwell'),
+      serveBin(),
       ['serve', '--bind', `127.0.0.1:${port}`, '--static', path.join(REPO_ROOT, 'web')],
       {
         env: { ...process.env, GRIDWELL_HOME: home },

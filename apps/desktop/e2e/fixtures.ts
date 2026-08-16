@@ -28,7 +28,7 @@ export interface PluginSpec {
 // dir; callers remove it on teardown.
 export function seedHome(extra: PluginSpec[] = []): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
-  const bin = path.join(REPO_ROOT, 'gridwell');
+  const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
   const env = { ...process.env, GRIDWELL_HOME: home };
   execFileSync(bin, ['init', '--kind', 'localdb', '--name', 'e2e'], { env, stdio: 'ignore' });
   for (const p of extra) {
