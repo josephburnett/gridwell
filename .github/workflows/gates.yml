@@ -51,6 +51,14 @@ jobs:
       # this was added — the shell-spec failures were NOT a missing tmux).
       - name: system deps
         run: sudo apt-get update && sudo apt-get install -y tmux
+      # The runner image leaves a /tmp/tmux-<uid> tmux refuses ("directory
+      # /tmp/tmux-1001 has unsafe permissions" — it must be user-owned mode
+      # 700). Remove it so tmux mints it correctly on first use; the ls is
+      # the evidence trail for who created it if it ever comes back badly.
+      - name: tmux socket dir hygiene
+        run: |
+          ls -ldn /tmp/tmux-* 2>/dev/null || echo "no /tmp/tmux-* yet"
+          sudo rm -rf "/tmp/tmux-$(id -u)"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -67,6 +75,8 @@ jobs:
         run: make build
       - name: electron harnesses
         run: cd apps/desktop && xvfb-run -a npm run test:integration && xvfb-run -a npm run test:bridge
+      - name: pre-e2e socket dir evidence
+        run: ls -ldn /tmp/tmux-* 2>/dev/null || echo "no /tmp/tmux-* before e2e"
       - name: e2e
         run: cd apps/desktop && npm run build && xvfb-run -a npx playwright test --retries=1
         env:
