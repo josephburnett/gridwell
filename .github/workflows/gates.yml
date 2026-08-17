@@ -59,6 +59,10 @@ jobs:
         run: |
           ls -ldn /tmp/tmux-* 2>/dev/null || echo "no /tmp/tmux-* yet"
           sudo rm -rf "/tmp/tmux-$(id -u)"
+          # Pre-create it CORRECTLY (0700, our uid): the unsafe dir is
+          # minted during the run itself, so removal alone loses the race;
+          # tmux accepts an existing user-owned 0700 dir.
+          mkdir -m 700 "/tmp/tmux-$(id -u)"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -84,6 +88,12 @@ jobs:
       # Failure evidence: traces + error-context for every failed spec —
       # the shell-spec failures are runner-only, so the trace is the only
       # way to see what the app actually did.
+      - name: post-e2e socket dir evidence
+        if: always()
+        run: |
+          ls -ldn /tmp/tmux-* 2>/dev/null || echo "no /tmp/tmux-* after e2e"
+          stat "/tmp/tmux-$(id -u)" 2>/dev/null || true
+          getfacl "/tmp/tmux-$(id -u)" 2>/dev/null || true
       - name: upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
