@@ -35,6 +35,14 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
   const well = tileAt(await gw.getGrid(grid), 'well', cx + 2, cy)!;
   await gw.openPalette();
   await gw.dragCreate('pane', cx - 2, cy);
+  // Wait until the pane tile is RENDERED before clicking it — the create's
+  // optimistic commit and the background refetch land on their own
+  // schedule (the render-seam class); a click into the gap lands on empty
+  // grid and no workspace opens.
+  const pt = tileAt(await gw.getGrid(grid), 'pane', cx - 2, cy)!;
+  await expect
+    .poll(async () => (await gw.focused()).tileIds, { timeout: 10_000 })
+    .toContain(pt.id);
 
   // Enter the workspace and bind its pane to the markdown tile.
   await gw.descendCell(cx - 2, cy);

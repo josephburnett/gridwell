@@ -73,10 +73,22 @@ test('cloning a tile leaves both the original and the copy rendered', async ({ g
   expect(copy, 'clone created on the server').toBeTruthy();
   expect(orig!.id, 'clone is a distinct tile (no id reassignment)').not.toBe(copy!.id);
 
-  // Render truth: neither the original nor the clone disappeared from the pane.
-  const rendered = (await gw.focused()).tileIds;
-  expect(rendered, 'the original is still rendered after the clone').toContain(orig!.id);
-  expect(rendered, 'the clone is rendered').toContain(copy!.id);
+  // Render truth: neither the original nor the clone disappeared from the
+  // pane. POLLED like the create spec above — the optimistic commit and
+  // the background refetch land on their own schedule; the guarded bug is
+  // a tile that NEVER comes back.
+  await expect
+    .poll(async () => (await gw.focused()).tileIds, {
+      message: 'the original is still rendered after the clone',
+      timeout: 10_000,
+    })
+    .toContain(orig!.id);
+  await expect
+    .poll(async () => (await gw.focused()).tileIds, {
+      message: 'the clone is rendered',
+      timeout: 10_000,
+    })
+    .toContain(copy!.id);
 });
 
 // Moving a tile must not lose it from the render (the owner's "I pick it up and
