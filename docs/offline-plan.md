@@ -190,17 +190,22 @@ reads whichever the node serves. No new client state, no second writer.
   partition case (noted gap: today's federation tests only cover spawn) —
   drop the tunnel, read through the cache, restore, assert resync.
 
-### Open decisions (small)
+### Open decisions (small) — both DECIDED 2026-08-17
 
-- Cache-everything-touched vs. prefetching the whole mount on connect.
-  The data here is SMALL — text, previews, metadata, megabytes not
-  gigabytes (noted 2026-08-14) — so whole-mount prefetch is realistic
-  and makes "everything is readable offline" literally true rather than
-  everything-touched. Leaning prefetch; decide at build time.
-- Byte caps: generous, with eviction as an emergency valve only — LRU
-  sophistication is not worth building at these sizes. The one genuinely
-  large class is fs-served content (photos through the /content/ door),
-  which stays bounded per entry.
+- Cache-everything-touched vs. prefetching the whole mount on connect:
+  **prefetch** (issue #254, landed). Every successful Subscribe — the
+  initial connect and each health-up reconnect — kicks a whole-mount
+  walk through the wrapper's own read methods (grids, tiles, previews,
+  plugin lists, text/pane bodies, serves_page door bodies), so the walk
+  doubles as the deletes-while-away resync. Caps are emergency valves
+  (4096 grids, 256MB content budget per walk), not tuning knobs.
+- Byte caps: as planned — generous, eviction as an emergency valve.
+  ServeContent bodies are cached BOUNDED (issue #255, landed): 32MB per
+  entry (oversized streams live, uncached), 512MB per mount with
+  oldest-first eviction; only status-200 answers are remembered. The
+  explicit "keep offline" pin stays DEFERRED by the plan's own
+  condition: prefetch removed touched-only coldness, so the pin waits
+  for real usage to prove the budget-bounded walk too cold.
 
 ### The supported offline-edit scenario (owner decision, 2026-08-14)
 
@@ -327,7 +332,7 @@ Deliberately last; Phases 0–2 make the states *correct*, this makes them
 | 0 hardening | — | check + electron + e2e (new outage specs) | **LANDED** 2026-08-15 (`938d4f2..c4213cf`) |
 | 1 mountcache | 0 (taxonomy) | check (unit vs fake remote) + federation (partition spec) | **LANDED** 2026-08-15 (`2d3def3`; deep-copy degrade `98f266a`) |
 | 2 flutter node | spike; 1 for cache value | check + mobile build in CI; real-hardware pass | Go half + Dart half **LANDED** (`9fa9510`, mobile-app boot commit); REMAINING: gomobile packaging (AAR/xcframework), the Kotlin/Swift `gridwell/node` channel shim (contract in `apps/mobile/lib/node.dart`), and the real-hardware pass |
-| 3 UX | 0–2 | e2e + web | largely absorbed: cache-served grids render normally under the existing plugin-health sticky notice; remaining polish (per-tile stale affordances, pin gesture) waits on real usage |
+| 3 UX | 0–2 | e2e + web | **LANDED** 2026-08-17: the wire-level `Grid.stale` bit (stamped only by the mountcache's serve-stale path) surfaces as the bar's quiet "offline" chip — bar chrome only, tiles never move or restyle; pinned by the federation partition gate (the bit crosses the real chain) and a web spec (a dark mount re-enters as a marked memory, tiles intact). The pin gesture stays deferred pending real usage |
 
 Each phase lands and ships alone. Also landed along the way: the
 mid-session partition federation gate (`test/federation/partition_test.go`)

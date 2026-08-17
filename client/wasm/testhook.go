@@ -491,6 +491,12 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"textFocus": p.TextFocus,
 			// The descent's live raw/rendered mode (#261's spec reads it).
 			"textMode": p.TextMode,
+			// The pane's grid is a cache-served memory (the wire stale bit,
+			// #256) — what the bar's offline chip reads.
+			"stale": func() bool {
+				g, ok := a.c.Grid(a.gridIDForPane(p))
+				return ok && g.Meta.Stale
+			}(),
 			// Viewport center (grid cell coords) + zoom, so a test can drop on a
 			// cell guaranteed to be on-screen regardless of the stored framing.
 			"cx":   p.Cx,

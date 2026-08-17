@@ -123,6 +123,12 @@ func TestMountPartitionServesCache(t *testing.T) {
 	if len(g["tiles"].([]any)) != 2 {
 		t.Fatalf("dark grid read has %d tiles, want the cached 2", len(g["tiles"].([]any)))
 	}
+	// The memory says so on the wire (#256): the cache-served grid wears
+	// the stale bit through the whole real chain — mountcache → server →
+	// Connect JSON — which is what the client's offline chip reads.
+	if gm, ok := g["grid"].(map[string]any); !ok || gm["stale"] != true {
+		t.Fatalf("dark grid read grid=%v, want stale=true on the wire", g["grid"])
+	}
 	// A never-read body fails HONESTLY — served-wrong would be worse than
 	// unavailable.
 	if _, _, _, err := cl.ReadContent(ctx, coldT["id"].(string)); err == nil {

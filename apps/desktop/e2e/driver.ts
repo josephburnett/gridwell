@@ -23,6 +23,8 @@ export interface PaneInfo {
   anchor: string;
   path: string[];
   textFocus: string;
+  // The pane's grid is a cache-served memory (the wire stale bit, #256).
+  stale?: boolean;
   textMode: string;
   cx: number;
   cy: number;

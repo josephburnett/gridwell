@@ -66,7 +66,7 @@ async function spawnServe(home: string, port: number): Promise<ChildProcess> {
 }
 
 type Fixtures = {
-  world: { localOrigin: string; farOrigin: string };
+  world: { localOrigin: string; farOrigin: string; killFar: () => Promise<void> };
   window: Page;
   gw: GridwellDriver;
 };
@@ -87,14 +87,12 @@ const test = base.extend<Fixtures>({
     const localPort = await freePort();
     const local = await spawnServe(localHome, localPort);
 
-    await use({
-      localOrigin: `http://127.0.0.1:${localPort}`,
-      farOrigin: `http://127.0.0.1:${farPort}`,
-    });
-
-    for (const c of [local, far]) {
-      c.kill('SIGTERM');
-      await new Promise<void>((res) => {
+    const stop = (c: ChildProcess) =>
+      new Promise<void>((res) => {
+        if (c.exitCode !== null) {
+          res();
+          return;
+        }
         const hard = setTimeout(() => {
           c.kill('SIGKILL');
           res();
@@ -103,7 +101,19 @@ const test = base.extend<Fixtures>({
           clearTimeout(hard);
           res();
         });
+        c.kill('SIGTERM');
       });
+
+    await use({
+      localOrigin: `http://127.0.0.1:${localPort}`,
+      farOrigin: `http://127.0.0.1:${farPort}`,
+      // The partition switch (stale-affordance spec): the far node dies
+      // mid-session, exactly like a machine going dark.
+      killFar: () => stop(far),
+    });
+
+    for (const c of [local, far]) {
+      await stop(c);
     }
     fs.rmSync(localHome, { recursive: true, force: true });
     fs.rmSync(farHome, { recursive: true, force: true });
@@ -236,4 +246,75 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     })
     .toBe(true);
   expect((await gw.getGrid(f.gridID)).tiles.length, 'no cross-node tile was created').toBe(before);
+});
+
+// The stale affordance (#256): a mounted machine going dark degrades the
+// remote pane to a cache-served MEMORY — the tiles render exactly as
+// remembered ("stays as you left it") and the wire-level stale bit
+// surfaces as the bar's quiet offline chip, read here via the panes()
+// hook. Nothing moves, nothing blanks.
+test('a dark mount serves the remembered room, marked stale', async ({ gw, window, world }) => {
+  // Wire the direct connection and note content on the far node.
+  const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
+  const rtb = lp.plugins.find((p: any) => p.kind === 'remote');
+  const conn = (
+    await rpcJSON(world.localOrigin, 'CreateTile', {
+      gridId: rtb.instanceGridId,
+      tile: { kind: 'well', x: 0, y: 0, w: 1, h: 1 },
+    })
+  ).tile;
+  await writeContent(
+    world.localOrigin,
+    conn.id,
+    Number(conn.version ?? 0),
+    Buffer.from(JSON.stringify({ addr: world.farOrigin.replace('http://', '') })),
+  );
+  let farHomeGrid = '';
+  await expect
+    .poll(
+      async () => {
+        const g = await rpcJSON(world.localOrigin, 'GetGrid', { gridId: rtb.instanceGridId });
+        farHomeGrid = (g.tiles ?? []).map((t: any) => t.childGridId).find(Boolean) ?? '';
+        return farHomeGrid;
+      },
+      { timeout: 20_000 },
+    )
+    .not.toBe('');
+  const farLp = await rpcJSON(world.farOrigin, 'ListPlugins', {});
+  await rpcJSON(world.farOrigin, 'CreateTile', {
+    gridId: farLp.plugins[0].rootGridId,
+    tile: { kind: 'text', x: 1, y: 1, w: 1, h: 1 },
+  });
+
+  // Link the far home into the local grid and descend: live first.
+  await gw.enterPlugin('e2e');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await rpcJSON(world.localOrigin, 'CreateTile', {
+    gridId: f.gridID,
+    tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
+  });
+  await expect.poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)).toBe(true);
+  await gw.descendCell(cx, cy);
+  let inside = (await gw.panes()).find((p) => p.focused)!;
+  expect(inside.gridID).toBe(farHomeGrid);
+  expect(inside.stale, 'a live remote room is not stale').toBeFalsy();
+  const liveTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
+  expect(liveTiles.length).toBeGreaterThan(0);
+
+  // The machine goes dark. Leave and re-enter: the room re-reads through
+  // the mount cache and arrives as a marked memory, tiles intact.
+  await world.killFar();
+  await gw.ascendViaCrumb();
+  await gw.descendCell(cx, cy);
+  await expect
+    .poll(async () => {
+      const p = (await gw.panes()).find((q) => q.focused);
+      return p?.gridID === farHomeGrid && p.stale === true;
+    }, { message: 'the re-entered room says it is a memory (#256)', timeout: 20_000 })
+    .toBe(true);
+  const staleTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
+  expect(staleTiles.length, 'the memory renders every remembered tile').toBe(liveTiles.length);
+  void window;
 });

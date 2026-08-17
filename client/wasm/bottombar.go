@@ -179,7 +179,36 @@ func (a *App) drawBottomBar() {
 	c.Set("fillStyle", button)
 	c.Call("fillRect", bx, top, bw, 1) // hairline above the band, kind-hued
 	a.drawBarTitle(top)
+	a.drawStaleChip(bx, top, bw)
 	a.drawBarSlot()
+}
+
+// drawStaleChip marks a pane whose grid is a cache-served MEMORY (the
+// wire-level stale bit, issue #256): a small amber chip at the bar's
+// right, beside the slot. Bar chrome only — staleness must never move or
+// restyle tiles; the room renders exactly as remembered, and this is the
+// one quiet sign it is a remembering.
+func (a *App) drawStaleChip(bx, top, bw float64) {
+	p := a.tree.FocusedPane()
+	if p == nil {
+		return
+	}
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok || !g.Meta.Stale {
+		return
+	}
+	const chipW, chipH = 52.0, 16.0
+	x := bx + bw - wsbar.SlotW - chipW - 8
+	y := top + (wsbar.RowH-chipH)/2
+	c := a.cctx
+	c.Set("fillStyle", "#8a6d2f")
+	c.Call("fillRect", x, y, chipW, chipH)
+	c.Set("fillStyle", "#f4e3b2")
+	c.Set("font", "10px system-ui, sans-serif")
+	c.Set("textAlign", "center")
+	c.Set("textBaseline", "middle")
+	c.Call("fillText", "offline", x+chipW/2, y+chipH/2)
+	c.Set("textAlign", "start")
 }
 
 // drawBoundaryCrumb paints a workspace-boundary crumb as the light-blue
