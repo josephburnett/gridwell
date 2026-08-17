@@ -918,9 +918,11 @@ func (a *App) fetchGrid(id string) {
 		resp, err := a.cl.GetGrid(context.Background(), id)
 		if err != nil {
 			a.gridLoadFailed[id] = true
+			a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
 			a.draw()
 			return
 		}
+		a.resolveErr("grid:" + id)
 		delete(a.gridLoadFailed, id)
 		a.c.PutGrid(resp.Grid, resp.Tiles)
 		a.draw()
