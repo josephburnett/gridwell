@@ -37,12 +37,16 @@ test('a text tile created in a descended grid is rendered, not just persisted', 
   expect(onServer, 'text tile persisted on the server').toBeTruthy();
 
   // Render truth: the focused pane actually draws it (the gap create-in-descent
-  // left open).
-  const after = await gw.focused();
-  expect(
-    after.tileIds,
-    'the created text tile is rendered by the pane, not silently dropped',
-  ).toContain(onServer!.id);
+  // left open). POLLED: the create's optimistic commit and the background
+  // fetchGrid land on their own schedule (the same gap workspace-create's
+  // baseline read had to poll across) — the bug this guards is a tile that
+  // NEVER appears, not one that appears a beat later.
+  await expect
+    .poll(async () => (await gw.focused()).tileIds, {
+      message: 'the created text tile is rendered by the pane, not silently dropped',
+      timeout: 10_000,
+    })
+    .toContain(onServer!.id);
 });
 
 // Regression guard for a specific owner report: "when I've cloned a tile … I

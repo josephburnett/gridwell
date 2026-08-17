@@ -20,8 +20,15 @@ test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
-  // Zoom in three steps: 1.1^3 ≈ 1.331, persisted on the tile.
-  for (let i = 0; i < 3; i++) await window.keyboard.press('Control+=');
+  // Zoom in three steps: 1.1^3 ≈ 1.331, persisted on the tile. Settle
+  // between presses — on a slow runner a rapid-fire chord can land while
+  // the previous step's redraw is still in flight and the middle press
+  // vanished (observed persisting exactly 1.1^2); the pin here is that
+  // the zoom PERSISTS as framing, not keyboard rapid-fire.
+  for (let i = 0; i < 3; i++) {
+    await window.keyboard.press('Control+=');
+    await gw.waitIdle();
+  }
   await expect
     .poll(async () => Number(tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)?.contentZoom ?? 0), {
       timeout: 10_000,
