@@ -972,6 +972,8 @@ func asConnectError(err error) error {
 			return connect.NewError(connect.CodeInvalidArgument, errors.New(st.Message()))
 		case gcodes.FailedPrecondition:
 			return connect.NewError(connect.CodeFailedPrecondition, errors.New(st.Message()))
+		case gcodes.Unavailable:
+			return connect.NewError(connect.CodeUnavailable, errors.New(st.Message()))
 		default:
 			return connect.NewError(connect.CodeInternal, errors.New(st.Message()))
 		}

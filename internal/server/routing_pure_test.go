@@ -234,7 +234,13 @@ func TestAsConnectError(t *testing.T) {
 		{status.Error(gcodes.NotFound, "x"), connect.CodeNotFound},
 		{status.Error(gcodes.InvalidArgument, "x"), connect.CodeInvalidArgument},
 		{status.Error(gcodes.FailedPrecondition, "x"), connect.CodeFailedPrecondition},
-		{status.Error(gcodes.Unavailable, "x"), connect.CodeInternal},
+		// Unavailable (e.g. a plugin's dial to its configured target failed)
+		// must stay Unavailable, not fall through to Internal: clientsync.Of
+		// classifies only CodeUnavailable/DeadlineExceeded/Canceled as
+		// OutcomeTransport ("the server never spoke, keep local state and
+		// retry"). Remapping it to Internal made a retryable connection
+		// failure (e.g. a bad ssh key path) look like a hard rejection.
+		{status.Error(gcodes.Unavailable, "x"), connect.CodeUnavailable},
 	}
 	for _, c := range grpcCases {
 		if got := connect.CodeOf(asConnectError(c.in)); got != c.want {
