@@ -118,6 +118,12 @@ type Grid struct {
 	// authoritatively at commit (the client's form is UX, never authority).
 	// Wire-only, never persisted.
 	CreateSchemas map[string]string `protobuf:"bytes,9,rep,name=create_schemas,json=createSchemas,proto3" json:"create_schemas,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// stale marks a response served from a mount's offline cache (issue
+	// #256): the mount is unreachable and this is the REMEMBERED answer,
+	// not the live one. Stamped only by the node-side mountcache on its
+	// serve-stale path; wire-only, never persisted — the same
+	// derived-fact shape as writable/serves_page.
+	Stale bool `protobuf:"varint,12,opt,name=stale,proto3" json:"stale,omitempty"`
 	// node_ns is the namespace chain of the NODE serving this grid, from
 	// the receiver's perspective: "" for a grid served by the node you are
 	// talking to; "<transit>/<conn>" (or deeper) through mounts — each
@@ -218,6 +224,13 @@ func (x *Grid) GetCreateSchemas() map[string]string {
 		return x.CreateSchemas
 	}
 	return nil
+}
+
+func (x *Grid) GetStale() bool {
+	if x != nil {
+		return x.Stale
+	}
+	return false
 }
 
 func (x *Grid) GetNodeNs() string {
@@ -3408,7 +3421,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xb8\x03\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xce\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3418,7 +3431,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tsource_id\x18\x05 \x01(\tR\bsourceId\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12K\n" +
-	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x12\x17\n" +
+	"\x0ecreate_schemas\x18\t \x03(\v2$.gridwell.v1.Grid.CreateSchemasEntryR\rcreateSchemas\x12\x14\n" +
+	"\x05stale\x18\f \x01(\bR\x05stale\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x129\n" +
 	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x1a@\n" +

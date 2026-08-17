@@ -24,9 +24,10 @@
 // grid's whole tile set); that read-through refresh is the resync, by
 // construction rather than by a sweep.
 //
-// Not cached (v1, deliberate): ServeContent bodies (unbounded fs content —
-// the /content/ door stays online-only for mounts until a pin/prefetch
-// gesture bounds it) and write responses (the next read refreshes).
+// Not cached (deliberate): write responses (the next read refreshes).
+// ServeContent bodies are cached BOUNDED (servecontent.go, issue #255);
+// whole-mount prefetch warms everything else on connect (prefetch.go,
+// issue #254).
 package mountcache
 
 import (
@@ -88,6 +89,18 @@ CREATE TABLE IF NOT EXISTS previews (
     jpeg       BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
 );
+-- The /content/ door's bounded body cache (issue #255). Added without a
+-- version bump: schemaDDL runs at every Open and the table is additive,
+-- which is exactly the liberty the disposable, non-frozen format buys.
+CREATE TABLE IF NOT EXISTS servecontent (
+    tile_id    TEXT NOT NULL,
+    subpath    TEXT NOT NULL,
+    status     INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    data       BLOB NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (tile_id, subpath)
+);
 `
 
 // contentChunkBytes mirrors the plugins' ReadContent chunking so a
@@ -101,10 +114,11 @@ const maxCachedContentBytes = 16 * 1024 * 1024
 
 // Client wraps a mount's gRPC client with the read-through cache. All
 // methods not overridden here pass through the embedded client untouched
-// (writes, shells, ServeContent, Probe, SetRootView).
+// (writes, shells, Probe, SetRootView).
 type Client struct {
 	pb.GridwellClient
 	db *sql.DB
+	pf prefetcher
 }
 
 // Open opens (or creates) the cache DB at dbPath and returns the wrapped
@@ -128,7 +142,11 @@ func Open(upstream pb.GridwellClient, dbPath string) (*Client, func(), error) {
 		return nil, nil, fmt.Errorf("mountcache %s: %w", dbPath, err)
 	}
 	c := &Client{GridwellClient: upstream, db: db}
-	return c, func() { _ = db.Close() }, nil
+	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
+	return c, func() {
+		c.pf.cancel()
+		_ = db.Close()
+	}, nil
 }
 
 // unreachable reports the transport-class failures the cache may answer
@@ -223,6 +241,13 @@ func (c *Client) GetGrid(ctx context.Context, in *pb.GetGridRequest, opts ...grp
 	cached, hit := c.loadGrid(ctx, in.GridId)
 	if !hit {
 		return nil, err
+	}
+	// The stale bit (issue #256): this is the REMEMBERED answer, and the
+	// wire says so — the one place the fact is known is the one place it
+	// is stamped. Wire-only, never stored (a later live read re-stores
+	// the grid without it).
+	if cached.GetGrid() != nil {
+		cached.Grid.Stale = true
 	}
 	return cached, nil
 }
@@ -414,6 +439,11 @@ func (c *Client) Subscribe(ctx context.Context, in *pb.SubscribeRequest, opts ..
 	if err != nil {
 		return nil, err
 	}
+	// Every successful (re)subscription means the mount is up NOW — the
+	// moment to warm the whole mount (issue #254): the initial connect
+	// and each health-up reconnect land here, so the walk doubles as the
+	// resync for grids nobody re-opened while the mount was dark.
+	c.kickPrefetch()
 	return &teeEventStream{ServerStreamingClient: stream, c: c, ctx: ctx}, nil
 }
 

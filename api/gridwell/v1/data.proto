@@ -56,6 +56,12 @@ message Grid {
   // authoritatively at commit (the client's form is UX, never authority).
   // Wire-only, never persisted.
   map<string, string> create_schemas = 9;
+  // stale marks a response served from a mount's offline cache (issue
+  // #256): the mount is unreachable and this is the REMEMBERED answer,
+  // not the live one. Stamped only by the node-side mountcache on its
+  // serve-stale path; wire-only, never persisted — the same
+  // derived-fact shape as writable/serves_page.
+  bool stale = 12;
   // node_ns is the namespace chain of the NODE serving this grid, from
   // the receiver's perspective: "" for a grid served by the node you are
   // talking to; "<transit>/<conn>" (or deeper) through mounts — each
