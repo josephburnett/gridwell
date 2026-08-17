@@ -80,8 +80,8 @@ func ParseParams(data []byte) (*Params, error) {
 func (p *Params) DialConfig(home string) (dial.Config, error) {
 	c := dial.Config{
 		User:       p.User,
-		KeyPath:    p.Key,
-		KnownHosts: p.KnownHosts,
+		KeyPath:    expandHome(p.Key, home),
+		KnownHosts: expandHome(p.KnownHosts, home),
 		Addr:       p.Addr,
 	}
 	if p.Host == "" {
@@ -114,6 +114,25 @@ func (p *Params) DialConfig(home string) (dial.Config, error) {
 		c.KnownHosts = filepath.Join(home, ".ssh", "known_hosts")
 	}
 	return c, nil
+}
+
+// expandHome expands a leading "~" or "~/" in a user-supplied path against
+// home, matching the schema's stated "~/.ssh/id_ed25519"-style UX — the
+// auto-defaulted path is already built from home directly (DialConfig
+// above); this is the one place a *typed* path gets the same treatment,
+// rather than being passed to os.ReadFile verbatim. Leaves p unchanged if it
+// has no "~" prefix, or if home is unknown.
+func expandHome(p, home string) string {
+	if home == "" {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	if strings.HasPrefix(p, "~/") {
+		return filepath.Join(home, p[2:])
+	}
+	return p
 }
 
 // firstExisting returns the first path that exists, or the first path (whose

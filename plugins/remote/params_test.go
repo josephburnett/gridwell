@@ -84,6 +84,63 @@ func TestDialConfigDefaults(t *testing.T) {
 	}
 }
 
+// TestDialConfigExpandsUserSuppliedTilde reproduces the bug where a
+// user-typed "~/.ssh/foo_key" (matching the schema's own placeholder text,
+// params.go's CreateSchemaWell) was passed to os.ReadFile verbatim instead
+// of being resolved against home — only the auto-defaulted path ever got
+// that treatment. A fully-qualified path worked; "~/..." silently didn't.
+func TestDialConfigExpandsUserSuppliedTilde(t *testing.T) {
+	home := t.TempDir()
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(sshDir, "foo_key")
+	if err := os.WriteFile(keyPath, []byte("k"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := ParseParams([]byte(`{"host":"rtb","user":"joe","key":"~/.ssh/foo_key","known_hosts":"~/.ssh/known_hosts"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := p.DialConfig(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.KeyPath != keyPath {
+		t.Errorf("key path = %q, want tilde expanded to %q", cfg.KeyPath, keyPath)
+	}
+	if want := filepath.Join(sshDir, "known_hosts"); cfg.KnownHosts != want {
+		t.Errorf("known_hosts path = %q, want tilde expanded to %q", cfg.KnownHosts, want)
+	}
+
+	// Bare "~" expands to home itself.
+	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","key":"~"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = p.DialConfig(home); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.KeyPath != home {
+		t.Errorf(`bare "~" key path = %q, want home %q`, cfg.KeyPath, home)
+	}
+
+	// No home to expand against: pass the literal string through rather
+	// than guess, so the resulting open failure names it exactly.
+	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","key":"~/.ssh/foo_key","known_hosts":"/kh"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = p.DialConfig(""); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.KeyPath != "~/.ssh/foo_key" {
+		t.Errorf("no home: key path = %q, want the literal string preserved", cfg.KeyPath)
+	}
+}
+
 func TestAutoLabel(t *testing.T) {
 	if l := autoLabel(`{"host":"rtb","user":"joe"}`); l != "joe@rtb" {
 		t.Errorf("autoLabel = %q, want joe@rtb", l)
