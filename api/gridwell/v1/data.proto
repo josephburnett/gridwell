@@ -224,6 +224,14 @@ message Tile {
   // prompts for the entry's params on first descent when the tile has
   // no content yet.
   string menu_entry = 34;
+
+  // status_detail is the owning plugin's CURRENT TROUBLE with this tile,
+  // for the client to display verbatim — e.g. an ssh connection well whose
+  // last dial failed carries that error until the connection comes up
+  // (errors must surface; the picker's "connecting…" must not hide the one
+  // message that names the problem). Wire-only, derived — never a stored
+  // column, never set by clients.
+  string status_detail = 35;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

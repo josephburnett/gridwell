@@ -44,6 +44,7 @@ type Entry struct {
 	Name        string // alt_text — the connection's name
 	ParamsJSON  string // "" = never configured
 	ChildGridID string // "" until the chain is learned
+	Detail      string // the plugin's last failure (Tile.StatusDetail); "" = none
 	ViewX       int64
 	ViewY       int64
 	ViewZoom    float64
@@ -58,6 +59,16 @@ func (e Entry) Status() Status {
 		return Pending
 	}
 	return Ready
+}
+
+// PendingLabel is a Pending row's status suffix. It carries the plugin's
+// recorded failure when there is one — the row is exactly where someone
+// stares when a connection won't come up, so the reason lives there too.
+func (e Entry) PendingLabel() string {
+	if e.Detail != "" {
+		return "  (connecting… — " + e.Detail + ")"
+	}
+	return "  (connecting…)"
 }
 
 // BuildEntries turns an instance grid's tiles into the picker's ordered
@@ -76,6 +87,7 @@ func BuildEntries(tiles []rpc.Tile, params func(tileID string) string) []Entry {
 			Name:        t.AltText,
 			ParamsJSON:  params(t.ID),
 			ChildGridID: t.ChildGridID,
+			Detail:      t.StatusDetail,
 			ViewX:       t.ViewX,
 			ViewY:       t.ViewY,
 			ViewZoom:    t.ViewZoom,

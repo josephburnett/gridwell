@@ -365,6 +365,11 @@ type Tile struct {
 	// tools by it; the client prompts for the entry's params on first
 	// descent while the tile has no content.
 	MenuEntry string `json:"menu_entry,omitempty"`
+	// StatusDetail is the owning plugin's current trouble with this tile,
+	// displayed verbatim (e.g. an ssh connection well's last dial error
+	// while it has no child yet). Wire-only, plugin-derived — never a
+	// stored column, never set by clients.
+	StatusDetail string `json:"status_detail,omitempty"`
 }
 
 // WebContent reports whether this tile PRESENTS as web content: a url tile

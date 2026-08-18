@@ -50,7 +50,9 @@ func TestProtoMatchesDDL(t *testing.T) {
 			// menu_entry marks a plugin-minted tool tile (#258); the OWNING
 			// plugin persists it in its own DB (fs does) — the local store
 			// mints no entry tiles today, so for it the field is wire-only.
-			protoOnly: []string{"reference", "serves_page", "text_presentation", "menu_entry"},
+			// status_detail is the owning plugin's transient trouble (the
+			// ssh plugin's last dial error) — wire-only, never a column.
+			protoOnly: []string{"reference", "serves_page", "text_presentation", "menu_entry", "status_detail"},
 		},
 	}
 	for _, c := range cases {

@@ -41,6 +41,24 @@ func TestEntryStatus(t *testing.T) {
 	}
 }
 
+// The plugin's recorded failure (Tile.StatusDetail) must reach the row —
+// the "(connecting…)" label is where someone stares when a connection
+// won't come up, so the reason rides it verbatim.
+func TestPendingLabelCarriesTheDetail(t *testing.T) {
+	tiles := []rpc.Tile{{ID: "s/1", Kind: rpc.KindWell,
+		StatusDetail: `read key "~/.ssh/k": no such file or directory`}}
+	got := BuildEntries(tiles, func(string) string { return `{"host":"h"}` })
+	if len(got) != 1 || got[0].Detail != tiles[0].StatusDetail {
+		t.Fatalf("Detail not plumbed: %+v", got)
+	}
+	if want := `  (connecting… — read key "~/.ssh/k": no such file or directory)`; got[0].PendingLabel() != want {
+		t.Errorf("PendingLabel = %q, want %q", got[0].PendingLabel(), want)
+	}
+	if (Entry{}).PendingLabel() != "  (connecting…)" {
+		t.Errorf("no detail: PendingLabel = %q", (Entry{}).PendingLabel())
+	}
+}
+
 func TestBuildEntries_WellsOnlySortedNamedFirst(t *testing.T) {
 	tiles := []rpc.Tile{
 		{ID: "s/3", Kind: rpc.KindWell, AltText: ""},

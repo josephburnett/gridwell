@@ -90,6 +90,7 @@ func TileToProto(t *Tile) *pb.Tile {
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
 		MenuEntry:        t.MenuEntry,
+		StatusDetail:     t.StatusDetail,
 
 		ConfigurePluginId: t.ConfigurePluginID,
 	}
@@ -131,6 +132,7 @@ func TileFromProto(t *pb.Tile) *Tile {
 		ServesPage:       t.ServesPage,
 		TextPresentation: t.TextPresentation,
 		MenuEntry:        t.MenuEntry,
+		StatusDetail:     t.StatusDetail,
 
 		ConfigurePluginID: t.ConfigurePluginId,
 	}

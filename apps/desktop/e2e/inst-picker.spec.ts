@@ -64,6 +64,11 @@ test('drop → picker: create, list as connecting, dedup by name, tombstone fore
     })
     .toBe(1);
 
+  // The WAIT says WHY (errors must surface): the plugin's recorded dial
+  // failure — here the unreadable key — reaches the picker while it is
+  // still waiting, not a bare "connecting…" shrug.
+  await expect(window.locator('#gw-pick-err')).toContainText('read key', { timeout: 10_000 });
+
   // Dismiss mid-wait. Things stay as you left them: the host well is still
   // unconfigured, byte-identical.
   await window.keyboard.press('Escape');
@@ -76,6 +81,9 @@ test('drop → picker: create, list as connecting, dedup by name, tombstone fore
   await window.locator('#gw-inst-picker #gw-pick-row-0').waitFor({ timeout: 10_000 });
   await expect(window.locator('#gw-pick-row-0')).toContainText('gpu-box');
   await expect(window.locator('#gw-pick-row-0')).toContainText('connecting');
+  // The row carries the reason too — it's where you stare when a
+  // connection won't come up.
+  await expect(window.locator('#gw-pick-row-0')).toContainText('read key');
 
   // Identical details are a DUPLICATE of gpu-box — refused by name, never a
   // twin (one param-set, one minted segment).

@@ -46,6 +46,12 @@ type Server struct {
 
 	mu   sync.Mutex
 	live map[string]*liveConn // by ns
+	// rootErr is a connection's LAST dial/root-fetch failure, by ns —
+	// the one fact behind the picker's "connecting…" row (surfaced as
+	// Tile.status_detail while the well has no child). Written only by
+	// ensureLive and the root-fetch goroutine, cleared on success and on
+	// params change (dropLive); never persisted.
+	rootErr map[string]string
 
 	hub *eventHub
 }
@@ -69,7 +75,8 @@ type liveConn struct {
 // New builds the plugin server. home is the host's home directory ("" =
 // no ~ defaults; params must carry explicit paths).
 func New(db *DB, dial Dialer, home string) *Server {
-	return &Server{db: db, dial: dial, home: home, live: map[string]*liveConn{}, hub: newEventHub()}
+	return &Server{db: db, dial: dial, home: home, live: map[string]*liveConn{},
+		rootErr: map[string]string{}, hub: newEventHub()}
 }
 
 // Close tears down every live connection.
@@ -187,16 +194,22 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	}
 	p, err := ParseParams([]byte(c.Params))
 	if err != nil {
+		s.rootErr[c.NS] = err.Error()
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	cfg, err := p.DialConfig(s.home)
 	if err != nil {
+		s.rootErr[c.NS] = err.Error()
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	client, closer, err := s.dial(cfg)
 	if err != nil {
+		// Record the BARE dial error (the ns wrapper below is routing
+		// noise to the person reading the picker row).
+		s.rootErr[c.NS] = err.Error()
 		return nil, status.Errorf(codes.Unavailable, "sshhost: connection %q: %v", c.NS, err)
 	}
+	delete(s.rootErr, c.NS) // transport constructed; the learn may still fail
 	ctx, cancel := context.WithCancel(context.Background())
 	lc := &liveConn{client: client, closer: closer, cancel: cancel}
 	s.live[c.NS] = lc
@@ -211,11 +224,35 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 func (s *Server) dropLive(ns string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	delete(s.rootErr, ns) // stale trouble must not outlive the params that caused it
 	if lc, ok := s.live[ns]; ok {
 		lc.cancel()
 		lc.closer()
 		delete(s.live, ns)
 	}
+}
+
+// setRootErr records ("" clears) a connection's last dial/root-fetch failure.
+func (s *Server) setRootErr(ns, detail string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if detail == "" {
+		delete(s.rootErr, ns)
+		return
+	}
+	s.rootErr[ns] = detail
+}
+
+// stampStatus writes the connection's recorded failure onto its well tile —
+// only while the well is CHILDLESS: once the chain is learned, a transient
+// outage is the mount-health story, not a picker-row status.
+func (s *Server) stampStatus(c *Conn, t *gridwellv1.Tile) {
+	if c.RemoteRoot != "" {
+		return
+	}
+	s.mu.Lock()
+	t.StatusDetail = s.rootErr[c.NS]
+	s.mu.Unlock()
 }
 
 // kickRootFetch learns the remote's root grid id (its node grid) from its
@@ -236,7 +273,9 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
-		return // params problem; surfaces on the direct paths
+		// Params/dial problem — ensureLive just recorded it (rootErr), so
+		// the well's status_detail says why; direct paths also error.
+		return
 	}
 	s.mu.Lock()
 	if lc.rootFetching || (refreshNodeGridRoot && lc.homeChecked) {
@@ -259,8 +298,15 @@ func (s *Server) kickRootFetch(c *Conn) {
 		defer cancel()
 		root, err := s.remoteHome(ctx, lc)
 		if err != nil || root == "" {
-			return // remote unreachable; retried on the next root-grid read
+			// Remote unreachable; retried on the next root-grid read. The
+			// failure is recorded so the well's status_detail can say WHY
+			// it stays childless (status.Convert strips the code prefix).
+			if err != nil {
+				s.setRootErr(ns, status.Convert(err).Message())
+			}
+			return
 		}
+		s.setRootErr(ns, "")
 		s.mu.Lock()
 		if l, ok := s.live[ns]; ok {
 			l.homeChecked = true
@@ -464,11 +510,15 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 	}
 	tiles := make([]*gridwellv1.Tile, 0, len(conns))
 	for _, c := range conns {
-		tiles = append(tiles, tileFromConn(c))
 		// A connection that has params but no learned root retries the learn
 		// on every list — the read is what shows the child, so the read is
-		// what re-kicks a remote that was down.
+		// what re-kicks a remote that was down. Kick BEFORE rendering the
+		// row: a config-shaped failure records synchronously, so the same
+		// read that retries also says why it keeps failing.
 		s.kickRootFetch(c)
+		t := tileFromConn(c)
+		s.stampStatus(c, t)
+		tiles = append(tiles, t)
 	}
 	return &gridwellv1.GetGridResponse{
 		Grid: &gridwellv1.Grid{
@@ -519,7 +569,11 @@ func (s *Server) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return &gridwellv1.TileResponse{Tile: tileFromConn(c)}, nil
+	t := tileFromConn(c)
+	// The picker's create flow polls THIS read while the row says
+	// "connecting…" — it must carry the recorded failure, not hide it.
+	s.stampStatus(c, t)
+	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
 func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {

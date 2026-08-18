@@ -460,7 +460,14 @@ type Tile struct {
 	// that declare entries persist it; others may ignore it. The client
 	// prompts for the entry's params on first descent when the tile has
 	// no content yet.
-	MenuEntry     string `protobuf:"bytes,34,opt,name=menu_entry,json=menuEntry,proto3" json:"menu_entry,omitempty"`
+	MenuEntry string `protobuf:"bytes,34,opt,name=menu_entry,json=menuEntry,proto3" json:"menu_entry,omitempty"`
+	// status_detail is the owning plugin's CURRENT TROUBLE with this tile,
+	// for the client to display verbatim — e.g. an ssh connection well whose
+	// last dial failed carries that error until the connection comes up
+	// (errors must surface; the picker's "connecting…" must not hide the one
+	// message that names the problem). Wire-only, derived — never a stored
+	// column, never set by clients.
+	StatusDetail  string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -708,6 +715,13 @@ func (x *Tile) GetTextPresentation() string {
 func (x *Tile) GetMenuEntry() string {
 	if x != nil {
 		return x.MenuEntry
+	}
+	return ""
+}
+
+func (x *Tile) GetStatusDetail() string {
+	if x != nil {
+		return x.StatusDetail
 	}
 	return ""
 }
@@ -3446,7 +3460,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05color\x18\x04 \x01(\tR\x05color\x12\x12\n" +
 	"\x04kind\x18\x05 \x01(\tR\x04kind\x12!\n" +
 	"\fparam_schema\x18\x06 \x01(\tR\vparamSchema\x12\x17\n" +
-	"\agrid_id\x18\a \x01(\tR\x06gridId\"\xd9\x06\n" +
+	"\agrid_id\x18\a \x01(\tR\x06gridId\"\xfe\x06\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x18\n" +
@@ -3484,7 +3498,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12\x1d\n" +
 	"\n" +
-	"menu_entry\x18\" \x01(\tR\tmenuEntry\"\r\n" +
+	"menu_entry\x18\" \x01(\tR\tmenuEntry\x12#\n" +
+	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\"\r\n" +
 	"\vInfoRequest\"\x8a\x05\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +

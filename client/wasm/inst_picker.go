@@ -357,7 +357,7 @@ func (a *App) instanceRow(pl rpc.PluginInfo, idx int, e instpick.Entry,
 	sum := instpick.Summary(form, e.ParamsJSON)
 	switch e.Status() {
 	case instpick.Pending:
-		sum = sum + "  (connecting…)"
+		sum = sum + e.PendingLabel()
 	case instpick.Inert:
 		sum = "unconfigured"
 	}
@@ -628,6 +628,7 @@ func (a *App) createInstance(pl rpc.PluginInfo, name string, params []byte,
 	}
 	errEl.Set("textContent", "connecting…")
 	deadline := time.Now().Add(pickReadyWait)
+	detail := ""
 	for time.Now().Before(deadline) {
 		cur, gerr := a.cl.GetTile(ctx, tile.ID)
 		if gerr == nil && cur.ChildGridID != "" {
@@ -638,9 +639,19 @@ func (a *App) createInstance(pl rpc.PluginInfo, name string, params []byte,
 			})
 			return
 		}
+		// The plugin records WHY the connection isn't up (Tile.StatusDetail);
+		// show it the moment it exists — the wait must never hide the reason.
+		if gerr == nil && cur.StatusDetail != "" && cur.StatusDetail != detail {
+			detail = cur.StatusDetail
+			errEl.Set("textContent", "connecting… — "+detail)
+		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	// Created but not reachable: an honest, durable state — the entry is in
 	// the list as (connecting…) and a later open can pick it.
-	errEl.Set("textContent", "created, but the remote hasn't answered — it stays listed as connecting")
+	msg := "created, but the remote hasn't answered — it stays listed as connecting"
+	if detail != "" {
+		msg = "created, but the remote hasn't answered: " + detail + " — it stays listed as connecting"
+	}
+	errEl.Set("textContent", msg)
 }

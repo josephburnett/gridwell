@@ -13,11 +13,14 @@ package server_test
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"errors"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/josephburnett/gridwell/internal/plugin"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -40,6 +43,23 @@ type chainHarness struct {
 	sshClient gridwellv1.GridwellClient // the sshhost plugin, in process (plugin-seam asserts)
 	dialed    []dial.Config             // every config the fake dialer saw
 	rootBare  string                    // the remote localdb's bare root grid id
+
+	mu      sync.Mutex
+	dialErr error // injected dial-construction failure (nil = dials succeed)
+}
+
+// setDialErr makes every subsequent dial CONSTRUCTION fail (nil heals it) —
+// the injectable transport fault the status_detail pins need.
+func (h *chainHarness) setDialErr(err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.dialErr = err
+}
+
+func (h *chainHarness) takeDialErr() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.dialErr
 }
 
 func newChainHarness(t *testing.T) *chainHarness {
@@ -85,6 +105,9 @@ func newChainHarness(t *testing.T) *chainHarness {
 	t.Cleanup(func() { _ = db.Close() })
 	srv := remote.New(db, func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error) {
 		h.dialed = append(h.dialed, cfg)
+		if err := h.takeDialErr(); err != nil {
+			return nil, nil, err
+		}
 		return remoteExport, func() {}, nil
 	}, "")
 	t.Cleanup(srv.Close)
@@ -356,6 +379,72 @@ func TestUnreachableRemoteIsNotGone(t *testing.T) {
 	}
 	if pr.Presence != gridwellv1.ProbeResponse_PRESENCE_PRESENT {
 		t.Errorf("a live connection well must probe PRESENT, got %v", pr.Presence)
+	}
+}
+
+// TestDialFailureSurfacesOnTheWell pins errors-must-surface for the picker's
+// exact read path: while a committed connection cannot come up, the well the
+// create-flow polls (GetTile) and the row the list shows (GetGrid) both carry
+// the plugin's recorded failure as Tile.StatusDetail — through the plugin,
+// the local server's transit qualification, and the Connect JSON — and the
+// moment the transport heals, the child appears and the trouble clears. This
+// was the "created, but the remote hasn't answered" dead end: the one message
+// naming the problem died in kickRootFetch while the picker showed a shrug.
+func TestDialFailureSurfacesOnTheWell(t *testing.T) {
+	ctx := context.Background()
+	h := newChainHarness(t)
+	h.setDialErr(errors.New(`read key "~/.ssh/rtb.local": no such file or directory`))
+
+	well, err := h.localCl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: "sshc/0", X: 0, Y: 0, W: 1, H: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The commit succeeds — the entry is durable; the failure is a STATUS,
+	// never a refusal of valid params.
+	if _, err := h.localCl.WriteContent(ctx, well.ID, well.Version, []byte(connParams)); err != nil {
+		t.Fatalf("params commit must survive a dead transport: %v", err)
+	}
+
+	// The polled read carries the reason (recorded synchronously by the
+	// commit's own kick, so the first poll already sees it).
+	cur, err := h.localCl.GetTile(ctx, well.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cur.StatusDetail, "read key") {
+		t.Fatalf("polled well StatusDetail = %q, want the dial error", cur.StatusDetail)
+	}
+	if cur.ChildGridID != "" {
+		t.Fatalf("a failing connection must stay childless, got %q", cur.ChildGridID)
+	}
+	// The list row says the same (the picker's entries read).
+	g, err := h.localCl.GetGrid(ctx, "sshc/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Tiles) != 1 || !strings.Contains(g.Tiles[0].StatusDetail, "read key") {
+		t.Fatalf("list row must carry the failure, got %+v", g.Tiles)
+	}
+
+	// Heal the transport (same params): the next list read re-kicks the
+	// learn; the child appears and the stale trouble clears with it.
+	h.setDialErr(nil)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		g, err := h.localCl.GetGrid(ctx, "sshc/0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(g.Tiles) == 1 && g.Tiles[0].ChildGridID != "" {
+			if g.Tiles[0].StatusDetail != "" {
+				t.Fatalf("a connected well must not keep old trouble: %q", g.Tiles[0].StatusDetail)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("connection never healed after the dial error cleared")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
