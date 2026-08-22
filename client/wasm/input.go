@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/caps"
+	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
@@ -1196,11 +1197,8 @@ func (a *App) portalWellForFrame(p *pane.Pane, f pane.Frame) *rpc.Tile {
 		a.fetchGrid(parentGridID)
 		return nil
 	}
-	for _, t := range g.Tiles {
-		if t.ChildGridID == p.Anchor && rpc.IsWellKind(t.Kind) {
-			w := t
-			return &w
-		}
+	if w, ok := door.WellInto(p.Anchor, g.Tiles); ok {
+		return &w
 	}
 	return nil
 }

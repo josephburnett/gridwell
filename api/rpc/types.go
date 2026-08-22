@@ -212,6 +212,26 @@ type MenuEntry struct {
 	GridID      string `json:"grid_id,omitempty"`
 }
 
+// EntryPlugin shapes a plugin ROOT MenuEntry as a PSEUDO-PLUGIN (#258):
+// the entry's grid as the root, its label/glyph as the face, no instance
+// grid — so every downstream flow (swatch, ghost, click-descend,
+// drag-link, the bar's door identity) is the battle-tested plugin path.
+// The handshake root view belongs to the MAIN root grid, so it is
+// zeroed: an entry grid opens at the default framing.
+func EntryPlugin(pl PluginInfo, e MenuEntry) PluginInfo {
+	pseudo := pl
+	pseudo.RootGridID = e.GridID
+	pseudo.InstanceGridID = ""
+	pseudo.RootViewCx, pseudo.RootViewCy, pseudo.RootViewZoom = 0, 0, 0
+	if e.Label != "" {
+		pseudo.Label = e.Label
+	}
+	if e.Glyph != "" {
+		pseudo.Glyph = e.Glyph
+	}
+	return pseudo
+}
+
 // The plugin glyph vocabulary (InfoResponse.glyph / PluginInfo.Glyph):
 // declared by the plugin, rendered by the client, with anything unknown
 // falling back to the generic globe — a third-party plugin degrades

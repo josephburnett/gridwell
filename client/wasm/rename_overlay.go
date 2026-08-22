@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pending"
@@ -52,6 +53,14 @@ func (a *App) renameTarget(p *pane.Pane) (rpc.Tile, bool) {
 		return t, true
 	}
 	if len(p.Path) == 0 {
+		// A portal level (a connection, a linked world): the door tile —
+		// the well descended through, or the instance well naming the same
+		// place — is a real row, and renaming the room names its door,
+		// exactly like the containing-well arm below (#263). Declarations
+		// (plugin roots, menu entries) stay unrenamable.
+		if t, kind := a.doorFind(p); kind == door.Well {
+			return t, true
+		}
 		return rpc.Tile{}, false
 	}
 	parentGridID := a.gridIDForPathFrom(p.Anchor, p.Path[:len(p.Path)-1])
@@ -102,14 +111,50 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 	if a.isNodeGridPane(p) {
 		return "home", false, true
 	}
-	// A plugin root (or an uncached parent): the plugin's config-owned label.
+	// A portal level: the DOOR's identity (#263) — the entry's or plugin's
+	// declared label, read-only. (A renamable door was already answered by
+	// the renameTarget arm above.)
+	if len(p.Path) == 0 {
+		if t, kind := a.doorFind(p); kind != door.None {
+			if t.AltText == "" {
+				return "unnamed", false, true
+			}
+			return t.AltText, false, true
+		}
+	}
+	// An uncached parent: the plugin's config-owned label.
 	want := uuidOf(a.gridIDForPane(p))
-	for _, pl := range a.plugins {
+	for _, pl := range a.allPlugins() {
 		if pl.UUID == want && pl.Label != "" {
 			return pl.Label, false, true
 		}
 	}
 	return "unnamed", false, true
+}
+
+// doorFind resolves the tile the focused pane's current level was entered
+// through (the DOOR — client/door), assembling the inputs from the caches:
+// the level below's grid when there is one, the plugin declarations, and
+// cached instance grids (kicking fetches on misses so the answer converges).
+func (a *App) doorFind(p *pane.Pane) (rpc.Tile, door.Kind) {
+	var parent map[string]rpc.Tile
+	if len(p.Up) > 0 {
+		f := p.Up[len(p.Up)-1]
+		if gid := a.gridIDForPathFrom(f.Anchor, f.Path); gid != "" {
+			if g, ok := a.c.Grid(gid); ok {
+				parent = g.Tiles
+			} else {
+				a.fetchGrid(gid)
+			}
+		}
+	}
+	return door.Find(p.Anchor, parent, a.allPlugins(), func(gid string) map[string]rpc.Tile {
+		if g, ok := a.c.Grid(gid); ok {
+			return g.Tiles
+		}
+		a.fetchGrid(gid)
+		return nil
+	})
 }
 
 // togglePaneZoom zooms the focused pane to the full layout, or back —

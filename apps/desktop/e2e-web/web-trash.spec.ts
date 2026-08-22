@@ -31,6 +31,15 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   await gw.clickPluginSwatch('trash');
   const troot = await gw.focused();
 
+  // The bar knows the DOOR you came through (#263/#264): the title is the
+  // entry's declared label (config-owned, not renamable), and the level's
+  // crumb wears the entry's declared glyph — not a generic grid face.
+  await expect.poll(async () => (await gw.barName()).label).toBe('trash');
+  expect((await gw.barName()).editable, 'a declared entry is not renamable').toBe(false);
+  const bar = await gw.bar();
+  const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
+  expect(rootCrumb?.glyph, 'the crumb wears the trash glyph').toBe('trash');
+
   // One dated month well; the deleted tile parked inside, SAME id.
   const tg = await gw.getGrid(troot.gridID);
   const wells = (tg.tiles ?? []).filter((t) => t.kind === 'well');

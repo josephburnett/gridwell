@@ -182,6 +182,26 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 
   // ── Descend: I AM THERE. The menu is the far node's. ──
   await gw.descendCell(cx, cy);
+
+  // The bar knows the DOOR (#263): the title is the link well's own name —
+  // never the plugin's config label — and renaming here renames that well
+  // (rename-where-you-stand). The level's crumb wears the mount's glyph
+  // (the globe, ""), not a generic grid face (#264).
+  await expect.poll(async () => (await gw.barName()).label).toBe('far');
+  expect((await gw.barName()).editable, 'the door is a real row — renamable').toBe(true);
+  const bar = await gw.bar();
+  const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
+  expect(rootCrumb?.glyph, 'the crumb wears the mount door face, not a grid').toBe('');
+  await gw.clickBarName('right');
+  const rin = window.locator('#gw-rename-input');
+  await expect(rin).toBeVisible();
+  await rin.fill('my far place');
+  await rin.press('Enter');
+  await expect
+    .poll(async () => String(tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)?.altText ?? ''))
+    .toBe('my far place');
+  await expect.poll(async () => (await gw.barName()).label).toBe('my far place');
+
   await gw.openPalette();
   await expect
     .poll(

@@ -156,6 +156,26 @@ export class GridwellDriver {
   // barName returns the bottom bar's centered current-pane TITLE (issue
   // #213, 2026-07-30 tweak): the focused pane's name, with the bar band's
   // geometry.
+  // bar returns the raw bar hook: the band geometry plus every segment's
+  // rect and identity (chain crumbs carry anchor/tileID and, for root
+  // crumbs, the glyph the crumb renders — the #264 pin).
+  async bar(): Promise<{
+    top: number;
+    height: number;
+    segments: Array<{
+      kind: string;
+      x: number;
+      w: number;
+      index: number;
+      level: number;
+      anchor?: string;
+      tileID?: string;
+      glyph?: string;
+    }>;
+  }> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.bar());
+  }
+
   async barName(): Promise<{
     x: number;
     w: number;

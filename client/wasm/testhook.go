@@ -745,6 +745,12 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			e["anchor"] = nc.crumb.Anchor
 			e["tileID"] = nc.crumb.TileID
 			e["text"] = nc.crumb.Text
+			if nc.crumb.Anchor != "" {
+				// The root crumb's face — the exact selector drawChainCrumb
+				// renders ("" = the globe), so a spec can pin crumb identity
+				// (#264) without reading pixels.
+				e["glyph"] = a.pluginGlyph(nc.crumb.Anchor)
+			}
 		}
 		out = append(out, e)
 	}

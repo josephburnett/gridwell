@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -69,13 +70,20 @@ func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 }
 
 // pluginGlyph returns the identity glyph for the plugin owning the given
-// qualified grid id, from DECLARATIONS only: the cached grid's own
-// source_kind when available (a wire enum riding ON the grid — it answers
-// for remote grids a local plugin-list lookup cannot), else the plugin's
-// declared glyph from the handshake, else "" (the globe). A cached grid
-// with no source_kind is owned content — the well glyph. No kind strings
+// qualified grid id, from DECLARATIONS only: a root MenuEntry naming the
+// grid wins (the trash grid is an ordinary local grid — only its entry
+// knows its face, #264), then the cached grid's own source_kind (a wire
+// enum riding ON the grid — it answers for remote grids a local
+// plugin-list lookup cannot), then, for content served by ANOTHER node
+// (node_ns set), the mount door's declared glyph — the same face the
+// tile you descended through wore. Else the plugin's declared glyph from
+// the handshake, else "" (the globe). A cached LOCAL grid with no
+// source_kind is owned content — the well glyph. No kind strings
 // anywhere (charter, 2026-08-15).
 func (a *App) pluginGlyph(gridID string) string {
+	if g := door.EntryGlyph(gridID, a.allPlugins()); g != "" {
+		return g
+	}
 	if g, ok := a.c.Grid(gridID); ok {
 		switch g.Meta.SourceKind {
 		case rpc.GridSourceFS:
@@ -85,6 +93,12 @@ func (a *App) pluginGlyph(gridID string) string {
 		case rpc.GridSourceNode:
 			return "" // a node grid (a mount's landing page): generic globe
 		default:
+			if g.Meta.NodeNS != "" {
+				if pl, ok := a.pluginByUUID(uuidOf(g.Meta.NodeNS)); ok {
+					return pl.Glyph
+				}
+				return "" // an unknown mount: the globe, like its swatch
+			}
 			return rpc.GlyphWell
 		}
 	}
@@ -92,4 +106,15 @@ func (a *App) pluginGlyph(gridID string) string {
 		return pl.Glyph
 	}
 	return ""
+}
+
+// allPlugins is every PluginInfo the client knows — the boot handshake's
+// list plus each fetched remote menu context — for declaration scans
+// (door.Find, door.EntryGlyph) that must see remote declarations too.
+func (a *App) allPlugins() []rpc.PluginInfo {
+	out := a.plugins
+	for _, ctx := range a.menuCtxs {
+		out = append(out[:len(out):len(out)], ctx.plugins...)
+	}
+	return out
 }
