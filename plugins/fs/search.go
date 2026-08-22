@@ -156,8 +156,9 @@ func (p *Plugin) commitSearch(tileID int64, data []byte) (*gridwellv1.TileRespon
 		return nil, err
 	}
 	occupied := map[[2]int64]bool{}
+	var cur griddb.Cursor
 	for _, m := range matches {
-		x, y := griddb.NextEmptyCell(occupied, autoGridWidth)
+		x, y := griddb.NextEmptyCell(occupied, autoGridWidth, &cur)
 		griddb.OccupyRect(occupied, x, y, 1, 1)
 		// A result row remembers the TARGET PATH; the read side
 		// synthesizes the link (dir → shared child grid; file → leaf

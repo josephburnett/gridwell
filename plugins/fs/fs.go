@@ -682,7 +682,8 @@ func (p *Plugin) reconcileTiles(gridID int64, dirPath string, entries []fssource
 		// NOT free — seeding only origins dropped new files inside it.
 		griddb.OccupyRect(occupied, e.x, e.y, e.w, e.h)
 	}
-	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth) }
+	var cur griddb.Cursor
+	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth, &cur) }
 
 	// Upsert entries.
 	presentNames := map[string]bool{}

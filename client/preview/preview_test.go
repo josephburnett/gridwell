@@ -91,6 +91,34 @@ func TestGetEmptyReturnsNotOK(t *testing.T) {
 	}
 }
 
+// TestPutEmptySettlesTheMiss (#265): a completed "no preview" answer is
+// RECORDED — KnownEmpty for that blob id — so the caller stops re-asking
+// every frame. A changed blob id (the server minted a real preview)
+// invalidates it, and a real image is never downgraded to a miss.
+func TestPutEmptySettlesTheMiss(t *testing.T) {
+	d := &fakeDecoder{}
+	c := NewCache(d)
+
+	c.PutEmpty("42", 7)
+	if !c.KnownEmpty("42", 7) {
+		t.Error("a settled empty answer must be known")
+	}
+	if _, ok := c.Get("42", 7); ok {
+		t.Error("an empty answer is not an image")
+	}
+	if c.KnownEmpty("42", 8) {
+		t.Error("a NEW blob id must invalidate the recorded miss (refetch)")
+	}
+
+	// A real Put supersedes; a later PutEmpty must not downgrade it.
+	c.Put("42", 8, []byte("jpeg-bytes"), nil)
+	d.resolveAll()
+	c.PutEmpty("42", 8)
+	if _, ok := c.Get("42", 8); !ok {
+		t.Error("PutEmpty must never evict a decoded image")
+	}
+}
+
 // TestPutGetRoundTrip: the obvious happy path. Put bytes under a
 // known blob id, decode, Get with that blob id returns the same
 // image.

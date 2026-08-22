@@ -239,6 +239,11 @@ type App struct {
 	// tile's PreviewBlobID changes server-side — see client/preview.
 	urlPreview *preview.Cache
 
+	// wrapCache memoizes raw-text soft-wrap results per (content id,
+	// version, length, columns) — a render cache (memoWrap), reset
+	// wholesale when full, never a fact.
+	wrapCache map[string][]string
+
 	// shellAlive caches the result of the ShellSessionAlive probe per
 	// tile id. The refresh button shows iff (preview_blob_id == 0)
 	// || shellAlive[id] is true. shellAliveProbing dedups in-flight
@@ -696,6 +701,7 @@ func main() {
 		tileInflight:       map[string]bool{},
 		tileLoadFailed:     map[string]bool{},
 		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
+		wrapCache:          map[string][]string{},
 		shellAlive:         map[string]bool{},
 		shellAliveProbing:  map[string]bool{},
 		wellWheelPending:   map[string]wellWheelDrift{},
@@ -925,7 +931,10 @@ func (a *App) fetchGrid(id string) {
 		a.resolveErr("grid:" + id)
 		delete(a.gridLoadFailed, id)
 		a.c.PutGrid(resp.Grid, resp.Tiles)
-		a.draw()
+		// Coalesced repaint (scheduleFrame): fetch completions land in
+		// bursts — one draw() per completed child-grid read meant
+		// hundreds of full repaints while a big directory loaded (#265).
+		a.scheduleFrame()
 	}()
 }
 

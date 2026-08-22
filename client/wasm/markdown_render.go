@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -89,7 +90,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *rpc.Tile, x, y, w, h float64) 
 		}
 		if body, ok := a.tileBody(n); ok {
 			drawMarkdownText(a.cctx, string(body), originX, originY,
-				a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0)
+				a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
 		}
 	} else {
 		a.tileBody(n) // warm the cache so the overlay has content when shown
@@ -136,7 +137,7 @@ func (a *App) drawMarkdownNode(n *rpc.Tile, x, y, w, h float64, selected, outsid
 			if body, ok := a.tileBody(n); ok {
 				drawMarkdownText(a.cctx, string(body),
 					x-scrollX*scale, y+topInset-scrollY*scale,
-					frame.ContentW, h-topInset+scrollY*scale, scale, 0)
+					frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
 			}
 		}
 	}
@@ -208,7 +209,8 @@ const rawTextLineHeight = 1.35
 // Text mode soft-wraps to the SAME columns the editing textarea shows
 // (markdown.WrapRawText, issue #216) — the face is monospace, so the budget
 // is a pure column count and the text cannot reflow when focus moves.
-func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64) {
+func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
+	wrap func(src string, cols int) []string) {
 	st := defaultMarkdownStyle()
 	fontPx := st.codePx
 	setFont(c, fontPx*scale, st.monospace, false)
@@ -230,11 +232,38 @@ func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64
 	// font above.
 	slotted := markdown.RawTextLineSlot(fontPx, rawTextLineHeight, scale, st.pad, scrollY, asc, desc)
 	slotTop := slotted.Top0
-	for _, ln := range markdown.WrapRawText(src, rawWrapCols(m, w, scale, st.pad)) {
+	for _, ln := range wrap(src, rawWrapCols(m, w, scale, st.pad)) {
+		if slotTop >= h {
+			break // past the bottom edge — nothing below is visible
+		}
 		if markdown.RawTextLineVisible(slotTop, slotted.Slot, h) {
 			c.Call("fillText", ln, x+st.pad*scale, y+slotTop+slotted.Baseline)
 		}
 		slotTop += slotted.Slot
+	}
+}
+
+// memoWrap is drawMarkdownText's wrap provider backed by a render cache:
+// re-wrapping a whole document every frame for every visible file tile
+// was O(doc × tiles) per frame (#265). Keyed by content id + version +
+// length + columns — the version bump (the one content door) invalidates
+// committed edits; the length guards the brief in-flight-edit window
+// (same-length uncommitted edits may render one debounce-cycle stale in
+// a background preview, which the save's version bump then corrects).
+// Bounded by wholesale reset: it is a derived cache, never a fact.
+func (a *App) memoWrap(n *rpc.Tile) func(string, int) []string {
+	return func(src string, cols int) []string {
+		key := n.ContentID() + "\x00" + strconv.FormatInt(n.Version, 10) + "\x00" +
+			strconv.Itoa(len(src)) + "\x00" + strconv.Itoa(cols)
+		if lines, ok := a.wrapCache[key]; ok {
+			return lines
+		}
+		lines := markdown.WrapRawText(src, cols)
+		if len(a.wrapCache) >= 512 {
+			a.wrapCache = map[string][]string{}
+		}
+		a.wrapCache[key] = lines
+		return lines
 	}
 }
 

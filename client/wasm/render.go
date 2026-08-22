@@ -1130,7 +1130,7 @@ func (a *App) fetchTileContent(tileID string) {
 		}
 		a.c.PutFetchedContent(tileID, data, version)
 		a.refreshFileOverlay()
-		a.draw()
+		a.scheduleFrame() // coalesced: body fetches land in bursts (#265)
 	}()
 }
 

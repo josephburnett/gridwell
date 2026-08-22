@@ -6,10 +6,11 @@ import "testing"
 // left-to-right then wrap to the next row at `width`.
 func TestNextEmptyCellFillsRowMajor(t *testing.T) {
 	occupied := map[[2]int64]bool{}
+	var cur Cursor
 	const width = 3
 	want := [][2]int64{{0, 0}, {1, 0}, {2, 0}, {0, 1}, {1, 1}, {2, 1}, {0, 2}}
 	for i, w := range want {
-		x, y := NextEmptyCell(occupied, width)
+		x, y := NextEmptyCell(occupied, width, &cur)
 		if x != w[0] || y != w[1] {
 			t.Fatalf("call %d = (%d,%d), want (%d,%d)", i, x, y, w[0], w[1])
 		}
@@ -24,15 +25,16 @@ func TestNextEmptyCellSkipsOccupied(t *testing.T) {
 		{1, 0}: true,
 		// (2,0) is the first free cell.
 	}
+	var cur Cursor
 	const width = 4
-	if x, y := NextEmptyCell(occupied, width); x != 2 || y != 0 {
+	if x, y := NextEmptyCell(occupied, width, &cur); x != 2 || y != 0 {
 		t.Fatalf("first free = (%d,%d), want (2,0)", x, y)
 	}
 	// (3,0) free, then wrap to (0,1).
-	if x, y := NextEmptyCell(occupied, width); x != 3 || y != 0 {
+	if x, y := NextEmptyCell(occupied, width, &cur); x != 3 || y != 0 {
 		t.Fatalf("second = (%d,%d), want (3,0)", x, y)
 	}
-	if x, y := NextEmptyCell(occupied, width); x != 0 || y != 1 {
+	if x, y := NextEmptyCell(occupied, width, &cur); x != 0 || y != 1 {
 		t.Fatalf("third = (%d,%d), want (0,1)", x, y)
 	}
 }
@@ -41,9 +43,10 @@ func TestNextEmptyCellSkipsOccupied(t *testing.T) {
 // handed out twice — the property the reconcile loop relies on.
 func TestNextEmptyCellMarksOccupied(t *testing.T) {
 	occupied := map[[2]int64]bool{}
+	var cur Cursor
 	seen := map[[2]int64]bool{}
 	for i := 0; i < 50; i++ {
-		x, y := NextEmptyCell(occupied, 8)
+		x, y := NextEmptyCell(occupied, 8, &cur)
 		if seen[[2]int64{x, y}] {
 			t.Fatalf("cell (%d,%d) handed out twice", x, y)
 		}
@@ -54,8 +57,9 @@ func TestNextEmptyCellMarksOccupied(t *testing.T) {
 // TestNextEmptyCellWidthOne degenerates to a single column.
 func TestNextEmptyCellWidthOne(t *testing.T) {
 	occupied := map[[2]int64]bool{}
+	var cur Cursor
 	for i := int64(0); i < 4; i++ {
-		x, y := NextEmptyCell(occupied, 1)
+		x, y := NextEmptyCell(occupied, 1, &cur)
 		if x != 0 || y != i {
 			t.Fatalf("call %d = (%d,%d), want (0,%d)", i, x, y, i)
 		}
@@ -68,7 +72,8 @@ func TestNextEmptyCellWidthOne(t *testing.T) {
 func TestOccupyRectFootprint(t *testing.T) {
 	occ := map[[2]int64]bool{}
 	OccupyRect(occ, 0, 0, 2, 2)
-	x, y := NextEmptyCell(occ, 8)
+	var cur Cursor
+	x, y := NextEmptyCell(occ, 8, &cur)
 	if x == 1 && y == 0 || x == 0 && y == 1 || x == 1 && y == 1 {
 		t.Fatalf("NextEmptyCell landed inside the 2x2 footprint: (%d,%d)", x, y)
 	}

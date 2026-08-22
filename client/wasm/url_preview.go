@@ -293,6 +293,9 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	if _, ok := a.urlPreview.Get(tileID, blobID); ok {
 		return
 	}
+	if a.urlPreview.KnownEmpty(tileID, blobID) {
+		return // the server already answered "no preview" for this blob
+	}
 	if !a.urlPreview.MarkFetching(tileID) {
 		return
 	}
@@ -305,13 +308,19 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 			// failure. Anything else surfaces (charter §6).
 			if !isUnimplemented(err) {
 				a.surfaceRPCError("GetTilePreview", err)
+				return // transient — the next draw may retry
 			}
+			a.urlPreview.PutEmpty(tileID, blobID)
 			return
 		}
 		if len(jpeg) == 0 {
+			// A completed answer settles the cache (PutEmpty) — leaving
+			// the miss unrecorded re-fired this fetch on EVERY draw, one
+			// RPC per non-decodable tile per frame, forever (#265).
+			a.urlPreview.PutEmpty(tileID, blobID)
 			return
 		}
-		a.urlPreview.Put(tileID, blobID, jpeg, func() { a.draw() })
+		a.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame() })
 	}()
 }
 

@@ -60,6 +60,11 @@ type entry struct {
 	blobID int64
 	image  Image
 	gen    int64
+	// empty records a COMPLETED fetch that answered "no preview" for
+	// blobID — a settled miss, not an unanswered one. Without it every
+	// frame re-asks the server for tiles that will never have a preview
+	// (one RPC per non-decodable tile per draw, forever — #265).
+	empty bool
 }
 
 // wildcardBlobID marks an entry whose bytes were captured locally
@@ -115,6 +120,28 @@ func (c *Cache) Get(tileID string, wantBlobID int64) (Image, bool) {
 // result is discarded and onReady is not called.
 func (c *Cache) Put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	c.put(tileID, blobID, bytes, onReady)
+}
+
+// PutEmpty records that the server ANSWERED with no preview for
+// (tileID, blobID). A completed fetch must settle the cache either way;
+// an unsettled empty result re-fires the fetch on every draw. A later
+// Put with real bytes, or a changed blob id, supersedes it.
+func (c *Cache) PutEmpty(tileID string, blobID int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.entries[tileID]; ok && e.image != nil && e.image.Truthy() {
+		return // never downgrade a real image to a recorded miss
+	}
+	c.entries[tileID] = &entry{blobID: blobID, empty: true}
+}
+
+// KnownEmpty reports a recorded "no preview" answer for (tileID, blobID)
+// — the caller skips the fetch instead of re-asking every frame.
+func (c *Cache) KnownEmpty(tileID string, blobID int64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[tileID]
+	return ok && e.empty && e.blobID == blobID
 }
 
 // PutWildcard decodes bytes and stores them under tileID with the

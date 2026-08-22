@@ -485,7 +485,8 @@ func (p *Plugin) reconcileTiles(gridID, rootPID int64) error {
 		// NOT free — seeding only origins dropped new processes inside it.
 		griddb.OccupyRect(occupied, e.x, e.y, e.w, e.h)
 	}
-	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth) }
+	var cur griddb.Cursor
+	nextCell := func() (int64, int64) { return griddb.NextEmptyCell(occupied, autoGridWidth, &cur) }
 
 	// @info tile for the root process's own metadata.
 	if _, exists := existingByKey[infoKey]; !exists {

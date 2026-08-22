@@ -11,11 +11,20 @@ package griddb
 //
 // width must be >= 1. The scan always terminates: each step either returns a
 // free cell or advances, and rows are unbounded, so a free cell always exists.
-func NextEmptyCell(occupied map[[2]int64]bool, width int64) (int64, int64) {
-	var cx, cy int64
+//
+// cur remembers where the previous scan stopped, so a BURST of placements
+// (first visit to a 2000-entry directory) costs one pass over the grid in
+// total, not one pass PER TILE — every cell behind the cursor is occupied
+// by construction (either pre-seeded or just placed), so restarting from
+// the origin each call only re-walked known-full cells, O(cells²) for the
+// burst. A fresh zero-value Cursor per reconcile run preserves the
+// first-free-slot semantics exactly.
+func NextEmptyCell(occupied map[[2]int64]bool, width int64, cur *Cursor) (int64, int64) {
+	cx, cy := cur.X, cur.Y
 	for {
 		if !occupied[[2]int64{cx, cy}] {
 			occupied[[2]int64{cx, cy}] = true
+			cur.X, cur.Y = cx, cy
 			return cx, cy
 		}
 		cx++
@@ -25,6 +34,10 @@ func NextEmptyCell(occupied map[[2]int64]bool, width int64) (int64, int64) {
 		}
 	}
 }
+
+// Cursor is NextEmptyCell's scan position — one per layout run (a
+// reconcile, a search commit); the zero value starts at the origin.
+type Cursor struct{ X, Y int64 }
 
 // OccupyRect marks a tile's FULL w×h footprint occupied — the same rule
 // the localdb's overlap check enforces (store/place.go). Seeding only the
