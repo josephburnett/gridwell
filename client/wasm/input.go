@@ -1183,6 +1183,29 @@ func (a *App) persistRootViewCore(p *pane.Pane, curCx, curCy, curZoom float64, c
 	})
 }
 
+// descentTextMode is the ONE owner of which mode a text descent shows.
+// URL tiles have no text/rendered modes; mode is "" for them so the
+// textarea overlay (gated on TextMode == "text") never shows, and
+// serves_page tiles present as web content the same way. A READ-ONLY
+// text tile (the @info tile, an fs file) always shows RENDERED — the
+// user never sees a blinking caret over content they can't change, and
+// rendered is the selectable DOM surface (#268). Otherwise the tile's
+// persisted mode, defaulting to raw text for a never-opened tile.
+// Every path that decides a text mode — descent, session restore, the
+// overlay's own gate — reads this, never re-derives it.
+func (a *App) descentTextMode(file *rpc.Tile) string {
+	if file.Kind != rpc.KindText || file.ServesPage {
+		return ""
+	}
+	if a.tileReadOnly(file) {
+		return rpc.TextModeRendered
+	}
+	if file.TextMode == "" {
+		return rpc.TextModeText
+	}
+	return file.TextMode
+}
+
 // portalWellForFrame finds the link tile the pane descended through: the well
 // in frame f's leaf grid whose child grid is the pane's current anchor. Nil
 // when that grid isn't cached or the tile is gone (the ascent then pops
@@ -1638,25 +1661,7 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	fileCopy := *file
 	initialScroll := float64(file.TextY)
 	initialScrollX := float64(file.TextX)
-	// URL tiles have no text/rendered modes; mode is "" for them so
-	// the textarea overlay (gated on TextMode == "text") never shows.
-	// serves_page tiles present as web content the same way — mode "".
-	// For text tiles the mode is the one persisted on the tile (server),
-	// defaulting to raw text for a never-opened tile. Source-backed text
-	// tiles (the @info tile, fs file metadata) are read-only — descent
-	// always shows the rendered markdown so the user never sees a
-	// blinking caret over content they can't change.
-	var mode string
-	if file.Kind == rpc.KindText && !file.ServesPage {
-		if a.tileReadOnly(file) {
-			mode = rpc.TextModeRendered
-		} else {
-			mode = file.TextMode
-			if mode == "" {
-				mode = rpc.TextModeText
-			}
-		}
-	}
+	mode := a.descentTextMode(file)
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
@@ -1691,6 +1696,14 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 			// remains for the callers that need something ELSE to run
 			// after the swap (none currently go live by hand).
 			a.autoLiveOnDescent(fp.ID, &fileCopy)
+			// The completed descent IS the new place — write it (the one
+			// history writer derives push-vs-replace from the diff). The
+			// gesture-time write above ran mid-transition with TextFocus
+			// still empty; editable files papered over that via later
+			// textarea cursor events, but a READ-ONLY file has no textarea,
+			// so its descent never reached the URL and a reload restored
+			// the parent grid instead (#268).
+			a.scheduleURLUpdate()
 			if afterDescend != nil {
 				afterDescend()
 			}

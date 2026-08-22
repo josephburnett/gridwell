@@ -471,14 +471,18 @@ func (a *App) applyURLState(raw string) {
 	p.Path = resolvedPath
 	if textTileID != "" {
 		p.TextFocus = textTileID
-		// Mode follows the tile's persisted text_mode; a URL that encodes
-		// a text cursor forces text mode. Scale is fixed; scroll restores
-		// from the tile's stored text_y.
-		if file, ok := a.cachedFile(p, textTileID); ok {
-			p.TextMode = file.TextMode
+		// Mode follows the one descent decision (descentTextMode — a
+		// read-only tile always restores RENDERED, the selectable face);
+		// a URL that encodes a text cursor forces text mode. Scale is
+		// fixed; scroll restores from the tile's stored text_y.
+		file, cached := a.cachedFile(p, textTileID)
+		if cached {
+			p.TextMode = a.descentTextMode(&file)
 			p.TextScrollY = float64(file.TextY)
 		}
-		if state.CursorMode {
+		// A cursor URL restores the caret — meaningless on a read-only
+		// tile, which stays on its rendered (selectable) face.
+		if state.CursorMode && !(cached && a.tileReadOnly(&file)) {
 			p.TextMode = rpc.TextModeText
 		}
 		if p.TextMode == "" {

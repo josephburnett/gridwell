@@ -105,16 +105,24 @@ func (a *App) refreshRenderedOverlay() {
 		hide()
 		return
 	}
+	t, ok := a.descendedTile(p)
+	if !ok || t.Kind != rpc.KindText {
+		hide()
+		return
+	}
 	mode := p.TextMode
 	if mode == "" {
 		mode = rpc.TextModeRendered
 	}
-	if mode != rpc.TextModeRendered {
-		hide()
-		return
+	// A READ-ONLY tile always shows its rendered (selectable) face,
+	// whatever mode the session carried in — the display-time guard that
+	// makes descentTextMode's rule unfalsifiable from any entry point
+	// (#268: a restored read-only file used to fall to canvas-drawn,
+	// unselectable text).
+	if a.tileReadOnly(&t) {
+		mode = rpc.TextModeRendered
 	}
-	t, ok := a.descendedTile(p)
-	if !ok || t.Kind != rpc.KindText {
+	if mode != rpc.TextModeRendered {
 		hide()
 		return
 	}

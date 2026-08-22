@@ -53,3 +53,53 @@ test('a source file shows as plain text and refreshes each open', async ({ gw, w
     )
     .toContain('changed on disk');
 });
+
+test('a read-only file is selectable, and stays so through a reload (#268)', async ({
+  gw,
+  window,
+}) => {
+  fs.writeFileSync(path.join(ROOT, 'copyme.txt'), 'grab these words with the mouse\n');
+  await gw.enterPlugin('code');
+  const f = await gw.focused();
+  const tile = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'copyme.txt')!;
+  await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
+  await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
+
+  // RELOAD lands back inside the descent. Two halves of the same promise:
+  // the descent must reach the URL at all (the completion write — a
+  // read-only file has no textarea events to paper over the missing one),
+  // and the restore must come back on the rendered (DOM) face, not
+  // canvas-drawn "text" mode with nothing to select.
+  const fileSeg = String(tile.id).split('/').pop()!;
+  await expect
+    .poll(() => window.evaluate(() => location.pathname), { timeout: 10_000 })
+    .toBe('/' + f.gridID + '/' + fileSeg);
+  await window.reload();
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  await expect
+    .poll(
+      () =>
+        window.evaluate(() => {
+          const v = document.getElementById('gw-rendered-view');
+          return v && v.style.display !== 'none' ? v.textContent ?? '' : '';
+        }),
+      { timeout: 15_000 },
+    )
+    .toContain('grab these words');
+
+  // A REAL mouse drag across the text selects it — the end-to-end claim
+  // (no handler may swallow the drag, no user-select may block it).
+  const box = await window.evaluate(() => {
+    const pre = document.querySelector('#gw-rendered-view pre.gw-plain')!;
+    const r = pre.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  await window.mouse.move(box.x + 2, box.y + 8);
+  await window.mouse.down();
+  await window.mouse.move(box.x + Math.min(box.w - 4, 300), box.y + 8, { steps: 8 });
+  await window.mouse.up();
+  await expect
+    .poll(() => window.evaluate(() => window.getSelection()?.toString() ?? ''))
+    .toContain('grab');
+});
