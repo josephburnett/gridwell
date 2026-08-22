@@ -75,6 +75,16 @@ func (a *App) installTestHook() {
 		// instead of sleeping between the forwarded press and the canvas
 		// half of the drag. Arming is also what parks the live view.
 		"leftResizeArmed": js.FuncOf(func(js.Value, []js.Value) any { return a.leftResize != nil }),
+		// rightDragKind names the armed right-button gesture ("" = none) —
+		// the observable that says WHICH gesture a right-down classified
+		// into, so a spec can distinguish "never armed" from "armed but
+		// didn't commit".
+		"rightDragKind": js.FuncOf(func(js.Value, []js.Value) any {
+			if a.rightDrag == nil {
+				return ""
+			}
+			return fmt.Sprint(a.rightDrag.kind)
+		}),
 		// persistPosts exposes the settle-persist observability counters:
 		// flush passes plus optimistic-persist dispatches by label. Lets a
 		// spec name WHICH stage of gesture → debounce → flush → post went

@@ -54,6 +54,49 @@ test('a source file shows as plain text and refreshes each open', async ({ gw, w
     .toContain('changed on disk');
 });
 
+test('a projection rearranged stays rearranged: fs tiles move and resize (#266)', async ({
+  gw,
+}) => {
+  fs.mkdirSync(path.join(ROOT, 'movedir'), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, 'sizeme.md'), 'a body to size\n');
+  await gw.enterPlugin('code');
+  const f = await gw.focused();
+  const dir = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'movedir')!;
+  expect(dir, 'movedir listed').toBeTruthy();
+
+  // MOVE: a same-grid left-drag is placement, not creation — the read-only
+  // (writable=false) projection accepts it and its store persists it. The
+  // client used to reject this before the RPC could even fire.
+  const fx = Number(dir.x ?? 0);
+  const fy = Number(dir.y ?? 0);
+  await gw.dragTileCell(fx, fy, fx, fy + 2);
+  await expect
+    .poll(async () => {
+      const t = (await gw.getGrid(f.gridID)).tiles!.find((x) => x.altText === 'movedir')!;
+      return `${Number(t.x ?? 0)},${Number(t.y ?? 0)}`;
+    })
+    .toBe(`${fx},${fy + 2}`);
+
+  // RESIZE persists too (a file tile, same placement door). Park it at a
+  // known in-viewport cell first; the +2 target grows one cell (the
+  // moving corner snaps like tile-gestures.spec pins).
+  const file = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'sizeme.md')!;
+  await gw.dragTileCell(Number(file.x ?? 0), Number(file.y ?? 0), 0, 1);
+  await expect
+    .poll(async () => {
+      const t = (await gw.getGrid(f.gridID)).tiles!.find((x) => x.altText === 'sizeme.md')!;
+      return `${Number(t.x ?? 0)},${Number(t.y ?? 0)}`;
+    })
+    .toBe('0,1');
+  await gw.resizeTileCell(0, 1, 2, 2);
+  await expect
+    .poll(async () => {
+      const t = (await gw.getGrid(f.gridID)).tiles!.find((x) => x.altText === 'sizeme.md')!;
+      return `${Number(t.w ?? 0)}x${Number(t.h ?? 0)}`;
+    })
+    .toBe('2x1');
+});
+
 test('a read-only file is selectable, and stays so through a reload (#268)', async ({
   gw,
   window,

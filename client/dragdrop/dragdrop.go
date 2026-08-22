@@ -335,10 +335,20 @@ type DropInput struct {
 	OverDelete    bool
 	HasTarget     bool
 	Forbidden     bool
-	// TargetReadOnly: the destination grid refuses mutations (the node grid,
-	// an fs/proc grid) — a drop there is rejected up front instead of firing
-	// an RPC the server must refuse.
+	// TargetReadOnly: the destination grid refuses CREATION (Grid.writable
+	// false — the node grid, an fs/proc grid): an ARRIVAL there (a
+	// cross-grid drop, a clone) is rejected up front instead of firing an
+	// RPC the server must refuse. A same-grid left-drag is exempt — that
+	// is PLACEMENT, not creation (see DecideDrop).
 	TargetReadOnly bool
+	// SameGrid: the drop lands in the tile's own grid — a rearrangement,
+	// no arrival anywhere.
+	SameGrid bool
+	// TargetImmovable: the grid refuses PLACEMENT too, not just creation —
+	// the node grid (source_kind "node", a declaration) is the one such
+	// surface; everything else persists user placement (griddb: "a
+	// directory listing a user has rearranged stays rearranged").
+	TargetImmovable bool
 	SameCell       bool
 	Occupied       bool
 	// CrossPlugin: the source grid and the target grid live in different id
@@ -379,7 +389,11 @@ func DecideDrop(in DropInput) DropAction {
 		return DropRejected
 	case in.Forbidden:
 		return DropRejected
-	case in.TargetReadOnly:
+	case in.TargetReadOnly && !(in.SameGrid && !in.Clone && !in.TargetImmovable):
+		// Read-only gates ARRIVALS (creation-class); a same-grid left-drag
+		// is placement, which read-only projections accept and persist
+		// (#266 — the client used to conflate the two and reject moves
+		// fs's own store was designed to keep). Clones stay creation.
 		return DropRejected
 	case in.SameCell:
 		return DropRejected

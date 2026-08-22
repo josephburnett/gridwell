@@ -341,6 +341,29 @@ func TestDecideDropTargetReadOnly(t *testing.T) {
 	}
 }
 
+// TestDecideDropReadOnlyPlacement (#266): read-only gates ARRIVALS, not
+// placement. A same-grid left-drag on a read-only projection (fs, proc) is
+// a rearrangement the plugin's store persists ("a directory listing a user
+// has rearranged stays rearranged") — DropMove. Clones stay creation-class,
+// and the node grid (TargetImmovable) refuses placement too.
+func TestDecideDropReadOnlyPlacement(t *testing.T) {
+	rearrange := DropInput{Started: true, TileID: "u/1", HasTarget: true,
+		TargetReadOnly: true, SameGrid: true}
+	if got := DecideDrop(rearrange); got != DropMove {
+		t.Errorf("same-grid move on read-only projection = %v, want DropMove", got)
+	}
+	clone := rearrange
+	clone.Clone = true
+	if got := DecideDrop(clone); got != DropRejected {
+		t.Errorf("same-grid clone on read-only grid = %v, want DropRejected (creation)", got)
+	}
+	node := rearrange
+	node.TargetImmovable = true
+	if got := DecideDrop(node); got != DropRejected {
+		t.Errorf("same-grid move on the node grid = %v, want DropRejected", got)
+	}
+}
+
 func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name             string
