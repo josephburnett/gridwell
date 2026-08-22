@@ -355,7 +355,7 @@ func (a *App) syncURLViews() {
 		}
 		// The focused pane's band is bar territory (issue #220): the live
 		// view's content box carves it out so it can never occlude the bar.
-		b := contentViewBounds(panebox.BarInset(r, paneID == a.tree.Focus, wsbar.RowH))
+		b := contentViewBounds(panebox.BarInset(r, wsbar.RowH))
 		v.bounds = b
 		bridgeSetBounds(paneID, b)
 		// The corner control belongs to the focused pane only — same rule the

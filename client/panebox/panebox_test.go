@@ -159,16 +159,16 @@ func TestLiveViewContentBoxDegeneratePane(t *testing.T) {
 }
 
 func TestBarInset(t *testing.T) {
+	// #267 (2026-08-21, reversing #220's focused-only band): EVERY pane
+	// wears the bar, so the inset is unconditional — content must not
+	// resize when focus moves.
 	r := pane.Rect{X: 10, Y: 20, W: 300, H: 200}
-	got := BarInset(r, true, 32)
+	got := BarInset(r, 32)
 	if got.H != 168 || got.X != 10 || got.Y != 20 || got.W != 300 {
-		t.Fatalf("focused inset = %+v, want H=168 only", got)
-	}
-	if BarInset(r, false, 32) != r {
-		t.Fatal("unfocused pane must keep its full rect")
+		t.Fatalf("inset = %+v, want H=168 only", got)
 	}
 	tiny := pane.Rect{H: 20}
-	if BarInset(tiny, true, 32) != tiny {
+	if BarInset(tiny, 32) != tiny {
 		t.Fatal("degenerate rect must not go negative")
 	}
 }

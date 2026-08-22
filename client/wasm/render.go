@@ -403,9 +403,9 @@ func (a *App) draw() {
 	// content box and park off-screen during canvas-overlay gestures.
 	a.syncURLViews()
 	// The reserved bottom bands, drawn last so nothing paints over them:
-	// the bottom bar (workspace crumbs + descent chain), then the notice
-	// strip.
-	a.drawBottomBar()
+	// every pane's bottom bar (#267 — workspace crumbs + descent chain),
+	// then the notice strip.
+	a.drawBottomBars()
 	a.drawErrStrip()
 	// Inside a workspace, a pane-tile-teal line wraps the whole window
 	// (issue #225) — a second hint you're in a pane tile, alongside the
@@ -685,12 +685,12 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 // drawURLBackButton paints the bar-slot button on a URL-tile descent.
 // Click → history.back() on the descended Chromium tab. Same circular
 // chrome as the + button so the position is muscle-memory-compatible.
-func (a *App) drawURLBackButton() {
-	cx, cy := a.plusButtonCenter()
+func (a *App) drawURLBackButton(p *pane.Pane) {
+	cx, cy := a.plusButtonCenterFor(p)
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Left-pointing arrow: a horizontal stem with a chevron at its left end.
-	band, _ := a.barTheme()
+	band, _ := a.barThemeFor(p)
 	a.cctx.Set("strokeStyle", band)
 	a.cctx.Set("lineWidth", 2.0)
 	a.cctx.Set("lineCap", "round")
@@ -711,12 +711,12 @@ func (a *App) drawURLBackButton() {
 // descent. Click → open URL stream (same action as the right-drag-down
 // refresh gesture). Same circular chrome as drawURLBackButton so the
 // position is muscle-memory-compatible.
-func (a *App) drawURLRefreshButton() {
-	cx, cy := a.plusButtonCenter()
+func (a *App) drawURLRefreshButton(p *pane.Pane) {
+	cx, cy := a.plusButtonCenterFor(p)
 	a.drawCircleButtonChrome(cx, cy)
 
 	// Refresh glyph: reuse drawRefreshIcon at a size that fits the button circle.
-	band, _ := a.barTheme()
+	band, _ := a.barThemeFor(p)
 	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
 }
 
@@ -727,12 +727,12 @@ func (a *App) drawURLRefreshButton() {
 // TAB (owner decision 2026-08-09) — the browser host's next-best descent;
 // the tile itself stays frozen and untouched. (This replaced the slashed
 // no-live glyph, whose only answer was an explanatory notice.)
-func (a *App) drawURLOpenTabButton() {
-	cx, cy := a.plusButtonCenter()
+func (a *App) drawURLOpenTabButton(p *pane.Pane) {
+	cx, cy := a.plusButtonCenterFor(p)
 	a.drawCircleButtonChrome(cx, cy)
 
 	c := a.cctx
-	band, _ := a.barTheme()
+	band, _ := a.barThemeFor(p)
 	c.Set("strokeStyle", band)
 	c.Set("lineWidth", 2.0)
 	c.Set("lineCap", "round")

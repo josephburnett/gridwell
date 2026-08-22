@@ -158,9 +158,13 @@ export class GridwellDriver {
   // geometry.
   // bar returns the raw bar hook: the band geometry plus every segment's
   // rect and identity (chain crumbs carry anchor/tileID and, for root
-  // crumbs, the glyph the crumb renders — the #264 pin).
-  async bar(): Promise<{
+  // crumbs, the glyph the crumb renders — the #264 pin). Every pane wears
+  // a band since #267 — pass a paneID for an unfocused pane's bar; no
+  // arg reads the focused pane's.
+  async bar(paneID?: string): Promise<{
     top: number;
+    left: number;
+    width: number;
     height: number;
     segments: Array<{
       kind: string;
@@ -173,7 +177,7 @@ export class GridwellDriver {
       glyph?: string;
     }>;
   }> {
-    return this.win.evaluate(() => (window as any).__gridwellTest.bar());
+    return this.win.evaluate((id) => (window as any).__gridwellTest.bar(id), paneID ?? '');
   }
 
   async barName(): Promise<{

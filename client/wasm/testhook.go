@@ -729,13 +729,19 @@ func stringsToAny(ss []string) []any {
 // index with the tile/anchor they stand for. Read-only over the exact
 // layout drawBottomBar renders and bottomBarClick hit-tests, so a spec's
 // click at a segment center is the click the user would make.
-func (a *App) thBar(js.Value, []js.Value) any {
-	bx, top, bw, ok := a.bottomBarRect()
+func (a *App) thBar(_ js.Value, args []js.Value) any {
+	// Optional arg: a pane id — every pane wears a band since #267; no
+	// arg reads the focused pane's, as always.
+	p := a.tree.FocusedPane()
+	if len(args) > 0 && args[0].Type() == js.TypeString && args[0].String() != "" {
+		p = a.tree.FindPane(args[0].String())
+	}
+	bx, top, bw, ok := a.bottomBarRectFor(p)
 	if !ok {
 		return map[string]any{"top": 0.0, "height": wsbar.RowH, "segments": []any{}}
 	}
-	chain := a.navChain()
-	segs := a.bottomBarSegments(chain)
+	chain := a.navChainFor(p)
+	segs := a.bottomBarSegmentsFor(p, chain)
 	out := make([]any, 0, len(segs))
 	for _, s := range segs {
 		// Segment X is emitted ABSOLUTE (the band lives inside the focused
@@ -764,7 +770,7 @@ func (a *App) thBar(js.Value, []js.Value) any {
 		}
 		out = append(out, e)
 	}
-	band, button := a.barTheme()
+	band, button := a.barThemeFor(p)
 	res := map[string]any{
 		"top":      top,
 		"left":     bx,
@@ -776,7 +782,7 @@ func (a *App) thBar(js.Value, []js.Value) any {
 	}
 	// The centered current-pane title (2026-07-30 tweak): the exact rect
 	// drawBarTitle renders and bottomBarClick hit-tests.
-	if x, w, label, editable, muted, ok := a.barTitleGeom(); ok {
+	if x, w, label, editable, muted, ok := a.barTitleGeomFor(p); ok {
 		res["title"] = map[string]any{
 			"x": x, "w": w, "label": label, "editable": editable, "muted": muted,
 		}

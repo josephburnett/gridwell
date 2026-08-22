@@ -257,14 +257,18 @@ reflows when focus moves. Grid previews render at constant scale
 sibling pane's width cannot re-wrap a preview — unrepresentable by
 signature).
 
-**The bottom bar lives in the focused pane** (`client/wsbar` geometry,
-`bottombar.go` glue): workspace crumbs, the anchor block, the descent chain
-as clickable square previews (derived per frame from `pane.DescentChain` —
-never stored), the centered title, and the circle slot (the + menu / back /
-refresh button). Native surfaces on the focused pane carve the band out of
-their rects (`panebox.BarInset`), so nothing can occlude it. Clicking a
-chain crumb is THE bar ascent gesture; middle-click on a pane is the
-in-pane shortcut.
+**Every pane wears the bottom bar** (`client/wsbar` geometry,
+`bottombar.go` glue; #267, 2026-08-21 — the band was focused-pane-only
+under #220, but content resizing on every focus change was distracting;
+focus shows only in the border color): workspace crumbs, the anchor
+block, the descent chain as clickable square previews (derived per frame
+from `pane.DescentChain` — never stored), the centered title, and the
+circle slot (the + menu / back / refresh button). Native surfaces carve
+the band out of their rects unconditionally (`panebox.BarInset`), so
+nothing can occlude it and nothing reflows on focus moves. Clicks act in
+the focused pane; a band click in an unfocused pane moves focus, nothing
+else. Clicking a chain crumb is THE bar ascent gesture; middle-click on
+a pane is the in-pane shortcut.
 
 ---
 

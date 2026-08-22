@@ -246,12 +246,16 @@ type App struct {
 
 	// shellAlive caches the result of the ShellSessionAlive probe per
 	// tile id. The refresh button shows iff (preview_blob_id == 0)
-	// || shellAlive[id] is true. shellAliveProbing dedups in-flight
-	// probes so a rapid sequence of redraws doesn't fan out into
-	// many RPC calls. A missing key means "unknown" — the renderer
-	// kicks off a probe and hides the button until the result lands.
+	// || shellAlive[id] is true. shellAliveProbing single-flights the
+	// in-flight probe per tile — an entry holds the CALLBACKS waiting
+	// on the answer, so a rapid sequence of redraws doesn't fan out
+	// into many RPCs and a caller's callback is never dropped (the
+	// bar's callback-less badge probe used to win the flight and
+	// silently disarm the restore's attach callback). A missing
+	// shellAlive key means "unknown" — the renderer kicks off a probe
+	// and hides the button until the result lands.
 	shellAlive        map[string]bool
-	shellAliveProbing map[string]bool
+	shellAliveProbing map[string][]func(alive bool)
 
 	// wellWheelPending holds well tiles whose preview framing the hover
 	// wheel changed (issue #210) but hasn't persisted yet: tile id → the
@@ -703,7 +707,7 @@ func main() {
 		urlPreview:         preview.NewCache(preview.NewJSDecoder()),
 		wrapCache:          map[string][]string{},
 		shellAlive:         map[string]bool{},
-		shellAliveProbing:  map[string]bool{},
+		shellAliveProbing:  map[string][]func(bool){},
 		wellWheelPending:   map[string]wellWheelDrift{},
 		traces:             map[string]traceState{},
 		paneLayouts:        map[string]*paneLayoutEntry{},

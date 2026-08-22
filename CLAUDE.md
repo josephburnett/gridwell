@@ -140,10 +140,13 @@ Re-litigating them silently is how churn happens.
 - **Connections are data (#199).** The ssh plugin's remotes are connection
   wells, not config entries. Deleting one tombstones its namespace segment
   forever. Secrets stay host-local file paths.
-- **The bar lives in the active pane; the crumb click is the ascent
-  (#220/#222).** Bar contents are per-pane facts. The old right-click
-  ascends (corner circle, empty bar, slot) are gone; middle-click remains
-  the in-pane shortcut.
+- **Every pane wears the bar; the crumb click is the ascent
+  (#220/#222, revised by #267 2026-08-21).** Bar contents are per-pane
+  facts; since #267 the band renders in EVERY pane (content resizing on
+  focus change was distracting — focus shows in the border color), and
+  clicks act only in the focused pane (an unfocused band click moves
+  focus, nothing else). The old right-click ascends (corner circle,
+  empty bar, slot) are gone; middle-click remains the in-pane shortcut.
 - **Parameterized plugins: the picker, not a synthetic root (#251,
   2026-08-08).** A plugin declares a root grid OR an instance grid — ssh's
   connection list is an instance grid, a storage address, never a landing

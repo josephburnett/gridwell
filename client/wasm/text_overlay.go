@@ -80,7 +80,7 @@ func textInnerBox(r pane.Rect) (x, y, w, h float64) {
 // carved out (issue #220) — the rect every overlay/native surface sizes
 // from, so none can occlude the band.
 func (a *App) barAwarePaneRect(p *pane.Pane) pane.Rect {
-	return panebox.BarInset(paneRectFor(a, p), p.ID == a.tree.Focus, wsbar.RowH)
+	return panebox.BarInset(paneRectFor(a, p), wsbar.RowH)
 }
 
 // paneContentBox returns the rectangle a URL tile renders into when

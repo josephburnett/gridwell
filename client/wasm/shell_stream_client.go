@@ -134,13 +134,28 @@ func (a *App) shellRefreshButtonVisible(tile *rpc.Tile) bool {
 // caller's continuation is dropped; the auto-live path re-decides from the
 // cache on the next descent, and the refresh button remains the retry).
 func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
-	if a.shellAliveProbing[tileID] {
+	// Single-flight COALESCES callers — it must never drop a callback.
+	// The entry's presence marks the in-flight probe; late callers park
+	// their callbacks on it and the one answer fires them all. (Dropping
+	// the later caller lost the restore's attach when the bar's
+	// callback-less badge probe happened to fire first — #267 made that
+	// race the common case, since every pane's slot now probes.)
+	if waiters, inflight := a.shellAliveProbing[tileID]; inflight {
+		if then != nil {
+			a.shellAliveProbing[tileID] = append(waiters, then)
+		}
 		return
 	}
-	a.shellAliveProbing[tileID] = true
+	waiters := []func(bool){}
+	if then != nil {
+		waiters = append(waiters, then)
+	}
+	a.shellAliveProbing[tileID] = waiters
 	go func() {
 		res, err := a.cl.ShellSessionAlive(context.Background(), &rpc.ShellSessionAliveRequest{TileID: tileID})
-		// Probing flag clears regardless so a future probe can retry.
+		// Everyone parked on this flight, then clear it so a future
+		// probe can retry.
+		done := a.shellAliveProbing[tileID]
 		delete(a.shellAliveProbing, tileID)
 		if err != nil {
 			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
@@ -150,8 +165,8 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 			return
 		}
 		a.shellAlive[tileID] = res.Alive
-		if then != nil {
-			then(res.Alive)
+		for _, fn := range done {
+			fn(res.Alive)
 		}
 		a.draw()
 	}()
@@ -741,7 +756,7 @@ func (a *App) syncShellOverlayPosition() {
 		// the chrome. Routes through panebox.ContentBox — same path as
 		// the URL live view (url_stream_client.go contentViewBounds) so
 		// both live-tile kinds always use the same inset (LiveViewInsetPx).
-		cb := panebox.ContentBox(panebox.BarInset(r, paneID == a.tree.Focus, wsbar.RowH), paneBorderPx)
+		cb := panebox.ContentBox(panebox.BarInset(r, wsbar.RowH), paneBorderPx)
 		if cb.W < 1 || cb.H < 1 {
 			conn.container.Get("style").Set("display", "none")
 			continue

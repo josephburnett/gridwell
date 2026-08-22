@@ -12,26 +12,33 @@ import (
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
-// The bottom bar (issues #212/#220/#245): the band at the bottom of the
-// ACTIVE pane — its contents are per-pane facts, so it rides the focused
-// pane and unfocused panes keep their full height. It carries the ONE nav
-// chain (the complete path from the root: outer chains, pane-tile
-// boundary crumbs, the current chain — square previews truncated from the
-// LEFT on overflow), the centered title, and the circle slot. Geometry
-// comes from wsbar so the click hit-test reads the identical layout —
-// render and input cannot disagree. The chain is DERIVED per frame from
-// the workspace stack + each tree's own facts (pane.DescentChain);
-// nothing here stores a second copy of where anything is.
+// The bottom bar (issues #212/#220/#245, #267): a band at the bottom of
+// EVERY pane — its contents are per-pane facts (owner decision
+// 2026-08-21, reversing #220's focused-only band: content resizing on
+// every focus change was distracting; focus shows in the border color).
+// It carries the ONE nav chain (the complete path from the root: outer
+// chains, pane-tile boundary crumbs, the pane's chain — square previews
+// truncated from the LEFT on overflow), the centered title, and the
+// circle slot. Geometry comes from wsbar so the click hit-test reads the
+// identical layout — render and input cannot disagree. The chain is
+// DERIVED per frame from the workspace stack + each tree's own facts
+// (pane.DescentChain); nothing here stores a second copy of where
+// anything is. Clicks ACT only in the focused pane; in an unfocused one
+// the band click moves focus, nothing else (the click-focus family).
 
-// bottomBarRect returns the bar band: a RowH strip INSIDE the focused
+// bottomBarRect is bottomBarRectFor of the focused pane — the band the
+// rename input, the palette anchor, and the testhook read.
+func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
+	return a.bottomBarRectFor(a.tree.FocusedPane())
+}
+
+// bottomBarRectFor returns pane p's bar band: a RowH strip INSIDE the
 // pane's border, flush above the bottom edge (issues #220/#223 — the
 // border wraps all the way around; the band never paints over it).
-// ok=false with no pane or a degenerate rect. Native surfaces on the
-// focused pane carve the band out of their content boxes (panebox.BarInset)
-// so they can never occlude it; their content box's bottom edge is exactly
-// this band's top.
-func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
-	p := a.tree.FocusedPane()
+// ok=false with no pane or a degenerate rect. Native surfaces carve the
+// band out of their content boxes (panebox.BarInset) so they can never
+// occlude it; their content box's bottom edge is exactly this band's top.
+func (a *App) bottomBarRectFor(p *pane.Pane) (x, top, w float64, ok bool) {
 	if p == nil {
 		return 0, 0, 0, false
 	}
@@ -42,12 +49,16 @@ func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
 	return r.X + paneBorderPx, r.Y + r.H - paneBorderPx - wsbar.RowH, r.W - 2*paneBorderPx, true
 }
 
-// barTheme returns the band and button shades for the focused pane: a
-// subtle dark of the pane's color family for the band, the family's
-// saturated hue for the buttons (issue #223). Same classifier as the pane
-// border (pane.FamilyOf via borderInputFor) — one fact, two shades.
+// barTheme is barThemeFor of the focused pane (the testhook's shade).
 func (a *App) barTheme() (band, button string) {
-	p := a.tree.FocusedPane()
+	return a.barThemeFor(a.tree.FocusedPane())
+}
+
+// barThemeFor returns the band and button shades for pane p: a subtle
+// dark of the pane's color family for the band, the family's saturated
+// hue for the buttons (issue #223). Same classifier as the pane border
+// (pane.FamilyOf via borderInputFor) — one fact, two shades.
+func (a *App) barThemeFor(p *pane.Pane) (band, button string) {
 	if p == nil {
 		return colorBg, colorFocusBorder
 	}
@@ -101,6 +112,10 @@ type navCrumb struct {
 // far-away tree's state from the bar, and the last of them duplicated
 // "go to the previous view" — the boundary bars already say that.
 func (a *App) navChain() []navCrumb {
+	return a.navChainFor(a.tree.FocusedPane())
+}
+
+func (a *App) navChainFor(p *pane.Pane) []navCrumb {
 	var out []navCrumb
 	depth := a.ws.Depth()
 	if depth > 0 {
@@ -125,7 +140,7 @@ func (a *App) navChain() []navCrumb {
 			out = append(out, navCrumb{paneTile: true, wsLevel: k, tileID: f.TileID})
 		}
 	}
-	if p := a.tree.FocusedPane(); p != nil {
+	if p != nil {
 		for _, c := range pane.DescentChain(p) {
 			out = append(out, navCrumb{treeLevel: depth, crumb: c})
 		}
@@ -137,7 +152,11 @@ func (a *App) navChain() []navCrumb {
 // left-truncation), relative to the band's left edge: squares for chain
 // crumbs, the wide named bar for workspace boundaries.
 func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
-	_, _, w, ok := a.bottomBarRect()
+	return a.bottomBarSegmentsFor(a.tree.FocusedPane(), chain)
+}
+
+func (a *App) bottomBarSegmentsFor(p *pane.Pane, chain []navCrumb) []wsbar.Segment {
+	_, _, w, ok := a.bottomBarRectFor(p)
 	if !ok {
 		return nil
 	}
@@ -152,19 +171,27 @@ func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
 	return wsbar.Layout(widths, w)
 }
 
-// drawBottomBar paints the band: the one nav chain, then title and slot.
-func (a *App) drawBottomBar() {
-	bx, top, bw, ok := a.bottomBarRect()
+// drawBottomBars paints every leaf pane's band (#267): the pane's nav
+// chain, title, and slot — the same bar everywhere, so content never
+// resizes when focus moves.
+func (a *App) drawBottomBars() {
+	pane.WalkLeaves(a.tree.Root, func(p *pane.Pane) { a.drawBottomBarFor(p) })
+}
+
+// drawBottomBarFor paints pane p's band: the one nav chain, then title
+// and slot.
+func (a *App) drawBottomBarFor(p *pane.Pane) {
+	bx, top, bw, ok := a.bottomBarRectFor(p)
 	if !ok {
 		return
 	}
-	band, button := a.barTheme()
+	band, button := a.barThemeFor(p)
 	c := a.cctx
 	c.Set("fillStyle", band)
 	c.Call("fillRect", bx, top, bw, wsbar.RowH)
 
-	chain := a.navChain()
-	segs := a.bottomBarSegments(chain)
+	chain := a.navChainFor(p)
+	segs := a.bottomBarSegmentsFor(p, chain)
 	c.Set("font", "12px system-ui, sans-serif")
 	c.Set("textBaseline", "middle")
 	for _, s := range segs {
@@ -178,18 +205,17 @@ func (a *App) drawBottomBar() {
 	}
 	c.Set("fillStyle", button)
 	c.Call("fillRect", bx, top, bw, 1) // hairline above the band, kind-hued
-	a.drawBarTitle(top)
-	a.drawStaleChip(bx, top, bw)
-	a.drawBarSlot()
+	a.drawBarTitleFor(p, top)
+	a.drawStaleChipFor(p, bx, top, bw)
+	a.drawBarSlotFor(p)
 }
 
-// drawStaleChip marks a pane whose grid is a cache-served MEMORY (the
+// drawStaleChipFor marks a pane whose grid is a cache-served MEMORY (the
 // wire-level stale bit, issue #256): a small amber chip at the bar's
 // right, beside the slot. Bar chrome only — staleness must never move or
 // restyle tiles; the room renders exactly as remembered, and this is the
 // one quiet sign it is a remembering.
-func (a *App) drawStaleChip(bx, top, bw float64) {
-	p := a.tree.FocusedPane()
+func (a *App) drawStaleChipFor(p *pane.Pane, bx, top, bw float64) {
 	if p == nil {
 		return
 	}
@@ -245,7 +271,10 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 // in the free space between the crumbs and the circle slot (issue #230).
 // Render, hit-test, and the rename input all read this one rect.
 func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bool) {
-	p := a.tree.FocusedPane()
+	return a.barTitleGeomFor(a.tree.FocusedPane())
+}
+
+func (a *App) barTitleGeomFor(p *pane.Pane) (x, w float64, label string, editable, muted, ok bool) {
 	if p == nil {
 		return
 	}
@@ -254,13 +283,13 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 	if label == "" {
 		return
 	}
-	bx, _, bw, rectOK := a.bottomBarRect()
+	bx, _, bw, rectOK := a.bottomBarRectFor(p)
 	if !rectOK {
 		return
 	}
 	a.cctx.Set("font", "12px system-ui, sans-serif")
 	textW := a.cctx.Call("measureText", label).Get("width").Float() + 24
-	segs := a.bottomBarSegments(a.navChain())
+	segs := a.bottomBarSegmentsFor(p, a.navChainFor(p))
 	crumbsEnd := 0.0
 	if n := len(segs); n > 0 {
 		crumbsEnd = segs[n-1].X + segs[n-1].W
@@ -273,14 +302,14 @@ func (a *App) barTitleGeom() (x, w float64, label string, editable, muted, ok bo
 	return
 }
 
-// drawBarTitle paints the current pane's name centered in the band (issue
-// #213 tweak 2026-07-30: a centered title, not a crumb extension). Hidden
-// while the rename input replaces it in place.
-func (a *App) drawBarTitle(top float64) {
-	if a.renameEditing {
+// drawBarTitleFor paints pane p's name centered in its band (issue #213
+// tweak 2026-07-30: a centered title, not a crumb extension). Hidden in
+// the focused pane while the rename input replaces it in place.
+func (a *App) drawBarTitleFor(p *pane.Pane, top float64) {
+	if a.renameEditing && p != nil && p.ID == a.tree.Focus {
 		return
 	}
-	x, w, label, _, muted, ok := a.barTitleGeom()
+	x, w, label, _, muted, ok := a.barTitleGeomFor(p)
 	if !ok {
 		return
 	}
@@ -302,15 +331,14 @@ func (a *App) drawBarTitle(top float64) {
 	c.Set("textAlign", "start")
 }
 
-// drawBarSlot paints the bar's right-end circle for the FOCUSED pane's
-// mode (issue #214, the corner circle's new home): URL descent shows back
+// drawBarSlotFor paints the bar's right-end circle for pane p's mode
+// (issue #214, the corner circle's new home): URL descent shows back
 // (live) / refresh (frozen) / the slashed no-live button; a frozen shell
 // shows refresh; a grid shows the + menu button (and the trashcan during a
 // tile drag). The node grid and a markdown descent draw nothing — the
 // first is read-only (and must offer no drag-delete target), the second's
 // slot is occupied by the DOM text-mode toggle at the same center.
-func (a *App) drawBarSlot() {
-	p := a.tree.FocusedPane()
+func (a *App) drawBarSlotFor(p *pane.Pane) {
 	if p == nil {
 		return
 	}
@@ -318,11 +346,11 @@ func (a *App) drawBarSlot() {
 		switch {
 		case a.isURLDescent(p):
 			if a.urlViewFor(p.ID) != nil {
-				a.drawURLBackButton()
+				a.drawURLBackButton(p)
 			} else if a.caps.LiveURL {
-				a.drawURLRefreshButton()
+				a.drawURLRefreshButton(p)
 			} else {
-				a.drawURLOpenTabButton()
+				a.drawURLOpenTabButton(p)
 			}
 		case a.isShellDescent(p) && !a.hasShellStream(p.ID):
 			// Frozen shell descent: refresh either creates a fresh tmux
@@ -332,7 +360,7 @@ func (a *App) drawBarSlot() {
 			// ShellSessionAlive probe if the answer isn't cached yet).
 			if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 				if file, ok := g.Tiles[p.TextFocus]; ok && a.shellRefreshButtonVisible(&file) {
-					a.drawURLRefreshButton()
+					a.drawURLRefreshButton(p)
 				}
 			}
 		}
@@ -493,8 +521,23 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *rpc.Tile {
 // fall through to a pane below; right clicks outside those surfaces DO,
 // so the pane border gestures under the band stay reachable (#220).
 func (a *App) bottomBarClick(sx, sy float64, button int) bool {
-	bx, top, bw, ok := a.bottomBarRect()
+	// Every pane wears a band (#267); resolve the one under the cursor.
+	bp, _, pOK := a.paneAtScreen(sx, sy)
+	if !pOK {
+		return false
+	}
+	bx, top, bw, ok := a.bottomBarRectFor(bp)
 	if !ok || sy < top || sy >= top+wsbar.RowH || sx < bx || sx >= bx+bw {
+		return false
+	}
+	if bp.ID != a.tree.Focus {
+		// A band click in an UNFOCUSED pane moves focus, nothing else —
+		// the same click-focus family as pane content (DropFocusOnly).
+		// Right clicks fall through so border gestures stay reachable.
+		if button == 0 {
+			a.focusToPane(bp)
+			return true
+		}
 		return false
 	}
 	chain := a.navChain()

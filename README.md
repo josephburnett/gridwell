@@ -62,11 +62,12 @@ the net.
 Everything is done with the mouse. Going **in** is a click; the way **back
 out** is the trail you left behind.
 
-The bottom bar of the focused pane shows where you are: a row of square
-tile previews, one per level you descended through — a cookie-crumb trail.
-Click any crumb to ascend back to that level. Middle-click anywhere in a
-pane does one step. The centered title names the room you're in: left-click
-it to zoom the pane tmux-style, right-click to rename.
+Every pane's bottom bar shows where that pane is: a row of square tile
+previews, one per level you descended through — a cookie-crumb trail.
+Click any crumb to ascend back to that level (in the focused pane;
+clicking an unfocused pane's bar just focuses it). Middle-click anywhere
+in a pane does one step. The centered title names the room you're in:
+left-click it to zoom the pane tmux-style, right-click to rename.
 
 | Gesture | Action |
 |---|---|

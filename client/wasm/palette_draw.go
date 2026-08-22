@@ -33,11 +33,18 @@ func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
 	}
 }
 
-// plusButtonCenter returns the screen-space center of the circle button:
-// the right end of the ACTIVE pane's bar band (issues #214/#220). Falls
-// back to the window corner only when no pane is focused (boot frame).
+// plusButtonCenter returns the screen-space center of the FOCUSED pane's
+// circle button (issues #214/#220) — the position click hit-tests and the
+// open palette anchor to. Falls back to the window corner only when no
+// pane is focused (boot frame).
 func (a *App) plusButtonCenter() (float64, float64) {
-	bx, top, bw, ok := a.bottomBarRect()
+	return a.plusButtonCenterFor(a.tree.FocusedPane())
+}
+
+// plusButtonCenterFor is the circle-slot center of pane p's own band —
+// every pane wears one (#267).
+func (a *App) plusButtonCenterFor(p *pane.Pane) (float64, float64) {
+	bx, top, bw, ok := a.bottomBarRectFor(p)
 	if !ok {
 		return a.width - wsbar.SlotW/2, a.height - wsbar.RowH/2
 	}
@@ -58,13 +65,13 @@ func (a *App) pointInPlus(x, y float64) bool {
 // ghost hovers over it ("release here deletes"). The round chrome is
 // identical either way so the position is muscle-memory-stable.
 func (a *App) drawPlusButton(p *pane.Pane) {
-	cx, cy := a.plusButtonCenter()
+	cx, cy := a.plusButtonCenterFor(p)
 	deleting := a.tileDragInFlight()
 	hot := deleting && a.pointInPlus(a.dragging.curScreenX, a.dragging.curScreenY)
 	// The button wears the pane's family hue (issue #223): saturated on the
 	// subtle dark band, so it stands out while still matching the scheme.
 	// The hot trashcan goes danger-red; an open menu gets a brighter ring.
-	band, button := a.barTheme()
+	band, button := a.barThemeFor(p)
 	bg := button
 	if hot {
 		bg = colorPlusBgDelete
