@@ -30,3 +30,14 @@ test('yaml connections: labeled row, pick-only picker', async ({ gw, window }) =
   await expect(window.locator('#gw-pick-ren-0')).toHaveCount(0);
   await expect(window.locator('#gw-pick-del-0')).toHaveCount(0);
 });
+
+test('a connection presents as its own menu row', async ({ gw }) => {
+  // v2 #269: the instance rows ride ListPlugins, so "rtb" sits in the
+  // + menu top row like a plugin. This one is unreachable (127.0.0.1:1),
+  // so it lists rootless/broken — present and labeled, inert until the
+  // remote answers.
+  await gw.enterPlugin('local');
+  const rtb = (await gw.plugins()).find((p) => p.label === 'rtb');
+  expect(rtb, 'the connection is a menu row of its own').toBeTruthy();
+  expect(rtb!.uuid.includes('/'), 'a chained namespace identifies it').toBe(true);
+});

@@ -190,6 +190,12 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		// which made both cases identical on the wire (issue #47).
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
 		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
+		// A PARAMETERIZED plugin's instances join the menu as rows of
+		// their own (v2 #269: a connection presents like a plugin —
+		// click descends, drag drops a link well). Synthesized from the
+		// instance grid the plugin already declares — no kind is
+		// consulted, so any parameterized plugin gets this for free.
+		out = append(out, h.instanceRows(ctx, p.UUID, info)...)
 	}
 	resp := &pb.ListPluginsResponse{
 		Plugins:        out,
@@ -212,6 +218,54 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		}
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// instanceRows synthesizes one menu row per instance of a parameterized
+// plugin (v2 #269): uuid is the CHAINED namespace (<plugin>/<instance>),
+// the root is the instance's child grid, the label is the instance's own.
+// An instance whose child is not yet learned (its remote never answered)
+// lists as rootless — inert, its status_detail riding InfoError so the
+// menu can say why. A failed instance-grid read synthesizes nothing: the
+// parameterized row itself still opens the picker, which shows the error.
+func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb.InfoResponse) []*pb.PluginInfo {
+	if info == nil || info.RootGridId != "" || info.InstanceGridId == "" {
+		return nil
+	}
+	c, ok := h.srv.pluginReg.Get(uuid)
+	if !ok {
+		return nil
+	}
+	g, err := c.GetGrid(ctx, &pb.GetGridRequest{GridId: info.InstanceGridId})
+	if err != nil {
+		return nil
+	}
+	var rows []*pb.PluginInfo
+	for _, t := range g.Tiles {
+		if t.Kind != "well" {
+			continue
+		}
+		row := &pb.PluginInfo{
+			Uuid:      rpc.QualifyID(uuid, t.Id),
+			Kind:      "instance",
+			Label:     t.AltText,
+			InfoError: t.StatusDetail,
+		}
+		if t.ChildGridId != "" {
+			row.Uuid = rpc.QualifyID(uuid, firstSegment(t.ChildGridId))
+			row.RootGridId = rpc.QualifyID(uuid, t.ChildGridId)
+			row.RootViewCx, row.RootViewCy, row.RootViewZoom = float64(t.ViewX), float64(t.ViewY), t.ViewZoom
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// firstSegment returns the leading segment of a chained id.
+func firstSegment(id string) string {
+	if hop, _, ok := rpc.SplitID(id); ok {
+		return hop
+	}
+	return id
 }
 
 // buildPluginInfo assembles a launcher PluginInfo from the config (uuid, kind,
