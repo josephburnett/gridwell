@@ -349,8 +349,8 @@ type DropInput struct {
 	// surface; everything else persists user placement (griddb: "a
 	// directory listing a user has rearranged stays rearranged").
 	TargetImmovable bool
-	SameCell       bool
-	Occupied       bool
+	SameCell        bool
+	Occupied        bool
 	// CrossPlugin: the source grid and the target grid live in different id
 	// namespaces. A clean left-drag then verdicts DropLink instead of
 	// DropMove (a clean right-drag stays DropClone — the server copies).
