@@ -3,6 +3,12 @@
 /gridwell-plugin-fs
 /gridwell-plugin-proc
 /gridwell-plugin-remote
+/gridwell-provider-fs
+/gridwell-provider-proc
+/gridwell-all
+# pre-rename binary names, in case an old checkout left them behind
+/gridwell-plugin-localdb
+/gridwell-plugin-ssh
 /web/gridwell.wasm
 /web/gridwell.wasm.gz
 /web/wasm_exec.js
