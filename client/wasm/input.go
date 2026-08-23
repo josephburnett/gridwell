@@ -1478,9 +1478,18 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
 func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 	if well.ChildGridID == "" {
 		// A link tile whose target isn't available — a broken or rootless
-		// plugin on the node grid. Say why instead of silently doing nothing
-		// (charter §6); pluginhealth owns the wording when it knows the plugin.
-		if pl, ok := a.pluginByUUID(rpc.LocalOf(well.ID)); ok {
+		// plugin, or a connection whose remote hasn't answered. Say why
+		// instead of silently doing nothing (charter §6); pluginhealth
+		// owns the wording. The id is the plugin uuid itself on a MENU
+		// row (chained for a connection — i9sm6ff/ltvv2f9), and
+		// node-qualified on a node-grid tile — try both shapes, or a
+		// connection's dial status never surfaces (the 2026-08-23
+		// nothing-to-descend-into bug).
+		pl, ok := a.pluginByUUID(well.ID)
+		if !ok {
+			pl, ok = a.pluginByUUID(rpc.LocalOf(well.ID))
+		}
+		if ok {
 			if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
 				a.reportErr(sev, source, message)
 				return

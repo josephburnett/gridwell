@@ -31,3 +31,26 @@ test('one menu row per connection; the picker row is gone', async ({ gw }) => {
     'the transport row is replaced by its instances',
   ).toBeUndefined();
 });
+
+test('clicking a pending connection says WHY, not nothing-to-descend-into', async ({
+  gw,
+  window,
+}) => {
+  // The 2026-08-23 laptop bug: the descent guard looked the plugin up by
+  // LocalOf(id), which mangles a chained connection uuid, so the click
+  // fell to the generic "nothing to descend into" instead of the
+  // connection's own status.
+  await gw.enterPlugin('local');
+  await gw.clickPluginSwatch('rtb');
+  await expect
+    .poll(async () => {
+      const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
+      return (errs.notices ?? []).some((n: any) => n.source === 'launcher:rtb');
+    })
+    .toBe(true);
+  const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
+  expect(
+    (errs.notices ?? []).some((n: any) => String(n.message).includes('nothing to descend into')),
+    'the generic fallback must not fire for a known connection row',
+  ).toBe(false);
+});

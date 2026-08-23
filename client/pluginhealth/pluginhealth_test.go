@@ -131,3 +131,23 @@ func TestClickNotice_SourceKeyedByLabelCoalesces(t *testing.T) {
 		t.Errorf("source key changed across identical clicks: %q vs %q", s1, s2)
 	}
 }
+
+// A CONNECTION row (chained uuid, v2 #269) that hasn't learned its root
+// is WAITING, not misconfigured — the notice must say so, never point at
+// config.root (which doesn't exist for connections).
+func TestClickNotice_PendingConnection(t *testing.T) {
+	pl := rpc.PluginInfo{UUID: "sshx/conn1", Label: "rtb"}
+	sev, source, msg, ok := ClickNotice(pl)
+	if !ok || source != "launcher:rtb" {
+		t.Fatalf("notice = %v %q %q %v", sev, source, msg, ok)
+	}
+	if !strings.Contains(msg, "hasn't answered") {
+		t.Fatalf("pending-connection wording: %q", msg)
+	}
+	// With a recorded dial failure the detail rides InfoError → Broken.
+	pl.InfoError = "dial tcp 127.0.0.1:1: connection refused"
+	_, _, msg, ok = ClickNotice(pl)
+	if !ok || !strings.Contains(msg, "connection refused") {
+		t.Fatalf("dial detail must surface: %q ok=%v", msg, ok)
+	}
+}
