@@ -61,10 +61,6 @@
         "to": "gridwell-provider-proc"
       },
       {
-        "from": "../../gridwell-plugin-remote",
-        "to": "gridwell-plugin-remote"
-      },
-      {
         "from": "../../api/gridwell/v1/data.proto",
         "to": "data.proto"
       }

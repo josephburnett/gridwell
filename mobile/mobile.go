@@ -38,10 +38,10 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/remote"
+	"github.com/josephburnett/gridwell/internal/remote/dial"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
 	"github.com/josephburnett/gridwell/plugins/proc"
-	"github.com/josephburnett/gridwell/plugins/remote"
-	"github.com/josephburnett/gridwell/plugins/remote/dial"
 	"github.com/josephburnett/gridwell/web"
 )
 

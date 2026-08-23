@@ -13,7 +13,6 @@ use (
 	./plugins/fs
 	./plugins/griddb
 	./plugins/proc
-	./plugins/remote
 	./test/boundary
 	./test/federation
 )

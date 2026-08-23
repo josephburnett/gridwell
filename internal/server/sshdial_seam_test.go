@@ -16,9 +16,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/remote/dial"
+	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/remote/dial"
-	"github.com/josephburnett/gridwell/plugins/remote/dial/dialtest"
 )
 
 // This is the ssh plugin's REAL transport seam, in-process: a genuine

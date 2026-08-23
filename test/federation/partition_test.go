@@ -22,7 +22,7 @@ import (
 	"time"
 
 	gwrpc "github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/plugins/remote/dial/dialtest"
+	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
 )
 
 func TestMountPartitionServesCache(t *testing.T) {

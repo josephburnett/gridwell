@@ -13,15 +13,12 @@ replace (
 	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ../../plugins/griddb
 	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
-	github.com/josephburnett/gridwell/plugins/remote => ../../plugins/remote
 )
 
 require (
 	github.com/josephburnett/gridwell v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/fs v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/proc v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/plugins/remote v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -34,6 +31,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
 	github.com/hashicorp/go-plugin v1.8.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
+	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000 // indirect
 	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000 // indirect
 	github.com/josephburnett/gridwell/plugins/griddb v0.0.0-00010101000000-000000000000 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect

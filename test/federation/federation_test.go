@@ -30,7 +30,7 @@ import (
 	"time"
 
 	gwrpc "github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/plugins/remote/dial/dialtest"
+	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
 )
 
 // repoRoot walks up from the test binary's source dir to the REPO root —

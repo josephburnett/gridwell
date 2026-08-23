@@ -13,7 +13,6 @@ replace (
 	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ../../plugins/griddb
 	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
-	github.com/josephburnett/gridwell/plugins/remote => ../../plugins/remote
 )
 
 require github.com/josephburnett/gridwell v0.0.0-00010101000000-000000000000
@@ -36,6 +35,7 @@ require (
 	github.com/oklog/run v1.2.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/yuin/goldmark v1.8.5 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect

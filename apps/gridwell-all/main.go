@@ -12,13 +12,10 @@ package main
 import (
 	"os"
 
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/cli"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
 	"github.com/josephburnett/gridwell/plugins/proc"
-	"github.com/josephburnett/gridwell/plugins/remote"
-	"github.com/josephburnett/gridwell/plugins/remote/dial"
 )
 
 func main() { os.Exit(cli.Main(os.Args[1:], factories())) }
@@ -31,13 +28,5 @@ func factories() map[string]plugin.ServerFactory {
 	return map[string]plugin.ServerFactory{
 		"fs":   fsplugin.NewFactory,
 		"proc": proc.NewFactory,
-		"remote": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			db, err := remote.OpenDB(cfg["db_file"])
-			if err != nil {
-				return nil, err
-			}
-			home := os.Getenv("GRIDWELL_HOME")
-			return remote.New(db, dial.Dial, home), nil
-		},
 	}
 }

@@ -31,9 +31,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/remote"
+	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/remote"
-	"github.com/josephburnett/gridwell/plugins/remote/dial"
 )
 
 // chainHarness wires remote node ⇐ sshhost plugin ⇐ local server.

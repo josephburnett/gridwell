@@ -217,9 +217,10 @@ func RunServe(args []string) int { return RunServeWith(args, nil) }
 // docs/plugin.md): kinds present in factories load in-process through the
 // same compose door; everything else spawns. The stock host passes nil.
 func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int {
-	// The native store (the v2 fold): kind "local" is node code, always
-	// in-process. A composer's own local factory (mobile) still wins.
-	factories = node.WithNativeLocal(factories)
+	// The v2 folds: the native store (local) and the builtin transport
+	// (remote) are node code, always in-process. A composer's own
+	// factories (mobile) still win.
+	factories = node.WithNativeTransports(factories)
 	home, err := config.Home()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)

@@ -13,21 +13,20 @@ replace (
 	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ../../plugins/griddb
 	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
-	github.com/josephburnett/gridwell/plugins/remote => ../../plugins/remote
 )
 
 require (
+	github.com/josephburnett/gridwell v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/plugins/remote v0.0.0-00010101000000-000000000000
 )
 
 require (
 	connectrpc.com/connect v1.20.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	golang.org/x/text v0.40.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260807164820-c8921c73eeea // indirect
 	google.golang.org/grpc v1.83.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )

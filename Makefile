@@ -3,7 +3,6 @@
 BIN := ./gridwell
 FS_BIN := ./gridwell-plugin-fs
 PROC_BIN := ./gridwell-plugin-proc
-REMOTE_BIN := ./gridwell-plugin-remote
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -46,7 +45,6 @@ bin-all:
 plugins:
 	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-plugin-fs ./cmd/gridwell-plugin-fs
 	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-plugin-proc ./cmd/gridwell-plugin-proc
-	cd plugins/remote && CGO_ENABLED=0 go build -o ../../gridwell-plugin-remote ./cmd/gridwell-plugin-remote
 	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-provider-fs ./cmd/gridwell-provider-fs
 	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-provider-proc ./cmd/gridwell-provider-proc
 
@@ -111,7 +109,7 @@ proto-check:
 # shared nested modules, and each plugin (its own module: the in-repo
 # strangers, docs/plugin.md). check builds and tests each one STANDALONE
 # (GOWORK=off) so no module can quietly lean on the workspace.
-MODULES := api internal/doctype plugins/griddb plugins/fs plugins/proc plugins/remote apps/gridwell apps/gridwell-all mobile
+MODULES := api internal/doctype plugins/griddb plugins/fs plugins/proc apps/gridwell apps/gridwell-all mobile
 
 # check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
 # a fresh checkout (CI) cannot even `go build ./...` before one exists.
@@ -243,5 +241,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(FS_BIN) $(PROC_BIN) $(REMOTE_BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(FS_BIN) $(PROC_BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out

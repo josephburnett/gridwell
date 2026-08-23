@@ -11,7 +11,6 @@ require (
 	github.com/josephburnett/gridwell/plugins/fs v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/griddb v0.0.0-00010101000000-000000000000 // indirect
 	github.com/josephburnett/gridwell/plugins/proc v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/plugins/remote v0.0.0-00010101000000-000000000000
 )
 
 replace (
@@ -20,7 +19,6 @@ replace (
 	github.com/josephburnett/gridwell/plugins/fs => ./plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ./plugins/griddb
 	github.com/josephburnett/gridwell/plugins/proc => ./plugins/proc
-	github.com/josephburnett/gridwell/plugins/remote => ./plugins/remote
 )
 
 require (
@@ -29,6 +27,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/niklasfasching/go-org v1.9.1
 	github.com/yuin/goldmark v1.8.5
+	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.12
@@ -51,7 +50,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/oklog/run v1.2.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260807164820-c8921c73eeea // indirect
