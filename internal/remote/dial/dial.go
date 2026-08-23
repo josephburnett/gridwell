@@ -124,6 +124,12 @@ func (r *redialer) establish() (*ssh.Client, error) {
 		User:            r.user,
 		Auth:            r.auth,
 		HostKeyCallback: r.hostKey,
+		// Offer the algorithms known_hosts already trusts for this host
+		// FIRST (recomputed each dial — the user may have just fixed the
+		// file), or a server with several host keys can present one the
+		// file doesn't hold and strict verification reports "key
+		// mismatch" on a perfectly good host (hostalgos.go).
+		HostKeyAlgorithms: hostKeyAlgorithmsFor(r.hostKey, r.host),
 		// Without a timeout a black-holing network (dropped NAT mapping,
 		// sleeping laptop's dead route) would hang the handshake — and mu —
 		// indefinitely.
