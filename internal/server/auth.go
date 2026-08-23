@@ -27,9 +27,9 @@ import (
 )
 
 const (
-	// authCookieName carries the token in browsers. SameSite=Lax keeps
+	// AuthCookieName carries the token in browsers. SameSite=Lax keeps
 	// cross-site POSTs (all Connect RPCs are POSTs) from riding the cookie.
-	authCookieName = "gridwell_auth"
+	AuthCookieName = "gridwell_auth"
 	// authLoginPath is the login form's POST target (and the login page's
 	// address). Handled by the middleware BEFORE the mux, so it can never
 	// collide with the SPA fallback.
@@ -90,13 +90,13 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 // authed reports whether the request carries the current token. Hashes are
 // fixed-length, so the constant-time compare leaks nothing.
 func authed(r *http.Request, token string) bool {
-	c, err := r.Cookie(authCookieName)
+	c, err := r.Cookie(AuthCookieName)
 	return err == nil && subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1
 }
 
 func setAuthCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     authCookieName,
+		Name:     AuthCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   authCookieMaxAge,

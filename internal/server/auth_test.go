@@ -58,7 +58,7 @@ func get(t *testing.T, c *http.Client, url string, cookie string) (*http.Respons
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	if cookie != "" {
-		req.AddCookie(&http.Cookie{Name: authCookieName, Value: cookie})
+		req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: cookie})
 	}
 	res, err := c.Do(req)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestAuthGatesBrowserSurface(t *testing.T) {
 		t.Fatalf("wrong-password login = %d, want 401", res.StatusCode)
 	}
 	for _, ck := range res.Cookies() {
-		if ck.Name == authCookieName {
+		if ck.Name == AuthCookieName {
 			t.Fatalf("wrong-password login must not set the auth cookie")
 		}
 	}
@@ -134,7 +134,7 @@ func TestAuthGatesBrowserSurface(t *testing.T) {
 	}
 	var token string
 	for _, ck := range res.Cookies() {
-		if ck.Name == authCookieName {
+		if ck.Name == AuthCookieName {
 			token = ck.Value
 		}
 	}
@@ -149,7 +149,7 @@ func TestAuthGatesBrowserSurface(t *testing.T) {
 	}
 	jar, _ := cookiejar.New(nil)
 	u, _ := url.Parse(hs.URL)
-	jar.SetCookies(u, []*http.Cookie{{Name: authCookieName, Value: token}})
+	jar.SetCookies(u, []*http.Cookie{{Name: AuthCookieName, Value: token}})
 	authedClient := *hs.Client()
 	authedClient.Jar = jar
 	cl = rpc.NewClient(&authedClient, hs.URL, connect.WithProtoJSON())

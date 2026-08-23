@@ -12,7 +12,7 @@ test('auth cookie constants match the server source', () => {
   const authGo = path.resolve(__dirname, '..', '..', '..', '..', 'internal', 'server', 'auth.go');
   const src = execFileSync('cat', [authGo], { encoding: 'utf8' });
   assert.ok(
-    src.includes(`authCookieName = "${AUTH_COOKIE_NAME}"`),
+    src.includes(`AuthCookieName = "${AUTH_COOKIE_NAME}"`),
     `server auth.go no longer names the cookie ${AUTH_COOKIE_NAME}`,
   );
   assert.ok(

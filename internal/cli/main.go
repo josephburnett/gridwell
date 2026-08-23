@@ -30,6 +30,8 @@ func Main(args []string, factories map[string]plugin.ServerFactory) int {
 		return RunBackup(rest)
 	case "clear-browser-data":
 		return RunClearBrowserData(rest)
+	case "parity":
+		return RunParity(rest)
 	case "-h", "--help", "help":
 		usage()
 		return 0
@@ -53,6 +55,10 @@ Usage:
                                               serving" (exit 1)
     gridwell backup DEST                      snapshot every plugin DB + server.yaml
                                               (VACUUM INTO; safe while serving)
+    gridwell parity --a URL --b URL [--password PW] [--ignore-fields f,g]
+                                              crawl two nodes serving the same
+                                              data and diff them (the migration
+                                              oracle; exit 0 = parity)
     gridwell clear-browser-data [--user-data DIR]
                                               delete the desktop app's Chromium
                                               session (cookies, storage, caches
