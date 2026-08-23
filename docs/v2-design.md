@@ -151,11 +151,11 @@ node. Schema (dbformat-versioned; durable-but-forgettable):
 ```sql
 meta      (k, v)                  -- uuid, kind, format version
 contexts  (grid_id PK AUTOINCREMENT, key UNIQUE, root_cx, root_cy, root_zoom)
-idmap     (tile_id PK AUTOINCREMENT, context_id, key, tombstoned,
-           UNIQUE(context_id, key))
+idmap     (tile_id PK AUTOINCREMENT, grid_id, key, tombstoned;
+           key UNIQUE among LIVE rows only — a retired key's row stays,
+           and a recreated key mints a FRESH id, the legacy fs identity)
 layout    (tile_id PK, x, y, w, h, view_x, view_y, view_zoom,
-           text_x, text_y, text_w, text_h, text_mode,
-           content_zoom, alt_override, alt_user, version)
+           text_x, text_y, text_w, text_h, text_mode, content_zoom)
 userdocs  (tile_id PK, params)    -- provider tool rows (fs search):
                                   -- user-created, provider-validated
 cache_listings  (context_id PK, proto_bytes, fetched_at)
@@ -163,11 +163,14 @@ cache_content   (key, proto_bytes, fetched_at)   -- bounded
 cache_previews  (key, jpeg, fetched_at)          -- bounded
 ```
 
-- `layout.version` gives provider tiles the same optimistic
-  concurrency native tiles have; framing columns never bump it (the
-  one version rule, third implementation deleted).
-- `alt_override`/`alt_user` is the rename latch, now in one place: the
-  provider's label is content, the user's rename is presentation.
+- Layout rows are UNVERSIONED (a deviation from this doc's first
+  draft, decided at implementation): provider tiles serve version 0
+  today (griddb never versioned placement), and the parity gate holds
+  the new stack to the same wire. Optimistic concurrency for provider
+  placement can arrive later as an additive column.
+- Renaming provider tiles stays refused for now (the legacy fs
+  behavior — a file tile's name IS the filename); a user-label
+  override is a possible later additive column, not a v2 fact.
 - For a CONNECTION the layout half sits empty (the remote hosts its
   own); the cache half is the old mountcache, same disposable
   semantics, now sharing the file with nothing it can hurt (dropping
