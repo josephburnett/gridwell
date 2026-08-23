@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -19,6 +20,13 @@ import (
 // labeled "personal" and "work", and returns a connect client plus the node's
 // qualified root grid id.
 func nodeGridServer(t *testing.T) (cl *rpc.Client, nodeRoot, uuidA, rootA string) {
+	t.Helper()
+	return nodeGridServerAt(t, "")
+}
+
+// nodeGridServerAt pins the node state file, for arrangement-persistence
+// tests.
+func nodeGridServerAt(t *testing.T, statePath string) (cl *rpc.Client, nodeRoot, uuidA, rootA string) {
 	t.Helper()
 	ctx := context.Background()
 	reg := plugin.NewRegistry()
@@ -48,7 +56,7 @@ func nodeGridServer(t *testing.T) (cl *rpc.Client, nodeRoot, uuidA, rootA string
 	reg.Register(uuidB, "local", clientB, nil)
 	reg.SetLabel(uuidB, "work")
 
-	srv := New(reg, Config{NodeID: "node1"})
+	srv := New(reg, Config{NodeID: "node1", NodeStatePath: statePath})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), "node1/0", uuidA, rootA
@@ -245,4 +253,51 @@ func nodeInfoViaExport(t *testing.T, statePath string) (*pb.InfoResponse, error)
 	ng := &nodeGrid{reg: plugin.NewRegistry(), info: nil, invalidate: func(string) {}, statePath: statePath}
 	ng.loadView()
 	return ng.Info(context.Background(), &pb.InfoRequest{})
+}
+
+// The launcher stays as you left it (v2, #269): placement persists in
+// the node state file, survives a server restart, and unplaced tiles
+// keep their config-order default row.
+func TestNodeGridPlacementPersists(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "node-view.json")
+	cl, nodeRoot, uuidA, _ := nodeGridServerAt(t, statePath)
+	ctx := context.Background()
+
+	tileID := "node1/" + uuidA
+	if _, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: tileID, GridID: nodeRoot, X: 3, Y: -2, W: 2, H: 1,
+	}); err != nil {
+		t.Fatalf("PlaceTile on the launcher: %v", err)
+	}
+	g, err := cl.GetGrid(ctx, nodeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var moved, other *rpc.Tile
+	for i := range g.Tiles {
+		if g.Tiles[i].ID == tileID {
+			moved = &g.Tiles[i]
+		} else {
+			other = &g.Tiles[i]
+		}
+	}
+	if moved == nil || moved.X != 3 || moved.Y != -2 || moved.W != 2 {
+		t.Fatalf("placement not served back: %+v", moved)
+	}
+	if other == nil || other.X != 1 || other.Y != 0 {
+		t.Fatalf("unplaced tile left its default row: %+v", other)
+	}
+
+	// A fresh provider over the same state file (the restart) still
+	// serves the arrangement.
+	ng := &nodeGrid{reg: plugin.NewRegistry(), info: nil, invalidate: func(string) {}, statePath: statePath}
+	ng.loadView()
+	if pos, ok := ng.view.Tiles[uuidA]; !ok || pos.X != 3 || pos.Y != -2 || pos.W != 2 {
+		t.Fatalf("restart lost the arrangement: %+v ok=%v", pos, ok)
+	}
+
+	// Content mutations stay refused — rearrangeable is not writable.
+	if _, err := cl.CreateText(ctx, &rpc.CreateTextRequest{GridID: nodeRoot, X: 9, Y: 9, W: 1, H: 1}); err == nil {
+		t.Fatal("create on the node grid succeeded, want refusal")
+	}
 }

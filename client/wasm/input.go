@@ -706,7 +706,6 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
 		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
 		in.SameGrid = t.gridID == d.srcGridID
-		in.TargetImmovable = a.gridImmovable(t.gridID)
 		in.CrossPlugin = dropCrossNamespace(d, t)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y

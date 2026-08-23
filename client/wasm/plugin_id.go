@@ -41,14 +41,6 @@ func (a *App) gridKnownReadOnly(gridID string) bool {
 	return ok && !g.Meta.Writable
 }
 
-// gridImmovable reports that the grid refuses PLACEMENT too, not just
-// creation: the node grid (source_kind "node" — a declaration) is the one
-// such surface; every other grid persists user placement.
-func (a *App) gridImmovable(gridID string) bool {
-	g, ok := a.c.Grid(gridID)
-	return ok && g.Meta.SourceKind == rpc.GridSourceNode
-}
-
 // isNodeGridPane reports whether pane p sits at the node grid — the plugin
 // list landing page. Drives only the pane's identity border color; the node
 // grid otherwise renders and behaves as the ordinary (read-only) grid it is.

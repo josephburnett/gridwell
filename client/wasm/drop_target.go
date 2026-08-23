@@ -61,7 +61,6 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 	if haveT {
 		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
 		in.SameGrid = t.gridID == d.srcGridID
-		in.TargetImmovable = a.gridImmovable(t.gridID)
 		in.CrossPlugin = dropCrossNamespace(d, t)
 		if clone {
 			in.Forbidden = dropForbiddenForClone(d, t)

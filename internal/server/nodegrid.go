@@ -55,11 +55,24 @@ type nodeGrid struct {
 	statePath string
 }
 
-// nodeView is the persisted landing-page viewport.
+// nodeView is the persisted landing-page state: the viewport, plus the
+// user's launcher arrangement (v2, #269 — the node grid rearranges like
+// any grid; a plugin tile with no entry sits at its config-order default
+// row position). Additive JSON: files written before Tiles load fine.
 type nodeView struct {
 	Cx   float64 `json:"cx"`
 	Cy   float64 `json:"cy"`
 	Zoom float64 `json:"zoom"`
+	// Tiles maps a plugin uuid to its user placement.
+	Tiles map[string]nodeTilePos `json:"tiles,omitempty"`
+}
+
+// nodeTilePos is one launcher tile's user placement.
+type nodeTilePos struct {
+	X int64 `json:"x"`
+	Y int64 `json:"y"`
+	W int64 `json:"w"`
+	H int64 `json:"h"`
 }
 
 // loadView restores the persisted viewport, if any. A missing file is a
@@ -124,11 +137,17 @@ func (n *nodeGrid) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.Get
 			Id:     p.UUID,
 			GridId: nodeGridID,
 			Kind:   "well",
-			// A centered row with a one-cell gap, in config order.
+			// The user's stored placement; a never-placed tile sits in
+			// the centered row with a one-cell gap, in config order.
 			X: int64(2*i - len(plugins) + 1), Y: 0, W: 1, H: 1,
 			AltText:   n.reg.Label(p.UUID),
 			Reference: true,
 		}
+		n.mu.Lock()
+		if pos, ok := n.view.Tiles[p.UUID]; ok {
+			t.X, t.Y, t.W, t.H = pos.X, pos.Y, pos.W, pos.H
+		}
+		n.mu.Unlock()
 		if info, err := n.info(ctx, p.UUID); err == nil && info.RootGridId != "" {
 			// Both shapes concat correctly: a leaf plugin's local root
 			// ("1" → "uuid/1") and a transit plugin's chain
@@ -219,20 +238,32 @@ func (n *nodeGrid) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Til
 // silently downgrading durability.
 func (n *nodeGrid) SetRootView(_ context.Context, req *pb.SetRootViewRequest) (*pb.SetRootViewResponse, error) {
 	n.mu.Lock()
-	n.view = nodeView{Cx: req.Cx, Cy: req.Cy, Zoom: req.Zoom}
+	n.view.Cx, n.view.Cy, n.view.Zoom = req.Cx, req.Cy, req.Zoom
+	n.mu.Unlock()
+	if err := n.saveView(); err != nil {
+		return nil, err
+	}
+	return &pb.SetRootViewResponse{}, nil
+}
+
+// saveView mirrors the in-memory state to the state file (the durable
+// copy; memory is the read cache — one writer).
+func (n *nodeGrid) saveView() error {
+	n.mu.Lock()
 	v := n.view
 	path := n.statePath
 	n.mu.Unlock()
-	if path != "" {
-		data, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(path, data, 0o600); err != nil {
-			return nil, fmt.Errorf("node grid: persist viewport: %w", err)
-		}
+	if path == "" {
+		return nil
 	}
-	return &pb.SetRootViewResponse{}, nil
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("node grid: persist state: %w", err)
+	}
+	return nil
 }
 
 // Every content mutation is refused with one clear error.
@@ -242,8 +273,35 @@ func (n *nodeGrid) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileR
 func (n *nodeGrid) CloneTile(context.Context, *pb.CloneTileRequest) (*pb.TileResponse, error) {
 	return nil, errNodeGridReadOnly
 }
-func (n *nodeGrid) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	return nil, errNodeGridReadOnly
+
+// PlaceTile persists a launcher tile's placement (v2, #269): the node
+// grid stays content-read-only (no creates, no deletes), but ARRANGEMENT
+// is the user's on every grid — the launcher finally stays as you left
+// it. Unversioned, like every projection placement.
+func (n *nodeGrid) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+	if _, ok := n.reg.Get(req.TileId); !ok {
+		return nil, status.Errorf(codes.NotFound, "node grid: no plugin %q", req.TileId)
+	}
+	if req.GridId != "" && req.GridId != nodeGridID {
+		return nil, status.Error(codes.InvalidArgument, "node grid: cross-grid placement not supported")
+	}
+	w, h := req.W, req.H
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	n.mu.Lock()
+	if n.view.Tiles == nil {
+		n.view.Tiles = map[string]nodeTilePos{}
+	}
+	n.view.Tiles[req.TileId] = nodeTilePos{X: req.X, Y: req.Y, W: w, H: h}
+	n.mu.Unlock()
+	if err := n.saveView(); err != nil {
+		return nil, err
+	}
+	return n.GetTile(ctx, &pb.GetTileRequest{TileId: req.TileId})
 }
 func (n *nodeGrid) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
 	return nil, errNodeGridReadOnly

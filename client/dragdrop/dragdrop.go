@@ -344,13 +344,8 @@ type DropInput struct {
 	// SameGrid: the drop lands in the tile's own grid — a rearrangement,
 	// no arrival anywhere.
 	SameGrid bool
-	// TargetImmovable: the grid refuses PLACEMENT too, not just creation —
-	// the node grid (source_kind "node", a declaration) is the one such
-	// surface; everything else persists user placement (griddb: "a
-	// directory listing a user has rearranged stays rearranged").
-	TargetImmovable bool
-	SameCell        bool
-	Occupied        bool
+	SameCell bool
+	Occupied bool
 	// CrossPlugin: the source grid and the target grid live in different id
 	// namespaces. A clean left-drag then verdicts DropLink instead of
 	// DropMove (a clean right-drag stays DropClone — the server copies).
@@ -389,7 +384,7 @@ func DecideDrop(in DropInput) DropAction {
 		return DropRejected
 	case in.Forbidden:
 		return DropRejected
-	case in.TargetReadOnly && !(in.SameGrid && !in.Clone && !in.TargetImmovable):
+	case in.TargetReadOnly && !(in.SameGrid && !in.Clone):
 		// Read-only gates ARRIVALS (creation-class); a same-grid left-drag
 		// is placement, which read-only projections accept and persist
 		// (#266 — the client used to conflate the two and reject moves
