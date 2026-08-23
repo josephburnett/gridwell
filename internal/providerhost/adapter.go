@@ -97,27 +97,65 @@ func notNow(err error) bool {
 
 // listing fetches a context's listing, degrading to the remembered
 // answer on a transport-shaped failure. stale reports a cache serve.
-func (a *Adapter) listing(ctx context.Context, gid int64, key string) (resp *cpv1.ListResponse, stale bool, err error) {
+// facts is the entry-fact lookup: the live entries, UNIONED (for a
+// non-authoritative listing) with previously remembered ones — a pid
+// unreadable this pass still has its kind and label from the last pass
+// it was seen (the legacy stored-row behavior, now cache behavior).
+func (a *Adapter) listing(ctx context.Context, gid int64, key string) (resp *cpv1.ListResponse, facts []*cpv1.Entry, stale bool, err error) {
+	prev := a.cachedListing(gid)
 	resp, err = a.cp.List(ctx, &cpv1.ListRequest{Context: key})
 	if err == nil {
-		if blob, merr := proto.Marshal(resp); merr == nil {
-			// A cache write failing must not fail the read.
+		facts = resp.Entries
+		if !resp.Authoritative && prev != nil {
+			facts = unionEntries(resp.Entries, prev.Entries)
+		}
+		// Remember the UNION so facts survive repeated unreadable
+		// passes. A cache write failing must not fail the read.
+		toCache := resp
+		if !resp.Authoritative {
+			toCache = &cpv1.ListResponse{Entries: facts, Authoritative: false, SourceLabel: resp.SourceLabel}
+		}
+		if blob, merr := proto.Marshal(toCache); merr == nil {
 			_ = a.mem.CacheListing(gid, blob, resp.Authoritative)
 		}
-		return resp, false, nil
+		return resp, facts, false, nil
 	}
 	if !notNow(err) {
-		return nil, false, err
+		return nil, nil, false, err
 	}
-	blob, _, ok, cerr := a.mem.CachedListing(gid)
-	if cerr != nil || !ok {
-		return nil, false, err // no remembered answer: the failure stands
+	if prev == nil {
+		return nil, nil, false, err // no remembered answer: the failure stands
+	}
+	return prev, prev.Entries, true, nil
+}
+
+// cachedListing loads the remembered listing, nil when none/corrupt.
+func (a *Adapter) cachedListing(gid int64) *cpv1.ListResponse {
+	blob, _, ok, err := a.mem.CachedListing(gid)
+	if err != nil || !ok {
+		return nil
 	}
 	cached := &cpv1.ListResponse{}
 	if uerr := proto.Unmarshal(blob, cached); uerr != nil {
-		return nil, false, err
+		return nil
 	}
-	return cached, true, nil
+	return cached
+}
+
+// unionEntries returns live entries plus remembered ones live didn't
+// include (live wins on a shared key).
+func unionEntries(live, remembered []*cpv1.Entry) []*cpv1.Entry {
+	seen := map[string]bool{}
+	for _, e := range live {
+		seen[e.Key] = true
+	}
+	out := append([]*cpv1.Entry(nil), live...)
+	for _, e := range remembered {
+		if !seen[e.Key] {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // engineEntries converts listing entries for the layout engine.
@@ -185,16 +223,41 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 	if err != nil {
 		return nil, nil, err
 	}
-	resp, stale, err := a.listing(ctx, gid, key)
+	resp, facts, stale, err := a.listing(ctx, gid, key)
 	if err != nil {
 		return nil, nil, err
 	}
 	// A stale (remembered) listing must never retire rows — the source
 	// didn't answer; nothing is authoritatively absent.
 	authoritative := resp.Authoritative && !stale
-	tiles, err := a.mem.Merge(gid, engineEntries(resp.Entries), authoritative)
+	tiles, err := a.mem.Merge(gid, engineEntries(facts), authoritative)
 	if err != nil {
 		return nil, nil, err
+	}
+	// A LIVE non-authoritative listing sweeps by arbitration: rows the
+	// listing didn't include are probed, and only a definitive GONE
+	// retires them (the legacy proc reconcile, as adapter machinery).
+	if !stale && !resp.Authoritative {
+		live := map[string]bool{}
+		for _, e := range resp.Entries {
+			live[e.Key] = true
+		}
+		kept := tiles[:0]
+		for _, t := range tiles {
+			if live[t.Key] {
+				kept = append(kept, t)
+				continue
+			}
+			pr, perr := a.cp.Probe(ctx, &cpv1.ProbeRequest{Key: t.Key})
+			if perr == nil && pr.Presence == cpv1.ProbeResponse_PRESENCE_GONE {
+				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, layout.ErrNotFound) {
+					return nil, nil, rerr
+				}
+				continue // definitively gone: swept
+			}
+			kept = append(kept, t) // uncertain or alive: keep (I12)
+		}
+		tiles = kept
 	}
 	ci, err := a.cp.Info(ctx, &cpv1.InfoRequest{})
 	if err != nil {
@@ -202,7 +265,7 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 	}
 	gridID := strconv.FormatInt(gid, 10)
 	g := &gridwellv1.Grid{Id: gridID, SourceKind: ci.Kind, SourceId: resp.SourceLabel, Stale: stale}
-	return g, buildTiles(gridID, tiles, resp.Entries), nil
+	return g, buildTiles(gridID, tiles, facts), nil
 }
 
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
