@@ -519,6 +519,54 @@ func (d *DB) Retire(tileID int64) error {
 	return d.exec(`UPDATE idmap SET tombstoned = 1 WHERE tile_id = ?`, tileID)
 }
 
+// ── converter imports (docs/v2-design.md §8) ────────────────────────────────
+// The one-time migration writes rows with EXPLICIT ids (identity crosses
+// verbatim, nothing re-minted) and then pins the AUTOINCREMENT sequences
+// so post-cutover mints continue the legacy number space. Production
+// reads/writes never use these.
+
+// ImportContext inserts a context row with an explicit grid id and the
+// legacy root viewport (nil = never set).
+func (d *DB) ImportContext(gridID int64, key string, rootCx, rootCy, rootZoom *float64) error {
+	_, err := d.db.Exec(`INSERT INTO contexts (grid_id, key, root_cx, root_cy, root_zoom) VALUES (?, ?, ?, ?, ?)`,
+		gridID, key, rootCx, rootCy, rootZoom)
+	return err
+}
+
+// ImportTile inserts an idmap+layout pair with an explicit tile id.
+func (d *DB) ImportTile(tileID, gridID int64, key string, x, y, w, h, vx, vy int64, vz float64) error {
+	if _, err := d.db.Exec(`INSERT INTO idmap (tile_id, grid_id, key) VALUES (?, ?, ?)`, tileID, gridID, key); err != nil {
+		return err
+	}
+	_, err := d.db.Exec(`INSERT INTO layout (tile_id, x, y, w, h, view_x, view_y, view_zoom) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		tileID, x, y, w, h, vx, vy, vz)
+	return err
+}
+
+// SetSequences pins the AUTOINCREMENT counters to the LEGACY values —
+// higher than any imported row when rows were ever deleted, so a
+// post-cutover mint can never collide with an id the old world already
+// spent (ids are never reused, across the migration too).
+func (d *DB) SetSequences(contextSeq, tileSeq int64) error {
+	for _, t := range []struct {
+		name string
+		seq  int64
+	}{{"contexts", contextSeq}, {"idmap", tileSeq}} {
+		// sqlite_sequence has no unique index, so no upsert: update the
+		// row AUTOINCREMENT created, insert only if it never has.
+		res, err := d.db.Exec(`UPDATE sqlite_sequence SET seq = ? WHERE name = ?`, t.seq, t.name)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			if _, err := d.db.Exec(`INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)`, t.name, t.seq); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // ── auto-place (the griddb semantics, verbatim) ─────────────────────────────
 
 type cursor struct{ x, y int64 }

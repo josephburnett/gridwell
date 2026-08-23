@@ -18,6 +18,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/compose"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/layout"
 	"github.com/josephburnett/gridwell/internal/parity"
@@ -51,7 +52,19 @@ func seedTree(t *testing.T) string {
 
 func legacyNode(t *testing.T, root string) *rpc.Client {
 	t.Helper()
-	p, err := fsplugin.Open(filepath.Join(t.TempDir(), "fs.db"), nil)
+	return legacyNodeAt(t, root, filepath.Join(t.TempDir(), "fs.db"))
+}
+
+// legacyNodeAt pins the legacy DB path — the conversion parity test
+// converts the very file the legacy node keeps serving.
+func legacyNodeAt(t *testing.T, root, dbPath string) *rpc.Client {
+	t.Helper()
+	// Stamp the pluginmeta identity exactly as `gridwell init` does — the
+	// converter verifies it, and every real legacy DB carries it.
+	if err := pluginmeta.Create(dbPath, fsUUID, "fs"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := fsplugin.Open(dbPath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +85,14 @@ func legacyNode(t *testing.T, root string) *rpc.Client {
 
 func providerNode(t *testing.T, root string) (*rpc.Client, *fsprovider.Provider) {
 	t.Helper()
-	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
+	return providerNodeAt(t, root, filepath.Join(t.TempDir(), "mem.db"))
+}
+
+// providerNodeAt builds the v2 stack over an EXISTING memory DB path —
+// how the conversion parity test serves a converted file.
+func providerNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsprovider.Provider) {
+	t.Helper()
+	mem, err := layout.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}

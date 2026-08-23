@@ -45,6 +45,11 @@ type Options struct {
 	// MaxGrids aborts the crawl (with an error, never a silent cap)
 	// when more than this many grids have been visited. 0 = unlimited.
 	MaxGrids int
+	// GridAllow, when non-nil, bounds descent to these qualified grid
+	// ids — the converter-scoped mode: compare exactly the grids the old
+	// DB had materialized, without materializing the rest of a live
+	// source on both sides. Skipped grids are recorded, never silent.
+	GridAllow map[string]bool
 }
 
 // TooDeep reports whether a qualified grid id crosses a transit
@@ -194,7 +199,7 @@ func crawl(ctx context.Context, cls []*rpc.Client, o Options) ([]*Snapshot, erro
 	for len(queue) > 0 {
 		gid := queue[0]
 		queue = queue[1:]
-		if TooDeep(gid) && !o.IncludeTransit {
+		if (TooDeep(gid) && !o.IncludeTransit) || (o.GridAllow != nil && !o.GridAllow[gid]) {
 			for _, s := range snaps {
 				s.Skipped = append(s.Skipped, gid)
 			}
