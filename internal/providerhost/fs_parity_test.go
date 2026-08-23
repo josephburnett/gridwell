@@ -25,8 +25,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/providerhost"
 	"github.com/josephburnett/gridwell/internal/server"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
 	"github.com/josephburnett/gridwell/plugins/fs/fssource"
+	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
 )
 
 const fsUUID = "fsuuidx" // shared by both stacks so ids compare literally
