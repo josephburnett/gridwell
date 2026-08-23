@@ -143,12 +143,12 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return node.BuildConfig(home, cfgPath)
 }
 
-// resolvePluginBinary finds the go-plugin binary for a built-in kind:
-// "gridwell-plugin-<kind>". Every plugin runs as a separately-compiled subprocess;
-// the host locates the binary via GRIDWELL_PLUGIN_DIR, then beside the running
-// gridwell executable (how `make` lays them out), then on PATH.
-func resolvePluginBinary(kind string) (string, error) {
-	name := "gridwell-plugin-" + kind
+// resolveBinary finds a go-plugin binary by name (gridwell-plugin-<kind>
+// or gridwell-provider-<kind>). Every plugin runs as a separately-compiled
+// subprocess; the host locates the binary via GRIDWELL_PLUGIN_DIR, then
+// beside the running gridwell executable (how `make` lays them out), then
+// on PATH.
+func resolveBinary(name string) (string, error) {
 	var tried []string
 	if dir := os.Getenv("GRIDWELL_PLUGIN_DIR"); dir != "" {
 		p := filepath.Join(dir, name)
@@ -188,7 +188,13 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 		if _, ok := factories[pc.Kind]; ok {
 			continue
 		}
-		bin, err := resolvePluginBinary(pc.Kind)
+		name := "gridwell-plugin-" + pc.Kind
+		if pc.Provider {
+			// v2 provider entries spawn the provider binary — a distinct
+			// name because a binary serves ONE service (docs/v2-design.md).
+			name = "gridwell-provider-" + pc.Kind
+		}
+		bin, err := resolveBinary(name)
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.Kind, err)
 		}

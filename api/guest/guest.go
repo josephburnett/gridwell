@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/go-plugin"
 
 	gplug "github.com/josephburnett/gridwell/api/compose"
+	contentproviderv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
@@ -77,6 +78,24 @@ func Serve(impl gridwellv1.GridwellServer) {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: gplug.HandshakeConfig,
 		Plugins:         gplug.PluginMap(impl),
+		GRPCServer:      plugin.DefaultGRPCServer,
+		Logger:          logger,
+	})
+}
+
+// ServeProvider runs a v2 CONTENT PROVIDER binary's event loop (the
+// provider twin of Serve): impl serves contentprovider.v1 — stateless
+// keys and content; the node owns ids, layout, and the memory DB.
+func ServeProvider(impl contentproviderv1.ContentProviderServer) {
+	watchHost()
+	logger := hclog.New(&hclog.LoggerOptions{
+		Level:      hclog.Error,
+		Output:     os.Stderr,
+		JSONFormat: true,
+	})
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: gplug.HandshakeConfig,
+		Plugins:         gplug.ProviderPluginMap(impl),
 		GRPCServer:      plugin.DefaultGRPCServer,
 		Logger:          logger,
 	})

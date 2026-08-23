@@ -67,6 +67,12 @@ type PluginConfig struct {
 	Kind   string            `yaml:"kind"`
 	Binary string            `yaml:"binary,omitempty"`
 	Config map[string]string `yaml:"config,omitempty"`
+	// Provider marks a v2 CONTENT PROVIDER entry (docs/v2-design.md): the
+	// process serves contentprovider.v1 (stateless — keys, content, no
+	// layout) and the NODE owns this external's memory DB (ids, placement,
+	// framing, cache) at the same derived db path. The binary default
+	// becomes gridwell-provider-<kind>.
+	Provider bool `yaml:"provider,omitempty"`
 }
 
 // Defaults holds the built-in values used when a field is absent from the

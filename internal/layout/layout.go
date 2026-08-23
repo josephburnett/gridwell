@@ -125,6 +125,49 @@ func Open(path string) (*DB, error) {
 // Close closes the underlying handle.
 func (d *DB) Close() error { return d.db.Close() }
 
+// OpenVerified opens (or creates) the memory DB and fuses the identity
+// check (the pluginmeta lesson, applied node-side): a fresh file is
+// stamped with the external's uuid and kind; an existing file must match
+// both, so a memory DB can never be served under the wrong id — the
+// key→id map inside it is what stored references resolve through.
+func OpenVerified(path, uuid, kind string) (*DB, error) {
+	d, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	get := func(k string) (string, error) {
+		var v string
+		err := d.db.QueryRow(`SELECT v FROM meta WHERE k = ?`, k).Scan(&v)
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return v, err
+	}
+	gotUUID, err := get("uuid")
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	gotKind, err := get("kind")
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	if gotUUID == "" {
+		if _, err := d.db.Exec(`INSERT INTO meta (k, v) VALUES ('uuid', ?), ('kind', ?)`, uuid, kind); err != nil {
+			d.Close()
+			return nil, err
+		}
+		return d, nil
+	}
+	if gotUUID != uuid || gotKind != kind {
+		d.Close()
+		return nil, fmt.Errorf("layout: %s belongs to %s/%s, not %s/%s — refusing to serve another external's memory",
+			path, gotUUID, gotKind, uuid, kind)
+	}
+	return d, nil
+}
+
 // Entry is one provider listing row, as the engine needs it — a mirror
 // of the ContentProvider Entry without a proto dependency (this package
 // stays pure).

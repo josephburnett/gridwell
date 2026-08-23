@@ -49,6 +49,8 @@ plugins:
 	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-plugin-fs ./cmd/gridwell-plugin-fs
 	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-plugin-proc ./cmd/gridwell-plugin-proc
 	cd plugins/remote && CGO_ENABLED=0 go build -o ../../gridwell-plugin-remote ./cmd/gridwell-plugin-remote
+	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-provider-fs ./cmd/gridwell-provider-fs
+	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-provider-proc ./cmd/gridwell-provider-proc
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's

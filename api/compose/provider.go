@@ -6,14 +6,97 @@ package compose
 // caller holds the same client interface a subprocess dial would give.
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
 
+	hclog "github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	contentproviderv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 )
+
+// ProviderPluginName is the go-plugin dispatch key for the v2 provider
+// service — distinct from PluginName so a binary's served service is
+// unambiguous at the handshake.
+const ProviderPluginName = "gridwell-provider"
+
+// providerGRPCPlugin bridges go-plugin's transport and the
+// ContentProvider service (the provider twin of gridwellGRPCPlugin).
+type providerGRPCPlugin struct {
+	plugin.Plugin
+	Impl contentproviderv1.ContentProviderServer
+}
+
+func (p *providerGRPCPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
+	contentproviderv1.RegisterContentProviderServer(s, p.Impl)
+	return nil
+}
+
+func (p *providerGRPCPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return contentproviderv1.NewContentProviderClient(c), nil
+}
+
+// ProviderPluginMap is the plugin map for provider binaries — impl set on
+// the guest side, nil on the host side.
+func ProviderPluginMap(impl contentproviderv1.ContentProviderServer) map[string]plugin.Plugin {
+	return map[string]plugin.Plugin{
+		ProviderPluginName: &providerGRPCPlugin{Impl: impl},
+	}
+}
+
+// LoadProvider spawns a provider binary and hands back the connected
+// client — the provider twin of LoadPlugin, sharing the config-env and
+// host-death conventions.
+func LoadProvider(binaryPath string, cfg map[string]string) (contentproviderv1.ContentProviderClient, func(), error) {
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name:   "provider-host",
+		Output: hclog.DefaultOutput,
+		Level:  hclog.Error,
+	})
+
+	cmd := exec.Command(binaryPath)
+	cmd.Env = os.Environ()
+	if len(cfg) > 0 {
+		blob, err := json.Marshal(cfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("provider %q: marshal config: %w", binaryPath, err)
+		}
+		cmd.Env = append(cmd.Env, ConfigEnvVar+"="+string(blob))
+	}
+	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%d", HostPIDEnvVar, os.Getpid()))
+
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  HandshakeConfig,
+		Plugins:          ProviderPluginMap(nil),
+		Cmd:              cmd,
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		Logger:           logger,
+		Stderr:           os.Stderr,
+	})
+
+	rpcClient, err := client.Client()
+	if err != nil {
+		client.Kill()
+		return nil, nil, fmt.Errorf("provider dial %q: %w", binaryPath, err)
+	}
+	raw, err := rpcClient.Dispense(ProviderPluginName)
+	if err != nil {
+		client.Kill()
+		return nil, nil, fmt.Errorf("provider dispense %q: %w", binaryPath, err)
+	}
+	cp, ok := raw.(contentproviderv1.ContentProviderClient)
+	if !ok {
+		client.Kill()
+		return nil, nil, fmt.Errorf("provider %q: unexpected type %T", binaryPath, raw)
+	}
+	return cp, client.Kill, nil
+}
 
 // ServeProviderInProcess serves a ContentProvider implementation over a
 // loopback gRPC server and returns the connected client — the provider

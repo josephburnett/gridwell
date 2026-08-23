@@ -16,9 +16,12 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
+	contentproviderv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/layout"
 	"github.com/josephburnett/gridwell/internal/plugin/mountcache"
+	"github.com/josephburnett/gridwell/internal/providerhost"
 )
 
 // LoadAll constructs a Registry from the server config. Each PluginConfig
@@ -31,10 +34,30 @@ import (
 // in-process path. For kinds not in factories, a binary path must be
 // provided in PluginConfig.Binary.
 func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Registry, error) {
+	return LoadAllWithProviders(cfg, factories, nil)
+}
+
+// ProviderFactory constructs an in-process v2 content provider from the
+// shared config vocabulary (the provider twin of ServerFactory).
+type ProviderFactory func(cfg map[string]string) (contentproviderv1.ContentProviderServer, error)
+
+// LoadAllWithProviders is LoadAll plus in-process provider constructors
+// (bundled binaries; tests). A config entry with Provider: true loads a
+// contentprovider.v1 process (or factory), opens the NODE-owned memory
+// DB at the entry's derived db path, and registers the providerhost
+// adapter — indistinguishable from any plugin above the registry.
+func LoadAllWithProviders(cfg *config.ServerConfig, factories map[string]ServerFactory, providerFactories map[string]ProviderFactory) (*Registry, error) {
 	reg := NewRegistry()
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
-		client, closer, err := loadOne(pc, factories)
+		var client gridwellv1.GridwellClient
+		var closer func()
+		var err error
+		if pc.Provider {
+			client, closer, err = loadProvider(pc, providerFactories)
+		} else {
+			client, closer, err = loadOne(pc, factories)
+		}
 		if err != nil {
 			reg.Close()
 			return nil, fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.ID, err)
@@ -117,4 +140,61 @@ func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridw
 		return nil, nil, fmt.Errorf("no factory for kind %q and no binary path", pc.Kind)
 	}
 	return compose.InProcess(factory).Open(cfg)
+}
+
+// loadProvider materializes one Provider entry: the content process
+// (subprocess binary or in-process factory — the same composition door),
+// the node-owned memory DB at the entry's derived db path, and the
+// adapter that joins them, served back as an ordinary GridwellClient.
+func loadProvider(pc *config.PluginConfig, providerFactories map[string]ProviderFactory) (gridwellv1.GridwellClient, func(), error) {
+	// The provider's config: its own keys plus identity — but NOT
+	// db_file: a provider is stateless by contract, and the derived db
+	// path is the NODE's memory DB, not the guest's to open.
+	cfg := make(map[string]string, len(pc.Config)+2)
+	for k, v := range pc.Config {
+		cfg[k] = v
+	}
+	memPath := cfg["db_file"]
+	delete(cfg, "db_file")
+	cfg["uuid"] = pc.ID
+	cfg["kind"] = pc.Kind
+	if memPath == "" {
+		return nil, nil, fmt.Errorf("provider %q: no derived db path (BuildConfig injects db_file)", pc.Name)
+	}
+
+	var cp contentproviderv1.ContentProviderClient
+	var cpClose func()
+	var err error
+	if pc.Binary != "" {
+		cp, cpClose, err = compose.LoadProvider(pc.Binary, cfg)
+	} else if factory, ok := providerFactories[pc.Kind]; ok {
+		impl, ferr := factory(cfg)
+		if ferr != nil {
+			return nil, nil, ferr
+		}
+		cp, cpClose, err = compose.ServeProviderInProcess(impl)
+	} else {
+		return nil, nil, fmt.Errorf("no provider factory for kind %q and no binary path", pc.Kind)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	mem, err := layout.OpenVerified(memPath, pc.ID, pc.Kind)
+	if err != nil {
+		cpClose()
+		return nil, nil, err
+	}
+	client, adapterClose, err := compose.ServeInProcess(providerhost.New(cp, mem))
+	if err != nil {
+		mem.Close()
+		cpClose()
+		return nil, nil, err
+	}
+	closer := func() {
+		adapterClose()
+		_ = mem.Close()
+		cpClose()
+	}
+	return client, closer, nil
 }

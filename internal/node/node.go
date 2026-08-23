@@ -55,7 +55,17 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 		// The DB must already exist: it is created once by init. serve
 		// never creates one — otherwise a changed id (whose derived path
 		// doesn't exist) would silently spawn a fresh, empty store
-		// instead of failing.
+		// instead of failing. EXCEPTION: a Provider entry's derived path
+		// is the NODE-owned memory DB (docs/v2-design.md §3.2), which is
+		// durable-but-FORGETTABLE by contract — creating it empty is the
+		// defined recovery from losing it, so serve creates it freely
+		// (layout.OpenVerified stamps identity at creation).
+		if pc.Provider {
+			if err := os.MkdirAll(filepath.Dir(dbFile), 0o755); err != nil {
+				return nil, fmt.Errorf("provider %q (%s): db dir: %w", pc.Name, pc.ID, err)
+			}
+			continue
+		}
 		if _, err := os.Stat(dbFile); err != nil {
 			return nil, fmt.Errorf("plugin %q (%s): no database at %s; run `gridwell init` to create it", pc.Name, pc.ID, dbFile)
 		}
@@ -110,6 +120,10 @@ type Options struct {
 	// docs/offline-plan.md phase 2). The CLI passes nil: production
 	// desktop/server plugins are always subprocesses.
 	Factories map[string]plugin.ServerFactory
+	// ProviderFactories, when non-nil, provides in-process constructors
+	// for Provider entries whose Binary is empty (bundled binaries;
+	// mobile; tests) — the provider twin of Factories.
+	ProviderFactories map[string]plugin.ProviderFactory
 	// StaticFS serves the web client at /; nil disables static files.
 	StaticFS fs.FS
 }
@@ -129,7 +143,7 @@ type Node struct {
 // nothing is left running.
 func Start(opts Options) (*Node, error) {
 	cfg := opts.Cfg
-	reg, err := plugin.LoadAll(cfg, opts.Factories)
+	reg, err := plugin.LoadAllWithProviders(cfg, opts.Factories, opts.ProviderFactories)
 	if err != nil {
 		return nil, fmt.Errorf("load plugins: %w", err)
 	}
