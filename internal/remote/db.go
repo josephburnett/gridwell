@@ -293,3 +293,20 @@ func (d *DB) BumpGridVersion(ctx context.Context) error {
 		 ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT)`)
 	return err
 }
+
+// CreateWithNS mints a connection row under an EXPLICIT namespace — the
+// config-sync and converter path (v2 #269: names come from server.yaml,
+// verbatim). Production picker creates went with #199's reversal.
+func (d *DB) CreateWithNS(ctx context.Context, ns, alt string) (*Conn, error) {
+	res, err := d.db.ExecContext(ctx,
+		`INSERT INTO ssh_connections (ns, object_id, alt_text) VALUES (?, ?, ?)`,
+		ns, idshape.NewUUID(), alt)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return d.Get(ctx, id)
+}

@@ -43,6 +43,9 @@ type Server struct {
 	db   *DB
 	dial Dialer
 	home string // plugin host's home dir, for ~-relative param defaults
+	// configMode: the connection set is OWNED by server.yaml (v2 #269);
+	// every connection mutation refuses (see sync.go).
+	configMode bool
 
 	mu   sync.Mutex
 	live map[string]*liveConn // by ns
@@ -627,6 +630,9 @@ func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	if local != connGridID {
 		return nil, status.Errorf(codes.NotFound, "sshhost: no grid %q", local)
 	}
+	if s.configMode {
+		return nil, status.Error(codes.FailedPrecondition, errConfigMode.Error())
+	}
 	t := req.Tile
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "sshhost: nil tile")
@@ -694,6 +700,9 @@ func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 	switch {
 	case req.Rename != "":
+		if s.configMode {
+			return nil, status.Error(codes.FailedPrecondition, errConfigMode.Error())
+		}
 		c, err = s.db.Rename(ctx, c.ID, req.Version, req.Rename)
 	case req.ContentZoom != nil:
 		return nil, status.Error(codes.InvalidArgument, "sshhost: content_zoom is refused for wells")
@@ -824,6 +833,9 @@ func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	if err != nil {
 		return nil, err
 	}
+	if s.configMode {
+		return nil, status.Error(codes.FailedPrecondition, errConfigMode.Error())
+	}
 	// Unlink, never cascade: the remote is untouched; the minted namespace
 	// stays reserved forever (tombstone, not DELETE).
 	if err := s.db.Tombstone(ctx, c.ID, req.Version); err != nil {
@@ -925,6 +937,9 @@ func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.Write
 	}
 	// Local: the connection's params document. Accumulate, validate
 	// AUTHORITATIVELY, commit at close (a broken stream commits nothing).
+	if s.configMode {
+		return status.Error(codes.FailedPrecondition, errConfigMode.Error())
+	}
 	c, err := s.localConn(ctx, local)
 	if err != nil {
 		return err

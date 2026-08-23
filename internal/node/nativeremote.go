@@ -8,6 +8,8 @@ package node
 // qualified by it.
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -37,7 +39,28 @@ func NativeRemoteFactory(cfg map[string]string) (gridwellv1.GridwellServer, erro
 		return nil, err
 	}
 	home, _ := os.UserHomeDir()
-	return remote.New(db, dial.Dial, home), nil
+	srv := remote.New(db, dial.Dial, home)
+	// CONFIG MODE (v2 #269): when server.yaml carries a `connections:`
+	// key, it owns the connection set — reconcile the store against it
+	// and refuse picker edits. The serve wiring passes the declarations
+	// through the one flat config vocabulary as JSON.
+	if raw, ok := cfg["connections_json"]; ok {
+		var conns []remote.ConnSpec
+		if err := json.Unmarshal([]byte(raw), &conns); err != nil {
+			return nil, fmt.Errorf("native remote: connections_json: %w", err)
+		}
+		var retired []string
+		if r := cfg["retired_json"]; r != "" {
+			if err := json.Unmarshal([]byte(r), &retired); err != nil {
+				return nil, fmt.Errorf("native remote: retired_json: %w", err)
+			}
+		}
+		if _, err := remote.SyncConfig(context.Background(), db, conns, retired); err != nil {
+			return nil, fmt.Errorf("native remote: connections: %w", err)
+		}
+		srv.SetConfigMode(true)
+	}
+	return srv, nil
 }
 
 // WithNativeTransports fills the node-native factory slots ("local",

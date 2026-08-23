@@ -54,6 +54,38 @@ type ServerConfig struct {
 	// previews (placement is sacred); they just can never attach a PTY here.
 	DisableShells bool           `yaml:"disable_shells,omitempty"`
 	Plugins       []PluginConfig `yaml:"plugins"`
+	// Connections declares the node's remote-node connections (v2, #269 —
+	// reversing #199 by owner decision 2026-08-22: connections are server
+	// CONFIG, reconciled into the builtin transport at boot; the picker
+	// no longer creates them). A nil slice (no `connections:` key) leaves
+	// a legacy transport DB alone; a PRESENT key — even an empty list —
+	// makes this file authoritative: rows absent from it tombstone.
+	Connections []ConnectionConfig `yaml:"connections,omitempty"`
+	// ConnectionsSet is derived by Load, never stored: the `connections:`
+	// key was present (the authoritative-mode marker above).
+	ConnectionsSet bool `yaml:"-"`
+	// RetiredNames reserves connection names FOREVER: a deleted
+	// connection's name goes here so it can never be reused (stored
+	// references through its namespace stay dangling, never re-routed).
+	RetiredNames []string `yaml:"retired_names,omitempty"`
+}
+
+// ConnectionConfig is one remote-node connection. Name is an IMMUTABLE
+// ID — it is the namespace segment inside every stored reference through
+// this connection (idshape.ValidateSegment shape). RENAMING IT DANGLES
+// THOSE REFERENCES; change Label instead, retire the old name into
+// retired_names if the connection itself dies. Field meanings mirror the
+// old picker form: Host set = the ssh bridge; Host empty = a DIRECT dial
+// of Addr.
+type ConnectionConfig struct {
+	Name       string `yaml:"name"`
+	Label      string `yaml:"label,omitempty"`
+	Host       string `yaml:"host,omitempty"`
+	User       string `yaml:"user,omitempty"`
+	Port       int64  `yaml:"port,omitempty"`
+	Addr       string `yaml:"addr,omitempty"`
+	Key        string `yaml:"key,omitempty"`
+	KnownHosts string `yaml:"known_hosts,omitempty"`
 }
 
 // PluginConfig describes one plugin instance. ID is the UUID assigned once
@@ -143,12 +175,16 @@ func Load(path string) (*ServerConfig, error) {
 	// value" — a pointer probe is the only way to see presence. An explicitly
 	// empty `bind: ""` counts as unset (and is default-filled below).
 	var probe struct {
-		Bind *string `yaml:"bind"`
+		Bind        *string             `yaml:"bind"`
+		Connections *[]ConnectionConfig `yaml:"connections"`
 	}
 	if err := yaml.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
 	cfg.BindSet = probe.Bind != nil && *probe.Bind != ""
+	// ConnectionsSet: the `connections:` key is PRESENT — this file is
+	// authoritative for the connection set, empty list included (v2 #269).
+	cfg.ConnectionsSet = probe.Connections != nil
 	if cfg.Bind == "" {
 		cfg.Bind = Defaults.Bind
 	}

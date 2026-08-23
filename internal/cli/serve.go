@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -175,6 +176,55 @@ func isExecutable(path string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
+// injectConnections carries server.yaml's connections: declarations to
+// the builtin transport through the one flat config vocabulary (v2
+// #269). Exactly one remote entry may exist when the key is present —
+// two transports sharing one connection list would double-materialize.
+func injectConnections(cfg *config.ServerConfig) error {
+	if !cfg.ConnectionsSet {
+		return nil
+	}
+	var remotes []*config.PluginConfig
+	for i := range cfg.Plugins {
+		if cfg.Plugins[i].Kind == "remote" {
+			remotes = append(remotes, &cfg.Plugins[i])
+		}
+	}
+	if len(remotes) == 0 {
+		if len(cfg.Connections) > 0 {
+			return fmt.Errorf("connections: declared but no remote transport entry exists — `gridwell init --kind remote --name far` first")
+		}
+		return nil
+	}
+	if len(remotes) > 1 {
+		return fmt.Errorf("connections: %d remote entries — one transport owns the connection list; remove the extras", len(remotes))
+	}
+	specs := make([]map[string]any, 0, len(cfg.Connections))
+	for _, c := range cfg.Connections {
+		specs = append(specs, map[string]any{
+			"Name": c.Name, "Label": c.Label, "Host": c.Host, "User": c.User,
+			"Port": c.Port, "Addr": c.Addr, "Key": c.Key, "KnownHosts": c.KnownHosts,
+		})
+	}
+	blob, err := json.Marshal(specs)
+	if err != nil {
+		return err
+	}
+	pc := remotes[0]
+	if pc.Config == nil {
+		pc.Config = map[string]string{}
+	}
+	pc.Config["connections_json"] = string(blob)
+	if len(cfg.RetiredNames) > 0 {
+		r, err := json.Marshal(cfg.RetiredNames)
+		if err != nil {
+			return err
+		}
+		pc.Config["retired_json"] = string(r)
+	}
+	return nil
+}
+
 // resolvePluginBinaries fills in Binary for every plugin that didn't pin
 // one explicitly in server.yaml, by kind — skipping kinds a bundled
 // binary provides in-process (its factories win: that is the composer's
@@ -271,6 +321,10 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int 
 
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
 	// each kind's binary (server.yaml may pin an explicit path instead).
+	if err := injectConnections(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
+		return 1
+	}
 	if err := resolvePluginBinaries(cfg, factories); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
