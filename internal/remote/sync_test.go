@@ -7,9 +7,14 @@ package remote
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/compose"
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
 func openSyncDB(t *testing.T) *DB {
@@ -185,5 +190,56 @@ func TestNoCreationSchemaEver(t *testing.T) {
 		if len(info.CreateSchemas) != 0 {
 			t.Fatalf("configMode=%v declared a creation schema: %v", mode, info.CreateSchemas)
 		}
+	}
+}
+
+// fakeRemote answers the two calls learnRoot makes.
+type fakeRemote struct {
+	gridwellv1.UnimplementedGridwellServer
+}
+
+func (fakeRemote) ListPlugins(context.Context, *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
+	return &gridwellv1.ListPluginsResponse{Plugins: []*gridwellv1.PluginInfo{
+		{Uuid: "farplug1", RootGridId: "farplug1/1"},
+	}}, nil
+}
+
+// ConnectAll (Joe, 2026-08-23: the boot doesn't serve mysteries): a
+// reachable connection is LIVE with its root persisted before the node
+// serves; an unreachable one has its error recorded (the wire status)
+// before the node serves.
+func TestConnectAllAtBoot(t *testing.T) {
+	ctx := context.Background()
+	db := openSyncDB(t)
+	if _, err := SyncConfig(ctx, db, []ConnSpec{
+		{Name: "goodcon", Label: "good", Addr: "127.0.0.1:1"},
+		{Name: "deadcon", Label: "dead", Addr: "127.0.0.1:2"},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	client, closer, err := compose.ServeInProcess(fakeRemote{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+	dialer := func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error) {
+		if cfg.Addr == "127.0.0.1:1" {
+			return client, func() {}, nil
+		}
+		return nil, nil, fmt.Errorf("dial %s: connection refused", cfg.Addr)
+	}
+	s := New(db, dialer, "")
+	s.SetConfigMode(true)
+	s.ConnectAll(ctx)
+
+	good, _ := db.GetByNS(ctx, "goodcon")
+	if good.RemoteRoot != "farplug1/1" {
+		t.Fatalf("good connection root = %q, want learned before serving", good.RemoteRoot)
+	}
+	s.mu.Lock()
+	deadErr := s.rootErr["deadcon"]
+	s.mu.Unlock()
+	if !strings.Contains(deadErr, "connection refused") {
+		t.Fatalf("dead connection's recorded error = %q, want the dial failure", deadErr)
 	}
 }

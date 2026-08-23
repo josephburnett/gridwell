@@ -59,6 +59,10 @@ func NativeRemoteFactory(cfg map[string]string) (gridwellv1.GridwellServer, erro
 			return nil, fmt.Errorf("native remote: connections: %w", err)
 		}
 		srv.SetConfigMode(true)
+		// Connect NOW, before the node serves: every declared connection
+		// is live or its error is in the log (Joe, 2026-08-23 — the boot
+		// doesn't serve mysteries).
+		srv.ConnectAll(context.Background())
 	}
 	return srv, nil
 }

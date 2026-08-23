@@ -19,6 +19,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	"google.golang.org/grpc/status"
 
 	"github.com/josephburnett/gridwell/api/idshape"
 )
@@ -191,3 +196,81 @@ func (s *Server) SetConfigMode(on bool) { s.configMode = on }
 // errConfigMode is the one refusal every connection mutation answers
 // with in config mode.
 var errConfigMode = fmt.Errorf("connections are server config (v2): edit server.yaml's connections: list and restart — the picker no longer edits them")
+
+// ConnectAll dials every declared connection NOW, synchronously, and
+// logs each outcome — the boot doesn't serve mysteries (Joe,
+// 2026-08-23): by the time the node is up, every connection is either
+// LIVE (root learned) or its error is in the server log verbatim (and
+// on the wire as the row's status). Bounded per connection so a dead
+// remote delays boot, never bricks it; the lazy re-kick on reads still
+// retries afterward.
+func (s *Server) ConnectAll(ctx context.Context) {
+	conns, err := s.db.List(ctx)
+	if err != nil {
+		log.Printf("gridwell: connections: list: %v", err)
+		return
+	}
+	var wg sync.WaitGroup
+	for _, c := range conns {
+		if c.Params == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(c *Conn) {
+			defer wg.Done()
+			label := c.AltText
+			if label == "" {
+				label = c.NS
+			}
+			done := make(chan struct{})
+			var root string
+			var lerr error
+			go func() {
+				defer close(done)
+				root, lerr = s.learnRoot(c)
+			}()
+			select {
+			case <-done:
+				if lerr != nil {
+					log.Printf("gridwell: connection %q (%s): %v", label, c.NS, lerr)
+				} else {
+					log.Printf("gridwell: connection %q (%s): connected — root %s", label, c.NS, root)
+				}
+			case <-time.After(20 * time.Second):
+				log.Printf("gridwell: connection %q (%s): no answer after 20s — still trying in the background", label, c.NS)
+			}
+		}(c)
+	}
+	wg.Wait()
+}
+
+// learnRoot is the SYNCHRONOUS connect-and-learn: dial the transport,
+// fetch the remote's home, persist it — the same bookkeeping the lazy
+// kick does, callable when the caller wants the answer now.
+func (s *Server) learnRoot(c *Conn) (string, error) {
+	lc, err := s.ensureLive(c)
+	if err != nil {
+		return "", err // ensureLive recorded the detail already
+	}
+	if c.RemoteRoot != "" {
+		return c.RemoteRoot, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	root, err := s.remoteHome(ctx, lc)
+	if err != nil {
+		s.setRootErr(c.NS, status.Convert(err).Message())
+		return "", err
+	}
+	if root == "" {
+		return "", fmt.Errorf("the remote declared no home")
+	}
+	s.setRootErr(c.NS, "")
+	if root != c.RemoteRoot {
+		if _, err := s.db.SetRemoteRoot(ctx, c.ID, root); err != nil {
+			return "", err
+		}
+		_ = s.db.BumpGridVersion(ctx)
+	}
+	return root, nil
+}
