@@ -189,13 +189,23 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		// from "healthy but rootless" — previously dropped on the floor here,
 		// which made both cases identical on the wire (issue #47).
 		info, err := h.srv.pluginInfo(ctx, p.UUID)
-		out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 		// A PARAMETERIZED plugin's instances join the menu as rows of
 		// their own (v2 #269: a connection presents like a plugin —
 		// click descends, drag drops a link well). Synthesized from the
 		// instance grid the plugin already declares — no kind is
 		// consulted, so any parameterized plugin gets this for free.
-		out = append(out, h.instanceRows(ctx, p.UUID, info)...)
+		// And when the plugin declares NO creation schema (a
+		// config-managed list — the picker has no job left), the
+		// instances REPLACE the plugin's own row: one icon per
+		// configured thing, no dialog door. The row stays whenever the
+		// picker still manages instances (a schema), the instance read
+		// failed (never blank a configured plugin silently), or the
+		// plugin isn't parameterized at all.
+		inst, managed := h.instanceRows(ctx, p.UUID, info)
+		if !managed || len(info.GetCreateSchemas()) > 0 {
+			out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
+		}
+		out = append(out, inst...)
 	}
 	resp := &pb.ListPluginsResponse{
 		Plugins:        out,
@@ -225,21 +235,22 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 // the root is the instance's child grid, the label is the instance's own.
 // An instance whose child is not yet learned (its remote never answered)
 // lists as rootless — inert, its status_detail riding InfoError so the
-// menu can say why. A failed instance-grid read synthesizes nothing: the
-// parameterized row itself still opens the picker, which shows the error.
-func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb.InfoResponse) []*pb.PluginInfo {
+// menu can say why. managed reports a successful synthesis (possibly
+// zero rows); false means not parameterized or an unreadable instance
+// grid — the caller then keeps the plugin's own row, whose picker shows
+// the error.
+func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb.InfoResponse) (rows []*pb.PluginInfo, managed bool) {
 	if info == nil || info.RootGridId != "" || info.InstanceGridId == "" {
-		return nil
+		return nil, false
 	}
 	c, ok := h.srv.pluginReg.Get(uuid)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	g, err := c.GetGrid(ctx, &pb.GetGridRequest{GridId: info.InstanceGridId})
 	if err != nil {
-		return nil
+		return nil, false
 	}
-	var rows []*pb.PluginInfo
 	for _, t := range g.Tiles {
 		if t.Kind != "well" {
 			continue
@@ -257,7 +268,7 @@ func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb
 		}
 		rows = append(rows, row)
 	}
-	return rows
+	return rows, true
 }
 
 // firstSegment returns the leading segment of a chained id.

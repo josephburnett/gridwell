@@ -21,10 +21,15 @@ import (
 // instance (child learned) and one pending one (no child, a status).
 type fakeParameterized struct {
 	pb.UnimplementedGridwellServer
+	withSchema bool
 }
 
-func (fakeParameterized) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return &pb.InfoResponse{Kind: "fakeparam", DisplayName: "things", InstanceGridId: "0"}, nil
+func (f fakeParameterized) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+	resp := &pb.InfoResponse{Kind: "fakeparam", DisplayName: "things", InstanceGridId: "0"}
+	if f.withSchema {
+		resp.CreateSchemas = map[string]string{"well": "{}"}
+	}
+	return resp, nil
 }
 
 func (fakeParameterized) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
@@ -39,8 +44,9 @@ func (fakeParameterized) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb
 	}, nil
 }
 
-func TestParameterizedInstancesJoinTheMenu(t *testing.T) {
-	client, closer, err := plugin.ServeInProcess(fakeParameterized{})
+func listFor(t *testing.T, impl pb.GridwellServer) []rpc.PluginInfo {
+	t.Helper()
+	client, closer, err := plugin.ServeInProcess(impl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,15 +56,21 @@ func TestParameterizedInstancesJoinTheMenu(t *testing.T) {
 	hs := httptest.NewServer(New(reg, Config{}).Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-
 	pl, err := cl.ListPlugins(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pl.Plugins) != 3 {
-		t.Fatalf("want the parameterized row + 2 instance rows, got %d: %+v", len(pl.Plugins), pl.Plugins)
+	return pl.Plugins
+}
+
+func TestParameterizedInstancesJoinTheMenu(t *testing.T) {
+	// Legacy world (a creation schema — the picker still manages): the
+	// plugin's own row stays, instances after it.
+	plugins := listFor(t, fakeParameterized{withSchema: true})
+	if len(plugins) != 3 {
+		t.Fatalf("want the parameterized row + 2 instance rows, got %d: %+v", len(plugins), plugins)
 	}
-	param, connected, pending := pl.Plugins[0], pl.Plugins[1], pl.Plugins[2]
+	param, connected, pending := plugins[0], plugins[1], plugins[2]
 	if param.InstanceGridID == "" || param.RootGridID != "" {
 		t.Fatalf("row 0 should be the parameterized plugin: %+v", param)
 	}
@@ -74,5 +86,23 @@ func TestParameterizedInstancesJoinTheMenu(t *testing.T) {
 	// its status riding InfoError so the menu can say why.
 	if pending.Label != "pending" || pending.RootGridID != "" || pending.InfoError != "the remote hasn't answered" {
 		t.Fatalf("pending row: %+v", pending)
+	}
+}
+
+func TestConfigManagedInstancesReplaceThePluginRow(t *testing.T) {
+	// v2 world (no creation schema — the picker has no job left): one
+	// icon per configured thing; the plugin's own row disappears behind
+	// its instances.
+	plugins := listFor(t, fakeParameterized{})
+	if len(plugins) != 2 {
+		t.Fatalf("want ONLY the 2 instance rows, got %d: %+v", len(plugins), plugins)
+	}
+	for _, p := range plugins {
+		if p.InstanceGridID != "" {
+			t.Fatalf("the parameterized plugin's own row leaked through: %+v", p)
+		}
+	}
+	if plugins[0].Label != "rtb" || plugins[1].Label != "pending" {
+		t.Fatalf("instance rows: %+v", plugins)
 	}
 }
