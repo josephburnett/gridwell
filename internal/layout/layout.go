@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS idmap (
 -- and a recreated key mints a fresh id.
 CREATE UNIQUE INDEX IF NOT EXISTS idmap_live_key
     ON idmap (grid_id, key) WHERE tombstoned = 0;
+-- The read-through listing cache (tenet 6): the last good answer per
+-- context, serialized by the caller (the adapter owns the entry shape).
+-- Disposable rows in a durable file: dropping them loses only the
+-- offline answer, never ids or arrangement.
+CREATE TABLE IF NOT EXISTS cache_listings (
+    grid_id       INTEGER PRIMARY KEY REFERENCES contexts(grid_id),
+    entries       BLOB NOT NULL,
+    authoritative INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS layout (
     tile_id      INTEGER PRIMARY KEY REFERENCES idmap(tile_id),
     x            INTEGER NOT NULL DEFAULT 0,
@@ -427,6 +436,34 @@ func (d *DB) RootView(gridID int64) (cx, cy, zoom float64, ok bool, err error) {
 func (d *DB) SetRootView(gridID int64, cx, cy, zoom float64) error {
 	return d.exec(`UPDATE contexts SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE grid_id = ?`,
 		cx, cy, zoom, gridID)
+}
+
+// CacheListing remembers a context's last good listing — an opaque blob
+// the caller (the provider adapter) serializes; the engine never
+// interprets it.
+func (d *DB) CacheListing(gridID int64, blob []byte, authoritative bool) error {
+	auth := 0
+	if authoritative {
+		auth = 1
+	}
+	_, err := d.db.Exec(`INSERT INTO cache_listings (grid_id, entries, authoritative) VALUES (?, ?, ?)
+		ON CONFLICT(grid_id) DO UPDATE SET entries = excluded.entries, authoritative = excluded.authoritative`,
+		gridID, blob, auth)
+	return err
+}
+
+// CachedListing returns the remembered listing, ok=false when none.
+func (d *DB) CachedListing(gridID int64) (blob []byte, authoritative, ok bool, err error) {
+	var auth int64
+	err = d.db.QueryRow(`SELECT entries, authoritative FROM cache_listings WHERE grid_id = ?`, gridID).
+		Scan(&blob, &auth)
+	if err == sql.ErrNoRows {
+		return nil, false, false, nil
+	}
+	if err != nil {
+		return nil, false, false, err
+	}
+	return blob, auth != 0, true, nil
 }
 
 // Retire tombstones one tile row directly — the delete-gesture path

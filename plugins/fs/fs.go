@@ -19,7 +19,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/dbformat"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/doctype"
+	"github.com/josephburnett/gridwell/plugins/fs/fsfile"
 	"github.com/josephburnett/gridwell/plugins/fs/fssource"
 	"github.com/josephburnett/gridwell/plugins/fs/trash"
 	"github.com/josephburnett/gridwell/plugins/griddb"
@@ -423,17 +423,10 @@ func (p *Plugin) SetTile(_ context.Context, req *gridwellv1.SetTileRequest) (*gr
 	return griddb.ApplySetWellView(p.db, fsLabelCol, req)
 }
 
-// renderableBodyCap bounds how much of a renderable file the descent body
-// carries (issue #236): a document view, not a file transfer. Files past
-// the cap fall back to the metadata summary.
-const renderableBodyCap = 4 << 20
-
-// ContentBody returns the descent body for a file tile. A RENDERABLE file
-// (doctype.Renderable — the same rule the client colors tiles by, issue
-// #236) serves its real bytes, so descending shows the document itself;
-// everything else serves the small metadata summary. Directories,
-// unreadable paths, and unknown ids return empty content rather than an
-// error.
+// ContentBody returns the descent body for a file tile: real bytes for a
+// renderable/plain file, the metadata summary otherwise (fsfile.Body owns
+// the rule, shared with the v2 provider). Directories, unreadable paths,
+// and unknown ids return empty content rather than an error.
 func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, err error) {
 	tileID, err := strconv.ParseInt(tileIDStr, 10, 64)
 	if err != nil {
@@ -463,22 +456,8 @@ func (p *Plugin) ContentBody(tileIDStr string) (data []byte, mediaType string, e
 	if err != nil {
 		return nil, "", err
 	}
-	fullPath := filepath.Join(dirPath, name)
-	entry, err := fssource.Stat(fullPath)
-	if err != nil {
-		return nil, "", nil
-	}
-	if (doctype.Renderable(name) || isPlainText(name)) && entry.Size <= renderableBodyCap {
-		if body, readErr := os.ReadFile(fullPath); readErr == nil {
-			if isPlainText(name) && !doctype.Renderable(name) {
-				return body, "text/plain", nil
-			}
-			return body, "text/markdown", nil
-		}
-		// Unreadable despite the stat: the metadata summary still tells
-		// the user what is here instead of a blank pane (charter §6).
-	}
-	return []byte(fssource.MetadataMarkdown(entry)), "text/markdown", nil
+	data, mediaType = fsfile.Body(dirPath, name)
+	return data, mediaType, nil
 }
 
 // ReadContent streams a file tile's descent body (one chunk; fs bodies are

@@ -91,6 +91,11 @@ message Entry {
   // calendar putting an event at its date). The user's arrangement wins
   // from then on; a hint never moves a placed tile.
   PlacementHint placement_hint = 9;
+  // preview_stamp is a cheap GENERATION for the entry's preview (fs: an
+  // image file's mtime) — the client keys its thumbnail cache by it, so
+  // an edited image invalidates naturally. 0 = no stamp. Becomes
+  // Tile.preview_blob_id on the node surface.
+  int64 preview_stamp = 10;
 }
 
 message PlacementHint {

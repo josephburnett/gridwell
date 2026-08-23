@@ -449,6 +449,11 @@ type Entry struct {
 	// calendar putting an event at its date). The user's arrangement wins
 	// from then on; a hint never moves a placed tile.
 	PlacementHint *PlacementHint `protobuf:"bytes,9,opt,name=placement_hint,json=placementHint,proto3" json:"placement_hint,omitempty"`
+	// preview_stamp is a cheap GENERATION for the entry's preview (fs: an
+	// image file's mtime) — the client keys its thumbnail cache by it, so
+	// an edited image invalidates naturally. 0 = no stamp. Becomes
+	// Tile.preview_blob_id on the node surface.
+	PreviewStamp  int64 `protobuf:"varint,10,opt,name=preview_stamp,json=previewStamp,proto3" json:"preview_stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -544,6 +549,13 @@ func (x *Entry) GetPlacementHint() *PlacementHint {
 		return x.PlacementHint
 	}
 	return nil
+}
+
+func (x *Entry) GetPreviewStamp() int64 {
+	if x != nil {
+		return x.PreviewStamp
+	}
+	return 0
 }
 
 type PlacementHint struct {
@@ -1588,7 +1600,7 @@ const file_contentprovider_v1_provider_proto_rawDesc = "" +
 	"\fListResponse\x123\n" +
 	"\aentries\x18\x01 \x03(\v2\x19.contentprovider.v1.EntryR\aentries\x12$\n" +
 	"\rauthoritative\x18\x02 \x01(\bR\rauthoritative\x12!\n" +
-	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\"\xc4\x02\n" +
+	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\"\xe9\x02\n" +
 	"\x05Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
@@ -1600,7 +1612,9 @@ const file_contentprovider_v1_provider_proto_rawDesc = "" +
 	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\x12\x1d\n" +
 	"\n" +
 	"url_string\x18\b \x01(\tR\turlString\x12H\n" +
-	"\x0eplacement_hint\x18\t \x01(\v2!.contentprovider.v1.PlacementHintR\rplacementHint\"G\n" +
+	"\x0eplacement_hint\x18\t \x01(\v2!.contentprovider.v1.PlacementHintR\rplacementHint\x12#\n" +
+	"\rpreview_stamp\x18\n" +
+	" \x01(\x03R\fpreviewStamp\"G\n" +
 	"\rPlacementHint\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x03R\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\x03R\x01y\x12\f\n" +

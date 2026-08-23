@@ -37,7 +37,9 @@ const MenuEntrySearch = "search"
 
 // searchParamSchema is the #198-subset form the client prompts with on
 // first descent.
-const searchParamSchema = `{
+// SearchParamSchema is exported for the v2 fs provider, which declares
+// the same tool (one schema, two declarers until the legacy plugin dies).
+const SearchParamSchema = `{
   "type": "object",
   "properties": {
     "query": {"type": "string", "title": "name contains"}
@@ -53,7 +55,7 @@ func searchMenuEntries() []*gridwellv1.MenuEntry {
 		Label:       "search",
 		Glyph:       "", // the globe — a lens glyph can join the vocabulary later
 		Kind:        "well",
-		ParamSchema: searchParamSchema,
+		ParamSchema: SearchParamSchema,
 	}}
 }
 
