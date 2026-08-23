@@ -50,6 +50,25 @@ type Options struct {
 	// DB had materialized, without materializing the rest of a live
 	// source on both sides. Skipped grids are recorded, never silent.
 	GridAllow map[string]bool
+	// NSAllow, when non-nil, allows EVERY grid of the named namespaces
+	// (first id segment) regardless of GridAllow — the whole-home gate's
+	// hybrid: fully crawl the finite stores (local, the launcher),
+	// scope-crawl the unbounded projections (fs).
+	NSAllow map[string]bool
+}
+
+// allowed reports whether a grid id is inside the crawl scope.
+func (o Options) allowed(gid string) bool {
+	if o.GridAllow == nil && o.NSAllow == nil {
+		return true
+	}
+	if o.NSAllow != nil {
+		ns, _, _ := strings.Cut(gid, "/")
+		if o.NSAllow[ns] {
+			return true
+		}
+	}
+	return o.GridAllow[gid]
 }
 
 // TooDeep reports whether a qualified grid id crosses a transit
@@ -199,7 +218,7 @@ func crawl(ctx context.Context, cls []*rpc.Client, o Options) ([]*Snapshot, erro
 	for len(queue) > 0 {
 		gid := queue[0]
 		queue = queue[1:]
-		if (TooDeep(gid) && !o.IncludeTransit) || (o.GridAllow != nil && !o.GridAllow[gid]) {
+		if (TooDeep(gid) && !o.IncludeTransit) || !o.allowed(gid) {
 			for _, s := range snaps {
 				s.Skipped = append(s.Skipped, gid)
 			}

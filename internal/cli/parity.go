@@ -34,6 +34,7 @@ func RunParity(args []string) int {
 	skipPreviews := fs.Bool("skip-previews", false, "skip preview hashing")
 	maxGrids := fs.Int("max-grids", 0, "abort past this many grids (0 = unlimited)")
 	ignore := fs.String("ignore-fields", "", "comma-separated field names to ignore (each is a deliberate, named blind spot)")
+	scope := fs.String("scope", "", "scope file (convert-v2 writes <home>/convert-scope.txt): 'ns:<namespace>' lines allow whole namespaces, '<ns>/<grid>' lines allow single grids")
 	volatile := fs.String("volatile-ns", "", "comma-separated namespaces whose entry sets churn (presence/content diffs suppressed)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -60,6 +61,14 @@ func RunParity(args []string) int {
 		SkipPreviews:   *skipPreviews,
 		MaxGrids:       *maxGrids,
 	}
+	if *scope != "" {
+		grids, ns, err := readScopeFile(*scope)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "parity: %v\n", err)
+			return 2
+		}
+		opts.GridAllow, opts.NSAllow = grids, ns
+	}
 	sa, sb, err := parity.CrawlPair(context.Background(), clA, clB, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parity: crawl: %v\n", err)
@@ -82,6 +91,26 @@ func RunParity(args []string) int {
 	}
 	fmt.Printf("PARITY FAILED: %d differences\n", len(diffs))
 	return 1
+}
+
+// readScopeFile parses a convert-scope file.
+func readScopeFile(path string) (grids, ns map[string]bool, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	grids, ns = map[string]bool{}, map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case line == "" || strings.HasPrefix(line, "#"):
+		case strings.HasPrefix(line, "ns:"):
+			ns[strings.TrimPrefix(line, "ns:")] = true
+		default:
+			grids[line] = true
+		}
+	}
+	return grids, ns, nil
 }
 
 func csvSet(s string) map[string]bool {

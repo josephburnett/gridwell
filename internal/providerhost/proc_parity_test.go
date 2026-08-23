@@ -18,8 +18,11 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/compose"
+	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/convert"
 	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/parity"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/providerhost"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -61,7 +64,17 @@ func writeProc(t *testing.T, root string, pid, ppid int64, name string) {
 
 func legacyProcNode(t *testing.T, procRoot string) *rpc.Client {
 	t.Helper()
-	p, err := procplugin.Open(":memory:", procRoot, nopKiller{})
+	return legacyProcNodeAt(t, procRoot, ":memory:")
+}
+
+func legacyProcNodeAt(t *testing.T, procRoot, dbPath string) *rpc.Client {
+	t.Helper()
+	if dbPath != ":memory:" {
+		if err := pluginmeta.Create(dbPath, procUUID, "proc"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := procplugin.Open(dbPath, procRoot, nopKiller{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +95,12 @@ func legacyProcNode(t *testing.T, procRoot string) *rpc.Client {
 
 func providerProcNode(t *testing.T, procRoot string) *rpc.Client {
 	t.Helper()
-	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
+	return providerProcNodeAt(t, procRoot, filepath.Join(t.TempDir(), "mem.db"))
+}
+
+func providerProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
+	t.Helper()
+	mem, err := layout.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +192,54 @@ func TestProcProviderPlacementParity(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+	}
+	mustParity(t, legacy, v2)
+}
+
+// The proc migration gate in miniature: a lived-in legacy proc DB
+// converts and the two stacks crawl to zero differences over the same
+// fake process tree — including a placed tile and a swept child.
+func TestConvertedProcDBMatchesLegacy(t *testing.T) {
+	procRoot := fakeProc(t)
+	dbPath := filepath.Join(t.TempDir(), "proc.db")
+	legacy := legacyProcNodeAt(t, procRoot, dbPath)
+	ctx := context.Background()
+	if _, err := parity.Crawl(ctx, legacy, parity.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	pl, err := legacy.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := pl.Plugins[0].RootGridID
+	g, err := legacy.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tile := range g.Tiles {
+		if tile.AltText == "300" {
+			if _, err := legacy.PlaceTile(ctx, &rpc.PlaceTileRequest{
+				TileID: tile.ID, Version: tile.Version, GridID: rootGrid, X: 7, Y: 1, W: 1, H: 1,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	memPath := filepath.Join(t.TempDir(), "mem.db")
+	res, err := convert.Proc(dbPath, memPath, procUUID, "proc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Grids == 0 || res.Tiles == 0 {
+		t.Fatalf("empty conversion: %+v", res)
+	}
+	v2 := providerProcNodeAt(t, procRoot, memPath)
+	mustParity(t, legacy, v2)
+
+	// A child dies post-conversion; both stacks sweep identically.
+	if err := os.RemoveAll(filepath.Join(procRoot, "200")); err != nil {
+		t.Fatal(err)
 	}
 	mustParity(t, legacy, v2)
 }
