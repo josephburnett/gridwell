@@ -8,9 +8,9 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/local"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // The link-resolution seam (owner decision 8, 2026-07-26): ReadContent and

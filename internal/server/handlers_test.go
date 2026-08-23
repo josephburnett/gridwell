@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 	procplugin "github.com/josephburnett/gridwell/plugins/proc"
 )
 

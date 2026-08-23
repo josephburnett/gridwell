@@ -1,0 +1,543 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/doctype"
+)
+
+// urlSchemeAllowed reports whether u is one of the schemes accepted by
+// URL tiles. Only http and https.
+func urlSchemeAllowed(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
+
+// MaxBlobBytes caps a single uploaded text-tile blob size.
+const MaxBlobBytes = 16 * 1024 * 1024
+
+// checkTileVersion loads a tile and verifies its claimed version matches.
+// Returns the loaded tile.
+func (s *Store) checkTileVersion(ctx context.Context, q gridReader, tileID, claimed int64) (*rpc.Tile, error) {
+	t, err := s.loadTile(ctx, q, tileID)
+	if err != nil {
+		return nil, err
+	}
+	if t.Version != claimed {
+		return nil, fmt.Errorf("%w: tile %d at version %d, claimed %d",
+			ErrVersionConflict, tileID, t.Version, claimed)
+	}
+	return t, nil
+}
+
+// loadForEdit is the shared preamble for a versioned single-tile mutation:
+// version-check the tile (optimistic concurrency) and optionally guard its
+// kind. wantKind == "" skips the kind guard (callers with a multi-kind rule,
+// e.g. any well, do their own check on the returned tile). Returns the loaded
+// tile plus its own grid id (the grid the overlap/insert checks run against —
+// the row is the one owner of its location; 2026-07-26: the wire carries no
+// descent path).
+func (s *Store) loadForEdit(ctx context.Context, tx *sql.Tx, tileID, version int64, wantKind string, wrongKindErr error) (*rpc.Tile, int64, error) {
+	n, err := s.checkTileVersion(ctx, tx, tileID, version)
+	if err != nil {
+		return nil, 0, err
+	}
+	if wantKind != "" && n.Kind != wantKind {
+		return nil, 0, wrongKindErr
+	}
+	gid, err := parseID(n.GridID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, n.GridID, err)
+	}
+	return n, gid, nil
+}
+
+// emitTileChanged reloads tileID and appends a TileChanged event for it. It is
+// the shared tail of every store write that publishes a tile. Framing setters
+// (SetWellView / SetTextView) call it directly — re-framing is NOT a content
+// edit, so it must not bump the version (CLAUDE.md). Content writers go through
+// finishContentEdit instead.
+func (s *Store) emitTileChanged(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {
+	out, err := s.loadTile(ctx, tx, tileID)
+	if err != nil {
+		return nil, err
+	}
+	*events = append(*events, rpc.Event{Kind: rpc.EventTileChanged, TileChanged: &rpc.TileChanged{Tile: *out}})
+	return out, nil
+}
+
+// finishContentEdit is the coda for a content mutation: bump the tile's version
+// (the optimistic-concurrency key + edit-history spine) then publish it via
+// emitTileChanged. Keeping the "content edit bumps version, framing edit does
+// not" rule as a choice between two named helpers — rather than a per-method
+// open-coded bump that a new mutation can forget or wrongly add — is what keeps
+// that invariant from drifting.
+func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64, events *[]rpc.Event) (*rpc.Tile, error) {
+	if err := bumpTileVersion(ctx, tx, tileID); err != nil {
+		return nil, err
+	}
+	return s.emitTileChanged(ctx, tx, tileID, events)
+}
+
+// createTile is the shared scaffolding for the Create* methods: sequence
+// validation → overlap check → kind-specific insert → grid version bump →
+// load → publish. The insert closure receives the canonical gridID, the
+// current unix timestamp, and the row's object_id; it inserts the tile row and
+// returns its id.
+//
+// objectID is the PROVENANCE override: a cross-plugin clone or link carries
+// the source's object_id (a random 128-bit hex, globally unique with no
+// per-plugin qualification) so lineage survives the boundary the same way it
+// survives a within-plugin clone (insertTileCopy). "" mints a fresh id — the
+// normal user-create path. This is the one place the fresh-vs-carried
+// decision lives.
+func (s *Store) createTile(
+	ctx context.Context,
+	gridIDStr string, x, y, w, h int64,
+	objectID string,
+	insert func(tx *sql.Tx, gridID, now int64, objID string) (tileID int64, err error),
+) (*rpc.Tile, error) {
+	gridID, err := parseID(gridIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
+	}
+	if w <= 0 || h <= 0 {
+		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		// grid_id is authoritative (id-addressed; no descent path on the
+		// wire). The load refuses a create into a grid that doesn't exist.
+		if _, err := s.loadGrid(ctx, tx, gridID); err != nil {
+			return fmt.Errorf("%w: grid %d: %v", ErrInvalidArgument, gridID, err)
+		}
+		gid := gridID
+
+		over, err := overlapsExisting(ctx, tx, gid, x, y, w, h)
+		if err != nil {
+			return err
+		}
+		if over {
+			return ErrOverlap
+		}
+
+		objID := objectID
+		if objID == "" {
+			objID = s.newID()
+		}
+		tileID, err := insert(tx, gid, s.now().Unix(), objID)
+		if err != nil {
+			return err
+		}
+		if err := s.bumpGridVersion(ctx, tx, gid); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// CreateWell creates a new well at (x,y) with footprint (w,h) inside
+// req.GridID. The child grid is created empty with no framing on the
+// well (view_x/y/zoom all zero). Label, when set, is stored as the well's
+// alt_text — the user-given name of the grid (the + palette's name field).
+// Wells have no content to derive an alt from, so this is alt's only writer.
+func (s *Store) CreateWell(ctx context.Context, req *rpc.CreateWellRequest) (*rpc.Tile, error) {
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
+		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
+			childObj := s.newID()
+			res, err := tx.ExecContext(ctx,
+				`INSERT INTO grids (object_id, created_at, updated_at) VALUES (?, ?, ?)`,
+				childObj, now, now)
+			if err != nil {
+				return 0, fmt.Errorf("insert child grid: %w", err)
+			}
+			childGridID, err := res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+			res, err = tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+					view_x, view_y, view_zoom, child_grid_id, alt_text,
+					created_at, updated_at)
+				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, childGridID, req.Label, now, now)
+			if err != nil {
+				return 0, fmt.Errorf("insert well: %w", err)
+			}
+			return res.LastInsertId()
+		})
+}
+
+// CreateExitWell creates a well tile whose child grid lives in a different
+// plugin — a file well or process well. Unlike CreateWell it allocates no
+// interior child grid and holds no refcount on the child: the child grid is
+// owned by the destination plugin and named by a qualified "<uuid>/<id>"
+// string. Deleting the well removes only the reference, never the backing
+// directory or process (that is a separate gesture on a tile *inside* the
+// grid). viewX/viewY/viewZoom carry the source's framing when the exit well
+// is a cross-plugin CLONE of a framed well — the link must preview and
+// descend to exactly where the source did; zeros are the default view.
+func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, viewX, viewY int64, viewZoom float64, objectID string) (*rpc.Tile, error) {
+	if childGridID == "" {
+		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
+	}
+	return s.createTile(ctx, gridID, x, y, w, h, objectID,
+		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+					view_x, view_y, view_zoom, child_grid_id, alt_text,
+					created_at, updated_at)
+				VALUES (?, ?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gid, x, y, w, h, viewX, viewY, viewZoom, childGridID, alt, now, now)
+			if err != nil {
+				return 0, fmt.Errorf("insert exit well: %w", err)
+			}
+			return res.LastInsertId()
+		})
+}
+
+// CreatePluginWell creates an UNCONFIGURED PLUGIN WELL (issue #251): a
+// childless well carrying only the uuid of the parameterized plugin whose
+// instance will fill it. Inert and legal (#209's drop-first rule): first
+// descent opens that plugin's instance picker, and AdoptChildGrid turns it
+// into an ordinary exit-well link. Born unnamed — the adopted instance's
+// name becomes the default label, the same copy-at-birth rule links follow.
+func (s *Store) CreatePluginWell(ctx context.Context, gridID string, x, y, w, h int64, configurePluginID string) (*rpc.Tile, error) {
+	if configurePluginID == "" {
+		return nil, fmt.Errorf("%w: configure_plugin_id required", ErrInvalidArgument)
+	}
+	return s.createTile(ctx, gridID, x, y, w, h, "",
+		func(tx *sql.Tx, gid, now int64, objID string) (int64, error) {
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+					view_x, view_y, view_zoom, configure_plugin_id, alt_text,
+					created_at, updated_at)
+				VALUES (?, ?, 'well', ?, ?, ?, ?, 0, 0, 0, ?, '', ?, ?)`,
+				objID, gid, x, y, w, h, configurePluginID, now, now)
+			if err != nil {
+				return 0, fmt.Errorf("insert plugin well: %w", err)
+			}
+			return res.LastInsertId()
+		})
+}
+
+// AdoptChildGrid turns a CHILDLESS well into a link by setting its child
+// grid (issue #251) — the moment an unconfigured plugin well becomes a
+// configured instance link. A versioned USER edit (bumps): the claim is
+// checked in the same transaction as the write. Refused for non-wells and
+// for wells that already have a child grid — a well's target never silently
+// changes; re-pointing is delete-and-recreate, where the user sees the
+// identity break. label applies only when the well is unnamed (alt empty,
+// alt_user unlatched): the copy-from-source-at-birth naming rule.
+func (s *Store) AdoptChildGrid(ctx context.Context, req *rpc.AdoptChildGridRequest) (*rpc.Tile, error) {
+	id, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	if req.ChildGridID == "" {
+		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, _, err := s.loadForEdit(ctx, tx, id, req.Version, rpc.KindWell, ErrNotWellTile)
+		if err != nil {
+			return err
+		}
+		if n.ChildGridID != "" {
+			return fmt.Errorf("%w: well %d already has a child grid", ErrInvalidArgument, id)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE tiles SET child_grid_id = ?, view_x = ?, view_y = ?, view_zoom = ?, updated_at = ?
+			WHERE id = ?`,
+			req.ChildGridID, req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), id); err != nil {
+			return fmt.Errorf("adopt child grid: %w", err)
+		}
+		if req.Label != "" && n.AltText == "" {
+			// setAltTx's user=false path respects the alt_user latch, so a
+			// name the user already chose is never clobbered by the default —
+			// and when it writes, it finishes the edit itself.
+			if err := s.setAltTx(ctx, tx, id, req.Label, false, events); err != nil {
+				return err
+			}
+		}
+		// One bump for the whole adopt: setAltTx bumped iff it wrote (the
+		// latch can defer it even past the empty-alt guard); finish the edit
+		// here exactly when it didn't.
+		cur, err := s.loadTile(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if cur.Version != n.Version {
+			out = cur
+			return nil
+		}
+		out, err = s.finishContentEdit(ctx, tx, id, events)
+		return err
+	})
+	return out, err
+}
+
+// CreateText creates a markdown text tile.
+func (s *Store) CreateText(ctx context.Context, req *rpc.CreateTextRequest) (*rpc.Tile, error) {
+	if int64(len(req.Data)) > MaxBlobBytes {
+		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
+	}
+	hash := hashBytes(req.Data)
+	alt := doctype.AltFromSource(string(req.Data))
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
+		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
+			blobID, err := s.putBlob(ctx, tx, hash, req.Data, mediaMarkdown)
+			if err != nil {
+				return 0, err
+			}
+			res, err := tx.ExecContext(ctx, `
+				INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+					blob_id, alt_text, created_at, updated_at)
+				VALUES (?, ?, 'text', ?, ?, ?, ?, ?, ?, ?, ?)`,
+				objID, gridID, req.X, req.Y, req.W, req.H, blobID, alt, now, now)
+			if err != nil {
+				return 0, fmt.Errorf("insert text tile: %w", err)
+			}
+			tileID, err := res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+			if err := s.incBlobRefcount(ctx, tx, blobID); err != nil {
+				return 0, err
+			}
+			return tileID, nil
+		})
+}
+
+// insertURLRow inserts one url tile row and returns its id. The single place
+// the url INSERT lives, shared by the on-grid CreateURL and the off-grid
+// CreateScratchURL so they can't drift.
+func insertURLRow(ctx context.Context, tx *sql.Tx, objID string, gridID, x, y, w, h int64, url string, now int64) (int64, error) {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+			url_string, created_at, updated_at)
+		VALUES (?, ?, 'url', ?, ?, ?, ?, ?, ?, ?)`,
+		objID, gridID, x, y, w, h, url, now, now)
+	if err != nil {
+		return 0, fmt.Errorf("insert url tile: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// CreateURL creates a URL tile pointing at the given URL. An EMPTY url is
+// the legal unconfigured state (issue #209: drop first, prompt on first
+// descent) — the address arrives later as the tile's content, through
+// WriteContent's url arm.
+func (s *Store) CreateURL(ctx context.Context, req *rpc.CreateURLRequest) (*rpc.Tile, error) {
+	urlString := strings.TrimSpace(req.URL)
+	if urlString != "" && !urlSchemeAllowed(urlString) {
+		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
+	}
+	return s.createTile(ctx, req.GridID, req.X, req.Y, req.W, req.H, req.ObjectID,
+		func(tx *sql.Tx, gridID, now int64, objID string) (int64, error) {
+			return insertURLRow(ctx, tx, objID, gridID, req.X, req.Y, req.W, req.H, urlString, now)
+		})
+}
+
+// CreateScratchURL creates an ephemeral url tile in the scratch grid (off any
+// visible grid) and returns it — the store side of "descend into a url" (a
+// shell link, a menu url click) without placing a tile on a grid. Unlike
+// CreateURL it takes no descent path and runs no overlap check: the scratch
+// grid is never rendered, so a tile's position there is meaningless and two
+// visits may share a cell. The result is otherwise a normal, persistent url
+// tile (durable visited-url history; a resolvable deep-link), it just lives
+// off-grid. See ScratchGridID.
+func (s *Store) CreateScratchURL(ctx context.Context, url string) (*rpc.Tile, error) {
+	urlString := strings.TrimSpace(url)
+	if !urlSchemeAllowed(urlString) {
+		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
+	}
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	gridID, err := parseID(scratch)
+	if err != nil {
+		return nil, err
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		now := s.now().Unix()
+		tileID, err := insertURLRow(ctx, tx, s.newID(), gridID, 0, 0, 1, 1, urlString, now)
+		if err != nil {
+			return err
+		}
+		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// CreateScratchShell creates an ephemeral shell tile in the scratch grid —
+// the shell twin of CreateScratchURL: off any visible grid, no descent path,
+// no overlap check. Unlike a placed shell it is DELETED on ascent (the client
+// drives that; the plugin's delete kills the tmux session), so nothing
+// persists — gray border means gone-on-ascent (issue #85).
+func (s *Store) CreateScratchShell(ctx context.Context) (*rpc.Tile, error) {
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	gridID, err := parseID(scratch)
+	if err != nil {
+		return nil, err
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		now := s.now().Unix()
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h,
+				alt_text, created_at, updated_at)
+			VALUES (?, ?, 'shell', 0, 0, 1, 1, 'shell', ?, ?)`,
+			s.newID(), gridID, now, now)
+		if err != nil {
+			return fmt.Errorf("insert scratch shell tile: %w", err)
+		}
+		tileID, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// SetWellView updates a well tile's framing (view_x/view_y/view_zoom).
+//
+// Framing is not a content edit: re-framing does NOT bump the tile version.
+// It's an in-place write to this tile's row (copy-on-clone means clones are
+// already independent, so there is nothing to fork) — the framing stays
+// exactly as you left it.
+func (s *Store) SetWellView(ctx context.Context, req *rpc.SetWellViewRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
+		if err != nil {
+			return err
+		}
+		if !isWellKind(n.Kind) {
+			return ErrNotWellTile
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tiles SET view_x = ?, view_y = ?, view_zoom = ?, updated_at = ? WHERE id = ?`,
+			req.ViewX, req.ViewY, req.ViewZoom, s.now().Unix(), tileID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// SetTextView updates a text tile's framed-document window and rendered/text
+// mode. Like SetWellView this is framing, not content: an in-place write that
+// does NOT bump the tile version.
+func (s *Store) SetTextView(ctx context.Context, req *rpc.SetTextViewRequest) (*rpc.Tile, error) {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	var out *rpc.Tile
+	err = s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		n, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, rpc.KindText, ErrNotTextTile)
+		if err != nil {
+			return err
+		}
+		if n.LinkTargetID != "" {
+			// A LINK row persists the framed window only: the v6 CHECK keeps
+			// text_mode NULL on links (framing is per-link local, the mode is
+			// not — issue #239). Writing it failed the whole framing save.
+			_, err := tx.ExecContext(ctx,
+				`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, updated_at = ? WHERE id = ?`,
+				req.TextX, req.TextY, req.TextW, req.TextH, s.now().Unix(), tileID)
+			if err != nil {
+				return err
+			}
+			out, err = s.emitTileChanged(ctx, tx, tileID, events)
+			return err
+		}
+		var textModeArg any
+		if req.TextMode != "" {
+			textModeArg = req.TextMode
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tiles SET text_x = ?, text_y = ?, text_w = ?, text_h = ?, text_mode = ?, updated_at = ? WHERE id = ?`,
+			req.TextX, req.TextY, req.TextW, req.TextH, textModeArg, s.now().Unix(), tileID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
+// DeleteTile is the user's discard gesture, two-stage (issue #262): a tile
+// on an ordinary grid MOVES into the trashcan's current-month subgrid —
+// same id, same row, links keep resolving (it moved, it didn't die) — and
+// only a tile already inside the trash tree (the second delete) is
+// destroyed for real, releasing the references it held (its blob, preview
+// blob, and — for an interior well — its child grid). Scratch-grid tiles
+// (system ephemerals: visited urls, gone-on-ascent shells) always delete
+// for real. A well whose child lives in another plugin (an exit well)
+// carries a qualified "<uuid>/<id>" child_grid_id that doesn't parse as a
+// local grid id, so no local child is GC'd; only the reference is dropped.
+// Tiles inside fs/proc grids are deleted by the plugin that owns them (the
+// server routes there), never through the local store.
+func (s *Store) DeleteTile(ctx context.Context, req *rpc.DeleteTileRequest) error {
+	tileID, err := parseID(req.TileID)
+	if err != nil {
+		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	return s.withMutation(ctx, func(tx *sql.Tx, events *[]rpc.Event) error {
+		t, _, err := s.loadForEdit(ctx, tx, tileID, req.Version, "", nil)
+		if err != nil {
+			return err
+		}
+		srcGrid, err := parseID(t.GridID)
+		if err != nil {
+			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, t.GridID, err)
+		}
+		bypass, err := s.deleteBypassesTrash(ctx, tx, srcGrid)
+		if err != nil {
+			return err
+		}
+		if !bypass {
+			return s.moveTileToTrash(ctx, tx, events, t)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
+			return err
+		}
+		childGridID, _ := strconv.ParseInt(t.ChildGridID, 10, 64)
+		if err := s.decTileRefs(ctx, tx, t.Kind, childGridID, t.BlobID, t.PreviewBlobID); err != nil {
+			return err
+		}
+		gridID, _ := parseID(t.GridID)
+		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+			return err
+		}
+		*events = append(*events, rpc.Event{Kind: rpc.EventTileRemoved, TileRemoved: &rpc.TileRemoved{GridID: t.GridID, TileID: t.ID}})
+		return nil
+	})
+}

@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // The unload-beacon seam (2026-08-14, the transport-loss class): the

@@ -15,8 +15,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 const spaMarker = "GRIDWELL-SPA-MARKER"

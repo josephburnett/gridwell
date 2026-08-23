@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/plugins/local"
-	"github.com/josephburnett/gridwell/plugins/local/store"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
 // serveInProcess is plugin.ServeInProcess's shape, inlined: the loader now

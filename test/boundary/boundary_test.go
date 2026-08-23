@@ -34,8 +34,8 @@ var modules = map[string][]string{
 	// griddb: the fs/proc shared layout DB, over the api only.
 	"plugins/griddb": {"api"},
 	// Plugins: the api, the shared neutral homes — never the host, never
-	// each other.
-	"plugins/local":  {"api", "internal/doctype"},
+	// each other. (local left this list 2026-08-23: the v2 fold made the
+	// native store NODE code — content-presentation.md §9.)
 	"plugins/fs":     {"api", "internal/doctype", "plugins/griddb"},
 	"plugins/proc":   {"api", "plugins/griddb"},
 	"plugins/remote": {"api"},

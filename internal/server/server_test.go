@@ -14,10 +14,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxy"
-	"github.com/josephburnett/gridwell/plugins/local"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // registerPrimaryLocaldb serves st as a localdb plugin in reg under its stable

@@ -10,7 +10,6 @@ require (
 	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/fs v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/griddb v0.0.0-00010101000000-000000000000 // indirect
-	github.com/josephburnett/gridwell/plugins/local v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/proc v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/remote v0.0.0-00010101000000-000000000000
 )
@@ -20,13 +19,13 @@ replace (
 	github.com/josephburnett/gridwell/internal/doctype => ./internal/doctype
 	github.com/josephburnett/gridwell/plugins/fs => ./plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ./plugins/griddb
-	github.com/josephburnett/gridwell/plugins/local => ./plugins/local
 	github.com/josephburnett/gridwell/plugins/proc => ./plugins/proc
 	github.com/josephburnett/gridwell/plugins/remote => ./plugins/remote
 )
 
 require (
 	connectrpc.com/connect v1.20.0
+	github.com/creack/pty v1.1.24
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/niklasfasching/go-org v1.9.1
 	github.com/yuin/goldmark v1.8.5
@@ -39,7 +38,6 @@ require (
 
 require (
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect

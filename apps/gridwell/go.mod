@@ -12,7 +12,6 @@ replace (
 	github.com/josephburnett/gridwell/internal/doctype => ../../internal/doctype
 	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ../../plugins/griddb
-	github.com/josephburnett/gridwell/plugins/local => ../../plugins/local
 	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
 	github.com/josephburnett/gridwell/plugins/remote => ../../plugins/remote
 )
@@ -21,6 +20,7 @@ require github.com/josephburnett/gridwell v0.0.0-00010101000000-000000000000
 
 require (
 	connectrpc.com/connect v1.20.0 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -30,7 +30,6 @@ require (
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000 // indirect
 	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000 // indirect
-	github.com/josephburnett/gridwell/plugins/local v0.0.0-00010101000000-000000000000 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

@@ -35,10 +35,10 @@ import (
 	"sync"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/local"
 	"github.com/josephburnett/gridwell/plugins/proc"
 	"github.com/josephburnett/gridwell/plugins/remote"
 	"github.com/josephburnett/gridwell/plugins/remote/dial"

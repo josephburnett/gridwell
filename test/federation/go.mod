@@ -12,7 +12,6 @@ replace (
 	github.com/josephburnett/gridwell/internal/doctype => ../../internal/doctype
 	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
 	github.com/josephburnett/gridwell/plugins/griddb => ../../plugins/griddb
-	github.com/josephburnett/gridwell/plugins/local => ../../plugins/local
 	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
 	github.com/josephburnett/gridwell/plugins/remote => ../../plugins/remote
 )

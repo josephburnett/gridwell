@@ -13,12 +13,12 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/shellsvc"
+	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/plugins/local"
-	"github.com/josephburnett/gridwell/plugins/local/shellsvc"
-	"github.com/josephburnett/gridwell/plugins/local/shellsvc/shellsvctest"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // nodeServer stands up a full Server (node id "node1", one in-process localdb

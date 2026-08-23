@@ -35,6 +35,4 @@ require (
 
 replace github.com/josephburnett/gridwell/api => ../../api
 
-replace github.com/josephburnett/gridwell/plugins/local => ../local
-
 replace github.com/josephburnett/gridwell/internal/doctype => ../../internal/doctype

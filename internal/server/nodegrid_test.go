@@ -10,9 +10,9 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/plugins/local"
-	"github.com/josephburnett/gridwell/plugins/local/store"
 )
 
 // nodeGridServer wires a server WITH a node id and two localdb plugins,

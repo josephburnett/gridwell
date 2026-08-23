@@ -12,7 +12,6 @@ use (
 	./mobile
 	./plugins/fs
 	./plugins/griddb
-	./plugins/local
 	./plugins/proc
 	./plugins/remote
 	./test/boundary

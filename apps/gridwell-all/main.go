@@ -16,7 +16,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/cli"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/local"
 	"github.com/josephburnett/gridwell/plugins/proc"
 	"github.com/josephburnett/gridwell/plugins/remote"
 	"github.com/josephburnett/gridwell/plugins/remote/dial"
@@ -25,19 +24,11 @@ import (
 func main() { os.Exit(cli.Main(os.Args[1:], factories())) }
 
 // factories is this binary's loadout: each kind constructed exactly as
-// its subprocess main would, minus the process boundary. Shells work
-// in-process too (the tmux manager is not wired here — a bundled desktop
-// binary wanting live shells would add it exactly as
-// plugins/local/cmd/gridwell-plugin-local does).
+// its subprocess main would, minus the process boundary. The native
+// store (kind local) is NODE code since the v2 fold — the serve wiring
+// supplies it, shells included; only real plugins are enumerated here.
 func factories() map[string]plugin.ServerFactory {
 	return map[string]plugin.ServerFactory{
-		"local": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			st, err := local.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
-			if err != nil {
-				return nil, err
-			}
-			return local.New(st, nil), nil
-		},
 		"fs":   fsplugin.NewFactory,
 		"proc": proc.NewFactory,
 		"remote": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/plugins/local/store"
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
 // backupTestHome builds a real home via RunInit (a localdb plugin with a DB)
