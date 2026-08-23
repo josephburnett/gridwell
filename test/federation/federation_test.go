@@ -183,38 +183,28 @@ func TestFederationSpawn(t *testing.T) {
 	// test uses, here with the PRODUCTION gridwell-ssh dialing it).
 	creds := dialtest.Server(t, t.TempDir())
 
-	// Local node: one localdb + the ssh plugin, no per-host config anywhere
-	// — connections are DATA (#199/#251): a well dropped in the instance
-	// grid, its params committed as content. (The pre-#251 config→data
-	// migration bridge is deleted — 2026-08-15, single-user cut.)
+	// Local node: one localdb + the builtin transport; the connection is
+	// server.yaml CONFIG (v2 #269), declared before first serve and
+	// reconciled at boot.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
+	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The plugin spawned PARAMETERIZED (no root, an instance grid);
-	//    drop a connection well, commit params, and the well gains its
-	//    child — the remote's node grid through the minted segment: the
+	// 1. The connection presents as its own menu row and gains its root
+	//    — the remote's node grid through the declared segment: the
 	//    chained <ssh>/<conn>/<rnode>/0 mount root the rest drives.
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	var instGrid, homeRoot string
+	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
 		pm := p.(map[string]any)
-		switch pm["label"] {
-		case "rtb":
-			instGrid, _ = pm["instanceGridId"].(string)
-			if root, _ := pm["rootGridId"].(string); root != "" {
-				t.Fatalf("ssh rootGridId = %q, want empty (parameterized)", root)
-			}
-		case "home":
+		if pm["label"] == "home" {
 			homeRoot, _ = pm["rootGridId"].(string)
 		}
 	}
-	if instGrid == "" {
-		t.Fatal("ssh plugin declared no instance grid — did the flip + spawn happen?")
-	}
-	sshRoot := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
+	sshRoot := awaitConnRoot(t, localOrigin, "fedconn1")
 
 	// 2. The landing is the remote's HOME — its FIRST plugin's root
 	//    (personal), where a direct client of that node boots (remote-menu,
@@ -415,11 +405,11 @@ func TestFederationSpawn(t *testing.T) {
 	fmt.Println("federation spawn gate: production binaries, real tunnel, chained write/read + session + live events OK")
 }
 
-// TestConnectionsModeSpawn is #199's spawn-level proof: the SAME gridwell-ssh
-// binary, launched with NO host config, comes up in connections mode — the
-// remote node is a WELL the user drops, its params committed as content, and
-// the whole chain `<ssh>/<conn>/<plugin>/<id>` routes through the minted
-// connection segment over a REAL ssh tunnel. server.yaml names no hosts.
+// v2 (#269): connections are server.yaml CONFIG through REAL binaries —
+// declared before first serve, presented as a menu row of their own,
+// mutation-refused on the wire, bytes flowing through the real tunnel,
+// and RETIRED by removing the declaration and restarting: the row
+// disappears, the namespace stops resolving, the remote is untouched.
 func TestConnectionsModeSpawn(t *testing.T) {
 	root := repoRoot(t)
 	bin := filepath.Join(root, "gridwell")
@@ -427,65 +417,52 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
 
-	// Remote node: one localdb, served for real.
+	// Remote node: one localdb, served for real; a real sshd fronting it.
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
 	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
-
-	// A real sshd fronting it.
 	creds := dialtest.Server(t, t.TempDir())
-	sshHost, sshPort, ok := strings.Cut(creds.Addr, ":")
-	if !ok {
-		t.Fatalf("bad sshd addr %q", creds.Addr)
-	}
 
-	// Local node: a home localdb plus ONE ssh plugin with no per-host config.
+	// Local node: localdb + the builtin transport, the connection declared
+	// in server.yaml before first serve.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "connections")
-	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
+	yamlBefore, err := os.ReadFile(filepath.Join(localHome, "server.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
+	localOrigin, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0")
 
-	// 1. The plugin spawned in connections mode: PARAMETERIZED since the
-	//    #251 flip — no root grid, its connection list declared as the
-	//    INSTANCE grid (one segment + "0", its own space, not a remote
-	//    chain), still stamping the #198 creation schema for wells.
+	// 1. The connection is a menu row of its own; the transport's row is
+	//    hidden behind it; the learned root is the chained
+	//    <ssh>/<conn>/<rnode>/0 mount root.
+	child := awaitConnRoot(t, localOrigin, "cmconn1")
+	if strings.Count(child, "/") != 3 {
+		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rnode>/0", child)
+	}
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	var connRoot, declaredRoot string
 	for _, p := range lp["plugins"].([]any) {
-		pm := p.(map[string]any)
-		if pm["label"] == "connections" {
-			connRoot, _ = pm["instanceGridId"].(string)
-			declaredRoot, _ = pm["rootGridId"].(string)
+		if p.(map[string]any)["label"] == "connections" {
+			t.Fatal("the transport's own row must hide behind its instances")
 		}
 	}
-	if declaredRoot != "" {
-		t.Fatalf("connections rootGridId = %q, want empty — parameterized plugins have no landing page", declaredRoot)
-	}
-	if strings.Count(connRoot, "/") != 1 || !strings.HasSuffix(connRoot, "/0") {
-		t.Fatalf("connections instance grid = %q, want <ssh>/0 (its own grid) — did connections mode spawn?", connRoot)
-	}
-	rg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": connRoot})
-	schemas, _ := rg["grid"].(map[string]any)["createSchemas"].(map[string]any)
-	if ws, _ := schemas["well"].(string); !strings.Contains(ws, `"host"`) {
-		t.Fatalf("connection grid must declare the well creation schema, got %v", schemas)
+
+	// 2. CONFIG MODE refuses the old picker mutations on the wire.
+	sshID, _, _ := strings.Cut(child, "/")
+	if code, body := rpcRaw(t, localOrigin, "CreateTile", map[string]any{
+		"gridId": sshID + "/0",
+		"tile":   map[string]any{"kind": "well", "x": 5, "y": 5, "w": 1, "h": 1},
+	}); code == 200 || !strings.Contains(string(body), "server config") {
+		t.Fatalf("picker create must refuse with the config pointer, got %d %s", code, body)
 	}
 
-	// 2. Drop a connection well and commit its params as content — the #198
-	//    flow, against real binaries.
-	well := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": connRoot,
-		"tile":   map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1},
-	})["tile"].(map[string]any)
-	if well["reference"] != true {
-		t.Fatal("a connection well must arrive as a dashed reference")
-	}
-	if c, _ := well["childGridId"].(string); c != "" {
-		t.Fatalf("no params yet: child must be empty, got %q", c)
-	}
-	// protojson renders int64 as a STRING (and omits zeros) — accept both.
+	// 3. Real bytes through all three peels: local server → connection
+	//    segment → remote node → back.
 	num := func(v any) int64 {
 		switch x := v.(type) {
 		case float64:
@@ -496,129 +473,99 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		}
 		return 0
 	}
-	params := fmt.Sprintf(`{"host":%q,"user":"joe","port":%s,"key":%q,"known_hosts":%q,"addr":%q}`,
-		sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
-	if _, err := gwrpc.NewDefaultClient(localOrigin).WriteContent(context.Background(),
-		well["id"].(string), num(well["version"]), []byte(params)); err != nil {
-		t.Fatalf("params commit: %v", err)
-	}
-
-	// 3. The well gains its child — the remote's node grid through the minted
-	//    connection segment: <ssh>/<conn>/<rnode>/0.
-	var child string
-	deadline := time.After(30 * time.Second)
-	for child == "" {
-		g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": connRoot})
-		polled, _ := g["tiles"].([]any)
-		for _, ti := range polled {
-			if c, _ := ti.(map[string]any)["childGridId"].(string); c != "" {
-				child = c
-			}
-		}
-		select {
-		case <-deadline:
-			t.Fatal("connection well never gained its child through the real tunnel")
-		case <-time.After(200 * time.Millisecond):
-		}
-	}
-	if strings.Count(child, "/") != 3 {
-		t.Fatalf("child = %q, want the four-segment <ssh>/<conn>/<rnode>/0", child)
-	}
-
-	// 4. The child IS the remote home (personal's root — remote-menu,
-	//    2026-08-16); move real bytes through all three peels: local
-	//    server → connection segment → remote node → local.
-	if strings.Count(child, "/") != 3 {
-		t.Fatalf("remote home = %q, want four segments", child)
-	}
 	txt := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": child,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
-	body := "# through a dropped connection"
+	body := "# through a declared connection"
 	if _, err := gwrpc.NewDefaultClient(localOrigin).WriteContent(context.Background(),
 		txt["id"].(string), num(txt["version"]), []byte(body)); err != nil {
 		t.Fatalf("WriteContent through the connection chain: %v", err)
 	}
-	got, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), txt["id"].(string))
-	if err != nil || string(got) != body {
+	if got, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), txt["id"].(string)); err != nil || string(got) != body {
 		t.Fatalf("ReadContent through the connection chain = %q (%v)", got, err)
 	}
 
-	// 5. Delete unlinks: the list empties, the namespace stops resolving, and
-	//    the REMOTE keeps its tile (verified on the remote's own front door).
-	wellNow := rpc(t, localOrigin, "GetTile", map[string]any{"tileId": well["id"]})["tile"].(map[string]any)
-	rpc(t, localOrigin, "DeleteTile", map[string]any{"tileId": well["id"], "version": num(wellNow["version"])})
-	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": connRoot})
-	// protojson omits an empty list entirely — a nil "tiles" IS the empty grid.
-	if after, _ := g["tiles"].([]any); len(after) != 0 {
-		t.Fatalf("after unlink: want 0 connections, got %d", len(after))
+	// 4. RETIREMENT is a config edit + restart: the declaration goes, the
+	//    row goes, the namespace stops resolving forever — and the REMOTE
+	//    keeps its tile (verified on its own front door).
+	stopLocal()
+	if err := os.WriteFile(filepath.Join(localHome, "server.yaml"),
+		append(yamlBefore, []byte("connections: []\nretired_names:\n    - cmconn1\n")...), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if code, _ := rpcRaw(t, localOrigin, "GetGrid", map[string]any{"gridId": child}); code == 200 {
-		t.Fatal("a deleted connection's namespace must stop resolving")
+	localOrigin2 := startServe(t, bin, localHome, "127.0.0.1:0")
+	lp = rpc(t, localOrigin2, "ListPlugins", map[string]any{})
+	for _, p := range lp["plugins"].([]any) {
+		if uuid, _ := p.(map[string]any)["uuid"].(string); strings.HasSuffix(uuid, "/cmconn1") {
+			t.Fatal("a retired connection must not row in")
+		}
+	}
+	if code, _ := rpcRaw(t, localOrigin2, "GetGrid", map[string]any{"gridId": child}); code == 200 {
+		t.Fatal("a retired connection's namespace must stop resolving")
 	}
 	peel := func(id string) string { return strings.SplitN(id, "/", 2)[1] }
 	remoteTxt := peel(peel(txt["id"].(string)))
 	if rbody, _, _, err := gwrpc.NewDefaultClient(remoteOrigin).ReadContent(context.Background(), remoteTxt); err != nil || string(rbody) != body {
-		t.Fatalf("the remote must be untouched by the unlink: %q (%v)", rbody, err)
+		t.Fatalf("the remote must be untouched by retirement: %q (%v)", rbody, err)
 	}
 
-	fmt.Println("federation spawn gate: connections mode — dropped well, real tunnel, chained bytes, clean unlink OK")
+	fmt.Println("federation spawn gate: connections mode — yaml-declared, real tunnel, chained bytes, config-refused edits, clean retirement OK")
 }
 
-// commitConnection drops a connection well in the ssh plugin's instance
-// grid, commits its params as content (#199: connections are data — the
-// only way a connection is ever made since the pre-#251 config bridge was
-// deleted), and waits for the well to gain its child: the remote's node
-// grid through the minted segment. Returns the chained
-// <ssh>/<conn>/<rnode>/0 mount root.
-func commitConnection(t *testing.T, origin, instGrid string, creds dialtest.Creds, remoteAddr string) string {
+// appendConnectionsYAML writes the v2 connections section into a home's
+// server.yaml BEFORE first serve (v2 #269: connections are config — the
+// picker flow this suite used to wire is deleted).
+func appendConnectionsYAML(t *testing.T, home, section string) {
+	t.Helper()
+	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(section); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sshConnectionYAML renders one ssh-bridged connection declaration.
+func sshConnectionYAML(t *testing.T, name string, creds dialtest.Creds, remoteAddr string) string {
 	t.Helper()
 	sshHost, sshPort, ok := strings.Cut(creds.Addr, ":")
 	if !ok {
 		t.Fatalf("bad sshd addr %q", creds.Addr)
 	}
-	params := fmt.Sprintf(`{"host":%q,"user":"joe","port":%s,"key":%q,"known_hosts":%q,"addr":%q}`,
-		sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
-	return commitConnectionParams(t, origin, instGrid, params)
+	return fmt.Sprintf(`connections:
+    - name: %s
+      host: %s
+      port: %s
+      user: joe
+      key: %s
+      known_hosts: %s
+      addr: %s
+`, name, sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
 }
 
-// commitConnectionParams commits an arbitrary params document — the shared
-// tail of the ssh and DIRECT connection flows.
-func commitConnectionParams(t *testing.T, origin, instGrid, params string) string {
+// awaitConnRoot polls the plugin list until the named connection's menu
+// row (v2 #269: instances present as rows of their own) carries its
+// learned root — the real tunnel answered.
+func awaitConnRoot(t *testing.T, origin, name string) string {
 	t.Helper()
-	well := rpc(t, origin, "CreateTile", map[string]any{
-		"gridId": instGrid,
-		"tile":   map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1},
-	})["tile"].(map[string]any)
-	version := int64(0)
-	switch v := well["version"].(type) {
-	case float64:
-		version = int64(v)
-	case string:
-		version, _ = strconv.ParseInt(v, 10, 64)
-	}
-	if _, err := gwrpc.NewDefaultClient(origin).WriteContent(context.Background(),
-		well["id"].(string), version, []byte(params)); err != nil {
-		t.Fatalf("params commit: %v", err)
-	}
-	var child string
 	deadline := time.After(30 * time.Second)
-	for child == "" {
-		g := rpc(t, origin, "GetGrid", map[string]any{"gridId": instGrid})
-		for _, ti := range g["tiles"].([]any) {
-			if c, _ := ti.(map[string]any)["childGridId"].(string); c != "" {
-				child = c
+	for {
+		lp := rpc(t, origin, "ListPlugins", map[string]any{})
+		for _, p := range lp["plugins"].([]any) {
+			pm := p.(map[string]any)
+			if uuid, _ := pm["uuid"].(string); strings.HasSuffix(uuid, "/"+name) {
+				if root, _ := pm["rootGridId"].(string); root != "" {
+					return root
+				}
 			}
 		}
 		select {
 		case <-deadline:
-			t.Fatal("connection well never gained its child through the real tunnel")
+			t.Fatalf("connection %q never gained its root through the real tunnel", name)
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	if strings.Count(child, "/") != 3 {
-		t.Fatalf("connection child = %q, want the chained <ssh>/<conn>/<rnode>/0", child)
-	}
-	return child
 }

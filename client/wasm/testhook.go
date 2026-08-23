@@ -617,8 +617,6 @@ func pluginStatusName(pl rpc.PluginInfo) string {
 		return "broken"
 	case pluginhealth.Rootless:
 		return "rootless"
-	case pluginhealth.Parameterized:
-		return "parameterized"
 	}
 	return "enterable"
 }

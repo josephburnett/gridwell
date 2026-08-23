@@ -2,11 +2,9 @@ import { test, expect } from './fixtures';
 
 // Config-managed connections (v2 #269, reversing #199): server.yaml owns
 // the list, and each connection presents as its OWN menu row — one icon
-// per configured thing. The transport's parameterized row (the picker
-// door) disappears entirely: with creation, rename, and delete all
-// config-side, the connection dialog has no job left. (Legacy homes —
-// no connections: key — keep the picker flow; inst-picker.spec covers
-// it.)
+// per configured thing. The transport's own row (once the picker door)
+// is gone entirely: with creation, rename, and delete all config-side,
+// the connection dialog had no job left and was deleted (2026-08-23).
 
 test.use({
   extraPlugins: [{ kind: 'remote', name: 'connections' }],
@@ -27,9 +25,9 @@ test('one menu row per connection; the picker row is gone', async ({ gw }) => {
   expect(rtb, 'the connection is a menu row of its own').toBeTruthy();
   expect(rtb!.uuid.includes('/'), 'a chained namespace identifies it').toBe(true);
 
-  // One icon per configured thing: no parameterized "connections" row.
+  // One icon per configured thing: the transport's own row is gone.
   expect(
-    pls.find((p) => p.status === 'parameterized'),
-    'the picker row is replaced by its instances',
+    pls.find((p) => p.label === 'connections'),
+    'the transport row is replaced by its instances',
   ).toBeUndefined();
 });

@@ -1477,15 +1477,6 @@ func (a *App) instantAscend(p *pane.Pane, parentPath []string) {
 // so neither feels rushed. C is zero-length when ViewZoom is unset.
 func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 	if well.ChildGridID == "" {
-		// A PARAMETERIZED plugin (issue #251) — the menu swatch click, a
-		// node-grid tile, or a mounted plugin well with no root: descending
-		// opens the instance picker; picking descends into that instance.
-		if pl, ok := a.pluginByUUID(rpc.LocalOf(well.ID)); ok &&
-			pluginhealth.Classify(pl) == pluginhealth.Parameterized {
-			a.menu.Close()
-			a.openPluginVisitPicker(p, well, pl)
-			return
-		}
 		// A link tile whose target isn't available — a broken or rootless
 		// plugin on the node grid. Say why instead of silently doing nothing
 		// (charter §6); pluginhealth owns the wording when it knows the plugin.
@@ -1505,12 +1496,12 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 			return
 		}
 		if well.ConfigurePluginID != "" {
-			if pl, ok := a.pluginByUUID(well.ConfigurePluginID); ok &&
-				pluginhealth.Classify(pl) == pluginhealth.Parameterized {
-				a.openWellConfigurePicker(p, well, pl)
-				return
-			}
-			a.reportErr(errsurface.Info, "descend", "this well's plugin is not available")
+			// A pre-v2 UNCONFIGURED plugin well: the picker that once
+			// configured it died with config-managed connections
+			// (2026-08-23). Deleting the well is the cleanup; the
+			// connection itself is a menu row now.
+			a.reportErr(errsurface.Info, "descend",
+				"this well predates config-managed connections — delete it and drag the connection from the menu instead")
 			return
 		}
 		a.reportErr(errsurface.Info, "descend", "nothing to descend into: "+well.AltText)
@@ -2248,28 +2239,13 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	}
 
 	// A plugin item drops into the destination grid (drag-a-plugin-onto-a-
-	// grid): a rooted plugin drops an exit-well link to its root grid; a
-	// PARAMETERIZED plugin (issue #251) drops an unconfigured plugin well —
-	// the instance picker opens on first descent. Only writable grids
-	// accept either; anything else snaps back.
+	// grid): an exit-well LINK to its root grid — a connection row drops
+	// the same way, its chained root already qualified (v2 #269; links
+	// are the standing cross-boundary vocabulary, 2026-07-19). Only
+	// writable grids accept it; anything else snaps back.
 	if d.item.isPlugin {
-		status := pluginhealth.Classify(d.item.plugin)
-		droppable := status == pluginhealth.Enterable || status == pluginhealth.Parameterized
+		droppable := pluginhealth.Classify(d.item.plugin) == pluginhealth.Enterable
 		if !droppable || !a.gridWritable(a.gridIDForPane(destPane)) {
-			a.cancelDragSnapBack(d)
-			return
-		}
-		// A ROOTED plugin dropped across nodes is fine — the drop is a
-		// LINK and the routed menu's RootGridID is already qualified for
-		// this receiver (links are the standing cross-boundary vocabulary,
-		// 2026-07-19). A PARAMETERIZED plugin is same-node only for now:
-		// its unconfigured well stores a bare configure_plugin_id that
-		// resolves against the serving node's registry, so a cross-node
-		// drop would mint a well nothing can configure. Visible refusal,
-		// never a silent no-op (charter §6).
-		if status == pluginhealth.Parameterized && a.paneNodeNS(destPane) != d.menuNS {
-			a.reportErr(errsurface.Info, "menu",
-				"this plugin belongs to another node — configure it in a grid on that node")
 			a.cancelDragSnapBack(d)
 			return
 		}
@@ -2278,11 +2254,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 			a.ghost.paneID = destPane.ID
 		}
 		a.startSnap(targetX, targetY, snapMs)
-		if status == pluginhealth.Parameterized {
-			a.createPluginWellAtCell(destPane, d.item.plugin, dropX, dropY)
-		} else {
-			a.createPluginLinkAtCell(destPane, d.item.plugin, dropX, dropY)
-		}
+		a.createPluginLinkAtCell(destPane, d.item.plugin, dropX, dropY)
 		a.menu.Close()
 		return
 	}
@@ -2344,21 +2316,6 @@ func (a *App) createPluginLinkAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cel
 		ViewX:       int64(pl.RootViewCx),
 		ViewY:       int64(pl.RootViewCy),
 		ViewZoom:    pl.RootViewZoom,
-	}
-	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
-		return a.cl.CreateWell(ctx, req)
-	}, nil)
-}
-
-// createPluginWellAtCell fires CreateWell with configure_plugin_id — the
-// UNCONFIGURED PLUGIN WELL a parameterized plugin's menu-drag lands (issue
-// #251): childless, unnamed, inert until first descent opens the instance
-// picker. The drop never prompts (issue #209's one create experience).
-func (a *App) createPluginWellAtCell(p *pane.Pane, pl rpc.PluginInfo, cellX, cellY int64) {
-	gid := a.gridIDForPane(p)
-	req := &rpc.CreateWellRequest{
-		GridID: gid, X: cellX, Y: cellY, W: 1, H: 1,
-		ConfigurePluginID: pl.UUID,
 	}
 	a.postTileMutate("CreateWell", gid, func(ctx context.Context) (*rpc.Tile, error) {
 		return a.cl.CreateWell(ctx, req)

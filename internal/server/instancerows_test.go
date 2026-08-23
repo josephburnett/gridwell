@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
@@ -21,18 +22,19 @@ import (
 // instance (child learned) and one pending one (no child, a status).
 type fakeParameterized struct {
 	pb.UnimplementedGridwellServer
-	withSchema bool
+	// brokenInstanceGrid makes the instance-grid read fail — the one
+	// case that keeps the plugin's own row listed.
+	brokenInstanceGrid bool
 }
 
 func (f fakeParameterized) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
-	resp := &pb.InfoResponse{Kind: "fakeparam", DisplayName: "things", InstanceGridId: "0"}
-	if f.withSchema {
-		resp.CreateSchemas = map[string]string{"well": "{}"}
-	}
-	return resp, nil
+	return &pb.InfoResponse{Kind: "fakeparam", DisplayName: "things", InstanceGridId: "0"}, nil
 }
 
-func (fakeParameterized) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+func (f fakeParameterized) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+	if f.brokenInstanceGrid {
+		return nil, fmt.Errorf("instance store unavailable")
+	}
 	return &pb.GetGridResponse{
 		Grid: &pb.Grid{Id: req.GridId},
 		Tiles: []*pb.Tile{
@@ -64,16 +66,13 @@ func listFor(t *testing.T, impl pb.GridwellServer) []rpc.PluginInfo {
 }
 
 func TestParameterizedInstancesJoinTheMenu(t *testing.T) {
-	// Legacy world (a creation schema — the picker still manages): the
-	// plugin's own row stays, instances after it.
-	plugins := listFor(t, fakeParameterized{withSchema: true})
-	if len(plugins) != 3 {
-		t.Fatalf("want the parameterized row + 2 instance rows, got %d: %+v", len(plugins), plugins)
+	// The instances ARE the menu rows — the plugin's own row is replaced
+	// (one icon per configured thing; the picker is gone, 2026-08-23).
+	plugins := listFor(t, fakeParameterized{})
+	if len(plugins) != 2 {
+		t.Fatalf("want ONLY the 2 instance rows, got %d: %+v", len(plugins), plugins)
 	}
-	param, connected, pending := plugins[0], plugins[1], plugins[2]
-	if param.InstanceGridID == "" || param.RootGridID != "" {
-		t.Fatalf("row 0 should be the parameterized plugin: %+v", param)
-	}
+	connected, pending := plugins[0], plugins[1]
 	// The connected instance: a chained namespace, its child as the root
 	// (click descends), its framing carried, its label its own.
 	if connected.UUID != "fakeuux/conn123" || connected.RootGridID != "fakeuux/conn123/rnode99/1" {
@@ -89,20 +88,14 @@ func TestParameterizedInstancesJoinTheMenu(t *testing.T) {
 	}
 }
 
-func TestConfigManagedInstancesReplaceThePluginRow(t *testing.T) {
-	// v2 world (no creation schema — the picker has no job left): one
-	// icon per configured thing; the plugin's own row disappears behind
-	// its instances.
-	plugins := listFor(t, fakeParameterized{})
-	if len(plugins) != 2 {
-		t.Fatalf("want ONLY the 2 instance rows, got %d: %+v", len(plugins), plugins)
+func TestUnreadableInstanceGridKeepsThePluginRow(t *testing.T) {
+	// A configured plugin must never blank silently: when the instance
+	// grid cannot be read, the plugin's own (rootless-inert) row stays.
+	plugins := listFor(t, fakeParameterized{brokenInstanceGrid: true})
+	if len(plugins) != 1 {
+		t.Fatalf("want the plugin's own row alone, got %d: %+v", len(plugins), plugins)
 	}
-	for _, p := range plugins {
-		if p.InstanceGridID != "" {
-			t.Fatalf("the parameterized plugin's own row leaked through: %+v", p)
-		}
-	}
-	if plugins[0].Label != "rtb" || plugins[1].Label != "pending" {
-		t.Fatalf("instance rows: %+v", plugins)
+	if plugins[0].InstanceGridID == "" || plugins[0].RootGridID != "" {
+		t.Fatalf("row 0 should be the parameterized plugin's own: %+v", plugins[0])
 	}
 }

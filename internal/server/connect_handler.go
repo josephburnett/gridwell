@@ -194,15 +194,12 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		// click descends, drag drops a link well). Synthesized from the
 		// instance grid the plugin already declares — no kind is
 		// consulted, so any parameterized plugin gets this for free.
-		// And when the plugin declares NO creation schema (a
-		// config-managed list — the picker has no job left), the
-		// instances REPLACE the plugin's own row: one icon per
-		// configured thing, no dialog door. The row stays whenever the
-		// picker still manages instances (a schema), the instance read
-		// failed (never blank a configured plugin silently), or the
-		// plugin isn't parameterized at all.
+		// The instances REPLACE the plugin's own row: one icon per
+		// configured thing (the instance picker is gone, 2026-08-23).
+		// The row stays when the instance read failed (never blank a
+		// configured plugin silently) or the plugin isn't parameterized.
 		inst, managed := h.instanceRows(ctx, p.UUID, info)
-		if !managed || len(info.GetCreateSchemas()) > 0 {
+		if !managed {
 			out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 		}
 		out = append(out, inst...)

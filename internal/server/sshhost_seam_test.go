@@ -152,8 +152,8 @@ func TestConnectionLifecycleThroughTheChain(t *testing.T) {
 	if g.Grid.Writable {
 		t.Error("the instance grid must NOT read writable — that's the + palette gate, and instances are created through the picker, never the palette")
 	}
-	if !strings.Contains(g.Grid.CreateSchemas["well"], `"host"`) {
-		t.Fatalf("root grid must declare the well creation schema, got %v", g.Grid.CreateSchemas)
+	if len(g.Grid.CreateSchemas) != 0 {
+		t.Fatalf("no creation schema anymore — the picker retired with v2 config-managed connections; got %v", g.Grid.CreateSchemas)
 	}
 	if len(g.Tiles) != 0 {
 		t.Fatalf("fresh plugin: want 0 tiles, got %d", len(g.Tiles))
@@ -529,34 +529,41 @@ func TestRemoteEventsArrivePrefixed(t *testing.T) {
 	}
 }
 
-// The #251 flip: ssh is a PARAMETERIZED plugin — no root grid, an instance
-// grid instead. The grid itself keeps serving under the same id (legacy
-// links, the picker's reads), only the declaration changed.
-func TestInfoDeclaresInstanceGridNotRoot(t *testing.T) {
+// v2 (2026-08-23, retiring #251's picker): the transport hides behind
+// its instances — zero connections, zero rows; each connection is a menu
+// row of its own. The instance grid itself keeps serving under the same
+// id (legacy links, the row synthesis).
+func TestTransportHidesBehindItsInstances(t *testing.T) {
 	ctx := context.Background()
 	h := newChainHarness(t)
-	pls, err := h.localCl.ListPlugins(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ssh *rpc.PluginInfo
-	for i := range pls.Plugins {
-		if pls.Plugins[i].Kind == "remote" {
-			ssh = &pls.Plugins[i]
+	rows := func() []rpc.PluginInfo {
+		pls, err := h.localCl.ListPlugins(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
+		var out []rpc.PluginInfo
+		for _, p := range pls.Plugins {
+			if p.Kind == "remote" || strings.HasPrefix(p.UUID, "sshc/") {
+				out = append(out, p)
+			}
+		}
+		return out
 	}
-	if ssh == nil {
-		t.Fatal("ssh plugin not listed")
+	if got := rows(); len(got) != 0 {
+		t.Fatalf("an empty transport must list NO rows, got %+v", got)
 	}
-	if ssh.RootGridID != "" {
-		t.Errorf("RootGridID = %q, want empty — ssh has no landing page", ssh.RootGridID)
-	}
-	if ssh.InstanceGridID != "sshc/0" {
-		t.Errorf("InstanceGridID = %q, want the qualified connection list sshc/0", ssh.InstanceGridID)
-	}
-	// The instance grid still serves.
+	// The instance grid (the storage address) still serves.
 	if _, err := h.localCl.GetGrid(ctx, "sshc/0"); err != nil {
 		t.Errorf("the instance grid must keep serving: %v", err)
+	}
+	// One connection → one row, the connection's own (pending: no params
+	// committed, so no chain learned — rootless-inert, never blanked).
+	if _, err := h.localCl.CreateWell(ctx, &rpc.CreateWellRequest{GridID: "sshc/0", X: 0, Y: 0, W: 1, H: 1, Label: "gpu-box"}); err != nil {
+		t.Fatal(err)
+	}
+	got := rows()
+	if len(got) != 1 || got[0].Label != "gpu-box" || got[0].RootGridID != "" {
+		t.Fatalf("want the connection's own pending row, got %+v", got)
 	}
 }
 

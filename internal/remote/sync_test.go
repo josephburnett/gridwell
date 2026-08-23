@@ -170,24 +170,20 @@ func TestSyncConfigLabelLatches(t *testing.T) {
 	}
 }
 
-func TestConfigModeDropsCreationSchema(t *testing.T) {
-	// The declaration channel is the gate: no create schema in config
-	// mode, so the picker renders pick-only (no form, no rename/delete).
+func TestNoCreationSchemaEver(t *testing.T) {
+	// The instance picker is deleted (2026-08-23): the transport never
+	// declares a creation schema — a form that could only fail must
+	// never render, in any mode.
 	db := openSyncDB(t)
 	s := New(db, nil, "")
-	info, err := s.Info(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(info.CreateSchemas) == 0 {
-		t.Fatal("legacy mode must declare the creation schema")
-	}
-	s.SetConfigMode(true)
-	info, err = s.Info(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(info.CreateSchemas) != 0 {
-		t.Fatal("config mode must not declare a creation schema — the picker would render a form that can only fail")
+	for _, mode := range []bool{false, true} {
+		s.SetConfigMode(mode)
+		info, err := s.Info(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(info.CreateSchemas) != 0 {
+			t.Fatalf("configMode=%v declared a creation schema: %v", mode, info.CreateSchemas)
+		}
 	}
 }

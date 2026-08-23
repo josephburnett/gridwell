@@ -24,28 +24,25 @@ const (
 	// crashed, hung, or otherwise not responding.
 	Broken
 	// Rootless: Info succeeded, but the plugin has no root grid configured
-	// (e.g. an fs plugin with no config.root). Healthy, just nothing to enter.
+	// (e.g. an fs plugin with no config.root). Healthy, just nothing to
+	// enter. (The Parameterized status — an instance grid instead of a
+	// root, #251 — retired 2026-08-23 with the instance picker: a
+	// parameterized plugin's instances present as rows of their own, and
+	// its bare row, listed only when its instance grid is unreadable,
+	// reads Rootless.)
 	Rootless
-	// Parameterized: Info succeeded, no root grid, but an instance grid is
-	// declared (issue #251 — e.g. ssh's connections). Healthy and clickable:
-	// the click opens the instance picker instead of descending.
-	Parameterized
 )
 
 // Classify decides pl's status from the facts the server's Info handshake
-// produces: whether it failed (InfoError != ""), whether it declared a root
-// (RootGridID != ""), and whether it declared an instance grid instead
-// (InstanceGridID != "" — issue #251). InfoError is the ONLY signal that
-// distinguishes Broken from the healthy rootless states — all three
-// otherwise leave RootGridID == "".
+// produces: whether it failed (InfoError != "") and whether it declared a
+// root (RootGridID != ""). InfoError is the ONLY signal that distinguishes
+// Broken from the healthy rootless state — both otherwise leave
+// RootGridID == "".
 func Classify(pl rpc.PluginInfo) Status {
 	if pl.InfoError != "" {
 		return Broken
 	}
 	if pl.RootGridID == "" {
-		if pl.InstanceGridID != "" {
-			return Parameterized
-		}
 		return Rootless
 	}
 	return Enterable
@@ -55,8 +52,7 @@ func Classify(pl rpc.PluginInfo) Status {
 // non-enterable launcher tile: severity, a per-plugin source key (so a second
 // click updates the same notice rather than scrolling the strip), and a
 // human-readable message. ok is false for Enterable (the caller descends)
-// and for Parameterized (the caller opens the instance picker, issue #251) —
-// neither click reports anything.
+// — that click reports nothing.
 //
 // The source namespace is "launcher:", not "plugin:" — "plugin:<uuid>" is the
 // sticky ongoing-condition namespace (errsurface.Sticky) used by health

@@ -418,14 +418,9 @@ func (s *Server) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		InstanceGridId: connGridID,
 		Watch:          true,
 	}
-	// CONFIG MODE (v2 #269): the connection list is server.yaml's — no
-	// creation schema means the picker renders no create form and no
-	// rename/delete affordances (the declaration channel IS the gate;
-	// the mutations would only refuse anyway). Legacy homes keep the
-	// picker-managed flow.
-	if !s.configMode {
-		resp.CreateSchemas = map[string]string{"well": CreateSchemaWell}
-	}
+	// No creation schema, ever: the instance picker retired with the v2
+	// config-managed connections (2026-08-23) — a connection is a menu
+	// row, and the list is edited in server.yaml.
 	return resp, nil
 }
 
@@ -535,14 +530,6 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 		// NOT writable: that's the "+ palette shows here" gate (#251).
 		// The plugin stamps its own grid because it is registered
 		// TRANSIT — the server forwards this stamp verbatim.
-	}
-	// The creation schema renders the picker's create form — declared
-	// only while the picker manages connections. CONFIG MODE (v2 #269)
-	// declares nothing: the list is server.yaml's, and the picker is
-	// pick-only (no form, no rename/delete — the client gates all three
-	// on this one declaration).
-	if !s.configMode {
-		grid.CreateSchemas = map[string]string{"well": CreateSchemaWell}
 	}
 	return &gridwellv1.GetGridResponse{
 		Grid:  grid,

@@ -148,16 +148,15 @@ Re-litigating them silently is how churn happens.
   focus, nothing else). The old right-click ascends (corner circle,
   empty bar, slot) are gone; middle-click remains the in-pane shortcut.
 - **Parameterized plugins: the picker, not a synthetic root (#251,
-  2026-08-08).** A plugin declares a root grid OR an instance grid — ssh's
-  connection list is an instance grid, a storage address, never a landing
-  page. Dragging a parameterized plugin drops an unconfigured plugin well
-  (childless, OWNED — solid border; dashed stays reserved for links);
-  descending it, or clicking the plugin in the menu, opens the instance
-  picker. Selecting an entry means THE SAME instance, never a copy;
-  deleting an entry is the tombstone gesture, forever (recreating the
-  details mints a new segment); a name copies from the instance at adopt
-  and is independent afterward (rename-where-you-stand, like links).
-  Modals center on the active pane, not the screen.
+  2026-08-08; SUPERSEDED 2026-08-23 by #269): the picker and the
+  parameterized flow are DELETED — connections are server.yaml config,
+  each instance presents as its own menu row (ListPlugins synthesis
+  from the instance grid), and stale unconfigured wells degrade to a
+  delete-me notice.** What still stands: the instance grid is a storage
+  address, never a landing page; an instance is always THE SAME
+  instance, never a copy; deleting one is the tombstone gesture,
+  forever (a retired name never returns). Modals center on the active
+  pane, not the screen.
 - **Plugins serve web content through the /content/ door (2026-08-11).**
   `ServeContent` is the one RPC carrier behind
   `/content/<token>/<tile-id>/<subpath>`; it routes/link-resolves/federates

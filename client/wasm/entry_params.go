@@ -5,11 +5,10 @@ package main
 // Plugin menu-entry tiles (#258), the client half: creating one from the
 // palette and prompting for its parameters on first descent (#209's
 // drop-first rule — the drop never prompts). The params commit as the
-// tile's CONTENT through WriteContent, exactly the connection-well
-// pattern: the plugin validates authoritatively and reacts (fs's search
-// runs the query and fills the child grid). The form machinery is the
-// instance picker's (schemaform + the shared field rows + the shared
-// modal shell).
+// tile's CONTENT through WriteContent: the plugin validates
+// authoritatively and reacts (fs's search runs the query and fills the
+// child grid). The form machinery is the shared modal shell +
+// schemaform field rows (modal_form.go).
 
 import (
 	"context"

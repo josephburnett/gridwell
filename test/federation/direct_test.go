@@ -35,35 +35,18 @@ func TestDirectConnectSpawn(t *testing.T) {
 	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
 
-	// Node B: local + the remote plugin. Note --name omitted for the
-	// remote plugin: it defaults to the kind (owner decision 2026-08-16).
+	// Node B: local + the builtin transport. A DIRECT connection — addr
+	// only, host empty; no sshd exists in this entire test — declared in
+	// server.yaml (v2 #269) before first serve. Its root is the remote's
+	// HOME (remote-menu, 2026-08-16): personal's root grid, exactly where
+	// a direct client of that node boots — writable, immediately usable.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote")
+	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
-
-	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	var instGrid string
-	for _, p := range lp["plugins"].([]any) {
-		pm := p.(map[string]any)
-		if pm["kind"] == "remote" {
-			instGrid, _ = pm["instanceGridId"].(string)
-			if pm["label"] != "remote" {
-				t.Fatalf("label = %v, want the kind as the default name", pm["label"])
-			}
-		}
-	}
-	if instGrid == "" {
-		t.Fatal("remote plugin declared no instance grid")
-	}
-
-	// A DIRECT connection: addr only, host empty — no sshd exists in this
-	// entire test. The connection's child is the remote's HOME (remote-menu,
-	// 2026-08-16): personal's root grid, exactly where a direct client of
-	// that node boots — writable, immediately usable.
-	sshRoot := commitConnectionParams(t, localOrigin, instGrid,
-		fmt.Sprintf(`{"addr":%q}`, remoteAddr))
+	sshRoot := awaitConnRoot(t, localOrigin, "dconn1")
 
 	hg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	gm := hg["grid"].(map[string]any)

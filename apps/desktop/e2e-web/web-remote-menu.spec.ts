@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
 import { serveBin } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
-import { getGrid, writeContent, tileAt } from '../e2e/oracle';
+import { getGrid, tileAt } from '../e2e/oracle';
 
 // The REMOTE MENU seam (docs/remote-menu.md, 2026-08-16: "when I descend
 // into a node, I am there"): two real nodes over a DIRECT connection —
@@ -83,7 +83,16 @@ const test = base.extend<Fixtures>({
     const farPort = await freePort();
     const far = await spawnServe(farHome, farPort);
 
-    const localHome = seedHome([{ kind: 'remote', name: 'rtb' }]);
+    // The connection is server.yaml config (v2 #269): declared before
+    // first boot, reconciled into the transport at start — the picker
+    // no longer exists to wire it "the data way".
+    const localHome = seedHome(
+      [{ kind: 'remote', name: 'rtb' }],
+      `connections:
+    - name: farconn1
+      addr: 127.0.0.1:${farPort}
+`,
+    );
     const localPort = await freePort();
     const local = await spawnServe(localHome, localPort);
 
@@ -133,30 +142,16 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   window,
   world,
 }) => {
-  // ── Wire the direct connection (the data way: well + params commit) ──
-  const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
-  const rtb = lp.plugins.find((p: any) => p.kind === 'remote');
-  const conn = (
-    await rpcJSON(world.localOrigin, 'CreateTile', {
-      gridId: rtb.instanceGridId,
-      tile: { kind: 'well', x: 0, y: 0, w: 1, h: 1 },
-    })
-  ).tile;
-  const farAddr = world.farOrigin.replace('http://', '');
-  await writeContent(
-    world.localOrigin,
-    conn.id,
-    Number(conn.version ?? 0),
-    Buffer.from(JSON.stringify({ addr: farAddr })),
-  );
-  // The connection's child = the remote HOME (farlocal's root), learned
-  // through the direct dial.
+  // ── The yaml-declared connection presents as its own menu row; its
+  // root (the remote HOME) is learned through the direct dial and rides
+  // the row's rootGridId (v2 #269 — the instance-row synthesis). ──
   let farHomeGrid = '';
   await expect
     .poll(
       async () => {
-        const g = await rpcJSON(world.localOrigin, 'GetGrid', { gridId: rtb.instanceGridId });
-        farHomeGrid = (g.tiles ?? []).map((t: any) => t.childGridId).find(Boolean) ?? '';
+        const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
+        const row = (lp.plugins ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
       { timeout: 20_000 },
@@ -274,27 +269,14 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 // surfaces as the bar's quiet offline chip, read here via the panes()
 // hook. Nothing moves, nothing blanks.
 test('a dark mount serves the remembered room, marked stale', async ({ gw, window, world }) => {
-  // Wire the direct connection and note content on the far node.
-  const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
-  const rtb = lp.plugins.find((p: any) => p.kind === 'remote');
-  const conn = (
-    await rpcJSON(world.localOrigin, 'CreateTile', {
-      gridId: rtb.instanceGridId,
-      tile: { kind: 'well', x: 0, y: 0, w: 1, h: 1 },
-    })
-  ).tile;
-  await writeContent(
-    world.localOrigin,
-    conn.id,
-    Number(conn.version ?? 0),
-    Buffer.from(JSON.stringify({ addr: world.farOrigin.replace('http://', '') })),
-  );
+  // The yaml-declared connection: its learned root IS the mount target.
   let farHomeGrid = '';
   await expect
     .poll(
       async () => {
-        const g = await rpcJSON(world.localOrigin, 'GetGrid', { gridId: rtb.instanceGridId });
-        farHomeGrid = (g.tiles ?? []).map((t: any) => t.childGridId).find(Boolean) ?? '';
+        const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
+        const row = (lp.plugins ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
+        farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
       { timeout: 20_000 },

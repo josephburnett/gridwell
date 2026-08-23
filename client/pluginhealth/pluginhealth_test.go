@@ -29,13 +29,14 @@ func TestClassify_Rootless(t *testing.T) {
 	}
 }
 
-// TestClassify_Parameterized: an instance grid with no root grid is the
-// parameterized-plugin declaration (issue #251) — healthy and clickable,
-// never the "set config.root" gap.
-func TestClassify_Parameterized(t *testing.T) {
+// TestClassify_InstanceGridReadsRootless: the Parameterized status
+// retired with the instance picker (2026-08-23) — a parameterized
+// plugin's bare row (listed only when its instance grid is unreadable)
+// is just rootless-inert now; its instances present as rows of their own.
+func TestClassify_InstanceGridReadsRootless(t *testing.T) {
 	pl := rpc.PluginInfo{Label: "connections", InstanceGridID: "s/0"}
-	if got := Classify(pl); got != Parameterized {
-		t.Errorf("Classify(%+v) = %v, want Parameterized", pl, got)
+	if got := Classify(pl); got != Rootless {
+		t.Errorf("Classify(%+v) = %v, want Rootless", pl, got)
 	}
 }
 
@@ -56,15 +57,6 @@ func TestClassify_BrokenWinsOverInstanceGrid(t *testing.T) {
 	pl := rpc.PluginInfo{Label: "X", InstanceGridID: "s/0", InfoError: "boom"}
 	if got := Classify(pl); got != Broken {
 		t.Errorf("Classify(%+v) = %v, want Broken", pl, got)
-	}
-}
-
-// TestClickNotice_ParameterizedIsSilent: clicking a parameterized plugin
-// opens the picker — no strip notice.
-func TestClickNotice_ParameterizedIsSilent(t *testing.T) {
-	pl := rpc.PluginInfo{Label: "connections", InstanceGridID: "s/0"}
-	if _, _, _, ok := ClickNotice(pl); ok {
-		t.Fatal("ClickNotice for a parameterized plugin must return ok=false (the click opens the picker)")
 	}
 }
 

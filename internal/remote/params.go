@@ -10,30 +10,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
 
-// CreateSchemaWell is the #198 creation schema the plugin declares for well
-// drops on its root grid: the form the client renders before committing a
-// connection. TWO transports, selected by what you fill in (owner decision
-// 2026-08-16): an SSH host+user bridges over ssh (auth + encryption — the
-// only authenticated transport); an EMPTY host with an addr connects
-// DIRECTLY to that gridwell node export — for another node on this
-// machine or across the tailnet, where the network itself is the trust
-// boundary (the password gates only the web UI, by design). Secrets stay
-// host-local FILES (owner decision, #198): key and known_hosts are PATHS
-// resolved where this plugin runs — key material never rides tile content
-// or the wire. The "secret" format masks input only.
-const CreateSchemaWell = `{
-  "type": "object",
-  "properties": {
-    "host":        {"type": "string", "title": "SSH host (leave empty to connect directly)"},
-    "user":        {"type": "string", "title": "SSH user (ssh only)"},
-    "port":        {"type": "number", "title": "SSH port (default 22)"},
-    "addr":        {"type": "string", "title": "Gridwell address — direct: as reachable from THIS host (e.g. 127.0.0.1:8081 or a tailscale IP); ssh: as seen on the remote (default 127.0.0.1:8080)"},
-    "key":         {"type": "string", "title": "Key path (ssh only; default ~/.ssh/id_ed25519)", "format": "secret"},
-    "known_hosts": {"type": "string", "title": "known_hosts path (ssh only; default ~/.ssh/known_hosts)"}
-  },
-  "required": []
-}`
-
 // Params is a connection's parsed parameter document.
 type Params struct {
 	Host       string  `json:"host"`

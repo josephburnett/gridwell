@@ -43,31 +43,29 @@ func TestMountPartitionServesCache(t *testing.T) {
 	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
 	creds := dialtest.Server(t, t.TempDir())
 
-	// Local node: localdb + ssh; the connection is committed the DATA way
-	// (commitConnection — the only way since the config bridge was deleted).
+	// Local node: localdb + the builtin transport; the connection is
+	// server.yaml CONFIG (v2 #269), declared before first serve.
 	localHome := t.TempDir()
 	lenv := []string{"GRIDWELL_HOME=" + localHome}
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
+	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "partconn1", creds, remoteAddr))
 	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
 	cl := gwrpc.NewDefaultClient(localOrigin)
 
-	// Resolve the mount root and the ssh plugin id (the cache file's name).
+	// The connection lands on the remote HOME — personal's root grid
+	// (remote-menu, 2026-08-16) — writable directly. The transport's id
+	// (the cache file's name) is the row's leading segment.
+	personalChild := awaitConnRoot(t, localOrigin, "partconn1")
+	sshID, _, _ := strings.Cut(personalChild, "/")
 	lp := rpc(t, localOrigin, "ListPlugins", map[string]any{})
-	var instGrid, homeRoot, sshID string
+	var homeRoot string
 	for _, p := range lp["plugins"].([]any) {
 		pm := p.(map[string]any)
-		switch pm["label"] {
-		case "rtb":
-			instGrid, _ = pm["instanceGridId"].(string)
-			sshID, _ = pm["uuid"].(string)
-		case "home":
+		if pm["label"] == "home" {
 			homeRoot, _ = pm["rootGridId"].(string)
 		}
 	}
-	// The connection lands on the remote HOME — personal's root grid
-	// (remote-menu, 2026-08-16) — writable directly.
-	personalChild := commitConnection(t, localOrigin, instGrid, creds, remoteAddr)
 
 	// Through the chain: a well holding a WARMED text, a NEVER-READ text.
 	well := rpc(t, localOrigin, "CreateTile", map[string]any{
