@@ -1,7 +1,9 @@
 # Content and presentation: the split the API implies but does not provide
 
-Status: options report (commissioned 2026-08-22). No decision taken; no
-code changes ride with this document.
+Status: options report (commissioned 2026-08-22), plus §9 — the end
+state the walkthrough with Joe converged on (2026-08-22), the seed of a
+plan. §9 supersedes §8's reading; no code changes ride with this
+document.
 
 The question, as posed: plugins provide tile content AND store location,
 size, and view information. The whole surface — server (node) and
@@ -209,3 +211,69 @@ commit** — griddb is the seed of the adapter's store — so starting A
 does not foreclose anything. C spends architectural principle (stateless
 router, join-free reads) to buy what B buys anyway; D is a formality
 that can wait until the subset has earned a name.
+
+## 9. The end state (walkthrough with Joe, 2026-08-22 — supersedes §8)
+
+Working C through the remote plugin — the hardest case — dissolved the
+B/C distinction and landed here. This is the seed of a plan, not yet a
+program of work.
+
+**Two services on the wire (D, arrived at honestly):**
+
+- **Gridwell** — the node surface, unchanged for clients and
+  federation: every node serves the full contract to browsers, the
+  desktop, and other nodes.
+- **ContentProvider** — what plugins serve: list a context's entries
+  (stable keys, kinds, labels, child-context keys, declarations,
+  optional placement *hints* used only at first sight), read/write/
+  serve content by key, probe, watch, shells. No ids, no layout, no
+  database. Only nodes talk to providers; providers are invisible on
+  the federation wire.
+
+**The node absorbs what was never really a plugin:**
+
+- **local folds into the node** — its store becomes the node's native
+  content DB (layout and content in one file, one writer).
+- **remote folds into the node** — transports are the system's own
+  topology, not a door for strangers; tunneling is builtin machinery.
+  Remote nodes still *present* as plugins in the menu/launcher — that
+  is rendering, already declaration-driven.
+- The node hosts layout for every provider and mints numeric ids
+  against provider keys. The launcher becomes an ordinary
+  rearrangeable grid. The user's arrangement always wins over a
+  provider's placement hints (the guiding rule).
+
+**Reversed owner decisions (Joe, 2026-08-22, explicit):**
+
+- **#199 "connections are data" → connections are server.yaml config.**
+  Consequences accepted: no creating connections from the client's
+  picker, and a yaml connection name is an immutable id by rule —
+  renaming one dangles every reference through it (loud comment in the
+  yaml template).
+- **"The server holds no Gridwell state" → the node owns the durable
+  store.** Process isolation for dial code is judged to have never
+  mattered.
+
+**The databases (all of them):**
+
+| File | Contents | Nature |
+|---|---|---|
+| **Node DB** (one) | native user content (text, urls, wells, panes, blobs, shells), its layout and versions, the node-grid arrangement | source of truth; self-describing in isolation |
+| **External memory DB** (one per provider AND per connection) | everything the node remembers about that external: key→id map, user layout (providers; remotes host their own), read-through cache | durable-but-forgettable: lose it and links dangle (interpretable via the uuid in qualified ids — reuniting with the file reconnects them), arrangement resets, cache re-warms |
+| server.yaml | plugins, connections | config |
+
+**Caching is uniform, not optional:** the node runs the same
+read-through cache for every external thing. This subsumes I12 — a dark
+directory, a dead process table, and an unreachable remote all serve
+the remembered answer, stamped stale, by the one mechanism.
+
+**What dissolves:** the local and remote plugin processes, griddb, the
+per-plugin content DBs, all four layout implementations, the fs/proc
+reconcile-and-sweep machinery, and the `writable`-conflation class
+(#266) — rearrangeability is the node's fact everywhere.
+
+**Migration honesty:** every current DB is forever-data. The fs/proc
+path→id and pid→id maps, the local store, and the ssh connection rows
+(minted NS segments live inside stored references) all have to arrive
+in the new homes without minting anything new. That migration is the
+riskiest part of the whole plan and gets designed first, not last.
