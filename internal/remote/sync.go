@@ -104,7 +104,11 @@ func SyncConfig(ctx context.Context, db *DB, conns []ConnSpec, retired []string)
 		if err != nil {
 			return nil, fmt.Errorf("connection %q: %w", c.Name, err)
 		}
+		// A declared label is the USER speaking (yaml is theirs): apply
+		// it through the rename latch, or connTile's auto-label override
+		// displays joe@host instead. No label = the auto-label rules.
 		label := c.Label
+		latch := label != ""
 		if label == "" {
 			label = autoLabel(doc)
 		}
@@ -136,9 +140,17 @@ func SyncConfig(ctx context.Context, db *DB, conns []ConnSpec, retired []string)
 				return nil, fmt.Errorf("connection %q: params: %w", c.Name, err)
 			}
 		}
-		if row.AltText != label {
-			if row, err = db.Rename(ctx, row.ID, row.Version, label); err != nil {
-				return nil, fmt.Errorf("connection %q: label: %w", c.Name, err)
+		if row.AltText != label || (latch && !row.AltUser) {
+			if latch {
+				if row, err = db.Rename(ctx, row.ID, row.Version, label); err != nil {
+					return nil, fmt.Errorf("connection %q: label: %w", c.Name, err)
+				}
+			} else if row.AltText != label {
+				// The auto-label path never latches: SetAlt keeps
+				// alt_user as it is (0 here — the row is config-made).
+				if row, err = db.SetAlt(ctx, row.ID, label); err != nil {
+					return nil, fmt.Errorf("connection %q: label: %w", c.Name, err)
+				}
 			}
 		}
 		live = append(live, c.Name)

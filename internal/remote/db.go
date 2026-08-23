@@ -310,3 +310,14 @@ func (d *DB) CreateWithNS(ctx context.Context, ns, alt string) (*Conn, error) {
 	}
 	return d.Get(ctx, id)
 }
+
+// SetAlt writes the display label WITHOUT latching alt_user — the
+// config-sync auto-label path (a derived caption, not a user rename).
+// No version bump: nothing user-made changed.
+func (d *DB) SetAlt(ctx context.Context, id int64, alt string) (*Conn, error) {
+	if _, err := d.db.ExecContext(ctx,
+		`UPDATE ssh_connections SET alt_text = ? WHERE id = ? AND deleted = 0`, alt, id); err != nil {
+		return nil, err
+	}
+	return d.Get(ctx, id)
+}

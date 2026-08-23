@@ -381,8 +381,15 @@ func (a *App) instanceRow(pl rpc.PluginInfo, idx int, e instpick.Entry,
 		row.Call("addEventListener", "click", clickCb)
 	}
 
-	row.Call("appendChild", a.instanceRenameButton(idx, entry, refresh))
-	row.Call("appendChild", a.instanceDeleteButton(idx, entry, refresh))
+	// No creation schema = a CONFIG-MANAGED list (v2 #269: connections
+	// live in server.yaml): the picker is pick-only — no rename, no
+	// delete, no create form. The declaration is the one gate; rendering
+	// buttons whose commits can only refuse would violate "errors must
+	// surface" in spirit.
+	if form != nil {
+		row.Call("appendChild", a.instanceRenameButton(idx, entry, refresh))
+		row.Call("appendChild", a.instanceDeleteButton(idx, entry, refresh))
+	}
 	return row
 }
 

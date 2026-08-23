@@ -26,7 +26,7 @@ export interface PluginSpec {
 // this way. `extra` registers additional plugins (in order, after the localdb) the
 // same way, for tests that need a second plugin present at boot. Returns the home
 // dir; callers remove it on teardown.
-export function seedHome(extra: PluginSpec[] = []): string {
+export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-e2e-'));
   const bin = path.join(REPO_ROOT, process.env.GRIDWELL_SERVE_BIN || 'gridwell');
   const env = { ...process.env, GRIDWELL_HOME: home };
@@ -40,6 +40,10 @@ export function seedHome(extra: PluginSpec[] = []): string {
     for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);
     execFileSync(bin, args, { env, stdio: 'ignore' });
   }
+  // extraYaml appends raw server.yaml lines (v2 config facts init has no
+  // flag for yet — e.g. a connections: list, which is config by owner
+  // decision #269).
+  if (extraYaml) fs.appendFileSync(path.join(home, 'server.yaml'), extraYaml);
   return home;
 }
 
@@ -80,6 +84,7 @@ type Fixtures = {
   // in a spec file, e.g. plugin-health.spec.ts): plugins seedHome registers
   // beyond the default localdb, present from the very first launch.
   extraPlugins: PluginSpec[];
+  extraYaml: string;
 };
 
 // The e2e fixture launches the SAME `electron .` entry that `make launch` uses
@@ -106,9 +111,10 @@ type Fixtures = {
 // next one.
 export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
+  extraYaml: ['', { option: true }],
 
-  electronApp: async ({ extraPlugins }, use) => {
-    const home = seedHome(extraPlugins);
+  electronApp: async ({ extraPlugins, extraYaml }, use) => {
+    const home = seedHome(extraPlugins, extraYaml);
     // The per-test Chromium profile. Created before launch so the flag is valid.
     const electronDir = path.join(home, 'electron');
     fs.mkdirSync(electronDir, { recursive: true });
