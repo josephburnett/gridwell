@@ -17,7 +17,6 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-
 // hostKeyAlgorithmsFor returns the host-key algorithms known_hosts
 // already trusts for host ("host:port"), by probing the callback with a
 // throwaway key and reading the KeyError's Want list. nil for an unknown
