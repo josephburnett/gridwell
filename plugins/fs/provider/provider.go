@@ -91,7 +91,6 @@ func (p *Provider) Info(context.Context, *cpv1.InfoRequest) (*cpv1.InfoResponse,
 		Kind:        "fs",
 		DisplayName: "files",
 		Glyph:       "folder",
-		RootContext: ".",
 		// The same (+) tool the legacy plugin declares (#258) — one
 		// schema, one id, two declarers until the legacy plugin dies.
 		MenuEntries: []*cpv1.MenuEntry{{
@@ -101,6 +100,12 @@ func (p *Provider) Info(context.Context, *cpv1.InfoRequest) (*cpv1.InfoResponse,
 			ParamSchema: fslegacy.SearchParamSchema,
 		}},
 	}
+	// No configured root → ROOTLESS (the legacy rule): the plugin is
+	// listed but not enterable; no context exists to descend into.
+	if p.root == "" || p.root == "." {
+		return resp, nil
+	}
+	resp.RootContext = "."
 	if label := filepath.Base(p.root); label != "/" && label != "." {
 		resp.DisplayName = label
 	}

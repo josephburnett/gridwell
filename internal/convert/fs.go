@@ -25,9 +25,9 @@ import (
 // fsKnownTables is the complete v3 fs schema surface the converter
 // understands: table → exact column set.
 var fsKnownTables = map[string][]string{
-	"_gridwell_meta": {"k", "v"},
-	"grids":          {"id", "path", "view_x", "view_y", "view_zoom", "root_cx", "root_cy", "root_zoom"},
-	"tiles":          {"id", "grid_id", "name", "kind", "x", "y", "w", "h", "child_grid_id", "view_x", "view_y", "view_zoom", "menu_entry", "params", "target_path"},
+	"_gridwell_meta":  {"k", "v"},
+	"grids":           {"id", "path", "view_x", "view_y", "view_zoom", "root_cx", "root_cy", "root_zoom"},
+	"tiles":           {"id", "grid_id", "name", "kind", "x", "y", "w", "h", "child_grid_id", "view_x", "view_y", "view_zoom", "menu_entry", "params", "target_path"},
 	"sqlite_sequence": nil, // system table; columns are sqlite's
 }
 

@@ -33,6 +33,10 @@ export function seedHome(extra: PluginSpec[] = []): string {
   execFileSync(bin, ['init', '--kind', 'local', '--name', 'e2e'], { env, stdio: 'ignore' });
   for (const p of extra) {
     const args = ['init', '--kind', p.kind, '--name', p.name];
+    // GRIDWELL_E2E_FS_PROVIDER=1 runs every fs plugin as a v2 content
+    // provider (docs/v2-design.md) — the same suite, the other stack:
+    // green under both is the cutover confidence for the fs flip (#269).
+    if (p.kind === 'fs' && process.env.GRIDWELL_E2E_FS_PROVIDER === '1') args.push('--provider');
     for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);
     execFileSync(bin, args, { env, stdio: 'ignore' });
   }

@@ -37,11 +37,12 @@ func RunInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	kind := fs.String("kind", "", "plugin kind (local, fs, proc, remote)")
 	name := fs.String("name", "", "display name shown in the launcher (default: the kind)")
+	provider := fs.Bool("provider", false, "register a v2 CONTENT PROVIDER (docs/v2-design.md): the process serves content only; the node owns its memory DB")
 	conf := kvFlag{}
 	fs.Var(conf, "config", "plugin config as key=value (repeatable)")
 	args = reorderFlagsFirst(args, func(n string) bool {
 		switch n {
-		case "kind", "name", "config":
+		case "kind", "name", "config", "provider":
 			return true
 		}
 		return false
@@ -69,7 +70,12 @@ func RunInit(args []string) int {
 	// letter, since 2026-07-25; earlier 32-hex ids stay valid forever),
 	// create the identity-stamped DB, append the config entry, ensure the
 	// node id.
-	id, err := node.InitPlugin(home, *kind, *name, map[string]string(conf))
+	var id string
+	if *provider {
+		id, err = node.InitProvider(home, *kind, *name, map[string]string(conf))
+	} else {
+		id, err = node.InitPlugin(home, *kind, *name, map[string]string(conf))
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
 		return 1

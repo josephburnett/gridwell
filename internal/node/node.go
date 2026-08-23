@@ -198,3 +198,25 @@ func (n *Node) Close() error {
 	n.Reg.Close()
 	return err
 }
+
+// InitProvider registers a v2 CONTENT PROVIDER entry (docs/v2-design.md):
+// like InitPlugin, but no plugin DB is created — the derived db path is
+// the NODE-owned memory DB, which serve creates and identity-stamps on
+// first load (forgettable by contract, so absence is never an error).
+func InitProvider(home, kind, name string, conf map[string]string) (id string, err error) {
+	id = idshape.NewShortID()
+	if err := os.MkdirAll(config.DBDir(home, id), 0o755); err != nil {
+		return "", err
+	}
+	entry := config.PluginConfig{ID: id, Name: name, Kind: kind, Provider: true}
+	if len(conf) > 0 {
+		entry.Config = conf
+	}
+	if err := config.AppendPlugin(home, entry); err != nil {
+		return "", err
+	}
+	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
+		return "", fmt.Errorf("node id: %w", err)
+	}
+	return id, nil
+}
