@@ -102,3 +102,19 @@ func TestConnectionsRefusesPendingStub(t *testing.T) {
 		t.Fatalf("pending stub not refused: %v", err)
 	}
 }
+
+func TestConvertNeverServedPluginIsEmpty(t *testing.T) {
+	// init stamps identity; the schema appears on first open. Converting
+	// a never-served fs DB yields an empty memory DB, not an error.
+	dbPath := filepath.Join(t.TempDir(), "fs.db")
+	if err := pluginmeta.Create(dbPath, "freshfs", "fs"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := convert.FS(dbPath, filepath.Join(t.TempDir(), "mem.db"), "freshfs", "fs", "/tmp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Grids != 0 || res.Tiles != 0 {
+		t.Fatalf("expected empty conversion: %+v", res)
+	}
+}

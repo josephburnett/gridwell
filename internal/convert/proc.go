@@ -40,6 +40,19 @@ func Proc(legacyPath, outPath, uuid, kind string) (*FSResult, error) {
 	if err := verifyMeta(src, uuid, kind); err != nil {
 		return nil, err
 	}
+	// A never-served plugin's DB is pluginmeta-only (init stamps identity;
+	// the schema materializes on first open): nothing to convert — an
+	// empty memory DB is the correct v2 twin.
+	if ok, err := tableExists(src, "grids"); err != nil {
+		return nil, err
+	} else if !ok {
+		mem, err := layout.OpenVerified(outPath, uuid, kind)
+		if err != nil {
+			return nil, err
+		}
+		_ = mem.Close()
+		return &FSResult{}, nil
+	}
 	mem, err := layout.OpenVerified(outPath, uuid, kind)
 	if err != nil {
 		return nil, err

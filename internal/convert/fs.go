@@ -59,6 +59,19 @@ func FS(legacyPath, outPath, uuid, kind, root string) (*FSResult, error) {
 	if err := verifyMeta(src, uuid, kind); err != nil {
 		return nil, err
 	}
+	// A never-served plugin's DB is pluginmeta-only (init stamps identity;
+	// the schema materializes on first open): nothing to convert — an
+	// empty memory DB is the correct v2 twin.
+	if ok, err := tableExists(src, "grids"); err != nil {
+		return nil, err
+	} else if !ok {
+		mem, err := layout.OpenVerified(outPath, uuid, kind)
+		if err != nil {
+			return nil, err
+		}
+		_ = mem.Close()
+		return &FSResult{}, nil
+	}
 	// Tool rows (#258 search wells) are USER STATE the v2 stack does not
 	// carry yet: refuse rather than drop, so a home that uses them waits
 	// for the userdocs support instead of losing them silently.
@@ -316,6 +329,13 @@ func verifyMeta(db *sql.DB, uuid, kind string) error {
 		return fmt.Errorf("convert: source identity %s/%s does not match target %s/%s", gotUUID, gotKind, uuid, kind)
 	}
 	return nil
+}
+
+// tableExists reports whether a table is present.
+func tableExists(db *sql.DB, table string) (bool, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&n)
+	return n > 0, err
 }
 
 func readSeq(db *sql.DB, table string) (int64, error) {
