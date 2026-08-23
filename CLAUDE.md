@@ -193,7 +193,7 @@ Re-litigating them silently is how churn happens.
   exercised by machinery; the coupling inventory and the enforcement
   options are `docs/plugin.md`.
 - **The storage format is frozen and additive-only.** The contract is
-  `internal/store/CLAUDE.md`. Never delete a DB to absorb a schema change.
+  `internal/local/store/CLAUDE.md`. Never delete a DB to absorb a schema change.
 
 ## The verification gates
 

@@ -35,12 +35,13 @@ lists where that still needs doing.
 └───────────────┬──────────────────────────────────────────────────────┘
                 │  go-plugin gRPC  (the SAME Gridwell service)
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Plugins        plugins/{local,fs,proc,remote} + proxy       │
+│ Plugins        plugins/{fs,proc} as CONTENT PROVIDERS (v2)  │
+│   + node-native: internal/local (store), internal/remote     │
 │   each a separate binary owning one SQLite DB + one id space         │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│ Store                        internal/store/                         │
+│ Store                        internal/local/store/  (node code, v2)  │
 │   ids, the framing-vs-content version split, clone, blobs            │
 │   SOLID BY CONSTRUCTION — the model to emulate                       │
 └──────────────────────────────────────────────────────────────────────┘
@@ -69,7 +70,7 @@ client boots into **home**, the first configured plugin's root grid
 
 The proto is the single source of truth for both the wire types and the
 persisted record shapes. Every field on `Grid`/`Tile` maps 1:1 to a column
-in `internal/store/schema.go`; a drift-lint test fails the build if they
+in `internal/local/store/schema.go`; a drift-lint test fails the build if they
 diverge.
 
 The surface, one method per concept:
@@ -169,7 +170,7 @@ stored reference carries is the id the store answers with.
 
 ### 4.1 Framing ≠ content — the best-enforced invariant
 
-In `internal/store/tiles.go`, two named helpers split every mutation:
+In `internal/local/store/tiles.go`, two named helpers split every mutation:
 
 | Helper | Used by | Bumps `version`? |
 |---|---|---|
@@ -191,8 +192,8 @@ enforced-by-construction looks like; emulate it.
   can never touch another, and no id is ever reassigned. (COW was tried and
   torn out — a fork re-rows tiles, and no patch makes that safe.)
 - The storage format is frozen and additive-only; the contract lives in
-  `internal/store/CLAUDE.md`. Never delete a DB to absorb a change.
-- One layering wrinkle: `internal/store` imports `client/markdown` for
+  `internal/local/store/CLAUDE.md`. Never delete a DB to absorb a change.
+- One layering wrinkle: `internal/local/store` imports `client/markdown` for
   `AltFromSource` (deriving a text tile's label from its first line). Pure
   and shared, but the arrow points from persistence into the client tree —
   if it grows, move the derivation to a neutral package.

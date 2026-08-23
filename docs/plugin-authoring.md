@@ -60,7 +60,7 @@ capabilities gray out.
 - `WriteContent` commits at close: a broken stream leaves the old value
   byte-for-byte.
 - The storage format promise, if you persist: additive-only evolution
-  (`dbformat` gives you the versioning engine; `plugins/local/store`'s
+  (`dbformat` gives you the versioning engine; `internal/local/store`'s
   CLAUDE.md is the worked contract).
 
 ## Running in-process instead
