@@ -45,15 +45,16 @@ func WellInto(anchor string, tiles map[string]rpc.Tile) (rpc.Tile, bool) {
 //     descended through (grid-tile descents, adopted plugin wells);
 //  2. a plugin ROOT MenuEntry declaring anchor — a menu-swatch descent
 //     (the trashcan);
-//  3. the plugin whose RootGridID is anchor — its own swatch;
-//  4. an instance well on a plugin's instance grid whose child is anchor
-//     — a picker descent into a connection (instanceTiles feeds the
-//     cached instance grid; nil is a clean miss).
+//  3. the plugin whose RootGridID is anchor — its own swatch (a
+//     connection menu row lands here too: its label is the row's, its
+//     framing the row's view — v2 #269).
+//
+// (The old case 4 — an instance well matched through the picker's cached
+// instance grid — died with the picker, 2026-08-23.)
 //
 // A None result means the level has no derivable door (a workspace root,
 // an uncached world) — callers keep their fallback.
-func Find(anchor string, parentTiles map[string]rpc.Tile, plugins []rpc.PluginInfo,
-	instanceTiles func(gridID string) map[string]rpc.Tile) (rpc.Tile, Kind) {
+func Find(anchor string, parentTiles map[string]rpc.Tile, plugins []rpc.PluginInfo) (rpc.Tile, Kind) {
 	if anchor == "" {
 		return rpc.Tile{}, None
 	}
@@ -72,17 +73,6 @@ func Find(anchor string, parentTiles map[string]rpc.Tile, plugins []rpc.PluginIn
 	for i := range plugins {
 		if plugins[i].RootGridID == anchor {
 			return rpc.PluginWellTile(plugins[i]), Root
-		}
-	}
-	if instanceTiles != nil {
-		for i := range plugins {
-			ig := plugins[i].InstanceGridID
-			if ig == "" {
-				continue
-			}
-			if t, ok := WellInto(anchor, instanceTiles(ig)); ok {
-				return t, Well
-			}
 		}
 	}
 	return rpc.Tile{}, None

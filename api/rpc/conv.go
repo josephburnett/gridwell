@@ -218,8 +218,7 @@ func EventFromProto(e *pb.Event) Event {
 func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindWell, X: r.X, Y: r.Y, W: r.W, H: r.H, ChildGridId: r.ChildGridID, AltText: r.Label,
-			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID,
-			ConfigurePluginId: r.ConfigurePluginID}}
+			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom, ObjectId: r.ObjectID}}
 }
 
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {

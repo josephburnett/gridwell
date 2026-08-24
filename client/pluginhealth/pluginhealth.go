@@ -56,6 +56,9 @@ func Classify(pl rpc.PluginInfo) Status {
 // human-readable message. ok is false for Enterable (the caller descends)
 // — that click reports nothing.
 //
+// The source key is "launcher:<uuid>" — the UUID, not the label: two
+// connections can share a label, and a shared source key would make one
+// row's notice silently replace another's (found 2026-08-23).
 // The source namespace is "launcher:", not "plugin:" — "plugin:<uuid>" is the
 // sticky ongoing-condition namespace (errsurface.Sticky) used by health
 // events, whereas a click notice is a one-shot answer to a gesture and should
@@ -66,15 +69,15 @@ func Classify(pl rpc.PluginInfo) Status {
 func ClickNotice(pl rpc.PluginInfo) (sev errsurface.Severity, source, message string, ok bool) {
 	switch Classify(pl) {
 	case Broken:
-		return errsurface.Error, "launcher:" + pl.Label, pl.Label + ": " + pl.InfoError, true
+		return errsurface.Error, "launcher:" + pl.UUID, pl.Label + ": " + pl.InfoError, true
 	case Rootless:
 		// A chained uuid is a CONNECTION row (v2 #269): rootless means
 		// its remote hasn't answered yet — a waiting state, not a
 		// config gap.
 		if strings.Contains(pl.UUID, "/") {
-			return errsurface.Info, "launcher:" + pl.Label, pl.Label + " — the remote hasn't answered yet; it will open once the connection comes up", true
+			return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " — the remote hasn't answered yet; it will open once the connection comes up", true
 		}
-		return errsurface.Info, "launcher:" + pl.Label, pl.Label + " has no root configured — set config.root in server.yaml", true
+		return errsurface.Info, "launcher:" + pl.UUID, pl.Label + " has no root configured — set config.root in server.yaml", true
 	default:
 		return 0, "", "", false
 	}

@@ -46,12 +46,14 @@ test('a rootless plugin swatch is inert and reports a notice instead of descendi
   const after = await gw.focused();
   expect(after.anchor, 'click on a rootless swatch must not descend').toBe(before.anchor);
 
-  // Instead, a notice must have appeared, attributed to this plugin by label
-  // (client/pluginhealth.ClickNotice's source key), as an Info severity (a
-  // fixable configuration gap, not a failure) mentioning the fix.
+  // Instead, a notice must have appeared, attributed to this plugin by UUID
+  // (ClickNotice's source key — labels can collide across connections), as
+  // an Info severity (a fixable configuration gap, not a failure)
+  // mentioning the fix.
+  const rootlessRow = pls.find((p) => p.label === 'rootless')!;
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  const notice = errs.notices.find((n: any) => n.source === 'launcher:rootless');
-  expect(notice, 'a notice for launcher:rootless is present').toBeTruthy();
+  const notice = errs.notices.find((n: any) => n.source === 'launcher:' + rootlessRow.uuid);
+  expect(notice, 'a notice keyed by the plugin uuid is present').toBeTruthy();
   expect(notice.severity).toBe('info');
   expect(notice.message).toContain('no root configured');
 });

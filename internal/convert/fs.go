@@ -31,9 +31,9 @@ var fsKnownTables = map[string][]string{
 	"sqlite_sequence": nil, // system table; columns are sqlite's
 }
 
-// FSResult reports what a conversion produced, for the scoped parity
-// crawl and the operator's log.
-type FSResult struct {
+// Result reports what one fs/proc conversion produced, for the scoped
+// parity crawl and the operator's log.
+type Result struct {
 	Grids, Tiles int
 	// GridIDs are the LOCAL grid ids materialized in the legacy DB —
 	// the exact crawl scope the parity gate should use.
@@ -45,7 +45,7 @@ type FSResult struct {
 // legacy absolute paths become the provider's slash-relative keys.
 // Identity (uuid/kind) is verified against the legacy pluginmeta rows
 // and stamped into the memory DB. The legacy file is opened read-only.
-func FS(legacyPath, outPath, uuid, kind, root string) (*FSResult, error) {
+func FS(legacyPath, outPath, uuid, kind, root string) (*Result, error) {
 	src, err := sql.Open("sqlite", "file:"+legacyPath+"?mode=ro")
 	if err != nil {
 		return nil, fmt.Errorf("convert fs: open %s: %w", legacyPath, err)
@@ -70,7 +70,7 @@ func FS(legacyPath, outPath, uuid, kind, root string) (*FSResult, error) {
 			return nil, err
 		}
 		_ = mem.Close()
-		return &FSResult{}, nil
+		return &Result{}, nil
 	}
 	// Tool rows (#258 search wells) are USER STATE the v2 stack does not
 	// carry yet: refuse rather than drop, so a home that uses them waits
@@ -90,7 +90,7 @@ func FS(legacyPath, outPath, uuid, kind, root string) (*FSResult, error) {
 	defer mem.Close()
 
 	root = filepath.Clean(root)
-	res := &FSResult{}
+	res := &Result{}
 
 	// Contexts: every grids row, path → relative key, root view carried.
 	gridKey := map[int64]string{}

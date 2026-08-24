@@ -147,3 +147,36 @@ func mutateDB(t *testing.T, path, ddl string) {
 		t.Fatal(err)
 	}
 }
+
+func TestConvertRefusesToolRows(t *testing.T) {
+	// A home that USED the fs search tool carries user state the v2
+	// stack cannot hold yet (#271): the converter must refuse, never
+	// silently drop the wells.
+	root := seedTree(t)
+	legacyDB := filepath.Join(t.TempDir(), "fs.db")
+	legacy := legacyNodeAt(t, root, legacyDB)
+	ctx := context.Background()
+	if _, err := parity.Crawl(ctx, legacy, parity.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	// The legacy #258 flow: mint the tool tile, commit its params.
+	pl, err := legacy.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := pl.Plugins[0].RootGridID
+	tool, err := legacy.CreateEntryTile(ctx, &rpc.CreateEntryTileRequest{
+		GridID: rootGrid, Kind: "well", X: 7, Y: 7, W: 1, H: 1,
+		Label: "search", MenuEntry: "search",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.WriteContent(ctx, tool.ID, tool.Version, []byte(`{"query":"notes"}`)); err != nil {
+		t.Fatal(err)
+	}
+	_, cerr := convert.FS(legacyDB, filepath.Join(t.TempDir(), "mem.db"), fsUUID, "fs", root)
+	if cerr == nil || !strings.Contains(cerr.Error(), "tool rows") {
+		t.Fatalf("tool rows not refused: %v", cerr)
+	}
+}

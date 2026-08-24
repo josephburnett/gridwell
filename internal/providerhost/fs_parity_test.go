@@ -97,7 +97,10 @@ func providerNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsprovide
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = mem.Close() })
-	prov := fsprovider.New(root, nil)
+	// A plain-remove host: nil would mean the PRODUCTION trash — test
+	// deletions must never land in the real freedesktop Trash (they did,
+	// until 2026-08-23).
+	prov := fsprovider.New(root, osRemoveHost{})
 	cp, cpCloser, err := compose.ServeProviderInProcess(prov)
 	if err != nil {
 		t.Fatal(err)
@@ -269,3 +272,59 @@ func TestProviderServesRememberedListingWhenSourceDark(t *testing.T) {
 		t.Fatal("healed source still stamped stale")
 	}
 }
+
+func TestDeleteRetiresOnTheWire(t *testing.T) {
+	// The delete gesture through the full v2 stack: the source is
+	// trashed, the row retires — Probe answers GONE, reads answer
+	// NotFound, a second delete is a no-op, and a recreated file is a
+	// NEW thing with a fresh id (the identity rule at the wire seam).
+	root := seedTree(t)
+	v2, _ := providerNode(t, root)
+	ctx := context.Background()
+	pl, err := v2.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := pl.Plugins[0].RootGridID
+	g, err := v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bin rpc.Tile
+	for _, tile := range g.Tiles {
+		if tile.AltText == "data.bin" {
+			bin = tile
+		}
+	}
+	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID, Version: bin.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "data.bin")); !os.IsNotExist(err) {
+		t.Fatalf("source file not deleted: %v", err)
+	}
+	if _, err := v2.GetTile(ctx, bin.ID); err == nil {
+		t.Fatal("a retired tile still reads")
+	}
+	if err := v2.DeleteTile(ctx, &rpc.DeleteTileRequest{TileID: bin.ID, Version: bin.Version}); err != nil {
+		t.Fatalf("delete must be idempotent: %v", err)
+	}
+	// Recreation mints fresh identity.
+	if err := os.WriteFile(filepath.Join(root, "data.bin"), []byte{9}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g, err = v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tile := range g.Tiles {
+		if tile.AltText == "data.bin" && tile.ID == bin.ID {
+			t.Fatal("a recreated file reused the retired id")
+		}
+	}
+}
+
+// osRemoveHost unlinks outright — the test stand-in for the trash.
+type osRemoveHost struct{}
+
+func (osRemoveHost) Remove(p string) error    { return os.Remove(p) }
+func (osRemoveHost) RemoveAll(p string) error { return os.RemoveAll(p) }

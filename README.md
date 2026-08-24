@@ -200,16 +200,17 @@ transport), or an address alone connects DIRECTLY — another gridwell on
 this machine, or across the tailnet, where the network is the trust
 boundary.
 
-The plugin has no grid of its own. Drag it from the + menu onto any grid
-and descend the dropped well: a picker lists your named connections —
-select one to wire the well to it (the same connection, never a copy), or
-fill in host and user (port, key path, known_hosts default to the usual
-places) to create a new one. Clicking the plugin in the menu opens the
-same picker and descends straight into the connection you pick; the picker
-is also where connections are renamed and deleted (deleting one tombstones
-its namespace forever). Connections are data — add a machine without
-touching config or restarting. Keys stay files on your machine; an
-unverified host is refused, and key material never rides tile content.
+Connections are server config (v2, #269): declare each one in
+server.yaml's `connections:` list — a `name` (immutable: it is the
+namespace segment inside every reference through it), an optional
+`label`, and either `host`/`user`/`key` for the ssh bridge or `addr`
+alone for a direct dial. Every connection then sits in the + menu as its
+own row: click descends straight into that machine, drag drops a link
+well. The node dials them all at boot and logs each verdict, so the
+terminal says exactly which connections are live. Removing one from the
+yaml retires its name forever (`retired_names` is the graveyard). Keys
+stay files on your machine; an unverified host is refused, and key
+material never rides tile content.
 
 The CLI is three commands: `gridwell init` (register a plugin), `gridwell
 serve` (run the node), and `gridwell backup` (snapshot every plugin DB,

@@ -515,11 +515,12 @@ type CreateWellRequest struct {
 	// to an existing well, or a deep-copied interior well (#200) — "" = mint
 	// fresh.
 	ObjectID string `json:"object_id,omitempty"`
-	// ConfigurePluginID, when set (with ChildGridID empty), creates an
-	// UNCONFIGURED PLUGIN WELL (issue #251): childless, inert, waiting for
-	// the named parameterized plugin's instance picker on first descent.
-	ConfigurePluginID string `json:"configure_plugin_id,omitempty"`
 }
+
+// (CreateWellRequest.ConfigurePluginID is gone — unconfigured plugin
+// wells stopped being creatable when the instance picker retired,
+// 2026-08-23; Tile.ConfigurePluginID stays for the stale wells that
+// still exist in stores.)
 
 // AdoptChildGridRequest is the SetTile adopt arm (issue #251): a versioned
 // user edit turning a CHILDLESS well into a link by setting its child grid.

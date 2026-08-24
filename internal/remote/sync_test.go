@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -307,4 +308,28 @@ func (countingRemote) ListPlugins(context.Context, *gridwellv1.ListPluginsReques
 func (r countingRemote) SetRootView(context.Context, *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
 	*r.calls++
 	return &gridwellv1.SetRootViewResponse{}, nil
+}
+
+func TestConnectAllIsBounded(t *testing.T) {
+	// A hanging dial delays boot by bootDialWait at most — never bricks
+	// it (the dial keeps trying in the background).
+	ctx := context.Background()
+	db := openSyncDB(t)
+	if _, err := SyncConfig(ctx, db, []ConnSpec{{Name: "hangcon", Addr: "127.0.0.1:9"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	old := bootDialWait
+	bootDialWait = 50 * time.Millisecond
+	t.Cleanup(func() { bootDialWait = old })
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	s := New(db, func(dial.Config) (gridwellv1.GridwellClient, func(), error) {
+		<-block // a black-holing network
+		return nil, nil, fmt.Errorf("never")
+	}, "")
+	start := time.Now()
+	s.ConnectAll(ctx)
+	if el := time.Since(start); el > 2*time.Second {
+		t.Fatalf("boot blocked %v on a hanging dial — the bound failed", el)
+	}
 }

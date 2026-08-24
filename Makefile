@@ -1,8 +1,9 @@
 .PHONY: build bin bin-all plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-parity check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
-FS_BIN := ./gridwell-plugin-fs
-PROC_BIN := ./gridwell-plugin-proc
+# Built plugin/provider binaries — the plugins target below and clean
+# must agree; this is the one list.
+ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-provider-fs ./gridwell-provider-proc ./gridwell-all
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -241,5 +242,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(FS_BIN) $(PROC_BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(ALL_PLUGIN_BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out

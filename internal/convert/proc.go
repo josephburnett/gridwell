@@ -27,7 +27,7 @@ var procKnownTables = map[string][]string{
 
 // Proc converts a legacy proc DB at legacyPath into a memory DB at
 // outPath. Same contract as FS: identity verbatim, refuse the unknown.
-func Proc(legacyPath, outPath, uuid, kind string) (*FSResult, error) {
+func Proc(legacyPath, outPath, uuid, kind string) (*Result, error) {
 	src, err := sql.Open("sqlite", "file:"+legacyPath+"?mode=ro")
 	if err != nil {
 		return nil, fmt.Errorf("convert proc: open %s: %w", legacyPath, err)
@@ -51,7 +51,7 @@ func Proc(legacyPath, outPath, uuid, kind string) (*FSResult, error) {
 			return nil, err
 		}
 		_ = mem.Close()
-		return &FSResult{}, nil
+		return &Result{}, nil
 	}
 	mem, err := layout.OpenVerified(outPath, uuid, kind)
 	if err != nil {
@@ -59,7 +59,7 @@ func Proc(legacyPath, outPath, uuid, kind string) (*FSResult, error) {
 	}
 	defer mem.Close()
 
-	res := &FSResult{}
+	res := &Result{}
 	gridPID := map[int64]int64{}
 	gridByPID := map[int64]int64{}
 	rows, err := src.Query(`SELECT id, pid, root_cx, root_cy, root_zoom FROM grids ORDER BY id`)

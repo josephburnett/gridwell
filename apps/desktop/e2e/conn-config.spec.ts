@@ -41,11 +41,13 @@ test('clicking a pending connection says WHY, not nothing-to-descend-into', asyn
   // fell to the generic "nothing to descend into" instead of the
   // connection's own status.
   await gw.enterPlugin('local');
+  const rtb = (await gw.plugins()).find((p) => p.label === 'rtb')!;
   await gw.clickPluginSwatch('rtb');
+  // The notice keys by UUID — labels can collide across connections.
   await expect
     .poll(async () => {
       const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-      return (errs.notices ?? []).some((n: any) => n.source === 'launcher:rtb');
+      return (errs.notices ?? []).some((n: any) => n.source === 'launcher:' + rtb.uuid);
     })
     .toBe(true);
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());

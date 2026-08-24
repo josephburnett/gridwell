@@ -338,3 +338,15 @@ func remapNS(s *parity.Snapshot, ns string) *parity.Snapshot {
 	}
 	return out
 }
+
+func TestMaxGridsAbortsLoudly(t *testing.T) {
+	// A bounded crawl must ABORT, never silently cap: a truncated crawl
+	// that returns normally would read as full coverage to the migration
+	// gate.
+	n := newNode(t)
+	seed(t, n)
+	_, err := parity.Crawl(context.Background(), n.cl, parity.Options{MaxGrids: 1})
+	if err == nil || !strings.Contains(err.Error(), "MaxGrids") {
+		t.Fatalf("bounded crawl did not abort loudly: %v", err)
+	}
+}

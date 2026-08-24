@@ -197,6 +197,11 @@ func (s *Server) SetConfigMode(on bool) { s.configMode = on }
 // with in config mode.
 var errConfigMode = fmt.Errorf("connections are server config (v2): edit server.yaml's connections: list and restart — the picker no longer edits them")
 
+// bootDialWait bounds how long ConnectAll waits per connection: a dead
+// remote delays boot by this much at most, never bricks it. A var so
+// the bound itself is testable.
+var bootDialWait = 20 * time.Second
+
 // ConnectAll dials every declared connection NOW, synchronously, and
 // logs each outcome — the boot doesn't serve mysteries (Joe,
 // 2026-08-23): by the time the node is up, every connection is either
@@ -236,8 +241,8 @@ func (s *Server) ConnectAll(ctx context.Context) {
 				} else {
 					log.Printf("gridwell: connection %q (%s): connected — root %s", label, c.NS, root)
 				}
-			case <-time.After(20 * time.Second):
-				log.Printf("gridwell: connection %q (%s): no answer after 20s — still trying in the background", label, c.NS)
+			case <-time.After(bootDialWait):
+				log.Printf("gridwell: connection %q (%s): no answer after %s — still trying in the background", label, c.NS, bootDialWait)
 			}
 		}(c)
 	}

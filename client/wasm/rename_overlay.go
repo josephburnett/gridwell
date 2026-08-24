@@ -148,13 +148,7 @@ func (a *App) doorFind(p *pane.Pane) (rpc.Tile, door.Kind) {
 			}
 		}
 	}
-	return door.Find(p.Anchor, parent, a.allPlugins(), func(gid string) map[string]rpc.Tile {
-		if g, ok := a.c.Grid(gid); ok {
-			return g.Tiles
-		}
-		a.fetchGrid(gid)
-		return nil
-	})
+	return door.Find(p.Anchor, parent, a.allPlugins())
 }
 
 // togglePaneZoom zooms the focused pane to the full layout, or back —

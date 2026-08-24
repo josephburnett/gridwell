@@ -1,3 +1,8 @@
+> **Superseded in part (2026-08-23, #269):** the instance picker and the
+> parameterized-plugin flow described below are DELETED — connections are
+> server.yaml config, and each presents as its own menu row. The routed
+> + menu, node_ns, and qualification mechanics remain accurate.
+
 # The remote menu: "when I descend into a node, I am there"
 
 Options doc (2026-08-16, audited against the code the same day). The
