@@ -12,6 +12,14 @@ import * as path from 'node:path';
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-fscontent-'));
 test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
 
+test('the provider fs declares no tool it cannot honor (#271)', async ({ gw, window }) => {
+  await gw.enterPlugin('code');
+  await gw.openPalette();
+  const pal = await window.evaluate(() => (window as any).__gridwellTest.palette());
+  const labels = (pal.items ?? []).map((i: any) => i.label);
+  expect(labels, 'no dead-end search entry on provider fs').not.toContain('search');
+});
+
 test('a source file shows as plain text and refreshes each open', async ({ gw, window }) => {
   // Reset the fixture: this test MUTATES the file (the freshness half),
   // and the module-scoped dir persists across runs.

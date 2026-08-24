@@ -18,6 +18,10 @@ export interface PluginSpec {
   kind: string;
   name: string;
   config?: Record<string, string>;
+  // legacy pins the pre-v2 plugin stack for this entry (the #258
+  // entry-tool flow only exists there until #271). Default: fs runs as
+  // a v2 CONTENT PROVIDER — production's shape since the cutover.
+  legacy?: boolean;
 }
 
 // seedHome creates a throwaway Gridwell home and registers one localdb plugin in
@@ -33,10 +37,13 @@ export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
   execFileSync(bin, ['init', '--kind', 'local', '--name', 'e2e'], { env, stdio: 'ignore' });
   for (const p of extra) {
     const args = ['init', '--kind', p.kind, '--name', p.name];
-    // GRIDWELL_E2E_FS_PROVIDER=1 runs every fs plugin as a v2 content
-    // provider (docs/v2-design.md) — the same suite, the other stack:
-    // green under both is the cutover confidence for the fs flip (#269).
-    if (p.kind === 'fs' && process.env.GRIDWELL_E2E_FS_PROVIDER === '1') args.push('--provider');
+    // fs defaults to the v2 CONTENT PROVIDER — production's shape since
+    // the cutover (#269). A spec pins {legacy: true} to exercise the
+    // pre-v2 plugin (the #258 tool flow, until #271);
+    // GRIDWELL_E2E_FS_LEGACY=1 flips the whole suite back for a
+    // comparison run.
+    const legacy = p.legacy || process.env.GRIDWELL_E2E_FS_LEGACY === '1';
+    if (p.kind === 'fs' && !legacy) args.push('--provider');
     for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);
     execFileSync(bin, args, { env, stdio: 'ignore' });
   }

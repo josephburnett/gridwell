@@ -123,7 +123,12 @@ func mustParity(t *testing.T, legacy, v2 *rpc.Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diffs := parity.Diff(sa, sb, parity.Policy{}); len(diffs) != 0 {
+	// menu_entries is the ONE named divergence: legacy fs declares the
+	// #258 search tool; the adapter strips creation entries until the
+	// userdocs store exists (#271) — never advertise a door you cannot
+	// open. Everything else compares with no blind spots.
+	pol := parity.Policy{IgnoreFields: map[string]bool{"menu_entries": true}}
+	if diffs := parity.Diff(sa, sb, pol); len(diffs) != 0 {
 		t.Fatalf("legacy and v2 stacks differ (%d):\n%s", len(diffs), strings.Join(diffs, "\n"))
 	}
 }

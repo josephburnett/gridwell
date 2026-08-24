@@ -19,7 +19,10 @@ fs.mkdirSync(path.join(ROOT, 'sub'));
 fs.writeFileSync(path.join(ROOT, 'sub', 'alpha-deep.txt'), 'b\n');
 fs.writeFileSync(path.join(ROOT, 'sub', 'beta.txt'), 'c\n');
 
-test.use({ extraPlugins: [{ kind: 'fs', name: 'docs', config: { root: ROOT } }] });
+// legacy: the #258 tool flow lives only on the pre-v2 fs plugin until
+// the userdocs store lands (#271) — the adapter strips creation entries
+// it cannot honor.
+test.use({ extraPlugins: [{ kind: 'fs', name: 'docs', config: { root: ROOT }, legacy: true }] });
 
 test('the fs search entry: drop, prompt on descent, results grid of links', async ({
   gw,

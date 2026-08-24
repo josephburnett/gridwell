@@ -97,7 +97,7 @@ func TestRealDataFSGate(t *testing.T) {
 	}
 	t.Logf("crawled %d grids / %d tiles (legacy), %d/%d (v2), %d scoped-out",
 		len(sa.Grids), len(sa.Tiles), len(sb.Grids), len(sb.Tiles), len(sa.Skipped))
-	if diffs := parity.Diff(sa, sb, parity.Policy{}); len(diffs) != 0 {
+	if diffs := parity.Diff(sa, sb, parity.Policy{IgnoreFields: map[string]bool{"menu_entries": true}}); len(diffs) != 0 {
 		t.Fatalf("REAL-DATA PARITY FAILED (%d):\n%s", len(diffs), strings.Join(diffs, "\n"))
 	}
 }

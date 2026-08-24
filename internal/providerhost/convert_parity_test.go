@@ -89,7 +89,7 @@ func TestConvertedFSDBMatchesLegacyOnTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diffs := parity.Diff(sa, sb, parity.Policy{}); len(diffs) != 0 {
+	if diffs := parity.Diff(sa, sb, parity.Policy{IgnoreFields: map[string]bool{"menu_entries": true}}); len(diffs) != 0 {
 		t.Fatalf("converted home differs from legacy (%d):\n%s", len(diffs), strings.Join(diffs, "\n"))
 	}
 
@@ -102,7 +102,7 @@ func TestConvertedFSDBMatchesLegacyOnTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diffs := parity.Diff(sa, sb, parity.Policy{}); len(diffs) != 0 {
+	if diffs := parity.Diff(sa, sb, parity.Policy{IgnoreFields: map[string]bool{"menu_entries": true}}); len(diffs) != 0 {
 		t.Fatalf("post-conversion mint diverged (%d):\n%s", len(diffs), strings.Join(diffs, "\n"))
 	}
 }

@@ -59,9 +59,17 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		Writable:    ci.Writable,
 	}
 	for _, m := range ci.MenuEntries {
+		// CREATION entries (kind set) are STRIPPED until the node can
+		// honor them: minting a tool tile needs the userdocs store
+		// (#271), and the adapter must never advertise a door it cannot
+		// open — a menu entry whose drop can only fail is the dead-end-
+		// button class (charter §6 in spirit). Root entries (a second
+		// plugin root) pass through.
+		if m.Kind != "" {
+			continue
+		}
 		out := &gridwellv1.MenuEntry{
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph, Color: m.Color,
-			Kind: m.Kind, ParamSchema: m.ParamSchema,
 		}
 		if m.Context != "" {
 			gid, err := a.mem.ContextID(m.Context)
