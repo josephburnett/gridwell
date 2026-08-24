@@ -326,11 +326,11 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	}
 }
 
-// The create_schemas stamping seam (issue #198): the owning plugin's per-kind
-// creation schemas ride ON the grid — stamped from Info by the serving node
-// for a leaf plugin, and passed VERBATIM through a transit hop, so the schema
-// a client sees is always the plugin that owns the grid it is dropping into,
-// at any chain depth.
+// The #198 creation-form mechanism is RETIRED (2026-08-23, with the
+// instance picker): a plugin may still declare create_schemas in Info,
+// but the serving node stamps NOTHING onto grids — no client reads it,
+// and a declared form that could only fail must never render. This pins
+// the retirement so the stamp cannot quietly return.
 func TestCreateSchemasStampAndTransit(t *testing.T) {
 	ctx := context.Background()
 
@@ -371,13 +371,12 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remote GetGrid: %v", err)
 	}
-	if got := g.Grid.CreateSchemas["well"]; !strings.Contains(got, `"query"`) {
-		t.Fatalf("leaf stamp missing: create_schemas = %v", g.Grid.CreateSchemas)
+	if len(g.Grid.CreateSchemas) != 0 {
+		t.Fatalf("the retired mechanism stamped a schema: %v", g.Grid.CreateSchemas)
 	}
 
-	// TRANSIT: a local node mounts the remote via the pure proxy (the ssh
-	// topology minus the tunnel); the schema arrives verbatim through the
-	// chain — the local node adds nothing.
+	// TRANSIT: whatever the remote GRID carries (nothing, since the
+	// retirement) rides verbatim — the local node adds nothing either.
 	grpcConn, err := grpc.NewClient(strings.TrimPrefix(remoteHTTP.URL, "http://"),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -401,8 +400,8 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chained GetGrid: %v", err)
 	}
-	if got := chained.Grid.CreateSchemas["well"]; !strings.Contains(got, `"query"`) {
-		t.Fatalf("transit dropped the schema: create_schemas = %v", chained.Grid.CreateSchemas)
+	if len(chained.Grid.CreateSchemas) != 0 {
+		t.Fatalf("transit invented a schema: %v", chained.Grid.CreateSchemas)
 	}
 }
 

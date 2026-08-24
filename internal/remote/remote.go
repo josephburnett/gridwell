@@ -21,8 +21,8 @@ import (
 
 // connGridID is the plugin's connection-list grid. Since the #251 flip it
 // is declared as the INSTANCE grid, not the root: a storage address the
-// instance picker reads and writes, never a landing page. It keeps serving
-// under the same id forever — existing connection rows appear in the picker
+// row synthesis reads, never a landing page. It keeps serving under the
+// same id forever — connection rows present as menu rows of their own
 // automatically, and any legacy exit-well link to the list still resolves.
 const connGridID = "0"
 
@@ -50,7 +50,7 @@ type Server struct {
 	mu   sync.Mutex
 	live map[string]*liveConn // by ns
 	// rootErr is a connection's LAST dial/root-fetch failure, by ns —
-	// the one fact behind the picker's "connecting…" row (surfaced as
+	// the one fact behind a pending row's status (surfaced as
 	// Tile.status_detail while the well has no child). Written only by
 	// ensureLive and the root-fetch goroutine, cleared on success and on
 	// params change (dropLive); never persisted.
@@ -208,7 +208,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	client, closer, err := s.dial(cfg)
 	if err != nil {
 		// Record the BARE dial error (the ns wrapper below is routing
-		// noise to the person reading the picker row).
+		// noise to the person reading the row status).
 		s.rootErr[c.NS] = err.Error()
 		return nil, status.Errorf(codes.Unavailable, "sshhost: connection %q: %v", c.NS, err)
 	}
@@ -248,7 +248,7 @@ func (s *Server) setRootErr(ns, detail string) {
 
 // stampStatus writes the connection's recorded failure onto its well tile —
 // only while the well is CHILDLESS: once the chain is learned, a transient
-// outage is the mount-health story, not a picker-row status.
+// outage is the mount-health story, not a pending-row status.
 func (s *Server) stampStatus(c *Conn, t *gridwellv1.Tile) {
 	if c.RemoteRoot != "" {
 		return
@@ -410,11 +410,9 @@ func (s *Server) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		Kind:        "remote",
 		DisplayName: "connections",
 		// The #251 flip: no root grid — the connection list is the INSTANCE
-		// grid, and the client's gestures open the instance picker instead
-		// of landing here. Writable is FALSE deliberately: it is the "+
-		// palette shows here" gate, and instances are created through the
-		// picker (CreateTile/WriteContent directly), never the palette. No
-		// root grid means no root view to report either.
+		// grid, and the server synthesizes one menu row per connection
+		// from it. Writable is FALSE deliberately: it is the "+ palette
+		// shows here" gate. No root grid means no root view to report.
 		InstanceGridId: connGridID,
 		Watch:          true,
 	}

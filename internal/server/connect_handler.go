@@ -121,9 +121,11 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			}
-			g.CreateSchemas = info.CreateSchemas
-			// The plugin's declared (+) menu additions (#258), stamped
-			// per grid exactly like create_schemas.
+			// (create_schemas is no longer stamped: the #198 creation-form
+			// mechanism retired with the instance picker, 2026-08-23 — no
+			// plugin declares one and no client reads one. The wire field
+			// remains, additive-only law.)
+			// The plugin's declared (+) menu additions (#258).
 			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		}
 	}

@@ -349,8 +349,10 @@ type App struct {
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
 
-	// instPicker is the lazily-created instance-picker container (issue
-	// #251); instPickerOpen gates re-entry and parks live views;
+	// instPicker is the shared modal-form container (modal_form.go — born
+	// as the instance picker's, inherited by the entry-params form when
+	// the picker died, 2026-08-23); instPickerOpen gates re-entry and
+	// parks live views;
 	// instPickerFuncs collects the current render's js callbacks so a
 	// re-render or close releases them (the no-leak discipline every
 	// modal here follows).

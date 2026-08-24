@@ -222,12 +222,6 @@ func CreateWellToProto(r *CreateWellRequest) *pb.CreateTileRequest {
 			ConfigurePluginId: r.ConfigurePluginID}}
 }
 
-// AdoptChildGridToProto builds the SetTile adopt arm (issue #251).
-func AdoptChildGridToProto(r *AdoptChildGridRequest) *pb.SetTileRequest {
-	return &pb.SetTileRequest{TileId: r.TileID, Version: r.Version,
-		AdoptChildGrid: &pb.AdoptChildGrid{ChildGridId: r.ChildGridID, Label: r.Label,
-			ViewX: r.ViewX, ViewY: r.ViewY, ViewZoom: r.ViewZoom}}
-}
 func CreateTextToProto(r *CreateTextRequest) *pb.CreateTileRequest {
 	return &pb.CreateTileRequest{GridId: r.GridID,
 		Tile: &pb.Tile{Kind: KindText, X: r.X, Y: r.Y, W: r.W, H: r.H, ObjectId: r.ObjectID}}
