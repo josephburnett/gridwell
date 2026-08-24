@@ -457,6 +457,21 @@ func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewReq
 		return nil, err
 	}
 	if fw != nil {
+		// The CONNECTION'S OWN ROOT: the connection row is the DOOR, and
+		// the door owns its viewport (#263's rule; v2 #269 — the menu
+		// row's root_view reads the row's view_*). Persist framing HERE,
+		// never forward: forwarding wrote the FAR node's landing framing
+		// (clobbering what its own clients left) while the local row
+		// stayed at zero — the ascent wrote one place, the re-entry read
+		// another, and the round trip silently lost the viewport.
+		if c, cerr := s.db.GetByNS(ctx, fw.ns); cerr == nil && !c.Deleted && c.RemoteRoot == local {
+			if _, ferr := s.db.SetFraming(ctx, c.ID, int64(req.Cx), int64(req.Cy), req.Zoom); ferr != nil {
+				return nil, dbErr(ferr)
+			}
+			return &gridwellv1.SetRootViewResponse{}, nil
+		}
+		// Deeper targets (a far PLUGIN's root through the routed menu)
+		// forward: that root belongs to the far node.
 		out := *req
 		out.RootGridId = local
 		return fw.client.SetRootView(ctx, &out)

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -159,88 +160,63 @@ func New(socketName, binary, shell string) (*Controller, func() error, error) {
 	if shell == "" {
 		shell = "bash"
 	}
-	f, err := os.CreateTemp("", "gridwell-tmux-*.conf")
-	if err != nil {
+	// STABLE per-socket paths, overwritten every New (the contents are
+	// static): one directory per tmux socket, forever. The old
+	// per-boot os.CreateTemp trio leaked three artifacts per server
+	// start once the plugin subprocess (whose exit cleanup covered
+	// them) folded into the node — and worse, a /tmp cleaner could
+	// delete a RUNNING session's shim out from under it. A stable path
+	// survives restarts, gets reused by the next boot, and a restarted
+	// server's long-lived sessions still resolve the same shim.
+	dir := filepath.Join(os.TempDir(), "gridwell-tmux-"+socketName)
+	shadowDir := filepath.Join(dir, "shadow-bin")
+	if err := os.MkdirAll(shadowDir, 0o700); err != nil {
+		return nil, nil, fmt.Errorf("tmux: config dir: %w", err)
+	}
+	confPath := filepath.Join(dir, "tmux.conf")
+	if err := os.WriteFile(confPath, []byte(gridwellConfig), 0o600); err != nil {
 		return nil, nil, fmt.Errorf("tmux: write config: %w", err)
 	}
-	if _, err := f.WriteString(gridwellConfig); err != nil {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-		return nil, nil, fmt.Errorf("tmux: write config: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(f.Name())
-		return nil, nil, fmt.Errorf("tmux: write config: %w", err)
-	}
-	shim, err := os.CreateTemp("", "gridwell-open-*.sh")
-	if err != nil {
-		_ = os.Remove(f.Name())
+	shimPath := filepath.Join(dir, "gridwell-open.sh")
+	if err := os.WriteFile(shimPath, []byte(browserShimScript), 0o755); err != nil {
 		return nil, nil, fmt.Errorf("tmux: write browser shim: %w", err)
 	}
-	if _, err := shim.WriteString(browserShimScript); err != nil {
-		_ = shim.Close()
-		_ = os.Remove(shim.Name())
-		_ = os.Remove(f.Name())
-		return nil, nil, fmt.Errorf("tmux: write browser shim: %w", err)
-	}
-	if err := shim.Close(); err != nil {
-		_ = os.Remove(shim.Name())
-		_ = os.Remove(f.Name())
-		return nil, nil, fmt.Errorf("tmux: write browser shim: %w", err)
-	}
-	if err := os.Chmod(shim.Name(), 0o755); err != nil {
-		_ = os.Remove(shim.Name())
-		_ = os.Remove(f.Name())
+	if err := os.Chmod(shimPath, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("tmux: chmod browser shim: %w", err)
 	}
-	shadowDir, err := writeShadowLaunchers(shim.Name())
-	if err != nil {
-		_ = os.Remove(shim.Name())
-		_ = os.Remove(f.Name())
+	if err := writeShadowLaunchers(shadowDir, shimPath); err != nil {
 		return nil, nil, err
 	}
 	c := &Controller{
 		binary:      binary,
 		socketName:  socketName,
-		configPath:  f.Name(),
+		configPath:  confPath,
 		shell:       shell,
-		browserShim: shim.Name(),
+		browserShim: shimPath,
 		shadowDir:   shadowDir,
 	}
 	cleanup := func() error {
-		err1 := os.Remove(c.configPath)
-		if err2 := os.Remove(c.browserShim); err1 == nil {
-			err1 = err2
-		}
-		if err3 := os.RemoveAll(c.shadowDir); err1 == nil {
-			err1 = err3
-		}
-		return err1
+		return os.RemoveAll(dir)
 	}
 	return c, cleanup, nil
 }
 
-// writeShadowLaunchers writes the shadow bin dir (issue #166): one launcher
+// writeShadowLaunchers fills the shadow bin dir (issue #166): one launcher
 // per shadowLauncherNames, each forwarding web urls to the gridwell-open shim
-// at shimPath and falling through to the real command otherwise.
-func writeShadowLaunchers(shimPath string) (string, error) {
-	dir, err := os.MkdirTemp("", "gridwell-shadow-bin-*")
-	if err != nil {
-		return "", fmt.Errorf("tmux: create shadow launcher dir: %w", err)
-	}
+// at shimPath and falling through to the real command otherwise. dir is the
+// STABLE per-socket location; contents overwrite idempotently.
+func writeShadowLaunchers(dir, shimPath string) error {
 	body := fmt.Sprintf(shadowLauncherScript, shimPath, dir)
 	for _, name := range shadowLauncherNames {
-		p := dir + "/" + name
+		p := filepath.Join(dir, name)
 		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
-			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("tmux: write shadow launcher %s: %w", name, err)
+			return fmt.Errorf("tmux: write shadow launcher %s: %w", name, err)
 		}
 		if err := os.Chmod(p, 0o755); err != nil {
-			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("tmux: chmod shadow launcher %s: %w", name, err)
+			return fmt.Errorf("tmux: chmod shadow launcher %s: %w", name, err)
 		}
 	}
-	return dir, nil
+	return nil
 }
 
 // Args returns the argv for spawning a tmux client connected to the

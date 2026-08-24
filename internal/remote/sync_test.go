@@ -243,3 +243,68 @@ func TestConnectAllAtBoot(t *testing.T) {
 		t.Fatalf("dead connection's recorded error = %q, want the dial failure", deadErr)
 	}
 }
+
+// The connection-row framing round trip (found 2026-08-23): ascending a
+// menu-row portal writes SetRootView at the connection's root chain. The
+// DOOR (the connection row) owns that viewport — it must land on the
+// row's view_* (what the menu row's root_view serves back), and must NOT
+// forward to the far node (whose own landing framing belongs to its own
+// clients).
+func TestConnectionRootFramingRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	db := openSyncDB(t)
+	if _, err := SyncConfig(ctx, db, []ConnSpec{{Name: "framecon", Addr: "127.0.0.1:1"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	farCalls := 0
+	client, closer, err := compose.ServeInProcess(countingRemote{calls: &farCalls})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+	s := New(db, func(dial.Config) (gridwellv1.GridwellClient, func(), error) {
+		return client, func() {}, nil
+	}, "")
+	s.SetConfigMode(true)
+	s.ConnectAll(ctx) // learns the root: farplug1/1
+
+	if _, err := s.SetRootView(ctx, &gridwellv1.SetRootViewRequest{
+		RootGridId: "framecon/farplug1/1", Cx: 7, Cy: -3, Zoom: 1.5,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := db.GetByNS(ctx, "framecon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ViewX != 7 || c.ViewY != -3 || c.ViewZoom != 1.5 {
+		t.Fatalf("the door's viewport didn't persist: %+v", c)
+	}
+	if farCalls != 0 {
+		t.Fatalf("the far node's landing framing was written %d times — the door owns this viewport", farCalls)
+	}
+	// The menu row serves it back (tileFromConn view_* is what
+	// instanceRows reads).
+	tile := tileFromConn(c)
+	if tile.ViewX != 7 || tile.ViewZoom != 1.5 {
+		t.Fatalf("round trip lost on the read side: %+v", tile)
+	}
+}
+
+// countingRemote counts SetRootView arrivals; answers the connect/learn
+// calls like fakeRemote.
+type countingRemote struct {
+	gridwellv1.UnimplementedGridwellServer
+	calls *int
+}
+
+func (countingRemote) ListPlugins(context.Context, *gridwellv1.ListPluginsRequest) (*gridwellv1.ListPluginsResponse, error) {
+	return &gridwellv1.ListPluginsResponse{Plugins: []*gridwellv1.PluginInfo{
+		{Uuid: "farplug1", RootGridId: "farplug1/1"},
+	}}, nil
+}
+
+func (r countingRemote) SetRootView(context.Context, *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
+	*r.calls++
+	return &gridwellv1.SetRootViewResponse{}, nil
+}

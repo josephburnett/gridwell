@@ -235,7 +235,13 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 		if pc.Binary != "" {
 			continue
 		}
-		if _, ok := factories[pc.Kind]; ok {
+		// PLUGIN factories satisfy plugin entries only: a provider entry
+		// serves a different service, so a bundled binary's in-process
+		// plugin factory must not suppress resolving the provider BINARY
+		// (found 2026-08-23: gridwell-all + a provider home failed with
+		// "no provider factory" because the fs plugin factory swallowed
+		// the lookup).
+		if _, ok := factories[pc.Kind]; ok && !pc.Provider {
 			continue
 		}
 		name := "gridwell-plugin-" + pc.Kind
