@@ -592,17 +592,17 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 	out := make([]any, 0, len(a.plugins))
 	for i, pl := range a.plugins {
 		out = append(out, map[string]any{
-			"index":          i,
-			"kind":           pl.Kind,
-			"label":          pl.Label,
-			"uuid":           pl.UUID,
-			"rootGridID":     pl.RootGridID,
-			"scratchGridID":  pl.ScratchGridID,
-			"infoError":      pl.InfoError,
-			"status":         pluginStatusName(pl),
-			"rootViewCx":     pl.RootViewCx,
-			"rootViewCy":     pl.RootViewCy,
-			"rootViewZoom":   pl.RootViewZoom,
+			"index":         i,
+			"kind":          pl.Kind,
+			"label":         pl.Label,
+			"uuid":          pl.UUID,
+			"rootGridID":    pl.RootGridID,
+			"scratchGridID": pl.ScratchGridID,
+			"infoError":     pl.InfoError,
+			"status":        pluginStatusName(pl),
+			"rootViewCx":    pl.RootViewCx,
+			"rootViewCy":    pl.RootViewCy,
+			"rootViewZoom":  pl.RootViewZoom,
 		})
 	}
 	return out
