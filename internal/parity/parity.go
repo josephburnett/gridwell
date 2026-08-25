@@ -273,15 +273,6 @@ func crawl(ctx context.Context, cls []*rpc.Client, o Options) ([]*Snapshot, erro
 	return snaps, nil
 }
 
-// ConvertGateIgnoreFields is the blind-spot list for the v2 migration's
-// live-serve parity gate (scripts/migrate-v2.sh, the convert-v2 verify
-// hint): status_detail and stale are volatile live-serve stamps;
-// menu_entries is the ONE named legacy/v2 divergence — the adapter
-// strips the #258 search entry until the userdocs store exists (#271).
-// One owner: the script and the CLI hint are pinned to this list by
-// TestMigrateScriptUsesTheConvertGateIgnores.
-var ConvertGateIgnoreFields = []string{"status_detail", "stale", "menu_entries"}
-
 // Policy names every deliberate blind spot of a diff. An empty Policy
 // compares everything.
 type Policy struct {

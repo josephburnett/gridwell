@@ -34,7 +34,7 @@ func RunParity(args []string) int {
 	skipPreviews := fs.Bool("skip-previews", false, "skip preview hashing")
 	maxGrids := fs.Int("max-grids", 0, "abort past this many grids (0 = unlimited)")
 	ignore := fs.String("ignore-fields", "", "comma-separated field names to ignore (each is a deliberate, named blind spot)")
-	scope := fs.String("scope", "", "scope file (convert-v2 writes <home>/convert-scope.txt): 'ns:<namespace>' lines allow whole namespaces, '<ns>/<grid>' lines allow single grids")
+	scope := fs.String("scope", "", "scope file: 'ns:<namespace>' lines allow whole namespaces, '<ns>/<grid>' lines allow single grids")
 	volatile := fs.String("volatile-ns", "", "comma-separated namespaces whose entry sets churn (presence/content diffs suppressed)")
 	if err := fs.Parse(args); err != nil {
 		return 2

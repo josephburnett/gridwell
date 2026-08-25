@@ -32,8 +32,6 @@ func Main(args []string, factories map[string]plugin.ServerFactory) int {
 		return RunClearBrowserData(rest)
 	case "parity":
 		return RunParity(rest)
-	case "convert-v2":
-		return RunConvertV2(rest)
 	case "-h", "--help", "help":
 		usage()
 		return 0
@@ -57,9 +55,6 @@ Usage:
                                               serving" (exit 1)
     gridwell backup DEST                      snapshot every plugin DB + server.yaml
                                               (VACUUM INTO; safe while serving)
-    gridwell convert-v2 --from HOME --to HOME  one-time v2 home migration
-                                              (offline, never in place; verify
-                                              with parity before cutover)
     gridwell parity --a URL --b URL [--password PW] [--ignore-fields f,g]
                                               crawl two nodes serving the same
                                               data and diff them (the migration

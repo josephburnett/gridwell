@@ -21,9 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/api/compose"
 	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/convert"
 	"github.com/josephburnett/gridwell/internal/layout"
-	"github.com/josephburnett/gridwell/internal/parity"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/providerhost"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -197,61 +195,13 @@ func TestProcProviderPlacementParity(t *testing.T) {
 	mustParity(t, legacy, v2)
 }
 
-// The proc migration gate in miniature: a lived-in legacy proc DB
-// converts and the two stacks crawl to zero differences over the same
-// fake process tree — including a placed tile and a swept child.
-func TestConvertedProcDBMatchesLegacy(t *testing.T) {
-	procRoot := fakeProc(t)
-	dbPath := filepath.Join(t.TempDir(), "proc.db")
-	legacy := legacyProcNodeAt(t, procRoot, dbPath)
-	ctx := context.Background()
-	if _, err := parity.Crawl(ctx, legacy, parity.Options{}); err != nil {
-		t.Fatal(err)
-	}
-	pl, err := legacy.ListPlugins(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rootGrid := pl.Plugins[0].RootGridID
-	g, err := legacy.GetGrid(ctx, rootGrid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tile := range g.Tiles {
-		if tile.AltText == "300" {
-			if _, err := legacy.PlaceTile(ctx, &rpc.PlaceTileRequest{
-				TileID: tile.ID, Version: tile.Version, GridID: rootGrid, X: 7, Y: 1, W: 1, H: 1,
-			}); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	memPath := filepath.Join(t.TempDir(), "mem.db")
-	res, err := convert.Proc(dbPath, memPath, procUUID, "proc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Grids == 0 || res.Tiles == 0 {
-		t.Fatalf("empty conversion: %+v", res)
-	}
-	v2 := providerProcNodeAt(t, procRoot, memPath)
-	mustParity(t, legacy, v2)
-
-	// A child dies post-conversion; both stacks sweep identically.
-	if err := os.RemoveAll(filepath.Join(procRoot, "200")); err != nil {
-		t.Fatal(err)
-	}
-	mustParity(t, legacy, v2)
-}
-
 // TestRetiredKeyStaysRetiredWithoutIdBurn pins the "a retired key stays
 // retired" tenet against the CACHE: a non-authoritative listing's cached
 // union used to keep a swept key forever, so every later read re-minted a
 // fresh id for it and immediately re-retired it — idmap/layout grew without
-// bound and the AUTOINCREMENT sequence (the identity fact convert.SetSequences
-// exists to protect) advanced on every read of an unchanged grid. Reading
-// never mutates.
+// bound and the AUTOINCREMENT sequence (the identity fact the v2
+// converter existed to protect) advanced on every read of an unchanged
+// grid. Reading never mutates.
 func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
 	procRoot := fakeProc(t)
 	memPath := filepath.Join(t.TempDir(), "mem.db")
