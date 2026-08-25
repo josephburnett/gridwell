@@ -8,6 +8,7 @@ package providerhost_test
 
 import (
 	"context"
+	"database/sql"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -242,4 +243,56 @@ func TestConvertedProcDBMatchesLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustParity(t, legacy, v2)
+}
+
+// TestRetiredKeyStaysRetiredWithoutIdBurn pins the "a retired key stays
+// retired" tenet against the CACHE: a non-authoritative listing's cached
+// union used to keep a swept key forever, so every later read re-minted a
+// fresh id for it and immediately re-retired it — idmap/layout grew without
+// bound and the AUTOINCREMENT sequence (the identity fact convert.SetSequences
+// exists to protect) advanced on every read of an unchanged grid. Reading
+// never mutates.
+func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
+	procRoot := fakeProc(t)
+	memPath := filepath.Join(t.TempDir(), "mem.db")
+	v2 := providerProcNodeAt(t, procRoot, memPath)
+	ctx := context.Background()
+
+	pl, err := v2.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := pl.Plugins[0].RootGridID
+	if _, err := v2.GetGrid(ctx, root); err != nil {
+		t.Fatal(err) // pass 1: mint the live rows
+	}
+	if err := os.RemoveAll(filepath.Join(procRoot, "200")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v2.GetGrid(ctx, root); err != nil {
+		t.Fatal(err) // pass 2: probe + sweep pid 200
+	}
+
+	count := func() int {
+		t.Helper()
+		db, err := sql.Open("sqlite", memPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM idmap`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := count()
+	for i := 0; i < 3; i++ {
+		if _, err := v2.GetGrid(ctx, root); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if after := count(); after != before {
+		t.Fatalf("idmap grew %d → %d across reads of an UNCHANGED grid: the cached union resurrects the retired key and every read mints-and-retires a fresh id", before, after)
+	}
 }

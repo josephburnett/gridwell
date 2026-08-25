@@ -115,7 +115,29 @@ func (a *Adapter) listing(ctx context.Context, gid int64, key string) (resp *cpv
 	if err == nil {
 		facts = resp.Entries
 		if !resp.Authoritative && prev != nil {
-			facts = unionEntries(resp.Entries, prev.Entries)
+			// A remembered key that was RETIRED and is not in the live
+			// listing stays retired: unioning it back would re-mint a
+			// fresh id every read (mint → probe → GONE → retire → cache
+			// remembers → mint …) — unbounded id burn on a read path.
+			// A retired key that IS live again (a recycled pid) enters
+			// as a live entry and mints fresh, which is the identity
+			// rule for a recreated thing.
+			remembered := prev.Entries
+			if retired, rerr := a.mem.RetiredKeys(gid); rerr == nil && len(retired) > 0 {
+				liveKeys := map[string]bool{}
+				for _, e := range resp.Entries {
+					liveKeys[e.Key] = true
+				}
+				kept := make([]*cpv1.Entry, 0, len(remembered))
+				for _, e := range remembered {
+					if retired[e.Key] && !liveKeys[e.Key] {
+						continue
+					}
+					kept = append(kept, e)
+				}
+				remembered = kept
+			}
+			facts = unionEntries(resp.Entries, remembered)
 		}
 		// Remember the UNION so facts survive repeated unreadable
 		// passes. A cache write failing must not fail the read.

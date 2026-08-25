@@ -236,6 +236,27 @@ func (d *DB) ContextKey(gridID int64) (string, error) {
 // TileKey resolves a minted tile id to its (grid id, provider key).
 // Retired rows still resolve — a dangling reference stays interpretable;
 // the caller decides what retirement means (reads: gone).
+// RetiredKeys returns the keys with a tombstoned row in the grid. The
+// adapter's cache filter reads it: a remembered (cached) entry whose key
+// was retired must not re-enter the merge — a retired key stays retired,
+// and re-minting it burns identity the converter's sequences protect.
+func (d *DB) RetiredKeys(gridID int64) (map[string]bool, error) {
+	rows, err := d.db.Query(`SELECT DISTINCT key FROM idmap WHERE grid_id = ? AND tombstoned = 1`, gridID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out[k] = true
+	}
+	return out, rows.Err()
+}
+
 func (d *DB) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, err error) {
 	var tomb int64
 	err = d.db.QueryRow(`SELECT grid_id, key, tombstoned FROM idmap WHERE tile_id = ?`, tileID).
