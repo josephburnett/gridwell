@@ -50,6 +50,10 @@ interface Entry {
   // Tracked so remove() can cancel it: the closure holds the view, and
   // firing after webContents.close() would throw uncaught in main.
   focusRecheck: ReturnType<typeof setTimeout> | null;
+  // captureFailing marks a mirror capture in a failing streak, so the
+  // transition into (and out of) failure logs exactly once — a silently
+  // frozen mirror otherwise leaves no evidence anywhere (charter §6).
+  captureFailing?: boolean;
 }
 
 // USER_CLICK_FOCUS_GRACE_MS is how long after a forwarded left press a view
@@ -545,8 +549,19 @@ export class WebviewRegistry {
     const e = this.entries.get(paneId);
     if (!e || e.hidden) return '';
     try {
-      return await captureJpegBase64(e.view);
-    } catch {
+      const jpeg = await captureJpegBase64(e.view);
+      if (e.captureFailing && jpeg) {
+        e.captureFailing = false;
+        console.log(`gridwell: mirror capture recovered for pane ${paneId}`);
+      }
+      return jpeg;
+    } catch (err) {
+      // A frozen mirror must not be evidence-free: log the transition
+      // into failure once per streak (per-frame captures would spam).
+      if (!e.captureFailing) {
+        e.captureFailing = true;
+        console.error(`gridwell: mirror capture failing for pane ${paneId}: ${String(err)}`);
+      }
       return '';
     }
   }
