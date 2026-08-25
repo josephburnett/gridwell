@@ -12,9 +12,9 @@
 //     recreated under the same name is a NEW thing with a fresh id
 //     (exactly the legacy fs reconcile's delete-then-reinsert identity),
 //     enforced by a partial unique index on LIVE rows only;
-//   - placement/framing writes are unversioned, mirroring the legacy
-//     griddb semantics byte-for-byte (provider tiles serve version 0 on
-//     the wire today, and the migration parity gate holds us to that).
+//   - placement/framing writes are unversioned (provider tiles serve
+//     version 0 on the wire — carried over verbatim from the retired
+//     legacy fs/proc plugins so the migration changed nothing).
 package layout
 
 import (
@@ -443,8 +443,7 @@ func (d *DB) liveOnly(tileID int64) error {
 }
 
 // Place is the placement writeback: (x, y, w, h), same grid always
-// (cross-grid placement never existed for provider tiles). Unversioned,
-// mirroring griddb.ApplyPlace.
+// (cross-grid placement never existed for provider tiles). Unversioned.
 func (d *DB) Place(tileID, x, y, w, h int64) error {
 	if err := d.liveOnly(tileID); err != nil {
 		return err
@@ -540,7 +539,7 @@ func (d *DB) Retire(tileID int64) error {
 	return d.exec(`UPDATE idmap SET tombstoned = 1 WHERE tile_id = ?`, tileID)
 }
 
-// ── auto-place (the griddb semantics, verbatim) ─────────────────────────────
+// ── auto-place (the retired griddb semantics, carried verbatim) ─────────────
 
 type cursor struct{ x, y int64 }
 

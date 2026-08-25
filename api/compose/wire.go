@@ -1,6 +1,6 @@
 // Package compose is the api library's COMPOSITION door: how a Gridwell
 // binary gets its plugins, without anything above it knowing which way.
-// A composer declares a Loadout — Command("gridwell-plugin-fs") for an
+// A composer declares a Loadout — Command("gridwell-plugin-<kind>") for an
 // out-of-process binary (go-plugin: process isolation, a separate
 // dependency graph — the third-party door) or InProcess(factory) for a
 // compiled-in plugin (bundled binaries; iOS, where fork/exec does not

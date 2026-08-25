@@ -361,7 +361,7 @@ func (a *Adapter) key(tileID string) (int64, string, error) {
 }
 
 // PlaceTile terminates at the memory DB: in-grid only, unversioned (the
-// legacy griddb semantics the parity gate pins).
+// retired legacy plugins' semantics, carried verbatim).
 func (a *Adapter) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
 	id, _, err := a.key(req.TileId)
 	if err != nil {
