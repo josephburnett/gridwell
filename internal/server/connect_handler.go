@@ -98,35 +98,30 @@ func (h *connectHandler) GetGrid(ctx context.Context, req *connect.Request[pb.Ge
 		return nil, asConnectError(err)
 	}
 	transit := h.srv.pluginReg.Transit(uuid)
-	g := qualifyGrid(uuid, resp.Grid)
 	// Grid.writable / scratch_grid_id are per-grid facts of the OWNING
 	// plugin. A leaf plugin doesn't stamp them (its Info declares them once);
-	// a transit plugin's response carries the remote node's stamp — writable
-	// verbatim, the scratch id prepended one segment like every other id.
-	if g != nil {
-		if transit {
-			if g.ScratchGridId != "" {
-				g.ScratchGridId = rpc.QualifyID(uuid, g.ScratchGridId)
+	// a transit plugin's response carries the remote node's stamp, ids
+	// prepended one segment (rpc.TransitQualifyGrid — the one grid rule,
+	// shared with the builtin remote transport's hop).
+	var g *pb.Grid
+	if transit {
+		g = rpc.TransitQualifyGrid(uuid, resp.Grid)
+	} else {
+		g = qualifyGrid(uuid, resp.Grid)
+		if g != nil {
+			if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
+				g.Writable = info.Writable
+				if info.ScratchGridId != "" {
+					g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
+				}
+				// (create_schemas is no longer stamped: the #198
+				// creation-form mechanism retired with the instance
+				// picker, 2026-08-23 — no plugin declares one and no
+				// client reads one. The wire field remains, additive-only
+				// law.)
+				// The plugin's declared (+) menu additions (#258).
+				g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 			}
-			// create_schemas rides verbatim: the remote node stamped its
-			// owning plugin's declaration; a chain adds nothing (#198).
-			// node_ns gains this hop's segment — the serving NODE, seen
-			// from here, is one segment further away (remote-menu: the
-			// one owner of "which node is this pane inside").
-			g.NodeNs = rpc.QualifyNS(uuid, g.NodeNs)
-			// Menu entries ride verbatim, root targets prefixed (#258).
-			g.MenuEntries = rpc.QualifyMenuEntries(uuid, g.MenuEntries)
-		} else if info, ierr := h.srv.pluginInfo(ctx, uuid); ierr == nil {
-			g.Writable = info.Writable
-			if info.ScratchGridId != "" {
-				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
-			}
-			// (create_schemas is no longer stamped: the #198 creation-form
-			// mechanism retired with the instance picker, 2026-08-23 — no
-			// plugin declares one and no client reads one. The wire field
-			// remains, additive-only law.)
-			// The plugin's declared (+) menu additions (#258).
-			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		}
 	}
 	return connect.NewResponse(&pb.GetGridResponse{

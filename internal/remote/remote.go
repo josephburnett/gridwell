@@ -470,22 +470,9 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 		if err != nil {
 			return nil, err
 		}
-		g := resp.Grid
-		if g != nil {
-			out := &gridwellv1.Grid{}
-			*out = *g
-			out.Id = rpc.QualifyID(fw.ns, g.Id)
-			if g.ScratchGridId != "" {
-				out.ScratchGridId = rpc.QualifyID(fw.ns, g.ScratchGridId)
-			}
-			// node_ns gains the connection segment — this hop, like the
-			// server's transit hop above it (remote-menu, 2026-08-16).
-			out.NodeNs = rpc.QualifyNS(fw.ns, g.NodeNs)
-			out.MenuEntries = rpc.QualifyMenuEntries(fw.ns, g.MenuEntries)
-			g = out
-		}
 		return &gridwellv1.GetGridResponse{
-			Grid:  g,
+			// The one transit grid rule, shared with the server's hop.
+			Grid:  rpc.TransitQualifyGrid(fw.ns, resp.Grid),
 			Tiles: rpc.TransitQualifyTiles(fw.ns, resp.Tiles),
 		}, nil
 	}
