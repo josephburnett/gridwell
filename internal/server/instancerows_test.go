@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -97,5 +98,13 @@ func TestUnreadableInstanceGridKeepsThePluginRow(t *testing.T) {
 	}
 	if plugins[0].InstanceGridID == "" || plugins[0].RootGridID != "" {
 		t.Fatalf("row 0 should be the parameterized plugin's own: %+v", plugins[0])
+	}
+	// The read error must ride the row: without it, "instance store down"
+	// and "healthy but rootless" are indistinguishable on the wire — the
+	// same class issue #47 fixed for the Info handshake, one read further
+	// in. The picker that used to surface this on descent is gone, so the
+	// row is the only place the user can learn why.
+	if plugins[0].InfoError == "" || !strings.Contains(plugins[0].InfoError, "instance store unavailable") {
+		t.Fatalf("row 0 must carry the instance-grid read error, got %q", plugins[0].InfoError)
 	}
 }

@@ -146,14 +146,17 @@ func TestBuildPluginInfo_InfoErrorSetOnlyWhenInfoNil(t *testing.T) {
 	}
 }
 
-// TestBuildPluginInfo_NoInfoErrorLeakWhenInfoPresent guards against a
-// regression where a stale/non-nil infoErr is passed alongside a non-nil info
-// (should never happen from pluginInfo, but buildPluginInfo's own contract is
-// "info != nil wins" — InfoError must never be set in that case).
-func TestBuildPluginInfo_NoInfoErrorLeakWhenInfoPresent(t *testing.T) {
-	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "1"}, errors.New("stale, should be ignored"))
-	if got.InfoError != "" {
-		t.Errorf("InfoError = %q, want empty when info is non-nil regardless of a stale err", got.InfoError)
+// TestBuildPluginInfo_ErrorRidesAlongsideLiveInfo pins the revised contract
+// (2026-08-24): an error passed WITH a non-nil info is a real post-handshake
+// failure (the instance-grid read in instanceRows is the producer) and must
+// ride the row verbatim — dropping it made "instance store down" and
+// "healthy but rootless" identical on the wire. The old contract ("info
+// non-nil wins, InfoError never set") guarded a stale-err case that had no
+// producer; hiding a real error is the worse failure mode.
+func TestBuildPluginInfo_ErrorRidesAlongsideLiveInfo(t *testing.T) {
+	got := buildPluginInfo("u", "fs", "Files", &pb.InfoResponse{RootGridId: "1"}, errors.New("instance grid unreadable: boom"))
+	if got.InfoError != "instance grid unreadable: boom" {
+		t.Errorf("InfoError = %q, want the post-handshake failure verbatim", got.InfoError)
 	}
 }
 

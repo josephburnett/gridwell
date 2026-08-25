@@ -199,9 +199,15 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 		// The instances REPLACE the plugin's own row: one icon per
 		// configured thing (the instance picker is gone, 2026-08-23).
 		// The row stays when the instance read failed (never blank a
-		// configured plugin silently) or the plugin isn't parameterized.
-		inst, managed := h.instanceRows(ctx, p.UUID, info)
+		// configured plugin silently) or the plugin isn't parameterized;
+		// a failed read rides the row as its InfoError — the row is the
+		// only surface left to say why (the picker that used to show it
+		// on descent is gone, 2026-08-23).
+		inst, managed, instErr := h.instanceRows(ctx, p.UUID, info)
 		if !managed {
+			if err == nil {
+				err = instErr
+			}
 			out = append(out, buildPluginInfo(p.UUID, p.Kind, label, info, err))
 		}
 		out = append(out, inst...)
@@ -236,19 +242,23 @@ func (h *connectHandler) ListPlugins(ctx context.Context, req *connect.Request[p
 // lists as rootless — inert, its status_detail riding InfoError so the
 // menu can say why. managed reports a successful synthesis (possibly
 // zero rows); false means not parameterized or an unreadable instance
-// grid — the caller then keeps the plugin's own row, whose picker shows
-// the error.
-func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb.InfoResponse) (rows []*pb.PluginInfo, managed bool) {
+// grid — the caller then keeps the plugin's own row, carrying err (the
+// read failure) so the wire can tell "store down" from "rootless".
+func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb.InfoResponse) (rows []*pb.PluginInfo, managed bool, err error) {
 	if info == nil || info.RootGridId != "" || info.InstanceGridId == "" {
-		return nil, false
+		return nil, false, nil
 	}
 	c, ok := h.srv.pluginReg.Get(uuid)
 	if !ok {
-		return nil, false
+		return nil, false, nil
 	}
-	g, err := c.GetGrid(ctx, &pb.GetGridRequest{GridId: info.InstanceGridId})
-	if err != nil {
-		return nil, false
+	// Bounded like the Info handshake three lines up (pluginInfoTimeout):
+	// a hung plugin must not stall every palette open through this read.
+	gctx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
+	defer cancel()
+	g, gerr := c.GetGrid(gctx, &pb.GetGridRequest{GridId: info.InstanceGridId})
+	if gerr != nil {
+		return nil, false, fmt.Errorf("instance grid unreadable: %w", gerr)
 	}
 	for _, t := range g.Tiles {
 		if t.Kind != "well" {
@@ -267,7 +277,7 @@ func (h *connectHandler) instanceRows(ctx context.Context, uuid string, info *pb
 		}
 		rows = append(rows, row)
 	}
-	return rows, true
+	return rows, true, nil
 }
 
 // firstSegment returns the leading segment of a chained id.
@@ -331,6 +341,13 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		rootViewZoom = info.RootViewZoom
 	} else if infoErr != nil {
 		infoError = "plugin not responding: " + infoErr.Error()
+	}
+	// An error alongside a live Info (the instance-grid read failed after a
+	// healthy handshake) still rides the row: without it "store down" and
+	// "healthy but rootless" are indistinguishable on the wire (issue #47's
+	// class, one read further in).
+	if infoError == "" && infoErr != nil {
+		infoError = infoErr.Error()
 	}
 	if label == "" {
 		label = kind
