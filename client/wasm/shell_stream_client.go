@@ -279,6 +279,10 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	Terminal := js.Global().Get("Terminal")
 	if !Terminal.Truthy() {
 		shellLog("xterm.Terminal not loaded; index.html missing script tag?")
+		// The user just descended into a shell: a console line alone
+		// presents as an empty pane that "just disappeared" (charter §6) —
+		// say so on the error surface like the alive-probe above does.
+		a.reportErr(errsurface.Error, "shell", "terminal engine unavailable on this host (xterm not loaded)")
 		doc.Get("body").Call("removeChild", container)
 		return
 	}
