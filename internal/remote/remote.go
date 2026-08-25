@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -1107,13 +1108,21 @@ func nsOf(fw *forward) string {
 // other read; a connection that errors or times out contributes nothing.
 func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
+		// An id: query targets ONE connection — an empty answer where the
+		// hop actually failed is a lie (it hid the export's missing Search
+		// delegate for weeks: every layer read the failure as "not found").
+		// Propagate; the fan-out caller upstream decides what a dead hop
+		// means for a broader search.
 		fw, local, err := s.route(ctx, q.ID)
-		if err != nil || fw == nil {
+		if err != nil {
+			return nil, err
+		}
+		if fw == nil {
 			return &gridwellv1.SearchResponse{}, nil
 		}
 		resp, err := fw.client.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + local, Limit: req.Limit})
 		if err != nil {
-			return &gridwellv1.SearchResponse{}, nil
+			return nil, err
 		}
 		return prependSearchResp(fw.ns, resp), nil
 	}
@@ -1132,6 +1141,9 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	for _, hp := range hops {
 		resp, err := hp.client.Search(ctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
 		if err != nil {
+			// A hop contributing nothing is policy; contributing nothing
+			// SILENTLY is how the missing export delegate stayed invisible.
+			log.Printf("gridwell: search: connection %s skipped: %v", hp.ns, err)
 			continue
 		}
 		out.Results = append(out.Results, prependSearchResp(hp.ns, resp).Results...)

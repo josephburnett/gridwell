@@ -293,3 +293,55 @@ func TestNodeExportContentStreams(t *testing.T) {
 		t.Errorf("placed = (%d,%d %dx%d), want (5,5 3x3)", placed.Tile.X, placed.Tile.Y, placed.Tile.W, placed.Tile.H)
 	}
 }
+
+// TestNodeExportSearches pins that Search crosses the node export. Why this
+// existed as a gap: the export delegates every unary verb by hand, Search was
+// simply never added, and BOTH downstream layers (the remote transport and
+// the connect handler's fan-out) treat any per-hop error — Unimplemented
+// included — as "that hop contributes nothing", so a federated search
+// silently answered empty instead of failing loudly anywhere.
+func TestNodeExportSearches(t *testing.T) {
+	c, _ := nodeServer(t)
+	ctx := context.Background()
+
+	ng, err := c.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "node1/0"})
+	if err != nil {
+		t.Fatalf("GetGrid(node grid): %v", err)
+	}
+	pluginRoot := ng.Tiles[0].ChildGridId
+	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+		GridId: pluginRoot,
+		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 2, H: 2},
+	})
+	if err != nil {
+		t.Fatalf("CreateTile: %v", err)
+	}
+	w, err := c.WriteContent(ctx)
+	if err != nil {
+		t.Fatalf("WriteContent: %v", err)
+	}
+	if err := w.Send(&gridwellv1.WriteContentRequest{TileId: created.Tile.Id, Version: created.Tile.Version, Data: []byte("# xylophone notes")}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if _, err := w.CloseAndRecv(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Free text finds the tile, id qualified for THIS hop's view.
+	resp, err := c.Search(ctx, &gridwellv1.SearchRequest{Query: "xylophone", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search via export: %v", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != created.Tile.Id {
+		t.Fatalf("search results = %+v, want the created tile %s", resp.Results, created.Tile.Id)
+	}
+
+	// The id: form routes too (the pane-path heal, #234, asks exactly this).
+	resp, err = c.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + created.Tile.Id, Limit: 1})
+	if err != nil {
+		t.Fatalf("Search id: via export: %v", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != created.Tile.Id {
+		t.Fatalf("id search results = %+v, want %s", resp.Results, created.Tile.Id)
+	}
+}

@@ -194,6 +194,14 @@ func (n *nodeExport) SetRootView(ctx context.Context, r *pb.SetRootViewRequest) 
 	return resp.Msg, nil
 }
 
+func (n *nodeExport) Search(ctx context.Context, r *pb.SearchRequest) (*pb.SearchResponse, error) {
+	resp, err := n.h.Search(ctx, connect.NewRequest(r))
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return resp.Msg, nil
+}
+
 func (n *nodeExport) ShellSessionAlive(ctx context.Context, r *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
 	resp, err := n.h.ShellSessionAlive(ctx, connect.NewRequest(r))
 	if err != nil {
