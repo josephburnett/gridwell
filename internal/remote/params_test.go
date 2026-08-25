@@ -148,4 +148,15 @@ func TestAutoLabel(t *testing.T) {
 	if l := autoLabel(""); l != "" {
 		t.Errorf("no params: autoLabel = %q, want empty", l)
 	}
+	// A DIRECT connection (addr only — the shape ParseParams explicitly
+	// admits) has no user and no host: the label is the address, never the
+	// literal "@" the naive concatenation produced (Joe's tailscale
+	// connection wore "@" in the menu, 2026-08-24).
+	if l := autoLabel(`{"addr":"100.120.18.84:10010"}`); l != "100.120.18.84:10010" {
+		t.Errorf("direct: autoLabel = %q, want the addr", l)
+	}
+	// Fully empty params: nothing to say — empty, not "@".
+	if l := autoLabel(`{}`); l != "" {
+		t.Errorf("empty params: autoLabel = %q, want empty", l)
+	}
 }

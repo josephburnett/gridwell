@@ -123,11 +123,16 @@ func firstExisting(paths ...string) string {
 }
 
 // autoLabel is the connection's automatic display name, shown until the user
-// renames (the alt_user latch): "user@host" once params are set.
+// renames (the alt_user latch): "user@host" for an ssh connection, the addr
+// for a DIRECT one (host empty, addr set — the shape ParseParams admits),
+// "" when there is nothing to say (never a bare "@").
 func autoLabel(paramsDoc string) string {
 	p, err := ParseParams([]byte(paramsDoc))
 	if err != nil {
 		return ""
+	}
+	if p.Host == "" {
+		return p.Addr
 	}
 	return p.User + "@" + p.Host
 }
