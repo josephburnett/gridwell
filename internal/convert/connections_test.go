@@ -12,9 +12,22 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/api/pluginmeta"
+	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/convert"
 	"github.com/josephburnett/gridwell/internal/remote"
 )
+
+// connSpecs maps yaml declarations to the transport's vocabulary the way
+// the serve wiring does (test-local: production maps via connections_json
+// in resolvePluginBinaries/injectConnections).
+func connSpecs(conns []config.ConnectionConfig) []remote.ConnSpec {
+	out := make([]remote.ConnSpec, len(conns))
+	for i, c := range conns {
+		out[i] = remote.ConnSpec{Name: c.Name, Label: c.Label, Host: c.Host, User: c.User,
+			Port: c.Port, Addr: c.Addr, Key: c.Key, KnownHosts: c.KnownHosts}
+	}
+	return out
+}
 
 func TestConnectionsRoundtrip(t *testing.T) {
 	ctx := context.Background()
@@ -70,7 +83,7 @@ func TestConnectionsRoundtrip(t *testing.T) {
 	// The roundtrip: syncing the emitted yaml onto the SAME DB is a
 	// no-op (no version churn, nothing tombstoned, nothing created).
 	before, _ := db.GetByNS(ctx, "geneva1")
-	if _, err := remote.SyncConfig(ctx, db, convert.ConnSpecs(conns), retired); err != nil {
+	if _, err := remote.SyncConfig(ctx, db, connSpecs(conns), retired); err != nil {
 		t.Fatalf("roundtrip sync: %v", err)
 	}
 	after, _ := db.GetByNS(ctx, "geneva1")

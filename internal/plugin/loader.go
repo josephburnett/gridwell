@@ -24,28 +24,19 @@ import (
 	"github.com/josephburnett/gridwell/internal/providerhost"
 )
 
-// LoadAll constructs a Registry from the server config. Each PluginConfig
-// entry becomes one Registry entry keyed by its ID (UUID). A plugin with a
-// binary path is spawned as a subprocess via go-plugin (the desktop/server
-// path); a plugin without one constructs in-process from factories (tests,
-// and the mobile node — no fork/exec on iOS).
-//
-// factories maps plugin kind strings to constructors used only on the
-// in-process path. For kinds not in factories, a binary path must be
-// provided in PluginConfig.Binary.
-func LoadAll(cfg *config.ServerConfig, factories map[string]ServerFactory) (*Registry, error) {
-	return LoadAllWithProviders(cfg, factories, nil)
-}
-
 // ProviderFactory constructs an in-process v2 content provider from the
 // shared config vocabulary (the provider twin of ServerFactory).
 type ProviderFactory func(cfg map[string]string) (contentproviderv1.ContentProviderServer, error)
 
-// LoadAllWithProviders is LoadAll plus in-process provider constructors
-// (bundled binaries; tests). A config entry with Provider: true loads a
-// contentprovider.v1 process (or factory), opens the NODE-owned memory
-// DB at the entry's derived db path, and registers the providerhost
-// adapter — indistinguishable from any plugin above the registry.
+// LoadAllWithProviders constructs a Registry from the server config. Each
+// PluginConfig entry becomes one Registry entry keyed by its ID (UUID). A
+// plugin with a binary path is spawned as a subprocess via go-plugin (the
+// desktop/server path); a plugin without one constructs in-process from
+// factories (tests, and the mobile node — no fork/exec on iOS). A config
+// entry with Provider: true loads a contentprovider.v1 process (or a
+// providerFactories constructor), opens the NODE-owned memory DB at the
+// entry's derived db path, and registers the providerhost adapter —
+// indistinguishable from any plugin above the registry.
 func LoadAllWithProviders(cfg *config.ServerConfig, factories map[string]ServerFactory, providerFactories map[string]ProviderFactory) (*Registry, error) {
 	reg := NewRegistry()
 	for i := range cfg.Plugins {

@@ -55,17 +55,6 @@ func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, err
 	return r.Msg.Jpeg, nil
 }
 
-// NodeIdentity returns the node's own uuid and the qualified id of its node
-// grid. A convenience wrapper over the ONE handshake (ListPlugins carries
-// the same fields); production boot reads PluginList directly.
-func (c *Client) NodeIdentity(ctx context.Context) (nodeUUID, nodeRootGridID string, err error) {
-	r, err := c.cl.ListPlugins(ctx, connect.NewRequest(&pb.ListPluginsRequest{}))
-	if err != nil {
-		return "", "", err
-	}
-	return r.Msg.NodeUuid, r.Msg.NodeRootGridId, nil
-}
-
 // PluginList is the node handshake: the plugin roster plus the node-level
 // facts that ride it (shells_disabled — see data.proto).
 type PluginList struct {

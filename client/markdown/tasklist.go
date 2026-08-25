@@ -55,11 +55,6 @@ func isTaskMarker(src []byte, off int) bool {
 		(src[off+1] == ' ' || src[off+1] == 'x' || src[off+1] == 'X')
 }
 
-// TaskCount returns how many toggleable task checkboxes src renders.
-func TaskCount(src []byte) int {
-	return len(taskMarkerOffsets(src))
-}
-
 // ToggleTask flips the index-th (0-based, document order) task checkbox in
 // src: "[ ]" becomes "[x]", "[x]"/"[X]" becomes "[ ]". Returns the new
 // source and true, or (nil, false) when index addresses no checkbox. The

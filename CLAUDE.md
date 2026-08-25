@@ -170,7 +170,7 @@ Re-litigating them silently is how churn happens.
   plugin derives the frozen face (fs: GetTilePreview thumbnails). The
   client/server URL grammar is pinned to itself by a round-trip seam test.
 - **Id shape (2026-07-25).** New plugin/node ids are 7-char lowercase
-  base36 with a leading letter (`store.NewShortID`); an id is immutable
+  base36 with a leading letter (`idshape.NewShortID`); an id is immutable
   once minted, and both shapes (short + legacy 32-hex) are valid forever.
   The leading letter is load-bearing: it is how URL paths tell a namespace
   segment from a tile id.

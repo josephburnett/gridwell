@@ -180,12 +180,12 @@ func TestNodeGridRefusesContentMutations(t *testing.T) {
 
 func TestListPluginsCarriesNodeIdentity(t *testing.T) {
 	cl, _, _, _ := nodeGridServer(t)
-	nodeUUID, nodeRoot, err := cl.NodeIdentity(context.Background())
+	pl, err := cl.ListPlugins(context.Background())
 	if err != nil {
 		t.Fatalf("ListPlugins: %v", err)
 	}
-	if nodeUUID != "node1" || nodeRoot != "node1/0" {
-		t.Errorf("node identity = %q %q, want node1 node1/0", nodeUUID, nodeRoot)
+	if pl.NodeUUID != "node1" || pl.NodeRootGridID != "node1/0" {
+		t.Errorf("node identity = %q %q, want node1 node1/0", pl.NodeUUID, pl.NodeRootGridID)
 	}
 }
 

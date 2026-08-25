@@ -259,19 +259,17 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 	return nil
 }
 
-// RunServe starts the backend HTTP server — the data plane for the Gridwell
-// desktop app and any plain-browser client: Connect-RPC, the SSE event
-// stream, the wasm client, and shell PTYs. Live URL tiles are hosted natively
-// by the Electron shell, so there is no browser driver here. The listen
-// address comes from resolveBind (loopback by default; server.yaml bind: pins
-// it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM trigger
-// graceful shutdown.
-// RunServe runs the stock host: every plugin an out-of-process binary.
-func RunServe(args []string) int { return RunServeWith(args, nil) }
-
-// RunServeWith is RunServe for a BUNDLED binary (a leaf composer,
-// docs/plugin.md): kinds present in factories load in-process through the
-// same compose door; everything else spawns. The stock host passes nil.
+// RunServeWith starts the backend HTTP server — the data plane for the
+// Gridwell desktop app and any plain-browser client: Connect-RPC, the SSE
+// event stream, the wasm client, and shell PTYs. Live URL tiles are hosted
+// natively by the Electron shell, so there is no browser driver here. The
+// listen address comes from resolveBind (loopback by default; server.yaml
+// bind: pins it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM
+// trigger graceful shutdown.
+//
+// factories is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
+// kinds present in it load in-process through the compose door; everything
+// else spawns out-of-process. The stock host passes nil.
 func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int {
 	// The v2 folds: the native store (local) and the builtin transport
 	// (remote) are node code, always in-process. A composer's own

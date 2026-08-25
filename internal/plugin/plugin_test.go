@@ -83,7 +83,7 @@ func TestLoadAll(t *testing.T) {
 			return &stubServer{}, nil
 		},
 	}
-	reg, err := plugin.LoadAll(cfg, factories)
+	reg, err := plugin.LoadAllWithProviders(cfg, factories, nil)
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}

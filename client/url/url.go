@@ -13,7 +13,7 @@
 //
 // The grammar has one rule: LEADING NON-NUMERIC segments are the anchor's
 // namespace chain (plugin/node ids — guaranteed non-numeric by config.Load
-// and store.NewShortID), the FIRST numeric segment is the anchor grid id,
+// and idshape.NewShortID), the FIRST numeric segment is the anchor grid id,
 // and every following segment is a tile row id in descent order. No leading
 // non-numeric segment means the home anchor ("/" is home — the first
 // configured plugin's root grid, rpc.HomeGrid). The trailing tile id may be

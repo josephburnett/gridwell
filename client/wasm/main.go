@@ -143,7 +143,7 @@ type App struct {
 
 	// caps is the host capability set (client/caps), derived ONCE at boot
 	// from bridge presence. Feature gates read a.caps; nothing else asks
-	// bridgeAvailable() to make a behavior decision.
+	// the bridge to make a behavior decision.
 	caps caps.Caps
 
 	// origin is the serving origin (location.origin), captured once at boot —

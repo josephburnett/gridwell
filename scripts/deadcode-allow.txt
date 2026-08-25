@@ -1,0 +1,9 @@
+# Deliberate exceptions to scripts/check-deadcode.sh, "<file> <func>" per
+# line, each with a reason. Keep this list SHORT — an entry here is a claim
+# that the symbol is part of a shipped surface the deadcode roots can't see.
+
+# The parity oracle's single-node half: the CLI ships CrawlPair (two nodes,
+# one union frontier), while the seam tests (internal/parity,
+# internal/providerhost) crawl one endpoint to prove determinism and the
+# MaxGrids abort. One crawl engine serves both; the sugar stays.
+internal/parity/parity.go Crawl

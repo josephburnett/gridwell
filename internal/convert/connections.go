@@ -83,14 +83,3 @@ func Connections(legacyPath, uuid string) ([]config.ConnectionConfig, []string, 
 	}
 	return out, retired, rows.Err()
 }
-
-// ConnSpecs converts yaml declarations to the transport's vocabulary
-// (the same mapping the serve wiring performs).
-func ConnSpecs(conns []config.ConnectionConfig) []remote.ConnSpec {
-	out := make([]remote.ConnSpec, len(conns))
-	for i, c := range conns {
-		out[i] = remote.ConnSpec{Name: c.Name, Label: c.Label, Host: c.Host, User: c.User,
-			Port: c.Port, Addr: c.Addr, Key: c.Key, KnownHosts: c.KnownHosts}
-	}
-	return out
-}

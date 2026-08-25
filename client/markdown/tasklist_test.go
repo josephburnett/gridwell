@@ -5,6 +5,13 @@ import (
 	"testing"
 )
 
+// TaskCount is the tests' parity oracle: how many toggleable checkboxes the
+// toggle machinery sees. Test-only — production counts nothing, it only
+// toggles (the deadcode gate keeps it that way).
+func TaskCount(src []byte) int {
+	return len(taskMarkerOffsets(src))
+}
+
 func TestToggleTaskBasic(t *testing.T) {
 	src := []byte("# Todo\n\n- [ ] alpha\n- [x] beta\n- [X] gamma\n")
 

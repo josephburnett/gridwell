@@ -16,7 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/proxy"
+	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
 	"github.com/josephburnett/gridwell/plugins/fs"
 )
 
@@ -287,7 +287,7 @@ func TestContentDoorTransit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(fsCloser)
-	proxied, proxClose, err := plugin.ServeInProcess(proxy.New(fsClient))
+	proxied, proxClose, err := plugin.ServeInProcess(proxytest.New(fsClient))
 	if err != nil {
 		t.Fatal(err)
 	}

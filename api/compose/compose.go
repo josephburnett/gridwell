@@ -38,9 +38,6 @@ func InProcess(f Factory) Loadout { return Loadout{factory: f} }
 // (the third-party door).
 func Command(path string) Loadout { return Loadout{command: path} }
 
-// IsZero reports an unset Loadout.
-func (l Loadout) IsZero() bool { return l.factory == nil && l.command == "" }
-
 // Open materializes the plugin: spawn-and-handshake for a Command,
 // construct-and-serve for an InProcess factory. Either way the caller
 // holds a GridwellClient and a closer, and cannot tell which it got.

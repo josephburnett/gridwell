@@ -1,4 +1,4 @@
-// Package proxy is a transparent Gridwell node: a GridwellServer that forwards
+// Package proxytest is a transparent Gridwell node: a GridwellServer that forwards
 // every RPC — unary, server-stream, client-stream, and the bidirectional
 // OpenShell — to a remote GridwellClient with full fidelity.
 //
@@ -7,7 +7,7 @@
 // an in-process remote in one of these to exercise the server's chain
 // qualification without standing up sshhost + an sshd. Production forwarding
 // through a connection lives in sshhost's own per-connection routing.
-package proxy
+package proxytest
 
 import (
 	"context"

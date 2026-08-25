@@ -1,4 +1,4 @@
-package proxy_test
+package proxytest_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/proxy"
+	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
 )
 
 // proxied stands up an in-process "remote" localdb (with a fake shell host),
@@ -32,7 +32,7 @@ func proxied(t *testing.T) gridwellv1.GridwellClient {
 	}
 	t.Cleanup(remoteCloser)
 
-	proxyClient, proxyCloser, err := plugin.ServeInProcess(proxy.New(remoteClient))
+	proxyClient, proxyCloser, err := plugin.ServeInProcess(proxytest.New(remoteClient))
 	if err != nil {
 		t.Fatalf("serve proxy: %v", err)
 	}

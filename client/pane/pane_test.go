@@ -2,6 +2,14 @@ package pane
 
 import "testing"
 
+// Count is the tests' pane tally. Test-only — production walks the tree, it
+// never counts (the deadcode gate keeps it that way).
+func (t *Tree) Count() int {
+	n := 0
+	t.Walk(func(*Pane) { n++ })
+	return n
+}
+
 // twoPaneTree returns a new Tree with two panes: the original (a) and a
 // horizontal sibling (b). Focus remains on a.
 func twoPaneTree(t *testing.T) (tr *Tree, a, b string) {

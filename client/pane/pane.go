@@ -257,13 +257,6 @@ func (t *Tree) FindPane(id string) *Pane {
 	return found
 }
 
-// Count returns the number of leaf panes.
-func (t *Tree) Count() int {
-	n := 0
-	t.Walk(func(*Pane) { n++ })
-	return n
-}
-
 // FocusedPane returns the focused pane, or nil if focus is invalid.
 func (t *Tree) FocusedPane() *Pane { return t.FindPane(t.Focus) }
 

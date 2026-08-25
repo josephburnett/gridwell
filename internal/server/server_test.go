@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/proxy"
+	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
 )
 
 // registerPrimaryLocaldb serves st as a localdb plugin in reg under its stable
@@ -225,7 +225,7 @@ func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	t.Cleanup(innerClose)
 	// The local ssh plugin: a transparent proxy around the remote client,
 	// registered under kind "remote" exactly as production would.
-	proxied, proxClose, err := plugin.ServeInProcess(proxy.New(inner))
+	proxied, proxClose, err := plugin.ServeInProcess(proxytest.New(inner))
 	if err != nil {
 		t.Fatalf("serve proxy: %v", err)
 	}

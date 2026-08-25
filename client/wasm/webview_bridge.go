@@ -28,11 +28,6 @@ func bridge() js.Value {
 	return g
 }
 
-// bridgeAvailable reports whether the native webview bridge is present.
-func bridgeAvailable() bool {
-	return bridge().Truthy()
-}
-
 // bridgeCaps reads the host's OWN capability declaration
 // (window.gridwell.caps — 2026-08-13): which bridge halves it implements.
 // A bridge without the field is the legacy Electron preload, the only

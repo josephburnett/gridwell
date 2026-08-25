@@ -16,7 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugin/proxy"
+	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -383,7 +383,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = grpcConn.Close() })
-	mountClient, mountCloser, err := plugin.ServeInProcess(proxy.New(gridwellv1.NewGridwellClient(grpcConn)))
+	mountClient, mountCloser, err := plugin.ServeInProcess(proxytest.New(gridwellv1.NewGridwellClient(grpcConn)))
 	if err != nil {
 		t.Fatal(err)
 	}
