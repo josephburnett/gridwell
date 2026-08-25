@@ -720,7 +720,12 @@ func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb
 		return nil, asConnectError(err)
 	}
 	if len(candidates) > 0 {
-		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); err != nil {
+		// Reap only on an EXPLICIT NotFound: "unreadable right now"
+		// (Unavailable, a deadline) is not "destroyed", and the reap is
+		// unrecoverable while the trash may be keeping the workspace
+		// for a restore. A missed reap is reclaimed by the boot sweep;
+		// a wrong reap is not reclaimed by anything.
+		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
 			h.reapWorkspaceEphemerals(ctx, candidates, req.Msg.TileId)
 		}
 	}
