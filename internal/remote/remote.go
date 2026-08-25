@@ -1148,18 +1148,12 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 }
 
 // prependSearchResp applies the transit prepend to every id a search
-// answer carries — result tiles and their path chains alike.
+// answer carries — the walk is rpc.QualifySearchResponse, shared with
+// the server's fan-out.
 func prependSearchResp(ns string, resp *gridwellv1.SearchResponse) *gridwellv1.SearchResponse {
-	out := &gridwellv1.SearchResponse{Results: make([]*gridwellv1.SearchResult, 0, len(resp.Results))}
-	for _, r := range resp.Results {
-		qr := &gridwellv1.SearchResult{Snippet: r.Snippet, Score: r.Score}
-		if r.Tile != nil {
-			qr.Tile = rpc.TransitQualifyTiles(ns, []*gridwellv1.Tile{r.Tile})[0]
-		}
-		qr.Path = rpc.TransitQualifyTiles(ns, r.Path)
-		out.Results = append(out.Results, qr)
-	}
-	return out
+	return rpc.QualifySearchResponse(resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
+		return rpc.TransitQualifyTiles(ns, ts)
+	})
 }
 
 func prependTileResp(ns string, resp *gridwellv1.TileResponse) *gridwellv1.TileResponse {

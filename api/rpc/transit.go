@@ -62,6 +62,24 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	return &out
 }
 
+// QualifySearchResponse rewrites every id a search answer carries —
+// result tiles and their path chains alike — through the caller's tile
+// rule (the one place leaf and transit differ, injected exactly like
+// QualifyEventIDs). One implementation for the server's fan-out and the
+// builtin transport's per-connection prepend.
+func QualifySearchResponse(resp *pb.SearchResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.SearchResponse {
+	out := &pb.SearchResponse{Results: make([]*pb.SearchResult, 0, len(resp.Results))}
+	for _, r := range resp.Results {
+		qr := &pb.SearchResult{Snippet: r.Snippet, Score: r.Score}
+		if r.Tile != nil {
+			qr.Tile = qualifyTiles([]*pb.Tile{r.Tile})[0]
+		}
+		qr.Path = qualifyTiles(r.Path)
+		out.Results = append(out.Results, qr)
+	}
+	return out
+}
+
 // QualifyEventIDs prepends prefix to every id in a change event, applying
 // qualifyTile to a TileChanged payload (the one place the leaf and transit
 // rules differ — the caller injects its rule). GridId/TileId are plain

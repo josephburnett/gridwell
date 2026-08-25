@@ -425,19 +425,13 @@ func localizeSearchQuery(query, uuid string) string {
 }
 
 // qualifySearch re-applies the owning namespace to every id in a search
-// response — the result tiles AND their path chains, with the same
-// leaf/transit rule as every other read.
+// response, with the same leaf/transit rule as every other read. The
+// walk is rpc.QualifySearchResponse — shared with the builtin
+// transport's per-connection prepend.
 func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.SearchResponse {
-	out := &pb.SearchResponse{Results: make([]*pb.SearchResult, 0, len(resp.Results))}
-	for _, r := range resp.Results {
-		qr := &pb.SearchResult{Snippet: r.Snippet, Score: r.Score}
-		if r.Tile != nil {
-			qr.Tile = qualifyTilesFor(transit, uuid, []*pb.Tile{r.Tile})[0]
-		}
-		qr.Path = qualifyTilesFor(transit, uuid, r.Path)
-		out.Results = append(out.Results, qr)
-	}
-	return out
+	return rpc.QualifySearchResponse(resp, func(ts []*pb.Tile) []*pb.Tile {
+		return qualifyTilesFor(transit, uuid, ts)
+	})
 }
 
 // ── creates ──────────────────────────────────────────────────────────────────
