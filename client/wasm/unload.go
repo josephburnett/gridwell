@@ -22,6 +22,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/textedit"
 )
 
 // sendBeacon posts one write so it survives the page (contentType picks
@@ -70,9 +71,11 @@ func (a *App) flushOnUnload() {
 // flushContentOnUnload beacons every dirty text body (audit #8,
 // 2026-08-14): the old path enqueued async saves on a dying page, so up
 // to a full debounce window of typing was reliably lost on every tab
-// close — while framing had beacons all along. Claims the SaveBasis
-// exactly like the ordinary save; a refused or oversized beacon falls
-// back to the async enqueue, which beats guaranteeing the loss.
+// close — while framing had beacons all along. What may write, and with
+// what claim, is textedit.DecideUnloadFlush (an UNCACHED owner row
+// beacons on the SaveBasis alone — audit #6's not-a-dead-end rule); a
+// refused or oversized beacon falls back to the async enqueue, which
+// beats guaranteeing the loss.
 func (a *App) flushContentOnUnload() {
 	for _, cid := range a.c.DirtyTileIDs() {
 		data, dirty := a.c.DirtyContent(cid)
@@ -80,12 +83,20 @@ func (a *App) flushContentOnUnload() {
 			continue
 		}
 		t := a.cachedTileByID(cid)
-		if t == nil || t.Kind != rpc.KindText || a.tileReadOnly(t) {
-			continue
+		basis, haveBasis := a.c.SaveBasis(cid)
+		var rowVersion int64
+		editable := false
+		if t != nil {
+			rowVersion = t.Version
+			editable = t.Kind == rpc.KindText && !a.tileReadOnly(t)
 		}
-		version, ok := a.c.SaveBasis(cid)
-		if !ok {
-			version = t.Version
+		version, do := textedit.DecideUnloadFlush(t != nil, editable, rowVersion, basis, haveBasis)
+		switch do {
+		case textedit.UnloadSkip:
+			continue
+		case textedit.UnloadAsync:
+			a.flushTileContent(cid)
+			continue
 		}
 		if path, body := rpc.WriteContentBeacon(cid, version, data); body != nil &&
 			a.sendBeacon(path, body, rpc.BeaconStreamType) {
