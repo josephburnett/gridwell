@@ -260,7 +260,17 @@ func (n *nodeGrid) saveView() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	// Write-temp + rename: a crash mid-write must not truncate the file —
+	// loadView discards an unparseable state wholesale, which would lose
+	// every launcher placement AND the landing viewport at once ("things
+	// stay as you left them"). Entries for plugins currently absent from
+	// the config are deliberately KEPT: a re-added plugin's launcher tile
+	// belongs where the user left it.
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("node grid: persist state: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("node grid: persist state: %w", err)
 	}
 	return nil
