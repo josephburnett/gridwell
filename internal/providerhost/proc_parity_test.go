@@ -1,10 +1,10 @@
 package providerhost_test
 
-// The proc twin of the fs parity gate: the SAME fake process tree served
-// by the legacy proc plugin and by the v2 stack must crawl to zero
-// differences — including the non-authoritative sweep (a dead child is
-// probed and swept; an @info tile is never swept; an unreadable pass
-// sweeps nothing).
+// The v2 proc stack through a full server: a dead child is probed and
+// swept while the survivors keep id and placement, and a retired key
+// never re-mints on reads of an unchanged grid. (Until the 2026-08
+// cutover these were pinned by crawling against the legacy proc plugin;
+// the legacy twin is gone, so the assertions are direct now.)
 
 import (
 	"context"
@@ -19,13 +19,11 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/compose"
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/layout"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/providerhost"
 	"github.com/josephburnett/gridwell/internal/server"
-	procplugin "github.com/josephburnett/gridwell/plugins/proc"
 	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
 )
 
@@ -61,37 +59,6 @@ func writeProc(t *testing.T, root string, pid, ppid int64, name string) {
 	}
 }
 
-func legacyProcNode(t *testing.T, procRoot string) *rpc.Client {
-	t.Helper()
-	return legacyProcNodeAt(t, procRoot, ":memory:")
-}
-
-func legacyProcNodeAt(t *testing.T, procRoot, dbPath string) *rpc.Client {
-	t.Helper()
-	if dbPath != ":memory:" {
-		if err := pluginmeta.Create(dbPath, procUUID, "proc"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	p, err := procplugin.Open(dbPath, procRoot, nopKiller{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = p.Close() })
-	p.SetRootPID(100)
-	client, closer, err := plugin.ServeInProcess(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
-	reg := plugin.NewRegistry()
-	reg.Register(procUUID, "proc", client, nil)
-	srv := server.New(reg, server.Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-}
-
 func providerProcNode(t *testing.T, procRoot string) *rpc.Client {
 	t.Helper()
 	return providerProcNodeAt(t, procRoot, filepath.Join(t.TempDir(), "mem.db"))
@@ -122,57 +89,18 @@ func providerProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 }
 
-func TestProcProviderMatchesLegacyOnTheWire(t *testing.T) {
+// TestProcProviderSweepAndPlacement: place a child, kill another; the
+// next read sweeps only the dead one and the placement persists.
+func TestProcProviderSweepAndPlacement(t *testing.T) {
 	procRoot := fakeProc(t)
-	legacy := legacyProcNode(t, procRoot)
 	v2 := providerProcNode(t, procRoot)
-	mustParity(t, legacy, v2)
-}
-
-func TestProcProviderSweepParity(t *testing.T) {
-	procRoot := fakeProc(t)
-	legacy := legacyProcNode(t, procRoot)
-	v2 := providerProcNode(t, procRoot)
-	mustParity(t, legacy, v2)
-
-	// child-a (pid 200) dies: the next crawl probes and sweeps its well
-	// on both sides — and its grid's @info tile survives on both (the
-	// never-sweep-@info rule).
-	if err := os.RemoveAll(filepath.Join(procRoot, "200")); err != nil {
-		t.Fatal(err)
-	}
-	mustParity(t, legacy, v2)
-
-	// The tile is really gone from both, not just still-matching.
 	ctx := context.Background()
-	pl, err := legacy.ListPlugins(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, err := legacy.GetGrid(ctx, pl.Plugins[0].RootGridID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tile := range g.Tiles {
-		if tile.AltText == "200" {
-			t.Fatal("dead child still listed")
-		}
-	}
-}
-
-func TestProcProviderPlacementParity(t *testing.T) {
-	procRoot := fakeProc(t)
-	legacy := legacyProcNode(t, procRoot)
-	v2 := providerProcNode(t, procRoot)
-	mustParity(t, legacy, v2)
-
-	ctx := context.Background()
-	pl, err := legacy.ListPlugins(ctx)
+	pl, err := v2.ListPlugins(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rootGrid := pl.Plugins[0].RootGridID
-	g, err := legacy.GetGrid(ctx, rootGrid)
+	g, err := v2.GetGrid(ctx, rootGrid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,14 +113,34 @@ func TestProcProviderPlacementParity(t *testing.T) {
 	if child.ID == "" {
 		t.Fatal("child 300 not found")
 	}
-	for _, cl := range []*rpc.Client{legacy, v2} {
-		if _, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
-			TileID: child.ID, Version: child.Version, GridID: rootGrid, X: 5, Y: 5, W: 1, H: 1,
-		}); err != nil {
-			t.Fatal(err)
+	if _, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: child.ID, Version: child.Version, GridID: rootGrid, X: 5, Y: 5, W: 1, H: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// child-a (pid 200) dies: the next read probes and sweeps it.
+	if err := os.RemoveAll(filepath.Join(procRoot, "200")); err != nil {
+		t.Fatal(err)
+	}
+	g, err = v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saw300 bool
+	for _, tile := range g.Tiles {
+		if tile.AltText == "200" {
+			t.Fatal("dead child still listed")
+		}
+		if tile.AltText == "300" {
+			saw300 = true
+			if tile.ID != child.ID || tile.X != 5 || tile.Y != 5 {
+				t.Fatalf("survivor drifted: %+v", tile)
+			}
 		}
 	}
-	mustParity(t, legacy, v2)
+	if !saw300 {
+		t.Fatal("living child swept")
+	}
 }
 
 // TestRetiredKeyStaysRetiredWithoutIdBurn pins the "a retired key stays

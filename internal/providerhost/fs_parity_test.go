@@ -1,36 +1,32 @@
 package providerhost_test
 
-// The stage-4 gate (docs/v2-design.md §7): the SAME directory tree served
-// by the legacy fs plugin and by the v2 stack (fs provider + adapter +
-// layout engine) must be indistinguishable on the wire — same ids, same
-// placement, same framing, same content, no policy blind spots. Both
-// stacks are crawled through full servers by the parity oracle; the two
-// registries share one uuid so the comparison is literal.
+// The v2 fs stack (fs provider + adapter + layout engine) through a full
+// server: placement and framing persist, sweeps remove only the dead,
+// the read-through cache answers when the source goes dark, and a
+// retired id never returns. (Until the 2026-08 cutover these behaviors
+// were pinned by crawling this stack against the legacy fs plugin; the
+// legacy twin is gone, so the assertions are direct now.)
 
 import (
 	"context"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/compose"
-	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/layout"
-	"github.com/josephburnett/gridwell/internal/parity"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/providerhost"
 	"github.com/josephburnett/gridwell/internal/server"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
 	"github.com/josephburnett/gridwell/plugins/fs/fssource"
 	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
 )
 
-const fsUUID = "fsuuidx" // shared by both stacks so ids compare literally
+const fsUUID = "fsuuidx"
 
 // seedTree builds the directory both stacks project.
 func seedTree(t *testing.T) string {
@@ -48,39 +44,6 @@ func seedTree(t *testing.T) string {
 	must(os.WriteFile(filepath.Join(root, "sub", "deep.md"), []byte("deeper"), 0o644))
 	must(os.Mkdir(filepath.Join(root, "sub", "empty"), 0o755))
 	return root
-}
-
-func legacyNode(t *testing.T, root string) *rpc.Client {
-	t.Helper()
-	return legacyNodeAt(t, root, filepath.Join(t.TempDir(), "fs.db"))
-}
-
-// legacyNodeAt pins the legacy DB path — the conversion parity test
-// converts the very file the legacy node keeps serving.
-func legacyNodeAt(t *testing.T, root, dbPath string) *rpc.Client {
-	t.Helper()
-	// Stamp the pluginmeta identity exactly as `gridwell init` does — the
-	// converter verifies it, and every real legacy DB carries it.
-	if err := pluginmeta.Create(dbPath, fsUUID, "fs"); err != nil {
-		t.Fatal(err)
-	}
-	p, err := fsplugin.Open(dbPath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = p.Close() })
-	p.SetRoot(root)
-	client, closer, err := plugin.ServeInProcess(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
-	reg := plugin.NewRegistry()
-	reg.Register(fsUUID, "fs", client, nil)
-	srv := server.New(reg, server.Config{})
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 }
 
 func providerNode(t *testing.T, root string) (*rpc.Client, *fsprovider.Provider) {
@@ -118,109 +81,6 @@ func providerNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsprovide
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), prov
-}
-
-func mustParity(t *testing.T, legacy, v2 *rpc.Client) {
-	t.Helper()
-	sa, sb, err := parity.CrawlPair(context.Background(), legacy, v2, parity.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// menu_entries is the ONE named divergence: legacy fs declares the
-	// #258 search tool; the adapter strips creation entries until the
-	// userdocs store exists (#271) — never advertise a door you cannot
-	// open. Everything else compares with no blind spots.
-	pol := parity.Policy{IgnoreFields: map[string]bool{"menu_entries": true}}
-	if diffs := parity.Diff(sa, sb, pol); len(diffs) != 0 {
-		t.Fatalf("legacy and v2 stacks differ (%d):\n%s", len(diffs), strings.Join(diffs, "\n"))
-	}
-}
-
-func TestFSProviderMatchesLegacyOnTheWire(t *testing.T) {
-	root := seedTree(t)
-	legacy := legacyNode(t, root)
-	v2, _ := providerNode(t, root)
-	mustParity(t, legacy, v2)
-}
-
-func TestFSProviderPlacementParity(t *testing.T) {
-	root := seedTree(t)
-	legacy := legacyNode(t, root)
-	v2, _ := providerNode(t, root)
-	ctx := context.Background()
-
-	// Materialize both, find notes.md on each — the ids must already
-	// agree (both stacks mint in listing order from the same tree).
-	pl, err := legacy.ListPlugins(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rootGrid := pl.Plugins[0].RootGridID
-	g, err := legacy.GetGrid(ctx, rootGrid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Materialize the v2 side too (both stacks mint rows on first read,
-	// exactly like the legacy reconcile). ListPlugins first: Info mints
-	// the root context, as the spawn-time handshake does in production.
-	if _, err := v2.ListPlugins(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := v2.GetGrid(ctx, rootGrid); err != nil {
-		t.Fatal(err)
-	}
-	var notes rpc.Tile
-	for _, tile := range g.Tiles {
-		if tile.AltText == "notes.md" {
-			notes = tile
-		}
-	}
-	if notes.ID == "" {
-		t.Fatal("notes.md not found")
-	}
-
-	// The user drags notes.md — on BOTH stacks (same logical action).
-	for _, cl := range []*rpc.Client{legacy, v2} {
-		if _, err := cl.PlaceTile(ctx, &rpc.PlaceTileRequest{
-			TileID: notes.ID, Version: notes.Version, GridID: rootGrid, X: 6, Y: 2, W: 2, H: 1,
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// And frames the sub directory well.
-	var sub rpc.Tile
-	for _, tile := range g.Tiles {
-		if tile.AltText == "sub" {
-			sub = tile
-		}
-	}
-	for _, cl := range []*rpc.Client{legacy, v2} {
-		if _, err := cl.SetWellView(ctx, &rpc.SetWellViewRequest{
-			TileID: sub.ID, Version: sub.Version, ViewX: 2, ViewY: -1, ViewZoom: 1.4,
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	mustParity(t, legacy, v2)
-
-	// New files arrive; both stacks must lay them into the same gaps.
-	if err := os.WriteFile(filepath.Join(root, "later.md"), []byte("late"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	mustParity(t, legacy, v2)
-}
-
-func TestFSProviderDeleteSweepParity(t *testing.T) {
-	root := seedTree(t)
-	legacy := legacyNode(t, root)
-	v2, _ := providerNode(t, root)
-	// Materialize, then remove a file from disk; the next crawl sweeps
-	// it on both sides identically.
-	mustParity(t, legacy, v2)
-	if err := os.Remove(filepath.Join(root, "data.bin")); err != nil {
-		t.Fatal(err)
-	}
-	mustParity(t, legacy, v2)
 }
 
 func TestProviderServesRememberedListingWhenSourceDark(t *testing.T) {
@@ -319,6 +179,106 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	for _, tile := range g.Tiles {
 		if tile.AltText == "data.bin" && tile.ID == bin.ID {
 			t.Fatal("a recreated file reused the retired id")
+		}
+	}
+}
+
+// TestFSProviderPlacementAndFramingPersist: the user drags notes.md and
+// frames the sub well; a later read serves both back verbatim, and a
+// file that arrives afterwards lands in an empty cell, never on top of
+// the placed tile ("things stay as you left them").
+func TestFSProviderPlacementAndFramingPersist(t *testing.T) {
+	root := seedTree(t)
+	v2, _ := providerNode(t, root)
+	ctx := context.Background()
+	pl, err := v2.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := pl.Plugins[0].RootGridID
+	g, err := v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	find := func(name string) rpc.Tile {
+		t.Helper()
+		for _, tile := range g.Tiles {
+			if tile.AltText == name {
+				return tile
+			}
+		}
+		t.Fatalf("%s not found", name)
+		return rpc.Tile{}
+	}
+	notes, sub := find("notes.md"), find("sub")
+	if _, err := v2.PlaceTile(ctx, &rpc.PlaceTileRequest{
+		TileID: notes.ID, Version: notes.Version, GridID: rootGrid, X: 6, Y: 2, W: 2, H: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v2.SetWellView(ctx, &rpc.SetWellViewRequest{
+		TileID: sub.ID, Version: sub.Version, ViewX: 2, ViewY: -1, ViewZoom: 1.4,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "later.md"), []byte("late"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g, err = v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, sub2, late := find("notes.md"), find("sub"), find("later.md")
+	if got.ID != notes.ID || got.X != 6 || got.Y != 2 || got.W != 2 || got.H != 1 {
+		t.Fatalf("placement did not persist: %+v", got)
+	}
+	if sub2.ViewX != 2 || sub2.ViewY != -1 || sub2.ViewZoom != 1.4 {
+		t.Fatalf("framing did not persist: %+v", sub2)
+	}
+	if late.X >= 6 && late.X < 8 && late.Y == 2 {
+		t.Fatalf("a new file landed on the placed tile: %+v", late)
+	}
+}
+
+// TestFSProviderSweepRemovesOnlyTheDead: a file deleted on disk is swept
+// on the next read; every surviving tile keeps its id and placement.
+func TestFSProviderSweepRemovesOnlyTheDead(t *testing.T) {
+	root := seedTree(t)
+	v2, _ := providerNode(t, root)
+	ctx := context.Background()
+	pl, err := v2.ListPlugins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootGrid := pl.Plugins[0].RootGridID
+	before, err := v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "data.bin")); err != nil {
+		t.Fatal(err)
+	}
+	after, err := v2.GetGrid(ctx, rootGrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Tiles) != len(before.Tiles)-1 {
+		t.Fatalf("sweep removed %d tiles, want exactly 1", len(before.Tiles)-len(after.Tiles))
+	}
+	survivors := map[string]rpc.Tile{}
+	for _, tile := range after.Tiles {
+		if tile.AltText == "data.bin" {
+			t.Fatal("dead file still listed")
+		}
+		survivors[tile.AltText] = tile
+	}
+	for _, tile := range before.Tiles {
+		if tile.AltText == "data.bin" {
+			continue
+		}
+		s, ok := survivors[tile.AltText]
+		if !ok || s.ID != tile.ID || s.X != tile.X || s.Y != tile.Y {
+			t.Fatalf("survivor %s drifted: %+v != %+v", tile.AltText, s, tile)
 		}
 	}
 }
