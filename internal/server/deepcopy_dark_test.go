@@ -37,6 +37,19 @@ type darkSource struct {
 	darkGrids    map[string]bool // local grid id → GetGrid unavailable
 	darkPreviews map[string]bool // local tile id → GetTilePreview unavailable
 	verdict      map[string]error
+	// darkSetTileFrom fails the Nth (1-indexed) and every later SetTile —
+	// the dest-goes-dark-MID-copy shape (a framing writeback into a mount
+	// whose tunnel dropped partway through the walk). 0 = never.
+	darkSetTileFrom int
+	setTileCalls    int
+}
+
+func (d *darkSource) SetTile(ctx context.Context, in *pb.SetTileRequest, opts ...grpc.CallOption) (*pb.TileResponse, error) {
+	d.setTileCalls++
+	if d.darkSetTileFrom > 0 && d.setTileCalls >= d.darkSetTileFrom {
+		return nil, status.Error(codes.Unavailable, "mount dark: tunnel dropped")
+	}
+	return d.GridwellClient.SetTile(ctx, in, opts...)
 }
 
 func (d *darkSource) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ContentChunk], error) {
@@ -316,5 +329,54 @@ func TestGoneIsNeverALink(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "deep copy incomplete") {
 		t.Fatalf("a verdict mid-walk must abort with the partial contract, got: %v", err)
+	}
+}
+
+// TestMidCopyFailureNeverDoublesTheWell pins the deepCopyTile well arm's
+// degrade guard: a failure AFTER the copy well exists (here: the DEST going
+// dark on the framing writeback) must surface as that failure — never fire
+// the dark-SOURCE degrade, which would stack a link well on the very cell
+// the partial copy already occupies (the user then saw an "overlap" refusal
+// pointing at a grid they never touched). Same guard the top-level clone
+// already has (out != nil before sourceUnreachable); the child arm lacked it.
+func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
+	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
+	ctx := context.Background()
+
+	// Source lives in HEALTHY plugin B; the wrapped plugin A is the dest.
+	well, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: rootB, X: 0, Y: 0, W: 1, H: 1, Label: "outer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A NESTED well, so the failing copy runs through the child arm (the
+	// top-level clone has its own, correct, guard).
+	if _, err := cl.CreateWell(ctx, &rpc.CreateWellRequest{
+		GridID: well.ChildGridID, X: 0, Y: 0, W: 1, H: 1, Label: "inner",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The dest tunnel drops MID-copy: the outer copy's framing (1st
+	// SetTile) lands, the inner's (2nd) fails — so the failure travels up
+	// through the child arm with the inner copy already created.
+	dark.darkSetTileFrom = 2
+
+	fresh, err := cl.GetTile(ctx, well.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, cerr := cl.CloneTile(ctx, &rpc.CloneTileRequest{
+		TileID: well.ID, Version: fresh.Version, DestGridID: rootA, X: 0, Y: 0,
+	})
+	if cerr == nil {
+		t.Fatal("a dest-dark mid-copy must surface, not pretend success")
+	}
+	if strings.Contains(cerr.Error(), "overlap") {
+		t.Fatalf("the degrade stacked a link on the partial copy (overlap refusal): %v", cerr)
+	}
+	if !strings.Contains(cerr.Error(), "mount dark") {
+		t.Fatalf("the REAL failure (dest unavailable) must surface, got: %v", cerr)
 	}
 }

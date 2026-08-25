@@ -117,8 +117,14 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		})
 		return err
 	case q.Kind == "well":
-		_, err := h.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, t.X, t.Y)
-		if sourceUnreachable(err) {
+		created, err := h.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, t.X, t.Y)
+		// Degrade ONLY when nothing was created (the source grid was dark
+		// before the copy began) — the same guard the top-level clone has
+		// (out != nil). A failure with a partial in place must surface as
+		// itself: firing the degrade there stacks a link on the cell the
+		// partial already occupies, and the user gets an "overlap" refusal
+		// pointing at a grid they never touched.
+		if created == nil && sourceUnreachable(err) {
 			// The room is DARK, not gone (offline-plan owner decision
 			// 2026-08-14): degrade to a LINK to the original — the dashed
 			// border says "lives elsewhere" in the vocabulary that already
