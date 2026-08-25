@@ -267,9 +267,9 @@ func (s *Server) kickRootFetch(c *Conn) {
 	if c.Params == "" || c.Deleted {
 		return
 	}
-	// A stored NODE-GRID root ("<rnode>/0" — the pre-remote-menu landing)
-	// re-resolves to the remote HOME, once per process; a resolved home
-	// (or a checked node-grid-only remote) is final for this run.
+	// Fast path without dialing: a resolved home is final for this run
+	// (learnRoot re-checks under its own rules — the node-grid re-resolve
+	// and homeChecked live THERE, the one learn implementation).
 	refreshNodeGridRoot := c.RemoteRoot != "" && strings.HasSuffix(c.RemoteRoot, "/0") &&
 		strings.Count(c.RemoteRoot, "/") == 1
 	if c.RemoteRoot != "" && !refreshNodeGridRoot {
@@ -288,7 +288,7 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}
 	lc.rootFetching = true
 	s.mu.Unlock()
-	id := c.ID
+	conn := *c
 	ns := c.NS
 	go func() {
 		defer func() {
@@ -298,35 +298,9 @@ func (s *Server) kickRootFetch(c *Conn) {
 			}
 			s.mu.Unlock()
 		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		root, err := s.remoteHome(ctx, lc)
-		if err != nil || root == "" {
-			// Remote unreachable; retried on the next root-grid read. The
-			// failure is recorded so the well's status_detail can say WHY
-			// it stays childless (status.Convert strips the code prefix).
-			if err != nil {
-				s.setRootErr(ns, status.Convert(err).Message())
-			}
-			return
-		}
-		s.setRootErr(ns, "")
-		s.mu.Lock()
-		if l, ok := s.live[ns]; ok {
-			l.homeChecked = true
-		}
-		s.mu.Unlock()
-		if root == c.RemoteRoot {
-			return // the remote's home IS its node grid; nothing to store
-		}
-		row, err := s.db.SetRemoteRoot(ctx, id, root)
-		if err != nil {
-			return
-		}
-		_ = s.db.BumpGridVersion(ctx)
-		s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-			TileChanged: &gridwellv1.TileChanged{Tile: tileFromConn(row)},
-		}})
+		// Failure is already recorded (rootErr) by learnRoot/ensureLive so
+		// the well's status_detail says why; retried on the next read.
+		_, _ = s.learnRoot(&conn)
 	}()
 }
 

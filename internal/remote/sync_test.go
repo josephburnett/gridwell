@@ -333,3 +333,50 @@ func TestConnectAllIsBounded(t *testing.T) {
 		t.Fatalf("boot blocked %v on a hanging dial — the bound failed", el)
 	}
 }
+
+// TestBootReResolvesNodeGridRoot pins that the boot path and the lazy kick
+// LEARN THE SAME WAY (they were two hand-written copies that had already
+// drifted): a stored node-grid root ("<rnode>/0" — the pre-remote-menu
+// landing) re-resolves to the remote HOME at boot, the live entry records
+// homeChecked so later reads don't re-probe, and the learned child is
+// published so open clients see the well gain its room.
+func TestBootReResolvesNodeGridRoot(t *testing.T) {
+	ctx := context.Background()
+	db := openSyncDB(t)
+	if _, err := SyncConfig(ctx, db, []ConnSpec{
+		{Name: "oldcon", Label: "old", Addr: "127.0.0.1:1"},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	row, err := db.GetByNS(ctx, "oldcon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The pre-remote-menu shape a migrated home carries.
+	if _, err := db.SetRemoteRoot(ctx, row.ID, "farnode/0"); err != nil {
+		t.Fatal(err)
+	}
+	client, closer, err := compose.ServeInProcess(fakeRemote{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+	dialer := func(cfg dial.Config) (gridwellv1.GridwellClient, func(), error) {
+		return client, func() {}, nil
+	}
+	s := New(db, dialer, "")
+	s.SetConfigMode(true)
+	s.ConnectAll(ctx)
+
+	got, _ := db.GetByNS(ctx, "oldcon")
+	if got.RemoteRoot != "farplug1/1" {
+		t.Fatalf("boot left the stale node-grid root: %q, want the re-resolved home farplug1/1", got.RemoteRoot)
+	}
+	s.mu.Lock()
+	lc := s.live["oldcon"]
+	checked := lc != nil && lc.homeChecked
+	s.mu.Unlock()
+	if !checked {
+		t.Fatal("boot must record homeChecked — otherwise every later read re-probes work the boot already did")
+	}
+}
