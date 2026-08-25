@@ -280,12 +280,12 @@ func (a *App) postRename(tileID, alt string) (*rpc.Tile, error) {
 	if t := a.cachedTileByID(tileID); t != nil {
 		version = t.Version
 	}
-	tile, err := a.cl.RenameTile(context.Background(), tileID, version, alt)
-	if err != nil && isVersionConflict(err) {
-		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-			tile, err = a.cl.RenameTile(context.Background(), tileID, fresh.Version, alt)
-		}
-	}
+	var tile *rpc.Tile
+	err := a.claimOnce(tileID, version, nil, func(v int64) error {
+		var e error
+		tile, e = a.cl.RenameTile(context.Background(), tileID, v, alt)
+		return e
+	})
 	return tile, err
 }
 

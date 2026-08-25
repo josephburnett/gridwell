@@ -611,15 +611,16 @@ func (a *App) flushWorkspaceSave() {
 // owner). Failure surfaces (charter §6) and stays unsaved, so the next
 // debounce tick retries naturally.
 func (a *App) postPaneLayout(tileID string, version int64, data []byte) {
-	tile, err := a.cl.WriteContent(context.Background(), tileID, version, data)
-	if err != nil && isVersionConflict(err) {
-		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-			if top := a.ws.Top(); top != nil && top.TileID == tileID {
-				top.TileVersion = fresh.Version
-			}
-			tile, err = a.cl.WriteContent(context.Background(), tileID, fresh.Version, data)
+	var tile *rpc.Tile
+	err := a.claimOnce(tileID, version, func(fresh *rpc.Tile) {
+		if top := a.ws.Top(); top != nil && top.TileID == tileID {
+			top.TileVersion = fresh.Version
 		}
-	}
+	}, func(v int64) error {
+		var e error
+		tile, e = a.cl.WriteContent(context.Background(), tileID, v, data)
+		return e
+	})
 	k := pending.Key{Op: "PaneLayout", ID: tileID}
 	if err != nil {
 		if clientsync.Of(err) == clientsync.OutcomeTransport {

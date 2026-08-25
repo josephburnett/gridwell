@@ -149,15 +149,35 @@ func (a *App) postCrossGridMutate(label string, srcGridID, dstGridID string, cal
 func (a *App) postFramingPersist(label, gid, tileID string, version int64, call func(ctx context.Context, version int64) (*rpc.Tile, error)) {
 	a.persistPosts[label]++
 	go func() {
-		_, err := call(context.Background(), version)
-		if err != nil && isVersionConflict(err) {
-			if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-				_, err = call(context.Background(), fresh.Version)
-			}
-		}
+		err := a.claimOnce(tileID, version, nil, func(v int64) error {
+			_, e := call(context.Background(), v)
+			return e
+		})
 		a.reactFraming(label, gid, pending.Key{Op: label, ID: tileID},
 			func() { a.postFramingPersist(label, gid, tileID, version, call) }, err)
 	}()
+}
+
+// claimOnce is THE one-retry conflict rule (framing-audit decision
+// 2026-08-13, "less cases, less code"), in exactly one place: run call
+// with version; on a version conflict re-claim ONCE via GetTile and
+// retry with the fresh claim — an automatic version-bumping writer (a
+// rename, a resize, a detach-time title capture, a foreign framing
+// write) must never outrank the user's action. onFresh (nil ok) hands
+// the re-claimed row to callers that track a captured version of their
+// own before the retry runs. Every conflict-retrying write goes through
+// here; a sixth hand-rolled copy is how the rule drifts.
+func (a *App) claimOnce(tileID string, version int64, onFresh func(*rpc.Tile), call func(version int64) error) error {
+	err := call(version)
+	if err != nil && isVersionConflict(err) {
+		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
+			if onFresh != nil {
+				onFresh(fresh)
+			}
+			err = call(fresh.Version)
+		}
+	}
+	return err
 }
 
 // doFreezeWrite runs a leaving-gesture freeze writeback (url page / shell
@@ -169,12 +189,7 @@ func (a *App) postFramingPersist(label, gid, tileID string, version int64, call 
 // the cache resyncs instead of drifting (issue #156 — these paths used to
 // bypass reactToErr). Blocking; callers run it from a goroutine.
 func (a *App) doFreezeWrite(label, gid, tileID string, version int64, source, failText string, write func(version int64) error) error {
-	err := write(version)
-	if err != nil && isVersionConflict(err) {
-		if fresh, gerr := a.cl.GetTile(context.Background(), tileID); gerr == nil {
-			err = write(fresh.Version)
-		}
-	}
+	err := a.claimOnce(tileID, version, nil, write)
 	k := pending.Key{Op: label, ID: tileID}
 	if clientsync.Of(err) == clientsync.OutcomeTransport {
 		// Park the freeze: the write closure holds the captured payload
