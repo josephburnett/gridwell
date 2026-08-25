@@ -25,7 +25,7 @@ import (
 // did: identity verification, the connection store, the real dialer.
 func NativeRemoteFactory(cfg map[string]string) (gridwellv1.GridwellServer, error) {
 	if cfg["host"] != "" {
-		return nil, fmt.Errorf("native remote: connection config keys are retired (#251) — connections are data; `gridwell serve` migrates old entries at boot")
+		return nil, fmt.Errorf("native remote: connection config keys are retired (#251) — declare connections under server.yaml `connections:`")
 	}
 	dbPath := cfg["db_file"]
 	if dbPath == "" {
