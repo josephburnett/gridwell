@@ -3,11 +3,18 @@ package rpc
 import (
 	"context"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
+
+// SearchHopTimeout bounds ONE hop's answer during a search fan-out, so
+// a hung hop (a dead ssh tunnel) can't stall the whole search. The one
+// owner for both fan-outs: the server's per-plugin loop and the builtin
+// remote transport's per-connection loop.
+const SearchHopTimeout = 3 * time.Second
 
 // SearchQuery is the parsed form of a Search query — the ONE grammar
 // every plugin reads (issue #244), so `id:` means the same thing in every

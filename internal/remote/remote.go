@@ -1100,7 +1100,11 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
 	out := &gridwellv1.SearchResponse{}
 	for _, hp := range hops {
-		resp, err := hp.client.Search(ctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+		// Each hop bounded (rpc.SearchHopTimeout, shared with the
+		// server's fan-out): one hung tunnel must not stall the search.
+		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
+		resp, err := hp.client.Search(hctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+		cancel()
 		if err != nil {
 			// A hop contributing nothing is policy; contributing nothing
 			// SILENTLY is how the missing export delegate stayed invisible.

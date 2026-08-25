@@ -373,14 +373,11 @@ func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.Ge
 	return h.tileResp(uuid, resp, err)
 }
 
-// searchPluginTimeout bounds each plugin's answer during a fan-out, so
-// one hung plugin (a dead ssh tunnel) can't stall the whole search.
-const searchPluginTimeout = 3 * time.Second
 
 // Search is the one generic find verb (issue #244). scope (any qualified
 // id) routes to the namespace owning it — localized like every routed
 // call; an empty scope fans out to every configured plugin in config
-// order, each bounded by searchPluginTimeout, Unimplemented and errors
+// order, each bounded by rpc.SearchHopTimeout, Unimplemented and errors
 // skipped (a search answers with what answered). Results come back
 // qualified like every other id — tile and path rows alike — so a hit is
 // immediately addressable.
@@ -403,7 +400,7 @@ func (h *connectHandler) Search(ctx context.Context, req *connect.Request[pb.Sea
 		if !ok {
 			continue
 		}
-		pctx, cancel := context.WithTimeout(ctx, searchPluginTimeout)
+		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
 		resp, err := c.Search(pctx, &pb.SearchRequest{Query: localizeSearchQuery(m.Query, p.UUID), Limit: m.Limit})
 		cancel()
 		if err != nil {
