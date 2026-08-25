@@ -82,6 +82,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	remoteSrv := server.New(remoteReg, server.Config{NodeID: "rnodex"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
+	remoteHTTP.Config.Protocols = server.NodeProtocols()
 	remoteHTTP.EnableHTTP2 = true
 	remoteHTTP.Start()
 	t.Cleanup(remoteHTTP.Close)

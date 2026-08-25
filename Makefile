@@ -124,6 +124,7 @@ check: fmt-check proto-check wasm
 	done
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	./scripts/check-deadcode.sh
+	go tool staticcheck ./...
 	cd $(DESKTOP) && npm run typecheck
 	cd $(DESKTOP) && npm test
 

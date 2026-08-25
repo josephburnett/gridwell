@@ -10,7 +10,6 @@ import (
 
 	"connectrpc.com/connect"
 
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
@@ -356,6 +355,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	remoteSrv := New(remoteReg, Config{NodeID: "rnode"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
+	remoteHTTP.Config.Protocols = NodeProtocols()
 	remoteHTTP.EnableHTTP2 = true
 	remoteHTTP.Start()
 	t.Cleanup(remoteHTTP.Close)
@@ -383,7 +383,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = grpcConn.Close() })
-	mountClient, mountCloser, err := plugin.ServeInProcess(proxytest.New(gridwellv1.NewGridwellClient(grpcConn)))
+	mountClient, mountCloser, err := plugin.ServeInProcess(proxytest.New(pb.NewGridwellClient(grpcConn)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ type schemaPlugin struct {
 	schemas map[string]string
 }
 
-func (p *schemaPlugin) Info(ctx context.Context, req *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+func (p *schemaPlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.InfoResponse, error) {
 	info, err := p.Plugin.Info(ctx, req)
 	if err != nil {
 		return nil, err

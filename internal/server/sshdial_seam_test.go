@@ -56,7 +56,7 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.NodeHandler()}
+	httpSrv := &http.Server{Handler: srv.NodeHandler(), Protocols: server.NodeProtocols()}
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 	return ln.Addr().String(), direct

@@ -147,13 +147,13 @@ func SyncConfig(ctx context.Context, db *DB, conns []ConnSpec, retired []string)
 		}
 		if row.AltText != label || (latch && !row.AltUser) {
 			if latch {
-				if row, err = db.Rename(ctx, row.ID, row.Version, label); err != nil {
+				if _, err = db.Rename(ctx, row.ID, row.Version, label); err != nil {
 					return nil, fmt.Errorf("connection %q: label: %w", c.Name, err)
 				}
 			} else if row.AltText != label {
 				// The auto-label path never latches: SetAlt keeps
 				// alt_user as it is (0 here — the row is config-made).
-				if row, err = db.SetAlt(ctx, row.ID, label); err != nil {
+				if _, err = db.SetAlt(ctx, row.ID, label); err != nil {
 					return nil, fmt.Errorf("connection %q: label: %w", c.Name, err)
 				}
 			}

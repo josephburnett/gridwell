@@ -53,7 +53,7 @@ func TestConnectionsRoundtrip(t *testing.T) {
 			t.Fatal(err)
 		}
 		if label != "" {
-			if c, err = db.Rename(ctx, c.ID, c.Version, label); err != nil {
+			if _, err = db.Rename(ctx, c.ID, c.Version, label); err != nil {
 				t.Fatal(err)
 			}
 		}

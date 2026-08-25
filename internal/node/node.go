@@ -164,6 +164,7 @@ func Start(opts Options) (*Node, error) {
 	requestCtx, cancel := context.WithCancel(context.Background())
 	httpSrv := &http.Server{
 		Handler:           srv.NodeHandler(),
+		Protocols:         server.NodeProtocols(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 	}

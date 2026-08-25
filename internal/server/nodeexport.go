@@ -23,8 +23,6 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,12 +31,14 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// NodeHandler wraps the server's HTTP mux in h2c and routes gRPC to the node
-// export. One port then serves every caller: browsers / the Electron shell
-// (HTTP/1.1 Connect, WS, static) hit the mux — behind the password gate when
-// one is configured (auth.go); raw gRPC (a remote mounter's tunnel, the
-// Electron shell PTY relay) hits the export, which the gate deliberately
-// does not cover — federation's transport trust model is the VPN-only bind.
+// NodeHandler routes gRPC to the node export and everything else to the
+// server's HTTP mux. One port then serves every caller: browsers / the
+// Electron shell (HTTP/1.1 Connect, WS, static) hit the mux — behind the
+// password gate when one is configured (auth.go); raw gRPC (a remote
+// mounter's tunnel, the Electron shell PTY relay) hits the export, which the
+// gate deliberately does not cover — federation's transport trust model is
+// the VPN-only bind. Serve it with NodeProtocols: gRPC over a cleartext
+// tunnel needs HTTP/2 without TLS, which plain net/http refuses by default.
 func (s *Server) NodeHandler() http.Handler {
 	g := grpc.NewServer()
 	pb.RegisterGridwellServer(g, &nodeExport{srv: s, h: newConnectHandler(s)})
@@ -50,7 +50,20 @@ func (s *Server) NodeHandler() http.Handler {
 		}
 		browser.ServeHTTP(w, r)
 	})
-	return h2c.NewHandler(root, &http2.Server{})
+	return root
+}
+
+// NodeProtocols is the protocol set for any http.Server serving NodeHandler:
+// HTTP/1.1 for the browser surface plus UNENCRYPTED HTTP/2 for raw gRPC
+// through an ssh tunnel (the connection is already private; TLS-only h2
+// would refuse the mounter). This replaced the deprecated x/net h2c wrapper
+// (Go 1.24's Server.Protocols is the supported form); one owner here so the
+// production server and every test harness negotiate identically.
+func NodeProtocols() *http.Protocols {
+	p := new(http.Protocols)
+	p.SetHTTP1(true)
+	p.SetUnencryptedHTTP2(true)
+	return p
 }
 
 // nodeExport implements the Gridwell service over gRPC by delegating every
