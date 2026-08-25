@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
+	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
 )
 
 // Cross-plugin gesture semantics (owner decision 2026-07-19): LEFT-drag
@@ -478,21 +478,11 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	fsP, err := fsplugin.Open(":memory:", nil)
-	if err != nil {
-		t.Fatalf("fs open: %v", err)
-	}
-	t.Cleanup(func() { _ = fsP.Close() })
-	fsP.SetRoot(dir)
-	info, err := fsP.Info(ctx, &gridwellv1.InfoRequest{})
+	fsClient := newProviderClient(t, "fs", fsprovider.New(dir, nil))
+	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("fs info: %v", err)
 	}
-	fsClient, fsCloser, err := plugin.ServeInProcess(fsP)
-	if err != nil {
-		t.Fatalf("fs serve: %v", err)
-	}
-	t.Cleanup(fsCloser)
 	const fsUUID = "fs-src-uuid"
 	reg.Register(fsUUID, "fs", fsClient, nil)
 

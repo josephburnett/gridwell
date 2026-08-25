@@ -3,16 +3,22 @@ package server
 import (
 	"context"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/api/compose"
+	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/layout"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	procplugin "github.com/josephburnett/gridwell/plugins/proc"
+	"github.com/josephburnett/gridwell/internal/providerhost"
+	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
+	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
 )
 
 // fsPluginUUID / procPluginUUID are the registry keys used by the
@@ -30,6 +36,36 @@ const (
 // localdb plus built-in fs and proc plugins. The fs plugin is rooted at a
 // fresh temp dir (returned as fsRoot) so a Mount of fsPluginUUID — which
 // attaches with the plugin's default config — lands there.
+// newProviderClient stands up the v2 provider stack the way the loader
+// does in production — the provider served in-process, fronted by the
+// node-side providerhost adapter over a fresh layout memory DB — and
+// returns the adapter's client. The SHIPPED fs/proc stack: server tests
+// must exercise it, not a stand-in.
+func newProviderClient(t *testing.T, kind string, impl cpv1.ContentProviderServer) pb.GridwellClient {
+	t.Helper()
+	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
+	if err != nil {
+		t.Fatalf("%s layout: %v", kind, err)
+	}
+	t.Cleanup(func() { _ = mem.Close() })
+	cp, cpCloser, err := compose.ServeProviderInProcess(impl)
+	if err != nil {
+		t.Fatalf("%s provider serve: %v", kind, err)
+	}
+	t.Cleanup(cpCloser)
+	client, closer, err := plugin.ServeInProcess(providerhost.New(cp, mem))
+	if err != nil {
+		t.Fatalf("%s adapter serve: %v", kind, err)
+	}
+	t.Cleanup(closer)
+	return client
+}
+
+func registerProviderPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, impl cpv1.ContentProviderServer) {
+	t.Helper()
+	reg.Register(uuid, kind, newProviderClient(t, kind, impl), nil)
+}
+
 func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
@@ -42,31 +78,10 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	_, root = registerPrimaryLocaldb(t, reg, st)
 
 	fsRoot = t.TempDir()
-	fsP, err := fsplugin.Open(":memory:", nil)
-	if err != nil {
-		t.Fatalf("fs open: %v", err)
-	}
-	fsP.SetRoot(fsRoot)
-	t.Cleanup(func() { _ = fsP.Close() })
-	fsClient, fsCloser, err := plugin.ServeInProcess(fsP)
-	if err != nil {
-		t.Fatalf("fs serve: %v", err)
-	}
-	t.Cleanup(fsCloser)
-	reg.Register(fsPluginUUID, "fs", fsClient, nil)
+	registerProviderPlugin(t, reg, fsPluginUUID, "fs", fsprovider.New(fsRoot, nil))
 	reg.SetLabel(fsPluginUUID, "files")
 
-	procP, err := procplugin.Open(":memory:", t.TempDir(), nil)
-	if err != nil {
-		t.Fatalf("proc open: %v", err)
-	}
-	t.Cleanup(func() { _ = procP.Close() })
-	procClient, procCloser, err := plugin.ServeInProcess(procP)
-	if err != nil {
-		t.Fatalf("proc serve: %v", err)
-	}
-	t.Cleanup(procCloser)
-	reg.Register(procPluginUUID, "proc", procClient, nil)
+	registerProviderPlugin(t, reg, procPluginUUID, "proc", procprovider.New(t.TempDir(), 1, nil))
 	reg.SetLabel(procPluginUUID, "processes")
 
 	srv := New(reg, Config{NodeID: "tnode"})
