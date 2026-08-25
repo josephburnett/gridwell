@@ -53,6 +53,9 @@ echo "== convert-v2 → $V2"
 PASSWORD="$(grep -E '^password:' "$HOME_DIR/server.yaml" | awk '{print $2}' || true)"
 PW_ARGS=()
 [ -n "$PASSWORD" ] && PW_ARGS=(--password "$PASSWORD")
+# Expansions of a possibly-EMPTY array must use the ${arr[@]+"${arr[@]}"}
+# idiom: macOS ships bash 3.2, where a plain "${arr[@]}" on an empty
+# array is an "unbound variable" error under set -u (fixed in bash 4.4).
 
 OLD_PID=""
 NEW_PID=""
@@ -71,7 +74,7 @@ NEW_PID=$!
 sleep 5
 
 if ! "$GW" parity --a "http://127.0.0.1:$PORT_A" --b "http://127.0.0.1:$PORT_B" \
-    "${PW_ARGS[@]}" --scope "$V2/convert-scope.txt" \
+    ${PW_ARGS[@]+"${PW_ARGS[@]}"} --scope "$V2/convert-scope.txt" \
     --ignore-fields status_detail,stale | grep -vE '^skipped'; then
   echo
   echo "migrate-v2: PARITY FAILED — NOTHING was swapped."
