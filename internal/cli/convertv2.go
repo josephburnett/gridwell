@@ -33,6 +33,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/convert"
+	"github.com/josephburnett/gridwell/internal/parity"
 )
 
 // RunConvertV2 implements `gridwell convert-v2 --from HOME --to HOME`.
@@ -56,9 +57,10 @@ Verify BEFORE cutover (the old home is untouched and remains the rollback):
   GRIDWELL_HOME=%s gridwell serve --bind 127.0.0.1:39001 &
   GRIDWELL_HOME=%s gridwell serve --bind 127.0.0.1:39002 &
   gridwell parity --a http://127.0.0.1:39001 --b http://127.0.0.1:39002 \
+      --ignore-fields %s \
       --scope %s/convert-scope.txt [--password ...]
 Zero differences or no cutover.
-`, *to, *from, *to, *to)
+`, *to, *from, *to, strings.Join(parity.ConvertGateIgnoreFields, ","), *to)
 	return 0
 }
 
