@@ -68,6 +68,10 @@ trap cleanup EXIT
 
 # The --ignore-fields list is parity.ConvertGateIgnoreFields — each entry a
 # deliberate, named blind spot — and a test pins this script to it.
+# Structural pass only: conversion changes identity/placement/framing, never
+# content bytes — fs content is the SAME disk under both servers, and hashing
+# every text file in every materialized directory (twice) can run for hours
+# on a whole-machine root.
 echo "== parity gate (old :$PORT_A vs converted :$PORT_B)"
 GRIDWELL_HOME="$HOME_DIR" "$GW" serve --bind "127.0.0.1:$PORT_A" >"$V2/parity-old.log" 2>&1 &
 OLD_PID=$!
@@ -77,6 +81,7 @@ sleep 5
 
 if ! "$GW" parity --a "http://127.0.0.1:$PORT_A" --b "http://127.0.0.1:$PORT_B" \
     ${PW_ARGS[@]+"${PW_ARGS[@]}"} --scope "$V2/convert-scope.txt" \
+    --skip-content --skip-previews \
     --ignore-fields status_detail,stale,menu_entries | grep -vE '^skipped'; then
   echo
   echo "migrate-v2: PARITY FAILED — NOTHING was swapped."
@@ -99,4 +104,4 @@ echo "  rollback: stop the server, then"
 echo "    mv $HOME_DIR ${HOME_DIR}-v2-failed && mv $BACKUPS/v1-home-$NAME-$STAMP $HOME_DIR"
 echo "  restart your server, then verify by hand. Optional health crawl:"
 echo "    $GW parity --a http://127.0.0.1:<port> --b http://127.0.0.1:<port> \\"
-echo "        ${PW_ARGS[*]:-} --scope $HOME_DIR/convert-scope.txt --ignore-fields status_detail,stale,menu_entries"
+echo "        ${PW_ARGS[*]:-} --scope $HOME_DIR/convert-scope.txt --skip-content --skip-previews --ignore-fields status_detail,stale,menu_entries"
