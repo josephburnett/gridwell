@@ -32,16 +32,18 @@ import (
 	gofs "io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
+	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
-	fsplugin "github.com/josephburnett/gridwell/plugins/fs"
-	"github.com/josephburnett/gridwell/plugins/proc"
+	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
+	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -82,10 +84,11 @@ func Start(home string) (string, error) {
 	cfg.Bind = "127.0.0.1:0"
 	cfg.DisableShells = true
 	n, err := node.Start(node.Options{
-		Home:      home,
-		Cfg:       cfg,
-		Factories: inProcessFactories(home),
-		StaticFS:  web.FS,
+		ProviderFactories: inProcessProviderFactories(),
+		Home:              home,
+		Cfg:               cfg,
+		Factories:         inProcessFactories(home),
+		StaticFS:          web.FS,
 	})
 	if err != nil {
 		return "", err
@@ -121,10 +124,25 @@ func Stop() {
 	origin = ""
 }
 
+// inProcessProviderFactories is the mobile provider registry: fs and
+// proc as v2 content providers, constructed exactly as their subprocess
+// mains (cmd/gridwell-provider-*) would, minus the process boundary.
+func inProcessProviderFactories() map[string]plugin.ProviderFactory {
+	return map[string]plugin.ProviderFactory{
+		"fs": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
+			return fsprovider.New(cfg["root"], nil), nil
+		},
+		"proc": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
+			pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
+			return procprovider.New("", pid, nil), nil
+		},
+	}
+}
+
 // inProcessFactories is the mobile plugin registry: every kind the
-// platform supports, constructed exactly as its subprocess main would
-// (cmd/plugin/*), minus the process boundary — and minus shells (no
-// tmux manager; the server refuses shell tiles anyway).
+// platform supports, constructed exactly as its subprocess main would,
+// minus the process boundary — and minus shells (no tmux manager; the
+// server refuses shell tiles anyway).
 func inProcessFactories(home string) map[string]plugin.ServerFactory {
 	return map[string]plugin.ServerFactory{
 		"local": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
@@ -134,8 +152,6 @@ func inProcessFactories(home string) map[string]plugin.ServerFactory {
 			}
 			return local.New(st, nil), nil
 		},
-		"fs":   fsplugin.NewFactory,
-		"proc": proc.NewFactory,
 		"remote": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
 			db, err := remote.OpenDB(cfg["db_file"])
 			if err != nil {

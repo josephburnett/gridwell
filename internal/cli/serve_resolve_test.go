@@ -28,7 +28,7 @@ func TestProviderEntriesResolvePastPluginFactories(t *testing.T) {
 		{ID: "p2", Kind: "fs"},
 	}}
 	factories := map[string]plugin.ServerFactory{"fs": nil} // the bundled shape
-	if err := resolvePluginBinaries(cfg, factories); err != nil {
+	if err := resolvePluginBinaries(cfg, factories, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := filepath.Base(cfg.Plugins[0].Binary); got != "gridwell-provider-fs" {
@@ -36,5 +36,30 @@ func TestProviderEntriesResolvePastPluginFactories(t *testing.T) {
 	}
 	if cfg.Plugins[1].Binary != "" {
 		t.Fatalf("plugin entry with a factory must stay in-process, resolved %q", cfg.Plugins[1].Binary)
+	}
+}
+
+// The provider twin: a bundled PROVIDER factory keeps its entry
+// in-process (no binary resolved), and never satisfies a PLUGIN entry.
+func TestProviderFactoriesKeepProviderEntriesInProcess(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gridwell-plugin-fs"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GRIDWELL_PLUGIN_DIR", dir)
+
+	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{
+		{ID: "p1", Kind: "fs", Provider: true},
+		{ID: "p2", Kind: "fs"},
+	}}
+	providers := map[string]plugin.ProviderFactory{"fs": nil} // the bundled shape
+	if err := resolvePluginBinaries(cfg, nil, providers); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Plugins[0].Binary != "" {
+		t.Fatalf("provider entry with a provider factory must stay in-process, resolved %q", cfg.Plugins[0].Binary)
+	}
+	if got := filepath.Base(cfg.Plugins[1].Binary); got != "gridwell-plugin-fs" {
+		t.Fatalf("plugin entry resolved %q — the provider factory must not satisfy it", cfg.Plugins[1].Binary)
 	}
 }

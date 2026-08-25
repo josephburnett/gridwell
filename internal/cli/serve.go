@@ -235,7 +235,7 @@ func injectConnections(cfg *config.ServerConfig) error {
 // one explicitly in server.yaml, by kind — skipping kinds a bundled
 // binary provides in-process (its factories win: that is the composer's
 // whole choice; an explicit server.yaml binary: still beats both).
-func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin.ServerFactory) error {
+func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin.ServerFactory, providers map[string]plugin.ProviderFactory) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Binary != "" {
@@ -252,6 +252,12 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 		}
 		name := "gridwell-plugin-" + pc.Kind
 		if pc.Provider {
+			// A bundled binary's in-process PROVIDER factory satisfies a
+			// provider entry the same way a plugin factory satisfies a
+			// plugin entry.
+			if _, ok := providers[pc.Kind]; ok {
+				continue
+			}
 			// v2 provider entries spawn the provider binary — a distinct
 			// name because a binary serves ONE service (docs/v2-design.md).
 			name = "gridwell-provider-" + pc.Kind
@@ -276,7 +282,7 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 // factories is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
 // kinds present in it load in-process through the compose door; everything
 // else spawns out-of-process. The stock host passes nil.
-func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int {
+func RunServeWith(args []string, factories map[string]plugin.ServerFactory, providers map[string]plugin.ProviderFactory) int {
 	// The v2 folds: the native store (local) and the builtin transport
 	// (remote) are node code, always in-process. A composer's own
 	// factories (mobile) still win.
@@ -335,7 +341,7 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int 
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
-	if err := resolvePluginBinaries(cfg, factories); err != nil {
+	if err := resolvePluginBinaries(cfg, factories, providers); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
@@ -346,9 +352,10 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory) int 
 	// CLI's own concerns wrap it: the lock above, the banner below,
 	// signals.
 	n, err := node.Start(node.Options{
-		Home:      home,
-		Cfg:       cfg,
-		Factories: factories,
+		Home:              home,
+		Cfg:               cfg,
+		Factories:         factories,
+		ProviderFactories: providers,
 		// The embedded web client by default — the binary is self-contained
 		// (web.FS); server.yaml static:/--static is the dev override that
 		// serves a checkout from disk instead.

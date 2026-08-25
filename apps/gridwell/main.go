@@ -11,4 +11,4 @@ import (
 	"github.com/josephburnett/gridwell/internal/cli"
 )
 
-func main() { os.Exit(cli.Main(os.Args[1:], nil)) }
+func main() { os.Exit(cli.Main(os.Args[1:], nil, nil)) }
