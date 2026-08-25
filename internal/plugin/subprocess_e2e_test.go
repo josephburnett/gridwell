@@ -12,15 +12,17 @@ import (
 	_ "modernc.org/sqlite" // register the sqlite driver for pluginmeta.Ensure
 )
 
-// buildPluginBinary compiles cmd/plugin/<kind> into a temp file and returns its
-// path. Skips the test on build failure (e.g. a constrained CI without a Go
-// toolchain) rather than failing spuriously.
+// buildPluginBinary compiles the test-only guest binary
+// (internal/plugin/guesttest) into a temp file and returns its path. A
+// build failure FAILS the test: the old skip-on-failure masked the
+// build path going stale for weeks — these tests silently skipped on
+// every run while the subprocess transport went unexercised.
 func buildPluginBinary(t *testing.T, kind string) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "gridwell-"+kind)
-	cmd := exec.Command("go", "build", "-o", out, "github.com/josephburnett/gridwell/cmd/plugin/"+kind)
+	cmd := exec.Command("go", "build", "-o", out, "github.com/josephburnett/gridwell/internal/plugin/guesttest")
 	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("go build %s: %v\n%s", kind, err, b)
+		t.Fatalf("go build guesttest: %v\n%s", err, b)
 	}
 	return out
 }
