@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -37,6 +38,14 @@ type Adapter struct {
 	gridwellv1.UnimplementedGridwellServer
 	cp  cpv1.ContentProviderClient
 	mem *layout.DB
+
+	// kind memoizes the provider's declared Kind after the first
+	// successful handshake. Identity-stable for the provider's lifetime
+	// — remembered so a DARK provider (crashed subprocess) degrades to
+	// the cached listing instead of failing every GetGrid on the Info
+	// call (tenet 6: the remembered answer, stamped stale).
+	kindMu sync.Mutex
+	kind   string
 }
 
 // New builds the adapter. The caller owns both halves' lifecycles.
@@ -243,6 +252,26 @@ func buildTiles(gridID string, tiles []layout.Tile, entries []*cpv1.Entry) []*gr
 	return out
 }
 
+// sourceKind answers the provider's declared Kind, from the memo when
+// the provider is unreachable — a read that already degraded to the
+// remembered listing must not fail on this identity-stable stamp.
+func (a *Adapter) sourceKind(ctx context.Context) (string, error) {
+	a.kindMu.Lock()
+	memo := a.kind
+	a.kindMu.Unlock()
+	ci, err := a.cp.Info(ctx, &cpv1.InfoRequest{})
+	if err != nil {
+		if memo != "" && notNow(err) {
+			return memo, nil
+		}
+		return "", err
+	}
+	a.kindMu.Lock()
+	a.kind = ci.Kind
+	a.kindMu.Unlock()
+	return ci.Kind, nil
+}
+
 // grid fetches, merges, and builds one grid — GetGrid's core, shared
 // with GetTile so the two can never disagree.
 func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gridwellv1.Tile, error) {
@@ -289,12 +318,12 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 		}
 		tiles = kept
 	}
-	ci, err := a.cp.Info(ctx, &cpv1.InfoRequest{})
+	kind, err := a.sourceKind(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	gridID := strconv.FormatInt(gid, 10)
-	g := &gridwellv1.Grid{Id: gridID, SourceKind: ci.Kind, SourceId: resp.SourceLabel, Stale: stale}
+	g := &gridwellv1.Grid{Id: gridID, SourceKind: kind, SourceId: resp.SourceLabel, Stale: stale}
 	return g, buildTiles(gridID, tiles, facts), nil
 }
 
@@ -362,7 +391,7 @@ func (a *Adapter) key(tileID string) (int64, string, error) {
 
 // PlaceTile terminates at the memory DB: in-grid only, unversioned (the
 // retired legacy plugins' semantics, carried verbatim).
-func (a *Adapter) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
 	id, _, err := a.key(req.TileId)
 	if err != nil {
 		return nil, err
@@ -379,7 +408,7 @@ func (a *Adapter) PlaceTile(_ context.Context, req *gridwellv1.PlaceTileRequest)
 	if err := a.mem.Place(id, req.X, req.Y, req.W, req.H); err != nil {
 		return nil, err
 	}
-	return a.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: req.TileId})
+	return a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: req.TileId})
 }
 
 // SetTile terminates the framing arms at the memory DB. Rename is
