@@ -373,7 +373,6 @@ func (h *connectHandler) GetTile(ctx context.Context, req *connect.Request[pb.Ge
 	return h.tileResp(uuid, resp, err)
 }
 
-
 // Search is the one generic find verb (issue #244). scope (any qualified
 // id) routes to the namespace owning it — localized like every routed
 // call; an empty scope fans out to every configured plugin in config

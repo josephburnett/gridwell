@@ -64,7 +64,7 @@ const (
 	colorURLLine           = "#7a5a9a"
 	colorURLLineFaded      = "#4a3a5a"
 	// colorURLLiveLine is the pane border used when a URL tile is live
-	// (WebSocket stream open). Same purple hue as colorURLLine but brighter
+	// (native view attached). Same purple hue as colorURLLine but brighter
 	// and more saturated so it's clearly distinct from the frozen state.
 	// The faded variant (issue #226) dims when the pane loses focus, but
 	// stays brighter than the frozen faded purple so live vs frozen still
@@ -1302,8 +1302,8 @@ func (a *App) drawGhostTile(n *rpc.Tile, x, y, w, h, parentCellSize float64, r p
 //   - root (nothing descended) → tan
 //
 // The focused boolean picks the saturated vs faded variant of that
-// hue. urlLive is true when an active WebSocket stream is open for
-// this pane, indicating a live Chromium tab. If the grid containing
+// hue. urlLive is true when a live native view is attached to this
+// pane — a live Chromium tab. If the grid containing
 // the descended tile isn't cached yet, we fall back to the generic
 // blue so the user still sees "descended into something".
 func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {

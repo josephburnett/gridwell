@@ -54,9 +54,9 @@ type BorderInput struct {
 	// Focused is true when this pane is the keyboard-focused pane in
 	// the split tree.
 	Focused bool
-	// URLLive is true when there's an open WebSocket stream rendering
-	// a live Chromium tab into this pane. Only meaningful for a
-	// descent into a URL tile.
+	// URLLive is true when a live native view (WebContentsView) renders
+	// a Chromium tab into this pane. Only meaningful for a descent into
+	// a URL tile.
 	URLLive bool
 	// InSourceGrid is true when the pane's currently-viewed grid is
 	// source-backed (fs or proc). Drives the brown Exit border for a

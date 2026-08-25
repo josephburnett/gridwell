@@ -1,10 +1,10 @@
 // Package plugin — loader builds the plugin registry from server config.
-// On desktop/server, every plugin (localdb, fs, proc, ssh) is a
-// separately-compiled go-plugin binary, spawned because its config sets
-// binary != "". The in-process factory path (loopback TCP gRPC, no
-// subprocess) serves two callers: tests, and the MOBILE node (mobile/ —
-// owner decision, offline-plan phase 2: iOS forbids fork/exec, so the
-// same gRPC surface runs in-process there) — see loadOne.
+// Since the v2 fold, local and remote are NODE code (the serve wiring's
+// native factories); fs and proc are content providers, spawned as
+// gridwell-provider-* subprocesses or compiled in through a
+// ProviderFactory (gridwell-all, mobile — iOS forbids fork/exec). Any
+// entry with binary != "" spawns as a go-plugin subprocess: the
+// third-party door (docs/plugin.md).
 package plugin
 
 import (

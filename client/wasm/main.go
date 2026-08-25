@@ -448,7 +448,8 @@ type paneLocal struct {
 	// urlView is the live native WebContentsView handle when this pane is
 	// descended into a live URL tile; nil otherwise. Closed via closeURLStream.
 	urlView *urlView
-	// shellConn is the live shell session (WebSocket + xterm.js overlay) when
+	// shellConn is the live shell session (main-process gRPC OpenShell
+	// relay + xterm.js overlay) when
 	// this pane is descended into a live shell tile; nil otherwise. Closed via
 	// closeShellStream / releaseShellStream.
 	shellConn *shellStreamConn

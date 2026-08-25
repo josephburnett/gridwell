@@ -165,7 +165,7 @@ check-parity: build node-modules
 	cd $(DESKTOP) && GRIDWELL_SERVE_BIN=gridwell-all npm run test:e2e:web
 
 # check-federation is the SPAWN GATE (issue #58): the real binaries —
-# gridwell init/serve and the go-plugin subprocesses including gridwell-ssh —
+# gridwell init/serve and the go-plugin provider subprocesses —
 # through a real ssh tunnel, one write/read crossing every hop. The in-process
 # seam tests cannot see go-plugin spawn: the pluginmeta sqlite-driver bug kept
 # every test green while every production spawn failed. Guarded by the

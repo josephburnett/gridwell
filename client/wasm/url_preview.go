@@ -59,8 +59,8 @@ func previewBlobKey(n *rpc.Tile) int64 {
 
 // drawURLTileInPane renders a URL tile that's currently the pane's
 // TextFocus (i.e., the user descended into it). The pane's inner-rect
-// (x, y, w, h) gets the cached preview image letterboxed to fit. While the
-// WebSocket stream is open, frames flow into the same urlPreview cache, so
+// (x, y, w, h) gets the cached preview image letterboxed to fit. While a
+// live view is attached, mirror frames flow into the same urlPreview cache, so
 // this draw call automatically reflects them. (The old frozen-descent
 // cover-crop pan is gone with cover mode itself — under fit there is no
 // overflow to pan into.)
