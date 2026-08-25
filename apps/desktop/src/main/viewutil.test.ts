@@ -12,6 +12,7 @@ import {
   openBelowUrl,
   serializeHistory,
   parseHistory,
+  reviveNavigation,
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   classifyRightPress,
@@ -291,4 +292,31 @@ test('openBelowUrl forwards web urls and drops everything else', () => {
   assert.equal(openBelowUrl('mailto:a@b.c'), null);
   assert.equal(openBelowUrl('about:blank'), null);
   assert.equal(openBelowUrl(''), null);
+});
+
+// The revive tie-break (found 2026-08-24): url_string is user-editable
+// through the content door, url_history is written only by the freeze —
+// when they disagree, restoring the stack navigated to the page the user
+// just typed over. The address wins.
+test('reviveNavigation: the edited address beats a stale back-stack', () => {
+  const history = JSON.stringify({
+    index: 1,
+    entries: [
+      { url: 'https://a.example/', title: 'a' },
+      { url: 'https://b.example/', title: 'b' },
+    ],
+  });
+  // Agreeing: the stack restores.
+  assert.deepEqual(reviveNavigation('https://b.example/', history), {
+    kind: 'restore',
+    history: { index: 1, entries: [
+      { url: 'https://a.example/', title: 'a' },
+      { url: 'https://b.example/', title: 'b' },
+    ] },
+  });
+  // The user edited the address: plain-load it, never the stale stack.
+  assert.deepEqual(reviveNavigation('https://c.example/', history), { kind: 'load' });
+  // No/invalid history: plain load (a corrupt blob must never break revive).
+  assert.deepEqual(reviveNavigation('https://c.example/', ''), { kind: 'load' });
+  assert.deepEqual(reviveNavigation('https://c.example/', '{broken'), { kind: 'load' });
 });

@@ -142,6 +142,25 @@ export function serializeHistory(
   return JSON.stringify({ index: idx, entries: es });
 }
 
+// reviveNavigation decides how a placed url tile comes back: restore the
+// persisted back-stack (issue #113), or plain-load the address. The address
+// (url_string) is a fact the user can EDIT through the content door, while
+// the back-stack is written only by the freeze (SetURLState) — so the two
+// can disagree, and when they do the ADDRESS wins: restoring the stack
+// would navigate to the page the user just typed over ("I changed the url
+// and it went back to the old page"). Pure, so the tie-break is pinned by a
+// unit test instead of only observable by editing a frozen tile's address
+// in the live app.
+export function reviveNavigation(
+  url: string,
+  history: string | undefined,
+): { kind: 'restore'; history: UrlHistory } | { kind: 'load' } {
+  const h = parseHistory(history);
+  if (!h) return { kind: 'load' };
+  if (url !== '' && h.entries[h.index].url !== url) return { kind: 'load' };
+  return { kind: 'restore', history: h };
+}
+
 // parseHistory validates persisted history JSON back into a restorable shape,
 // or null when absent/invalid (the caller falls back to a plain loadURL — a
 // corrupt blob must never break revive).
