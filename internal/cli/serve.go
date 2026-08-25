@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/web"
 )
@@ -199,11 +200,16 @@ func injectConnections(cfg *config.ServerConfig) error {
 	if len(remotes) > 1 {
 		return fmt.Errorf("connections: %d remote entries — one transport owns the connection list; remove the extras", len(remotes))
 	}
-	specs := make([]map[string]any, 0, len(cfg.Connections))
+	// The TYPED spec, not a hand-keyed map: remote.ConnSpec is the shape
+	// nativeremote unmarshals, so marshaling it here is the one place the
+	// yaml vocabulary meets the transport's. TestInjectConnectionsCarries
+	// EveryField pins the mapping exhaustive — a field added to ConnSpec
+	// without a line here fails that test instead of silently dropping.
+	specs := make([]remote.ConnSpec, 0, len(cfg.Connections))
 	for _, c := range cfg.Connections {
-		specs = append(specs, map[string]any{
-			"Name": c.Name, "Label": c.Label, "Host": c.Host, "User": c.User,
-			"Port": c.Port, "Addr": c.Addr, "Key": c.Key, "KnownHosts": c.KnownHosts,
+		specs = append(specs, remote.ConnSpec{
+			Name: c.Name, Label: c.Label, Host: c.Host, User: c.User,
+			Port: c.Port, Addr: c.Addr, Key: c.Key, KnownHosts: c.KnownHosts,
 		})
 	}
 	blob, err := json.Marshal(specs)
