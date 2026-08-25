@@ -113,6 +113,14 @@ func New(reg *plugin.Registry, cfg Config) *Server {
 	return srv
 }
 
+// Close releases what New created: the node grid's in-process grpc
+// listener. The registry is the caller's to close (Node.Close does).
+func (s *Server) Close() {
+	if s.nodeClose != nil {
+		s.nodeClose()
+	}
+}
+
 // routeClient resolves a plugin uuid to its client: the node grid provider
 // for the node's own uuid, else the registry. The ONE routing lookup — the
 // Connect handler, the shell WS bridge, the session endpoint, and the preview

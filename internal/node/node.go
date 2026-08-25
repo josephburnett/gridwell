@@ -133,6 +133,7 @@ type Node struct {
 	Reg *plugin.Registry
 	Ln  net.Listener
 
+	srv           *server.Server
 	httpSrv       *http.Server
 	cancelRequest context.CancelFunc
 }
@@ -174,7 +175,7 @@ func Start(opts Options) (*Node, error) {
 		reg.Close()
 		return nil, err
 	}
-	return &Node{Reg: reg, Ln: ln, httpSrv: httpSrv, cancelRequest: cancel}, nil
+	return &Node{Reg: reg, Ln: ln, srv: srv, httpSrv: httpSrv, cancelRequest: cancel}, nil
 }
 
 // ServeBackground starts serving on the listener; the returned channel
@@ -196,6 +197,7 @@ func (n *Node) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err := n.httpSrv.Shutdown(ctx)
+	n.srv.Close()
 	n.Reg.Close()
 	return err
 }
