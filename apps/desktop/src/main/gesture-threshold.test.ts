@@ -41,6 +41,20 @@ test('the drag threshold agrees across the canvas and both native copies', () =>
 // lives in two places: viewutil.ts (exported, unit-tested) and urlview-preload.ts
 // (inlined — the preload is sandboxed and cannot import from main). The single
 // owner is viewutil.ts; this test fails the build if the preload copy drifts.
+// The FAR threshold (#119) joined later and was left out of this lint —
+// a drifted far threshold means a fast flick arms a pane gesture on the
+// canvas but pops a context menu over the live view.
+test('the right-drag far threshold agrees between viewutil and the preload', () => {
+  const viewutil = literal('apps/desktop/src/main/viewutil.ts', /RIGHT_DRAG_FAR_THRESHOLD\s*=\s*([\d.]+)/);
+  const preload = literal('apps/desktop/src/preload/urlview-preload.ts', /RIGHT_DRAG_FAR_THRESHOLD\s*=\s*([\d.]+)/);
+
+  assert.equal(
+    preload,
+    viewutil,
+    'urlview-preload.ts RIGHT_DRAG_FAR_THRESHOLD drifted from viewutil.ts (the owner); update both and keep them equal',
+  );
+});
+
 test('the right-drag time threshold agrees between viewutil and the preload', () => {
   const viewutil = literal('apps/desktop/src/main/viewutil.ts', /RIGHT_DRAG_TIME_MS\s*=\s*([\d.]+)/);
   const preload = literal('apps/desktop/src/preload/urlview-preload.ts', /RIGHT_DRAG_TIME_MS\s*=\s*([\d.]+)/);
