@@ -51,8 +51,8 @@ func (a *App) isNodeGridPane(p *pane.Pane) bool {
 // pluginByUUID returns the plugin with the given (possibly chain-
 // qualified) namespace: the local list first, then every fetched remote
 // menu context (remote-menu, 2026-08-16 — a remote plugin's descent
-// guards and picker need its PluginInfo, and its uuid arrives
-// chain-qualified so the spaces can never collide).
+// guards need its PluginInfo, and its uuid arrives chain-qualified so
+// the spaces can never collide).
 func (a *App) pluginByUUID(u string) (rpc.PluginInfo, bool) {
 	for i := range a.plugins {
 		if a.plugins[i].UUID == u {

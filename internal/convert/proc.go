@@ -61,7 +61,6 @@ func Proc(legacyPath, outPath, uuid, kind string) (*Result, error) {
 
 	res := &Result{}
 	gridPID := map[int64]int64{}
-	gridByPID := map[int64]int64{}
 	rows, err := src.Query(`SELECT id, pid, root_cx, root_cy, root_zoom FROM grids ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -92,7 +91,6 @@ func Proc(legacyPath, outPath, uuid, kind string) (*Result, error) {
 			return nil, fmt.Errorf("convert proc: grid %d: %w", c.id, err)
 		}
 		gridPID[c.id] = c.pid
-		gridByPID[c.pid] = c.id
 		res.GridIDs = append(res.GridIDs, c.id)
 		res.Grids++
 	}
@@ -151,7 +149,6 @@ func Proc(legacyPath, outPath, uuid, kind string) (*Result, error) {
 		entriesByGrid[t.gridID] = append(entriesByGrid[t.gridID], entry)
 		res.Tiles++
 	}
-	_ = gridByPID
 
 	for _, gid := range res.GridIDs {
 		lr := &cpv1.ListResponse{Entries: entriesByGrid[gid], Authoritative: false,

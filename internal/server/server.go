@@ -79,8 +79,9 @@ type Server struct {
 	// plugin's lifetime, so repeat ListPlugins / Subscribe calls must not
 	// re-handshake every plugin (a consistently slow remote made every
 	// palette open pay pluginInfoTimeout). Failures are never cached — the
-	// next call retries. Invalidated on nothing today: a uuid is never
-	// re-registered with a different backing plugin within one server run.
+	// next call retries. Invalidated when a plugin's declared facts change
+	// under one uuid (invalidateInfoCache: a SetRootView framing write, a
+	// launcher placement through the node grid).
 	infoMu    sync.Mutex
 	infoCache map[string]*pb.InfoResponse
 }

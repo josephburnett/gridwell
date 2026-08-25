@@ -349,16 +349,16 @@ type App struct {
 	// A second openURLModal call while this is true is a no-op.
 	urlModalOpen bool
 
-	// instPicker is the shared modal-form container (modal_form.go — born
+	// modalCard is the shared modal-form container (modal_form.go — born
 	// as the instance picker's, inherited by the entry-params form when
-	// the picker died, 2026-08-23); instPickerOpen gates re-entry and
+	// the picker died, 2026-08-23); modalOpen gates re-entry and
 	// parks live views;
-	// instPickerFuncs collects the current render's js callbacks so a
+	// modalFuncs collects the current render's js callbacks so a
 	// re-render or close releases them (the no-leak discipline every
 	// modal here follows).
-	instPicker      js.Value
-	instPickerOpen  bool
-	instPickerFuncs []js.Func
+	modalCard      js.Value
+	modalOpen  bool
+	modalFuncs []js.Func
 
 	// lastTextareaTileID tracks which text-tile id the singleton
 	// textarea is currently bound to (i.e., whose blob it holds in its
@@ -635,7 +635,7 @@ type ghost struct {
 // original position if the drop is rejected.
 type dragState struct {
 	// menuNS is the node whose menu offered a template item (remote-menu):
-	// primitives create same-node only; parameterized plugin drops too.
+	// primitives create same-node only.
 	menuNS       string
 	originPaneID string
 	// originFocused records whether the origin pane was ALREADY focused when

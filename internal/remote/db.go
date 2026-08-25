@@ -1,14 +1,16 @@
-// Package sshhost is the multi-connection ssh plugin (issues #199, #251):
-// one plugin process hosting MANY remote-node mounts, each a connection WELL
-// on the plugin's INSTANCE grid — created and managed through the client's
-// instance picker, never a landing page. The connection's parameters (host,
-// user, key path, …) are the well's CONTENT — committed through the one
-// content door (WriteContent) via the #198 creation schema — and its child
-// is the remote's node grid, reached through a per-connection sub-namespace
-// segment the plugin mints and routes: `<ssh-plugin>/<conn>/<remote-plugin>/<id>`.
-// The plugin peels its connection segment exactly as a node peels a plugin
-// segment (rpc.TransitQualifyTiles — the same one transit rule), so
-// namespaces recurse and server.yaml stops naming hosts.
+// Package remote is the builtin transport (v2 #269, folded into the node):
+// one implementation hosting MANY remote-node mounts. Connections are
+// server.yaml CONFIG (`connections:`, reversing #199) reconciled into this
+// DB at boot (sync.go) — the DB is the node-side MATERIALIZATION: each
+// connection is a row holding its namespace segment, params, label, and
+// learned remote root, presented as a menu row of its own. A connection's
+// child is the remote's home, reached through the per-connection namespace
+// segment the transport mints and routes:
+// `<transport>/<conn>/<remote-plugin>/<id>`. The transport peels its
+// connection segment exactly as a node peels a plugin segment
+// (rpc.TransitQualifyTiles — the same one transit rule), so namespaces
+// recurse. Deleting a connection (removing it from the yaml) tombstones its
+// segment forever — a retired name never returns.
 package remote
 
 import (

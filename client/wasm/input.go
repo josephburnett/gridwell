@@ -1495,11 +1495,9 @@ func (a *App) startDescent(p *pane.Pane, well *rpc.Tile) {
 				return
 			}
 		}
-		// An UNCONFIGURED PLUGIN WELL (issue #251, the drop-first rule):
-		// this descent is where the instance gets picked or created, and
-		// adoption completes the descent the user asked for.
 		// An entry-minted tool with uncommitted params prompts here —
-		// #209's drop-first rule, the connection-well pattern (#258).
+		// #209's drop-first rule (#258): the descent is where the params
+		// form opens, and committing them completes the descent asked for.
 		if a.entryTileNeedsParams(well) {
 			a.openEntryParamsForm(p, well)
 			return

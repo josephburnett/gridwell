@@ -57,12 +57,12 @@ export const EV = {
   shellData: 'gw:shell-data', // ShellDataEvent — PTY output for a pane's terminal
   shellExit: 'gw:shell-exit', // ShellExitEvent — the pane's stream ended (exactly once)
   error: 'gw:error', // ErrorEvent — the ONE wire for every main-process failure
+                     // (electron:webview | electron:shell | electron:backend)
+                     // that must reach the user. Charter §6: one owner, no
+                     // second "silent" path for a main-process failure.
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window/ctrl-click link (issue #111)
   freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture (issue #237)
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus (issue #170)
-                      // (webview, session, sidecar) that must reach the user.
-                      // Charter §1/§6: one owner, no second "silent" path for
-                      // a main-process failure.
 } as const;
 
 // ViewRightdown carries the press in physical screen coordinates

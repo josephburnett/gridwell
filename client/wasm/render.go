@@ -849,10 +849,11 @@ func (a *App) drawNodeWithPreview(n *rpc.Tile, x, y, w, h, parentCellSize float6
 		drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
-	// An UNCONFIGURED PLUGIN WELL (issue #251): no child to fetch or
-	// preview — the plugin's identity glyph inside a SOLID plugin-family
-	// border (owned, not a link; dashed stays reserved for links) says "a
-	// plugin thing waits here; descend to configure it".
+	// A STALE UNCONFIGURED PLUGIN WELL (pre-config-managed connections):
+	// no child to fetch or preview — the plugin's identity glyph inside a
+	// SOLID plugin-family border (owned, not a link; dashed stays reserved
+	// for links) says "a plugin thing waits here"; descending explains the
+	// well predates yaml connections and offers deletion.
 	if n.ChildGridID == "" && n.ConfigurePluginID != "" {
 		a.cctx.Set("fillStyle", colorBg)
 		a.cctx.Call("fillRect", x, y, w, h)
@@ -1212,8 +1213,8 @@ func drawNode(c js.Value, n *rpc.Tile, x, y, w, h float64, selected bool, outsid
 		c.Call("fillRect", x, y, w, h)
 		border := colorFocusBorder
 		if n.ChildGridID == "" && n.ConfigurePluginID != "" {
-			// An unconfigured plugin well (issue #251): the plugin family
-			// color says "a plugin thing waits here". SOLID border — it is
+			// A stale unconfigured plugin well: the plugin family color
+			// says "a plugin thing waits here". SOLID border — it is
 			// owned, not a link; dashed stays reserved for links.
 			border = colorPluginBorder
 		}

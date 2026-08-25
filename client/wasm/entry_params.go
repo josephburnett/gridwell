@@ -68,14 +68,14 @@ func (a *App) openEntryParamsForm(p *pane.Pane, t *rpc.Tile) {
 		a.reportErr(errsurface.Error, "entry", "entry form: "+err.Error())
 		return
 	}
-	if a.instPickerOpen {
+	if a.modalOpen {
 		return
 	}
-	a.instPickerOpen = true
+	a.modalOpen = true
 	a.draw()
 
 	doc := a.doc
-	modal := a.instPickerEl()
+	modal := a.modalCardEl()
 	modal.Set("innerHTML", "")
 	card := doc.Call("createElement", "div")
 	cs := card.Get("style")
@@ -124,11 +124,11 @@ func (a *App) openEntryParamsForm(p *pane.Pane, t *rpc.Tile) {
 	paneID, tileID, version, gid := p.ID, t.ID, t.Version, t.GridID
 	close := func() {
 		modal.Get("style").Set("display", "none")
-		a.instPickerOpen = false
-		a.releaseInstPickerFuncs()
+		a.modalOpen = false
+		a.releaseModalFuncs()
 		a.draw()
 	}
-	submitCb := a.pickerFunc(func(_ js.Value, args []js.Value) any {
+	submitCb := a.modalFunc(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 {
 			args[0].Call("preventDefault")
 		}
@@ -168,7 +168,7 @@ func (a *App) openEntryParamsForm(p *pane.Pane, t *rpc.Tile) {
 		return nil
 	})
 	f.Call("addEventListener", "submit", submitCb)
-	keyCb := a.pickerFunc(func(_ js.Value, args []js.Value) any {
+	keyCb := a.modalFunc(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 && args[0].Get("key").String() == "Escape" {
 			args[0].Call("preventDefault")
 			close()

@@ -134,8 +134,7 @@ func (a *App) bubbleLabel(p *pane.Pane) (label string, editable, muted bool) {
 
 // doorFind resolves the tile the focused pane's current level was entered
 // through (the DOOR — client/door), assembling the inputs from the caches:
-// the level below's grid when there is one, the plugin declarations, and
-// cached instance grids (kicking fetches on misses so the answer converges).
+// the level below's grid when there is one, and the plugin declarations.
 func (a *App) doorFind(p *pane.Pane) (rpc.Tile, door.Kind) {
 	var parent map[string]rpc.Tile
 	if len(p.Up) > 0 {

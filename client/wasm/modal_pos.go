@@ -10,10 +10,10 @@ import (
 )
 
 // centerCardOnActivePane positions a modal card over the ACTIVE pane's
-// center (issue #251): the pane you acted in — clicked the menu, descended
-// the unparameterized tile — is where the dialog appears, not the middle of
+// center: the pane you acted in — clicked the menu, descended the
+// params-pending tile — is where the dialog appears, not the middle of
 // the screen. The ONE centering rule for every modal card (the url modal
-// and the instance picker): the geometry decision lives in
+// and the entry-params form): the geometry decision lives in
 // panebox.ModalCardPos; this function only measures and applies styles.
 //
 // Call AFTER the modal is visible (the card must have layout to measure).

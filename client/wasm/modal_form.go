@@ -72,16 +72,17 @@ func buildSchemaFieldRows(doc js.Value, card js.Value, form *schemaform.Form) ma
 	return inputs
 }
 
-// instPickerEl lazily creates the fixed overlay container the modal
-// forms render into. The id stays gw-inst-picker: the e2e drivers and
-// the live-view parking predicate key on it.
-func (a *App) instPickerEl() js.Value {
-	if a.instPicker.Truthy() {
-		return a.instPicker
+// modalCardEl lazily creates the fixed overlay container the modal
+// forms render into. Nothing external keys on the container id: the e2e
+// drives the form's own ids (#gw-entry-form / #gw-entry-ok), and the
+// live-view parking predicate reads a.modalOpen, not the DOM.
+func (a *App) modalCardEl() js.Value {
+	if a.modalCard.Truthy() {
+		return a.modalCard
 	}
 	doc := a.doc
 	modal := doc.Call("createElement", "div")
-	modal.Set("id", "gw-inst-picker")
+	modal.Set("id", "gw-modal")
 	st := modal.Get("style")
 	st.Set("position", "fixed")
 	st.Set("inset", "0")
@@ -91,23 +92,23 @@ func (a *App) instPickerEl() js.Value {
 	st.Set("background", "rgba(0,0,0,0.45)")
 	st.Set("zIndex", "20")
 	doc.Get("body").Call("appendChild", modal)
-	a.instPicker = modal
+	a.modalCard = modal
 	return modal
 }
 
-// pickerFunc registers a js callback owned by the current modal render.
-func (a *App) pickerFunc(fn func(this js.Value, args []js.Value) any) js.Func {
+// modalFunc registers a js callback owned by the current modal render.
+func (a *App) modalFunc(fn func(this js.Value, args []js.Value) any) js.Func {
 	f := js.FuncOf(fn)
-	a.instPickerFuncs = append(a.instPickerFuncs, f)
+	a.modalFuncs = append(a.modalFuncs, f)
 	return f
 }
 
-// releaseInstPickerFuncs releases every callback the current render owns.
+// releaseModalFuncs releases every callback the current render owns.
 // The DOM nodes holding them are discarded wholesale (innerHTML reset), so
 // no removeEventListener bookkeeping is needed — only the Go-side release.
-func (a *App) releaseInstPickerFuncs() {
-	for _, f := range a.instPickerFuncs {
+func (a *App) releaseModalFuncs() {
+	for _, f := range a.modalFuncs {
 		f.Release()
 	}
-	a.instPickerFuncs = nil
+	a.modalFuncs = nil
 }
