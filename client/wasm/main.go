@@ -356,7 +356,7 @@ type App struct {
 	// modalFuncs collects the current render's js callbacks so a
 	// re-render or close releases them (the no-leak discipline every
 	// modal here follows).
-	modalCard      js.Value
+	modalCard  js.Value
 	modalOpen  bool
 	modalFuncs []js.Func
 
