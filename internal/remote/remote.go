@@ -306,14 +306,45 @@ func (s *Server) kickRootFetch(c *Conn) {
 
 // fanInRemote forwards a connection's remote change events, each id prefixed
 // with the connection segment. Plain retry loop: the transport underneath
-// self-heals (sshdial's redialer), so a dropped stream just re-subscribes.
+// self-heals (sshdial's redialer), so a dropped stream just re-subscribes —
+// but never silently: a connection whose events stop presents as "tiles
+// stopped updating" with no evidence, so each transition is logged and
+// published as an EventPluginHealth (the same contract the server's
+// fanInEvents keeps for local plugins, issue #47).
 func (s *Server) fanInRemote(ctx context.Context, ns string, client gridwellv1.GridwellClient) {
+	healthy := true
+	report := func(up bool, detail string) {
+		s.hub.publish(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
+			PluginUuid: ns, Healthy: up, Detail: detail,
+		}}})
+	}
 	for {
 		stream, err := client.Subscribe(ctx, &gridwellv1.SubscribeRequest{})
-		if err == nil {
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("gridwell: remote %s: event subscribe failed: %v (retrying in 5s)", ns, err)
+			if healthy {
+				healthy = false
+				report(false, err.Error())
+			}
+		} else {
+			if !healthy {
+				healthy = true
+				report(true, "")
+			}
 			for {
-				ev, err := stream.Recv()
-				if err != nil {
+				ev, rerr := stream.Recv()
+				if rerr != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					log.Printf("gridwell: remote %s: event stream ended: %v (retrying in 5s)", ns, rerr)
+					if healthy {
+						healthy = false
+						report(false, rerr.Error())
+					}
 					break
 				}
 				s.hub.publish(rpc.TransitQualifyEvent(ns, ev))
