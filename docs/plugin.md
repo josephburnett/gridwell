@@ -76,14 +76,18 @@ mountcache),config,cli,dbformat,doctype,...}` plus `client/` and `web/`.
 It knows how to OPEN the door (spawn a Command, accept an InProcess
 loadout) and never what's behind it.
 
-### A plugin module (the example shape, ×4)
+### A plugin module (the example shape)
 
 ```
 plugins/fs/
-  go.mod                  requires .../api ONLY
-  fs.go ...               the implementation (from internal/plugin/fs)
-  cmd/gridwell-plugin-fs/ main: guest.Serve(fs.New(...))
+  go.mod                     requires .../api ONLY
+  provider/ fsfile/ ...      the implementation
+  cmd/gridwell-provider-fs/  main: guest.ServeProvider(provider.New(...))
 ```
+(2026-08-24: the legacy full-`gridwell.v1` fs/proc plugins retired with
+the v2 cutover; the in-repo examples are v2 content providers. The
+`gridwell.v1` guest door — `guest.Serve` — remains the third-party
+surface.)
 localdb additionally absorbs `internal/store` (+ its CLAUDE.md contract,
 unchanged) and the tmux/shellsvc machinery its binary owns.
 

@@ -17,9 +17,14 @@ import (
 	"google.golang.org/grpc/status"
 
 	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
-	procplugin "github.com/josephburnett/gridwell/plugins/proc"
 	"github.com/josephburnett/gridwell/plugins/proc/procsource"
 )
+
+// Killer is the signal interface. Injected so tests never signal real
+// processes. Production uses syscall.Kill (sysKiller).
+type Killer interface {
+	Kill(pid int64, sig syscall.Signal) error
+}
 
 // infoLabel is the metadata tile's display label (the legacy key).
 const infoLabel = "@info"
@@ -39,12 +44,12 @@ type Provider struct {
 	cpv1.UnimplementedContentProviderServer
 	procRoot string
 	rootPID  int64
-	killer   procplugin.Killer
+	killer   Killer
 }
 
 // New builds a provider. Empty procRoot uses /proc; rootPID <= 0 uses
 // pid 1; nil killer signals real processes.
-func New(procRoot string, rootPID int64, killer procplugin.Killer) *Provider {
+func New(procRoot string, rootPID int64, killer Killer) *Provider {
 	if procRoot == "" {
 		procRoot = procsource.DefaultRoot
 	}

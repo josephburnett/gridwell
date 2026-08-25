@@ -45,14 +45,6 @@
         "to": "gridwell"
       },
       {
-        "from": "../../gridwell-plugin-fs",
-        "to": "gridwell-plugin-fs"
-      },
-      {
-        "from": "../../gridwell-plugin-proc",
-        "to": "gridwell-plugin-proc"
-      },
-      {
         "from": "../../gridwell-provider-fs",
         "to": "gridwell-provider-fs"
       },

@@ -1,7 +1,5 @@
 /gridwell
 /gridwell-plugin-local
-/gridwell-plugin-fs
-/gridwell-plugin-proc
 /gridwell-plugin-remote
 /gridwell-provider-fs
 /gridwell-provider-proc

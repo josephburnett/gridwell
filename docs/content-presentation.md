@@ -41,7 +41,7 @@ independent copies:
 | Provider | Presentation storage | Notes |
 |---|---|---|
 | **local** | `plugins/local/store` — the reference implementation | The full split (`emitTileChanged` / `finishContentEdit`), the model everything else imitates |
-| **fs** | own SQLite schema + migrations + reconcile; placement/framing/root-view via the shared `plugins/griddb` helpers | The DB is ~half presentation plumbing: `x/y/w/h`, `view_*`, `root_cx/cy/zoom`, auto-layout cursor — around the path→id identity map, which is the only part that is genuinely fs's |
+| **fs** | own SQLite schema + migrations + reconcile; placement/framing/root-view via the shared griddb helpers (RETIRED 2026-08-24 with the legacy plugins — the v2 layout engine is `internal/layout`) | The DB is ~half presentation plumbing: `x/y/w/h`, `view_*`, `root_cx/cy/zoom`, auto-layout cursor — around the path→id identity map, which is the only part that is genuinely fs's |
 | **proc** | same shape as fs, second copy of the schema/migrations/reconcile | griddb deduplicates the *mutations*, not the schema, the migrations, or the reconcile |
 | **remote (ssh)** | bespoke — `ssh_connections` carries `x/y/w/h`, `view_*`, `alt_user`, `version` inline (`plugins/remote/db.go`) | A third, hand-rolled copy of placement + framing + rename-latch + version semantics; ~200 of its 296 lines are presentation, not connections |
 | **node grid** | none — `PlaceTile` is refused; tiles sit in a synthesized centered row; the root viewport lives in a JSON state file | A fourth root-view implementation; and the launcher — the federation surface itself — **cannot be rearranged at all** |

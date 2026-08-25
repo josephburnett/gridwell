@@ -20,11 +20,24 @@ import (
 
 	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	fslegacy "github.com/josephburnett/gridwell/plugins/fs"
 	"github.com/josephburnett/gridwell/plugins/fs/fsfile"
 	"github.com/josephburnett/gridwell/plugins/fs/fssource"
 	"github.com/josephburnett/gridwell/plugins/fs/trash"
 )
+
+// MenuEntrySearch is the (+) menu entry id fs declares (#258); the
+// search well itself waits on the userdocs store (#271).
+const MenuEntrySearch = "search"
+
+// SearchParamSchema is the form the client prompts with on first
+// descent into a search well.
+const SearchParamSchema = `{
+  "type": "object",
+  "properties": {
+    "query": {"type": "string", "title": "name contains"}
+  },
+  "required": ["query"]
+}`
 
 // Host is the destructive side-effect surface, injected so tests never
 // touch real files (the legacy plugin's discipline).
@@ -91,13 +104,14 @@ func (p *Provider) Info(context.Context, *cpv1.InfoRequest) (*cpv1.InfoResponse,
 		Kind:        "fs",
 		DisplayName: "files",
 		Glyph:       "folder",
-		// The same (+) tool the legacy plugin declares (#258) — one
-		// schema, one id, two declarers until the legacy plugin dies.
+		// The (+) tool fs declares (#258). The adapter strips creation
+		// entries until the userdocs store exists (#271), so this is a
+		// forward declaration of the search well.
 		MenuEntries: []*cpv1.MenuEntry{{
-			Id:          fslegacy.MenuEntrySearch,
+			Id:          MenuEntrySearch,
 			Label:       "search",
 			Kind:        "well",
-			ParamSchema: fslegacy.SearchParamSchema,
+			ParamSchema: SearchParamSchema,
 		}},
 	}
 	// No configured root → ROOTLESS (the legacy rule): the plugin is

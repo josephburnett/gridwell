@@ -8,13 +8,13 @@
 #
 # Two worlds, one verdict: a symbol is dead when the native world cannot
 # reach it AND either its package is not part of the wasm build or the wasm
-# world cannot reach it either. Packages named *test (shellsvctest,
-# dbformattest) exist for tests and are exempt. Deliberate exceptions go in
+# world cannot reach it either. Packages named *test (shellsvctest) exist
+# for tests and are exempt. Deliberate exceptions go in
 # scripts/deadcode-allow.txt as "<file> <func>" lines with a comment.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-NATIVE_ROOTS=(./apps/gridwell ./apps/gridwell-all ./plugins/fs/cmd/... ./plugins/proc/cmd/... ./plugins/griddb/...)
+NATIVE_ROOTS=(./apps/gridwell ./apps/gridwell-all ./plugins/fs/cmd/... ./plugins/proc/cmd/...)
 PKGS=(./internal/... ./api/... ./client/...)
 
 # "path/file.go:12:6: unreachable func: Name" -> "path/file.go Name"
