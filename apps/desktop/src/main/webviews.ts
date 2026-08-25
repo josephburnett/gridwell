@@ -28,7 +28,7 @@ const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js
 
 interface Entry {
   view: WebContentsView;
-  tileId: number;
+  tileId: string;
   objectId: string;
   bounds: Bounds;
   hidden: boolean;
@@ -215,7 +215,7 @@ export class WebviewRegistry {
   }
 
   // tileIdFor returns the tile id hosted in paneId, or undefined.
-  tileIdFor(paneId: string): number | undefined {
+  tileIdFor(paneId: string): string | undefined {
     return this.entries.get(paneId)?.tileId;
   }
 
@@ -235,7 +235,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: number, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false): Promise<void> {
+  async place(paneId: string, tileId: string, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false): Promise<void> {
     const rounded = roundBounds(bounds);
     // ONE host-local session (owner decision 2026-07-26): every live url
     // tile, local or through a mount, browses on the shared persistent

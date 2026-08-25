@@ -47,7 +47,7 @@ app.whenReady().then(async () => {
   const win = new BaseWindow({ width: 800, height: 600, show: true });
   const registry = new WebviewRegistry(win, { onNav: (ev) => navEvents.push(ev) });
 
-  registry.place('pane1', 42, 'obj-harness', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
+  registry.place('pane1', 'u1/42', 'obj-harness', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
 
   const jpeg = await waitForNonEmptyCapture(registry, 'pane1', 6000);
   if (jpeg.length === 0) fail('capturePage produced no frame within 6s');
@@ -60,7 +60,7 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 500));
   if (navEvents.length === 0) fail('no nav event fired');
   const last = navEvents[navEvents.length - 1];
-  if (last.tileId !== 42) fail(`nav tileId wrong: ${last.tileId}`);
+  if (last.tileId !== 'u1/42') fail(`nav tileId wrong: ${last.tileId}`);
   console.log(`nav ok: title=${JSON.stringify(last.title)} url-prefix=${last.url.slice(0, 16)}`);
 
   // remove() returns a freeze snapshot.
@@ -77,7 +77,7 @@ app.whenReady().then(async () => {
   // Chromium session is host-local now — Chromium's own disk persistence is
   // the system of record, so a crashed view no longer risks losing logins.)
   const reg2 = new WebviewRegistry(win, {});
-  await reg2.place('pane2', 43, 'obj-dead', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await reg2.place('pane2', 'u1/43', 'obj-dead', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   if ((await waitForNonEmptyCapture(reg2, 'pane2', 6000)).length === 0) {
     fail('dead-view scenario: view produced no frame within 6s');
   }
@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
   registerWebviewIpc(reg3, rootWin.webContents, win);
   const TALL_URL =
     'data:text/html,' + encodeURIComponent('<body style="margin:0;height:20000px">tall</body>');
-  await reg3.place('pane3', 44, 'obj-touch', TALL_URL, { x: 0, y: 0, width: 800, height: 600 });
+  await reg3.place('pane3', 'u1/44', 'obj-touch', TALL_URL, { x: 0, y: 0, width: 800, height: 600 });
   if ((await waitForNonEmptyCapture(reg3, 'pane3', 6000)).length === 0) {
     fail('touch scenario: view produced no frame within 6s');
   }

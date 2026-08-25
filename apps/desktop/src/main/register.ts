@@ -140,7 +140,7 @@ export function registerWebviewIpc(
 // makeNavForwarder returns a registry onNav callback that ships nav events
 // to the renderer over EV.nav.
 export function makeNavForwarder(rootWC: WebContents) {
-  return (ev: { paneId: string; tileId: number; url: string; title: string }) => {
+  return (ev: { paneId: string; tileId: string; url: string; title: string }) => {
     safeSend(rootWC, EV.nav, ev);
   };
 }
@@ -166,7 +166,7 @@ export function makeZoomKeyForwarder(rootWC: WebContents): (ev: ZoomKeyEvent) =>
 }
 
 // sendFrame ships a mirror/capture frame to the renderer.
-export function sendFrame(rootWC: WebContents, paneId: string, tileId: number, jpegBase64: string): void {
+export function sendFrame(rootWC: WebContents, paneId: string, tileId: string, jpegBase64: string): void {
   if (jpegBase64) safeSend(rootWC, EV.frame, { paneId, tileId, jpegBase64 });
 }
 

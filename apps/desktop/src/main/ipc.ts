@@ -135,7 +135,7 @@ export interface ShellExitEvent {
 
 export interface PlaceArgs {
   paneId: string;
-  tileId: number;
+  tileId: string;
   // objectId identifies which tile a pane is showing, so a pane reused for a
   // different tile tears its old view down instead of just re-navigating.
   objectId: string;
@@ -189,13 +189,13 @@ export interface FreezeResult {
 
 export interface FrameEvent {
   paneId: string;
-  tileId: number;
+  tileId: string;
   jpegBase64: string;
 }
 
 export interface NavEvent {
   paneId: string;
-  tileId: number;
+  tileId: string;
   url: string;
   title: string;
 }
