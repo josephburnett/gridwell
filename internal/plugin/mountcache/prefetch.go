@@ -222,8 +222,10 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	// A leaf link's target is what the link renders and resolves through:
 	// warm the target row (and its face/body) even if its own grid is
 	// never walked.
+	// walkTile owns the seen-set: pre-marking the target here would make
+	// the recursion below return at its seen-check with nothing warmed —
+	// and poison the target's later natural visit too.
 	if target := t.GetLinkTargetId(); target != "" && !w.seenTiles[target] {
-		w.seenTiles[target] = true
 		if !w.pause() {
 			return false
 		}

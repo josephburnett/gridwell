@@ -136,3 +136,4 @@ func TestStaleBitMarksCacheServedGrids(t *testing.T) {
 		t.Error("the stale bit leaked into the stored row")
 	}
 }
+
