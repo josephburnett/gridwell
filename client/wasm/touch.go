@@ -57,7 +57,12 @@ func touchNow() float64 {
 // claimed, the whole gesture tail is forwarded, per-finger lifts included.
 // The listeners are non-passive so preventDefault stops the browser's own
 // handling and its duplicate compatibility mouse events.
-func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point) bool) {
+//
+// Returns the four allocated js.Funcs: a caller whose element is
+// per-session (the shell container — rebuilt on every descend) MUST
+// Release them on teardown; the one-time surfaces (canvas, textarea,
+// toggle button) may drop the return.
+func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point) bool) []js.Func {
 	active := false
 	opts := js.Global().Get("Object").New()
 	opts.Set("passive", false)
@@ -92,10 +97,11 @@ func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point)
 			return nil
 		})
 	}
-	el.Call("addEventListener", "touchstart", handler("start"), opts)
-	el.Call("addEventListener", "touchmove", handler("move"), opts)
-	el.Call("addEventListener", "touchend", handler("end"), opts)
-	el.Call("addEventListener", "touchcancel", handler("end"), opts)
+	fns := []js.Func{handler("start"), handler("move"), handler("end"), handler("end")}
+	for i, name := range []string{"touchstart", "touchmove", "touchend", "touchcancel"} {
+		el.Call("addEventListener", name, fns[i], opts)
+	}
+	return fns
 }
 
 // touchPoints converts a TouchList to touchgest points (clientX/Y — the same

@@ -44,12 +44,13 @@ type shellStreamConn struct {
 	anchor string
 	path   []string
 
-	onData         js.Func // term.onData(bytes string) callback
-	onResize       js.Func // term.onResize({cols, rows})
-	onMouse        js.Func // container right-button → canvas gesture pipeline
-	onLinkProvide  js.Func // xterm link provider: scans lines for http(s) urls
-	onLinkActivate js.Func // shared link click handler → ephemeral url descent
-	onOSCURL       js.Func // OSC 5522 from the gridwell-open shim → ephemeral url descent
+	onData         js.Func   // term.onData(bytes string) callback
+	onResize       js.Func   // term.onResize({cols, rows})
+	onMouse        js.Func   // container right-button → canvas gesture pipeline
+	onLinkProvide  js.Func   // xterm link provider: scans lines for http(s) urls
+	onLinkActivate js.Func   // shared link click handler → ephemeral url descent
+	onOSCURL       js.Func   // OSC 5522 from the gridwell-open shim → ephemeral url descent
+	touchFns       []js.Func // the container's overlay-touch handlers (installOverlayTouch)
 
 	closed bool
 
@@ -172,10 +173,9 @@ func (a *App) probeShellSessionAlive(tileID string, then func(alive bool)) {
 	}()
 }
 
-// setShellAlive overrides the cached probe result for tileID. Used
-// when the wasm has firsthand knowledge: a successful WS attach
-// means the session IS alive; a WS rejection with PolicyViolation
-// means it ISN'T. Triggers a redraw.
+// setShellAlive overrides the cached probe result for tileID — used when
+// the wasm has firsthand knowledge; today that is onShellExit's
+// sessionGone verdict (alive=false). Triggers a redraw on change.
 func (a *App) setShellAlive(tileID string, alive bool) {
 	cur, ok := a.shellAlive[tileID]
 	a.shellAlive[tileID] = alive
@@ -335,7 +335,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 	// Touch: multi-finger gestures feed the shared translation (issue #191);
 	// single fingers stay native to the terminal. The ascend handle is the
 	// bottom bar's slot (issue #214) — the canvas touch layer covers it.
-	a.installOverlayTouch(container, shellTouchClaim())
+	touchFns := a.installOverlayTouch(container, shellTouchClaim())
 
 	// Initial size — the fit addon will overwrite it, but the bind message
 	// lets the plugin start the PTY at the right dimensions.
@@ -354,6 +354,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		anchor:       p.Anchor,
 		path:         slices.Clone(p.Path),
 		onMouse:      onMouse,
+		touchFns:     touchFns,
 		lastCols:     uint16(cols),
 		lastRows:     uint16(rows),
 	}
@@ -709,6 +710,13 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	}
 	if conn.onOSCURL.Truthy() {
 		conn.onOSCURL.Release()
+	}
+	for _, f := range conn.touchFns {
+		f.Release()
+	}
+	// The mouse-routing target must not outlive the container it names.
+	if a.touchDownTarget.Truthy() && a.touchDownTarget.Equal(conn.container) {
+		a.touchDownTarget = js.Value{}
 	}
 	if conn.term.Truthy() {
 		conn.term.Call("dispose")
