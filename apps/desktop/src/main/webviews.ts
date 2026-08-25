@@ -10,7 +10,7 @@ import {
   minWidthZoomFactor,
   composeZoom,
   serializeHistory,
-  parseHistory,
+  reviveNavigation,
   URL_MIN_LAYOUT_WIDTH,
   shouldSurfaceFailLoad,
   failLoadMessage,
@@ -46,6 +46,10 @@ interface Entry {
   // an ephemeral visit, which has nothing to re-descend into, so the context
   // menu offers no Freeze Page there (issue #240).
   durable: boolean;
+  // focusRecheck is the steal guard's pending settle-timer (issue #172).
+  // Tracked so remove() can cancel it: the closure holds the view, and
+  // firing after webContents.close() would throw uncaught in main.
+  focusRecheck: ReturnType<typeof setTimeout> | null;
 }
 
 // USER_CLICK_FOCUS_GRACE_MS is how long after a forwarded left press a view
@@ -316,18 +320,19 @@ export class WebviewRegistry {
       // of the canvas overlay. syncURLViews will call setHidden for this pane on
       // the next draw() and reaffirm the correct state.
       const startHidden = this._globalHidden;
-      e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable };
+      e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
       view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
       this.wireNav(paneId, e);
       this.applyMinWidthZoom(e);
-      // A persisted back-stack revives with its history (issue #113); absent
-      // or invalid falls back to a plain load — a corrupt blob must never
-      // break revive.
-      const h = parseHistory(history);
-      if (h) {
-        void view.webContents.navigationHistory.restore({ entries: h.entries, index: h.index });
+      // A persisted back-stack revives with its history (issue #113); absent,
+      // invalid, or DISAGREEING with the tile's (user-editable) address falls
+      // back to a plain load of the address — reviveNavigation owns the
+      // tie-break and is unit-tested.
+      const nav = reviveNavigation(url, history);
+      if (nav.kind === 'restore') {
+        void view.webContents.navigationHistory.restore({ entries: nav.history.entries, index: nav.history.index });
       } else {
         void view.webContents.loadURL(url);
       }
@@ -464,6 +469,12 @@ export class WebviewRegistry {
     const e = this.entries.get(paneId);
     if (!e) return { jpegBase64: '', url: '', title: '', history: '' };
     this.entries.delete(paneId);
+    // Cancel the steal guard's settle timer (issue #172): its closure holds
+    // this view, and firing after close() would throw uncaught in main.
+    if (e.focusRecheck) {
+      clearTimeout(e.focusRecheck);
+      e.focusRecheck = null;
+    }
 
     // Commit DOM storage (localStorage) to the persistent partition BEFORE
     // the renderer is closed. Chromium writes cookies eagerly but flushes
@@ -514,8 +525,15 @@ export class WebviewRegistry {
       try {
         this.win.contentView.removeChildView(e.view);
         e.view.webContents.close();
-      } catch {
-        // ignore
+      } catch (err) {
+        // This is EXACTLY the state the comment above forbids — a live view
+        // left sitting on top of the pane the user ascended out of. It must
+        // not fail silently (charter §6): say so, so "a blank rectangle
+        // covers my pane" comes with its cause attached.
+        this.cb.onError?.({
+          source: 'electron:webview',
+          message: 'failed to detach live view — ascend may leave a blank overlay: ' + String(err),
+        });
       }
     }
     return { jpegBase64, url, title, history };
@@ -579,8 +597,14 @@ export class WebviewRegistry {
       // The grab can still be IN FLIGHT when the bounce runs — Chromium's
       // widget-focus commit then lands after it with no further focus
       // event. Recheck once the dust settles and bounce again if the view
-      // still holds focus it shouldn't.
-      setTimeout(() => {
+      // still holds focus it shouldn't. The timer is tracked on the entry
+      // and guarded on liveness: a middle-click ascent inside the settle
+      // window destroys the view, and isFocused() on a destroyed
+      // WebContents throws uncaught in main.
+      if (e.focusRecheck) clearTimeout(e.focusRecheck);
+      e.focusRecheck = setTimeout(() => {
+        e.focusRecheck = null;
+        if (this.entries.get(paneId) !== e) return; // removed meanwhile
         if (!e.focused && e.view.webContents.isFocused() &&
             Date.now() - e.lastUserClickMs >= USER_CLICK_FOCUS_GRACE_MS) {
           this.cb.onFocusStolen?.({ paneId });
