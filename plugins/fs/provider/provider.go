@@ -70,7 +70,7 @@ func (p *Provider) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
 func (p *Provider) abs(key string) (string, error) {
 	clean := path.Clean("/" + key) // "/" + forces the cleanup to anchor
 	full := filepath.Join(p.root, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
-	if full != p.root && !strings.HasPrefix(full, p.root+string(filepath.Separator)) {
+	if !fsfile.UnderRoot(p.root, full) {
 		return "", status.Errorf(codes.InvalidArgument, "fs provider: key %q escapes the root", key)
 	}
 	return full, nil

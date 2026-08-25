@@ -181,7 +181,7 @@ func ServeFile(stream ServeChunkSender, dirPath, name, subpath string) error {
 	target := filepath.Join(dirPath, name)
 	if subpath != "" {
 		target = filepath.Join(dirPath, filepath.FromSlash(subpath))
-		if target != dirPath && !strings.HasPrefix(target, dirPath+string(filepath.Separator)) {
+		if !UnderRoot(dirPath, target) {
 			return notFoundPage(stream)
 		}
 	}

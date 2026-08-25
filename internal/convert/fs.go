@@ -238,16 +238,15 @@ func FS(legacyPath, outPath, uuid, kind, root string) (*Result, error) {
 
 // relKey turns a legacy absolute path into the provider's slash-relative
 // key under root ("." for the root itself). A path outside the root is
-// unknown territory: refuse.
+// unknown territory: refuse. filepath.Rel, not a hand-built root+"/"
+// prefix — with root "/" that prefix is "//", which no path starts with,
+// and every entry under a whole-machine root was refused.
 func relKey(path, root string) (string, error) {
-	path = filepath.Clean(path)
-	if path == root {
-		return ".", nil
-	}
-	if !strings.HasPrefix(path, root+string(filepath.Separator)) {
+	rel, err := filepath.Rel(root, filepath.Clean(path))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("convert fs: path %q outside configured root %q", path, root)
 	}
-	return filepath.ToSlash(strings.TrimPrefix(path, root+string(filepath.Separator))), nil
+	return filepath.ToSlash(rel), nil
 }
 
 // refuseUnknown verifies the source's table/column surface is EXACTLY
