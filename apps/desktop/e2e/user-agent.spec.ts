@@ -23,7 +23,7 @@ test('a live url view reports a Chrome UA with no Electron token', async ({ elec
       const reg = (globalThis as { __gwRegistry?: any }).__gwRegistry;
       if (!reg) throw new Error('registry not exposed (GRIDWELL_E2E not set?)');
 
-      await reg.place('e2e-ua', 1, 'e2e-ua-obj', args.dataURL, { x: 0, y: 0, width: 400, height: 300 }, '');
+      await reg.place('e2e-ua', 1, 'e2e-ua-obj', args.dataURL, { x: 0, y: 0, width: 400, height: 300 });
       try {
         let wc: any = null;
         const findDeadline = Date.now() + 8000;

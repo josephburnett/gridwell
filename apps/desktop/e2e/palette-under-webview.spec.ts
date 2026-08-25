@@ -38,7 +38,7 @@ test('place() with new bounds while hidden keeps the view parked (reuse-path fix
     const newBounds = { x: 200, y: 150, width: 500, height: 350 };
 
     // Place a live view at its initial position.
-    await reg.place(paneId, 1, 'obj-park-reuse', args.dataURL, initialBounds, '');
+    await reg.place(paneId, 1, 'obj-park-reuse', args.dataURL, initialBounds);
 
     // Wait for the view to appear in webContents (the preload + data URL load).
     const deadline = Date.now() + 8_000;
@@ -56,7 +56,7 @@ test('place() with new bounds while hidden keeps the view parked (reuse-path fix
     // Call place() with NEW bounds while the view is still parked. Before the
     // fix this physically moved the view to the new visible position; after the
     // fix the view must remain at park coords.
-    await reg.place(paneId, 1, 'obj-park-reuse', args.dataURL, newBounds, '');
+    await reg.place(paneId, 1, 'obj-park-reuse', args.dataURL, newBounds);
     const boundsAfterReplace = reg.viewBoundsFor(paneId);
 
     // Simulate "palette closed": un-park. The view must move to newBounds, not
@@ -106,7 +106,7 @@ test('new view placed while _globalHidden=true starts parked (new-view-path fix)
     const bounds = { x: 100, y: 100, width: 400, height: 300 };
 
     // Place the sentinel and park it — this sets _globalHidden=true.
-    await reg.place(sentinelId, 1, 'obj-sentinel', args.dataURL, bounds, '');
+    await reg.place(sentinelId, 1, 'obj-sentinel', args.dataURL, bounds);
     const dSentinel = Date.now() + 8_000;
     while (!webContents.getAllWebContents().some((w: any) => w.getURL().includes(args.marker)) && Date.now() < dSentinel) {
       await new Promise<void>((res) => setTimeout(res, 50));
@@ -114,7 +114,7 @@ test('new view placed while _globalHidden=true starts parked (new-view-path fix)
     reg.setHidden(sentinelId, true, false);
 
     // Now place a brand-new view. With _globalHidden=true it should start parked.
-    await reg.place(newPaneId, 2, 'obj-new-while-hidden', args.dataURL, bounds, '');
+    await reg.place(newPaneId, 2, 'obj-new-while-hidden', args.dataURL, bounds);
     const boundsAfterPlace = reg.viewBoundsFor(newPaneId);
 
     // Restore: un-park the sentinel and the new view, then clean up.
