@@ -1,0 +1,187 @@
+// Package todos is the PURE half of the gitlab todos provider: the todo
+// record, the week calendar, the memory of every todo seen, and the
+// derivations (entries, labels, placement hints) the provider answers
+// with. No network, no gRPC — everything here is unit-tested against
+// fakes, and the provider package only wires it to the wire.
+package todos
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Todo is the subset of GitLab's todo object the provider uses
+// (docs.gitlab.com/api/todos). Only the fields that survive every
+// target_type are read from the nested target — Commit and Project
+// targets carry no iid, for instance.
+type Todo struct {
+	ID         int64  `json:"id"`
+	ActionName string `json:"action_name"`
+	TargetType string `json:"target_type"`
+	TargetURL  string `json:"target_url"`
+	Body       string `json:"body"`
+	// State is "pending" or "done" — GitLab's word, and the ONE fact
+	// the provider re-derives locally (see Memory.Sync): a todo absent
+	// from the pending set is done, whatever GitLab says about it.
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Project   struct {
+		ID                int64  `json:"id"`
+		Name              string `json:"name"`
+		PathWithNamespace string `json:"path_with_namespace"`
+		WebURL            string `json:"web_url"`
+	} `json:"project"`
+	Author struct {
+		Name     string `json:"name"`
+		Username string `json:"username"`
+		WebURL   string `json:"web_url"`
+	} `json:"author"`
+	Target struct {
+		IID   int64  `json:"iid"`
+		Title string `json:"title"`
+		State string `json:"state"`
+	} `json:"target"`
+}
+
+const (
+	StatePending = "pending"
+	StateDone    = "done"
+)
+
+// Done reports the derived completion state.
+func (t *Todo) Done() bool { return t.State == StateDone }
+
+// Ref is the GitLab short reference of the target ("!42", "#7", "&3"),
+// "" when the target type has none.
+func (t *Todo) Ref() string {
+	if t.Target.IID == 0 {
+		return ""
+	}
+	switch t.TargetType {
+	case "MergeRequest":
+		return "!" + strconv.FormatInt(t.Target.IID, 10)
+	case "Issue":
+		return "#" + strconv.FormatInt(t.Target.IID, 10)
+	case "Epic":
+		return "&" + strconv.FormatInt(t.Target.IID, 10)
+	}
+	return ""
+}
+
+// Title is the todo's headline: the target's title, else the body's
+// first line, else the action on the target type.
+func (t *Todo) Title() string {
+	if s := strings.TrimSpace(t.Target.Title); s != "" {
+		return s
+	}
+	if line, _, _ := strings.Cut(strings.TrimSpace(t.Body), "\n"); line != "" {
+		return line
+	}
+	return t.Action() + " " + t.TargetType
+}
+
+// actionPhrases humanizes GitLab's action_name vocabulary.
+var actionPhrases = map[string]string{
+	"assigned":                "assigned to you",
+	"mentioned":               "mentioned you",
+	"build_failed":            "build failed",
+	"marked":                  "marked",
+	"approval_required":       "approval required",
+	"unmergeable":             "unmergeable",
+	"directly_addressed":      "addressed you",
+	"merge_train_removed":     "removed from merge train",
+	"review_requested":        "review requested",
+	"member_access_requested": "access requested",
+	"review_submitted":        "review submitted",
+}
+
+// Action is the human phrase for the todo's action_name; an unknown
+// action rides verbatim with underscores opened.
+func (t *Todo) Action() string {
+	if p, ok := actionPhrases[t.ActionName]; ok {
+		return p
+	}
+	return strings.ReplaceAll(t.ActionName, "_", " ")
+}
+
+// Label is the tile face: a done mark, the short ref, and the title.
+func (t *Todo) Label() string {
+	var b strings.Builder
+	if t.Done() {
+		b.WriteString("✓ ")
+	}
+	if r := t.Ref(); r != "" {
+		b.WriteString(r)
+		b.WriteByte(' ')
+	}
+	b.WriteString(t.Title())
+	return b.String()
+}
+
+// Key is the todo's provider key — stable forever, GitLab's own id.
+func (t *Todo) Key() string { return KeyPrefix + strconv.FormatInt(t.ID, 10) }
+
+// KeyPrefix namespaces todo keys; WeekPrefix namespaces week contexts;
+// RootContext is the provider's landing grid.
+const (
+	KeyPrefix   = "todo:"
+	WeekPrefix  = "week:"
+	RootContext = "todos"
+)
+
+// ParseKey resolves a todo key to its id.
+func ParseKey(key string) (int64, bool) {
+	s, ok := strings.CutPrefix(key, KeyPrefix)
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(s, 10, 64)
+	return id, err == nil && id > 0
+}
+
+// ── weeks ──────────────────────────────────────────────────────────────
+
+// WeekStart is the Monday 00:00 UTC that begins the week containing t.
+// UTC because GitLab timestamps are UTC and a week key must never shift
+// with the host's zone — a key names the same thing forever.
+func WeekStart(t time.Time) time.Time {
+	u := t.UTC()
+	wd := (int(u.Weekday()) + 6) % 7 // Monday = 0
+	d := time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC)
+	return d.AddDate(0, 0, -wd)
+}
+
+// WeekKey is the context key of the week starting at start.
+func WeekKey(start time.Time) string { return WeekPrefix + start.UTC().Format("2006-01-02") }
+
+// ParseWeekKey resolves a week context key to its Monday.
+func ParseWeekKey(key string) (time.Time, bool) {
+	s, ok := strings.CutPrefix(key, WeekPrefix)
+	if !ok {
+		return time.Time{}, false
+	}
+	t, err := time.ParseInLocation("2006-01-02", s, time.UTC)
+	if err != nil || t.Weekday() != time.Monday {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// HintEpoch anchors the root column: the week containing it sits at
+// y=0, later weeks climb (negative y), earlier weeks descend. A fixed
+// date, so a week's hint is the same on every host and every restart —
+// two nodes never disagree about where a week first lands.
+var HintEpoch = time.Date(2026, time.August, 24, 0, 0, 0, 0, time.UTC)
+
+// WeekRow is the root-column y of the week starting at start.
+func WeekRow(start time.Time) int64 {
+	return -int64(start.Sub(WeekStart(HintEpoch)).Hours() / (24 * 7))
+}
+
+// WeekLabel names a week well by its Monday and its counts.
+func WeekLabel(start time.Time, open, done int) string {
+	return fmt.Sprintf("%s · %d open · %d done", start.UTC().Format("2006-01-02"), open, done)
+}

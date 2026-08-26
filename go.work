@@ -11,6 +11,7 @@ use (
 	./internal/doctype
 	./mobile
 	./plugins/fs
+	./plugins/gitlab
 	./plugins/proc
 	./test/boundary
 	./test/federation
