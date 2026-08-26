@@ -43,6 +43,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
+	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
 	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
 	"github.com/josephburnett/gridwell/web"
 )
@@ -124,8 +125,8 @@ func Stop() {
 	origin = ""
 }
 
-// inProcessProviderFactories is the mobile provider registry: fs and
-// proc as v2 content providers, constructed exactly as their subprocess
+// inProcessProviderFactories is the mobile provider registry: fs, proc
+// and gitlab as v2 content providers, constructed exactly as their subprocess
 // mains (cmd/gridwell-provider-*) would, minus the process boundary.
 func inProcessProviderFactories() map[string]plugin.ProviderFactory {
 	return map[string]plugin.ProviderFactory{
@@ -135,6 +136,9 @@ func inProcessProviderFactories() map[string]plugin.ProviderFactory {
 		"proc": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
 			pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
 			return procprovider.New("", pid, nil), nil
+		},
+		"gitlab": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
+			return gitlabprovider.FromConfig(cfg), nil
 		},
 	}
 }

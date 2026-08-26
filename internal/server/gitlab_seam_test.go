@@ -1,0 +1,183 @@
+package server
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/josephburnett/gridwell/api/compose"
+	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/layout"
+	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/providerhost"
+	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
+	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
+)
+
+// The gitlab todos provider through the WHOLE shipped stack — fake
+// GitLab → provider → adapter → server → the /content/ door — pinning
+// the three promises the design makes at the seam where they are kept:
+// the provider's hints become the first arrangement and the user's
+// moves win from then on; a todo that leaves GitLab flips to done
+// without moving or changing identity; and a provider RESTART (empty
+// memory) does not lose the tile — the node remembers it.
+
+type fakeGitLab struct {
+	pending, done []todos.Todo
+}
+
+func (f *fakeGitLab) Page(_ context.Context, state string, page int) ([]todos.Todo, bool, error) {
+	if page > 1 {
+		return nil, false, nil
+	}
+	if state == todos.StateDone {
+		return f.done, false, nil
+	}
+	return f.pending, false, nil
+}
+
+func gitlabTodo(id int64, created string) todos.Todo {
+	var t todos.Todo
+	t.ID, t.State = id, todos.StatePending
+	t.CreatedAt, _ = time.Parse(time.RFC3339, created)
+	t.TargetType, t.Target.IID, t.Target.Title, t.Body = "MergeRequest", id, "change "+strings.Repeat("x", int(id)), "please **review**"
+	return t
+}
+
+// gitlabStackAt stands the provider up over an EXISTING memory DB path
+// (a restart reuses it) and returns the adapter client plus a closer.
+func gitlabStackAt(t *testing.T, memPath string, impl cpv1.ContentProviderServer) (gridwellv1.GridwellClient, func()) {
+	t.Helper()
+	mem, err := layout.Open(memPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, cpCloser, err := compose.ServeProviderInProcess(impl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, closer, err := plugin.ServeInProcess(providerhost.New(cp, mem))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client, func() { closer(); cpCloser(); _ = mem.Close() }
+}
+
+func tileByLabelPrefix(tiles []*gridwellv1.Tile, prefix string) *gridwellv1.Tile {
+	for _, tl := range tiles {
+		if strings.HasPrefix(tl.AltText, prefix) {
+			return tl
+		}
+	}
+	return nil
+}
+
+func TestGitLabTodosThroughTheStack(t *testing.T) {
+	gl := &fakeGitLab{
+		pending: []todos.Todo{gitlabTodo(1, "2026-08-18T10:00:00Z"), gitlabTodo(2, "2026-08-25T10:00:00Z")},
+		done:    []todos.Todo{gitlabTodo(3, "2026-08-19T10:00:00Z")},
+	}
+	gl.done[0].State = todos.StateDone
+	clock := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	now := func() time.Time { return clock }
+	memPath := filepath.Join(t.TempDir(), "mem.db")
+	client, closeStack := gitlabStackAt(t, memPath, gitlabprovider.New(gl, nil, gitlabprovider.Options{Now: now}))
+
+	reg := plugin.NewRegistry()
+	reg.Register("ug1", "gitlab", client, nil)
+	srv := New(reg, Config{NodeID: "node1", Password: "pw"})
+	hs := httptest.NewServer(srv.NodeHandler())
+	t.Cleanup(hs.Close)
+	ctx := context.Background()
+
+	// Root: one well per week, hinted into the epoch-anchored column.
+	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.RootGridId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(root.Tiles) != 2 || root.Grid.SourceKind != "gitlab" {
+		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
+	}
+	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
+	if week == nil || week.Kind != "well" || week.ChildGridId == "" || week.X != 0 || week.Y != todos.WeekRow(time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("week well = %+v", week)
+	}
+
+	// Descent: the week's todos, calendar-hinted (Tue = column 1).
+	wk, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := tileByLabelPrefix(wk.Tiles, "!1 ")
+	three := tileByLabelPrefix(wk.Tiles, "✓ !3 ")
+	if len(wk.Tiles) != 2 || one == nil || three == nil {
+		t.Fatalf("week grid = %v", wk.Tiles)
+	}
+	if !one.ServesPage || one.Kind != "text" || one.X != 1*todos.TodoTileW || one.Y != 0 || one.W != todos.TodoTileW || three.X != 2*todos.TodoTileW {
+		t.Errorf("hints not honored: one=%+v three=%+v", one, three)
+	}
+
+	// The door serves the provider's HTML.
+	token := ContentToken("pw")
+	pageURL := hs.URL + "/content/" + token + "/ug1/" + one.Id + "/"
+	res, body := get(t, noRedirect(hs), pageURL, "")
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") || !strings.Contains(body, "<strong>review</strong>") {
+		t.Fatalf("page = %d %q %q", res.StatusCode, res.Header.Get("Content-Type"), body)
+	}
+
+	// The user moves todo 1.
+	if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: one.Id, X: 5, Y: 5, W: 3, H: 2}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Todo 1 leaves GitLab entirely (target deleted): after the refresh
+	// window it reads as done — same id, where the user left it.
+	gl.pending = gl.pending[1:]
+	clock = clock.Add(gitlabprovider.DefaultRefresh + time.Second)
+	wk, err = client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	flipped := tileByLabelPrefix(wk.Tiles, "✓ !1 ")
+	if len(wk.Tiles) != 2 || flipped == nil || flipped.Id != one.Id || flipped.X != 5 || flipped.Y != 5 || flipped.W != 3 {
+		t.Fatalf("after deletion in GitLab: %v", wk.Tiles)
+	}
+
+	// Provider restart: a fresh process has never seen todo 1, and
+	// GitLab no longer lists it. The NODE remembers: same tile, same id,
+	// same placement, last-seen label; its page says it is not in memory.
+	closeStack()
+	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabprovider.New(gl, nil, gitlabprovider.Options{Now: now}))
+	t.Cleanup(closeStack2)
+	reg2 := plugin.NewRegistry()
+	reg2.Register("ug1", "gitlab", client2, nil)
+	hs2 := httptest.NewServer(New(reg2, Config{NodeID: "node1", Password: "pw"}).NodeHandler())
+	t.Cleanup(hs2.Close)
+	wk, err = client2.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := tileByLabelPrefix(wk.Tiles, "✓ !1 ")
+	if len(wk.Tiles) != 2 || kept == nil || kept.Id != one.Id || kept.X != 5 || kept.Y != 5 {
+		t.Fatalf("restart lost the todo: %v", wk.Tiles)
+	}
+	res, body = get(t, noRedirect(hs2), hs2.URL+"/content/"+token+"/ug1/"+one.Id+"/", "")
+	if res.StatusCode != http.StatusNotFound || !strings.Contains(body, "todo:1") {
+		t.Errorf("gone page = %d %q", res.StatusCode, body)
+	}
+	// And a live todo still serves after the restart.
+	three = tileByLabelPrefix(wk.Tiles, "✓ !3 ")
+	res, _ = get(t, noRedirect(hs2), hs2.URL+"/content/"+token+"/ug1/"+three.Id+"/", "")
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("live page after restart = %d", res.StatusCode)
+	}
+}

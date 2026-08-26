@@ -11,6 +11,7 @@ replace (
 	github.com/josephburnett/gridwell/api => ../../api
 	github.com/josephburnett/gridwell/internal/doctype => ../../internal/doctype
 	github.com/josephburnett/gridwell/plugins/fs => ../../plugins/fs
+	github.com/josephburnett/gridwell/plugins/gitlab => ../../plugins/gitlab
 	github.com/josephburnett/gridwell/plugins/proc => ../../plugins/proc
 )
 
@@ -18,6 +19,7 @@ require (
 	github.com/josephburnett/gridwell v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/fs v0.0.0-00010101000000-000000000000
+	github.com/josephburnett/gridwell/plugins/gitlab v0.0.0-00010101000000-000000000000
 	github.com/josephburnett/gridwell/plugins/proc v0.0.0-00010101000000-000000000000
 )
 

@@ -53,6 +53,10 @@
         "to": "gridwell-provider-proc"
       },
       {
+        "from": "../../gridwell-provider-gitlab",
+        "to": "gridwell-provider-gitlab"
+      },
+      {
         "from": "../../api/gridwell/v1/data.proto",
         "to": "data.proto"
       }

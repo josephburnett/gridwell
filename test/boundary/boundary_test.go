@@ -36,6 +36,9 @@ var modules = map[string][]string{
 	// native store NODE code — content-presentation.md §9.)
 	"plugins/fs":   {"api", "internal/doctype"},
 	"plugins/proc": {"api"},
+	// gitlab: the api plus goldmark (a plugin's own dependency graph is
+	// the door's point — the host never sees it).
+	"plugins/gitlab": {"api"},
 	// The root module is the SERVER LIBRARY (+ its embedded client): the
 	// api and the neutral homes — never a plugin implementation.
 	"": {"api", "internal/doctype"},

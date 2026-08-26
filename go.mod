@@ -16,6 +16,7 @@ replace (
 	github.com/josephburnett/gridwell/api => ./api
 	github.com/josephburnett/gridwell/internal/doctype => ./internal/doctype
 	github.com/josephburnett/gridwell/plugins/fs => ./plugins/fs
+	github.com/josephburnett/gridwell/plugins/gitlab => ./plugins/gitlab
 	github.com/josephburnett/gridwell/plugins/proc => ./plugins/proc
 )
 

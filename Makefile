@@ -3,7 +3,7 @@
 BIN := ./gridwell
 # Built plugin/provider binaries — the plugins target below and clean
 # must agree; this is the one list.
-ALL_PLUGIN_BIN := ./gridwell-provider-fs ./gridwell-provider-proc ./gridwell-all
+ALL_PLUGIN_BIN := ./gridwell-provider-fs ./gridwell-provider-proc ./gridwell-provider-gitlab ./gridwell-all
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -46,6 +46,7 @@ bin-all:
 plugins:
 	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-provider-fs ./cmd/gridwell-provider-fs
 	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-provider-proc ./cmd/gridwell-provider-proc
+	cd plugins/gitlab && CGO_ENABLED=0 go build -o ../../gridwell-provider-gitlab ./cmd/gridwell-provider-gitlab
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's
@@ -108,7 +109,7 @@ proto-check:
 # shared nested modules, and each plugin (its own module: the in-repo
 # strangers, docs/plugin.md). check builds and tests each one STANDALONE
 # (GOWORK=off) so no module can quietly lean on the workspace.
-MODULES := api internal/doctype plugins/fs plugins/proc apps/gridwell apps/gridwell-all mobile
+MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/gridwell apps/gridwell-all mobile
 
 # check depends on wasm: web/embed.go EMBEDS the built gridwell.wasm, so
 # a fresh checkout (CI) cannot even `go build ./...` before one exists.

@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/cli"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
+	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
 	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
 )
 
@@ -35,6 +36,9 @@ func providerFactories() map[string]plugin.ProviderFactory {
 		"proc": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
 			pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
 			return procprovider.New("", pid, nil), nil
+		},
+		"gitlab": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
+			return gitlabprovider.FromConfig(cfg), nil
 		},
 	}
 }
