@@ -401,3 +401,13 @@ func TestPropertyAtLeastOnePane(t *testing.T) {
 		}
 	}
 }
+
+func TestStillDescended(t *testing.T) {
+	p := &Pane{ID: "p", TextFocus: "u1/7"}
+	if !StillDescended(p, "u1/7") {
+		t.Fatal("descended pane must still count")
+	}
+	if StillDescended(nil, "u1/7") || StillDescended(p, "u1/8") || StillDescended(&Pane{ID: "p"}, "u1/7") {
+		t.Fatal("closed, moved on, or ascended must not")
+	}
+}

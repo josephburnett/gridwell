@@ -165,8 +165,11 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 			a.surfaceRPCError("GetTile", err)
 			return
 		}
-		if a.tree.FindPane(paneID) == nil {
-			return // pane closed while the target row was in flight
+		// The pane may have closed, ascended, or descended elsewhere
+		// while the target row was in flight — the same moved-on rule
+		// every async descent path applies (pane.StillDescended).
+		if !pane.StillDescended(a.tree.FindPane(paneID), t.ID) {
+			return
 		}
 		a.placeURLView(paneID, *target, target.Version)
 	}()

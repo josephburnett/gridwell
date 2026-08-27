@@ -430,3 +430,14 @@ func (t *Tree) SetFocus(id string) error {
 	t.Focus = id
 	return nil
 }
+
+// StillDescended reports whether pane p (nil = closed) is still descended
+// into tileID — THE moved-on guard every async descent path applies
+// after an await (a fetch, a probe, a target-row lookup): the pane may
+// have closed, ascended, or descended elsewhere while the reply was in
+// flight, and a late placement would leave a native surface over a
+// pane that no longer shows that tile (2026-08-27: the url-link target
+// path checked existence only).
+func StillDescended(p *Pane, tileID string) bool {
+	return p != nil && p.TextFocus == tileID
+}

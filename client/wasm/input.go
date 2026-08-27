@@ -1741,7 +1741,7 @@ func (a *App) autoLiveOnRestore(paneID, tileID string) {
 // frozen-preview state.
 func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 	fp := a.tree.FindPane(paneID)
-	if fp == nil || fp.TextFocus != tile.ID {
+	if !pane.StillDescended(fp, tile.ID) {
 		return
 	}
 	if a.isEphemeralTile(fp, tile) {
@@ -1791,7 +1791,7 @@ func (a *App) healStalePanePath(paneID string, tile *rpc.Tile) {
 func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 	tileID := tile.ID
 	fp := a.tree.FindPane(paneID)
-	if fp == nil || fp.TextFocus != tileID {
+	if !pane.StillDescended(fp, tileID) {
 		return
 	}
 	// The shell facts key by the CONTENT id (a link attaches its target's
