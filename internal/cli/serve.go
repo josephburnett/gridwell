@@ -232,6 +232,14 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 		}
 		bin, err := resolveBinary(name)
 		if err != nil {
+			// The commonest miss (2026-08-27): a provider kind declared
+			// without `provider: true`, so the PLUGIN name was tried. If
+			// the provider binary is right there, say so.
+			if !pc.Provider {
+				if _, perr := resolveBinary("gridwell-provider-" + pc.Kind); perr == nil {
+					return fmt.Errorf("plugin %q (%s): %w — gridwell-provider-%s exists: is this entry missing `provider: true`?", pc.Name, pc.Kind, err, pc.Kind)
+				}
+			}
 			return fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.Kind, err)
 		}
 		pc.Binary = bin

@@ -8,6 +8,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/config"
@@ -61,5 +62,25 @@ func TestProviderFactoriesKeepProviderEntriesInProcess(t *testing.T) {
 	}
 	if got := filepath.Base(cfg.Plugins[1].Binary); got != "gridwell-plugin-fs" {
 		t.Fatalf("plugin entry resolved %q — the provider factory must not satisfy it", cfg.Plugins[1].Binary)
+	}
+}
+
+// A provider kind declared WITHOUT `provider: true` (Joe, 2026-08-27:
+// the gitlab entry) fails on the plugin name — the error must point at
+// the flag when the provider binary is right there.
+func TestMissingProviderFlagIsNamedInTheError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gridwell-provider-gitlab"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GRIDWELL_PLUGIN_DIR", dir)
+	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{ID: "g1", Name: "todos", Kind: "gitlab"}}}
+	err := resolvePluginBinaries(cfg, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "provider: true") {
+		t.Fatalf("err = %v, want the provider-flag hint", err)
+	}
+	cfg = &config.ServerConfig{Plugins: []config.PluginConfig{{ID: "g1", Name: "x", Kind: "nosuch"}}}
+	if err := resolvePluginBinaries(cfg, nil, nil); err == nil || strings.Contains(err.Error(), "provider: true") {
+		t.Fatalf("no provider binary → no hint: %v", err)
 	}
 }
