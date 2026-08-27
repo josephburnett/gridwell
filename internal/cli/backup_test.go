@@ -19,6 +19,16 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	if code := RunInit([]string{"--kind", "local", "--name", "home"}); code != 0 {
 		t.Fatalf("init exit = %d", code)
 	}
+	// A provider entry that has never served: no memory DB yet (2026-08-27:
+	// backup aborted on it). And the loose durable files a served home has.
+	if code := RunInit([]string{"--kind", "gitlab", "--name", "todos"}); code != 0 {
+		t.Fatalf("init gitlab exit = %d", code)
+	}
+	for _, f := range []string{config.PasswordFile(home), config.NodeViewFile(home)} {
+		if err := os.WriteFile(f, []byte("x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cfg, err := config.Load(filepath.Join(home, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +76,14 @@ func TestBackupSnapshotsHome(t *testing.T) {
 	}
 	if gotRoot != rootID {
 		t.Errorf("backed-up root grid = %s, want %s (identity must survive)", gotRoot, rootID)
+	}
+	for _, f := range config.DurableFiles(dest) {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("backup lacks %s: %v (a restored home would rotate its password / lose its viewport)", filepath.Base(f), err)
+		}
+	}
+	if len(cfg.Plugins) != 2 {
+		t.Errorf("backup config lists %d entries, want both (the provider without a DB must not abort)", len(cfg.Plugins))
 	}
 	_ = home
 }

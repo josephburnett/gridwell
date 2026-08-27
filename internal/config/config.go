@@ -75,10 +75,12 @@ type ServerConfig struct {
 	// no longer creates them). A nil slice (no `connections:` key) leaves
 	// a legacy transport DB alone; a PRESENT key — even an empty list —
 	// makes this file authoritative: rows absent from it tombstone.
-	Connections []ConnectionConfig `yaml:"connections,omitempty"`
-	// ConnectionsSet is derived by Load, never stored: the `connections:`
-	// key was present (the authoritative-mode marker above).
-	ConnectionsSet bool `yaml:"-"`
+	// A POINTER so presence survives a rewrite: nil = no key; a non-nil
+	// empty slice = `connections: []`, the authoritative-empty marker —
+	// which a plain `omitempty` slice silently dropped on the next
+	// `gridwell init` (2026-08-27), flipping the transport out of config
+	// mode. Set reports presence.
+	Connections *[]ConnectionConfig `yaml:"connections,omitempty"`
 	// RetiredNames reserves connection names FOREVER: a deleted
 	// connection's name goes here so it can never be reused (stored
 	// references through its namespace stay dangling, never re-routed).
@@ -118,6 +120,16 @@ type FederationConfig struct {
 // FederationSocket is the default federation socket path for a home.
 func FederationSocket(home string) string {
 	return filepath.Join(home, "federation.sock")
+}
+
+// ConnectionList answers the declared connections ([] when the key is
+// absent) and whether the key was PRESENT — present means this file is
+// authoritative for the connection set, empty list included (v2 #269).
+func (c *ServerConfig) ConnectionList() (conns []ConnectionConfig, set bool) {
+	if c.Connections == nil {
+		return nil, false
+	}
+	return *c.Connections, true
 }
 
 // ConnectionConfig is one remote-node connection. Name is an IMMUTABLE
@@ -227,7 +239,6 @@ func Load(path string) (*ServerConfig, error) {
 		Web  *struct {
 			Bind *string `yaml:"bind"`
 		} `yaml:"web"`
-		Connections *[]ConnectionConfig `yaml:"connections"`
 	}
 	if err := yaml.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
@@ -251,9 +262,6 @@ func Load(path string) (*ServerConfig, error) {
 			cfg.Deprecations = append(cfg.Deprecations, fmt.Sprintf("plugin %q: provider: true is implied for every non-native kind; drop the line", pc.Name))
 		}
 	}
-	// ConnectionsSet: the `connections:` key is PRESENT — this file is
-	// authoritative for the connection set, empty list included (v2 #269).
-	cfg.ConnectionsSet = probe.Connections != nil
 	if cfg.Web.Bind == "" {
 		cfg.Web.Bind = Defaults.Web.Bind
 	}
@@ -397,6 +405,19 @@ func EnsureNodeID(home string, newID func() string) (string, error) {
 // PasswordFile is where a home's web password lives: beside server.yaml
 // and the federation socket, 0600.
 func PasswordFile(home string) string { return filepath.Join(home, "web-password") }
+
+// NodeViewFile is the landing page's persisted viewport.
+func NodeViewFile(home string) string { return filepath.Join(home, "node-view.json") }
+
+// DurableFiles are the loose files a home is made of besides its DBs —
+// what a backup must carry for a restored home to be "as you left it"
+// (the password: every browser stays logged in; the landing viewport).
+// The ONE list; backup reads it, so a new durable file joins here and
+// nowhere else. Absent files are simply absent (a home that has never
+// served has no password yet).
+func DurableFiles(home string) []string {
+	return []string{filepath.Join(home, "server.yaml"), PasswordFile(home), NodeViewFile(home)}
+}
 
 // EnsurePasswordFile returns the home's web password, minting one (128
 // random bits as hex, written 0600) when the file is absent — the door

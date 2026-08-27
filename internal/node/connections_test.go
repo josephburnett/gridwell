@@ -19,13 +19,12 @@ import (
 func TestInjectConnectionsCarriesEveryField(t *testing.T) {
 	cfg := &config.ServerConfig{
 		Plugins: []config.PluginConfig{{ID: "remuuid1", Kind: "remote", Name: "far"}},
-		Connections: []config.ConnectionConfig{{
+		Connections: &[]config.ConnectionConfig{{
 			Name: "con1", Label: "rtb", Host: "192.168.88.5", User: "joe",
-			Port: 2222, Addr: "127.0.0.1:10010", Key: "~/.ssh/rtb",
+			Port: 2222, Addr: "/r/federation.sock", Key: "~/.ssh/rtb",
 			KnownHosts: "~/.ssh/known_hosts",
 		}},
-		RetiredNames:   []string{"olddead"},
-		ConnectionsSet: true,
+		RetiredNames: []string{"olddead"},
 	}
 	if err := injectConnections(cfg); err != nil {
 		t.Fatal(err)

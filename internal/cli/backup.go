@@ -10,12 +10,14 @@ import (
 	"strings"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/node"
 	_ "modernc.org/sqlite"
 )
 
-// RunBackup snapshots a whole Gridwell home — every plugin DB plus
-// server.yaml — into a destination directory, from which a home can be
-// reconstituted by plain copy. For a system whose thesis is permanence, this
+// RunBackup snapshots a whole Gridwell home — every DB plus the loose
+// durable files (config.DurableFiles: server.yaml, the web password, the
+// landing viewport) — into a destination directory, from which a home
+// can be reconstituted by plain copy. For a system whose thesis is permanence, this
 // is the cheap insurance against the file itself being lost (disk death,
 // accidental rm, a bad home migration).
 //
@@ -77,12 +79,18 @@ func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) err
 		return err
 	}
 
-	// Snapshot every plugin DB first; write server.yaml last, so a completed
-	// backup (one whose server.yaml exists) always has all its DBs.
+	// Snapshot every DB first; write server.yaml last, so a completed
+	// backup (one whose server.yaml exists) always has all its DBs. A
+	// native kind's DB must exist (init created it); a provider's is the
+	// node's memory DB, minted at first serve — absent means never served,
+	// not lost (durable-but-forgettable by contract).
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		src := config.DBFile(home, pc.ID)
 		if _, err := os.Stat(src); err != nil {
+			if !node.IsNative(pc.Kind) && errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
 			return fmt.Errorf("plugin %q (%s): no database at %s", pc.Name, pc.ID, src)
 		}
 		dstDir := config.DBDir(dest, pc.ID)
@@ -94,11 +102,25 @@ func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) err
 		}
 	}
 
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return err
+	// The loose durable files, server.yaml LAST (the completion marker).
+	files := config.DurableFiles(home)
+	for i := len(files) - 1; i >= 0; i-- {
+		src := files[i]
+		if filepath.Base(src) == "server.yaml" {
+			src = cfgPath
+		}
+		data, err := os.ReadFile(src)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dest, filepath.Base(files[i])), data, 0o600); err != nil {
+			return err
+		}
 	}
-	return os.WriteFile(filepath.Join(dest, "server.yaml"), data, 0o600)
+	return nil
 }
 
 // vacuumInto opens src read-only and writes a consistent, compacted snapshot

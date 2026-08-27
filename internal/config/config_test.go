@@ -418,3 +418,44 @@ func TestEnsurePasswordFile(t *testing.T) {
 		t.Fatalf("a hand-written file is the password: %q", got)
 	}
 }
+
+// TestConnectionsPresenceSurvivesRewrite: `connections: []` (present and
+// empty = the transport is in config mode with no connections) must
+// survive AppendPlugin / EnsureNodeID, which re-marshal the struct — a
+// plain omitempty slice dropped the key (2026-08-27), silently flipping
+// a home out of config mode on its next `gridwell init`.
+func TestConnectionsPresenceSurvivesRewrite(t *testing.T) {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("connections: []\nplugins: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "local"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureNodeID(home, func() string { return "nodeid1" }); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(home, "server.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conns, set := cfg.ConnectionList(); !set || len(conns) != 0 {
+		t.Fatalf("connections presence lost across rewrites: set=%v conns=%v", set, conns)
+	}
+	absent, err := Load(write(t, "plugins: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, set := absent.ConnectionList(); set {
+		t.Fatal("an absent key must not read as present")
+	}
+}
+
+func write(t *testing.T, yml string) string {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), "server.yaml")
+	if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}

@@ -192,7 +192,7 @@ func Start(opts Options) (*Node, error) {
 		NodeID:   nodeID,
 		// The landing page's viewport survives restarts in a small state
 		// file beside the config ("things stay as you left them").
-		NodeStatePath: filepath.Join(opts.Home, "node-view.json"),
+		NodeStatePath: config.NodeViewFile(opts.Home),
 		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
 	})
@@ -289,7 +289,8 @@ func (n *Node) Close() error {
 // silently ignored the connections: key). Exactly one remote entry may exist when the key is present —
 // two transports sharing one connection list would double-materialize.
 func injectConnections(cfg *config.ServerConfig) error {
-	if !cfg.ConnectionsSet {
+	conns, set := cfg.ConnectionList()
+	if !set {
 		return nil
 	}
 	var remotes []*config.PluginConfig
@@ -299,7 +300,7 @@ func injectConnections(cfg *config.ServerConfig) error {
 		}
 	}
 	if len(remotes) == 0 {
-		if len(cfg.Connections) > 0 {
+		if len(conns) > 0 {
 			return fmt.Errorf("connections: declared but no remote transport entry exists — `gridwell init --kind remote --name far` first")
 		}
 		return nil
@@ -312,8 +313,8 @@ func injectConnections(cfg *config.ServerConfig) error {
 	// yaml vocabulary meets the transport's. TestInjectConnectionsCarries
 	// EveryField pins the mapping exhaustive — a field added to ConnSpec
 	// without a line here fails that test instead of silently dropping.
-	specs := make([]remote.ConnSpec, 0, len(cfg.Connections))
-	for _, c := range cfg.Connections {
+	specs := make([]remote.ConnSpec, 0, len(conns))
+	for _, c := range conns {
 		specs = append(specs, remote.ConnSpec{
 			Name: c.Name, Label: c.Label, Host: c.Host, User: c.User,
 			Port: c.Port, Addr: c.Addr, Key: c.Key, KnownHosts: c.KnownHosts,
