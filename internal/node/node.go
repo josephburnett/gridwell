@@ -4,8 +4,8 @@
 // assembly, and the lifecycle. Extracted (offline-plan phase 2) so the
 // CLI and the mobile bind (mobile/) share ONE serve wiring instead of
 // drifting copies: the CLI adds flags, the serve lock, the banner and
-// signal handling around it; mobile adds in-process factories and
-// auto-init. Neither reimplements the middle.
+// signal handling around it; mobile adds its bundled provider factories
+// and auto-init. Neither reimplements the middle.
 package node
 
 import (

@@ -1,4 +1,4 @@
-// Package sshdialtest provides a minimal REAL ssh server for tests: public-key
+// Package dialtest provides a minimal REAL ssh server for tests: public-key
 // auth against exactly one authorized key, host-key verification material, and
 // direct-streamlocal channel forwarding — everything the ssh plugin's dial path
 // needs, nothing else. Shared by the sshdial seam test (in-process) and the

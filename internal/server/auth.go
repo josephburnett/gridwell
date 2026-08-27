@@ -2,7 +2,8 @@ package server
 
 // Password auth for the BROWSER surface (the mux: Connect RPCs, static
 // files, the wasm client). Single-tenant by design: one plaintext password
-// in server.yaml, one derived cookie, no accounts, no sessions table.
+// (the minted <home>/web-password file — config.PasswordFile), one derived
+// cookie, no accounts, no sessions table.
 //
 // The one fact is the password (config-owned); everything else derives from
 // it in exactly one place: AuthToken(password) is both the cookie value a
@@ -10,11 +11,10 @@ package server
 // check is against the CURRENT password's token, changing the password
 // invalidates every outstanding cookie with no revocation state at all.
 //
-// Deliberately NOT gated: the gRPC node export sharing this port (the
-// FederationHandler) — it carries federation (an ssh mount's tunnel
-// dials it) and the Electron shell PTY relay, both established before this
-// feature. The transport trust model there is unchanged: bind loopback or a
-// VPN-only address (bindWarning says so). The desktop app's own window
+// Deliberately NOT gated: the gRPC node export (FederationHandler) — it
+// carries federation (an ssh mount's tunnel dials it) and the Electron
+// shell PTY relay. Its gate is the kernel: it is served only on the 0600
+// unix socket node.listenFederation opens. The desktop app's own window
 // authenticates without prompting: the serve banner carries the token and
 // the sidecar pre-sets the cookie (apps/desktop/src/main/sidecar.ts).
 

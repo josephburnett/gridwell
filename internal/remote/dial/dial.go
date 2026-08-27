@@ -1,14 +1,15 @@
-// Package sshdial is the ssh plugin's transport: it opens an SSH tunnel to a
-// remote host and dials the remote gridwell node's one HTTP/h2c port through
-// it with raw gRPC. The far end is the remote's node export — the full
+// Package dial is the builtin transport's dialer: it opens an SSH tunnel to
+// a remote host and dials the remote node's federation socket through it
+// with raw gRPC (direct-streamlocal). The far end is the remote's node
+// export — the full
 // Gridwell service, routed by the qualified ids each request carries — so the
 // mount is the WHOLE NODE: its node grid (the plugin-list landing page) is
 // the root the descent lands on, and every remote plugin is reachable through
 // it. No selector, no name resolution — routing is by id at every hop.
 //
-// Extracted from cmd/plugin/ssh so the whole path — key auth, known_hosts
-// verification, tunnel, gRPC-over-h2c — is testable in-process against a real
-// ssh server (sshdial_test.go); the binary's main is a thin caller.
+// The whole path — key auth, known_hosts verification, tunnel, gRPC over
+// the socket — is testable in-process against a real ssh server
+// (dialtest; internal/server/sshdial_seam_test.go crosses it).
 package dial
 
 import (

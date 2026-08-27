@@ -111,11 +111,9 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return node.BuildConfig(home, cfgPath)
 }
 
-// resolveBinary finds a provider binary by name (gridwell-provider-<kind>
-// or gridwell-provider-<kind>). Every plugin runs as a separately-compiled
-// subprocess; the host locates the binary via GRIDWELL_PLUGIN_DIR, then
-// beside the running gridwell executable (how `make` lays them out), then
-// on PATH.
+// resolveBinary finds a provider binary (gridwell-provider-<kind>): via
+// GRIDWELL_PLUGIN_DIR, then beside the running gridwell executable (how
+// `make` lays them out), then on PATH.
 func resolveBinary(name string) (string, error) {
 	var tried []string
 	if dir := os.Getenv("GRIDWELL_PLUGIN_DIR"); dir != "" {
@@ -232,8 +230,8 @@ func RunServeWith(args []string, providers map[string]plugin.ProviderFactory) in
 	}
 	defer lock.Release()
 
-	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
-	// each kind's binary (server.yaml may pin an explicit path instead).
+	// Resolve each provider's binary (server.yaml may pin an explicit path
+	// instead); native and bundled kinds stay in-process (node.IsNative).
 	if err := resolvePluginBinaries(cfg, providers); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1

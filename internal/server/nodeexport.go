@@ -1,7 +1,7 @@
 package server
 
 // The node export: the same Gridwell service the browser client consumes,
-// re-served over raw gRPC on the node's loopback federation port — the
+// re-served over raw gRPC on the node's federation socket — the
 // surface a remote mounter's ssh tunnel dials. Every request is routed by the
 // QUALIFIED ids it carries, exactly like the Connect front door (the unary
 // methods literally delegate to the same connectHandler, so the two surfaces
@@ -41,9 +41,9 @@ func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
 
 // FederationHandler is the NODE door: the Gridwell service over raw
 // gRPC, what a remote mounter's ssh tunnel and the desktop's shell relay
-// dial. Ungated by design and served ONLY on loopback (node.Start binds
-// it to config.FederationAddr; there is no address field to bind it
-// elsewhere) — ssh is the authenticated transport between nodes. Serve
+// dial. Ungated by design and served ONLY on the 0600 unix socket
+// node.listenFederation opens (config.FederationSocket; there is no
+// address form) — ssh is the authenticated transport between nodes. Serve
 // it with NodeProtocols: gRPC over a cleartext tunnel needs HTTP/2
 // without TLS, which plain net/http refuses by default.
 func (s *Server) FederationHandler() http.Handler {
