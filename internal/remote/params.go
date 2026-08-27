@@ -1,8 +1,6 @@
 package remote
 
 import (
-	"github.com/josephburnett/gridwell/internal/config"
-
 	"encoding/json"
 	"fmt"
 	"os"
@@ -51,8 +49,7 @@ func ParseParams(data []byte) (*Params, error) {
 }
 
 // DialConfig resolves the params to a concrete dial.Config, applying the
-// host-side defaults: port 22, addr = the built-in federation port on the
-// remote's loopback (config.DefaultFederationPort), key = the first of ~/.ssh/id_ed25519 / ~/.ssh/id_rsa that exists,
+// host-side defaults: port 22, key = the first of ~/.ssh/id_ed25519 / ~/.ssh/id_rsa that exists,
 // known_hosts = ~/.ssh/known_hosts. home is the plugin host's home directory
 // ("" disables the ~ defaults, forcing explicit paths).
 func (p *Params) DialConfig(home string) (dial.Config, error) {
@@ -63,9 +60,12 @@ func (p *Params) DialConfig(home string) (dial.Config, error) {
 		Addr:       p.Addr,
 	}
 	if p.Host == "" {
-		// DIRECT: addr is the node export as reachable from THIS host;
-		// no ssh fields resolve or default. Host stays "" — the dialer's
-		// transport selector.
+		// DIRECT: addr is the other node's federation socket on THIS
+		// host; no ssh fields resolve or default. Host stays "" — the
+		// dialer's transport selector.
+		if c.Addr == "" {
+			return dial.Config{}, fmt.Errorf("connection params: addr required — the other node's federation socket path")
+		}
 		return c, nil
 	}
 	port := int64(22)
@@ -74,7 +74,9 @@ func (p *Params) DialConfig(home string) (dial.Config, error) {
 	}
 	c.Host = fmt.Sprintf("%s:%d", p.Host, port)
 	if c.Addr == "" {
-		c.Addr = config.FederationAddr(config.DefaultFederationPort)
+		// No default: the remote's federation socket lives under ITS home,
+		// which only the operator knows (~ does not expand through sshd).
+		return dial.Config{}, fmt.Errorf("connection params: addr required — the remote node's federation socket path (its <home>/federation.sock)")
 	}
 	if c.KeyPath == "" {
 		if home == "" {

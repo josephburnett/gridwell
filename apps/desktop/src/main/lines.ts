@@ -5,9 +5,9 @@
 // ServingAddr is the address announced by the serve banner. host is the raw
 // WEB listener host: it may be a wildcard ("0.0.0.0", "::", or "") — Go
 // announces a wildcard bind as its dual-stack listener address "[::]:<port>".
-// federation is the node door's actual loopback address (host:port) — the
-// gRPC export the shell relay dials; since 2026-08-26 it is a separate
-// listener, never on the web address.
+// federation is the node door's unix socket path — the gRPC export the
+// shell relay dials; since 2026-08-26 it is a 0600 socket, never a TCP
+// address, and it is the banner's LAST field (a path may contain spaces).
 // auth, when present, is the web-UI auth token (server.AuthToken — the value
 // of the gridwell_auth cookie): the server prints it when server.yaml sets a
 // password, so this window can authenticate without prompting.
@@ -26,8 +26,8 @@ export interface ServingAddr {
 // parseServingLine extracts the bound address from the serve banner, or null
 // for any other line. This is the boot contract with `gridwell serve`
 // (internal/cli/serve.go servingBanner): the server prints
-//   "gridwell: serving on <host>:<port> (static=... plugins=N federation=<host:port> [auth=<hex>])"
-// with both listeners' ACTUAL bound addresses, only once both are up. A
+//   "gridwell: serving on <host>:<port> (static=... plugins=N auth=<hex> federation=<socket path>)"
+// with the listener's ACTUAL bound address, only once both doors are up. A
 // banner without federation= is not a serve banner: the shell relay would
 // have nothing to dial, so it is null rather than a half-parsed address.
 // The server — not this spawner — owns the "where am I listening" fact,
@@ -47,7 +47,7 @@ export function parseServingLine(line: string): ServingAddr | null {
   if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
   let host = addr.slice(0, i);
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1); // net.JoinHostPort IPv6 form
-  const federation = /\bfederation=([^\s)]+)/.exec(line)?.[1];
+  const federation = /\bfederation=(.+)\)$/.exec(line)?.[1];
   if (!federation) return null;
   const auth = /\bauth=([0-9a-f]{64})\b/.exec(line)?.[1];
   const out: ServingAddr = { host, port, federation };
@@ -65,10 +65,10 @@ export function windowOrigin(a: ServingAddr): string {
 }
 
 // dialAddr is the gRPC node-export target for the shell transport: the
-// federation door the banner announced — always loopback, whatever the
-// web door is bound to.
+// federation socket the banner announced, in grpc-js's unix: form —
+// whatever the web door is bound to.
 export function dialAddr(a: ServingAddr): string {
-  return a.federation;
+  return `unix:${a.federation}`;
 }
 
 function reachableHost(a: ServingAddr): string {

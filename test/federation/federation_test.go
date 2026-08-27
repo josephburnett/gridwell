@@ -26,8 +26,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
 
 	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
@@ -56,20 +59,20 @@ func repoRoot(t *testing.T) string {
 }
 
 // startServe launches the real `gridwell serve` for a home and returns its
-// origin and the federation door's loopback address once the banner
-// announces them. fedPort is the --federation-port to pin ("0" =
-// ephemeral): two nodes on one box cannot share the built-in default.
-func startServe(t *testing.T, bin, home, bind string) (origin, fedAddr string) {
-	origin, fedAddr, _ = startServeProc(t, bin, home, bind, "0")
-	return origin, fedAddr
+// origin and the federation door's socket path once the banner announces
+// them (the socket lives under the home, so two nodes on one box never
+// collide).
+func startServe(t *testing.T, bin, home, bind string) (origin, fedSocket string) {
+	origin, fedSocket, _ = startServeProc(t, bin, home, bind)
+	return origin, fedSocket
 }
 
 // startServeProc is startServe returning a stop() as well, for tests that
 // PARTITION a node mid-session (kill it hard) and bring it back on the
 // same address. stop is idempotent with the registered cleanup.
-func startServeProc(t *testing.T, bin, home, bind, fedPort string) (origin, fedAddr string, stop func()) {
+func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket string, stop func()) {
 	t.Helper()
-	cmd := exec.Command(bin, "serve", "--bind", bind, "--federation-port", fedPort, "--static", "")
+	cmd := exec.Command(bin, "serve", "--bind", bind, "--static", "")
 	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+home, "GRIDWELL_PLUGIN_DIR="+filepath.Dir(bin))
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -112,7 +115,12 @@ func startServeProc(t *testing.T, bin, home, bind, fedPort string) (origin, fedA
 				if fi < 0 {
 					t.Fatalf("banner lacks federation=: %q", line)
 				}
-				fedAddr = strings.TrimRight(strings.Fields(line[fi+len("federation="):])[0], ")")
+				fedSocket = strings.TrimSuffix(line[fi+len("federation="):], ")")
+				if ai := strings.Index(line, "auth="); ai >= 0 {
+					tokensMu.Lock()
+					tokens["http://"+addr] = strings.Fields(line[ai+len("auth="):])[0]
+					tokensMu.Unlock()
+				}
 				go func() { // keep draining so the child never blocks on stderr
 					for l := range lines {
 						if os.Getenv("GW_FED_DEBUG") != "" {
@@ -120,7 +128,7 @@ func startServeProc(t *testing.T, bin, home, bind, fedPort string) (origin, fedA
 						}
 					}
 				}()
-				return "http://" + addr, fedAddr, stop
+				return "http://" + addr, fedSocket, stop
 			}
 		case <-deadline:
 			t.Fatalf("serve for %s never announced", home)
@@ -128,12 +136,41 @@ func startServeProc(t *testing.T, bin, home, bind, fedPort string) (origin, fedA
 	}
 }
 
+// The web door is always password-gated (2026-08-26): startServeProc
+// records each origin's auth token from the serve banner, and every
+// helper below rides it as the cookie a logged-in browser would carry.
+var (
+	tokensMu sync.Mutex
+	tokens   = map[string]string{} // origin → server.AuthToken
+)
+
+type cookieTransport struct{ token string }
+
+func (c cookieTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Cookie", "gridwell_auth="+c.token)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// httpFor is the authenticated client for an origin startServeProc announced.
+func httpFor(origin string) *http.Client {
+	tokensMu.Lock()
+	tok := tokens[origin]
+	tokensMu.Unlock()
+	return &http.Client{Transport: cookieTransport{tok}}
+}
+
+// clientFor is httpFor as an api/rpc client (the foreign-writer calls).
+func clientFor(origin string) *gwrpc.Client {
+	return gwrpc.NewClient(httpFor(origin), origin, connect.WithProtoJSON())
+}
+
 // rpcRaw posts one Connect-JSON call and returns the raw status + body —
 // for asserting on DESIGNED refusals (rpc t.Fatals on any non-200).
 func rpcRaw(t *testing.T, origin, method string, req any) (int, []byte) {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	hr, err := http.Post(origin+"/gridwell.v1.Gridwell/"+method, "application/json", bytes.NewReader(body))
+	hr, err := httpFor(origin).Post(origin+"/gridwell.v1.Gridwell/"+method, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("%s: %v", method, err)
 	}
@@ -146,7 +183,7 @@ func rpcRaw(t *testing.T, origin, method string, req any) (int, []byte) {
 func rpc(t *testing.T, origin, method string, req any) map[string]any {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	hr, err := http.Post(origin+"/gridwell.v1.Gridwell/"+method, "application/json", bytes.NewReader(body))
+	hr, err := httpFor(origin).Post(origin+"/gridwell.v1.Gridwell/"+method, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("%s: %v", method, err)
 	}
@@ -255,7 +292,7 @@ func TestFederationSpawn(t *testing.T) {
 	})["tile"].(map[string]any)
 	// Creation is metadata-only; the body follows through the ONE content
 	// write, routed through the chain by the qualified id.
-	txtRow, err := gwrpc.NewDefaultClient(localOrigin).WriteContent(context.Background(),
+	txtRow, err := clientFor(localOrigin).WriteContent(context.Background(),
 		txt["id"].(string), num(txt["version"]), []byte("# across the spawn gate"))
 	if err != nil {
 		t.Fatalf("WriteContent through the chain: %v", err)
@@ -284,7 +321,7 @@ func TestFederationSpawn(t *testing.T) {
 	if copiedTextID == "" {
 		t.Fatalf("deep copy through the chain missing the text tile: %v", copiedGrid["tiles"])
 	}
-	copiedBody, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), copiedTextID)
+	copiedBody, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), copiedTextID)
 	if err != nil || string(copiedBody) != "# across the spawn gate" {
 		t.Fatalf("deep-copied body through the chain = %q (%v)", copiedBody, err)
 	}
@@ -302,7 +339,7 @@ func TestFederationSpawn(t *testing.T) {
 	if link["objectId"] != well["objectId"] {
 		t.Fatalf("link provenance = %v, want the remote well's object id %v", link["objectId"], well["objectId"])
 	}
-	got, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), txt["id"].(string))
+	got, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), txt["id"].(string))
 	if err != nil {
 		t.Fatalf("ReadContent through the chain: %v", err)
 	}
@@ -330,7 +367,7 @@ func TestFederationSpawn(t *testing.T) {
 	subErr := make(chan error, 1)
 	go func() {
 		defer close(gotEvents)
-		sub, err := gwrpc.NewDefaultClient(localOrigin).Subscribe(ctx)
+		sub, err := clientFor(localOrigin).Subscribe(ctx)
 		if err != nil {
 			subErr <- err
 			return
@@ -372,7 +409,7 @@ func TestFederationSpawn(t *testing.T) {
 			body := fmt.Sprintf("# edited on the remote, take %d", wrote)
 			// The foreign writer speaks the one content write, directly
 			// against the REMOTE node (another device, not this mount).
-			wt, werr := gwrpc.NewDefaultClient(remoteOrigin).WriteContent(
+			wt, werr := clientFor(remoteOrigin).WriteContent(
 				context.Background(), peel(peel(txtID)), version, []byte(body))
 			if werr != nil {
 				t.Fatalf("remote WriteContent: %v", werr)
@@ -441,7 +478,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
-	localOrigin, _, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0", "0")
+	localOrigin, _, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0")
 
 	// 1. The connection is a menu row of its own; the transport's row is
 	//    hidden behind it; the learned root is the chained
@@ -483,11 +520,11 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	body := "# through a declared connection"
-	if _, err := gwrpc.NewDefaultClient(localOrigin).WriteContent(context.Background(),
+	if _, err := clientFor(localOrigin).WriteContent(context.Background(),
 		txt["id"].(string), num(txt["version"]), []byte(body)); err != nil {
 		t.Fatalf("WriteContent through the connection chain: %v", err)
 	}
-	if got, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(context.Background(), txt["id"].(string)); err != nil || string(got) != body {
+	if got, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), txt["id"].(string)); err != nil || string(got) != body {
 		t.Fatalf("ReadContent through the connection chain = %q (%v)", got, err)
 	}
 
@@ -511,7 +548,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	}
 	peel := func(id string) string { return strings.SplitN(id, "/", 2)[1] }
 	remoteTxt := peel(peel(txt["id"].(string)))
-	if rbody, _, _, err := gwrpc.NewDefaultClient(remoteOrigin).ReadContent(context.Background(), remoteTxt); err != nil || string(rbody) != body {
+	if rbody, _, _, err := clientFor(remoteOrigin).ReadContent(context.Background(), remoteTxt); err != nil || string(rbody) != body {
 		t.Fatalf("the remote must be untouched by retirement: %q (%v)", rbody, err)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -52,14 +53,17 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 	}
 	direct, _ := reg.Get("ur1")
 	srv := server.New(reg, server.Config{NodeID: "rnode"})
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// The federation door is a unix socket (2026-08-26); the test sshd
+	// forwards direct-streamlocal to it, exactly like a real sshd.
+	sock := filepath.Join(t.TempDir(), "federation.sock")
+	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	httpSrv := &http.Server{Handler: srv.FederationHandler(), Protocols: server.NodeProtocols()}
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
-	return ln.Addr().String(), direct
+	return sock, direct
 }
 
 // dialThroughSSH assembles the full topology and returns the tunneled client.

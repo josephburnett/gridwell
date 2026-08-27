@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, authHeaders } from './fixtures';
 import { tileAt } from '../e2e/oracle';
 
 // Crosses the browser-mode seam: the full core loop — boot, enter a plugin,
@@ -36,7 +36,7 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
 // (here: through the server oracle, as the desktop app would) still
 // lands in the client's world. url tiles deliberately remain creatable
 // (recording an address is useful without a live view).
-test('the browser offers no shell creation, but views shell tiles fine', async ({ gw, window }) => {
+test('the browser offers no shell creation, but views shell tiles fine', async ({ gw, window, serve }) => {
   await gw.enterPlugin('e2e');
   const f = await gw.focused();
 
@@ -53,7 +53,7 @@ test('the browser offers no shell creation, but views shell tiles fine', async (
   const cy = Math.round(f.cy);
   const res = await fetch(`${gw.origin}/gridwell.v1.Gridwell/CreateTile`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(serve) },
     body: JSON.stringify({
       gridId: f.gridID,
       tile: { kind: 'shell', x: cx, y: cy, w: 1, h: 1, altText: 'desktop shell' },

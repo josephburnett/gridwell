@@ -38,7 +38,7 @@ test('resolves on the serving banner with the ANNOUNCED address, not the request
   const p = boot(child);
   // The banner arrives split across chunks and on stderr — both real.
   child.stderr.write('gridwell: serving on 127.0');
-  child.stderr.write('.0.1:9999 (static=/x plugins=1 federation=127.0.0.1:7777)\n');
+  child.stderr.write('.0.1:9999 (static=/x plugins=1 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
   assert.equal(sc.port, 9999, 'port comes from the banner (server.yaml bind: may override the request)');
   assert.equal(sc.origin, 'http://127.0.0.1:9999');
@@ -51,7 +51,7 @@ test('passes the banner auth token through so the window can authenticate', asyn
   const child = new FakeChild();
   const p = boot(child);
   const token = 'b'.repeat(64);
-  child.stdout.write(`gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1 federation=127.0.0.1:7777 auth=${token})\n`);
+  child.stdout.write(`gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1 auth=${token} federation=/tmp/gw home/federation.sock)\n`);
   const sc = await p;
   assert.equal(sc.auth, token, 'index.ts pre-sets this as the auth cookie — no prompt in the desktop app');
   sc.stop();
@@ -98,12 +98,12 @@ test('"already serving" resolves EXTERNAL: connect, never watch, never kill', as
   const p = boot(child);
   const token = 'c'.repeat(64);
   child.stdout.write(
-    `gridwell: already serving on 127.0.0.1:7001 (static=embedded plugins=2 federation=127.0.0.1:7777 auth=${token})\n`,
+    `gridwell: already serving on 127.0.0.1:7001 (static=embedded plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)\n`,
   );
   const sc = await p;
   assert.equal(sc.external, true);
   assert.equal(sc.origin, 'http://127.0.0.1:7001');
-  assert.equal(sc.dialAddr, '127.0.0.1:7777', 'the shell relay dials the federation door, not the web address');
+  assert.equal(sc.dialAddr, 'unix:/tmp/gw home/federation.sock', 'the shell relay dials the federation socket, not the web address');
   assert.equal(sc.auth, token, 'the RUNNING holder\'s token authenticates this window');
   sc.stop();
   assert.equal(child.killed, false, 'stop() must never signal toward an external server');
@@ -131,7 +131,7 @@ test('first run: "no config" exits → gridwell init → one respawn → ready',
   children[1].emit('exit', 0, null);
   await new Promise((r) => setTimeout(r, 10)); // let the retry serve spawn
   assert.equal(argvs[2][0], 'serve', 'after init, serve is retried once');
-  children[2].stdout.write('gridwell: serving on 127.0.0.1:9999 (static=embedded plugins=1 federation=127.0.0.1:7777)\n');
+  children[2].stdout.write('gridwell: serving on 127.0.0.1:9999 (static=embedded plugins=1 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
   assert.equal(sc.external, false);
   assert.equal(sc.port, 9999);
@@ -189,7 +189,7 @@ test('--no-server connects to a running server via the status banner', async () 
     spawnFn: () => child as unknown as ChildProcess,
     binaryPath: '/fake/gridwell',
   });
-  child.stdout.write('gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 federation=127.0.0.1:7777)\n');
+  child.stdout.write('gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
   assert.equal(sc.external, true);
   assert.equal(sc.origin, 'http://127.0.0.1:10010');

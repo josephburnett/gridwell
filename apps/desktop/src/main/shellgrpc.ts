@@ -27,7 +27,7 @@ interface OpenShellResponse {
 const sessionGoneCodes = new Set<number>([grpc.status.NOT_FOUND, grpc.status.FAILED_PRECONDITION]);
 
 // makeShellDialer loads the proto and returns a ShellDialer bound to the
-// sidecar's gRPC address ("127.0.0.1:<port>").
+// sidecar's federation socket ("unix:<path>").
 export function makeShellDialer(address: string, protoPath: string): ShellDialer {
   const def = protoLoader.loadSync(protoPath, {
     keepCase: true,

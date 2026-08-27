@@ -1,6 +1,6 @@
 // Package sshdialtest provides a minimal REAL ssh server for tests: public-key
 // auth against exactly one authorized key, host-key verification material, and
-// direct-tcpip channel forwarding — everything the ssh plugin's dial path
+// direct-streamlocal channel forwarding — everything the ssh plugin's dial path
 // needs, nothing else. Shared by the sshdial seam test (in-process) and the
 // federation spawn gate (production binaries), so there is one implementation
 // of "a throwaway sshd" instead of a hand-rolled copy per smoke.
@@ -14,7 +14,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"testing"
 
@@ -22,12 +21,14 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// directTCPIP is the SSH direct-tcpip channel-open payload (RFC 4254 §7.2).
-type directTCPIP struct {
-	DestHost string
-	DestPort uint32
-	SrcHost  string
-	SrcPort  uint32
+// directStreamLocal is the direct-streamlocal@openssh.com channel-open
+// payload (OpenSSH PROTOCOL §2.4): what x/crypto/ssh's Client.Dial("unix",
+// path) sends — the only forwarding the federation dial uses since the
+// node door became a unix socket (2026-08-26).
+type directStreamLocal struct {
+	SocketPath string
+	Reserved0  string
+	Reserved1  uint32
 }
 
 // Creds is everything a dialer needs to reach the test sshd: the file paths
@@ -39,7 +40,7 @@ type Creds struct {
 }
 
 // Server starts a real x/crypto ssh server on a loopback port that accepts
-// exactly one freshly-minted client key and forwards direct-tcpip channels to
+// exactly one freshly-minted client key and forwards direct-streamlocal channels to
 // their requested destinations. Key material is written under dir (a
 // t.TempDir()); the listener is torn down with the test.
 func Server(t *testing.T, dir string) Creds {
@@ -178,11 +179,11 @@ func (h *Handle) serve(ln net.Listener) {
 			defer sc.Close()
 			go ssh.DiscardRequests(reqs)
 			for newChan := range chans {
-				if newChan.ChannelType() != "direct-tcpip" {
-					newChan.Reject(ssh.UnknownChannelType, "only direct-tcpip")
+				if newChan.ChannelType() != "direct-streamlocal@openssh.com" {
+					newChan.Reject(ssh.UnknownChannelType, "only direct-streamlocal@openssh.com")
 					continue
 				}
-				var msg directTCPIP
+				var msg directStreamLocal
 				if err := ssh.Unmarshal(newChan.ExtraData(), &msg); err != nil {
 					newChan.Reject(ssh.ConnectionFailed, "bad payload")
 					continue
@@ -192,15 +193,15 @@ func (h *Handle) serve(ln net.Listener) {
 					continue
 				}
 				go ssh.DiscardRequests(chReqs)
-				go pipeTo(ch, net.JoinHostPort(msg.DestHost, strconv.Itoa(int(msg.DestPort))))
+				go pipeTo(ch, msg.SocketPath)
 			}
 		}()
 	}
 }
 
-func pipeTo(ch ssh.Channel, addr string) {
+func pipeTo(ch ssh.Channel, socketPath string) {
 	defer ch.Close()
-	target, err := net.Dial("tcp", addr)
+	target, err := net.Dial("unix", socketPath)
 	if err != nil {
 		return
 	}

@@ -42,6 +42,15 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	if len(cfg.Plugins) == 0 {
 		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind local --name <name>`", cfgPath)
 	}
+	// The web door is never open (owner decision 2026-08-26): a home
+	// without a password does not serve. init mints one, so this only
+	// bites a hand-edited file — and says how to fix it.
+	if cfg.Web.Password == "" {
+		return nil, fmt.Errorf("%s has no web.password; `gridwell init` mints one, or set web.password yourself", cfgPath)
+	}
+	if cfg.Federation.Socket == "" {
+		cfg.Federation.Socket = config.FederationSocket(home)
+	}
 	// The mount cache lives beside (never inside) the plugin DBs:
 	// disposable, excluded from backup, per-mount files under one dir.
 	cfg.CacheDir = filepath.Join(home, "cache")
@@ -104,6 +113,11 @@ func InitPlugin(home, kind, name string, conf map[string]string) (id string, err
 	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
 		return "", fmt.Errorf("node id: %w", err)
 	}
+	// The web door is never open: mint the password with the first
+	// plugin so a fresh home is gated before first serve (2026-08-26).
+	if _, err := config.EnsureWebPassword(home, config.MintPassword); err != nil {
+		return "", fmt.Errorf("web password: %w", err)
+	}
 	return id, nil
 }
 
@@ -132,7 +146,7 @@ type Options struct {
 type Node struct {
 	Reg *plugin.Registry
 	// Ln is the web door's listener (bound where web.bind says); FedLn is
-	// the federation door's (loopback, always).
+	// the federation door's unix socket, nil when the door is closed.
 	Ln    net.Listener
 	FedLn net.Listener
 
@@ -169,9 +183,9 @@ func Start(opts Options) (*Node, error) {
 	requestCtx, cancel := context.WithCancel(context.Background())
 	// Two doors, two listeners (owner decision 2026-08-26): the web door
 	// binds where config says (a tailnet address is fine — it is
-	// password-gated); the federation door binds LOOPBACK, always — the
-	// port is the only configurable fact, so no config can expose the
-	// ungated gRPC export to a network. ssh tunnels terminate on loopback.
+	// password-gated); the federation door is a 0600 UNIX SOCKET, or
+	// closed — never TCP, so no config can expose the ungated gRPC export
+	// to another uid, let alone a network. ssh tunnels terminate on it.
 	webSrv := &http.Server{
 		Handler:           srv.WebHandler(),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -189,18 +203,40 @@ func Start(opts Options) (*Node, error) {
 		reg.Close()
 		return nil, err
 	}
-	fedLn, err := net.Listen("tcp", config.FederationAddr(cfg.Federation.Port))
-	if err != nil {
-		ln.Close()
-		cancel()
-		reg.Close()
-		return nil, fmt.Errorf("federation port: %w", err)
+	var fedLn net.Listener
+	if sock := cfg.Federation.Socket; sock != "" {
+		fedLn, err = listenFederation(sock)
+		if err != nil {
+			ln.Close()
+			cancel()
+			reg.Close()
+			return nil, err
+		}
 	}
 	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
 }
 
-// ServeBackground starts serving on both listeners; the returned channel
-// carries the first serve error (never http.ErrServerClosed).
+// listenFederation opens the federation socket: a stale file from a
+// crashed serve is unlinked first (the serve lock guarantees no live
+// holder), and the socket is 0600 — the kernel is the gate.
+func listenFederation(path string) (net.Listener, error) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("federation socket: %w", err)
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, fmt.Errorf("federation socket: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		ln.Close()
+		return nil, fmt.Errorf("federation socket: %w", err)
+	}
+	return ln, nil
+}
+
+// ServeBackground starts serving on the listeners (the federation door
+// only when open); the returned channel carries the first serve error
+// (never http.ErrServerClosed).
 func (n *Node) ServeBackground() <-chan error {
 	errCh := make(chan error, 2)
 	serve := func(s *http.Server, ln net.Listener) {
@@ -209,7 +245,9 @@ func (n *Node) ServeBackground() <-chan error {
 		}
 	}
 	go serve(n.webSrv, n.Ln)
-	go serve(n.fedSrv, n.FedLn)
+	if n.FedLn != nil {
+		go serve(n.fedSrv, n.FedLn)
+	}
 	return errCh
 }
 
@@ -219,7 +257,10 @@ func (n *Node) Close() error {
 	n.cancelRequest()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := errors.Join(n.webSrv.Shutdown(ctx), n.fedSrv.Shutdown(ctx))
+	err := n.webSrv.Shutdown(ctx)
+	if n.FedLn != nil {
+		err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
+	}
 	n.srv.Close()
 	n.Reg.Close()
 	return err
@@ -243,6 +284,11 @@ func InitProvider(home, kind, name string, conf map[string]string) (id string, e
 	}
 	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
 		return "", fmt.Errorf("node id: %w", err)
+	}
+	// The web door is never open: mint the password with the first
+	// plugin so a fresh home is gated before first serve (2026-08-26).
+	if _, err := config.EnsureWebPassword(home, config.MintPassword); err != nil {
+		return "", fmt.Errorf("web password: %w", err)
 	}
 	return id, nil
 }

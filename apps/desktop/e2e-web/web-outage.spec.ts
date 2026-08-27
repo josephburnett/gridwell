@@ -1,10 +1,9 @@
 import { test as base, expect, Page } from '@playwright/test';
-import { spawn, ChildProcess } from 'node:child_process';
-import * as net from 'node:net';
+import { ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
-import { serveBin } from './fixtures';
+import { Served, spawnServe, freePort, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
@@ -21,21 +20,11 @@ import { tileAt } from '../e2e/oracle';
 // restartable server: same seedHome, same binary, same flags — plus
 // kill()/start() the test drives.
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const port = (srv.address() as net.AddressInfo).port;
-      srv.close(() => resolve(port));
-    });
-  });
-}
 
 class RestartableServe {
   child: ChildProcess | null = null;
+  token = '';
   constructor(
     readonly home: string,
     readonly port: number,
@@ -43,30 +32,13 @@ class RestartableServe {
   get origin(): string {
     return `http://127.0.0.1:${this.port}`;
   }
+  get served(): Served {
+    return { origin: this.origin, home: this.home, token: this.token, child: this.child! };
+  }
   async start(): Promise<void> {
-    const child = spawn(
-      serveBin(),
-      ['serve', '--bind', `127.0.0.1:${this.port}`, '--static', path.join(REPO_ROOT, 'web')],
-      { env: { ...process.env, GRIDWELL_HOME: this.home }, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let output = '';
-    child.stdout!.on('data', (d) => (output += d));
-    child.stderr!.on('data', (d) => (output += d));
-    this.child = child;
-    const deadline = Date.now() + 15_000;
-    for (;;) {
-      try {
-        const res = await fetch(this.origin + '/');
-        if (res.ok) break;
-      } catch {
-        // not up yet
-      }
-      if (Date.now() > deadline) {
-        child.kill('SIGKILL');
-        throw new Error(`gridwell serve not ready on ${this.origin}:\n${output}`);
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    const served = await spawnServe(this.home, this.port);
+    this.child = served.child;
+    this.token = served.token; // the same password, so the same token across restarts
   }
   // kill is the OUTAGE: SIGKILL, so no graceful shutdown, no goodbye on any
   // stream — the same shape as a dropped link or a crashed box. Waits for
@@ -98,6 +70,7 @@ const test = base.extend<Fixtures>({
     fs.rmSync(home, { recursive: true, force: true });
   },
   window: async ({ outage, page }, use) => {
+    await authenticate(page, outage.served);
     await page.goto(outage.origin + '/?e2e=1');
     await page.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
     await use(page);

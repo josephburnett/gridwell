@@ -2,9 +2,10 @@ package node
 
 import (
 	"context"
-	"net"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -14,10 +15,12 @@ import (
 )
 
 // The listener seam of the two-door decision (2026-08-26): Start binds
-// the web door where config says and the federation door on LOOPBACK
-// regardless — the config carries a port, never an address, so the
-// ungated gRPC export cannot be exposed to a network by any server.yaml.
-func TestStartBindsFederationOnLoopbackOnly(t *testing.T) {
+// the web door where config says and the federation door as a 0600 UNIX
+// SOCKET at federation.socket — never TCP — so the ungated gRPC export
+// is reachable by the owning uid only, and the web door keeps its
+// Connect API. A fresh home's init minted the password, so the web door
+// is gated from the first serve.
+func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	home := t.TempDir()
 	if _, err := InitPlugin(home, "local", "home", nil); err != nil {
 		t.Fatal(err)
@@ -26,24 +29,25 @@ func TestStartBindsFederationOnLoopbackOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if cfg.Web.Password == "" || cfg.Federation.Socket != filepath.Join(home, "federation.sock") {
+		t.Fatalf("built config: web %+v federation %+v", cfg.Web, cfg.Federation)
+	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	cfg.Federation.Port = 0
 	n, err := Start(Options{Home: home, Cfg: cfg, Factories: WithNativeLocal(nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = n.Close() })
 	n.ServeBackground()
 
-	fedHost, _, _ := net.SplitHostPort(n.FedLn.Addr().String())
-	if fedHost != "127.0.0.1" {
-		t.Fatalf("federation door bound %s, want 127.0.0.1", n.FedLn.Addr())
+	if n.FedLn.Addr().Network() != "unix" || n.FedLn.Addr().String() != cfg.Federation.Socket {
+		t.Fatalf("federation door = %s %s, want the unix socket %s", n.FedLn.Addr().Network(), n.FedLn.Addr(), cfg.Federation.Socket)
 	}
-	if n.FedLn.Addr().String() == n.Ln.Addr().String() {
-		t.Fatal("the two doors share one listener")
+	st, err := os.Stat(cfg.Federation.Socket)
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("socket mode = %v (%v), want 0600", st.Mode(), err)
 	}
-	info := func(addr string) error {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	info := func(target string) error {
+		conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +55,7 @@ func TestStartBindsFederationOnLoopbackOnly(t *testing.T) {
 		_, err = gridwellv1.NewGridwellClient(conn).Info(context.Background(), &gridwellv1.InfoRequest{})
 		return err
 	}
-	if err := info(n.FedLn.Addr().String()); err != nil {
+	if err := info("unix:" + cfg.Federation.Socket); err != nil {
 		t.Fatalf("federation door: %v", err)
 	}
 	if err := info(n.Ln.Addr().String()); err == nil {
@@ -62,7 +66,24 @@ func TestStartBindsFederationOnLoopbackOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if res.StatusCode == http.StatusNotFound {
-		t.Fatal("the web door lost its Connect API")
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("the web door answered %d without the cookie, want 401 (the password is required)", res.StatusCode)
+	}
+	if err := n.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(cfg.Federation.Socket); !os.IsNotExist(err) {
+		t.Errorf("socket not unlinked on close: %v", err)
+	}
+	// A home without a password does not serve.
+	bare := t.TempDir()
+	if _, err := InitPlugin(bare, "local", "home", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bare, "server.yaml"), []byte("plugins:\n  - id: abc1234\n    name: home\n    kind: local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BuildConfig(bare, filepath.Join(bare, "server.yaml")); err == nil || !strings.Contains(err.Error(), "web.password") {
+		t.Fatalf("a passwordless home must refuse to serve, naming web.password: %v", err)
 	}
 }

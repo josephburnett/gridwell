@@ -39,11 +39,11 @@ type Config struct {
 	User       string // SSH user (ssh only)
 	KeyPath    string // private key file (ssh only)
 	KnownHosts string // known_hosts file (ssh only; mandatory — no blind trust)
-	// Addr is the remote node's federation door (h2c gRPC) — as seen ON
-	// THE REMOTE HOST for an ssh bridge (its loopback federation.port,
-	// 127.0.0.1:8081 by default), as reachable FROM THIS HOST for a direct
-	// connection (another node on this machine: the door never leaves
-	// loopback).
+	// Addr is the remote node's federation door: its UNIX SOCKET PATH —
+	// on the remote host for an ssh bridge (its federation.socket,
+	// <home>/federation.sock by default), on this host for a direct
+	// connection (another node on this machine). Never a TCP address:
+	// the door does not exist in that form (owner decision 2026-08-26).
 	Addr string
 }
 
@@ -77,7 +77,7 @@ type redialer struct {
 // caller's (gRPC's) backoff.
 func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
 	if c := r.current(); c != nil {
-		conn, err := c.Dial("tcp", addr)
+		conn, err := c.Dial("unix", addr)
 		if err == nil {
 			return conn, nil
 		}
@@ -87,7 +87,9 @@ func (r *redialer) dial(_ string, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := c.Dial("tcp", addr)
+	// direct-streamlocal@openssh.com: the remote's federation door is a
+	// unix socket, never a port (2026-08-26).
+	conn, err := c.Dial("unix", addr)
 	if err != nil {
 		r.drop(c)
 		return nil, err
@@ -193,11 +195,13 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, closer func(), err erro
 		hostKey: hostKey,
 	}
 
-	conn, err := grpc.NewClient(cfg.Addr,
-		grpc.WithContextDialer(func(_ context.Context, a string) (net.Conn, error) {
-			// The dialer ignores grpc's notion of the address and opens addr
-			// on the remote host through the (self-healing) SSH session.
-			return rd.dial("tcp", a)
+	// A fixed passthrough target: grpc's resolvers cannot carry a socket
+	// path (they would strip its leading slash), and the dialer never
+	// needs it — it opens cfg.Addr on the remote host through the
+	// (self-healing) SSH session, whatever grpc hands it.
+	conn, err := grpc.NewClient("passthrough:///federation",
+		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+			return rd.dial("unix", cfg.Addr)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		// HTTP/2 pings through the tunnel: a session that dies WITHOUT an
@@ -234,14 +238,13 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, closer func(), err erro
 }
 
 // dialDirect is the DIRECT transport: a plain gRPC connection to another
-// node's federation door, same keepalive and healing posture as the
-// tunnel — a dead peer surfaces as Unavailable (never a silent stale
-// stream) and a revived one heals in seconds. No auth on this path: since
-// 2026-08-26 the door only binds loopback, so "direct" means another
-// node on this same machine; across machines the ssh bridge is the one
-// authenticated transport.
+// node's federation socket on this machine, same keepalive and healing
+// posture as the tunnel — a dead peer surfaces as Unavailable (never a
+// silent stale stream) and a revived one heals in seconds. No auth on
+// this path: the socket's 0600 mode is the gate (same uid only); across
+// machines the ssh bridge is the one authenticated transport.
 func dialDirect(addr string) (gridwellv1.GridwellClient, func(), error) {
-	conn, err := grpc.NewClient(addr,
+	conn, err := grpc.NewClient("unix:"+addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:    30 * time.Second,

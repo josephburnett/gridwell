@@ -194,3 +194,29 @@ func TestAuthLoginPageDirect(t *testing.T) {
 		t.Fatalf("authed GET %s = %d, want 303 to /", authLoginPath, res.StatusCode)
 	}
 }
+
+// The TOKEN LOGIN (2026-08-26): a GET on the login path carrying the
+// banner's token sets the cookie and lands home — how a native shell
+// that owns a webview's cookie jar (mobile) authenticates without a
+// prompt; a wrong token is the login page, 401, no cookie.
+func TestTokenLogin(t *testing.T) {
+	hs, _ := newAuthTestServer(t, "hunter2")
+	client := noRedirect(hs)
+	res, _ := get(t, client, TokenLoginURL(hs.URL, "hunter2"), "")
+	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/" {
+		t.Fatalf("token login = %d %q, want 303 to /", res.StatusCode, res.Header.Get("Location"))
+	}
+	var cookie string
+	for _, c := range res.Cookies() {
+		if c.Name == AuthCookieName {
+			cookie = c.Value
+		}
+	}
+	if cookie != AuthToken("hunter2") {
+		t.Fatalf("cookie = %q", cookie)
+	}
+	res, body := get(t, client, TokenLoginURL(hs.URL, "wrong"), "")
+	if res.StatusCode != http.StatusUnauthorized || len(res.Cookies()) != 0 || !strings.Contains(body, "wrong password") {
+		t.Fatalf("wrong token = %d cookies=%d", res.StatusCode, len(res.Cookies()))
+	}
+}

@@ -32,6 +32,19 @@ export interface GridSnapshot {
   tiles?: Tile[];
 }
 
+// The web door is always password-gated (2026-08-26): the fixtures
+// register each served node's auth token BY ORIGIN (two nodes in one
+// test have two passwords), and every RPC carries the right one as the
+// cookie a browser would.
+const authTokens = new Map<string, string>();
+export function setOracleAuth(origin: string, token: string): void {
+  authTokens.set(origin, token);
+}
+function authHeaders(origin: string): Record<string, string> {
+  const token = authTokens.get(origin);
+  return token ? { Cookie: `gridwell_auth=${token}` } : {};
+}
+
 // getGrid fetches a grid's tiles from the server. Throws on a non-OK Connect
 // response (the body carries the Connect error JSON).
 export async function getGrid(origin: string, gridId: string): Promise<GridSnapshot> {
@@ -40,6 +53,7 @@ export async function getGrid(origin: string, gridId: string): Promise<GridSnaps
     headers: {
       'Content-Type': 'application/json',
       'Connect-Protocol-Version': '1',
+      ...authHeaders(origin),
     },
     body: JSON.stringify({ gridId }),
   });
@@ -76,7 +90,7 @@ function* deEnvelope(body: Buffer): Generator<{ flags: number; payload: Buffer }
 export async function getTileContent(origin: string, tileId: string): Promise<string> {
   const res = await fetch(`${origin}/${SERVICE}/ReadContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
+    headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
     body: envelope(0, Buffer.from(JSON.stringify({ tileId }))),
   });
   if (!res.ok) throw new Error(`ReadContent(${tileId}) failed: ${res.status} ${await res.text()}`);
@@ -108,7 +122,7 @@ export async function writeContent(
 ): Promise<void> {
   const res = await fetch(`${origin}/${SERVICE}/WriteContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
+    headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
     body: envelope(
       0,
       Buffer.from(JSON.stringify({ tileId, version, data: bytes.toString('base64') })),
@@ -142,7 +156,7 @@ export async function placeTile(
 ): Promise<void> {
   const res = await fetch(`${origin}/${SERVICE}/PlaceTile`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
     body: JSON.stringify({ tileId, version: Number(version ?? 0), gridId, x, y, w, h }),
   });
   if (!res.ok) {

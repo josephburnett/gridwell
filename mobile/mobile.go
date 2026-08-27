@@ -42,6 +42,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
+	"github.com/josephburnett/gridwell/internal/server"
 	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
 	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
 	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
@@ -55,9 +56,12 @@ var (
 )
 
 // Start brings the node up for the given home directory (the app's
-// private storage; created if absent) and returns the loopback origin the
-// webview should load, e.g. "http://127.0.0.1:53712". Idempotent while
-// running.
+// private storage; created if absent) and returns the URL the webview
+// should load: the TOKEN LOGIN on the loopback origin, e.g.
+// "http://127.0.0.1:53712/login?token=<hex>" — the web door is always
+// password-gated (2026-08-26; first-run init mints the password), and the
+// webview owns its own cookie jar, so the first load authenticates it and
+// redirects home. Idempotent while running.
 func Start(home string) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -83,7 +87,9 @@ func Start(home string) (string, error) {
 		return "", err
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	cfg.Federation.Port = 0 // an ephemeral loopback port: the phone is mounted by nobody
+	// The federation door stays CLOSED on the phone: nobody mounts it, and
+	// iOS container paths overrun the unix-socket path limit anyway.
+	cfg.Federation.Socket = ""
 	cfg.DisableShells = true
 	n, err := node.Start(node.Options{
 		ProviderFactories: inProcessProviderFactories(),
@@ -110,7 +116,7 @@ func Start(home string) (string, error) {
 		}
 	}()
 	running = n
-	origin = "http://" + n.Ln.Addr().String()
+	origin = server.TokenLoginURL("http://"+n.Ln.Addr().String(), cfg.Web.Password)
 	return origin, nil
 }
 

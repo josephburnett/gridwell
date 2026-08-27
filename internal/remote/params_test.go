@@ -43,7 +43,16 @@ func TestDialConfigDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// addr has NO default (2026-08-26): the remote's federation socket
+	// lives under its home, which only the operator knows.
 	p, err := ParseParams([]byte(`{"host":"rtb","user":"joe"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DialConfig(home); err == nil || !strings.Contains(err.Error(), "addr required") {
+		t.Fatalf("missing addr must refuse naming the socket: %v", err)
+	}
+	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","addr":"/home/joe/.gridwell/federation.sock"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,8 +63,8 @@ func TestDialConfigDefaults(t *testing.T) {
 	if cfg.Host != "rtb:22" {
 		t.Errorf("default port: host = %q, want rtb:22", cfg.Host)
 	}
-	if cfg.Addr != "127.0.0.1:8081" { // the built-in federation port
-		t.Errorf("default addr = %q, want the built-in gridwell bind", cfg.Addr)
+	if cfg.Addr != "/home/joe/.gridwell/federation.sock" {
+		t.Errorf("addr = %q", cfg.Addr)
 	}
 	if cfg.KeyPath != filepath.Join(sshDir, "id_rsa") {
 		t.Errorf("key default = %q, want the existing id_rsa", cfg.KeyPath)
@@ -78,7 +87,7 @@ func TestDialConfigDefaults(t *testing.T) {
 	}
 
 	// No home dir and no explicit paths: refuse loudly rather than guess.
-	p, _ = ParseParams([]byte(`{"host":"rtb","user":"joe"}`))
+	p, _ = ParseParams([]byte(`{"host":"rtb","user":"joe","addr":"/r/federation.sock"}`))
 	if _, err := p.DialConfig(""); err == nil {
 		t.Error("no home and no key path must be refused")
 	}
@@ -100,7 +109,7 @@ func TestDialConfigExpandsUserSuppliedTilde(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := ParseParams([]byte(`{"host":"rtb","user":"joe","key":"~/.ssh/foo_key","known_hosts":"~/.ssh/known_hosts"}`))
+	p, err := ParseParams([]byte(`{"host":"rtb","user":"joe","addr":"/r/federation.sock","key":"~/.ssh/foo_key","known_hosts":"~/.ssh/known_hosts"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +125,7 @@ func TestDialConfigExpandsUserSuppliedTilde(t *testing.T) {
 	}
 
 	// Bare "~" expands to home itself.
-	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","key":"~"}`))
+	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","addr":"/r/federation.sock","key":"~"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +138,7 @@ func TestDialConfigExpandsUserSuppliedTilde(t *testing.T) {
 
 	// No home to expand against: pass the literal string through rather
 	// than guess, so the resulting open failure names it exactly.
-	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","key":"~/.ssh/foo_key","known_hosts":"/kh"}`))
+	p, err = ParseParams([]byte(`{"host":"rtb","user":"joe","addr":"/r/federation.sock","key":"~/.ssh/foo_key","known_hosts":"/kh"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

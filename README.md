@@ -154,9 +154,9 @@ by door in `~/.gridwell/server.yaml`:
 ```yaml
 web:                       # browsers + the desktop window
   bind: "100.64.0.7:8080"  # your Tailscale IP
-  password: "something long"
+  password: "something long"   # required; `gridwell init` mints one
 federation:                # other nodes mounting this one, via ssh
-  port: 8081               # loopback only — a port, never an address
+  socket: ~/.gridwell/federation.sock   # a 0600 unix socket — never TCP
 ```
 
 Give the web door a reachable address,
@@ -165,7 +165,9 @@ then run `gridwell serve`. In a browser, live url tiles stay frozen.
 Everything else — grids, text, wells, live shells, navigation — works,
 touch included.
 
-The browser UI can require a password (`web.password`). A browser gets a login page once, then holds a cookie that never expires —
+The browser UI always requires a password (`web.password` — `gridwell
+init` mints a random one; set your own to share the origin with a
+phone). A browser gets a login page once, then holds a cookie that never expires —
 but the cookie is checked against the *current* password, so changing the
 password signs every browser out. The desktop app never prompts: it
 authenticates its own window automatically.
@@ -183,17 +185,17 @@ is sacred); they just can never attach a terminal here.
 
 Note: the password gates the web door. The gRPC node export (federation,
 the desktop's shell transport) is unauthenticated and therefore **only
-ever binds loopback** — `federation.port` is a port, not an address, so
-no config can expose it; ssh is the one authenticated transport between
-nodes. Without a password the web door is open to whoever can reach
-`web.bind`: bind loopback or a VPN-only address (Tailscale is the
-intended transport), never an open interface. `gridwell serve` warns
-loudly when the web bind is not loopback and no password is set. (The
-flat `bind:` / `password:` keys still load, with a deprecation notice.)
+exists as a unix socket**, mode 0600 — the kernel admits your uid and
+nobody else; there is no TCP form, so no config can expose it. ssh is
+the one authenticated transport between nodes. Bind the web door to
+loopback or a VPN-only address (Tailscale is the intended transport),
+never an open interface. (The flat `bind:` / `password:` keys still
+load, with a deprecation notice.)
 
 To mount remote nodes, the remote just runs `gridwell serve`; its
-`federation.port` (8081 by default) is what the connection's `addr`
-names, reached through ssh.
+`federation.socket` path (`<home>/federation.sock` by default) is what
+the connection's `addr` names — required, no default — reached through
+ssh's unix-socket forwarding.
 On the mounting machine, register the remote plugin once:
 
 ```sh

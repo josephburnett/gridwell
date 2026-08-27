@@ -329,11 +329,10 @@ func TestEnsureNodeID(t *testing.T) {
 }
 
 // TestLoad_doors pins the grouped-by-door shape (owner decision
-// 2026-08-26): web.bind / web.password and federation.port load; the
+// 2026-08-26): web.bind / web.password and federation.socket load; the
 // legacy flat bind: / password: still load, folded into the web door
-// with a deprecation each; the federation port is a plain int with a
-// built-in default and a presence bit; and a config REWRITE keeps a
-// legacy file's keys (they are struct fields, not probe-only).
+// with a deprecation each; and a config REWRITE keeps a legacy file's
+// keys (they are struct fields, not probe-only).
 func TestLoad_doors(t *testing.T) {
 	write := func(t *testing.T, yml string) string {
 		t.Helper()
@@ -343,12 +342,12 @@ func TestLoad_doors(t *testing.T) {
 		}
 		return f
 	}
-	nested, err := Load(write(t, "web:\n  bind: \"100.64.0.7:8080\"\n  password: hunter2\nfederation:\n  port: 9001\nplugins: []\n"))
+	nested, err := Load(write(t, "web:\n  bind: \"100.64.0.7:8080\"\n  password: hunter2\nfederation:\n  socket: /run/gw.sock\nplugins: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if nested.Web.Bind != "100.64.0.7:8080" || !nested.Web.BindSet || nested.Web.Password != "hunter2" ||
-		nested.Federation.Port != 9001 || !nested.Federation.PortSet || len(nested.Deprecations) != 0 {
+		nested.Federation.Socket != "/run/gw.sock" || len(nested.Deprecations) != 0 {
 		t.Errorf("nested = %+v", nested)
 	}
 	legacy, err := Load(write(t, "bind: \"100.64.0.7:8080\"\npassword: hunter2\nplugins: []\n"))
@@ -358,14 +357,18 @@ func TestLoad_doors(t *testing.T) {
 	if legacy.Web.Bind != "100.64.0.7:8080" || !legacy.Web.BindSet || legacy.Web.Password != "hunter2" || len(legacy.Deprecations) != 2 {
 		t.Errorf("legacy fold = %+v deprecations %v", legacy.Web, legacy.Deprecations)
 	}
-	if legacy.Federation.Port != DefaultFederationPort || legacy.Federation.PortSet {
-		t.Errorf("federation default = %+v", legacy.Federation)
+	tilde, err := Load(write(t, "federation:\n  socket: ~/gw.sock\nplugins: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if userHome, _ := os.UserHomeDir(); tilde.Federation.Socket != filepath.Join(userHome, "gw.sock") {
+		t.Errorf("~ not expanded in federation.socket: %q", tilde.Federation.Socket)
 	}
 	silent, err := Load(write(t, "plugins: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if silent.Web.Bind != Defaults.Web.Bind || silent.Web.BindSet || silent.Federation.Port != DefaultFederationPort || silent.Federation.PortSet {
+	if silent.Web.Bind != Defaults.Web.Bind || silent.Web.BindSet || silent.Federation.Socket != "" {
 		t.Errorf("silent = web %+v federation %+v", silent.Web, silent.Federation)
 	}
 	// A rewrite (AppendPlugin re-marshals the struct) keeps a legacy
@@ -384,7 +387,36 @@ func TestLoad_doors(t *testing.T) {
 	if after.Web.Password != "hunter2" {
 		t.Errorf("legacy password lost across a rewrite: %+v", after.Web)
 	}
-	if FederationAddr(9001) != "127.0.0.1:9001" {
-		t.Error("the federation door must be IPv4 loopback")
+}
+
+// TestEnsureWebPassword: the web door is never open (2026-08-26) — init
+// mints a password into a fresh home, keeps an existing one (nested or
+// legacy) untouched, and the mint is real entropy, not a constant.
+func TestEnsureWebPassword(t *testing.T) {
+	home := t.TempDir()
+	if err := AppendPlugin(home, PluginConfig{ID: "p1", Name: "e2e", Kind: "local"}); err != nil {
+		t.Fatal(err)
+	}
+	minted, err := EnsureWebPassword(home, MintPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(minted) != 32 || minted == MintPassword() {
+		t.Fatalf("mint = %q", minted)
+	}
+	again, err := EnsureWebPassword(home, MintPassword)
+	if err != nil || again != minted {
+		t.Fatalf("second ensure re-minted: %q vs %q (%v)", again, minted, err)
+	}
+	cfg, err := Load(filepath.Join(home, "server.yaml"))
+	if err != nil || cfg.Web.Password != minted {
+		t.Fatalf("minted password not persisted under web: %+v %v", cfg.Web, err)
+	}
+	legacyHome := t.TempDir()
+	if err := os.WriteFile(filepath.Join(legacyHome, "server.yaml"), []byte("password: keepme\nplugins: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := EnsureWebPassword(legacyHome, MintPassword); err != nil || got != "keepme" {
+		t.Fatalf("legacy password not honored: %q %v", got, err)
 	}
 }

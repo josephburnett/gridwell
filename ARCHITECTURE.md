@@ -126,10 +126,12 @@ Connect handler behind the password gate — the `web.bind` listener,
 bindable to a network; `FederationHandler` is the raw-gRPC node export,
 whose unary methods delegate straight into the Connect handler and whose
 streams (`OpenShell`, `WriteContent`) route by the id in their first
-message — served on its own listener at `127.0.0.1:<federation.port>`,
-never elsewhere (the config carries a port, not an address; ssh is the
-authenticated transport between nodes). A remote mounter and a browser
-exercise the same routing code through different doors.
+message — served on its own listener, the 0600 unix socket at
+`federation.socket`, never TCP (the kernel gates it to the owning uid;
+ssh's direct-streamlocal forwarding is the authenticated transport
+between nodes). The web door always has a password (`gridwell init`
+mints one). A remote mounter and a browser exercise the same routing
+code through different doors.
 
 `Info` handshakes are timeout-bounded and cached per uuid after first
 success (invalidated on `SetRootView`, since root framing rides the
@@ -303,8 +305,8 @@ persistence is the session's system of record (a documented charter-§7
 exception, like processes and files). Teardown captures a final frame for
 the freeze but never depends on the capture succeeding.
 
-**Shell transport.** `shellstreams.ts` dials the sidecar's federation door
-(the banner's `federation=` address, loopback) and
+**Shell transport.** `shellstreams.ts` dials the sidecar's federation
+socket (the banner's `federation=` path, `unix:`) and
 relays gRPC `OpenShell` per pane over IPC (replace-on-open, at-most-once
 exit, no-op after close — unit-tested against a fake dialer). Browsers get
 frozen shell previews, caps-gated like live url tiles.

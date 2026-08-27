@@ -16,8 +16,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 )
 
 func TestDirectConnectSpawn(t *testing.T) {
@@ -32,8 +30,8 @@ func TestDirectConnectSpawn(t *testing.T) {
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
-	// remoteAddr is the FEDERATION door (loopback) — the only address a
-	// connection can dial since 2026-08-26; the web origin is not it.
+	// remoteAddr is the FEDERATION door — its unix socket path, the only
+	// thing a connection can dial since 2026-08-26; the web origin is not it.
 	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
 	// Node B: local + the builtin transport. A DIRECT connection — addr
@@ -81,11 +79,11 @@ func TestDirectConnectSpawn(t *testing.T) {
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
-	if _, err := gwrpc.NewDefaultClient(localOrigin).WriteContent(ctx,
+	if _, err := clientFor(localOrigin).WriteContent(ctx,
 		txt["id"].(string), num(txt["version"]), []byte("direct, no ssh anywhere")); err != nil {
 		t.Fatalf("write through direct chain: %v", err)
 	}
-	body, _, _, err := gwrpc.NewDefaultClient(localOrigin).ReadContent(ctx, txt["id"].(string))
+	body, _, _, err := clientFor(localOrigin).ReadContent(ctx, txt["id"].(string))
 	if err != nil || string(body) != "direct, no ssh anywhere" {
 		t.Fatalf("read through direct chain = %q (%v)", body, err)
 	}

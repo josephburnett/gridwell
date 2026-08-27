@@ -5,12 +5,13 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -86,38 +87,34 @@ type WebConfig struct {
 	// (the desktop sidecar's ephemeral loopback port) fill in only when
 	// the config is silent.
 	BindSet bool `yaml:"-"`
-	// Password, when non-empty, gates the web UI: every HTTP request must
-	// carry the auth cookie (obtained by entering this password on the
-	// login page), and the cookie is checked against the CURRENT password
-	// — change it and every browser must log in again. Plaintext by design
-	// (single-tenant; the file is the secret). The desktop app
-	// authenticates itself from the serve banner and never prompts. The
-	// federation door is not gated by it — it never leaves loopback.
+	// Password gates the web UI and is REQUIRED (owner decision
+	// 2026-08-26): every HTTP request must carry the auth cookie (from
+	// the login page, or the token-login the desktop and mobile shells
+	// use), checked against the CURRENT password — change it and every
+	// browser must log in again. `gridwell init` mints one (MintPassword)
+	// so a fresh home is never open; serve refuses a home without one
+	// (BuildConfig). Plaintext by design (single-tenant; the file is the
+	// secret). The federation door is not gated by it — it is a 0600
+	// unix socket, gated by the kernel.
 	Password string `yaml:"password,omitempty"`
 }
 
-// FederationConfig is the node door's configuration: a PORT, never an
-// address. The export binds 127.0.0.1 by construction — there is no
-// field that could open it on a network, because ssh is the one
-// authenticated transport between nodes and an unauthenticated export
-// on a reachable address was the door this shape exists to close.
+// FederationConfig is the node door's configuration: a UNIX SOCKET path,
+// never a TCP address (owner decision 2026-08-26: "federation exposed
+// only by socket, no fallback"). The kernel enforces who may connect —
+// the socket is created 0600, so only the owning uid reaches the
+// ungated gRPC export; other users and sandboxed apps on the machine
+// cannot, which loopback TCP could never promise. ssh tunnels terminate
+// on the socket (direct-streamlocal); a remote entry's addr names it.
+// "" = the door is closed (no listener) — the mobile node, which nobody
+// mounts. BuildConfig fills the default (FederationSocket) for serve.
 type FederationConfig struct {
-	Port int `yaml:"port,omitempty"`
-	// PortSet is derived by Load, never stored: the file names a port
-	// (same role as WebConfig.BindSet for `serve --federation-port-default`).
-	PortSet bool `yaml:"-"`
+	Socket string `yaml:"socket,omitempty"`
 }
 
-// DefaultFederationPort is the loopback port other nodes mount this one
-// through when server.yaml names none — what a remote entry's addr
-// defaults to on the far side.
-const DefaultFederationPort = 8081
-
-// FederationAddr is the federation listener address for a port: always
-// IPv4 loopback, the one form every dialer (the desktop shell relay, a
-// remote entry's default addr) agrees on.
-func FederationAddr(port int) string {
-	return "127.0.0.1:" + strconv.Itoa(port)
+// FederationSocket is the default federation socket path for a home.
+func FederationSocket(home string) string {
+	return filepath.Join(home, "federation.sock")
 }
 
 // ConnectionConfig is one remote-node connection. Name is an IMMUTABLE
@@ -160,9 +157,8 @@ type PluginConfig struct {
 // Defaults holds the built-in values used when a field is absent from the
 // config file or no config file exists.
 var Defaults = ServerConfig{
-	Web:        WebConfig{Bind: "127.0.0.1:8080"},
-	Federation: FederationConfig{Port: DefaultFederationPort},
-	StaticDir:  "", // embedded web client (web.FS); a path serves a dev checkout from disk
+	Web:       WebConfig{Bind: "127.0.0.1:8080"},
+	StaticDir: "", // embedded web client (web.FS); a path serves a dev checkout from disk
 }
 
 // Home returns the Gridwell home directory: GRIDWELL_HOME if set, else
@@ -230,9 +226,6 @@ func Load(path string) (*ServerConfig, error) {
 		Web  *struct {
 			Bind *string `yaml:"bind"`
 		} `yaml:"web"`
-		Federation *struct {
-			Port *int `yaml:"port"`
-		} `yaml:"federation"`
 		Connections *[]ConnectionConfig `yaml:"connections"`
 	}
 	if err := yaml.Unmarshal(data, &probe); err != nil {
@@ -253,15 +246,11 @@ func Load(path string) (*ServerConfig, error) {
 		cfg.Deprecations = append(cfg.Deprecations, "password: is now web.password (the flat key still loads)")
 	}
 	cfg.Web.BindSet = webBindSet || legacyBindSet
-	cfg.Federation.PortSet = probe.Federation != nil && probe.Federation.Port != nil && cfg.Federation.Port > 0
 	// ConnectionsSet: the `connections:` key is PRESENT — this file is
 	// authoritative for the connection set, empty list included (v2 #269).
 	cfg.ConnectionsSet = probe.Connections != nil
 	if cfg.Web.Bind == "" {
 		cfg.Web.Bind = Defaults.Web.Bind
-	}
-	if cfg.Federation.Port <= 0 {
-		cfg.Federation.Port = Defaults.Federation.Port
 	}
 	if err := expandPaths(&cfg); err != nil {
 		return nil, err
@@ -300,6 +289,9 @@ func validateIDs(cfg *ServerConfig) error {
 // expandPaths expands "~/" prefixes in every path field of cfg.
 func expandPaths(cfg *ServerConfig) error {
 	var err error
+	if cfg.Federation.Socket, err = expandHome(cfg.Federation.Socket); err != nil {
+		return err
+	}
 	if cfg.StaticDir != "" {
 		if cfg.StaticDir, err = expandHome(cfg.StaticDir); err != nil {
 			return err
@@ -395,6 +387,48 @@ func EnsureNodeID(home string, newID func() string) (string, error) {
 		return "", fmt.Errorf("config: write %s: %w", path, err)
 	}
 	return cfg.NodeID, nil
+}
+
+// MintPassword mints a fresh web password: 128 random bits as hex. The
+// one generator, used by EnsureWebPassword at init.
+func MintPassword() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("config: crypto/rand unavailable: " + err.Error())
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// EnsureWebPassword returns the home's web password from server.yaml,
+// minting and persisting one (via mint) if the file has none — neither
+// web.password nor the legacy flat key. Init calls it so a fresh home is
+// gated from its first serve; an existing password is never touched (a
+// change would sign every browser out). The file must already exist.
+func EnsureWebPassword(home string, mint func() string) (string, error) {
+	path := filepath.Join(home, "server.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("config: read %s: %w", path, err)
+	}
+	cfg := ServerConfig{}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return "", fmt.Errorf("config: parse %s: %w", path, err)
+	}
+	if cfg.Web.Password != "" {
+		return cfg.Web.Password, nil
+	}
+	if cfg.LegacyPassword != "" {
+		return cfg.LegacyPassword, nil
+	}
+	cfg.Web.Password = mint()
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return "", fmt.Errorf("config: marshal: %w", err)
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		return "", fmt.Errorf("config: write %s: %w", path, err)
+	}
+	return cfg.Web.Password, nil
 }
 
 func expandHome(p string) (string, error) {

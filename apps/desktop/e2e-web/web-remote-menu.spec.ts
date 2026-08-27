@@ -1,11 +1,10 @@
 import { test as base, expect, Page } from '@playwright/test';
-import { execFileSync, spawn, ChildProcess } from 'node:child_process';
-import * as net from 'node:net';
+import { execFileSync } from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
-import { serveBin } from './fixtures';
+import { serveBin, Served, spawnServe, stopServe, freePort, authHeaders, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { getGrid, tileAt } from '../e2e/oracle';
 
@@ -17,56 +16,20 @@ import { getGrid, tileAt } from '../e2e/oracle';
 // that menu creates on the REMOTE node, and dropping it into a LOCAL
 // pane refuses VISIBLY — a menu belongs to its node.
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const SERVICE = 'gridwell.v1.Gridwell';
 
-async function rpcJSON(origin: string, method: string, body: unknown): Promise<any> {
-  const res = await fetch(`${origin}/${SERVICE}/${method}`, {
+async function rpcJSON(node: Served, method: string, body: unknown): Promise<any> {
+  const res = await fetch(`${node.origin}/${SERVICE}/${method}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(node) },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${method} failed: ${res.status} ${await res.text()}`);
   return res.json();
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const port = (srv.address() as net.AddressInfo).port;
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-// spawnServe boots one gridwell node for a home and polls readiness.
-async function spawnServe(home: string, port: number): Promise<ChildProcess> {
-  const child = spawn(
-    serveBin(),
-    ['serve', '--bind', `127.0.0.1:${port}`, '--static', path.join(REPO_ROOT, 'web')],
-    { env: { ...process.env, GRIDWELL_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  const origin = `http://127.0.0.1:${port}`;
-  const deadline = Date.now() + 15_000;
-  for (;;) {
-    try {
-      if ((await fetch(origin + '/')).ok) break;
-    } catch {
-      // not up yet
-    }
-    if (Date.now() > deadline) {
-      child.kill('SIGKILL');
-      throw new Error(`serve not ready on ${origin}`);
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return child;
-}
-
 type Fixtures = {
-  world: { localOrigin: string; farOrigin: string; killFar: () => Promise<void> };
+  world: { local: Served; far: Served; killFar: () => Promise<void> };
   window: Page;
   gw: GridwellDriver;
 };
@@ -90,50 +53,34 @@ const test = base.extend<Fixtures>({
       [{ kind: 'remote', name: 'rtb' }],
       `connections:
     - name: farconn1
-      addr: 127.0.0.1:${farPort}
+      addr: ${path.join(farHome, 'federation.sock')}
 `,
     );
     const localPort = await freePort();
     const local = await spawnServe(localHome, localPort);
 
-    const stop = (c: ChildProcess) =>
-      new Promise<void>((res) => {
-        if (c.exitCode !== null) {
-          res();
-          return;
-        }
-        const hard = setTimeout(() => {
-          c.kill('SIGKILL');
-          res();
-        }, 3_000);
-        c.once('exit', () => {
-          clearTimeout(hard);
-          res();
-        });
-        c.kill('SIGTERM');
-      });
-
     await use({
-      localOrigin: `http://127.0.0.1:${localPort}`,
-      farOrigin: `http://127.0.0.1:${farPort}`,
+      local,
+      far,
       // The partition switch (stale-affordance spec): the far node dies
       // mid-session, exactly like a machine going dark.
-      killFar: () => stop(far),
+      killFar: () => stopServe(far.child),
     });
 
     for (const c of [local, far]) {
-      await stop(c);
+      await stopServe(c.child);
     }
     fs.rmSync(localHome, { recursive: true, force: true });
     fs.rmSync(farHome, { recursive: true, force: true });
   },
   window: async ({ world, page }, use) => {
-    await page.goto(world.localOrigin + '/?e2e=1');
+    await authenticate(page, world.local);
+    await page.goto(world.local.origin + '/?e2e=1');
     await page.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
     await use(page);
   },
   gw: async ({ window, world }, use) => {
-    await use(new GridwellDriver(window, world.localOrigin));
+    await use(new GridwellDriver(window, world.local.origin));
   },
 });
 
@@ -149,7 +96,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   await expect
     .poll(
       async () => {
-        const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
+        const lp = await rpcJSON(world.local, 'ListPlugins', {});
         const row = (lp.plugins ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
@@ -157,7 +104,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
       { timeout: 20_000 },
     )
     .not.toBe('');
-  const farLp = await rpcJSON(world.farOrigin, 'ListPlugins', {});
+  const farLp = await rpcJSON(world.far, 'ListPlugins', {});
   expect(farHomeGrid.endsWith('/' + farLp.plugins[0].rootGridId), 'the landing is the remote HOME').toBe(
     true,
   );
@@ -167,7 +114,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await rpcJSON(world.localOrigin, 'CreateTile', {
+  await rpcJSON(world.local, 'CreateTile', {
     gridId: f.gridID,
     tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
   });
@@ -219,7 +166,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   const icy = Math.round(inside.cy);
   await gw.dragCreate('markdown', icx, icy);
   const farRootBare = farLp.plugins[0].rootGridId;
-  const farSnap = await getGrid(world.farOrigin, farRootBare);
+  const farSnap = await getGrid(world.far.origin, farRootBare);
   expect(tileAt(farSnap, 'text', icx, icy), 'the text tile exists ON THE FAR NODE').toBeTruthy();
 
   // ── The refusal: a remote menu's primitive dropped into a LOCAL pane ──
@@ -274,7 +221,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   await expect
     .poll(
       async () => {
-        const lp = await rpcJSON(world.localOrigin, 'ListPlugins', {});
+        const lp = await rpcJSON(world.local, 'ListPlugins', {});
         const row = (lp.plugins ?? []).find((p: any) => p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
@@ -282,8 +229,8 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
       { timeout: 20_000 },
     )
     .not.toBe('');
-  const farLp = await rpcJSON(world.farOrigin, 'ListPlugins', {});
-  await rpcJSON(world.farOrigin, 'CreateTile', {
+  const farLp = await rpcJSON(world.far, 'ListPlugins', {});
+  await rpcJSON(world.far, 'CreateTile', {
     gridId: farLp.plugins[0].rootGridId,
     tile: { kind: 'text', x: 1, y: 1, w: 1, h: 1 },
   });
@@ -293,7 +240,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await rpcJSON(world.localOrigin, 'CreateTile', {
+  await rpcJSON(world.local, 'CreateTile', {
     gridId: f.gridID,
     tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
   });

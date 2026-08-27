@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	gwrpc "github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
 )
 
@@ -39,10 +38,9 @@ func TestMountPartitionServesCache(t *testing.T) {
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
-	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0", "0")
-	// The revival must land on the SAME federation port the connection
-	// dials, so pin it from the first run's ephemeral choice.
-	_, fedPort, _ := strings.Cut(remoteAddr, ":")
+	// The federation socket lives under the home, so a revival on the same
+	// home lands on the SAME path the connection dials.
+	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
 	// Local node: localdb + the builtin transport; the connection is
@@ -53,7 +51,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "partconn1", creds, remoteAddr))
 	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
-	cl := gwrpc.NewDefaultClient(localOrigin)
+	cl := clientFor(localOrigin)
 
 	// The connection lands on the remote HOME — personal's root grid
 	// (remote-menu, 2026-08-16) — writable directly. The transport's id
@@ -169,7 +167,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// Same address, same DB: the connection self-heals (sshdial backoff
 	// caps at 10s) and the cold body reads LIVE — proof the cache answers
 	// only when the mount cannot.
-	if _, _, stop2 := startServeProc(t, bin, remoteHome, strings.TrimPrefix(remoteOrigin, "http://"), fedPort); stop2 == nil {
+	if _, _, stop2 := startServeProc(t, bin, remoteHome, strings.TrimPrefix(remoteOrigin, "http://")); stop2 == nil {
 		t.Fatal("remote revival failed")
 	}
 	deadline = time.Now().Add(60 * time.Second)

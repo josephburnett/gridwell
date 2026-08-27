@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import { GridwellDriver } from './driver';
+import { setOracleAuth } from './oracle';
 import { pluginUUIDs, killTmuxServers } from './homes';
 
 // apps/desktop, and the repo root two levels up (where `make build` lays out the
@@ -47,6 +48,30 @@ export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
 }
 
 
+// homePassword reads the password `gridwell init` minted into a seeded
+// home (web.password — the web door is never open, 2026-08-26).
+export function homePassword(home: string): string {
+  const yml = fs.readFileSync(path.join(home, 'server.yaml'), 'utf8');
+  const m = /^\s+password:\s*"?([^"\n]+)"?\s*$/m.exec(yml);
+  if (!m) throw new Error('seeded home has no web.password:\n' + yml);
+  return m[1];
+}
+
+// loginToken posts the password to the login form and returns the auth
+// cookie value the server issued — the same token the serve banner
+// carries — so oracle RPCs and a plain browser page can authenticate.
+export async function loginToken(origin: string, password: string): Promise<string> {
+  const res = await fetch(origin + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password }).toString(),
+    redirect: 'manual',
+  });
+  const m = /gridwell_auth=([0-9a-f]{64})/.exec(res.headers.get('set-cookie') ?? '');
+  if (!m) throw new Error(`login at ${origin} issued no cookie (${res.status})`);
+  return m[1];
+}
+
 // assertSidecarExited polls (briefly) that the sidecar process is no longer
 // alive after app.close(). Fails loudly so the LEAKING test is blamed, not a
 // later one that encounters a stale port or database lock.
@@ -76,6 +101,9 @@ async function assertSidecarExited(pid: number | null): Promise<void> {
 }
 
 type Fixtures = {
+  // home is the seeded temp home (server.yaml, DBs) the app launches on;
+  // the gw fixture reads its minted web.password to authenticate the oracle.
+  home: string;
   electronApp: ElectronApplication;
   window: Page;
   gw: GridwellDriver;
@@ -112,8 +140,11 @@ export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
   extraYaml: ['', { option: true }],
 
-  electronApp: async ({ extraPlugins, extraYaml }, use) => {
-    const home = seedHome(extraPlugins, extraYaml);
+  home: async ({ extraPlugins, extraYaml }, use) => {
+    await use(seedHome(extraPlugins, extraYaml));
+  },
+
+  electronApp: async ({ home }, use) => {
     // The per-test Chromium profile. Created before launch so the flag is valid.
     const electronDir = path.join(home, 'electron');
     fs.mkdirSync(electronDir, { recursive: true });
@@ -260,8 +291,9 @@ export const test = base.extend<Fixtures>({
     await use(win);
   },
 
-  gw: async ({ window }, use) => {
+  gw: async ({ window, home }, use) => {
     const origin = new URL(window.url()).origin;
+    setOracleAuth(origin, await loginToken(origin, homePassword(home)));
     await use(new GridwellDriver(window, origin));
   },
 });
