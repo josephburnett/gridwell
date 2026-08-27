@@ -6,9 +6,10 @@
 // main process's gRPC OpenShell stream against the node export — the
 // browser-facing surface is pure Connect.
 //
-// Single-tenant. The browser surface can be gated behind the server.yaml
-// password (auth.go: one cookie derived from the current password); the
-// gRPC node export is not gated — bind loopback or a VPN-only address.
+// Single-tenant, two doors (2026-08-26): WebHandler is the browser surface,
+// gated behind the server.yaml web.password (auth.go: one cookie derived
+// from the current password) and bindable to a network; FederationHandler
+// is the raw-gRPC node export, ungated and loopback-only by construction.
 package server
 
 import (

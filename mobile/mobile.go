@@ -82,7 +82,8 @@ func Start(home string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cfg.Bind = "127.0.0.1:0"
+	cfg.Web.Bind = "127.0.0.1:0"
+	cfg.Federation.Port = 0 // an ephemeral loopback port: the phone is mounted by nobody
 	cfg.DisableShells = true
 	n, err := node.Start(node.Options{
 		ProviderFactories: inProcessProviderFactories(),

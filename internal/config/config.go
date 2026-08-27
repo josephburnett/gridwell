@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -26,27 +27,32 @@ type ServerConfig struct {
 	// reference through this node depends on it staying put, exactly like a
 	// plugin id.
 	NodeID string `yaml:"node_id,omitempty"`
-	Bind   string `yaml:"bind,omitempty"`
-	// BindSet is derived by Load, never stored: true when the file contains a
-	// non-empty `bind:` key. It distinguishes "the user pinned the listen
-	// address in server.yaml" from "Bind holds the built-in default", which is
-	// what lets `serve --bind-default` (the desktop sidecar's ephemeral
-	// loopback port) fill in only when the config is silent.
-	BindSet bool `yaml:"-"`
+	// Web is the BROWSER door: the address browsers and the desktop window
+	// load from, and the password that gates it. Federation is the NODE
+	// door: the loopback port other nodes mount this one through (ssh
+	// tunnels terminate there). Grouped by door (owner decision
+	// 2026-08-26) so the file cannot be misread about which listener the
+	// password protects or which port a remote entry must name.
+	Web        WebConfig        `yaml:"web,omitempty"`
+	Federation FederationConfig `yaml:"federation,omitempty"`
+	// LegacyBind / LegacyPassword are the pre-2026-08-26 flat keys. Load
+	// folds them into Web (and records a deprecation) so an existing
+	// home keeps working; nothing reads them after Load. They stay in
+	// the struct — not in a parse-only probe — because every config
+	// REWRITE (AppendPlugin, EnsureNodeID) re-marshals this struct, and a
+	// key the struct cannot hold would be silently dropped by the next
+	// `gridwell init`.
+	LegacyBind     string `yaml:"bind,omitempty"`
+	LegacyPassword string `yaml:"password,omitempty"`
+	// Deprecations is derived by Load, never stored: one line per legacy
+	// key the file still uses, for serve to print.
+	Deprecations []string `yaml:"-"`
 	// CacheDir is derived by serve (never stored): <home>/cache, where the
 	// loader keeps each MOUNT's read-through cache DB (mountcache — the
 	// offline-plan phase-1 layer). Empty disables caching (tests, headless
 	// probes). Cache files are disposable and excluded from backup.
 	CacheDir  string `yaml:"-"`
 	StaticDir string `yaml:"static,omitempty"` // "" → the embedded web client; a path → dev override from disk
-	// Password, when non-empty, gates the browser-served web UI: every HTTP
-	// request must carry the auth cookie (obtained by entering this password
-	// on the login page), and the cookie is checked against the CURRENT
-	// password — change it and every browser must log in again. Plaintext by
-	// design (single-tenant; the file is the secret). The desktop app
-	// authenticates itself from the serve banner and never prompts, and the
-	// gRPC node export (federation) is not gated — see server/auth.go.
-	Password string `yaml:"password,omitempty"`
 	// DisableShells, when true, removes shell tiles from this node entirely:
 	// the + palette offers no shell primitive, and the server refuses
 	// CreateTile(kind=shell) and every OpenShell — whichever plugin (local or
@@ -68,6 +74,50 @@ type ServerConfig struct {
 	// connection's name goes here so it can never be reused (stored
 	// references through its namespace stay dangling, never re-routed).
 	RetiredNames []string `yaml:"retired_names,omitempty"`
+}
+
+// WebConfig is the browser door's configuration.
+type WebConfig struct {
+	Bind string `yaml:"bind,omitempty"`
+	// BindSet is derived by Load, never stored: true when the file names
+	// a non-empty bind (web.bind, or the legacy flat bind:). It
+	// distinguishes "the user pinned the listen address" from "Bind holds
+	// the built-in default", which is what lets `serve --bind-default`
+	// (the desktop sidecar's ephemeral loopback port) fill in only when
+	// the config is silent.
+	BindSet bool `yaml:"-"`
+	// Password, when non-empty, gates the web UI: every HTTP request must
+	// carry the auth cookie (obtained by entering this password on the
+	// login page), and the cookie is checked against the CURRENT password
+	// — change it and every browser must log in again. Plaintext by design
+	// (single-tenant; the file is the secret). The desktop app
+	// authenticates itself from the serve banner and never prompts. The
+	// federation door is not gated by it — it never leaves loopback.
+	Password string `yaml:"password,omitempty"`
+}
+
+// FederationConfig is the node door's configuration: a PORT, never an
+// address. The export binds 127.0.0.1 by construction — there is no
+// field that could open it on a network, because ssh is the one
+// authenticated transport between nodes and an unauthenticated export
+// on a reachable address was the door this shape exists to close.
+type FederationConfig struct {
+	Port int `yaml:"port,omitempty"`
+	// PortSet is derived by Load, never stored: the file names a port
+	// (same role as WebConfig.BindSet for `serve --federation-port-default`).
+	PortSet bool `yaml:"-"`
+}
+
+// DefaultFederationPort is the loopback port other nodes mount this one
+// through when server.yaml names none — what a remote entry's addr
+// defaults to on the far side.
+const DefaultFederationPort = 8081
+
+// FederationAddr is the federation listener address for a port: always
+// IPv4 loopback, the one form every dialer (the desktop shell relay, a
+// remote entry's default addr) agrees on.
+func FederationAddr(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
 }
 
 // ConnectionConfig is one remote-node connection. Name is an IMMUTABLE
@@ -110,8 +160,9 @@ type PluginConfig struct {
 // Defaults holds the built-in values used when a field is absent from the
 // config file or no config file exists.
 var Defaults = ServerConfig{
-	Bind:      "127.0.0.1:8080",
-	StaticDir: "", // embedded web client (web.FS); a path serves a dev checkout from disk
+	Web:        WebConfig{Bind: "127.0.0.1:8080"},
+	Federation: FederationConfig{Port: DefaultFederationPort},
+	StaticDir:  "", // embedded web client (web.FS); a path serves a dev checkout from disk
 }
 
 // Home returns the Gridwell home directory: GRIDWELL_HOME if set, else
@@ -169,24 +220,48 @@ func Load(path string) (*ServerConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
-	// BindSet ("the file explicitly names a bind address") is derived here,
-	// once. cfg starts as Defaults, so after the unmarshal above Bind==default
-	// is ambiguous between "key absent" and "key present with the default
-	// value" — a pointer probe is the only way to see presence. An explicitly
-	// empty `bind: ""` counts as unset (and is default-filled below).
+	// Presence is derived here, once. cfg starts as Defaults, so after the
+	// unmarshal above a field equal to its default is ambiguous between
+	// "key absent" and "key present with the default value" — a pointer
+	// probe is the only way to see presence. An explicitly empty value
+	// counts as unset (and is default-filled below).
 	var probe struct {
-		Bind        *string             `yaml:"bind"`
+		Bind *string `yaml:"bind"`
+		Web  *struct {
+			Bind *string `yaml:"bind"`
+		} `yaml:"web"`
+		Federation *struct {
+			Port *int `yaml:"port"`
+		} `yaml:"federation"`
 		Connections *[]ConnectionConfig `yaml:"connections"`
 	}
 	if err := yaml.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
-	cfg.BindSet = probe.Bind != nil && *probe.Bind != ""
+	// The legacy flat keys fold into the web door — a file written before
+	// the doors were grouped keeps working, and says so once per serve.
+	// Presence comes from the probe, never from the value: cfg started as
+	// Defaults, so Web.Bind is non-empty even when the file never said so.
+	webBindSet := probe.Web != nil && probe.Web.Bind != nil && *probe.Web.Bind != ""
+	legacyBindSet := probe.Bind != nil && *probe.Bind != ""
+	if !webBindSet && legacyBindSet {
+		cfg.Web.Bind = cfg.LegacyBind
+		cfg.Deprecations = append(cfg.Deprecations, "bind: is now web.bind (the flat key still loads)")
+	}
+	if cfg.Web.Password == "" && cfg.LegacyPassword != "" {
+		cfg.Web.Password = cfg.LegacyPassword
+		cfg.Deprecations = append(cfg.Deprecations, "password: is now web.password (the flat key still loads)")
+	}
+	cfg.Web.BindSet = webBindSet || legacyBindSet
+	cfg.Federation.PortSet = probe.Federation != nil && probe.Federation.Port != nil && cfg.Federation.Port > 0
 	// ConnectionsSet: the `connections:` key is PRESENT — this file is
 	// authoritative for the connection set, empty list included (v2 #269).
 	cfg.ConnectionsSet = probe.Connections != nil
-	if cfg.Bind == "" {
-		cfg.Bind = Defaults.Bind
+	if cfg.Web.Bind == "" {
+		cfg.Web.Bind = Defaults.Web.Bind
+	}
+	if cfg.Federation.Port <= 0 {
+		cfg.Federation.Port = Defaults.Federation.Port
 	}
 	if err := expandPaths(&cfg); err != nil {
 		return nil, err

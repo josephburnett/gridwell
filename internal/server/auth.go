@@ -11,7 +11,7 @@ package server
 // invalidates every outstanding cookie with no revocation state at all.
 //
 // Deliberately NOT gated: the gRPC node export sharing this port (the
-// NodeHandler grpc branch) — it carries federation (an ssh mount's tunnel
+// FederationHandler) — it carries federation (an ssh mount's tunnel
 // dials it) and the Electron shell PTY relay, both established before this
 // feature. The transport trust model there is unchanged: bind loopback or a
 // VPN-only address (bindWarning says so). The desktop app's own window

@@ -131,10 +131,14 @@ type Options struct {
 // Node is a running (or listen-ready) Gridwell node.
 type Node struct {
 	Reg *plugin.Registry
-	Ln  net.Listener
+	// Ln is the web door's listener (bound where web.bind says); FedLn is
+	// the federation door's (loopback, always).
+	Ln    net.Listener
+	FedLn net.Listener
 
 	srv           *server.Server
-	httpSrv       *http.Server
+	webSrv        *http.Server
+	fedSrv        *http.Server
 	cancelRequest context.CancelFunc
 }
 
@@ -159,34 +163,53 @@ func Start(opts Options) (*Node, error) {
 		// The landing page's viewport survives restarts in a small state
 		// file beside the config ("things stay as you left them").
 		NodeStatePath: filepath.Join(opts.Home, "node-view.json"),
-		Password:      cfg.Password,
+		Password:      cfg.Web.Password,
 		DisableShells: cfg.DisableShells,
 	})
 	requestCtx, cancel := context.WithCancel(context.Background())
-	httpSrv := &http.Server{
-		Handler:           srv.NodeHandler(),
+	// Two doors, two listeners (owner decision 2026-08-26): the web door
+	// binds where config says (a tailnet address is fine — it is
+	// password-gated); the federation door binds LOOPBACK, always — the
+	// port is the only configurable fact, so no config can expose the
+	// ungated gRPC export to a network. ssh tunnels terminate on loopback.
+	webSrv := &http.Server{
+		Handler:           srv.WebHandler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return requestCtx },
+	}
+	fedSrv := &http.Server{
+		Handler:           srv.FederationHandler(),
 		Protocols:         server.NodeProtocols(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return requestCtx },
 	}
-	ln, err := net.Listen("tcp", cfg.Bind)
+	ln, err := net.Listen("tcp", cfg.Web.Bind)
 	if err != nil {
 		cancel()
 		reg.Close()
 		return nil, err
 	}
-	return &Node{Reg: reg, Ln: ln, srv: srv, httpSrv: httpSrv, cancelRequest: cancel}, nil
+	fedLn, err := net.Listen("tcp", config.FederationAddr(cfg.Federation.Port))
+	if err != nil {
+		ln.Close()
+		cancel()
+		reg.Close()
+		return nil, fmt.Errorf("federation port: %w", err)
+	}
+	return &Node{Reg: reg, Ln: ln, FedLn: fedLn, srv: srv, webSrv: webSrv, fedSrv: fedSrv, cancelRequest: cancel}, nil
 }
 
-// ServeBackground starts serving on the listener; the returned channel
+// ServeBackground starts serving on both listeners; the returned channel
 // carries the first serve error (never http.ErrServerClosed).
 func (n *Node) ServeBackground() <-chan error {
-	errCh := make(chan error, 1)
-	go func() {
-		if err := n.httpSrv.Serve(n.Ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	errCh := make(chan error, 2)
+	serve := func(s *http.Server, ln net.Listener) {
+		if err := s.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
-	}()
+	}
+	go serve(n.webSrv, n.Ln)
+	go serve(n.fedSrv, n.FedLn)
 	return errCh
 }
 
@@ -196,7 +219,7 @@ func (n *Node) Close() error {
 	n.cancelRequest()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := n.httpSrv.Shutdown(ctx)
+	err := errors.Join(n.webSrv.Shutdown(ctx), n.fedSrv.Shutdown(ctx))
 	n.srv.Close()
 	n.Reg.Close()
 	return err

@@ -91,7 +91,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
 	srv := New(reg, Config{NodeID: "node1", Password: "pw"})
-	hs := httptest.NewServer(srv.NodeHandler())
+	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 	ctx := context.Background()
 
@@ -160,7 +160,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	t.Cleanup(closeStack2)
 	reg2 := plugin.NewRegistry()
 	reg2.Register("ug1", "gitlab", client2, nil)
-	hs2 := httptest.NewServer(New(reg2, Config{NodeID: "node1", Password: "pw"}).NodeHandler())
+	hs2 := httptest.NewServer(New(reg2, Config{NodeID: "node1", Password: "pw"}).WebHandler())
 	t.Cleanup(hs2.Close)
 	wk, err = client2.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
 	if err != nil {

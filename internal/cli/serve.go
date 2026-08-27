@@ -28,7 +28,11 @@ import (
 type serveFlags struct {
 	Bind        string
 	BindDefault string
-	StaticDir   string
+	// FederationPort / FederationPortDefault mirror Bind / BindDefault for
+	// the node door: -1 = not passed (0 is a real value: an ephemeral port).
+	FederationPort        int
+	FederationPortDefault int
+	StaticDir             string
 }
 
 // parseServeFlags parses the `serve` flag set. StaticDir defaults to defStatic
@@ -39,12 +43,14 @@ type serveFlags struct {
 func parseServeFlags(args []string, defStatic string) (serveFlags, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var f serveFlags
-	fs.StringVar(&f.Bind, "bind", "", "HTTP listen address (hard override: beats server.yaml bind:)")
-	fs.StringVar(&f.BindDefault, "bind-default", "", "HTTP listen address used only when server.yaml has no bind: (the desktop sidecar passes its ephemeral loopback port here)")
+	fs.StringVar(&f.Bind, "bind", "", "web listen address (hard override: beats server.yaml web.bind)")
+	fs.StringVar(&f.BindDefault, "bind-default", "", "web listen address used only when server.yaml has no web.bind (the desktop sidecar passes its ephemeral loopback port here)")
+	fs.IntVar(&f.FederationPort, "federation-port", -1, "loopback port for the node export (hard override: beats server.yaml federation.port; 0 = ephemeral)")
+	fs.IntVar(&f.FederationPortDefault, "federation-port-default", -1, "node export port used only when server.yaml has no federation.port (the desktop sidecar passes 0)")
 	fs.StringVar(&f.StaticDir, "static", defStatic, "serve static files from this directory instead of the embedded web client (dev override; empty = embedded)")
 	args = reorderFlagsFirst(args, func(name string) bool {
 		switch name {
-		case "bind", "bind-default", "static":
+		case "bind", "bind-default", "federation-port", "federation-port-default", "static":
 			return true
 		}
 		return false
@@ -55,41 +61,52 @@ func parseServeFlags(args []string, defStatic string) (serveFlags, error) {
 	return f, nil
 }
 
-// resolveBind is the one owner of the listen-address decision:
+// resolveSetting is the one owner of the listener-setting precedence,
+// for both doors:
 //
-//	--bind (a human's hard override)
-//	> server.yaml bind: (explicitly present — configBindSet, see config.Load)
-//	> --bind-default (the caller's fallback, e.g. the desktop sidecar's
-//	  ephemeral loopback port)
-//	> the built-in default (config.Defaults.Bind).
+//	the flag (a human's hard override)
+//	> server.yaml (explicitly present — the Load-derived *Set bit)
+//	> the flag's -default twin (the caller's fallback, e.g. the desktop
+//	  sidecar's ephemeral loopback port)
+//	> the built-in default.
 //
-// "Unset" is the empty string at every level, so an explicit config bind equal
-// to the built-in default still pins the address. This is what lets one server
-// instance carry both the desktop window and a phone: declare bind: in
-// server.yaml and the sidecar's --bind-default no longer wins.
-func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault string) string {
+// "Unset" is the given sentinel at every level, so an explicit config
+// value equal to the built-in default still pins it. This is what lets
+// one server instance carry both the desktop window and a phone: declare
+// web.bind in server.yaml and the sidecar's --bind-default no longer wins.
+func resolveSetting[T comparable](flag, configVal T, configSet bool, flagDefault, unset, builtin T) T {
 	switch {
-	case flagBind != "":
-		return flagBind
-	case configBindSet:
-		return configBind
-	case bindDefault != "":
-		return bindDefault
+	case flag != unset:
+		return flag
+	case configSet:
+		return configVal
+	case flagDefault != unset:
+		return flagDefault
 	default:
-		return config.Defaults.Bind
+		return builtin
 	}
 }
 
-// bindWarning returns a prominent startup warning when addr exposes the server
-// beyond loopback, or "" when the bind is loopback-only. Without a password
-// the whole API is open; with one, the browser surface is gated but the gRPC
-// node export sharing the port (federation, the shell PTY relay) is not — so
-// either way a non-loopback bind should be a VPN-only address (e.g. a
-// Tailscale IP), never 0.0.0.0 on an untrusted network.
+// resolveBind applies resolveSetting to the web door ("" = unset).
+func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault string) string {
+	return resolveSetting(flagBind, configBind, configBindSet, bindDefault, "", config.Defaults.Web.Bind)
+}
+
+// resolveFederationPort applies resolveSetting to the node door (-1 =
+// unset; 0 is a real value, an ephemeral port).
+func resolveFederationPort(flagPort, configPort int, configSet bool, portDefault int) int {
+	return resolveSetting(flagPort, configPort, configSet, portDefault, -1, config.Defaults.Federation.Port)
+}
+
+// bindWarning is the exposure notice for a non-loopback WEB bind with no
+// password: every byte of the UI and its API is open on that interface.
+// With a password the web door is gated, and since 2026-08-26 the gRPC
+// node export is a separate loopback-only listener — nothing else is on
+// the address, so nothing else to warn about. Loopback: never a warning.
 func bindWarning(addr string, hasPassword bool) string {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		host = addr // no port part — judge the host as given
+		return ""
 	}
 	if host == "localhost" {
 		return ""
@@ -98,34 +115,32 @@ func bindWarning(addr string, hasPassword bool) string {
 		return ""
 	}
 	if hasPassword {
-		return fmt.Sprintf(`gridwell: WARNING: listening on %s — this is NOT a loopback address.
-gridwell: WARNING: the web UI requires the configured password, but the gRPC node export
-gridwell: WARNING: on the same port is UNAUTHENTICATED: anyone who can reach that address
-gridwell: WARNING: can read and write every tile and open live shell PTYs on this machine.
-gridwell: WARNING: bind a VPN-only address (e.g. your Tailscale IP), never an open network.`, addr)
+		return ""
 	}
-	return fmt.Sprintf(`gridwell: WARNING: listening on %s — this is NOT a loopback address.
-gridwell: WARNING: the API is UNAUTHENTICATED: anyone who can reach that address can read
-gridwell: WARNING: and write every tile and open live shell PTYs on this machine.
-gridwell: WARNING: bind a VPN-only address (e.g. your Tailscale IP), never an open network.
-gridwell: WARNING: (set password: in server.yaml to at least gate the web UI.)`, addr)
+	return fmt.Sprintf(`gridwell: WARNING: web UI listening on %s — this is NOT a loopback address.
+gridwell: WARNING: the web UI and its API are UNAUTHENTICATED: anyone who can reach that
+gridwell: WARNING: address can read and write every tile and open live shell PTYs on this machine.
+gridwell: WARNING: set web.password in server.yaml, and bind a VPN-only address (e.g. your
+gridwell: WARNING: Tailscale IP), never an open network.`, addr)
 }
 
 // servingBanner is the one-line boot contract with the desktop sidecar
-// (apps/desktop/src/main/lines.ts parses it): the ACTUAL bound address,
-// printed only once Listen has succeeded. With a password configured it also
-// carries the derived auth token (server.AuthToken — the cookie value), so
-// the sidecar can authenticate its own window without ever prompting: local
-// stdout is same-trust as server.yaml, which holds the password itself.
-func servingBanner(addr, staticDir string, plugins int, password string) string {
+// (apps/desktop/src/main/lines.ts parses it): the web door's ACTUAL bound
+// address leads, printed only once both listeners are up; federation= is
+// the node door's actual loopback address (what the shell relay dials).
+// With a password configured it also carries the derived auth token
+// (server.AuthToken — the cookie value), so the sidecar can authenticate
+// its own window without ever prompting: local stdout is same-trust as
+// server.yaml, which holds the password itself.
+func servingBanner(addr, fedAddr, staticDir string, plugins int, password string) string {
 	if staticDir == "" {
 		staticDir = "embedded"
 	}
 	if password == "" {
-		return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d)", addr, staticDir, plugins)
+		return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d federation=%s)", addr, staticDir, plugins, fedAddr)
 	}
-	return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d auth=%s)",
-		addr, staticDir, plugins, server.AuthToken(password))
+	return fmt.Sprintf("gridwell: serving on %s (static=%s plugins=%d federation=%s auth=%s)",
+		addr, staticDir, plugins, fedAddr, server.AuthToken(password))
 }
 
 // staticFS resolves the static override: "" is the embedded web client
@@ -276,7 +291,7 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 // event stream, the wasm client, and shell PTYs. Live URL tiles are hosted
 // natively by the Electron shell, so there is no browser driver here. The
 // listen address comes from resolveBind (loopback by default; server.yaml
-// bind: pins it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM
+// web.bind pins it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM
 // trigger graceful shutdown.
 //
 // factories is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
@@ -317,8 +332,12 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory, prov
 	if err != nil {
 		return 2
 	}
-	cfg.Bind = resolveBind(f.Bind, cfg.Bind, cfg.BindSet, f.BindDefault)
+	cfg.Web.Bind = resolveBind(f.Bind, cfg.Web.Bind, cfg.Web.BindSet, f.BindDefault)
+	cfg.Federation.Port = resolveFederationPort(f.FederationPort, cfg.Federation.Port, cfg.Federation.PortSet, f.FederationPortDefault)
 	cfg.StaticDir = f.StaticDir
+	for _, d := range cfg.Deprecations {
+		fmt.Fprintf(os.Stderr, "gridwell: DEPRECATED in %s: %s\n", cfgPath, d)
+	}
 
 	// ONE serve per home (servelock.go): taken before any plugin spawns so a
 	// second server never touches the DBs. On conflict, re-emit the running
@@ -347,8 +366,8 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory, prov
 	}
 
 	// The node core (internal/node — shared with the mobile bind): plugin
-	// loading, identity, the server assembly (NodeHandler: browsers, gRPC
-	// front door, and the node export on ONE port), and the listener. The
+	// loading, identity, the server assembly, and the two listeners (the
+	// web door where config says, the federation door on loopback). The
 	// CLI's own concerns wrap it: the lock above, the banner below,
 	// signals.
 	n, err := node.Start(node.Options{
@@ -375,10 +394,10 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory, prov
 	// (apps/desktop/src/main/lines.ts) to learn the origin its window
 	// should load, so it must carry the listener's ACTUAL bound address
 	// and appear only once the listener is really up.
-	if w := bindWarning(n.Ln.Addr().String(), cfg.Password != ""); w != "" {
+	if w := bindWarning(n.Ln.Addr().String(), cfg.Web.Password != ""); w != "" {
 		fmt.Fprintln(os.Stderr, w)
 	}
-	banner := servingBanner(n.Ln.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Password)
+	banner := servingBanner(n.Ln.Addr().String(), n.FedLn.Addr().String(), cfg.StaticDir, len(cfg.Plugins), cfg.Web.Password)
 	fmt.Println(banner)
 	// Record the banner in the lock file — the "already serving" reprint a
 	// conflicting serve hands to the desktop app.

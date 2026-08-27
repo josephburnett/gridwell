@@ -148,24 +148,24 @@ make launch   # build and run
 ```
 
 The same server also serves plain browsers — one instance, one origin, for
-the desktop window and your phone. Give it a reachable address in
-`~/.gridwell/server.yaml`:
+the desktop window and your phone. The server has two doors, configured
+by door in `~/.gridwell/server.yaml`:
 
 ```yaml
-bind: "100.64.0.7:8080"   # your Tailscale IP
+web:                       # browsers + the desktop window
+  bind: "100.64.0.7:8080"  # your Tailscale IP
+  password: "something long"
+federation:                # other nodes mounting this one, via ssh
+  port: 8081               # loopback only — a port, never an address
 ```
+
+Give the web door a reachable address,
 
 then run `gridwell serve`. In a browser, live url tiles stay frozen.
 Everything else — grids, text, wells, live shells, navigation — works,
 touch included.
 
-The browser UI can require a password — add one to `server.yaml`:
-
-```yaml
-password: "something long"
-```
-
-A browser gets a login page once, then holds a cookie that never expires —
+The browser UI can require a password (`web.password`). A browser gets a login page once, then holds a cookie that never expires —
 but the cookie is checked against the *current* password, so changing the
 password signs every browser out. The desktop app never prompts: it
 authenticates its own window automatically.
@@ -181,13 +181,19 @@ shell creation and every PTY attach — whichever plugin, local or mounted,
 would serve it. Existing shell tiles keep their frozen previews (placement
 is sacred); they just can never attach a terminal here.
 
-Note: the password gates only the web UI. **The gRPC node export on the
-same port (federation, shell transport) is unauthenticated**, as is
-everything when no password is set. Bind loopback or a VPN-only address
-(Tailscale is the intended transport), never an open interface. `gridwell
-serve` warns loudly when the bind is not loopback.
+Note: the password gates the web door. The gRPC node export (federation,
+the desktop's shell transport) is unauthenticated and therefore **only
+ever binds loopback** — `federation.port` is a port, not an address, so
+no config can expose it; ssh is the one authenticated transport between
+nodes. Without a password the web door is open to whoever can reach
+`web.bind`: bind loopback or a VPN-only address (Tailscale is the
+intended transport), never an open interface. `gridwell serve` warns
+loudly when the web bind is not loopback and no password is set. (The
+flat `bind:` / `password:` keys still load, with a deprecation notice.)
 
-To mount remote nodes, the remote just runs `gridwell serve` on loopback.
+To mount remote nodes, the remote just runs `gridwell serve`; its
+`federation.port` (8081 by default) is what the connection's `addr`
+names, reached through ssh.
 On the mounting machine, register the remote plugin once:
 
 ```sh

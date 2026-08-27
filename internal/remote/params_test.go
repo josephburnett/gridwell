@@ -54,7 +54,7 @@ func TestDialConfigDefaults(t *testing.T) {
 	if cfg.Host != "rtb:22" {
 		t.Errorf("default port: host = %q, want rtb:22", cfg.Host)
 	}
-	if cfg.Addr != "127.0.0.1:8080" {
+	if cfg.Addr != "127.0.0.1:8081" { // the built-in federation port
 		t.Errorf("default addr = %q, want the built-in gridwell bind", cfg.Addr)
 	}
 	if cfg.KeyPath != filepath.Join(sshDir, "id_rsa") {

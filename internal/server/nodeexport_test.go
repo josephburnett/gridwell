@@ -22,7 +22,7 @@ import (
 )
 
 // nodeServer stands up a full Server (node id "node1", one in-process localdb
-// registered as uuid "ur1", label "personal") behind its NodeHandler on a real
+// registered as uuid "ur1", label "personal") behind its FederationHandler on a real
 // TCP listener, and returns a raw gRPC client dialed at it — the exact wire a
 // remote ssh-plugin sees after its tunnel. Every request routes by the
 // QUALIFIED ids it carries; there is no scoping header and no name-based
@@ -57,7 +57,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.NodeHandler(), Protocols: server.NodeProtocols()}
+	httpSrv := &http.Server{Handler: srv.FederationHandler(), Protocols: server.NodeProtocols()}
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 

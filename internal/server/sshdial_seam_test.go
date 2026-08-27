@@ -29,7 +29,7 @@ import (
 // binary crosses except the network itself.
 
 // remoteNode stands up the "remote gridwell serve": node id "rnode" with two
-// localdb plugins ("personal", "work") behind NodeHandler on a real listener.
+// localdb plugins ("personal", "work") behind FederationHandler on a real listener.
 // Returns its address and a direct client to the first plugin for
 // ground-truth assertions.
 func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
@@ -56,7 +56,7 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := &http.Server{Handler: srv.NodeHandler(), Protocols: server.NodeProtocols()}
+	httpSrv := &http.Server{Handler: srv.FederationHandler(), Protocols: server.NodeProtocols()}
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 	return ln.Addr().String(), direct

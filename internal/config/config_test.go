@@ -103,8 +103,8 @@ func TestPasswordRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Password != "hunter2" {
-		t.Fatalf("password: got %q, want hunter2", cfg.Password)
+	if cfg.Web.Password != "hunter2" {
+		t.Fatalf("password: got %q, want hunter2", cfg.Web.Password)
 	}
 	if err := AppendPlugin(home, PluginConfig{ID: "id-b", Name: "files", Kind: "fs"}); err != nil {
 		t.Fatalf("append: %v", err)
@@ -116,8 +116,8 @@ func TestPasswordRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if cfg.Password != "hunter2" {
-		t.Fatalf("password dropped by a config rewrite: got %q", cfg.Password)
+	if cfg.Web.Password != "hunter2" {
+		t.Fatalf("password dropped by a config rewrite: got %q", cfg.Web.Password)
 	}
 }
 
@@ -145,8 +145,8 @@ plugins:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Bind != "127.0.0.1:9090" {
-		t.Errorf("bind: got %q", cfg.Bind)
+	if cfg.Web.Bind != "127.0.0.1:9090" {
+		t.Errorf("bind: got %q", cfg.Web.Bind)
 	}
 	if cfg.StaticDir != "/var/www" {
 		t.Errorf("static: got %q", cfg.StaticDir)
@@ -209,8 +209,8 @@ func TestLoad_defaults_for_missing_fields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Bind != "0.0.0.0:7070" {
-		t.Errorf("bind: got %q", cfg.Bind)
+	if cfg.Web.Bind != "0.0.0.0:7070" {
+		t.Errorf("bind: got %q", cfg.Web.Bind)
 	}
 }
 
@@ -266,10 +266,10 @@ func TestLoad_bindSet(t *testing.T) {
 		wantBind string
 		wantSet  bool
 	}{
-		{"key absent", `static: "/var/www"`, Defaults.Bind, false},
+		{"key absent", `static: "/var/www"`, Defaults.Web.Bind, false},
 		{"key present", `bind: "100.64.0.7:8080"`, "100.64.0.7:8080", true},
-		{"key present, equals built-in default", `bind: "127.0.0.1:8080"`, Defaults.Bind, true},
-		{"key present but empty", `bind: ""`, Defaults.Bind, false},
+		{"key present, equals built-in default", `bind: "127.0.0.1:8080"`, Defaults.Web.Bind, true},
+		{"key present but empty", `bind: ""`, Defaults.Web.Bind, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -281,11 +281,11 @@ func TestLoad_bindSet(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
-			if cfg.Bind != c.wantBind {
-				t.Errorf("Bind = %q, want %q", cfg.Bind, c.wantBind)
+			if cfg.Web.Bind != c.wantBind {
+				t.Errorf("Bind = %q, want %q", cfg.Web.Bind, c.wantBind)
 			}
-			if cfg.BindSet != c.wantSet {
-				t.Errorf("BindSet = %v, want %v", cfg.BindSet, c.wantSet)
+			if cfg.Web.BindSet != c.wantSet {
+				t.Errorf("BindSet = %v, want %v", cfg.Web.BindSet, c.wantSet)
 			}
 		})
 	}
@@ -325,5 +325,66 @@ func TestEnsureNodeID(t *testing.T) {
 	// The plugin list survived the rewrite.
 	if len(cfg.Plugins) != 1 || cfg.Plugins[0].ID != "p1" {
 		t.Errorf("plugins after node-id write = %+v", cfg.Plugins)
+	}
+}
+
+// TestLoad_doors pins the grouped-by-door shape (owner decision
+// 2026-08-26): web.bind / web.password and federation.port load; the
+// legacy flat bind: / password: still load, folded into the web door
+// with a deprecation each; the federation port is a plain int with a
+// built-in default and a presence bit; and a config REWRITE keeps a
+// legacy file's keys (they are struct fields, not probe-only).
+func TestLoad_doors(t *testing.T) {
+	write := func(t *testing.T, yml string) string {
+		t.Helper()
+		f := filepath.Join(t.TempDir(), "server.yaml")
+		if err := os.WriteFile(f, []byte(yml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	nested, err := Load(write(t, "web:\n  bind: \"100.64.0.7:8080\"\n  password: hunter2\nfederation:\n  port: 9001\nplugins: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nested.Web.Bind != "100.64.0.7:8080" || !nested.Web.BindSet || nested.Web.Password != "hunter2" ||
+		nested.Federation.Port != 9001 || !nested.Federation.PortSet || len(nested.Deprecations) != 0 {
+		t.Errorf("nested = %+v", nested)
+	}
+	legacy, err := Load(write(t, "bind: \"100.64.0.7:8080\"\npassword: hunter2\nplugins: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Web.Bind != "100.64.0.7:8080" || !legacy.Web.BindSet || legacy.Web.Password != "hunter2" || len(legacy.Deprecations) != 2 {
+		t.Errorf("legacy fold = %+v deprecations %v", legacy.Web, legacy.Deprecations)
+	}
+	if legacy.Federation.Port != DefaultFederationPort || legacy.Federation.PortSet {
+		t.Errorf("federation default = %+v", legacy.Federation)
+	}
+	silent, err := Load(write(t, "plugins: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if silent.Web.Bind != Defaults.Web.Bind || silent.Web.BindSet || silent.Federation.Port != DefaultFederationPort || silent.Federation.PortSet {
+		t.Errorf("silent = web %+v federation %+v", silent.Web, silent.Federation)
+	}
+	// A rewrite (AppendPlugin re-marshals the struct) keeps a legacy
+	// file's password: the next Load still folds it.
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("password: hunter2\nplugins: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendPlugin(home, PluginConfig{ID: "abc1234", Name: "a", Kind: "local"}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := Load(filepath.Join(home, "server.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Web.Password != "hunter2" {
+		t.Errorf("legacy password lost across a rewrite: %+v", after.Web)
+	}
+	if FederationAddr(9001) != "127.0.0.1:9001" {
+		t.Error("the federation door must be IPv4 loopback")
 	}
 }

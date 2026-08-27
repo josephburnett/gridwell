@@ -23,7 +23,7 @@ import (
 // The /content/ door crosses every seam at once: HTTP URL grammar → token
 // gate → router (with link resolution and transit forwarding) → plugin
 // ServeContent stream → HTTP response with the sandbox header. These tests
-// drive the REAL NodeHandler with real plugins behind it — the exact
+// drive the REAL WebHandler with real plugins behind it — the exact
 // surface a sandboxed page's subresource request hits.
 
 // TestParseContentPath pins the URL grammar: the first all-digits segment
@@ -72,7 +72,7 @@ func TestPageURLMatchesDoorGrammar(t *testing.T) {
 	}
 }
 
-// contentDoorServer stands up a NodeHandler with an fs plugin over a temp
+// contentDoorServer stands up a WebHandler with an fs plugin over a temp
 // dir holding one image, and returns the base URL plus the image tile's
 // qualified id and the raw bytes.
 func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tileID string, img []byte) {
@@ -92,7 +92,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
 	srv := New(reg, Config{NodeID: "node1", Password: password})
-	hs = httptest.NewServer(srv.NodeHandler())
+	hs = httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 
 	ctx := context.Background()
@@ -210,7 +210,7 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	_, rootA := registerPrimaryLocaldb(t, reg, st)
 	reg.Register("uf1", "fs", fsClient, nil)
 	srv := New(reg, Config{NodeID: "node1"})
-	hs := httptest.NewServer(srv.NodeHandler())
+	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 
 	ctx := context.Background()
@@ -267,7 +267,7 @@ func TestContentDoorTransit(t *testing.T) {
 	reg.Register("ssh1", "remote", proxied, nil)
 	reg.SetTransit("ssh1", true) // the declaration the loader reads from Info in production
 	srv := New(reg, Config{NodeID: "node1"})
-	hs := httptest.NewServer(srv.NodeHandler())
+	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 
 	ctx := context.Background()
@@ -302,7 +302,7 @@ func TestContentDoorUnimplemented(t *testing.T) {
 	reg := plugin.NewRegistry()
 	_, root := registerPrimaryLocaldb(t, reg, st)
 	srv := New(reg, Config{NodeID: "node1"})
-	hs := httptest.NewServer(srv.NodeHandler())
+	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 
 	cl := rpc.NewClient(hs.Client(), hs.URL)

@@ -39,9 +39,11 @@ type Config struct {
 	User       string // SSH user (ssh only)
 	KeyPath    string // private key file (ssh only)
 	KnownHosts string // known_hosts file (ssh only; mandatory — no blind trust)
-	// Addr is the remote node's HTTP/h2c export address — as seen ON THE
-	// REMOTE HOST for an ssh bridge (e.g. its bind:, 127.0.0.1:8080), as
-	// reachable FROM THIS HOST for a direct connection.
+	// Addr is the remote node's federation door (h2c gRPC) — as seen ON
+	// THE REMOTE HOST for an ssh bridge (its loopback federation.port,
+	// 127.0.0.1:8081 by default), as reachable FROM THIS HOST for a direct
+	// connection (another node on this machine: the door never leaves
+	// loopback).
 	Addr string
 }
 
@@ -232,12 +234,12 @@ func Dial(cfg Config) (client gridwellv1.GridwellClient, closer func(), err erro
 }
 
 // dialDirect is the DIRECT transport: a plain gRPC connection to another
-// node's export, same keepalive and healing posture as the tunnel — a
-// dead peer surfaces as Unavailable (never a silent stale stream) and a
-// revived one heals in seconds. No auth on this path by design: it is
-// for loopback and tailnet addresses, where the network is the trust
-// boundary (the ssh bridge is the authenticated transport; the web-UI
-// password gates only the web UI).
+// node's federation door, same keepalive and healing posture as the
+// tunnel — a dead peer surfaces as Unavailable (never a silent stale
+// stream) and a revived one heals in seconds. No auth on this path: since
+// 2026-08-26 the door only binds loopback, so "direct" means another
+// node on this same machine; across machines the ssh bridge is the one
+// authenticated transport.
 func dialDirect(addr string) (gridwellv1.GridwellClient, func(), error) {
 	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

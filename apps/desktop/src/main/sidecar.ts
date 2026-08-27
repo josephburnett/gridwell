@@ -10,10 +10,9 @@ export interface Sidecar {
   // (e.g. a Tailscale IP shared with a phone browser).
   port: number;
   origin: string;
-  // dialAddr is the gRPC node-export target (host:port) — SAME host
-  // decision as the window origin, so a server bound to a Tailscale IP
-  // gets its shells dialed there too (previously hard-coded 127.0.0.1:
-  // the window worked, every terminal failed).
+  // dialAddr is the gRPC node-export target (host:port): the federation
+  // door from the banner — a separate loopback listener since 2026-08-26,
+  // so a window on a Tailscale origin still dials its shells locally.
   dialAddr: string;
   // The web-UI auth token from the banner, when server.yaml sets a password.
   // index.ts pre-sets it as the auth cookie so this window never prompts —
@@ -86,6 +85,9 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
     : [
         'serve',
         '--bind-default', `127.0.0.1:${port}`,
+        // The federation door: an ephemeral loopback port unless server.yaml
+        // pins federation.port (a node someone mounts wants a stable one).
+        '--federation-port-default', '0',
         // --static only when explicitly overridden: the binary embeds the
         // web client (web/embed.go), and the dev tree / e2e harness still
         // pin their checkout via GRIDWELL_STATIC.

@@ -32,8 +32,9 @@ func TestDirectConnectSpawn(t *testing.T) {
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
-	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
-	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
+	// remoteAddr is the FEDERATION door (loopback) — the only address a
+	// connection can dial since 2026-08-26; the web origin is not it.
+	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
 	// Node B: local + the builtin transport. A DIRECT connection — addr
 	// only, host empty; no sshd exists in this entire test — declared in
@@ -45,7 +46,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote")
 	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
-	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
+	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 	sshRoot := awaitConnRoot(t, localOrigin, "dconn1")
 
 	hg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})

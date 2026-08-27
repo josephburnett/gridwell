@@ -39,8 +39,10 @@ func TestMountPartitionServesCache(t *testing.T) {
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
-	remoteOrigin, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
-	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
+	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0", "0")
+	// The revival must land on the SAME federation port the connection
+	// dials, so pin it from the first run's ephemeral choice.
+	_, fedPort, _ := strings.Cut(remoteAddr, ":")
 	creds := dialtest.Server(t, t.TempDir())
 
 	// Local node: localdb + the builtin transport; the connection is
@@ -50,7 +52,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "partconn1", creds, remoteAddr))
-	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
+	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 	cl := gwrpc.NewDefaultClient(localOrigin)
 
 	// The connection lands on the remote HOME — personal's root grid
@@ -167,7 +169,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// Same address, same DB: the connection self-heals (sshdial backoff
 	// caps at 10s) and the cold body reads LIVE — proof the cache answers
 	// only when the mount cannot.
-	if _, stop2 := startServeProc(t, bin, remoteHome, remoteAddr); stop2 == nil {
+	if _, _, stop2 := startServeProc(t, bin, remoteHome, strings.TrimPrefix(remoteOrigin, "http://"), fedPort); stop2 == nil {
 		t.Fatal("remote revival failed")
 	}
 	deadline = time.Now().Add(60 * time.Second)

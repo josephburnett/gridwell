@@ -21,11 +21,11 @@ import (
 
 const spaMarker = "GRIDWELL-SPA-MARKER"
 
-// newAuthTestServer serves the REAL browser surface — NodeHandler, exactly
+// newAuthTestServer serves the REAL browser surface — WebHandler, exactly
 // what `gridwell serve` mounts — with a static dir whose index.html carries a
 // marker, so a test can tell the SPA from the login page. The auth tests
 // cross this seam on purpose: gating logic verified against anything less
-// than the production handler would miss a wiring mistake in NodeHandler.
+// than the production handler would miss a wiring mistake in WebHandler.
 func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
@@ -41,7 +41,7 @@ func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string)
 		t.Fatalf("write index: %v", err)
 	}
 	srv := New(reg, Config{StaticFS: os.DirFS(staticDir), Password: password})
-	hs := httptest.NewServer(srv.NodeHandler())
+	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 	return hs, root
 }

@@ -121,12 +121,15 @@ plugin and translates ids at the boundary:
    implementation). Transit-ness comes from `Registry.Transit`, a
    config-time fact, so it holds while the remote is down.
 
-**Two wire surfaces, one implementation.** The Connect handler serves
-browsers; `NodeHandler` wraps the same mux in h2c and routes raw gRPC to
-the node export, whose unary methods delegate straight into the Connect
-handler and whose streams (`OpenShell`, `WriteContent`) route by the id in
-their first message. A remote mounter and a browser exercise the same
-routing code.
+**Two wire surfaces, one implementation, two doors.** `WebHandler` is the
+Connect handler behind the password gate — the `web.bind` listener,
+bindable to a network; `FederationHandler` is the raw-gRPC node export,
+whose unary methods delegate straight into the Connect handler and whose
+streams (`OpenShell`, `WriteContent`) route by the id in their first
+message — served on its own listener at `127.0.0.1:<federation.port>`,
+never elsewhere (the config carries a port, not an address; ssh is the
+authenticated transport between nodes). A remote mounter and a browser
+exercise the same routing code through different doors.
 
 `Info` handshakes are timeout-bounded and cached per uuid after first
 success (invalidated on `SetRootView`, since root framing rides the
@@ -300,7 +303,8 @@ persistence is the session's system of record (a documented charter-§7
 exception, like processes and files). Teardown captures a final frame for
 the freeze but never depends on the capture succeeding.
 
-**Shell transport.** `shellstreams.ts` dials the sidecar's node export and
+**Shell transport.** `shellstreams.ts` dials the sidecar's federation door
+(the banner's `federation=` address, loopback) and
 relays gRPC `OpenShell` per pane over IPC (replace-on-open, at-most-once
 exit, no-op after close — unit-tested against a fake dialer). Browsers get
 frozen shell previews, caps-gated like live url tiles.

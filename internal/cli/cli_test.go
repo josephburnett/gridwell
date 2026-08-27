@@ -89,7 +89,7 @@ func TestParseServeFlagsRejectsUnknown(t *testing.T) {
 // non-empty bind: key in the file — so a config bind equal to the built-in
 // default still pins the address (TestLoad_bindSet covers the detection).
 func TestResolveBind(t *testing.T) {
-	const def = "127.0.0.1:8080" // config.Defaults.Bind
+	const def = "127.0.0.1:8080" // config.Defaults.Web.Bind
 	cases := []struct {
 		name          string
 		flagBind      string
@@ -116,10 +116,12 @@ func TestResolveBind(t *testing.T) {
 	}
 }
 
-// TestBindWarning pins the exposure warning: a non-loopback bind must produce
-// a prominent notice (without a password every byte is open on that
-// interface; with one, the gRPC node export still is), and a loopback bind
-// must not, either way.
+// TestBindWarning pins the exposure warning: a non-loopback web bind with
+// no password must produce a prominent notice (every byte is open on
+// that interface); WITH a password there is nothing left to warn about
+// — since 2026-08-26 the gRPC node export is its own loopback-only
+// listener, so the old "the export on the same port is ungated" warning
+// would be a false fact. Loopback never warns.
 func TestBindWarning(t *testing.T) {
 	loopback := []string{"127.0.0.1:8080", "127.1.2.3:9000", "[::1]:8080", "localhost:8080"}
 	for _, addr := range loopback {
@@ -136,26 +138,54 @@ func TestBindWarning(t *testing.T) {
 			t.Errorf("bindWarning(%q, false) = none, want a warning (non-loopback)", addr)
 			continue
 		}
-		if !strings.Contains(w, addr) || !strings.Contains(strings.ToLower(w), "unauthenticated") {
-			t.Errorf("bindWarning(%q, false) should name the address and say the API is unauthenticated; got %q", addr, w)
+		if !strings.Contains(w, addr) || !strings.Contains(strings.ToLower(w), "unauthenticated") || !strings.Contains(w, "web.password") {
+			t.Errorf("bindWarning(%q, false) should name the address, say the UI is unauthenticated, and name web.password; got %q", addr, w)
 		}
-		wp := bindWarning(addr, true)
-		if wp == "" || !strings.Contains(wp, addr) || !strings.Contains(wp, "node export") {
-			t.Errorf("bindWarning(%q, true) should still warn about the ungated node export; got %q", addr, wp)
+		if wp := bindWarning(addr, true); wp != "" {
+			t.Errorf("bindWarning(%q, true) = %q, want none: the web door is gated and the export is loopback-only", addr, wp)
 		}
 	}
 }
 
+// TestResolveFederationPort pins the node door's precedence — the same
+// resolveSetting as the web bind, with -1 as unset so that 0 (an
+// ephemeral port, what the sidecar asks for) is a real value.
+func TestResolveFederationPort(t *testing.T) {
+	def := config.Defaults.Federation.Port
+	cases := []struct {
+		name              string
+		flag, cfg         int
+		cfgSet            bool
+		flagDefault, want int
+	}{
+		{"flag beats all", 9100, 9000, true, 0, 9100},
+		{"flag zero is a real value", 0, 9000, true, 9200, 0},
+		{"config beats the default twin", -1, 9000, true, 0, 9000},
+		{"config equal to built-in still wins", -1, def, true, 0, def},
+		{"default twin fills in when config is silent", -1, def, false, 0, 0},
+		{"built-in when nothing is set", -1, def, false, -1, def},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveFederationPort(c.flag, c.cfg, c.cfgSet, c.flagDefault); got != c.want {
+				t.Errorf("resolveFederationPort(%d, %d, %v, %d) = %d, want %d", c.flag, c.cfg, c.cfgSet, c.flagDefault, got, c.want)
+			}
+		})
+	}
+}
+
 // TestServingBanner pins the sidecar boot contract (lines.ts parses this):
-// the address leads, and a configured password rides along as the derived
-// auth token so the desktop window can authenticate without prompting.
+// the web address leads, federation= carries the node door's loopback
+// address (the shell relay's dial target), and a configured password
+// rides along as the derived auth token so the desktop window can
+// authenticate without prompting.
 func TestServingBanner(t *testing.T) {
-	plain := servingBanner("127.0.0.1:8080", "./web", 2, "")
-	if plain != "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2)" {
+	plain := servingBanner("127.0.0.1:8080", "127.0.0.1:8081", "./web", 2, "")
+	if plain != "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2 federation=127.0.0.1:8081)" {
 		t.Errorf("bare banner drifted: %q", plain)
 	}
-	withPW := servingBanner("127.0.0.1:8080", "./web", 2, "hunter2")
-	want := "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2 auth=" + server.AuthToken("hunter2") + ")"
+	withPW := servingBanner("127.0.0.1:8080", "127.0.0.1:8081", "./web", 2, "hunter2")
+	want := "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2 federation=127.0.0.1:8081 auth=" + server.AuthToken("hunter2") + ")"
 	if withPW != want {
 		t.Errorf("auth banner = %q, want %q", withPW, want)
 	}

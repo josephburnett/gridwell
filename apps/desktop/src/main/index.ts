@@ -143,8 +143,8 @@ async function boot(): Promise<void> {
   // (2026-07-26 — the /rpc/ShellStream WS bridge is gone). A dial failure
   // surfaces on the ONE error wire like every other main-process failure.
   shells = new ShellStreams(
-    // dialAddr shares windowOrigin's host decision: a server bound to a
-    // Tailscale IP gets its shells dialed there too, not at loopback.
+    // dialAddr is the banner's federation door — loopback, whatever the
+    // web door is bound to (a Tailscale IP for the window is fine).
     makeShellDialer(sidecar.dialAddr, dataProtoPath()),
     (paneId, data) => sendShellData(rootWC, paneId, data),
     (ev) => {

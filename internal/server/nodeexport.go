@@ -1,8 +1,8 @@
 package server
 
 // The node export: the same Gridwell service the browser client consumes,
-// re-served over raw gRPC on the node's one port — the surface a remote
-// mounter (the ssh plugin's tunnel) dials. Every request is routed by the
+// re-served over raw gRPC on the node's loopback federation port — the
+// surface a remote mounter's ssh tunnel dials. Every request is routed by the
 // QUALIFIED ids it carries, exactly like the Connect front door (the unary
 // methods literally delegate to the same connectHandler, so the two surfaces
 // cannot drift), plus the streams: OpenShell (bidi PTY), ReadContent /
@@ -20,7 +20,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -31,30 +30,30 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// NodeHandler routes gRPC to the node export and everything else to the
-// server's HTTP mux. One port then serves every caller: browsers / the
-// Electron shell (HTTP/1.1 Connect, WS, static) hit the mux — behind the
-// password gate when one is configured (auth.go); raw gRPC (a remote
-// mounter's tunnel, the Electron shell PTY relay) hits the export, which the
-// gate deliberately does not cover — federation's transport trust model is
-// the VPN-only bind. Serve it with NodeProtocols: gRPC over a cleartext
-// tunnel needs HTTP/2 without TLS, which plain net/http refuses by default.
-func (s *Server) NodeHandler() http.Handler {
+// WebHandler is the BROWSER door: static, Connect RPCs, SSE, and the
+// /content/ pages — behind the password gate when one is configured
+// (auth.go). This is the handler for the `web.bind` listener, the only
+// one that may face a network. Raw gRPC is NOT demuxed here (it was,
+// until 2026-08-26): a request for the node export on this door is
+// just an unknown route, so binding the web UI to a tailnet address
+// exposes exactly the gated surface and nothing else.
+func (s *Server) WebHandler() http.Handler { return s.authWrap(s.mux) }
+
+// FederationHandler is the NODE door: the Gridwell service over raw
+// gRPC, what a remote mounter's ssh tunnel and the desktop's shell relay
+// dial. Ungated by design and served ONLY on loopback (node.Start binds
+// it to config.FederationAddr; there is no address field to bind it
+// elsewhere) — ssh is the authenticated transport between nodes. Serve
+// it with NodeProtocols: gRPC over a cleartext tunnel needs HTTP/2
+// without TLS, which plain net/http refuses by default.
+func (s *Server) FederationHandler() http.Handler {
 	g := grpc.NewServer()
 	pb.RegisterGridwellServer(g, &nodeExport{srv: s, h: newConnectHandler(s)})
-	browser := s.authWrap(s.mux)
-	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			g.ServeHTTP(w, r)
-			return
-		}
-		browser.ServeHTTP(w, r)
-	})
-	return root
+	return g
 }
 
-// NodeProtocols is the protocol set for any http.Server serving NodeHandler:
-// HTTP/1.1 for the browser surface plus UNENCRYPTED HTTP/2 for raw gRPC
+// NodeProtocols is the protocol set for any http.Server serving the
+// federation door: HTTP/1.1 plus UNENCRYPTED HTTP/2 for raw gRPC
 // through an ssh tunnel (the connection is already private; TLS-only h2
 // would refuse the mounter). This replaced the deprecated x/net h2c wrapper
 // (Go 1.24's Server.Protocols is the supported form); one owner here so the

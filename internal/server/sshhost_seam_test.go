@@ -81,7 +81,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	remoteReg.Register("rp1", "local", remoteClient, nil)
 	remoteSrv := server.New(remoteReg, server.Config{NodeID: "rnodex"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
+	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
 	remoteHTTP.Config.Protocols = server.NodeProtocols()
 	remoteHTTP.EnableHTTP2 = true
 	remoteHTTP.Start()
@@ -128,7 +128,11 @@ func newChainHarness(t *testing.T) *chainHarness {
 	localHTTP := httptest.NewServer(localSrv.Handler())
 	t.Cleanup(localHTTP.Close)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
-	h.remoteCl = rpc.NewClient(remoteHTTP.Client(), remoteHTTP.URL, connect.WithProtoJSON())
+	// The remote's WEB door is a second listener (2026-08-26: the browser
+	// surface no longer shares the federation handler).
+	remoteWeb := httptest.NewServer(remoteSrv.WebHandler())
+	t.Cleanup(remoteWeb.Close)
+	h.remoteCl = rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
 
 	h.rootBare, err = remoteStore.RootGridID(ctx)
 	if err != nil {

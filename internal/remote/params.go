@@ -1,6 +1,8 @@
 package remote
 
 import (
+	"github.com/josephburnett/gridwell/internal/config"
+
 	"encoding/json"
 	"fmt"
 	"os"
@@ -49,8 +51,8 @@ func ParseParams(data []byte) (*Params, error) {
 }
 
 // DialConfig resolves the params to a concrete dial.Config, applying the
-// host-side defaults: port 22, addr 127.0.0.1:8080 (the built-in gridwell
-// bind), key = the first of ~/.ssh/id_ed25519 / ~/.ssh/id_rsa that exists,
+// host-side defaults: port 22, addr = the built-in federation port on the
+// remote's loopback (config.DefaultFederationPort), key = the first of ~/.ssh/id_ed25519 / ~/.ssh/id_rsa that exists,
 // known_hosts = ~/.ssh/known_hosts. home is the plugin host's home directory
 // ("" disables the ~ defaults, forcing explicit paths).
 func (p *Params) DialConfig(home string) (dial.Config, error) {
@@ -72,7 +74,7 @@ func (p *Params) DialConfig(home string) (dial.Config, error) {
 	}
 	c.Host = fmt.Sprintf("%s:%d", p.Host, port)
 	if c.Addr == "" {
-		c.Addr = "127.0.0.1:8080"
+		c.Addr = config.FederationAddr(config.DefaultFederationPort)
 	}
 	if c.KeyPath == "" {
 		if home == "" {

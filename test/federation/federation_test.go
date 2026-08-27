@@ -56,18 +56,20 @@ func repoRoot(t *testing.T) string {
 }
 
 // startServe launches the real `gridwell serve` for a home and returns its
-// origin once the banner announces the bound address.
-func startServe(t *testing.T, bin, home, bind string) string {
-	origin, _ := startServeProc(t, bin, home, bind)
-	return origin
+// origin and the federation door's loopback address once the banner
+// announces them. fedPort is the --federation-port to pin ("0" =
+// ephemeral): two nodes on one box cannot share the built-in default.
+func startServe(t *testing.T, bin, home, bind string) (origin, fedAddr string) {
+	origin, fedAddr, _ = startServeProc(t, bin, home, bind, "0")
+	return origin, fedAddr
 }
 
 // startServeProc is startServe returning a stop() as well, for tests that
 // PARTITION a node mid-session (kill it hard) and bring it back on the
 // same address. stop is idempotent with the registered cleanup.
-func startServeProc(t *testing.T, bin, home, bind string) (string, func()) {
+func startServeProc(t *testing.T, bin, home, bind, fedPort string) (origin, fedAddr string, stop func()) {
 	t.Helper()
-	cmd := exec.Command(bin, "serve", "--bind", bind, "--static", "")
+	cmd := exec.Command(bin, "serve", "--bind", bind, "--federation-port", fedPort, "--static", "")
 	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+home, "GRIDWELL_PLUGIN_DIR="+filepath.Dir(bin))
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -81,7 +83,7 @@ func startServeProc(t *testing.T, bin, home, bind string) (string, func()) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start serve: %v", err)
 	}
-	stop := func() {
+	stop = func() {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}
@@ -106,6 +108,11 @@ func startServeProc(t *testing.T, bin, home, bind string) (string, func()) {
 			}
 			if i := strings.Index(line, "serving on "); i >= 0 {
 				addr := strings.Fields(line[i+len("serving on "):])[0]
+				fi := strings.Index(line, "federation=")
+				if fi < 0 {
+					t.Fatalf("banner lacks federation=: %q", line)
+				}
+				fedAddr = strings.TrimRight(strings.Fields(line[fi+len("federation="):])[0], ")")
 				go func() { // keep draining so the child never blocks on stderr
 					for l := range lines {
 						if os.Getenv("GW_FED_DEBUG") != "" {
@@ -113,7 +120,7 @@ func startServeProc(t *testing.T, bin, home, bind string) (string, func()) {
 						}
 					}
 				}()
-				return "http://" + addr, stop
+				return "http://" + addr, fedAddr, stop
 			}
 		case <-deadline:
 			t.Fatalf("serve for %s never announced", home)
@@ -176,8 +183,7 @@ func TestFederationSpawn(t *testing.T) {
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
 	run(t, renv, bin, "init", "--kind", "local", "--name", "work")
-	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
-	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
+	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 
 	// A real ssh server fronting it (shared helper — the same sshd the seam
 	// test uses, here with the PRODUCTION gridwell-ssh dialing it).
@@ -191,7 +197,7 @@ func TestFederationSpawn(t *testing.T) {
 	run(t, lenv, bin, "init", "--kind", "local", "--name", "home")
 	run(t, lenv, bin, "init", "--kind", "remote", "--name", "rtb")
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
-	localOrigin := startServe(t, bin, localHome, "127.0.0.1:0")
+	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 
 	// 1. The connection presents as its own menu row and gains its root
 	//    — the remote's node grid through the declared segment: the
@@ -421,8 +427,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	remoteHome := t.TempDir()
 	renv := []string{"GRIDWELL_HOME=" + remoteHome}
 	run(t, renv, bin, "init", "--kind", "local", "--name", "personal")
-	remoteOrigin := startServe(t, bin, remoteHome, "127.0.0.1:0")
-	remoteAddr := strings.TrimPrefix(remoteOrigin, "http://")
+	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
 	// Local node: localdb + the builtin transport, the connection declared
@@ -436,7 +441,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
-	localOrigin, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0")
+	localOrigin, _, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0", "0")
 
 	// 1. The connection is a menu row of its own; the transport's row is
 	//    hidden behind it; the learned root is the chained
@@ -494,7 +499,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		append(yamlBefore, []byte("connections: []\nretired_names:\n    - cmconn1\n")...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	localOrigin2 := startServe(t, bin, localHome, "127.0.0.1:0")
+	localOrigin2, _ := startServe(t, bin, localHome, "127.0.0.1:0")
 	lp = rpc(t, localOrigin2, "ListPlugins", map[string]any{})
 	for _, p := range lp["plugins"].([]any) {
 		if uuid, _ := p.(map[string]any)["uuid"].(string); strings.HasSuffix(uuid, "/cmconn1") {

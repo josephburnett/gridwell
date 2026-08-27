@@ -20,7 +20,7 @@ and every plugin as a sidecar child process and talks to it over loopback
 structurally never offline from its own data. Losing the internet costs it
 exactly what it costs the server: live url tiles can't browse, and
 federation mounts go dark. **This case mostly already works.** Two caveats:
-a `bind:` pinned to a Tailscale IP makes the window's own origin
+a `web.bind` pinned to a Tailscale IP makes the window's own origin
 non-loopback (`lines.ts:66-69` only rewrites wildcard hosts), so a tailnet
 outage can partition the desktop from its own sidecar; and a sidecar crash
 leaves a window whose every RPC fails, framed as "restart the app"

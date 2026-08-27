@@ -357,7 +357,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	remoteReg.Register("rp1", "local", remoteClient, nil)
 	remoteSrv := New(remoteReg, Config{NodeID: "rnode"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config.Handler = remoteSrv.NodeHandler()
+	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
 	remoteHTTP.Config.Protocols = NodeProtocols()
 	remoteHTTP.EnableHTTP2 = true
 	remoteHTTP.Start()
@@ -365,7 +365,9 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 
 	// LEAF stamping: the remote's own front door carries the schema on the
 	// plugin's grid.
-	remoteCl := rpc.NewClient(remoteHTTP.Client(), remoteHTTP.URL, connect.WithProtoJSON())
+	remoteWeb := httptest.NewServer(remoteSrv.WebHandler()) // the browser door: a second listener
+	t.Cleanup(remoteWeb.Close)
+	remoteCl := rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
 	rootBare, err := remoteStore.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
