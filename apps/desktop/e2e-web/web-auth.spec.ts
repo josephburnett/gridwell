@@ -1,9 +1,8 @@
 import { test as base, expect, Page } from '@playwright/test';
-import { spawn, ChildProcess } from 'node:child_process';
-import * as net from 'node:net';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
+import { spawnServe, stopServe, freePort } from './fixtures';
 
 // The web-UI password gate (the minted <home>/web-password file), driven
 // from a real browser against the real server: the login page fronts
@@ -14,18 +13,6 @@ import { seedHome } from '../e2e/fixtures';
 // authenticated from the banner token (fixtures.ts); this one alone drives
 // the login FORM.
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const port = (srv.address() as net.AddressInfo).port;
-      srv.close(() => resolve(port));
-    });
-  });
-}
 
 const PASSWORD = 'e2e-secret';
 
@@ -38,49 +25,13 @@ const test = base.extend<Fixtures>({
     const home = seedHome();
     // The password is the web-password file beside server.yaml (the door
     // is never open, 2026-08-26): serve mints one when absent, and a
-    // user who wants a memorable one writes the file — as here.
+    // user who wants a memorable one writes the file — as here. The one
+    // spawner (spawnServe) waits for the banner, which the gate never
+    // hides; this suite then deliberately ignores the token it announced.
     fs.writeFileSync(path.join(home, 'web-password'), PASSWORD + '\n', { mode: 0o600 });
-    const port = await freePort();
-    const origin = `http://127.0.0.1:${port}`;
-    const child: ChildProcess = spawn(
-      path.join(REPO_ROOT, 'gridwell'),
-      ['serve', '--bind', `127.0.0.1:${port}`, '--static', path.join(REPO_ROOT, 'web')],
-      { env: { ...process.env, GRIDWELL_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let output = '';
-    child.stdout!.on('data', (d) => (output += d));
-    child.stderr!.on('data', (d) => (output += d));
-
-    // Readiness: the gate answers (401 with the login page) — res.ok would
-    // never come true unauthenticated, which is the point of this suite.
-    const deadline = Date.now() + 15_000;
-    for (;;) {
-      try {
-        const res = await fetch(origin + '/');
-        if (res.status === 401) break;
-      } catch {
-        // not up yet
-      }
-      if (Date.now() > deadline) {
-        child.kill('SIGKILL');
-        throw new Error(`gridwell serve did not become ready on ${origin}:\n${output}`);
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-
-    await use({ origin });
-
-    child.kill('SIGTERM');
-    await new Promise<void>((resolve) => {
-      const hard = setTimeout(() => {
-        child.kill('SIGKILL');
-        resolve();
-      }, 3_000);
-      child.once('exit', () => {
-        clearTimeout(hard);
-        resolve();
-      });
-    });
+    const served = await spawnServe(home, await freePort());
+    await use({ origin: served.origin });
+    await stopServe(served.child);
     fs.rmSync(home, { recursive: true, force: true });
   },
 });
