@@ -82,7 +82,7 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
     .poll(
       async () => {
         const ng = await gw.getGrid(nodeGrid);
-        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'second');
+        const t = (ng.tiles ?? []).find((x) => x.altText === 'second');
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { timeout: 5_000 },
@@ -153,7 +153,7 @@ test('a plugin root reframe persists without ascending (issue #190)', async ({ g
     .poll(
       async () => {
         const ng = await gw.getGrid(nodeGrid);
-        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'second');
+        const t = (ng.tiles ?? []).find((x) => x.altText === 'second');
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { timeout: 5_000 },
@@ -206,7 +206,7 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
     .poll(
       async () => {
         const ng = await gw.getGrid(nodeGrid1);
-        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'e2e');
+        const t = (ng.tiles ?? []).find((x) => x.altText === 'e2e');
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { timeout: 10_000 },
@@ -216,7 +216,7 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
   // A bare URL is the fresh-launch shape: no viewport params to win over
   // the stored root view.
   await window.evaluate(() => {
-    window.location.href = '/?e2e=1';
+    globalThis.location.href = '/?e2e=1';
   });
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
   await window.waitForFunction(
@@ -267,7 +267,7 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
     .poll(
       async () => {
         const ng = await gw.getGrid(nodeGrid2);
-        const t = (ng.tiles ?? []).find((x: { altText?: string }) => x.altText === 'e2e');
+        const t = (ng.tiles ?? []).find((x) => x.altText === 'e2e');
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { timeout: 10_000 },
@@ -278,7 +278,7 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   // actually IN the URL, or the reload lands at the root with nothing to
   // ascend from.
   await expect
-    .poll(() => window.evaluate(() => window.location.pathname), { timeout: 10_000 })
+    .poll(() => window.evaluate(() => globalThis.location.pathname), { timeout: 10_000 })
     .not.toBe('/');
 
   await window.reload();

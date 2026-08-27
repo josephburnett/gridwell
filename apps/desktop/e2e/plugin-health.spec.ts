@@ -1,4 +1,4 @@
-import { test as base, expect } from './fixtures';
+import { test, expect } from './fixtures';
 
 // Crosses the plugin-classification seam (issue #47): a plugin whose Info
 // handshake succeeds but declares no root grid ("rootless" — e.g. an fs
@@ -14,7 +14,6 @@ import { test as base, expect } from './fixtures';
 // cmd/gridwell), so there is no way to reach a "broken" plugin swatch in a
 // real app boot. That case is covered at the buildPluginInfo/pluginInfo unit
 // level (internal/server/plugininfo_test.go).
-const test = base.extend<Record<string, never>>({});
 test.use({ extraPlugins: [{ kind: 'fs', name: 'rootless' }] });
 
 test('a rootless plugin swatch is inert and reports a notice instead of descending', async ({ gw, window }) => {

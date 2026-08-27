@@ -1,6 +1,5 @@
 import { test as base, expect, Page } from '@playwright/test';
 import { ChildProcess } from 'node:child_process';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
 import { Served, spawnServe, freePort, authenticate } from './fixtures';
@@ -182,7 +181,7 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
     .poll(
       async () => {
         const g = await gw.getGrid(f.gridID);
-        const t = g.tiles.find((t) => t.id === well.id);
+        const t = (g.tiles ?? []).find((t) => t.id === well.id);
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { timeout: 30_000 },

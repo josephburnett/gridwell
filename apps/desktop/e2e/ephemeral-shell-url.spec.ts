@@ -12,7 +12,6 @@ import { test, expect } from './fixtures';
 // the e2e fires the exact callback xterm's link provider runs (shellVisitURL);
 // url detection is unit-tested separately (urlnorm.FindURLs).
 test('clicking a url in a shell opens an ephemeral visit in a split below (#207)', async ({
-  electronApp,
   window,
   gw,
 }) => {

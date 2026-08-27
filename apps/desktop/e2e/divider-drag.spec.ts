@@ -27,7 +27,7 @@ test('left divider-arm mousedown is defaultPrevented; single-jump drag tracks fu
   // window fires after the canvas-level listener).
   await window.evaluate(() => {
     (window as any).__gwLastMousedownPrevented = null;
-    window.addEventListener('mousedown', (e) => {
+    globalThis.addEventListener('mousedown', (e: MouseEvent) => {
       (window as any).__gwLastMousedownPrevented = e.defaultPrevented;
     });
   });

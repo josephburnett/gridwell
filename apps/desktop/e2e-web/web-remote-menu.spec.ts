@@ -194,7 +194,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   const md = pal.items.find((i: any) => !i.isPlugin && i.kind === 'markdown');
   expect(md, 'the remote menu offers markdown').toBeTruthy();
   const target = await gw.cellCenter(sib.id, Math.round(sib.cx) + 1, Math.round(sib.cy) + 1);
-  const before = (await gw.getGrid(f.gridID)).tiles.length;
+  const before = ((await gw.getGrid(f.gridID)).tiles ?? []).length;
   await window.mouse.move(md.x + md.w / 2, md.y + md.h / 2);
   await window.mouse.down();
   await window.mouse.move(md.x + md.w / 2 + 10, md.y + md.h / 2 + 10);
@@ -207,7 +207,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
       return errs.notices.some((n: any) => n.source === 'menu');
     })
     .toBe(true);
-  expect((await gw.getGrid(f.gridID)).tiles.length, 'no cross-node tile was created').toBe(before);
+  expect(((await gw.getGrid(f.gridID)).tiles ?? []).length, 'no cross-node tile was created').toBe(before);
 });
 
 // The stale affordance (#256): a mounted machine going dark degrades the

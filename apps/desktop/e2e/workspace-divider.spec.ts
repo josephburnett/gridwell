@@ -19,7 +19,7 @@ async function workspaceState(window: any): Promise<{ depth: number }> {
 
 // barClick right-clicks the workspace bar's crumb to ascend (the bar band
 // sits directly below the lowest pane edge).
-async function barClick(gw: any, window: any): Promise<void> {
+async function barClick(gw: any): Promise<void> {
   // The bar lives inside the FOCUSED pane (issue #220); leaving is the
   // crumb BEFORE the pane boundary (one-chain nav, #245: click = go there).
   await gw.leaveWorkspace();
@@ -62,6 +62,6 @@ test('stacked-pane divider left-resizes inside a workspace; right-drag splits', 
   expect((await gw.panes()).length, 'border right-drag split a pane').toBe(3);
 
   // Leave the workspace so the shared session ends at the root.
-  await barClick(gw, window);
+  await barClick(gw);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
 });

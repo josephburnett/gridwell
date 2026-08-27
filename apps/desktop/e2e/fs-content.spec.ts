@@ -1,5 +1,4 @@
 import { test, expect } from './fixtures';
-import { tileAt } from './oracle';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -151,6 +150,6 @@ test('a read-only file is selectable, and stays so through a reload (#268)', asy
   await window.mouse.move(box.x + Math.min(box.w - 4, 300), box.y + 8, { steps: 8 });
   await window.mouse.up();
   await expect
-    .poll(() => window.evaluate(() => window.getSelection()?.toString() ?? ''))
+    .poll(() => window.evaluate(() => globalThis.getSelection()?.toString() ?? ''))
     .toContain('grab');
 });

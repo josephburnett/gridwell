@@ -12,7 +12,7 @@ import { tileAt } from './oracle';
 
 // stablePane projects a thPanes entry down to the fields that must survive
 // the workspace round trip untouched.
-function stablePane(p: Record<string, unknown>) {
+function stablePane(p: object) {
   const { id, x, y, w, h, anchor, path, gridID, textFocus, cx, cy, zoom } = p as any;
   return { id, x, y, w, h, anchor, path, gridID, textFocus, cx, cy, zoom };
 }
@@ -24,7 +24,7 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
 // barClick left-clicks the workspace bar's leftmost crumb. The bar band sits
 // directly below the lowest pane edge (rootLayoutRect reserves it), so its
 // vertical center is that edge + half the row height.
-async function barClick(gw: any, window: any): Promise<void> {
+async function barClick(gw: any): Promise<void> {
   // The bar lives inside the FOCUSED pane (issue #220); leaving is the
   // crumb BEFORE the pane boundary (one-chain nav, #245: click = go there).
   await gw.leaveWorkspace();
@@ -73,7 +73,7 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   }, { message: 'the debounced persister must write the split layout', timeout: 10_000 }).toBe('split-persisted');
 
   // 3. Ascend via the bar: back to the session tree, byte-identical.
-  await barClick(gw, window);
+  await barClick(gw);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const outerAfter = (await gw.panes()).map(stablePane);
   expect(outerAfter, 'outer arrangement must be exactly as it was left').toEqual(outerBefore);
@@ -88,5 +88,5 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   expect(resolved.length, 'both leaves must still frame the containing grid').toBe(2);
 
   // Teardown: leave the workspace so the shared session ends at the root.
-  await barClick(gw, window);
+  await barClick(gw);
 });

@@ -9,13 +9,12 @@ import { tileAt, writeContent } from './oracle';
 // (internal/server crossplugin_clone_test.go); this spec is the gesture-to-
 // store composition for the common case.
 
-const SERVICE = 'gridwell.v1.Gridwell';
 
 async function workspaceState(window: any): Promise<{ depth: number }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
 }
 
-async function barLeave(gw: any, window: any): Promise<void> {
+async function barLeave(gw: any): Promise<void> {
   // The bar lives inside the FOCUSED pane (issue #220); leaving is the
   // crumb BEFORE the pane boundary (one-chain nav, #245: click = go there).
   await gw.leaveWorkspace();
@@ -43,7 +42,7 @@ test('cloning a workspace: shared blob, independent divergence', async ({ gw, wi
       return false;
     }
   }, { timeout: 10_000 }).toBe(true);
-  await barLeave(gw, window);
+  await barLeave(gw);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const origBlob = await gw.getTileContent(orig!.id);
 
@@ -67,7 +66,7 @@ test('cloning a workspace: shared blob, independent divergence', async ({ gw, wi
       return false;
     }
   }, { message: "the clone's blob must diverge", timeout: 10_000 }).toBe(true);
-  await barLeave(gw, window);
+  await barLeave(gw);
 
   // The ORIGINAL is untouched — byte-for-byte.
   expect(await gw.getTileContent(orig!.id), "editing the clone must never touch the original").toBe(origBlob);
@@ -111,5 +110,5 @@ test('an unreadable layout opens read-only and is never overwritten', async ({ g
   await gw.splitFocusedPaneVertical();
   await window.waitForTimeout(1_500); // two debounce windows
   expect(await gw.getTileContent(pt!.id), 'read-only session must never overwrite').toBe(futureBlob);
-  await barLeave(gw, window);
+  await barLeave(gw);
 });

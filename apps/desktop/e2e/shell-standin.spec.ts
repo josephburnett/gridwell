@@ -61,7 +61,7 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   const live = await window.evaluate(() => {
     const host = document.querySelector('.gw-shell-host');
     if (!host) return null;
-    const canvas = [...host.querySelectorAll('canvas')].find((c) => c.className === '');
+    const canvas = Array.from(host.querySelectorAll('canvas')).find((c) => c.className === '');
     if (!canvas) return null;
     const r = canvas.getBoundingClientRect();
     return { x: r.x, y: r.y, w: r.width, h: r.height };

@@ -143,7 +143,6 @@ func isExecutable(path string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
-
 // resolvePluginBinaries fills each entry's binary: the node's NATIVE
 // kinds run in-process; a kind with a bundled provider factory runs
 // in-process too; every other kind spawns gridwell-provider-<kind>

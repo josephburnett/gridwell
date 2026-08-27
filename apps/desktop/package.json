@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "test:e2e:web": "playwright test -c playwright.web.config.ts",
     "dist": "npm run build && electron-builder",
-    "dist:dir": "npm run build && electron-builder --dir"
+    "dist:dir": "npm run build && electron-builder --dir",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

@@ -39,7 +39,7 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   });
   await window.evaluate(() => {
     (window as any).__wopens = [];
-    (window as any).__realOpen = window.open.bind(window);
+    (window as any).__realOpen = globalThis.open.bind(globalThis);
     (window as any).open = (u: any) => {
       (window as any).__wopens.push(String(u));
       return null;
@@ -121,7 +121,7 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   await window.evaluate(() => {
     (window as any).open = (window as any).__realOpen; // real one for the seal probe
   });
-  await window.evaluate(() => window.open('https://example.com/sealed'));
+  await window.evaluate(() => globalThis.open('https://example.com/sealed'));
   await window.waitForTimeout(500);
   expect(
     await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),

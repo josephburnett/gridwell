@@ -22,7 +22,6 @@ test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: picsDir } 
 test('an fs image tile: the circle opens the /content/ page in a new tab', async ({
   gw,
   window,
-  serve,
 }) => {
   await gw.enterPlugin('pics');
   const f = await gw.focused();

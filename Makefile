@@ -125,6 +125,7 @@ check: fmt-check proto-check wasm
 	./scripts/check-deadcode.sh
 	go tool staticcheck ./...
 	cd $(DESKTOP) && npm run typecheck
+	cd $(DESKTOP) && npm run typecheck:e2e
 	cd $(DESKTOP) && npm test
 
 # check-electron runs the live-tile harnesses under a virtual display. Needed

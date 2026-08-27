@@ -12,7 +12,7 @@ async function workspaceState(window: any): Promise<{ depth: number }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
 }
 
-async function barAscend(gw: any, window: any): Promise<void> {
+async function barAscend(gw: any): Promise<void> {
   // The bar lives inside the FOCUSED pane (issue #220); leaving is the
   // crumb BEFORE the pane boundary (one-chain nav, #245: click = go there).
   await gw.leaveWorkspace();
@@ -59,7 +59,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
     .toBe('recorded');
 
   // Ascend out of the workspace: the ephemeral SURVIVES (detach, not kill).
-  await barAscend(gw, window);
+  await barAscend(gw);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const scratch = await gw.getGrid(scratchGridID);
   const tileIds = (scratch.tiles ?? []).map((t: any) => String(t.id));
@@ -85,7 +85,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
 
   // Deleting the pane tile PARKS it in the trash (#262): a trashed
   // workspace keeps its ephemerals, so a restore comes back whole.
-  await barAscend(gw, window);
+  await barAscend(gw);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   await gw.deleteTileCell(wx, wy);
   await gw.clickPluginSwatch('trash');

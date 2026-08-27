@@ -14,7 +14,7 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
 }
 
-async function barClickCrumb(gw: any, window: any, level: number): Promise<void> {
+async function barClickCrumb(gw: any, level: number): Promise<void> {
   // One-chain nav (#245): "leave workspace `level` and deeper" = go to
   // level-1 — the crumb before that boundary.
   await gw.leaveWorkspace(level - 1);
@@ -64,7 +64,7 @@ test('nested workspaces: breadcrumbs, session-only membership, safe self-referen
 
   // Leave everything with one click on the OUTERMOST crumb (leave A ⇒
   // leaves B too): back to the session tree.
-  await barClickCrumb(gw, window, 1);
+  await barClickCrumb(gw, 1);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   await expect.poll(async () => (await gw.focused()).gridID).toBe(rootGrid);
 
@@ -77,6 +77,6 @@ test('nested workspaces: breadcrumbs, session-only membership, safe self-referen
   await gw.descendCell(ax, ay); // A, from inside A
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(2);
   expect((await workspaceState(window)).tileID).toBe(A!.id);
-  await barClickCrumb(gw, window, 1);
+  await barClickCrumb(gw, 1);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
 });

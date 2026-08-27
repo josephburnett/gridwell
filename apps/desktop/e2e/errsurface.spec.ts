@@ -89,7 +89,7 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
     .toBe(0);
   const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
   const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const winH = await window.evaluate(() => window.innerHeight);
+  const winH = await window.evaluate(() => globalThis.innerHeight);
   const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
   // Panes reclaim the full window height — no strip, and no reserved bar
   // band either: the bar rides INSIDE the focused pane (#220), a border's

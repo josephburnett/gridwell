@@ -15,13 +15,8 @@ async function workspaceState(window: any): Promise<{ depth: number; names: stri
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
 }
 
-async function bar(window: any): Promise<{ top: number; height: number; segments: any[] }> {
+async function bar(window: any): Promise<{ top: number; height: number; left: number; width: number; band: string; button: string; segments: any[] }> {
   return window.evaluate(() => (window as any).__gridwellTest.bar());
-}
-
-async function panesBottom(gw: any): Promise<number> {
-  const panes = await gw.panes();
-  return Math.max(...panes.map((p: any) => p.y + p.h));
 }
 
 test('the bar is always reserved; workspace crumbs appear only inside; in-pane ascent never crosses', async ({ gw, window }) => {
@@ -59,8 +54,8 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   // The teal workspace outline is reserved layout (issue #228): panes inset
   // by its width on every side, so the line never paints over the panes'
   // own kind-colored borders — the strip's reserved-band pattern again.
-  const winW = await window.evaluate(() => window.innerWidth);
-  const winH = await window.evaluate(() => window.innerHeight);
+  const winW = await window.evaluate(() => globalThis.innerWidth);
+  const winH = await window.evaluate(() => globalThis.innerHeight);
   const wp = (await gw.panes())[0];
   expect(wp.x, 'left outline gutter exists').toBeGreaterThan(0);
   expect(wp.x, 'the gutter is thin').toBeLessThan(8);

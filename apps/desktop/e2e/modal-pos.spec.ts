@@ -22,7 +22,7 @@ test('the url modal centers on the active pane, not the screen', async ({ gw, wi
   const cardCx = card!.x + card!.width / 2;
   const cardCy = card!.y + card!.height / 2;
 
-  const winW = await window.evaluate(() => window.innerWidth);
+  const winW = await window.evaluate(() => globalThis.innerWidth);
   expect(
     Math.abs(cardCx - (right.x + right.w / 2)),
     'card centers on the focused pane horizontally',

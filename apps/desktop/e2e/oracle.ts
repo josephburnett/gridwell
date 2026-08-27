@@ -91,7 +91,7 @@ export async function getTileContent(origin: string, tileId: string): Promise<st
   const res = await fetch(`${origin}/${SERVICE}/ReadContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: envelope(0, Buffer.from(JSON.stringify({ tileId }))),
+    body: new Uint8Array(envelope(0, Buffer.from(JSON.stringify({ tileId })))),
   });
   if (!res.ok) throw new Error(`ReadContent(${tileId}) failed: ${res.status} ${await res.text()}`);
   const raw = Buffer.from(await res.arrayBuffer());
@@ -123,9 +123,8 @@ export async function writeContent(
   const res = await fetch(`${origin}/${SERVICE}/WriteContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: envelope(
-      0,
-      Buffer.from(JSON.stringify({ tileId, version, data: bytes.toString('base64') })),
+    body: new Uint8Array(
+      envelope(0, Buffer.from(JSON.stringify({ tileId, version, data: bytes.toString('base64') }))),
     ),
   });
   if (!res.ok) throw new Error(`WriteContent(${tileId}@${version}) failed: ${res.status} ${await res.text()}`);
