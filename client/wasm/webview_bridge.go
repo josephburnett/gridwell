@@ -143,9 +143,13 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 	args.Set("paneId", paneID)
 	promise := g.Call("removeWebview", args)
 
-	// Exactly ONE of then/catch fires, so each arm must release BOTH — the
-	// old per-arm defer leaked the other js.Func on every close (the
-	// rendered_preview onload/onerror release() pattern).
+	// Exactly ONE of the two arms fires — promise.then(onFulfilled,
+	// onRejected), the two-argument form. The chained form
+	// .then(a).catch(b) is NOT exclusive: a throw inside the fulfilled arm
+	// rejects the derived promise and runs the catch arm too, releasing
+	// twice and writing a second, empty freeze (2026-08-27). Each arm
+	// releases BOTH funcs (the old per-arm defer leaked the other on every
+	// close).
 	var then, catch js.Func
 	release := func() { then.Release(); catch.Release() }
 	then = js.FuncOf(func(_ js.Value, p []js.Value) any {
@@ -163,7 +167,7 @@ func bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history 
 		onFreeze(nil, "", "", "")
 		return nil
 	})
-	promise.Call("then", then).Call("catch", catch)
+	promise.Call("then", then, catch)
 }
 
 // ── shell transport (2026-07-26: PTY bytes ride main's gRPC OpenShell
