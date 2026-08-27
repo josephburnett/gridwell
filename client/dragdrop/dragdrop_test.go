@@ -392,30 +392,6 @@ func TestMoveForbidden(t *testing.T) {
 	}
 }
 
-// TestCloneForbidden pins the right-drag policy: since issue #200 NOTHING is
-// forbidden — a solid well deep-copies across plugins, a link copies as a
-// link, a leaf copies bytes, and within one namespace clones always worked.
-func TestCloneForbidden(t *testing.T) {
-	cases := []struct {
-		name                             string
-		crossPlugin, isWell, isReference bool
-		want                             bool
-	}{
-		{"solid well across namespaces (deep copy, #200)", true, true, false, false},
-		{"link well across namespaces (mount, exit well)", true, true, true, false},
-		{"leaf across namespaces (byte copy)", true, false, false, false},
-		{"leaf link across namespaces (link copy)", true, false, true, false},
-		{"solid well within one namespace (deep copy)", false, true, false, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := CloneForbidden(c.crossPlugin, c.isWell, c.isReference); got != c.want {
-				t.Errorf("CloneForbidden(%v, %v, %v) = %v, want %v", c.crossPlugin, c.isWell, c.isReference, got, c.want)
-			}
-		})
-	}
-}
-
 func TestDecideDrop(t *testing.T) {
 	// base is a clean, started, left-drag of a real tile over a valid
 	// empty target cell — i.e. the DropMove case. Each row flips just the
@@ -468,8 +444,8 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Occupied: true}, DropRejected},
 		{"clone onto same cell -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, SameCell: true}, DropRejected},
-		// A forbidden clone (solid well across namespaces; caller feeds
-		// CloneForbidden) rejects like a forbidden move.
+		// Forbidden is a per-gesture input; the verdict treats a forbidden
+		// clone like a forbidden move (no gesture sets it for clones today).
 		{"forbidden clone -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Clone: true, Forbidden: true}, DropRejected},
 

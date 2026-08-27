@@ -443,7 +443,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	// right-drag is a CLONE everywhere (a copy of the dragged tile — a link
 	// tile copies as another link); its one Forbidden case is a SOLID well
 	// crossing a namespace, whose deep copy the server refuses
-	// (dropForbiddenForClone).
+	// (no clone is forbidden since issue #200).
 	in := dragdrop.DropInput{
 		Started:       d.started,
 		OriginFocused: d.originFocused,
@@ -458,7 +458,6 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 	if haveT {
 		in.TargetReadOnly = a.gridKnownReadOnly(t.gridID)
 		in.CrossPlugin = dropCrossNamespace(d, t)
-		in.Forbidden = dropForbiddenForClone(d, t)
 		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 		in.SameCell = t.gridID == d.srcGridID && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
 		// A clone excludes nothing: the source tile is a real neighbor the

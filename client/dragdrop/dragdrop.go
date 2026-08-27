@@ -256,16 +256,6 @@ func MoveForbidden(sameGrid, crossPlugin bool, srcKind, dstKind string) bool {
 	return srcKind != "" || dstKind != ""
 }
 
-// CloneForbidden reports whether a right-drag (clone) is rejected up front.
-// Since issue #200 nothing is: a solid well deep-copies across plugins (the
-// server walks the subtree over the content streams), a link copies as a
-// link, and within one namespace clones always worked. Kept as the named
-// decision point so a future forbidden case has its one home; the e2e pins
-// the deep copy end to end.
-func CloneForbidden(crossPlugin, isWell, isReference bool) bool {
-	return false
-}
-
 // DropAction is the single verdict for a drag release (and the matching
 // in-flight preview). BOTH the commit handlers and the ghost-preview
 // handlers in the wasm client route through DecideDrop so they can never
@@ -313,8 +303,9 @@ const (
 // Field provenance in the wasm caller (impure resolvers stay there):
 //   - OverDelete:  a.overDeleteButton(d, sx, sy)
 //   - HasTarget:   a.dropTargetAt(sx, sy, tileID) resolved
-//   - Forbidden:   per gesture — move: a.dropForbiddenForMove(d, t)
-//     (MoveForbidden); clone: dropForbiddenForClone(d, t) (CloneForbidden)
+//   - Forbidden:   move only — a.dropForbiddenForMove(d, t) (MoveForbidden);
+//     since issue #200 no clone is forbidden (a solid well deep-copies, a
+//     link copies as a link), so a clone leaves it false
 //   - CrossPlugin: dropCrossNamespace(d, t) — NamespaceOf(src) != NamespaceOf(dst)
 //   - SameCell:    target grid == source grid && drop cell == source cell
 //   - Occupied:    a.occupiedForDrop(t.gridID, dropX, dropY, w, h, exclude)

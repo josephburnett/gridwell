@@ -33,7 +33,7 @@ type dropTarget struct {
 // the SAME dragdrop.DecideDrop verdict the commit path uses, so a
 // previewed action can never diverge from the committed one (the
 // trashcan-delete regression was exactly such a divergence). clone picks
-// the right-drag flavor: Clone=true, Forbidden from CloneForbidden (a
+// the right-drag flavor: Clone=true, Forbidden never (issue #200 — a
 // solid well can't deep-copy across a namespace), and no no-entry badge
 // on a read-only doc (the clone preview never drew one). The left flavor
 // feeds MoveForbidden and, across a namespace, previews the LINK (dashed
@@ -63,7 +63,6 @@ func (a *App) previewDrop(d *dragState, sx, sy float64, clone bool) {
 		in.SameGrid = t.gridID == d.srcGridID
 		in.CrossPlugin = dropCrossNamespace(d, t)
 		if clone {
-			in.Forbidden = dropForbiddenForClone(d, t)
 		} else {
 			in.Forbidden = a.dropForbiddenForMove(d, t)
 		}
@@ -198,21 +197,6 @@ func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 		dropCrossNamespace(d, t),
 		a.gridSourceKind(d.srcGridID),
 		a.gridSourceKind(t.gridID),
-	)
-}
-
-// dropForbiddenForClone reports whether a right-drag (clone) is rejected up
-// front: a SOLID well cannot deep-copy across a namespace yet (the server
-// refuses with unimplemented). Links clone anywhere — copying a link copies
-// the reference.
-func dropForbiddenForClone(d *dragState, t *dropTarget) bool {
-	if d == nil || t == nil {
-		return false
-	}
-	return dragdrop.CloneForbidden(
-		dropCrossNamespace(d, t),
-		rpc.IsWellKind(d.snapshotTile.Kind),
-		d.snapshotTile.Reference,
 	)
 }
 
