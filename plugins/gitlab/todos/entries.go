@@ -7,19 +7,21 @@ import (
 )
 
 // RootEntries derives the landing grid: one well per week, newest
-// first, hinted into a single column anchored by HintEpoch (this
-// week at y=0, newer up, older down). Labels carry the counts, so a
-// week's face changes as its todos complete.
+// first, hinted as a calendar — a row per month anchored by HintEpoch
+// (this month at y=0, newer up, older down), the month's weeks left to
+// right (WeekCell). Labels carry the counts, so a week's face changes
+// as its todos complete.
 func RootEntries(weeks []WeekSummary) []*cpv1.Entry {
 	out := make([]*cpv1.Entry, 0, len(weeks))
 	for _, w := range weeks {
 		key := WeekKey(w.Start)
+		x, y := WeekCell(w.Start)
 		out = append(out, &cpv1.Entry{
 			Key:           key,
 			Kind:          "well",
 			Label:         WeekLabel(w.Start, w.Open, w.Done),
 			ChildContext:  key,
-			PlacementHint: &cpv1.PlacementHint{X: 0, Y: WeekRow(w.Start), W: 1, H: 1},
+			PlacementHint: &cpv1.PlacementHint{X: x, Y: y, W: 1, H: 1},
 		})
 	}
 	return out
@@ -51,6 +53,7 @@ func WeekEntries(start time.Time, todos []Todo) []*cpv1.Entry {
 			Label:        t.Label(),
 			ServesPage:   true,
 			StatusDetail: t.State,
+			PreviewStamp: t.PreviewStamp(),
 			PlacementHint: &cpv1.PlacementHint{
 				X: int64(day) * TodoTileW, Y: row, W: TodoTileW, H: 1,
 			},

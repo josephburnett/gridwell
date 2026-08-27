@@ -1,8 +1,10 @@
 package todos
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image/jpeg"
 	"strings"
 	"testing"
 	"time"
@@ -37,13 +39,18 @@ func TestWeekStartIsMondayUTC(t *testing.T) {
 	}
 }
 
-func TestWeekRowAnchorsThisWeekAtZero(t *testing.T) {
-	this := WeekStart(HintEpoch)
-	if WeekRow(this) != 0 {
-		t.Fatalf("epoch week row = %d", WeekRow(this))
+func TestWeekCellIsACalendarPage(t *testing.T) {
+	cell := func(s string) [2]int64 {
+		x, y := WeekCell(at(s))
+		return [2]int64{x, y}
 	}
-	if WeekRow(this.AddDate(0, 0, 7)) != -1 || WeekRow(this.AddDate(0, 0, -14)) != 2 {
-		t.Errorf("newer must climb, older must descend: %d %d", WeekRow(this.AddDate(0, 0, 7)), WeekRow(this.AddDate(0, 0, -14)))
+	// August 2026 is row 0: Mondays the 3rd, 10th, 17th, 24th, 31st → x 0..4.
+	if cell("2026-08-03T00:00:00Z") != [2]int64{0, 0} || cell("2026-08-24T00:00:00Z") != [2]int64{3, 0} || cell("2026-08-31T00:00:00Z") != [2]int64{4, 0} {
+		t.Errorf("august cells: %v %v %v", cell("2026-08-03T00:00:00Z"), cell("2026-08-24T00:00:00Z"), cell("2026-08-31T00:00:00Z"))
+	}
+	// September climbs, July descends; the year boundary keeps counting.
+	if cell("2026-09-07T00:00:00Z") != [2]int64{0, -1} || cell("2026-07-27T00:00:00Z") != [2]int64{3, 1} || cell("2025-12-29T00:00:00Z") != [2]int64{4, 8} {
+		t.Errorf("month rows: %v %v %v", cell("2026-09-07T00:00:00Z"), cell("2026-07-27T00:00:00Z"), cell("2025-12-29T00:00:00Z"))
 	}
 }
 
@@ -258,7 +265,7 @@ func TestWeeksAndEntries(t *testing.T) {
 		t.Fatalf("weeks = %+v", weeks)
 	}
 	root := RootEntries(weeks)
-	if root[0].Key != "week:2026-08-24" || root[0].ChildContext != root[0].Key || root[0].PlacementHint.Y != 0 || root[1].PlacementHint.Y != 1 {
+	if root[0].Key != "week:2026-08-24" || root[0].ChildContext != root[0].Key || root[0].PlacementHint.X != 3 || root[0].PlacementHint.Y != 0 || root[1].PlacementHint.X != 2 || root[1].PlacementHint.Y != 0 {
 		t.Errorf("root entries = %v", root)
 	}
 	if root[1].Label != "2026-08-17 · 1 open · 2 done" {
@@ -298,5 +305,29 @@ func TestPageEscapesAndRenders(t *testing.T) {
 	}
 	if !strings.Contains(string(GonePage("todo:<1>")), "todo:&lt;1&gt;") {
 		t.Error("gone page must escape the key")
+	}
+}
+
+func TestPreviewIsACardThatChangesWithState(t *testing.T) {
+	td := mk(9, "2026-08-18T10:00:00Z", StatePending)
+	td.Target.Title = "A merge request title long enough to wrap across the card at least twice over"
+	open := Preview(&td)
+	img, err := jpeg.Decode(bytes.NewReader(open))
+	if err != nil || img.Bounds().Dx() != previewW || img.Bounds().Dy() != previewH {
+		t.Fatalf("preview = %d bytes, %v", len(open), err)
+	}
+	td.State = StateDone
+	if bytes.Equal(open, Preview(&td)) {
+		t.Error("a done todo must draw a different face")
+	}
+	if td.PreviewStamp() != 2 || (&Todo{State: StatePending}).PreviewStamp() != 1 {
+		t.Error("state-only stamps")
+	}
+	td.UpdatedAt = at("2026-08-19T00:00:00Z")
+	if td.PreviewStamp() != td.UpdatedAt.Unix() {
+		t.Error("updated_at is the stamp when present")
+	}
+	if got := wrap("one two three four", 9, 2); len(got) != 2 || got[0] != "one two" || got[1] != "three…" {
+		t.Errorf("wrap = %q", got)
 	}
 }

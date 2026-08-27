@@ -10,6 +10,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -118,7 +119,16 @@ func (p *Provider) List(ctx context.Context, req *cpv1.ListRequest) (*cpv1.ListR
 		if err := p.sync(ctx, req.Context, time.Time{}); err != nil {
 			return nil, err
 		}
-		return &cpv1.ListResponse{Entries: todos.RootEntries(p.mem.Weeks()), Authoritative: false, SourceLabel: p.label}, nil
+		weeks := p.mem.Weeks()
+		open, done := 0, 0
+		for _, w := range weeks {
+			open += w.Open
+			done += w.Done
+		}
+		// The totals ride the grid's source label, so the root says at a
+		// glance what the walk found.
+		return &cpv1.ListResponse{Entries: todos.RootEntries(weeks), Authoritative: false,
+			SourceLabel: fmt.Sprintf("%s · %d open · %d done", p.label, open, done)}, nil
 	default:
 		start, ok := todos.ParseWeekKey(req.Context)
 		if !ok {
@@ -164,6 +174,17 @@ func (p *Provider) ServeContent(req *cpv1.ServeContentRequest, stream cpv1.Conte
 		return stream.Send(&cpv1.ServeContentChunk{Status: code, MediaType: "text/plain", Data: data})
 	}
 	return stream.Send(&cpv1.ServeContentChunk{Status: code, MediaType: "text/html; charset=utf-8", Data: data})
+}
+
+// GetPreview is the tile face: a rendered card for a remembered todo,
+// nothing for anything else (the client keeps showing the label).
+func (p *Provider) GetPreview(_ context.Context, req *cpv1.GetPreviewRequest) (*cpv1.GetPreviewResponse, error) {
+	if id, ok := todos.ParseKey(req.Key); ok {
+		if t, known := p.mem.Get(id); known {
+			return &cpv1.GetPreviewResponse{Jpeg: todos.Preview(&t)}, nil
+		}
+	}
+	return &cpv1.GetPreviewResponse{}, nil
 }
 
 // Probe never says GONE: a remembered todo is PRESENT; one this process

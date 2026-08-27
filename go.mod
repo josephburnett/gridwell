@@ -23,6 +23,7 @@ replace (
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24
+	github.com/josephburnett/gridwell/plugins/gitlab v0.0.0-00010101000000-000000000000
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/niklasfasching/go-org v1.9.1
 	github.com/yuin/goldmark v1.8.5
@@ -50,6 +51,7 @@ require (
 	github.com/oklog/run v1.2.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect

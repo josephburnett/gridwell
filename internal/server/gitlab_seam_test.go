@@ -108,7 +108,8 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
 	}
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
-	if week == nil || week.Kind != "well" || week.ChildGridId == "" || week.X != 0 || week.Y != todos.WeekRow(time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)) {
+	wantX, wantY := todos.WeekCell(time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC))
+	if week == nil || week.Kind != "well" || week.ChildGridId == "" || week.X != wantX || week.Y != wantY {
 		t.Fatalf("week well = %+v", week)
 	}
 

@@ -121,6 +121,19 @@ func (t *Todo) Label() string {
 	return b.String()
 }
 
+// PreviewStamp is the face's generation: the client keys its thumbnail
+// cache by it, so a state flip (done) redraws the card. GitLab bumps
+// updated_at on the flip; a record without one falls back to the state.
+func (t *Todo) PreviewStamp() int64 {
+	if !t.UpdatedAt.IsZero() {
+		return t.UpdatedAt.Unix()
+	}
+	if t.Done() {
+		return 2
+	}
+	return 1
+}
+
 // Key is the todo's provider key — stable forever, GitLab's own id.
 func (t *Todo) Key() string { return KeyPrefix + strconv.FormatInt(t.ID, 10) }
 
@@ -170,15 +183,20 @@ func ParseWeekKey(key string) (time.Time, bool) {
 	return t, true
 }
 
-// HintEpoch anchors the root column: the week containing it sits at
-// y=0, later weeks climb (negative y), earlier weeks descend. A fixed
+// HintEpoch anchors the root calendar: the month containing it is row
+// y=0, later months climb (negative y), earlier months descend. A fixed
 // date, so a week's hint is the same on every host and every restart —
 // two nodes never disagree about where a week first lands.
 var HintEpoch = time.Date(2026, time.August, 24, 0, 0, 0, 0, time.UTC)
 
-// WeekRow is the root-column y of the week starting at start.
-func WeekRow(start time.Time) int64 {
-	return -int64(start.Sub(WeekStart(HintEpoch)).Hours() / (24 * 7))
+// WeekCell is the root hint for the week starting at start: one ROW per
+// month (the month the Monday falls in), the month's weeks left to
+// right by their Monday's position in the month (x = 0..4). A calendar
+// page, read newest at the top.
+func WeekCell(start time.Time) (x, y int64) {
+	u := start.UTC()
+	months := (u.Year()-HintEpoch.Year())*12 + int(u.Month()-HintEpoch.Month())
+	return int64((u.Day() - 1) / 7), -int64(months)
 }
 
 // WeekLabel names a week well by its Monday and its counts.
