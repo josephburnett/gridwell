@@ -1,6 +1,7 @@
 package panebox
 
 import (
+	"github.com/josephburnett/gridwell/client/preview"
 	"math"
 	"testing"
 
@@ -45,9 +46,9 @@ func TestPointInContent(t *testing.T) {
 		{200, 50, false},
 	}
 	for _, c := range cases {
-		got := PointInContent(r, 10, c.sx, c.sy)
+		got := PointInLiveContent(r, 0, 10, c.sx, c.sy)
 		if got != c.want {
-			t.Errorf("PointInContent(%v, %v) = %v, want %v", c.sx, c.sy, got, c.want)
+			t.Errorf("PointInLiveContent(%v, %v) = %v, want %v", c.sx, c.sy, got, c.want)
 		}
 	}
 }
@@ -196,5 +197,30 @@ func TestModalCardPos_ClampsToTheWindow(t *testing.T) {
 	x, y = ModalCardPos(r, 1200, 900, 1000, 800)
 	if x != 0 || y != 0 {
 		t.Errorf("oversized card pos = (%v,%v), want (0,0)", x, y)
+	}
+}
+
+// The parked frame and the live view share ONE box (2026-08-27): a
+// capture taken at the live bounds, contain-fit into the fallback box,
+// lands pixel-for-pixel where the view was — no letterbox, no shift.
+// Drawn into the un-inset content box instead (the old fallback), the
+// same frame sat half a bar lower behind black bands.
+func TestLiveContentBoxIsTheFallbackBox(t *testing.T) {
+	r := pane.Rect{X: 100, Y: 40, W: 600, H: 400}
+	live := LiveContentBox(r, 28, 2)
+	if live != ContentBox(BarInset(r, 28), 2) {
+		t.Fatalf("LiveContentBox = %+v", live)
+	}
+	dx, dy, dw, dh, ok := preview.ContainDstRect(live.W, live.H, live.X, live.Y, live.W, live.H)
+	if !ok || dx != live.X || dy != live.Y || dw != live.W || dh != live.H {
+		t.Fatalf("frame drawn into its own box moved: (%v,%v,%v,%v)", dx, dy, dw, dh)
+	}
+	raw := ContentBox(r, 2)
+	_, dy, _, _, _ = preview.ContainDstRect(live.W, live.H, raw.X, raw.Y, raw.W, raw.H)
+	if dy == live.Y {
+		t.Fatal("the un-inset box would not have shifted the frame — the regression this pins is gone from the fixture")
+	}
+	if !PointInLiveContent(r, 28, 2, 300, 300) || PointInLiveContent(r, 28, 2, 300, 430) {
+		t.Error("hit-test: inside the live box yes, in the bar band no")
 	}
 }

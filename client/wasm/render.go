@@ -575,10 +575,10 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				case file.WebContent():
 					// url tiles AND serves_page tiles: the same web-content
 					// descent — preview when frozen, native view when live.
-					ix, iy, iw, ih := paneContentBox(r)
+					ix, iy, iw, ih := liveContentBox(r)
 					a.drawURLTileInPane(&file, ix, iy, iw, ih)
 				case file.Kind == rpc.KindShell:
-					ix, iy, iw, ih := paneContentBox(r)
+					ix, iy, iw, ih := liveContentBox(r)
 					a.drawShellTileInPane(p, &file, ix, iy, iw, ih)
 				default:
 					ix, iy, iw, ih := textInnerBox(r)

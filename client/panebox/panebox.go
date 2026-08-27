@@ -43,9 +43,20 @@ func ContentBox(r pane.Rect, borderPx float64) pane.Rect {
 }
 
 // PointInContent reports whether (sx, sy) lies inside ContentBox(r, borderPx).
-func PointInContent(r pane.Rect, borderPx, sx, sy float64) bool {
-	b := ContentBox(r, borderPx)
-	return b.Contains(sx, sy)
+// LiveContentBox is THE content box of a live surface — a url/page
+// view, a shell overlay — and of the canvas frame drawn in its place
+// while it is parked: the pane minus the bar band minus the border. One
+// derivation for the native bounds AND the fallback draw, so the two
+// cannot disagree (2026-08-27: the fallback drew into the un-inset pane
+// and contain-fit letterboxed the frame half a bar lower — the "jump"
+// on every click that parks the views).
+func LiveContentBox(r pane.Rect, barH, borderPx float64) pane.Rect {
+	return ContentBox(BarInset(r, barH), borderPx)
+}
+
+// PointInLiveContent is the hit-test twin of LiveContentBox.
+func PointInLiveContent(r pane.Rect, barH, borderPx, sx, sy float64) bool {
+	return LiveContentBox(r, barH, borderPx).Contains(sx, sy)
 }
 
 // TextareaBox returns the file-overlay textarea rectangle and its

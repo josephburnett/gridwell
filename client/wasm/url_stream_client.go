@@ -10,8 +10,6 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/panebox"
-	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
 // urlView is the renderer-side handle for one live URL tile — a native
@@ -68,8 +66,8 @@ func urlLog(format string, args ...any) {
 // float on top as a small native overlay view (see webviews.ts), since a
 // canvas-drawn button can't paint above a native WebContentsView.
 func contentViewBounds(r pane.Rect) viewBounds {
-	b := panebox.ContentBox(r, paneBorderPx)
-	return viewBounds{X: b.X, Y: b.Y, W: b.W, H: b.H}
+	x, y, w, h := liveContentBox(r)
+	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
 // urlTileForPane resolves the web-content tile a pane is descended into —
@@ -353,9 +351,10 @@ func (a *App) syncURLViews() {
 			bridgeSetHidden(paneID, true, false)
 			continue
 		}
-		// The focused pane's band is bar territory (issue #220): the live
-		// view's content box carves it out so it can never occlude the bar.
-		b := contentViewBounds(panebox.BarInset(r, wsbar.RowH))
+		// The band is bar territory (issue #220): liveContentBox carves it
+		// out so the view can never occlude the bar — and the canvas draws
+		// the parked frame into the very same box.
+		b := contentViewBounds(r)
 		v.bounds = b
 		bridgeSetBounds(paneID, b)
 		// The corner control belongs to the focused pane only — same rule the

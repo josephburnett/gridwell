@@ -12,10 +12,8 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/shellconn"
 	"github.com/josephburnett/gridwell/client/urlnorm"
-	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
 // shellStreamConn is one live shell attachment: the pane's slot on the
@@ -764,11 +762,11 @@ func (a *App) syncShellOverlayPosition() {
 			conn.container.Get("style").Set("display", "none")
 			continue
 		}
-		// Inset by the pane border so the overlay sits flush inside
-		// the chrome. Routes through panebox.ContentBox — same path as
-		// the URL live view (url_stream_client.go contentViewBounds) so
-		// both live-tile kinds always use the same inset (LiveViewInsetPx).
-		cb := panebox.ContentBox(panebox.BarInset(r, wsbar.RowH), paneBorderPx)
+		// The one live content box (liveContentBox): the same rect the
+		// URL view and the canvas fallback use, so every live-tile kind
+		// sits flush inside the chrome and above the bar.
+		cx, cy, cw, ch := liveContentBox(r)
+		cb := pane.Rect{X: cx, Y: cy, W: cw, H: ch}
 		if cb.W < 1 || cb.H < 1 {
 			conn.container.Get("style").Set("display", "none")
 			continue

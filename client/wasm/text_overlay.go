@@ -83,21 +83,21 @@ func (a *App) barAwarePaneRect(p *pane.Pane) pane.Rect {
 	return panebox.BarInset(paneRectFor(a, p), wsbar.RowH)
 }
 
-// paneContentBox returns the rectangle a URL tile renders into when
-// descended: the full pane minus the pane outline thickness. URL tiles
-// fill the pane edge-to-edge — the wide textarea-style margin used by
-// markdown files makes no sense here, since web pages have their own
-// internal layout and want all the pixels they can get. Ascent out of
-// a URL tile is via the Escape key.
-func paneContentBox(r pane.Rect) (x, y, w, h float64) {
-	b := panebox.ContentBox(r, paneBorderPx)
+// liveContentBox returns the rectangle a live surface (url/page view,
+// shell overlay) occupies in pane rect r, and the rectangle its parked
+// fallback frame is drawn into: the pane minus the bar band minus the
+// outline — panebox.LiveContentBox with this renderer's constants. Web
+// content fills it edge-to-edge (pages have their own layout); ascent
+// is via the Escape key. There is deliberately no un-inset variant.
+func liveContentBox(r pane.Rect) (x, y, w, h float64) {
+	b := panebox.LiveContentBox(r, wsbar.RowH, paneBorderPx)
 	return b.X, b.Y, b.W, b.H
 }
 
-// pointInPaneContent / pointInFileInner are thin adapters over the panebox
-// hit-tests, supplying the wasm renderer's border / inset constants.
-func pointInPaneContent(r pane.Rect, sx, sy float64) bool {
-	return panebox.PointInContent(r, paneBorderPx, sx, sy)
+// pointInLiveContent / pointInFileInner are thin adapters over the
+// panebox hit-tests, supplying the wasm renderer's constants.
+func pointInLiveContent(r pane.Rect, sx, sy float64) bool {
+	return panebox.PointInLiveContent(r, wsbar.RowH, paneBorderPx, sx, sy)
 }
 
 func pointInFileInner(r pane.Rect, sx, sy float64) bool {

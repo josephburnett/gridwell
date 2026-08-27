@@ -221,7 +221,7 @@ func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 	}
 	// The same box the in-pane draw uses (render.go's KindShell arm).
 	r := a.paneRectByID(p.ID)
-	x, y, _, _ := paneContentBox(r)
+	x, y, _, _ := liveContentBox(r)
 	cached, ok := a.urlPreview.Get(file.ContentID(), file.PreviewBlobID)
 	if !ok {
 		return nil

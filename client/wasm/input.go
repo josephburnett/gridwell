@@ -208,7 +208,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		TextFocused:       p.TextFocus != "",
 		URLDescent:        a.isURLDescent(p),
 		LiveURLView:       a.urlViewFor(p.ID) != nil,
-		InContentBox:      pointInPaneContent(r, sx, sy),
+		InContentBox:      pointInLiveContent(r, sx, sy),
 		TextModeRendered:  p.TextMode == rpc.TextModeRendered,
 		OverEnterableWell: hoverWell != nil,
 		ZoomOut:           dy > 0,
@@ -605,7 +605,7 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	// gridwell gesture.
 	sx, sy := mouseXY(args[0], a.canvas)
 	if p, r, ok := a.paneAtScreen(sx, sy); ok && a.isURLDescent(p) {
-		if a.urlViewFor(p.ID) != nil && pointInPaneContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
+		if a.urlViewFor(p.ID) != nil && pointInLiveContent(r, sx, sy) && args[0].Get("button").Int() == 0 {
 			return nil
 		}
 	}
