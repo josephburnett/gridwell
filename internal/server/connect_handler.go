@@ -553,7 +553,7 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 				return nil, connect.NewError(connect.CodeAborted,
 					fmt.Errorf("deep copy incomplete (the partial copy remains, delete it if unwanted): %w", err))
 			}
-			if sourceUnreachable(err) {
+			if gwerr.IsTransport(err) {
 				// The whole room is dark: degrade the TOP-LEVEL well to a
 				// link (offline-plan decision 2026-08-14) — st.ChildGridId
 				// is already the qualified target, so this is exactly the
@@ -577,7 +577,7 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// degrades the copy to a link to the original (offline-plan
 		// decision, 2026-08-14) — same rule as inside a deep walk.
 		if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
-			if sourceUnreachable(err) {
+			if gwerr.IsTransport(err) {
 				create.Tile.LinkTargetId = st.Id
 				copyBody = nil
 				break
@@ -598,7 +598,7 @@ func (h *connectHandler) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTile
 		// never-arranged pane tile (no blob) copies with no body.
 		if st.BlobId != 0 {
 			if copyBody, err = readAllContent(ctx, src, srcLocal); err != nil {
-				if sourceUnreachable(err) {
+				if gwerr.IsTransport(err) {
 					// Degrade to a link, like text above.
 					create.Tile.LinkTargetId = st.Id
 					copyBody = nil

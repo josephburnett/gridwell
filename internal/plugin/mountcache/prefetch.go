@@ -26,6 +26,7 @@ package mountcache
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"io"
 	"sync"
 	"time"
@@ -146,14 +147,14 @@ func (w *walker) walkGrid(gridID string) bool {
 	}
 	resp, err := w.c.GetGrid(w.ctx, &pb.GetGridRequest{GridId: gridID})
 	if err != nil {
-		return !unreachable(err) // dark → abort; refused → skip this branch
+		return !gwerr.IsTransport(err) // dark → abort; refused → skip this branch
 	}
 	// The + menu context for this grid's node (remote-menu): warm the
 	// routed plugin list once per namespace.
 	if ns := resp.GetGrid().GetNodeNs(); !w.seenNs[ns] {
 		w.seenNs[ns] = true
 		if w.pause() {
-			if _, err := w.c.ListPlugins(w.ctx, &pb.ListPluginsRequest{Namespace: ns}); err != nil && unreachable(err) {
+			if _, err := w.c.ListPlugins(w.ctx, &pb.ListPluginsRequest{Namespace: ns}); err != nil && gwerr.IsTransport(err) {
 				return false
 			}
 		} else {
@@ -185,7 +186,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	if !w.pause() {
 		return false
 	}
-	if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && unreachable(err) {
+	if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsTransport(err) {
 		return false
 	}
 	if contentKinds[t.GetKind()] && w.spent < prefetchContentBudget {
@@ -194,7 +195,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		s, err := w.c.ReadContent(w.ctx, &pb.ReadContentRequest{TileId: t.GetId()})
 		if err != nil {
-			return !unreachable(err)
+			return !gwerr.IsTransport(err)
 		}
 		if n, ok := drainStream(s); !ok {
 			return false
@@ -211,7 +212,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		s, err := w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId(), Subpath: ""})
 		if err != nil {
-			return !unreachable(err)
+			return !gwerr.IsTransport(err)
 		}
 		if n, ok := drainServeStream(s); !ok {
 			return false
@@ -231,7 +232,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		tr, err := w.c.GetTile(w.ctx, &pb.GetTileRequest{TileId: target})
 		if err != nil {
-			return !unreachable(err)
+			return !gwerr.IsTransport(err)
 		}
 		if tt := tr.GetTile(); tt != nil {
 			tt2 := proto.Clone(tt).(*pb.Tile)
@@ -251,7 +252,7 @@ func drainServeStream(s grpc.ServerStreamingClient[pb.ServeContentChunk]) (n int
 			return n, true
 		}
 		if err != nil {
-			return n, !(first && unreachable(err))
+			return n, !(first && gwerr.IsTransport(err))
 		}
 		first = false
 		n += len(ch.GetData())
@@ -269,7 +270,7 @@ func drainStream(s grpc.ServerStreamingClient[pb.ContentChunk]) (n int, ok bool)
 			return n, true
 		}
 		if err != nil {
-			return n, !(first && unreachable(err))
+			return n, !(first && gwerr.IsTransport(err))
 		}
 		first = false
 		n += len(ch.GetData())

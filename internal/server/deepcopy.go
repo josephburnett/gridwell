@@ -3,27 +3,10 @@ package server
 import (
 	"context"
 	"fmt"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/josephburnett/gridwell/api/gwerr"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
-
-// sourceUnreachable reports a TRANSPORT-shaped failure from the source
-// plugin: the mount is dark (tunnel down, box asleep) — the source never
-// spoke. The offline degrade (below) keys on exactly this and nothing
-// else: NotFound, a tombstoned namespace, InvalidArgument are all answers,
-// and an answer must never turn into a link (gone is not "elsewhere").
-// Same taxonomy as the client's clientsync.Of, in this hop's dialect
-// (plugin hops are gRPC).
-func sourceUnreachable(err error) bool {
-	switch status.Code(err) {
-	case codes.Unavailable, codes.DeadlineExceeded:
-		return true
-	}
-	return false
-}
 
 // Cross-plugin DEEP COPY of a solid well (issue #200) — the standing punt
 // from the 2026-07-19 link/clone decision, unblocked by the content streams.
@@ -124,7 +107,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 		// itself: firing the degrade there stacks a link on the cell the
 		// partial already occupies, and the user gets an "overlap" refusal
 		// pointing at a grid they never touched.
-		if created == nil && sourceUnreachable(err) {
+		if created == nil && gwerr.IsTransport(err) {
 			// The room is DARK, not gone (offline-plan owner decision
 			// 2026-08-14): degrade to a LINK to the original — the dashed
 			// border says "lives elsewhere" in the vocabulary that already
@@ -156,7 +139,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 	if (t.Kind == "text" || t.Kind == "pane") && t.BlobId != 0 {
 		var err error
 		body, err = readAllContent(ctx, src, t.Id)
-		if sourceUnreachable(err) {
+		if gwerr.IsTransport(err) {
 			_, lerr := dst.CreateTile(ctx, &pb.CreateTileRequest{
 				GridId: dstGrid,
 				Tile: &pb.Tile{Kind: t.Kind, X: t.X, Y: t.Y, W: t.W, H: t.H,
@@ -199,7 +182,7 @@ func (h *connectHandler) deepCopyTile(ctx context.Context, src pb.GridwellClient
 			return nil
 		}
 		pv, err := src.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: t.Id})
-		if sourceUnreachable(err) {
+		if gwerr.IsTransport(err) {
 			return nil
 		}
 		if err != nil || len(pv.GetJpeg()) == 0 {

@@ -134,3 +134,12 @@ func ReactSave(o Outcome) Reaction {
 	}
 	return Reaction{}
 }
+
+// IsUnimplemented reports a plugin's "I don't serve this" answer — a
+// normal capability property (no previews, no pages), never a failure
+// to surface. Lives here so every wire-code judgment is in the one
+// tested classifier.
+func IsUnimplemented(err error) bool {
+	var ce *connect.Error
+	return errors.As(err, &ce) && ce.Code() == connect.CodeUnimplemented
+}

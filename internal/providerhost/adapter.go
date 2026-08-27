@@ -29,6 +29,7 @@ import (
 
 	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/internal/layout"
 )
 
@@ -102,16 +103,6 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 	return resp, nil
 }
 
-// notNow reports a transport-shaped failure — "the source didn't answer",
-// as opposed to an answered verdict. Only these degrade to the cache.
-func notNow(err error) bool {
-	switch status.Code(err) {
-	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:
-		return true
-	}
-	return false
-}
-
 // listing fetches a context's listing, degrading to the remembered
 // answer on a transport-shaped failure. stale reports a cache serve.
 // facts is the entry-fact lookup: the live entries, UNIONED (for a
@@ -159,7 +150,7 @@ func (a *Adapter) listing(ctx context.Context, gid int64, key string) (resp *cpv
 		}
 		return resp, facts, false, nil
 	}
-	if !notNow(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, nil, false, err
 	}
 	if prev == nil {
@@ -261,7 +252,7 @@ func (a *Adapter) sourceKind(ctx context.Context) (string, error) {
 	a.kindMu.Unlock()
 	ci, err := a.cp.Info(ctx, &cpv1.InfoRequest{})
 	if err != nil {
-		if memo != "" && notNow(err) {
+		if memo != "" && gwerr.IsTransport(err) {
 			return memo, nil
 		}
 		return "", err
@@ -530,7 +521,7 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 	}
 	resp, err := a.cp.Probe(ctx, &cpv1.ProbeRequest{Key: key})
 	if err != nil {
-		if notNow(err) {
+		if gwerr.IsTransport(err) {
 			return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_UNSPECIFIED}, nil
 		}
 		return nil, err

@@ -12,6 +12,7 @@ package mountcache
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"io"
 
 	"google.golang.org/grpc"
@@ -32,7 +33,7 @@ var (
 func (c *Client) ServeContent(ctx context.Context, in *pb.ServeContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.ServeContentChunk], error) {
 	upstream, err := c.GridwellClient.ServeContent(ctx, in, opts...)
 	if err != nil {
-		if unreachable(err) {
+		if gwerr.IsTransport(err) {
 			if s, ok := c.loadServeContent(ctx, in.GetTileId(), in.GetSubpath()); ok {
 				return s, nil
 			}
@@ -75,7 +76,7 @@ func (s *teeServeStream) Recv() (*pb.ServeContentChunk, error) {
 		return nil, err
 	}
 	if err != nil {
-		if !s.gotFrame && unreachable(err) {
+		if !s.gotFrame && gwerr.IsTransport(err) {
 			if m, ok := s.c.loadServeContent(s.ctx, s.tileID, s.subpath); ok {
 				s.fallback = m
 				return s.fallback.Recv()

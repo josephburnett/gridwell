@@ -7,7 +7,11 @@
 // vocabulary lives in the api.
 package gwerr
 
-import "errors"
+import (
+	"errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
 
 // Sentinel errors. Callers use errors.Is; plugins return them (wrapped is
 // fine) so every transport classifies identically.
@@ -73,4 +77,22 @@ func ClassifyError(err error) ErrorClass {
 		}
 	}
 	return ClassInternal
+}
+
+// IsTransport reports a TRANSPORT-shaped gRPC failure: the far side never
+// spoke (Unavailable — refused/dropped; DeadlineExceeded — timed out;
+// Canceled — the caller gave up). Every server-side hop that degrades
+// to a remembered answer keys on exactly this and nothing else: a coded
+// answer — NotFound, a tombstone, InvalidArgument — is an ANSWER and
+// must pass through verbatim, never resurrected from a cache or turned
+// into a link. The ONE classifier for gRPC hops (the providerhost
+// read-through cache, the mount cache, the cross-plugin deep copy);
+// clientsync.Of is its Connect-wire twin on the client, pinned to the
+// same three codes.
+func IsTransport(err error) bool {
+	switch status.Code(err) {
+	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:
+		return true
+	}
+	return false
 }

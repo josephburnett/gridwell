@@ -34,12 +34,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"log"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/josephburnett/gridwell/api/dbformat"
@@ -149,19 +148,6 @@ func Open(upstream pb.GridwellClient, dbPath string) (*Client, func(), error) {
 	}, nil
 }
 
-// unreachable reports the transport-class failures the cache may answer
-// for: the mount never spoke. Any coded answer — NotFound, a tombstone,
-// InvalidArgument — passes through verbatim; a cache must never resurrect
-// what the remote says is gone. (The same taxonomy as clientsync.Of and
-// the server's sourceUnreachable, in this hop's dialect.)
-func unreachable(err error) bool {
-	switch status.Code(err) {
-	case codes.Unavailable, codes.DeadlineExceeded:
-		return true
-	}
-	return false
-}
-
 // logErr surfaces a cache-side failure to the server log. A broken cache
 // must never fail a live request — but it must not be silent either, or
 // the offline promise degrades invisibly until the day it's needed.
@@ -185,7 +171,7 @@ func (c *Client) Info(ctx context.Context, in *pb.InfoRequest, opts ...grpc.Call
 		}
 		return resp, nil
 	}
-	if !unreachable(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
 	var b []byte
@@ -213,7 +199,7 @@ func (c *Client) ListPlugins(ctx context.Context, in *pb.ListPluginsRequest, opt
 		}
 		return resp, nil
 	}
-	if !unreachable(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
 	var b []byte
@@ -235,7 +221,7 @@ func (c *Client) GetGrid(ctx context.Context, in *pb.GetGridRequest, opts ...grp
 		c.storeGrid(ctx, in.GridId, resp)
 		return resp, nil
 	}
-	if !unreachable(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
 	cached, hit := c.loadGrid(ctx, in.GridId)
@@ -332,7 +318,7 @@ func (c *Client) GetTile(ctx context.Context, in *pb.GetTileRequest, opts ...grp
 		c.upsertTile(ctx, resp.GetTile())
 		return resp, nil
 	}
-	if !unreachable(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
 	var tb []byte
@@ -383,7 +369,7 @@ func (c *Client) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewReques
 		}
 		return resp, nil
 	}
-	if !unreachable(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
 	var jpeg []byte
@@ -403,7 +389,7 @@ func (c *Client) ReadContent(ctx context.Context, in *pb.ReadContentRequest, opt
 		// transport failure surfaces to the caller AND skips the store.)
 		return &teeContentStream{ServerStreamingClient: stream, c: c, ctx: ctx, tileID: in.TileId}, nil
 	}
-	if !unreachable(err) {
+	if !gwerr.IsTransport(err) {
 		return nil, err
 	}
 	mediaType, version, data, ok := c.loadContent(ctx, in.TileId)

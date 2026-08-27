@@ -8,6 +8,7 @@ package mountcache
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"io"
 
 	"google.golang.org/grpc"
@@ -57,7 +58,7 @@ func (s *teeContentStream) Recv() (*pb.ContentChunk, error) {
 		return nil, err
 	}
 	if err != nil {
-		if !s.gotFrame && unreachable(err) {
+		if !s.gotFrame && gwerr.IsTransport(err) {
 			if mt, ver, data, ok := s.c.loadContent(s.ctx, s.tileID); ok {
 				s.fallback = newMemContentStream(s.ctx, mt, ver, data)
 				return s.fallback.Recv()

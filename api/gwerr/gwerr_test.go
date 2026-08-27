@@ -6,6 +6,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,4 +122,22 @@ func declaredSentinelNames(t *testing.T) map[string]string {
 		}
 	}
 	return out
+}
+
+// TestIsTransportPinsWireCodes: the three transport codes and nothing
+// else — a coded answer is never a transport failure.
+func TestIsTransportPinsWireCodes(t *testing.T) {
+	for _, c := range []codes.Code{codes.Unavailable, codes.DeadlineExceeded, codes.Canceled} {
+		if !IsTransport(status.Error(c, "x")) {
+			t.Errorf("%v must be transport", c)
+		}
+	}
+	for _, c := range []codes.Code{codes.NotFound, codes.InvalidArgument, codes.FailedPrecondition, codes.Unimplemented, codes.Internal, codes.OK} {
+		if IsTransport(status.Error(c, "x")) {
+			t.Errorf("%v must be an answer", c)
+		}
+	}
+	if IsTransport(nil) || IsTransport(errors.New("plain")) {
+		t.Error("nil and non-status errors are not transport failures")
+	}
 }

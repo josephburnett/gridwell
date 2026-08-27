@@ -32,18 +32,9 @@ type tileCall func(ctx context.Context) (*rpc.Tile, error)
 type voidCall func(ctx context.Context) error
 
 // isUnimplemented reports a plugin's "I don't serve this" answer — a
-// normal capability property (no previews, no pages), never a failure to
-// surface.
-func isUnimplemented(err error) bool {
-	if err == nil {
-		return false
-	}
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return ce.Code() == connect.CodeUnimplemented
-	}
-	return false
-}
+// capability property, never a failure to surface. The judgment is
+// clientsync's (the one wire-code classifier).
+func isUnimplemented(err error) bool { return clientsync.IsUnimplemented(err) }
 
 // isVersionConflict reports whether an RPC error came back as a
 // version/overlap conflict (the one-retry loops re-claim on exactly this).
@@ -55,7 +46,7 @@ func isVersionConflict(err error) bool {
 // surfaceRPCError surfaces a non-nil RPC error as an on-canvas notice (the
 // errsurface strip — what the user actually sees); reportErr also writes the
 // one console/log line. It is only reached for real failures — the
-// conflict-vs-surface decision is owned by clientsync.Classify (reactToErr),
+// conflict-vs-surface decision is owned by clientsync.Of (reactToErr),
 // which never routes a conflict here.
 func (a *App) surfaceRPCError(label string, err error) {
 	if err == nil {

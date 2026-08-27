@@ -119,3 +119,12 @@ func TestNoDropWithoutVerdict(t *testing.T) {
 		}
 	}
 }
+
+func TestIsUnimplemented(t *testing.T) {
+	if !IsUnimplemented(connect.NewError(connect.CodeUnimplemented, errors.New("no previews"))) {
+		t.Fatal("Unimplemented is a capability miss")
+	}
+	if IsUnimplemented(connect.NewError(connect.CodeUnavailable, errors.New("x"))) || IsUnimplemented(errors.New("plain")) || IsUnimplemented(nil) {
+		t.Fatal("anything else is not")
+	}
+}
