@@ -426,3 +426,16 @@ func TestDividerOnSide(t *testing.T) {
 		}
 	}
 }
+
+func TestCanSplitAgreesWithTheClamp(t *testing.T) {
+	for _, h := range []float64{2*MinPanePx - 1, 2 * MinPanePx, 2*MinPanePx + 1, 10 * MinPanePx} {
+		r := Rect{W: 10 * MinPanePx, H: h}
+		_, ok := SplitClampedPosition(SideBottom, r, r.W/2, r.H/2)
+		if CanSplit(SideBottom, r) != ok {
+			t.Errorf("H=%v: CanSplit=%v but the clamp says %v", h, CanSplit(SideBottom, r), ok)
+		}
+	}
+	if CanSplit(SideRight, Rect{W: 2 * MinPanePx, H: 999}) || !CanSplit(SideRight, Rect{W: 2*MinPanePx + 1, H: 999}) {
+		t.Error("the horizontal axis follows the same rule")
+	}
+}

@@ -276,14 +276,28 @@ const MinPanePx = 32.0
 // never produce a sub-minimum pane. The second return is false when the
 // cursor is outside the valid range (or the pane is too small to split at
 // all), letting the caller render the preview in a "won't commit" style.
+// CanSplit reports whether a pane of rect r can be split on side at all:
+// both halves need MinPanePx, so the axis must exceed twice the minimum.
+// The ONE sub-minimum rule — the gesture clamp (SplitClampedPosition)
+// and programmatic splits (openLinkBelow) read it; they used to disagree
+// at exactly 2×MinPanePx.
+func CanSplit(side Side, r Rect) bool {
+	switch side {
+	case SideTop, SideBottom:
+		return r.H > 2*MinPanePx
+	default:
+		return r.W > 2*MinPanePx
+	}
+}
+
 func SplitClampedPosition(side Side, paneRect Rect, curX, curY float64) (float64, bool) {
+	if !CanSplit(side, paneRect) {
+		return 0, false
+	}
 	switch side {
 	case SideTop, SideBottom:
 		minY := paneRect.Y + MinPanePx
 		maxY := paneRect.Y + paneRect.H - MinPanePx
-		if minY >= maxY {
-			return 0, false
-		}
 		if curY < minY {
 			return minY, false
 		}
@@ -294,9 +308,6 @@ func SplitClampedPosition(side Side, paneRect Rect, curX, curY float64) (float64
 	case SideLeft, SideRight:
 		minX := paneRect.X + MinPanePx
 		maxX := paneRect.X + paneRect.W - MinPanePx
-		if minX >= maxX {
-			return 0, false
-		}
 		if curX < minX {
 			return minX, false
 		}

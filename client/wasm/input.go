@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"math"
 	"slices"
 	"syscall/js"
@@ -1184,27 +1185,14 @@ func (a *App) persistRootViewCore(p *pane.Pane, curCx, curCy, curZoom float64, c
 	})
 }
 
-// descentTextMode is the ONE owner of which mode a text descent shows.
-// URL tiles have no text/rendered modes; mode is "" for them so the
-// textarea overlay (gated on TextMode == "text") never shows, and
-// serves_page tiles present as web content the same way. A READ-ONLY
-// text tile (the @info tile, an fs file) always shows RENDERED — the
-// user never sees a blinking caret over content they can't change, and
-// rendered is the selectable DOM surface (#268). Otherwise the tile's
-// persisted mode, defaulting to raw text for a never-opened tile.
-// Every path that decides a text mode — descent, session restore, the
-// overlay's own gate — reads this, never re-derives it.
-func (a *App) descentTextMode(file *rpc.Tile) string {
-	if file.Kind != rpc.KindText || file.ServesPage {
-		return ""
-	}
-	if a.tileReadOnly(file) {
-		return rpc.TextModeRendered
-	}
-	if file.TextMode == "" {
-		return rpc.TextModeText
-	}
-	return file.TextMode
+// descentTextMode applies textedit.DescentMode (the one owner) to a
+// cached tile row at descent; cursorURL is the restore path's extra
+// input (an address that encodes a text cursor).
+func (a *App) descentTextMode(file *rpc.Tile, cursorURL bool) string {
+	return textedit.DescentMode(textedit.ModeInput{
+		Kind: file.Kind, ServesPage: file.ServesPage, ReadOnly: a.tileReadOnly(file),
+		Cached: true, CursorURL: cursorURL, Stored: file.TextMode,
+	})
 }
 
 // portalWellForFrame finds the link tile the pane descended through: the well
@@ -1660,7 +1648,7 @@ func (a *App) startTextDescent(p *pane.Pane, file *rpc.Tile, afterDescend func()
 	fileCopy := *file
 	initialScroll := float64(file.TextY)
 	initialScrollX := float64(file.TextX)
-	mode := a.descentTextMode(file)
+	mode := a.descentTextMode(file, false)
 	a.startTransition(&paneTransition{
 		paneID: p.ID,
 		segments: []transSegment{
@@ -2041,9 +2029,9 @@ func (a *App) persistWellView(p *pane.Pane, well *rpc.Tile, parentAnchor string,
 }
 
 // saveTextBeforeAscent posts the editor buffer (if text mode is active)
-// and the live scroll position back to the server. Failures are silently
-// dropped; the user will see the local state on next descent and the
-// server state otherwise.
+// and the framed window back to the server, through the dispatcher: a
+// failure reacts via clientsync (conflict re-claim, transport park,
+// surfaced rejection) like every other mutation.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 	// SetTextView (and the framed-window cache patch) are text-tile
 	// concerns — URL and shell tiles don't carry text_x/text_y/text_w
@@ -2138,7 +2126,13 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file rpc.Tile) {
 			}
 		}
 		// Persist the framed window + mode so re-descent and the preview
-		// honor "however you left it" across reloads.
+		// honor "however you left it" across reloads — only when something
+		// changed (textedit.FramingChanged, the one rule): a pure
+		// descend-and-ascent must not write.
+		next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: mode}
+		if !textedit.FramingChanged(textedit.FramingOf(file), next) {
+			return
+		}
 		req := &rpc.SetTextViewRequest{
 			TileID:   file.ID,
 			Version:  curVersion,
@@ -2604,7 +2598,7 @@ func (a *App) openLinkBelow(paneID, url string) {
 	// place instead of birthing a sub-minimum pane (SplitOnSideAt itself
 	// only clamps the ratio — its doc makes sub-min rejection the caller's
 	// job).
-	if r := paneRectFor(a, p); r.H < 2*pane.MinPanePx {
+	if !pane.CanSplit(pane.SideBottom, paneRectFor(a, p)) {
 		a.visitEphemeralURL(p, url)
 		return
 	}

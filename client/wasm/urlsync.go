@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"slices"
 	"strings"
 	"syscall/js"
@@ -164,17 +165,18 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	}
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
-	if scrollX == file.TextX && scrollY == file.TextY && p.TextMode == file.TextMode {
-		return
-	}
 	gid := a.gridIDForPane(p)
 	r := paneRectFor(a, p)
 	_, _, iw, ih := textInnerBox(r)
+	next := textedit.Framing{X: scrollX, Y: scrollY, W: int64(iw + 0.5), H: int64(ih + 0.5), Mode: p.TextMode}
+	if !textedit.FramingChanged(textedit.FramingOf(file), next) {
+		return
+	}
 	req := &rpc.SetTextViewRequest{
 		TileID: file.ID, Version: file.Version,
-		TextX: scrollX, TextY: scrollY,
-		TextW: int64(iw + 0.5), TextH: int64(ih + 0.5),
-		TextMode: p.TextMode,
+		TextX: next.X, TextY: next.Y,
+		TextW: next.W, TextH: next.H,
+		TextMode: next.Mode,
 	}
 	patched := file
 	patched.TextX, patched.TextY = scrollX, scrollY
@@ -477,16 +479,11 @@ func (a *App) applyURLState(raw string) {
 		// fixed; scroll restores from the tile's stored text_y.
 		file, cached := a.cachedFile(p, textTileID)
 		if cached {
-			p.TextMode = a.descentTextMode(&file)
+			p.TextMode = a.descentTextMode(&file, state.CursorMode)
 			p.TextScrollY = float64(file.TextY)
-		}
-		// A cursor URL restores the caret — meaningless on a read-only
-		// tile, which stays on its rendered (selectable) face.
-		if state.CursorMode && !(cached && a.tileReadOnly(&file)) {
-			p.TextMode = rpc.TextModeText
-		}
-		if p.TextMode == "" {
-			p.TextMode = rpc.TextModeText
+		} else {
+			// Uncached: no row to read; the one owner decides the default.
+			p.TextMode = textedit.DescentMode(textedit.ModeInput{Kind: rpc.KindText, CursorURL: state.CursorMode})
 		}
 		p.TextZoom = a.textScaleFor(p) // base × the tile's content zoom (issue #82)
 		a.fetchBlobAndSetCursor(textTileID, state)
