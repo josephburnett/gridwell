@@ -48,13 +48,11 @@ export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
 }
 
 
-// homePassword reads the password `gridwell init` minted into a seeded
-// home (web.password — the web door is never open, 2026-08-26).
+// homePassword reads the web password serve minted into a home's
+// web-password file (the door is never open, 2026-08-26) — so it exists
+// only once a serve has started on that home.
 export function homePassword(home: string): string {
-  const yml = fs.readFileSync(path.join(home, 'server.yaml'), 'utf8');
-  const m = /^\s+password:\s*"?([^"\n]+)"?\s*$/m.exec(yml);
-  if (!m) throw new Error('seeded home has no web.password:\n' + yml);
-  return m[1];
+  return fs.readFileSync(path.join(home, 'web-password'), 'utf8').trim();
 }
 
 // loginToken posts the password to the login form and returns the auth
@@ -102,7 +100,7 @@ async function assertSidecarExited(pid: number | null): Promise<void> {
 
 type Fixtures = {
   // home is the seeded temp home (server.yaml, DBs) the app launches on;
-  // the gw fixture reads its minted web.password to authenticate the oracle.
+  // the gw fixture reads its minted web-password to authenticate the oracle.
   home: string;
   electronApp: ElectronApplication;
   window: Page;

@@ -35,13 +35,10 @@ type Fixtures = {
 const test = base.extend<Fixtures>({
   serve: async ({}, use) => {
     const home = seedHome();
-    // The password rides server.yaml like a user would set it: init minted
-    // a random web.password (the door is never open, 2026-08-26); a user
-    // who wants a memorable one edits that line.
-    const cfgPath = path.join(home, 'server.yaml');
-    const yml = fs.readFileSync(cfgPath, 'utf8');
-    if (!/^\s+password: /m.test(yml)) throw new Error('init minted no web.password:\n' + yml);
-    fs.writeFileSync(cfgPath, yml.replace(/^(\s+password: ).*$/m, `$1"${PASSWORD}"`));
+    // The password is the web-password file beside server.yaml (the door
+    // is never open, 2026-08-26): serve mints one when absent, and a
+    // user who wants a memorable one writes the file — as here.
+    fs.writeFileSync(path.join(home, 'web-password'), PASSWORD + '\n', { mode: 0o600 });
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
     const child: ChildProcess = spawn(

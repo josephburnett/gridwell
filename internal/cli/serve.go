@@ -346,8 +346,12 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory, prov
 	// (apps/desktop/src/main/lines.ts) to learn the origin its window
 	// should load, so it must carry the listener's ACTUAL bound address
 	// and appear only once the listener is really up.
-	banner := servingBanner(n.Ln.Addr().String(), cfg.Federation.Socket, cfg.StaticDir, len(cfg.Plugins), cfg.Web.Password)
+	banner := servingBanner(n.Ln.Addr().String(), cfg.Federation.Socket, cfg.StaticDir, len(cfg.Plugins), cfg.WebPassword)
 	fmt.Println(banner)
+	// The password itself, for the human at the process: carry it to a
+	// browser once and the cookie lasts (owner decision 2026-08-26).
+	fmt.Fprintf(os.Stderr, "gridwell: web password: %s  (%s — delete the file to rotate; every browser logs in again)\n",
+		cfg.WebPassword, config.PasswordFile(home))
 	// Record the banner in the lock file — the "already serving" reprint a
 	// conflicting serve hands to the desktop app.
 	lock.WriteBanner(banner)

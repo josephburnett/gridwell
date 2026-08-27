@@ -36,13 +36,21 @@ type ServerConfig struct {
 	// password protects or which port a remote entry must name.
 	Web        WebConfig        `yaml:"web,omitempty"`
 	Federation FederationConfig `yaml:"federation,omitempty"`
-	// LegacyBind / LegacyPassword are the pre-2026-08-26 flat keys. Load
-	// folds them into Web (and records a deprecation) so an existing
-	// home keeps working; nothing reads them after Load. They stay in
-	// the struct — not in a parse-only probe — because every config
-	// REWRITE (AppendPlugin, EnsureNodeID) re-marshals this struct, and a
-	// key the struct cannot hold would be silently dropped by the next
-	// `gridwell init`.
+	// WebPassword gates the web door. It is NOT a yaml fact: BuildConfig
+	// reads it from <home>/web-password (EnsurePasswordFile), which serve
+	// mints — a random token, 0600 — when absent and prints at startup, so
+	// whoever runs the process carries it to a browser once; the cookie
+	// then lasts. Delete the file to rotate: the next serve mints a new
+	// one and every browser must log in again (owner decision 2026-08-26).
+	WebPassword string `yaml:"-"`
+	// LegacyBind is the pre-2026-08-26 flat bind key. Load folds it into
+	// Web (and records a deprecation) so an existing home keeps working;
+	// nothing reads it after Load. LegacyPassword (and Web.LegacyPassword)
+	// are IGNORED — the password is the file — and parsed only so a rewrite
+	// keeps the user's line. They stay in the struct, not in a parse-only
+	// probe, because every config REWRITE (AppendPlugin, EnsureNodeID)
+	// re-marshals this struct, and a key the struct cannot hold would be
+	// silently dropped by the next `gridwell init`.
 	LegacyBind     string `yaml:"bind,omitempty"`
 	LegacyPassword string `yaml:"password,omitempty"`
 	// Deprecations is derived by Load, never stored: one line per legacy
@@ -87,16 +95,11 @@ type WebConfig struct {
 	// (the desktop sidecar's ephemeral loopback port) fill in only when
 	// the config is silent.
 	BindSet bool `yaml:"-"`
-	// Password gates the web UI and is REQUIRED (owner decision
-	// 2026-08-26): every HTTP request must carry the auth cookie (from
-	// the login page, or the token-login the desktop and mobile shells
-	// use), checked against the CURRENT password — change it and every
-	// browser must log in again. `gridwell init` mints one (MintPassword)
-	// so a fresh home is never open; serve refuses a home without one
-	// (BuildConfig). Plaintext by design (single-tenant; the file is the
-	// secret). The federation door is not gated by it — it is a 0600
-	// unix socket, gated by the kernel.
-	Password string `yaml:"password,omitempty"`
+	// LegacyPassword is the pre-2026-08-26 `web.password` key. It is
+	// IGNORED (the password lives in the web-password file — see
+	// ServerConfig.WebPassword) and only parsed so a rewrite keeps the
+	// user's line and Load can say so once.
+	LegacyPassword string `yaml:"password,omitempty"`
 }
 
 // FederationConfig is the node door's configuration: a UNIX SOCKET path,
@@ -241,9 +244,8 @@ func Load(path string) (*ServerConfig, error) {
 		cfg.Web.Bind = cfg.LegacyBind
 		cfg.Deprecations = append(cfg.Deprecations, "bind: is now web.bind (the flat key still loads)")
 	}
-	if cfg.Web.Password == "" && cfg.LegacyPassword != "" {
-		cfg.Web.Password = cfg.LegacyPassword
-		cfg.Deprecations = append(cfg.Deprecations, "password: is now web.password (the flat key still loads)")
+	if cfg.LegacyPassword != "" || cfg.Web.LegacyPassword != "" {
+		cfg.Deprecations = append(cfg.Deprecations, "password: / web.password are IGNORED — the web password is the web-password file beside this config (delete it to rotate)")
 	}
 	cfg.Web.BindSet = webBindSet || legacyBindSet
 	// ConnectionsSet: the `connections:` key is PRESENT — this file is
@@ -389,46 +391,33 @@ func EnsureNodeID(home string, newID func() string) (string, error) {
 	return cfg.NodeID, nil
 }
 
-// MintPassword mints a fresh web password: 128 random bits as hex. The
-// one generator, used by EnsureWebPassword at init.
-func MintPassword() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic("config: crypto/rand unavailable: " + err.Error())
-	}
-	return hex.EncodeToString(b[:])
-}
+// PasswordFile is where a home's web password lives: beside server.yaml
+// and the federation socket, 0600.
+func PasswordFile(home string) string { return filepath.Join(home, "web-password") }
 
-// EnsureWebPassword returns the home's web password from server.yaml,
-// minting and persisting one (via mint) if the file has none — neither
-// web.password nor the legacy flat key. Init calls it so a fresh home is
-// gated from its first serve; an existing password is never touched (a
-// change would sign every browser out). The file must already exist.
-func EnsureWebPassword(home string, mint func() string) (string, error) {
-	path := filepath.Join(home, "server.yaml")
+// EnsurePasswordFile returns the home's web password, minting one (128
+// random bits as hex, written 0600) when the file is absent — the door
+// is never open and never needs a human to choose a secret. The file IS
+// the password: delete it and the next serve rotates.
+func EnsurePasswordFile(home string) (string, error) {
+	path := PasswordFile(home)
 	data, err := os.ReadFile(path)
-	if err != nil {
+	if err == nil {
+		if pw := strings.TrimSpace(string(data)); pw != "" {
+			return pw, nil
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("config: read %s: %w", path, err)
 	}
-	cfg := ServerConfig{}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return "", fmt.Errorf("config: parse %s: %w", path, err)
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("config: mint web password: %w", err)
 	}
-	if cfg.Web.Password != "" {
-		return cfg.Web.Password, nil
-	}
-	if cfg.LegacyPassword != "" {
-		return cfg.LegacyPassword, nil
-	}
-	cfg.Web.Password = mint()
-	out, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return "", fmt.Errorf("config: marshal: %w", err)
-	}
-	if err := os.WriteFile(path, out, 0o600); err != nil {
+	pw := hex.EncodeToString(b[:])
+	if err := os.WriteFile(path, []byte(pw+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("config: write %s: %w", path, err)
 	}
-	return cfg.Web.Password, nil
+	return pw, nil
 }
 
 func expandHome(p string) (string, error) {

@@ -116,7 +116,7 @@ func Start(home string) (string, error) {
 		}
 	}()
 	running = n
-	origin = server.TokenLoginURL("http://"+n.Ln.Addr().String(), cfg.Web.Password)
+	origin = server.TokenLoginURL("http://"+n.Ln.Addr().String(), cfg.WebPassword)
 	return origin, nil
 }
 

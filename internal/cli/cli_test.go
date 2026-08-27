@@ -153,7 +153,7 @@ func TestBuildServeConfigNoPlugins(t *testing.T) {
 func TestBuildServeConfigInjectsDBFile(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "server.yaml")
-	yml := "web:\n  password: \"pw\"\nplugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"localdb\"\n"
+	yml := "plugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"localdb\"\n"
 	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestBuildServeConfigInjectsDBFile(t *testing.T) {
 func TestBuildServeConfigMissingDB(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "server.yaml")
-	yml := "web:\n  password: \"pw\"\nplugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"localdb\"\n"
+	yml := "plugins:\n  - id: \"abc\"\n    name: \"home\"\n    kind: \"localdb\"\n"
 	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}

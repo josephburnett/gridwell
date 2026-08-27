@@ -129,8 +129,8 @@ streams (`OpenShell`, `WriteContent`) route by the id in their first
 message — served on its own listener, the 0600 unix socket at
 `federation.socket`, never TCP (the kernel gates it to the owning uid;
 ssh's direct-streamlocal forwarding is the authenticated transport
-between nodes). The web door always has a password (`gridwell init`
-mints one). A remote mounter and a browser exercise the same routing
+between nodes). The web door always has a password — the 0600
+`web-password` file serve mints and prints; delete it to rotate. A remote mounter and a browser exercise the same routing
 code through different doors.
 
 `Info` handshakes are timeout-bounded and cached per uuid after first

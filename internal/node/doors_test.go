@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -29,7 +28,7 @@ func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Web.Password == "" || cfg.Federation.Socket != filepath.Join(home, "federation.sock") {
+	if cfg.WebPassword == "" || cfg.Federation.Socket != filepath.Join(home, "federation.sock") {
 		t.Fatalf("built config: web %+v federation %+v", cfg.Web, cfg.Federation)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
@@ -75,15 +74,21 @@ func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 	if _, err := os.Stat(cfg.Federation.Socket); !os.IsNotExist(err) {
 		t.Errorf("socket not unlinked on close: %v", err)
 	}
-	// A home without a password does not serve.
-	bare := t.TempDir()
-	if _, err := InitPlugin(bare, "local", "home", nil); err != nil {
+	// The password is the file beside the config: minted by BuildConfig,
+	// stable across serves, rotated by deleting it.
+	pwFile := filepath.Join(home, "web-password")
+	if st, err := os.Stat(pwFile); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("web-password file = %v %v, want 0600", st, err)
+	}
+	same, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	if err != nil || same.WebPassword != cfg.WebPassword {
+		t.Fatalf("password changed between serves: %v", err)
+	}
+	if err := os.Remove(pwFile); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(bare, "server.yaml"), []byte("plugins:\n  - id: abc1234\n    name: home\n    kind: local\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := BuildConfig(bare, filepath.Join(bare, "server.yaml")); err == nil || !strings.Contains(err.Error(), "web.password") {
-		t.Fatalf("a passwordless home must refuse to serve, naming web.password: %v", err)
+	rotated, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	if err != nil || rotated.WebPassword == cfg.WebPassword {
+		t.Fatal("deleting web-password must rotate on the next serve")
 	}
 }

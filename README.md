@@ -154,7 +154,6 @@ by door in `~/.gridwell/server.yaml`:
 ```yaml
 web:                       # browsers + the desktop window
   bind: "100.64.0.7:8080"  # your Tailscale IP
-  password: "something long"   # required; `gridwell init` mints one
 federation:                # other nodes mounting this one, via ssh
   socket: ~/.gridwell/federation.sock   # a 0600 unix socket — never TCP
 ```
@@ -165,12 +164,13 @@ then run `gridwell serve`. In a browser, live url tiles stay frozen.
 Everything else — grids, text, wells, live shells, navigation — works,
 touch included.
 
-The browser UI always requires a password (`web.password` — `gridwell
-init` mints a random one; set your own to share the origin with a
-phone). A browser gets a login page once, then holds a cookie that never expires —
-but the cookie is checked against the *current* password, so changing the
-password signs every browser out. The desktop app never prompts: it
-authenticates its own window automatically.
+The browser UI always requires a password. It is not in the yaml: serve
+mints a random one into `~/.gridwell/web-password` (0600) and prints it
+at startup — carry it to a browser once. A browser gets a login page once, then holds a cookie that never expires
+(re-issued on every request) — but the cookie is checked against the
+*current* password, so deleting `web-password` (a new one is minted on
+the next start) signs every browser out. The desktop app never prompts:
+it authenticates its own window automatically.
 
 Shell tiles can be switched off node-wide:
 
@@ -189,8 +189,8 @@ exists as a unix socket**, mode 0600 — the kernel admits your uid and
 nobody else; there is no TCP form, so no config can expose it. ssh is
 the one authenticated transport between nodes. Bind the web door to
 loopback or a VPN-only address (Tailscale is the intended transport),
-never an open interface. (The flat `bind:` / `password:` keys still
-load, with a deprecation notice.)
+never an open interface. (The flat `bind:` key still loads with a
+deprecation notice; a yaml `password:` is ignored with one.)
 
 To mount remote nodes, the remote just runs `gridwell serve`; its
 `federation.socket` path (`<home>/federation.sock` by default) is what

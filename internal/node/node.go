@@ -42,11 +42,11 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	if len(cfg.Plugins) == 0 {
 		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind local --name <name>`", cfgPath)
 	}
-	// The web door is never open (owner decision 2026-08-26): a home
-	// without a password does not serve. init mints one, so this only
-	// bites a hand-edited file — and says how to fix it.
-	if cfg.Web.Password == "" {
-		return nil, fmt.Errorf("%s has no web.password; `gridwell init` mints one, or set web.password yourself", cfgPath)
+	// The web door is never open (owner decision 2026-08-26): the password
+	// is the web-password file beside the config, minted here on first
+	// serve, printed by serve, rotated by deleting it.
+	if cfg.WebPassword, err = config.EnsurePasswordFile(home); err != nil {
+		return nil, err
 	}
 	if cfg.Federation.Socket == "" {
 		cfg.Federation.Socket = config.FederationSocket(home)
@@ -113,11 +113,6 @@ func InitPlugin(home, kind, name string, conf map[string]string) (id string, err
 	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
 		return "", fmt.Errorf("node id: %w", err)
 	}
-	// The web door is never open: mint the password with the first
-	// plugin so a fresh home is gated before first serve (2026-08-26).
-	if _, err := config.EnsureWebPassword(home, config.MintPassword); err != nil {
-		return "", fmt.Errorf("web password: %w", err)
-	}
 	return id, nil
 }
 
@@ -177,7 +172,7 @@ func Start(opts Options) (*Node, error) {
 		// The landing page's viewport survives restarts in a small state
 		// file beside the config ("things stay as you left them").
 		NodeStatePath: filepath.Join(opts.Home, "node-view.json"),
-		Password:      cfg.Web.Password,
+		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
 	})
 	requestCtx, cancel := context.WithCancel(context.Background())
@@ -284,11 +279,6 @@ func InitProvider(home, kind, name string, conf map[string]string) (id string, e
 	}
 	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
 		return "", fmt.Errorf("node id: %w", err)
-	}
-	// The web door is never open: mint the password with the first
-	// plugin so a fresh home is gated before first serve (2026-08-26).
-	if _, err := config.EnsureWebPassword(home, config.MintPassword); err != nil {
-		return "", fmt.Errorf("web password: %w", err)
 	}
 	return id, nil
 }

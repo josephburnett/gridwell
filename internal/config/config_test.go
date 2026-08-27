@@ -88,11 +88,9 @@ func TestAppendPlugin(t *testing.T) {
 	}
 }
 
-// TestPasswordRoundTrip pins two facts about the web-UI password: it loads
-// from server.yaml, and it SURVIVES the config rewriters (AppendPlugin /
-// EnsureNodeID re-marshal the whole struct — a field without a yaml tag
-// would be silently dropped on the first `gridwell init` after the user set
-// a password).
+// TestPasswordRoundTrip pins that a legacy `password:` line is PRESERVED
+// across a config rewrite (never silently dropped) even though it is
+// ignored since 2026-08-26 — the password is the web-password file.
 func TestPasswordRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "server.yaml")
@@ -103,8 +101,8 @@ func TestPasswordRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Web.Password != "hunter2" {
-		t.Fatalf("password: got %q, want hunter2", cfg.Web.Password)
+	if cfg.LegacyPassword != "hunter2" {
+		t.Fatalf("password: got %q, want hunter2", cfg.LegacyPassword)
 	}
 	if err := AppendPlugin(home, PluginConfig{ID: "id-b", Name: "files", Kind: "fs"}); err != nil {
 		t.Fatalf("append: %v", err)
@@ -116,8 +114,8 @@ func TestPasswordRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if cfg.Web.Password != "hunter2" {
-		t.Fatalf("password dropped by a config rewrite: got %q", cfg.Web.Password)
+	if cfg.LegacyPassword != "hunter2" {
+		t.Fatalf("password dropped by a config rewrite: got %q", cfg.LegacyPassword)
 	}
 }
 
@@ -342,19 +340,21 @@ func TestLoad_doors(t *testing.T) {
 		}
 		return f
 	}
-	nested, err := Load(write(t, "web:\n  bind: \"100.64.0.7:8080\"\n  password: hunter2\nfederation:\n  socket: /run/gw.sock\nplugins: []\n"))
+	nested, err := Load(write(t, "web:\n  bind: \"100.64.0.7:8080\"\nfederation:\n  socket: /run/gw.sock\nplugins: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if nested.Web.Bind != "100.64.0.7:8080" || !nested.Web.BindSet || nested.Web.Password != "hunter2" ||
+	if nested.Web.Bind != "100.64.0.7:8080" || !nested.Web.BindSet ||
 		nested.Federation.Socket != "/run/gw.sock" || len(nested.Deprecations) != 0 {
 		t.Errorf("nested = %+v", nested)
 	}
+	// A yaml password (flat or nested) is IGNORED, with one notice: the
+	// password is the web-password file.
 	legacy, err := Load(write(t, "bind: \"100.64.0.7:8080\"\npassword: hunter2\nplugins: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if legacy.Web.Bind != "100.64.0.7:8080" || !legacy.Web.BindSet || legacy.Web.Password != "hunter2" || len(legacy.Deprecations) != 2 {
+	if legacy.Web.Bind != "100.64.0.7:8080" || !legacy.Web.BindSet || legacy.WebPassword != "" || len(legacy.Deprecations) != 2 {
 		t.Errorf("legacy fold = %+v deprecations %v", legacy.Web, legacy.Deprecations)
 	}
 	tilde, err := Load(write(t, "federation:\n  socket: ~/gw.sock\nplugins: []\n"))
@@ -372,7 +372,7 @@ func TestLoad_doors(t *testing.T) {
 		t.Errorf("silent = web %+v federation %+v", silent.Web, silent.Federation)
 	}
 	// A rewrite (AppendPlugin re-marshals the struct) keeps a legacy
-	// file's password: the next Load still folds it.
+	// file's lines rather than silently dropping them.
 	home := t.TempDir()
 	if err := os.WriteFile(filepath.Join(home, "server.yaml"), []byte("password: hunter2\nplugins: []\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -384,39 +384,37 @@ func TestLoad_doors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Web.Password != "hunter2" {
-		t.Errorf("legacy password lost across a rewrite: %+v", after.Web)
+	if after.LegacyPassword != "hunter2" {
+		t.Errorf("legacy line lost across a rewrite: %+v", after)
 	}
 }
 
-// TestEnsureWebPassword: the web door is never open (2026-08-26) — init
-// mints a password into a fresh home, keeps an existing one (nested or
-// legacy) untouched, and the mint is real entropy, not a constant.
-func TestEnsureWebPassword(t *testing.T) {
+// TestEnsurePasswordFile: the web password is the web-password file
+// (2026-08-26) — minted 0600 on first ask, stable while the file exists,
+// rotated by deleting it.
+func TestEnsurePasswordFile(t *testing.T) {
 	home := t.TempDir()
-	if err := AppendPlugin(home, PluginConfig{ID: "p1", Name: "e2e", Kind: "local"}); err != nil {
+	minted, err := EnsurePasswordFile(home)
+	if err != nil || len(minted) != 32 {
+		t.Fatalf("mint = %q %v", minted, err)
+	}
+	st, err := os.Stat(PasswordFile(home))
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("password file mode = %v (%v), want 0600", st.Mode(), err)
+	}
+	if again, _ := EnsurePasswordFile(home); again != minted {
+		t.Fatalf("re-minted while the file exists: %q vs %q", again, minted)
+	}
+	if err := os.Remove(PasswordFile(home)); err != nil {
 		t.Fatal(err)
 	}
-	minted, err := EnsureWebPassword(home, MintPassword)
-	if err != nil {
+	if rotated, _ := EnsurePasswordFile(home); rotated == minted {
+		t.Fatal("deleting the file must rotate the password")
+	}
+	if err := os.WriteFile(PasswordFile(home), []byte("chosen\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if len(minted) != 32 || minted == MintPassword() {
-		t.Fatalf("mint = %q", minted)
-	}
-	again, err := EnsureWebPassword(home, MintPassword)
-	if err != nil || again != minted {
-		t.Fatalf("second ensure re-minted: %q vs %q (%v)", again, minted, err)
-	}
-	cfg, err := Load(filepath.Join(home, "server.yaml"))
-	if err != nil || cfg.Web.Password != minted {
-		t.Fatalf("minted password not persisted under web: %+v %v", cfg.Web, err)
-	}
-	legacyHome := t.TempDir()
-	if err := os.WriteFile(filepath.Join(legacyHome, "server.yaml"), []byte("password: keepme\nplugins: []\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := EnsureWebPassword(legacyHome, MintPassword); err != nil || got != "keepme" {
-		t.Fatalf("legacy password not honored: %q %v", got, err)
+	if got, _ := EnsurePasswordFile(home); got != "chosen" {
+		t.Fatalf("a hand-written file is the password: %q", got)
 	}
 }

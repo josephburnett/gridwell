@@ -35,6 +35,11 @@ const (
 	// collide with the SPA fallback.
 	authLoginPath = "/auth/login"
 	// authCookieMaxAge is the cookie lifetime in seconds: 400 days, the
+	// browser-enforced maximum — and the cookie is RE-ISSUED on every
+	// authenticated request, so in use it never expires (owner decision
+	// 2026-08-26: one-time setup). Revocation is rotating the password
+	// (deleting the web-password file), never a cookie expiry.
+	// It remains the
 	// longest modern browsers honor. The user asked for "no expiration" —
 	// this is as close as a cookie gets, and every authenticated request
 	// re-issues it, so the window slides forever under any regular use.
