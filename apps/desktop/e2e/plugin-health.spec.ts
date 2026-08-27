@@ -10,8 +10,8 @@ import { test, expect } from './fixtures';
 // classification and the click-notice contract are unchanged.
 //
 // The broken-plugin case (Info failing/timing out) is NOT covered here: a
-// plugin that fails to spawn at all aborts the whole server by design (see
-// cmd/gridwell), so there is no way to reach a "broken" plugin swatch in a
+// plugin that fails to spawn at all aborts the whole server by design
+// (internal/plugin's loader), so there is no way to reach a "broken" plugin swatch in a
 // real app boot. That case is covered at the buildPluginInfo/pluginInfo unit
 // level (internal/server/plugininfo_test.go).
 test.use({ extraPlugins: [{ kind: 'fs', name: 'rootless' }] });

@@ -44,9 +44,9 @@ const MIRROR_INTERVAL_MS = 250;
 //   2. open the root window pointing at the sidecar's loopback origin
 //   3. tear the sidecar down on quit
 //
-// Single-tenant. A server.yaml password gates OTHER browsers on a shared
-// origin; this window authenticates itself from the serve banner's token
-// (see boot below) and never prompts.
+// Single-tenant. The web door is always password-gated (the minted
+// web-password file); this window authenticates itself from the serve
+// banner's token (see boot below) and never prompts.
 
 let sidecar: Sidecar | null = null;
 let registry: WebviewRegistry | null = null;
@@ -106,8 +106,8 @@ async function boot(): Promise<void> {
     app.exit(1);
     return;
   }
-  // A configured web-UI password (server.yaml password:) must never prompt
-  // THIS window — the gate is for other browsers on a shared origin. The
+  // The web-UI password must never prompt THIS window — the gate is for
+  // other browsers on a shared origin. The
   // serve banner carries the derived auth token; set it as the cookie the
   // server checks, before the window's first load. Cookies scope by host,
   // not port, so it also survives the ephemeral-port churn across launches.
@@ -139,7 +139,7 @@ async function boot(): Promise<void> {
   registerWebviewIpc(reg, rootWC, win);
 
   // The shell transport: PTY bytes ride a main-process gRPC OpenShell stream
-  // to the sidecar's export port and cross to the renderer's xterm over IPC
+  // to the sidecar's federation socket and cross to the renderer's xterm over IPC
   // (2026-07-26 — the /rpc/ShellStream WS bridge is gone). A dial failure
   // surfaces on the ONE error wire like every other main-process failure.
   shells = new ShellStreams(

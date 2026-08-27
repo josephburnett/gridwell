@@ -5,13 +5,14 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { seedHome } from '../e2e/fixtures';
 
-// The web-UI password gate (server.yaml `password:`), driven from a real
-// browser against the real server: the login page fronts everything, a wrong
-// password re-prompts, the right one sets the cookie and the wasm client
-// boots, and the cookie keeps working across a reload (it is checked against
-// the CURRENT password, so no re-prompt until the password changes). The
-// no-password suites (web-core & co.) pin the open behavior — this file is
-// the only one whose server sets a password.
+// The web-UI password gate (the minted <home>/web-password file), driven
+// from a real browser against the real server: the login page fronts
+// everything, a wrong password re-prompts, the right one sets the cookie
+// and the wasm client boots, and the cookie keeps working across a reload
+// (it is checked against the CURRENT password, so no re-prompt until the
+// password changes). Every suite's server is gated — the others start
+// authenticated from the banner token (fixtures.ts); this one alone drives
+// the login FORM.
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 

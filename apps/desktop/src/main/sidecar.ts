@@ -6,7 +6,7 @@ import { dialAddr, makeLineSplitter, parseServingLine, windowOrigin } from './li
 
 export interface Sidecar {
   // The announced port and window origin, read back from the serve banner —
-  // loopback by default, but server.yaml `bind:` may pin another address
+  // loopback by default, but server.yaml `web.bind` may pin another address
   // (e.g. a Tailscale IP shared with a phone browser).
   port: number;
   origin: string;
@@ -14,7 +14,8 @@ export interface Sidecar {
   // the banner (unix:<path>) — a 0600 socket since 2026-08-26, so a window
   // on a Tailscale origin still dials its shells locally.
   dialAddr: string;
-  // The web-UI auth token from the banner, when server.yaml sets a password.
+  // The web-UI auth token from the banner (the door is always gated; the
+  // password is the minted web-password file — lines.ts owns the contract).
   // index.ts pre-sets it as the auth cookie so this window never prompts —
   // the password gate is for OTHER browsers reaching the shared origin.
   auth?: string;
@@ -29,7 +30,7 @@ export interface Sidecar {
 
 export interface StartOptions {
   // Override the default bind port (otherwise a free ephemeral port is
-  // chosen). Passed as --bind-default: an explicit `bind:` in server.yaml
+  // chosen). Passed as --bind-default: an explicit `web.bind` in server.yaml
   // still wins — the server owns the listen-address decision.
   port?: number;
   // Milliseconds to wait for the ready line before giving up.
@@ -72,7 +73,7 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
   // retry runs `gridwell init --kind local --name home` — first-run
   // friendliness in the app, while the server keeps its strict contract.
   // --bind-default (not --bind): the ephemeral loopback port applies only when
-  // ~/.gridwell/server.yaml declares no bind: of its own. A declared bind:
+  // ~/.gridwell/server.yaml declares no web.bind of its own. A declared one
   // wins, so one server instance serves both this window and a phone browser
   // on a stable origin. The actual address comes back in the serve banner.
   //

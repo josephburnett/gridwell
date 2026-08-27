@@ -9,7 +9,7 @@
 // shell relay dials; since 2026-08-26 it is a 0600 socket, never a TCP
 // address, and it is the banner's LAST field (a path may contain spaces).
 // auth, when present, is the web-UI auth token (server.AuthToken — the value
-// of the gridwell_auth cookie): the server prints it when server.yaml sets a
+// of the gridwell_auth cookie): the server prints it (the door always has a
 // password, so this window can authenticate without prompting.
 export interface ServingAddr {
   host: string;
