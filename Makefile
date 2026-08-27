@@ -115,11 +115,12 @@ MODULES := api internal/doctype plugins/fs plugins/proc plugins/gitlab apps/grid
 # a fresh checkout (CI) cannot even `go build ./...` before one exists.
 check: fmt-check proto-check wasm
 	go build ./...
+	go vet ./...
 	go test ./...
 	cd test/boundary && go test -count=1 .
 	@for m in $(MODULES); do \
 		echo "== module $$m (standalone)"; \
-		(cd $$m && GOWORK=off go build ./... && GOWORK=off go test ./...) || exit 1; \
+		(cd $$m && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./...) || exit 1; \
 	done
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	./scripts/check-deadcode.sh

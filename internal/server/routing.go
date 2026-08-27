@@ -3,6 +3,7 @@ package server
 import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"google.golang.org/protobuf/proto"
 )
 
 // The id codec (QualifyID / SplitID / UUIDOf) lives once, in internal/rpc —
@@ -15,9 +16,9 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 	if g == nil {
 		return nil
 	}
-	out := *g
+	out := proto.Clone(g).(*pb.Grid)
 	out.Id = rpc.QualifyID(uuid, g.Id)
-	return &out
+	return out
 }
 
 // qualifyTiles rewrites all IDs in a slice of proto Tiles returned by a
@@ -37,7 +38,7 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {
-		qt := *t
+		qt := proto.Clone(t).(*pb.Tile)
 		qt.Id = rpc.QualifyID(uuid, t.Id)
 		qt.GridId = rpc.QualifyID(uuid, t.GridId)
 		if t.ChildGridId != "" {
@@ -54,7 +55,7 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 		if t.LinkTargetId != "" {
 			qt.Reference = true
 		}
-		out[i] = &qt
+		out[i] = qt
 	}
 	return out
 }

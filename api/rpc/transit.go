@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"google.golang.org/protobuf/proto"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
@@ -23,7 +25,7 @@ import (
 func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {
-		qt := *t
+		qt := proto.Clone(t).(*pb.Tile)
 		qt.Id = QualifyID(prefix, t.Id)
 		qt.GridId = QualifyID(prefix, t.GridId)
 		if t.ChildGridId != "" {
@@ -35,7 +37,7 @@ func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 			// so prepend one segment. The wire Reference bit rides verbatim.
 			qt.LinkTargetId = QualifyID(prefix, t.LinkTargetId)
 		}
-		out[i] = &qt
+		out[i] = qt
 	}
 	return out
 }
@@ -52,14 +54,14 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	if g == nil {
 		return nil
 	}
-	out := *g
+	out := proto.Clone(g).(*pb.Grid)
 	out.Id = QualifyID(prefix, g.Id)
 	if g.ScratchGridId != "" {
 		out.ScratchGridId = QualifyID(prefix, g.ScratchGridId)
 	}
 	out.NodeNs = QualifyNS(prefix, g.NodeNs)
 	out.MenuEntries = QualifyMenuEntries(prefix, g.MenuEntries)
-	return &out
+	return out
 }
 
 // QualifySearchResponse rewrites every id a search answer carries —
@@ -173,11 +175,11 @@ func QualifyMenuEntries(prefix string, in []*pb.MenuEntry) []*pb.MenuEntry {
 	}
 	out := make([]*pb.MenuEntry, len(in))
 	for i, e := range in {
-		q := *e
+		q := proto.Clone(e).(*pb.MenuEntry)
 		if q.GridId != "" {
 			q.GridId = QualifyID(prefix, q.GridId)
 		}
-		out[i] = &q
+		out[i] = q
 	}
 	return out
 }

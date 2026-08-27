@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"errors"
+	"google.golang.org/protobuf/proto"
 	"io"
 	"log"
 	"sort"
@@ -478,9 +479,9 @@ func (s *Server) SetRootView(ctx context.Context, req *gridwellv1.SetRootViewReq
 		}
 		// Deeper targets (a far PLUGIN's root through the routed menu)
 		// forward: that root belongs to the far node.
-		out := *req
+		out := proto.Clone(req).(*gridwellv1.SetRootViewRequest)
 		out.RootGridId = local
-		return fw.client.SetRootView(ctx, &out)
+		return fw.client.SetRootView(ctx, out)
 	}
 	// Local: the plugin has no root grid (#251 — the connection list is an
 	// instance grid, never a landing page), so there is no root view to
@@ -612,19 +613,18 @@ func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		return nil, err
 	}
 	if fw != nil {
-		out := *req
+		out := proto.Clone(req).(*gridwellv1.CreateTileRequest)
 		out.GridId = local
 		if req.Tile != nil {
-			t := *req.Tile
+			t := out.Tile
 			// A qualified child/target crossing INTO the connection was
 			// qualified from OUR side; strip our segment so the remote sees
 			// its own frame. (The server-side link machinery does the same
 			// strip one level up.)
 			t.ChildGridId = stripPrefix(t.ChildGridId, fw.ns)
 			t.LinkTargetId = stripPrefix(t.LinkTargetId, fw.ns)
-			out.Tile = &t
 		}
-		resp, err := fw.client.CreateTile(ctx, &out)
+		resp, err := fw.client.CreateTile(ctx, out)
 		if err != nil {
 			return nil, err
 		}
@@ -689,9 +689,9 @@ func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return nil, err
 	}
 	if fw != nil {
-		out := *req
+		out := proto.Clone(req).(*gridwellv1.SetTileRequest)
 		out.TileId = local
-		resp, err := fw.client.SetTile(ctx, &out)
+		resp, err := fw.client.SetTile(ctx, out)
 		if err != nil {
 			return nil, err
 		}
@@ -738,10 +738,10 @@ func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest
 			"sshhost: placement never crosses a connection boundary — clone or link instead")
 	}
 	if fwTile != nil {
-		out := *req
+		out := proto.Clone(req).(*gridwellv1.PlaceTileRequest)
 		out.TileId = localTile
 		out.GridId = localGrid
-		resp, err := fwTile.client.PlaceTile(ctx, &out)
+		resp, err := fwTile.client.PlaceTile(ctx, out)
 		if err != nil {
 			return nil, err
 		}
@@ -784,10 +784,10 @@ func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest
 			"sshhost: clone never crosses a connection boundary here — the server's cross-plugin copy handles that")
 	}
 	if fwTile != nil {
-		out := *req
+		out := proto.Clone(req).(*gridwellv1.CloneTileRequest)
 		out.TileId = localTile
 		out.DestGridId = localGrid
-		resp, err := fwTile.client.CloneTile(ctx, &out)
+		resp, err := fwTile.client.CloneTile(ctx, out)
 		if err != nil {
 			return nil, err
 		}
@@ -916,9 +916,9 @@ func (s *Server) WriteContent(stream grpc.ClientStreamingServer[gridwellv1.Write
 		if err != nil {
 			return err
 		}
-		rewritten := *first
+		rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
 		rewritten.TileId = local
-		if err := cs.Send(&rewritten); err != nil {
+		if err := cs.Send(rewritten); err != nil {
 			return err
 		}
 		for {
@@ -1022,9 +1022,9 @@ func (s *Server) OpenShell(stream grpc.BidiStreamingServer[gridwellv1.OpenShellR
 	if err != nil {
 		return err
 	}
-	rewritten := *first
+	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
-	if err := cs.Send(&rewritten); err != nil {
+	if err := cs.Send(rewritten); err != nil {
 		return err
 	}
 	errc := make(chan error, 2)
