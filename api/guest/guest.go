@@ -1,10 +1,11 @@
-// Package guest is called by a plugin binary's main() to serve the Gridwell
-// gRPC service over go-plugin's managed subprocess transport.
+// Package guest is called by a provider binary's main() to serve the
+// contentprovider.v1 service over go-plugin's managed subprocess
+// transport.
 //
-// Usage in a plugin binary:
+// Usage in a provider binary:
 //
 //	func main() {
-//	    guest.Serve(myImpl)
+//	    guest.ServeProvider(myImpl)
 //	}
 package guest
 

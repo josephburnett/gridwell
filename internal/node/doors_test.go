@@ -32,7 +32,7 @@ func TestStartBindsFederationOnASocketOnly(t *testing.T) {
 		t.Fatalf("built config: web %+v federation %+v", cfg.Web, cfg.Federation)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	n, err := Start(Options{Home: home, Cfg: cfg, Factories: WithNativeLocal(nil)})
+	n, err := Start(Options{Home: home, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}

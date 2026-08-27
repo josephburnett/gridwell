@@ -31,9 +31,8 @@ func TestNonNativeKindsResolveProviderBinaries(t *testing.T) {
 		{ID: "p2", Kind: "local"},
 		{ID: "p3", Kind: "proc"},
 	}}
-	natives := map[string]plugin.ServerFactory{"local": nil}
 	bundled := map[string]plugin.ProviderFactory{"proc": nil}
-	if err := resolvePluginBinaries(cfg, natives, bundled); err != nil {
+	if err := resolvePluginBinaries(cfg, bundled); err != nil {
 		t.Fatal(err)
 	}
 	if got := filepath.Base(cfg.Plugins[0].Binary); got != "gridwell-provider-fs" {
@@ -43,7 +42,7 @@ func TestNonNativeKindsResolveProviderBinaries(t *testing.T) {
 		t.Fatalf("native and bundled kinds must stay in-process: %q %q", cfg.Plugins[1].Binary, cfg.Plugins[2].Binary)
 	}
 	missing := &config.ServerConfig{Plugins: []config.PluginConfig{{ID: "g1", Name: "todos", Kind: "gitlab"}}}
-	if err := resolvePluginBinaries(missing, natives, nil); err == nil || !strings.Contains(err.Error(), "gridwell-provider-gitlab") {
+	if err := resolvePluginBinaries(missing, nil); err == nil || !strings.Contains(err.Error(), "gridwell-provider-gitlab") {
 		t.Fatalf("a missing provider binary must be named: %v", err)
 	}
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/tmux"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // NativeLocalFactory is the in-process constructor for the native store
@@ -63,16 +62,4 @@ func NativeLocalFactory(cfg map[string]string) (gridwellv1.GridwellServer, error
 		log.Printf("gridwell: native local: orphan cleanup killed %d stale shell session(s)", killed)
 	}
 	return p, nil
-}
-
-// WithNativeLocal fills the "local" factory slot unless the composer
-// supplied one (mobile does — iOS has no tmux and wires its own).
-func WithNativeLocal(factories map[string]plugin.ServerFactory) map[string]plugin.ServerFactory {
-	if factories == nil {
-		factories = map[string]plugin.ServerFactory{}
-	}
-	if _, ok := factories["local"]; !ok {
-		factories["local"] = NativeLocalFactory
-	}
-	return factories
 }

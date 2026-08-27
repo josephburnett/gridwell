@@ -115,13 +115,13 @@ unchanged) and the tmux/shellsvc machinery its binary owns.
 
 ### The apps
 
-- `apps/gridwell`: server + api. ZERO plugin imports — the host spawns
-  `gridwell-plugin-*` binaries named by config/PATH. This is what dist
+- `apps/gridwell`: server + api. ZERO provider imports — the host spawns
+  `gridwell-provider-*` binaries named by config/PATH. This is what dist
   ships today, minus the knowledge of who it ships with.
-- `apps/gridwell-all`: the bundled example — same server, the four
-  plugins compiled in via `compose.InProcess`. Exists to PROVE the sugar
-  (e2e runs the same suite against both binaries) and as the template
-  for anyone composing their own.
+- `apps/gridwell-all`: the bundled example — same server, the shipped
+  providers compiled in as `plugin.ProviderFactory` entries. Exists to
+  PROVE the door (check-parity runs the browser suite against it) and
+  as the template for anyone composing their own.
 - `apps/mobile` (the Go bind in `mobile/` moves here or stays — leaf
   either way): the bundled leaf iOS forces.
 

@@ -3,9 +3,11 @@ package mobile
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/josephburnett/gridwell/internal/node"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -130,4 +132,47 @@ func TestEmbeddedNodeLifecycle(t *testing.T) {
 	// Stop is idempotent.
 	Stop()
 	Stop()
+}
+
+// The phone honors `connections:` config exactly as the desktop does
+// (2026-08-27): mobile used to compose its OWN remote factory, which
+// skipped the config-mode reconcile — the same server.yaml declared a
+// connection on a laptop and nothing on a phone. The native factories
+// are the node's now; this pins the seam from the yaml to the menu.
+func TestEmbeddedNodeHonorsConnectionsConfig(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "gwhome")
+	loginURL, err := Start(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Stop()
+	// The desktop's init door registers the remote kind; the phone's
+	// first run only seeds local. Declare both, as the CLI would.
+	if _, err := node.Init(home, "remote", "connections", nil); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// addr points at a closed socket path: the boot-time connect fails
+	// fast and the row still exists, pending.
+	if _, err := f.WriteString("connections:\n    - name: phoneconn\n      label: Laptop\n      addr: /nonexistent/federation.sock\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	loginURL, err = Start(home)
+	if err != nil {
+		t.Fatalf("restart with connections: %v", err)
+	}
+	defer Stop()
+	origin, client := webview(t, loginURL)
+	lp := post(t, client, origin, "ListPlugins", map[string]any{})
+	var labels []string
+	for _, p := range lp["plugins"].([]any) {
+		labels = append(labels, p.(map[string]any)["label"].(string))
+	}
+	if !strings.Contains(strings.Join(labels, ","), "Laptop") {
+		t.Fatalf("the declared connection is not a menu row on the phone: %v", labels)
+	}
 }

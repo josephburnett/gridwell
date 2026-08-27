@@ -15,7 +15,6 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/pluginmeta"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 )
@@ -65,15 +64,4 @@ func NativeRemoteFactory(cfg map[string]string) (gridwellv1.GridwellServer, erro
 		srv.ConnectAll(context.Background())
 	}
 	return srv, nil
-}
-
-// WithNativeTransports fills the node-native factory slots ("local",
-// "remote") unless the composer supplied its own (mobile wires both for
-// iOS).
-func WithNativeTransports(factories map[string]plugin.ServerFactory) map[string]plugin.ServerFactory {
-	factories = WithNativeLocal(factories)
-	if _, ok := factories["remote"]; !ok {
-		factories["remote"] = NativeRemoteFactory
-	}
-	return factories
 }

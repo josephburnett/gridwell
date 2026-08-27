@@ -1,4 +1,4 @@
-package cli
+package node
 
 // The yaml→transport connection seam: injectConnections is the ONE place
 // server.yaml's vocabulary meets remote.ConnSpec. It used to build a
@@ -43,7 +43,7 @@ func TestInjectConnectionsCarriesEveryField(t *testing.T) {
 	v := reflect.ValueOf(specs[0])
 	for i := 0; i < v.NumField(); i++ {
 		if v.Field(i).IsZero() {
-			t.Errorf("ConnSpec.%s was dropped crossing injectConnections — map it in serve.go (and in config.ConnectionConfig if new)", v.Type().Field(i).Name)
+			t.Errorf("ConnSpec.%s was dropped crossing injectConnections — map it in node.go (and in config.ConnectionConfig if new)", v.Type().Field(i).Name)
 		}
 	}
 	var retired []string

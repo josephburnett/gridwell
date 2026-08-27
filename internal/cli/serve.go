@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/web"
 )
@@ -145,71 +143,18 @@ func isExecutable(path string) bool {
 	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
 }
 
-// injectConnections carries server.yaml's connections: declarations to
-// the builtin transport through the one flat config vocabulary (v2
-// #269). Exactly one remote entry may exist when the key is present —
-// two transports sharing one connection list would double-materialize.
-func injectConnections(cfg *config.ServerConfig) error {
-	if !cfg.ConnectionsSet {
-		return nil
-	}
-	var remotes []*config.PluginConfig
-	for i := range cfg.Plugins {
-		if cfg.Plugins[i].Kind == "remote" {
-			remotes = append(remotes, &cfg.Plugins[i])
-		}
-	}
-	if len(remotes) == 0 {
-		if len(cfg.Connections) > 0 {
-			return fmt.Errorf("connections: declared but no remote transport entry exists — `gridwell init --kind remote --name far` first")
-		}
-		return nil
-	}
-	if len(remotes) > 1 {
-		return fmt.Errorf("connections: %d remote entries — one transport owns the connection list; remove the extras", len(remotes))
-	}
-	// The TYPED spec, not a hand-keyed map: remote.ConnSpec is the shape
-	// nativeremote unmarshals, so marshaling it here is the one place the
-	// yaml vocabulary meets the transport's. TestInjectConnectionsCarries
-	// EveryField pins the mapping exhaustive — a field added to ConnSpec
-	// without a line here fails that test instead of silently dropping.
-	specs := make([]remote.ConnSpec, 0, len(cfg.Connections))
-	for _, c := range cfg.Connections {
-		specs = append(specs, remote.ConnSpec{
-			Name: c.Name, Label: c.Label, Host: c.Host, User: c.User,
-			Port: c.Port, Addr: c.Addr, Key: c.Key, KnownHosts: c.KnownHosts,
-		})
-	}
-	blob, err := json.Marshal(specs)
-	if err != nil {
-		return err
-	}
-	pc := remotes[0]
-	if pc.Config == nil {
-		pc.Config = map[string]string{}
-	}
-	pc.Config["connections_json"] = string(blob)
-	if len(cfg.RetiredNames) > 0 {
-		r, err := json.Marshal(cfg.RetiredNames)
-		if err != nil {
-			return err
-		}
-		pc.Config["retired_json"] = string(r)
-	}
-	return nil
-}
 
-// resolvePluginBinaries fills each entry's binary: NATIVE kinds (present
-// in factories) run in-process; a kind with a bundled provider factory
-// runs in-process too; every other kind spawns gridwell-provider-<kind>
+// resolvePluginBinaries fills each entry's binary: the node's NATIVE
+// kinds run in-process; a kind with a bundled provider factory runs
+// in-process too; every other kind spawns gridwell-provider-<kind>
 // (server.yaml may pin an explicit binary: path instead).
-func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin.ServerFactory, providers map[string]plugin.ProviderFactory) error {
+func resolvePluginBinaries(cfg *config.ServerConfig, providers map[string]plugin.ProviderFactory) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Binary != "" {
 			continue
 		}
-		if _, native := factories[pc.Kind]; native {
+		if node.IsNative(pc.Kind) {
 			continue
 		}
 		if _, bundled := providers[pc.Kind]; bundled {
@@ -232,14 +177,11 @@ func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin
 // web.bind pins it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM
 // trigger graceful shutdown.
 //
-// factories is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
-// kinds present in it load in-process through the compose door; everything
-// else spawns out-of-process. The stock host passes nil.
-func RunServeWith(args []string, factories map[string]plugin.ServerFactory, providers map[string]plugin.ProviderFactory) int {
-	// The v2 folds: the native store (local) and the builtin transport
-	// (remote) are node code, always in-process. A composer's own
-	// factories (mobile) still win.
-	factories = node.WithNativeTransports(factories)
+// providers is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
+// kinds present in it load in-process; every other provider spawns
+// out-of-process. The stock host passes nil. The native kinds (local,
+// remote) are the node's own on every path.
+func RunServeWith(args []string, providers map[string]plugin.ProviderFactory) int {
 	home, err := config.Home()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -293,11 +235,7 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory, prov
 
 	// Every plugin runs as a separately-compiled go-plugin subprocess. Resolve
 	// each kind's binary (server.yaml may pin an explicit path instead).
-	if err := injectConnections(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		return 1
-	}
-	if err := resolvePluginBinaries(cfg, factories, providers); err != nil {
+	if err := resolvePluginBinaries(cfg, providers); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
@@ -310,7 +248,6 @@ func RunServeWith(args []string, factories map[string]plugin.ServerFactory, prov
 	n, err := node.Start(node.Options{
 		Home:              home,
 		Cfg:               cfg,
-		Factories:         factories,
 		ProviderFactories: providers,
 		// The embedded web client by default — the binary is self-contained
 		// (web.FS); server.yaml static:/--static is the dev override that

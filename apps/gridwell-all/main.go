@@ -21,7 +21,7 @@ import (
 	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
 )
 
-func main() { os.Exit(cli.Main(os.Args[1:], nil, providerFactories())) }
+func main() { os.Exit(cli.Main(os.Args[1:], providerFactories())) }
 
 // providerFactories is this binary's loadout: each kind constructed
 // exactly as its subprocess main (cmd/gridwell-provider-*) would, minus

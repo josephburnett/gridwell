@@ -36,12 +36,8 @@ import (
 	"sync"
 
 	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/remote"
-	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
 	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
 	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
@@ -95,7 +91,6 @@ func Start(home string) (string, error) {
 		ProviderFactories: inProcessProviderFactories(),
 		Home:              home,
 		Cfg:               cfg,
-		Factories:         inProcessFactories(home),
 		StaticFS:          web.FS,
 	})
 	if err != nil {
@@ -146,29 +141,6 @@ func inProcessProviderFactories() map[string]plugin.ProviderFactory {
 		},
 		"gitlab": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
 			return gitlabprovider.FromConfig(cfg), nil
-		},
-	}
-}
-
-// inProcessFactories is the mobile plugin registry: every kind the
-// platform supports, constructed exactly as its subprocess main would,
-// minus the process boundary — and minus shells (no tmux manager; the
-// server refuses shell tiles anyway).
-func inProcessFactories(home string) map[string]plugin.ServerFactory {
-	return map[string]plugin.ServerFactory{
-		"local": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			st, err := local.OpenVerified(cfg["db_file"], cfg["uuid"], cfg["kind"])
-			if err != nil {
-				return nil, err
-			}
-			return local.New(st, nil), nil
-		},
-		"remote": func(cfg map[string]string) (gridwellv1.GridwellServer, error) {
-			db, err := remote.OpenDB(cfg["db_file"])
-			if err != nil {
-				return nil, err
-			}
-			return remote.New(db, dial.Dial, home), nil
 		},
 	}
 }
