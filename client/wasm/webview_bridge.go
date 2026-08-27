@@ -301,6 +301,7 @@ func (a *App) installWebviewListeners() {
 			for _, pl := range a.locals {
 				if pl.urlView != nil && pl.urlView.tileID == tileID {
 					pl.urlView.navDirty = true
+					pl.urlView.lastURL = url
 					pl.urlView.lastTitle = title
 				}
 			}

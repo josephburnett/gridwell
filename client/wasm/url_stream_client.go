@@ -48,6 +48,12 @@ type urlView struct {
 	// at a teardown whose IPC reply never arrives during unload (audit
 	// #2, 2026-08-14), so closing the tab lost the trail every time.
 	navDirty bool
+	// lastURL is the address the live page most recently navigated to
+	// (the nav event carries it) — what the unload beacon writes. The
+	// cache is not consulted for it: a url LINK's target row lives in a
+	// foreign grid the cache never held, and the beacon used to skip such
+	// a view entirely (2026-08-27), dropping its navigation on tab close.
+	lastURL string
 	// lastTitle is the most recent page title from the nav events, for
 	// the unload beacon (the freeze path gets its title from the bridge
 	// reply, which the unload path cannot wait for).

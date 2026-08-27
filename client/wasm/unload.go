@@ -119,9 +119,11 @@ func (a *App) flushURLStateOnUnload() {
 		if v == nil || v.page || !v.durable || !v.navDirty {
 			continue
 		}
-		var url string
-		if ct := a.cachedTileByID(v.tileID); ct != nil {
-			url = ct.URLString
+		url := v.lastURL
+		if url == "" {
+			if ct := a.cachedTileByID(v.tileID); ct != nil {
+				url = ct.URLString
+			}
 		}
 		if url == "" {
 			continue
