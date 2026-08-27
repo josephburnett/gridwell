@@ -192,9 +192,9 @@ SERVE_FLAGS ?=
 # init bootstraps a fresh home: it mints a plugin id, creates its DB (with
 # identity metadata) under ~/.gridwell/db/<id>/, and registers it in
 # ~/.gridwell/server.yaml. Run once before `make serve` / `make launch`.
-#   make init                                  # localdb named "home"
+#   make init                                  # the native store, named "home"
 #   make init INIT_FLAGS="--kind fs --name files --config root=/home/joe"
-INIT_FLAGS ?= --kind localdb --name home
+INIT_FLAGS ?= --kind local --name home
 init: bin
 	$(BIN) init $(INIT_FLAGS)
 

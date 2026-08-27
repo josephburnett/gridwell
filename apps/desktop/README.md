@@ -15,7 +15,7 @@ cd ../.. && make vendor
 Then create a home and run the app (offline from here on):
 
 ```sh
-cd ../.. && make init            # once: register a localdb plugin in ~/.gridwell
+cd ../.. && make init            # once: register the native store in ~/.gridwell
 make launch                      # against ~/.gridwell
 GRIDWELL_HOME=/path make launch  # against another home
 ```
@@ -26,7 +26,7 @@ untrusted web content, so the sandbox is the containment that matters, and a
 modern Linux/WSL2 kernel with unprivileged user namespaces needs no setuid
 helper for it. The app spawns `<repo>/gridwell serve` with an ephemeral
 loopback port as `--bind-default`, waits for the server to announce its actual
-bound address, and loads the renderer from that origin. An explicit `bind:` in
+bound address, and loads the renderer from that origin. An explicit `web.bind` in
 `~/.gridwell/server.yaml` overrides the ephemeral default — that is how one
 server instance serves both the desktop window and a phone browser (see
 "Running it" in the repo README). `serve`
@@ -102,5 +102,5 @@ from `process.resourcesPath` at runtime, falling back to the dev tree.
 for another OS/arch, cross-compile it first and build on/for that platform:
 
 ```sh
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o ../../gridwell ./cmd/gridwell
+cd ../gridwell && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o ../../gridwell .
 ```
