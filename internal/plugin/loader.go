@@ -1,10 +1,10 @@
-// Package plugin — loader builds the plugin registry from server config.
-// Since the v2 fold, local and remote are NODE code (the serve wiring's
-// native factories); fs and proc are content providers, spawned as
-// gridwell-provider-* subprocesses or compiled in through a
-// ProviderFactory (gridwell-all, mobile — iOS forbids fork/exec). Any
-// entry with binary != "" spawns as a go-plugin subprocess: the
-// third-party door (docs/plugin.md).
+// Package plugin — loader builds the registry from server config. Every
+// entry is one of two things: a NATIVE kind (local, remote — node code,
+// constructed by the factories the serve wiring supplies) or a CONTENT
+// PROVIDER (everything else — spawned as a gridwell-provider-<kind>
+// subprocess, the third-party door, or compiled in through a
+// ProviderFactory: gridwell-all, mobile — iOS forbids fork/exec). The
+// gridwell.v1 subprocess door retired 2026-08-27; plugins are providers.
 package plugin
 
 import (
@@ -29,14 +29,12 @@ import (
 type ProviderFactory func(cfg map[string]string) (contentproviderv1.ContentProviderServer, error)
 
 // LoadAllWithProviders constructs a Registry from the server config. Each
-// PluginConfig entry becomes one Registry entry keyed by its ID (UUID). A
-// plugin with a binary path is spawned as a subprocess via go-plugin (the
-// desktop/server path); a plugin without one constructs in-process from
-// factories (tests, and the mobile node — no fork/exec on iOS). A config
-// entry with Provider: true loads a contentprovider.v1 process (or a
-// providerFactories constructor), opens the NODE-owned memory DB at the
-// entry's derived db path, and registers the providerhost adapter —
-// indistinguishable from any plugin above the registry.
+// entry becomes one Registry entry keyed by its ID. A kind present in
+// factories is NATIVE and constructs in-process; every other kind is a
+// content provider: a contentprovider.v1 subprocess (binary) or a
+// providerFactories constructor, fronted by the providerhost adapter over
+// the NODE-owned memory DB at the entry's derived db path —
+// indistinguishable from a native kind above the registry.
 func LoadAllWithProviders(cfg *config.ServerConfig, factories map[string]ServerFactory, providerFactories map[string]ProviderFactory) (*Registry, error) {
 	reg := NewRegistry()
 	for i := range cfg.Plugins {
@@ -44,10 +42,10 @@ func LoadAllWithProviders(cfg *config.ServerConfig, factories map[string]ServerF
 		var client gridwellv1.GridwellClient
 		var closer func()
 		var err error
-		if pc.Provider {
-			client, closer, err = loadProvider(pc, providerFactories)
+		if factory, native := factories[pc.Kind]; native {
+			client, closer, err = loadNative(pc, factory)
 		} else {
-			client, closer, err = loadOne(pc, factories)
+			client, closer, err = loadProvider(pc, providerFactories)
 		}
 		if err != nil {
 			reg.Close()
@@ -98,45 +96,36 @@ func LoadAllWithProviders(cfg *config.ServerConfig, factories map[string]ServerF
 	return reg, nil
 }
 
-// ServerFactory is compose.Factory: an in-process plugin constructor over
-// the ONE config vocabulary both process shapes share.
+// ServerFactory is compose.Factory: an in-process constructor for a
+// NATIVE kind over the ONE config vocabulary providers share.
 type ServerFactory = compose.Factory
 
 // ServeInProcess is compose.ServeInProcess — re-exported for the many
-// seam tests that stand a real plugin up without a subprocess.
+// seam tests that stand a real gridwell.v1 server up in-process.
 var ServeInProcess = compose.ServeInProcess
 
-func loadOne(pc *config.PluginConfig, factories map[string]ServerFactory) (gridwellv1.GridwellClient, func(), error) {
-	// The one config vocabulary: the plugin's own keys plus the injected
-	// identity it persists and the server verifies against its DB (see
-	// pluginmeta) — uuid is the durable routing id, kind selects the
-	// schema; db_file is derived upstream. Identical for a subprocess (the
-	// spawn env) and an in-process factory (the argument).
+// loadNative constructs a native kind: its own keys plus the injected
+// identity it persists and verifies against its DB (pluginmeta) — uuid
+// is the durable routing id, kind selects the schema; db_file is derived
+// upstream.
+func loadNative(pc *config.PluginConfig, factory ServerFactory) (gridwellv1.GridwellClient, func(), error) {
 	cfg := make(map[string]string, len(pc.Config)+2)
 	for k, v := range pc.Config {
 		cfg[k] = v
 	}
 	cfg["uuid"] = pc.ID
 	cfg["kind"] = pc.Kind
-
-	// The composition door (api/compose): Command for a subprocess binary
-	// (desktop/server production), InProcess for a factory (tests, the
-	// mobile node). Callers cannot tell which they got — that is the door's
-	// contract, and the parity gate pins it.
-	if pc.Binary != "" {
-		return compose.Command(pc.Binary).Open(cfg)
+	impl, err := factory(cfg)
+	if err != nil {
+		return nil, nil, err
 	}
-	factory, ok := factories[pc.Kind]
-	if !ok {
-		return nil, nil, fmt.Errorf("no factory for kind %q and no binary path", pc.Kind)
-	}
-	return compose.InProcess(factory).Open(cfg)
+	return compose.ServeInProcess(impl)
 }
 
-// loadProvider materializes one Provider entry: the content process
-// (subprocess binary or in-process factory — the same composition door),
-// the node-owned memory DB at the entry's derived db path, and the
-// adapter that joins them, served back as an ordinary GridwellClient.
+// loadProvider materializes one provider entry: the content process
+// (subprocess binary or in-process factory), the node-owned memory DB at
+// the entry's derived db path, and the adapter that joins them, served
+// back as an ordinary GridwellClient.
 func loadProvider(pc *config.PluginConfig, providerFactories map[string]ProviderFactory) (gridwellv1.GridwellClient, func(), error) {
 	// The provider's config: its own keys plus identity — but NOT
 	// db_file: a provider is stateless by contract, and the derived db
@@ -165,7 +154,7 @@ func loadProvider(pc *config.PluginConfig, providerFactories map[string]Provider
 		}
 		cp, cpClose, err = compose.ServeProviderInProcess(impl)
 	} else {
-		return nil, nil, fmt.Errorf("no provider factory for kind %q and no binary path", pc.Kind)
+		return nil, nil, fmt.Errorf("kind %q: no provider factory and no binary path (not a native kind either)", pc.Kind)
 	}
 	if err != nil {
 		return nil, nil, err

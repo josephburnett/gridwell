@@ -21,13 +21,21 @@ import (
 	contentproviderv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 )
 
-// ProviderPluginName is the go-plugin dispatch key for the v2 provider
-// service — distinct from PluginName so a binary's served service is
-// unambiguous at the handshake.
+// ConfigEnvVar is the environment variable the host uses to hand a
+// provider its config map (JSON) at spawn — guest.Config reads it.
+const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
+
+// HostPIDEnvVar carries the spawning host's pid to the guest, which
+// watches it and exits when the host dies (guest's watchdog, issue #197):
+// go-plugin gives the guest no host-death detection in our configuration.
+const HostPIDEnvVar = "GRIDWELL_HOST_PID"
+
+// ProviderPluginName is the go-plugin dispatch key for the provider
+// service.
 const ProviderPluginName = "gridwell-provider"
 
 // providerGRPCPlugin bridges go-plugin's transport and the
-// ContentProvider service (the provider twin of gridwellGRPCPlugin).
+// ContentProvider service.
 type providerGRPCPlugin struct {
 	plugin.Plugin
 	Impl contentproviderv1.ContentProviderServer
@@ -51,8 +59,8 @@ func ProviderPluginMap(impl contentproviderv1.ContentProviderServer) map[string]
 }
 
 // LoadProvider spawns a provider binary and hands back the connected
-// client — the provider twin of LoadPlugin, sharing the config-env and
-// host-death conventions.
+// client: the config map rides the spawn environment (guest.Config), the
+// host pid rides with it for the guest's host-death watchdog.
 func LoadProvider(binaryPath string, cfg map[string]string) (contentproviderv1.ContentProviderClient, func(), error) {
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "provider-host",

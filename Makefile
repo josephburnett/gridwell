@@ -21,15 +21,15 @@ export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 
 # `bin`, `plugins`, and `wasm` are phony so they always invoke `go build`. Go's
 # build cache makes this fast when nothing changed, but it guarantees
-# we never serve a stale binary or wasm artifact. Every plugin is its own
+# we never serve a stale binary or wasm artifact. Every provider is its own
 # separately-compiled go-plugin binary, laid out beside $(BIN) so the server
-# resolves them by `gridwell-plugin-<kind>`.
+# resolves them by `gridwell-provider-<kind>`.
 build: bin bin-all plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
 # pure Go, so nothing pulls cgo and the result has no libc-version coupling —
 # and since the web client (index.html, wasm, vendor) is EMBEDDED (web/embed.go),
-# the built gridwell + gridwell-plugin-<kind> binaries are the whole distribution:
+# the built gridwell + gridwell-provider-<kind> binaries are the whole distribution:
 # copy them anywhere and the browser client serves from the binary itself.
 # bin depends on wasm so the embed always carries the current client.
 bin: wasm

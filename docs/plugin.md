@@ -96,7 +96,6 @@ todo the user has seen. Config:
 - id: <minted>
   name: todos
   kind: gitlab
-  provider: true
   config:
     url: https://gitlab.com          # optional
     token_file: /home/me/.gitlab-token   # read_api PAT; a file path, never a value
@@ -104,9 +103,13 @@ todo the user has seen. Config:
 ```
 
 (2026-08-24: the legacy full-`gridwell.v1` fs/proc plugins retired with
-the v2 cutover; the in-repo examples are v2 content providers. The
-`gridwell.v1` guest door — `guest.Serve` — remains the third-party
-surface.)
+the v2 cutover. 2026-08-27: the `gridwell.v1` subprocess door itself —
+`guest.Serve`, `compose.Command`, the `provider: true` flag, the second
+init door — retired: a plugin IS a content provider, every non-native
+kind spawns `gridwell-provider-<kind>`, and `local`/`remote` are the
+node's own kinds. This document's remaining "gridwell-plugin-*" wording
+is the 2026-08-15 plan as executed; the current door is
+`docs/plugin-authoring.md`.)
 localdb additionally absorbs `internal/store` (+ its CLAUDE.md contract,
 unchanged) and the tmux/shellsvc machinery its binary owns.
 

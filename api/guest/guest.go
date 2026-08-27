@@ -20,7 +20,6 @@ import (
 
 	gplug "github.com/josephburnett/gridwell/api/compose"
 	contentproviderv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
 // Config returns the config map the host handed this plugin at spawn (db_file,
@@ -64,28 +63,6 @@ func watchHost() {
 	}()
 }
 
-// Serve runs the plugin event loop. It blocks until the host process closes
-// the connection or the process is killed. impl must implement
-// gridwellv1.GridwellServer; embed gridwellv1.UnimplementedGridwellServer and
-// override the methods your plugin supports.
-func Serve(impl gridwellv1.GridwellServer) {
-	watchHost()
-	logger := hclog.New(&hclog.LoggerOptions{
-		Level:      hclog.Error,
-		Output:     os.Stderr,
-		JSONFormat: true,
-	})
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: gplug.HandshakeConfig,
-		Plugins:         gplug.PluginMap(impl),
-		GRPCServer:      plugin.DefaultGRPCServer,
-		Logger:          logger,
-	})
-}
-
-// ServeProvider runs a v2 CONTENT PROVIDER binary's event loop (the
-// provider twin of Serve): impl serves contentprovider.v1 — stateless
-// keys and content; the node owns ids, layout, and the memory DB.
 func ServeProvider(impl contentproviderv1.ContentProviderServer) {
 	watchHost()
 	logger := hclog.New(&hclog.LoggerOptions{

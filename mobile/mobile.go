@@ -18,7 +18,7 @@
 //   - No password (loopback inside an app sandbox; the webview is the
 //     only client) and no serve lock (the OS gives each app one process).
 //   - First run auto-inits a "local" plugin named "home" through the SAME init
-//     door the CLI uses (node.InitPlugin), so a phone home is
+//     door the CLI uses (node.Init), so a phone home is
 //     byte-compatible with every other home.
 //
 // The exported surface is deliberately gomobile-shaped: strings, error,
@@ -78,7 +78,7 @@ func Start(home string) (string, error) {
 	if _, err := os.Stat(cfgPath); errors.Is(err, gofs.ErrNotExist) {
 		// First run: one localdb named "home", exactly the heal the
 		// desktop sidecar performs — same door, same resulting bytes.
-		if _, err := node.InitPlugin(home, "local", "home", nil); err != nil {
+		if _, err := node.Init(home, "local", "home", nil); err != nil {
 			return "", fmt.Errorf("mobile: first-run init: %w", err)
 		}
 	}

@@ -19,13 +19,17 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
+// buildProviderBinary compiles a shipped provider binary into a temp
+// file. A build failure FAILS the test (never skips): a skip-on-failure
+// once masked a stale build path for weeks while the subprocess
+// transport went unexercised.
 func buildProviderBinary(t *testing.T, kind string) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "gridwell-provider-"+kind)
 	cmd := exec.Command("go", "build", "-o", out,
 		"github.com/josephburnett/gridwell/plugins/"+kind+"/cmd/gridwell-provider-"+kind)
 	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("go build provider %s: %v\n%s", kind, err, b)
+		t.Fatalf("go build provider %s: %v\n%s", kind, err, b)
 	}
 	return out
 }
@@ -46,7 +50,7 @@ func TestSubprocessProvider_FS(t *testing.T) {
 	memPath := filepath.Join(t.TempDir(), "mem.db")
 
 	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{
-		ID: "pfsuuid", Name: "files", Kind: "fs", Provider: true, Binary: bin,
+		ID: "pfsuuid", Name: "files", Kind: "fs", Binary: bin,
 		Config: map[string]string{"root": root, "db_file": memPath},
 	}}}
 	reg, err := plugin.LoadAllWithProviders(cfg, nil, nil)

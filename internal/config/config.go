@@ -149,12 +149,10 @@ type PluginConfig struct {
 	Kind   string            `yaml:"kind"`
 	Binary string            `yaml:"binary,omitempty"`
 	Config map[string]string `yaml:"config,omitempty"`
-	// Provider marks a v2 CONTENT PROVIDER entry (docs/v2-design.md): the
-	// process serves contentprovider.v1 (stateless — keys, content, no
-	// layout) and the NODE owns this external's memory DB (ids, placement,
-	// framing, cache) at the same derived db path. The binary default
-	// becomes gridwell-provider-<kind>.
-	Provider bool `yaml:"provider,omitempty"`
+	// LegacyProvider is the retired `provider: true` marker (2026-08-27):
+	// every non-native kind IS a content provider now, so the flag says
+	// nothing. Parsed only so a rewrite keeps the line; Load notes it.
+	LegacyProvider bool `yaml:"provider,omitempty"`
 }
 
 // Defaults holds the built-in values used when a field is absent from the
@@ -248,6 +246,11 @@ func Load(path string) (*ServerConfig, error) {
 		cfg.Deprecations = append(cfg.Deprecations, "password: / web.password are IGNORED — the web password is the web-password file beside this config (delete it to rotate)")
 	}
 	cfg.Web.BindSet = webBindSet || legacyBindSet
+	for _, pc := range cfg.Plugins {
+		if pc.LegacyProvider {
+			cfg.Deprecations = append(cfg.Deprecations, fmt.Sprintf("plugin %q: provider: true is implied for every non-native kind; drop the line", pc.Name))
+		}
+	}
 	// ConnectionsSet: the `connections:` key is PRESENT — this file is
 	// authoritative for the connection set, empty list included (v2 #269).
 	cfg.ConnectionsSet = probe.Connections != nil

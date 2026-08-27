@@ -113,7 +113,7 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return node.BuildConfig(home, cfgPath)
 }
 
-// resolveBinary finds a go-plugin binary by name (gridwell-plugin-<kind>
+// resolveBinary finds a provider binary by name (gridwell-provider-<kind>
 // or gridwell-provider-<kind>). Every plugin runs as a separately-compiled
 // subprocess; the host locates the binary via GRIDWELL_PLUGIN_DIR, then
 // beside the running gridwell executable (how `make` lays them out), then
@@ -199,47 +199,24 @@ func injectConnections(cfg *config.ServerConfig) error {
 	return nil
 }
 
-// resolvePluginBinaries fills in Binary for every plugin that didn't pin
-// one explicitly in server.yaml, by kind — skipping kinds a bundled
-// binary provides in-process (its factories win: that is the composer's
-// whole choice; an explicit server.yaml binary: still beats both).
+// resolvePluginBinaries fills each entry's binary: NATIVE kinds (present
+// in factories) run in-process; a kind with a bundled provider factory
+// runs in-process too; every other kind spawns gridwell-provider-<kind>
+// (server.yaml may pin an explicit binary: path instead).
 func resolvePluginBinaries(cfg *config.ServerConfig, factories map[string]plugin.ServerFactory, providers map[string]plugin.ProviderFactory) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Binary != "" {
 			continue
 		}
-		// PLUGIN factories satisfy plugin entries only: a provider entry
-		// serves a different service, so a bundled binary's in-process
-		// plugin factory must not suppress resolving the provider BINARY
-		// (found 2026-08-23: gridwell-all + a provider home failed with
-		// "no provider factory" because the fs plugin factory swallowed
-		// the lookup).
-		if _, ok := factories[pc.Kind]; ok && !pc.Provider {
+		if _, native := factories[pc.Kind]; native {
 			continue
 		}
-		name := "gridwell-plugin-" + pc.Kind
-		if pc.Provider {
-			// A bundled binary's in-process PROVIDER factory satisfies a
-			// provider entry the same way a plugin factory satisfies a
-			// plugin entry.
-			if _, ok := providers[pc.Kind]; ok {
-				continue
-			}
-			// v2 provider entries spawn the provider binary — a distinct
-			// name because a binary serves ONE service (docs/v2-design.md).
-			name = "gridwell-provider-" + pc.Kind
+		if _, bundled := providers[pc.Kind]; bundled {
+			continue
 		}
-		bin, err := resolveBinary(name)
+		bin, err := resolveBinary("gridwell-provider-" + pc.Kind)
 		if err != nil {
-			// The commonest miss (2026-08-27): a provider kind declared
-			// without `provider: true`, so the PLUGIN name was tried. If
-			// the provider binary is right there, say so.
-			if !pc.Provider {
-				if _, perr := resolveBinary("gridwell-provider-" + pc.Kind); perr == nil {
-					return fmt.Errorf("plugin %q (%s): %w — gridwell-provider-%s exists: is this entry missing `provider: true`?", pc.Name, pc.Kind, err, pc.Kind)
-				}
-			}
 			return fmt.Errorf("plugin %q (%s): %w", pc.Name, pc.Kind, err)
 		}
 		pc.Binary = bin

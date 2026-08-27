@@ -34,9 +34,6 @@ export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
   execFileSync(bin, ['init', '--kind', 'local', '--name', 'e2e'], { env, stdio: 'ignore' });
   for (const p of extra) {
     const args = ['init', '--kind', p.kind, '--name', p.name];
-    // fs is the v2 CONTENT PROVIDER — the only fs since the cutover
-    // (#269; the legacy plugin was deleted 2026-08-24).
-    if (p.kind === 'fs') args.push('--provider');
     for (const [k, v] of Object.entries(p.config ?? {})) args.push('--config', `${k}=${v}`);
     execFileSync(bin, args, { env, stdio: 'ignore' });
   }

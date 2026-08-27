@@ -61,15 +61,15 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 		}
 		dbFile := config.DBFile(home, pc.ID)
 		pc.Config["db_file"] = dbFile
-		// The DB must already exist: it is created once by init. serve
-		// never creates one — otherwise a changed id (whose derived path
-		// doesn't exist) would silently spawn a fresh, empty store
-		// instead of failing. EXCEPTION: a Provider entry's derived path
-		// is the NODE-owned memory DB (docs/v2-design.md §3.2), which is
-		// durable-but-FORGETTABLE by contract — creating it empty is the
-		// defined recovery from losing it, so serve creates it freely
+		// A NATIVE kind's DB must already exist: it is created once by
+		// init. serve never creates one — otherwise a changed id (whose
+		// derived path doesn't exist) would silently spawn a fresh, empty
+		// store instead of failing. A PROVIDER's derived path is the
+		// NODE-owned memory DB (docs/v2-design.md §3.2), durable-but-
+		// FORGETTABLE by contract — creating it empty is the defined
+		// recovery from losing it, so serve creates it freely
 		// (layout.OpenVerified stamps identity at creation).
-		if pc.Provider {
+		if !NativeKinds[pc.Kind] {
 			if err := os.MkdirAll(filepath.Dir(dbFile), 0o755); err != nil {
 				return nil, fmt.Errorf("provider %q (%s): db dir: %w", pc.Name, pc.ID, err)
 			}
@@ -82,21 +82,31 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return cfg, nil
 }
 
-// InitPlugin registers one plugin in a home: mint the durable id, create
-// the DB with its identity stamped (pluginmeta), append the server.yaml
-// entry, and ensure the node's own id. The one init door — the CLI's
-// `gridwell init` and mobile's first-run auto-init both come through
-// here, so a home initialized on any platform is byte-compatible with
-// every other.
-func InitPlugin(home, kind, name string, conf map[string]string) (id string, err error) {
+// NativeKinds are the kinds the NODE itself implements over gridwell.v1
+// — the local store and the remote transport — the only kinds that are
+// not content providers (docs/content-presentation.md §9). The one owner
+// of that distinction: init decides whether to create a DB by it, serve
+// decides whether to spawn by it (via the factories the wiring supplies
+// for exactly these kinds).
+var NativeKinds = map[string]bool{"local": true, "remote": true}
+
+// Init registers one entry in a home: mint the durable id, create a
+// NATIVE kind's DB with its identity stamped (pluginmeta) — a provider
+// gets no DB here; its node-owned memory DB is minted at first serve —
+// append the server.yaml entry, and ensure the node's own id. The one
+// init door: the CLI's `gridwell init` and mobile's first-run auto-init
+// both come through here, so a home initialized on any platform is
+// byte-compatible with every other.
+func Init(home, kind, name string, conf map[string]string) (id string, err error) {
 	id = idshape.NewShortID()
 	dbDir := config.DBDir(home, id)
 	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		return "", err
 	}
-	dbFile := config.DBFile(home, id)
-	if err := pluginmeta.Create(dbFile, id, kind); err != nil {
-		return "", err
+	if NativeKinds[kind] {
+		if err := pluginmeta.Create(config.DBFile(home, id), id, kind); err != nil {
+			return "", err
+		}
 	}
 	entry := config.PluginConfig{ID: id, Name: name, Kind: kind}
 	if len(conf) > 0 {
@@ -109,7 +119,7 @@ func InitPlugin(home, kind, name string, conf map[string]string) (id string, err
 		return "", err
 	}
 	// The node's own identity rides in the same file; mint it with the
-	// first plugin so a fresh home is fully identified before first serve.
+	// first entry so a fresh home is fully identified before first serve.
 	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
 		return "", fmt.Errorf("node id: %w", err)
 	}
@@ -259,26 +269,4 @@ func (n *Node) Close() error {
 	n.srv.Close()
 	n.Reg.Close()
 	return err
-}
-
-// InitProvider registers a v2 CONTENT PROVIDER entry (docs/v2-design.md):
-// like InitPlugin, but no plugin DB is created — the derived db path is
-// the NODE-owned memory DB, which serve creates and identity-stamps on
-// first load (forgettable by contract, so absence is never an error).
-func InitProvider(home, kind, name string, conf map[string]string) (id string, err error) {
-	id = idshape.NewShortID()
-	if err := os.MkdirAll(config.DBDir(home, id), 0o755); err != nil {
-		return "", err
-	}
-	entry := config.PluginConfig{ID: id, Name: name, Kind: kind, Provider: true}
-	if len(conf) > 0 {
-		entry.Config = conf
-	}
-	if err := config.AppendPlugin(home, entry); err != nil {
-		return "", err
-	}
-	if _, err := config.EnsureNodeID(home, idshape.NewShortID); err != nil {
-		return "", fmt.Errorf("node id: %w", err)
-	}
-	return id, nil
 }

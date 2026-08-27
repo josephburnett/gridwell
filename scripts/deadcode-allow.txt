@@ -8,14 +8,6 @@
 # MaxGrids abort. One crawl engine serves both; the sugar stays.
 internal/parity/parity.go Crawl
 
-# The GUEST half of the third-party gridwell.v1 plugin door
-# (docs/plugin-authoring.md): an external plugin main calls guest.Serve;
-# no in-repo main does since the legacy fs/proc plugins retired
-# (2026-08-24) — the host half (compose.LoadPlugin) stays live in the
-# loader. Retiring the public protocol is an owner decision, not a
-# deadcode sweep's.
-api/guest/guest.go Serve
-
 # The mobile bind's login door: mobile.Start (a gomobile LIBRARY leaf —
 # no main for the deadcode roots to walk) returns TokenLoginURL so the
 # phone's webview authenticates against the always-gated web door

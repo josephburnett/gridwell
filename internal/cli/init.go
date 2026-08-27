@@ -25,24 +25,24 @@ func (m kvFlag) Set(s string) error {
 	return nil
 }
 
-// RunInit creates and registers a new plugin in one coordinated step: it mints
-// a routing id, creates the plugin's DB directory and DB (writing the gridwell
-// marker + id + kind metadata that the server strictly verifies on every
-// start), then appends the matching entry to <home>/server.yaml. The DB path is
-// derived from the id (<home>/db/<id>/store.db) — it is never specified by the
-// user. Name is the plugin's node-grid label; id and kind are the durable identity.
+// RunInit registers a new entry in one coordinated step: it mints a
+// routing id, creates the DB directory (and, for a native kind, the DB
+// with the gridwell marker + id + kind metadata the server strictly
+// verifies on every start), then appends the matching entry to
+// <home>/server.yaml. The DB path is derived from the id — never
+// specified by the user. Name is the launcher label; id and kind are the
+// durable identity.
 //
 //	gridwell init --kind <kind> --name <name> [--config k=v ...]
 func RunInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	kind := fs.String("kind", "", "plugin kind (local, fs, proc, remote)")
+	kind := fs.String("kind", "", "kind: a native kind (local, remote) or a content provider (fs, proc, gitlab, …)")
 	name := fs.String("name", "", "display name shown in the launcher (default: the kind)")
-	provider := fs.Bool("provider", false, "register a v2 CONTENT PROVIDER (docs/v2-design.md): the process serves content only; the node owns its memory DB")
 	conf := kvFlag{}
 	fs.Var(conf, "config", "plugin config as key=value (repeatable)")
 	args = reorderFlagsFirst(args, func(n string) bool {
 		switch n {
-		case "kind", "name", "config", "provider":
+		case "kind", "name", "config":
 			return true
 		}
 		return false
@@ -65,17 +65,12 @@ func RunInit(args []string) int {
 		return 1
 	}
 
-	// The one init door (node.InitPlugin — shared with the mobile bind's
+	// The one init door (node.Init — shared with the mobile bind's
 	// first-run auto-init): mint the durable id (7-char base36, leading
 	// letter, since 2026-07-25; earlier 32-hex ids stay valid forever),
-	// create the identity-stamped DB, append the config entry, ensure the
-	// node id.
-	var id string
-	if *provider {
-		id, err = node.InitProvider(home, *kind, *name, map[string]string(conf))
-	} else {
-		id, err = node.InitPlugin(home, *kind, *name, map[string]string(conf))
-	}
+	// create a native kind's identity-stamped DB, append the config
+	// entry, ensure the node id.
+	id, err := node.Init(home, *kind, *name, map[string]string(conf))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
 		return 1

@@ -120,9 +120,10 @@ Notes:
 - **No shells**: shells are native content (node-owned tmux, as
   today's local plugin). A provider cannot serve a shell in v2; noted
   as a possible later extension, not designed here.
-- Go authors implement the generated interface and `guest.Serve`; any
-  other language speaks the service behind the same go-plugin
-  handshake. `compose.InProcess` carries over for bundled leaves.
+- Go authors implement the generated interface and
+  `guest.ServeProvider`; any other language speaks the service behind
+  the same go-plugin handshake. A `plugin.ProviderFactory` is the
+  bundled-leaf shape (gridwell-all, mobile).
 
 ## 3. The databases
 

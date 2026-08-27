@@ -214,6 +214,10 @@ that can wait until the subset has earned a name.
 
 ## 9. The end state (walkthrough with Joe, 2026-08-22 — supersedes §8)
 
+**Status 2026-08-27: reached.** Two services on the wire; local and
+remote are node code; every other kind is a provider; the `gridwell.v1`
+subprocess door and the `provider:` flag are deleted.
+
 Working C through the remote plugin — the hardest case — dissolved the
 B/C distinction and landed here. This is the seed of a plan, not yet a
 program of work.
