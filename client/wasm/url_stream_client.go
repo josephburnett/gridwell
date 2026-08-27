@@ -191,8 +191,14 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	}
 	// Idempotent: the pane already shows this content live (a keep-alive
 	// return, issue #249 — nothing froze, so there is nothing to redo).
-	if v := a.urlViewFor(paneID); v != nil && v.tileID == t.ID {
-		return
+	// A DIFFERENT tile live in this pane closes through the one path that
+	// persists its freeze (2026-08-27: the registry used to tear it down
+	// and drop the FreezeResult on the floor).
+	if v := a.urlViewFor(paneID); v != nil {
+		if v.tileID == t.ID {
+			return
+		}
+		a.closeURLStream(paneID, true)
 	}
 	// ONE live surface per content tile (issue #249, generalizing the
 	// same-level rule): any OTHER pane — at any stack level — holding a
@@ -218,7 +224,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	a.local(p.ID).urlView.durable = durable
 	addr := a.webAddress(&t)
 	urlLog("place pane=%s tile=%s obj=%s url=%s", p.ID, t.ID, t.ObjectID, addr)
-	bridgePlace(p.ID, t.ID, t.ObjectID, addr, b, contentZoomOf(&t), t.URLHistory, durable)
+	bridgePlace(p.ID, t.ID, t.ObjectID, addr, b, contentZoomOf(&t), t.URLHistory, durable, a.liveOverlaysHidden())
 	a.draw()
 }
 

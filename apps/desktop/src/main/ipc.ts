@@ -136,6 +136,12 @@ export interface ShellExitEvent {
 export interface PlaceArgs {
   paneId: string;
   tileId: string;
+  // hidden: the renderer's per-frame gesture-hide verdict at the moment of
+  // placement (liveOverlaysHidden) — a view placed during a drag or under
+  // an open palette starts parked. The renderer owns this fact; the
+  // registry used to infer it from the LAST setHidden it happened to
+  // receive, which ranged over a Go map (2026-08-27).
+  hidden?: boolean;
   // objectId identifies which tile a pane is showing, so a pane reused for a
   // different tile tears its old view down instead of just re-navigating.
   objectId: string;

@@ -112,13 +112,6 @@ export class WebviewRegistry {
   private readonly win: BaseWindow;
   private readonly cb: RegistryCallbacks;
   private readonly entries = new Map<string, Entry>();
-  // _globalHidden is the registry's single copy of "are all views currently
-  // parked for a gesture/modal" — the last value seen by setHidden. A new view
-  // placed while this is true starts parked rather than landing over an open
-  // palette or drag ghost. Convergent: setHidden always re-applies the correct
-  // state after place, but this closes the window where a briefly-visible new
-  // view could occlude a canvas overlay.
-  private _globalHidden = false;
   // Count of zoom chords seen by before-input-event and relayed to the
   // renderer. Read by the e2e (via __gwRegistry) as a delivery ACK: a
   // synthetic sendInputEvent that never bumps this was lost in the input
@@ -239,7 +232,7 @@ export class WebviewRegistry {
   // exists for the pane it's reused; a URL change re-navigates it. The view
   // is added as a child of the window's contentView, so it paints above the
   // root canvas renderer at the given bounds.
-  async place(paneId: string, tileId: string, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false): Promise<void> {
+  async place(paneId: string, tileId: string, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false): Promise<void> {
     const rounded = roundBounds(bounds);
     // ONE host-local session (owner decision 2026-07-26): every live url
     // tile, local or through a mount, browses on the shared persistent
@@ -249,9 +242,17 @@ export class WebviewRegistry {
     let e = this.entries.get(paneId);
 
     if (e && e.objectId !== objectId) {
-      // A different tile in the same pane — tear the old view down first so
-      // we don't leak a view.
-      this.remove(paneId).catch(() => {});
+      // A different tile in the same pane. The renderer closes the old
+      // stream FIRST (placeURLView → closeURLStream — the one path that
+      // persists a freeze), so reaching here means a view was replaced
+      // without its close: surface it, then tear the old view down so at
+      // least nothing leaks. The freeze that remove() returns has no
+      // caller to land in — which is exactly why this must be loud.
+      this.cb.onError?.({
+        source: 'electron:webview',
+        message: `pane ${paneId}: live view replaced (${e.tileId} → ${tileId}) without a close; its final frame is lost`,
+      });
+      await this.remove(paneId).catch(() => {});
       e = undefined;
     }
 
@@ -319,11 +320,14 @@ export class WebviewRegistry {
       // focused starts true: a pane only goes live by an action on the focused
       // pane, so the control should appear immediately; syncURLViews corrects
       // it on the next frame if focus has already moved.
-      // hidden starts from _globalHidden so a view placed while the palette is
-      // open (or during a drag gesture) starts parked rather than landing on top
-      // of the canvas overlay. syncURLViews will call setHidden for this pane on
+      // hidden starts from the renderer's verdict for THIS frame (PlaceArgs.hidden)
+      // so a view placed while the palette is open (or during a drag gesture)
+      // starts parked rather than landing on top of the canvas overlay.
+      // (It used to come from the last setHidden seen — a value that ranged
+      // over a Go map, so a parked stacked level could park a new view at
+      // random.) syncURLViews will call setHidden for this pane on
       // the next draw() and reaffirm the correct state.
-      const startHidden = this._globalHidden;
+      const startHidden = hidden;
       e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
       this.entries.set(paneId, e);
       this.win.contentView.addChildView(view);
@@ -448,11 +452,6 @@ export class WebviewRegistry {
   // focus (issue #172). Called
   // every frame from syncURLViews, so it no-ops when nothing changed.
   setHidden(paneId: string, hidden: boolean, focused: boolean): void {
-    // Track the registry-level hidden state so place() can initialize new
-    // views correctly (see _globalHidden). We update it regardless of whether
-    // the entry exists — the caller (syncURLViews) passes the same hidden value
-    // for all on-grid panes, so the last value written is authoritative.
-    this._globalHidden = hidden;
     const e = this.entries.get(paneId);
     if (!e || (e.hidden === hidden && e.focused === focused)) return;
     const viewChanged = e.hidden !== hidden;
@@ -552,7 +551,7 @@ export class WebviewRegistry {
       const jpeg = await captureJpegBase64(e.view);
       if (e.captureFailing && jpeg) {
         e.captureFailing = false;
-        console.log(`gridwell: mirror capture recovered for pane ${paneId}`);
+        this.cb.onError?.({ source: 'electron:webview', message: `pane ${paneId}: mirror capture recovered` });
       }
       return jpeg;
     } catch (err) {
@@ -560,7 +559,7 @@ export class WebviewRegistry {
       // into failure once per streak (per-frame captures would spam).
       if (!e.captureFailing) {
         e.captureFailing = true;
-        console.error(`gridwell: mirror capture failing for pane ${paneId}: ${String(err)}`);
+        this.cb.onError?.({ source: 'electron:webview', message: `pane ${paneId}: mirror capture failing: ${String(err)}` });
       }
       return '';
     }
