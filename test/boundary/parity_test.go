@@ -31,7 +31,7 @@ func TestEveryBundledKindIsCrawledByTheWebSuite(t *testing.T) {
 	if end := strings.Index(body, "\n}\n"); end >= 0 {
 		body = body[:end]
 	}
-	keyRe := regexp.MustCompile(`(?m)^\s*"([a-z0-9]+)":\s*func\(`)
+	keyRe := regexp.MustCompile(`(?m)^\s*"([a-z0-9]+)":\s*\S`)
 	var kinds []string
 	for _, m := range keyRe.FindAllStringSubmatch(body, -1) {
 		kinds = append(kinds, m[1])
