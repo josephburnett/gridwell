@@ -32,8 +32,14 @@ import (
 )
 
 const (
-	cellPx     = pane.CellPx
-	zoomMin    = 0.25
+	cellPx = pane.CellPx
+	// zoomMin is THE grid zoom floor — one value for every zoom gesture
+	// (wheel and pinch both land in zoomtrans.WheelZoom with it), on
+	// every client (desktop and the phone's web client alike; a narrow
+	// viewport needs the same floor to take in the lay of the land).
+	// 0.125 keeps cells at 8px, above the 4px line where
+	// drawGridLinesIn stops painting the grid (render.go).
+	zoomMin    = 0.125
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
