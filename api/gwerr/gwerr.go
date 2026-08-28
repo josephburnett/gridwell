@@ -85,7 +85,7 @@ func ClassifyError(err error) ErrorClass {
 // to a remembered answer keys on exactly this and nothing else: a coded
 // answer — NotFound, a tombstone, InvalidArgument — is an ANSWER and
 // must pass through verbatim, never resurrected from a cache or turned
-// into a link. The ONE classifier for gRPC hops (the providerhost
+// into a link. The ONE classifier for gRPC hops (the pluginhost
 // read-through cache, the mount cache, the cross-plugin deep copy);
 // clientsync.Of is its Connect-wire twin on the client, pinned to the
 // same three codes.

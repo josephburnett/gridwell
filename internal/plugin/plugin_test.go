@@ -78,12 +78,12 @@ func TestLoadAll(t *testing.T) {
 			{ID: "uuid-b", Name: "beta", Kind: "stub"},
 		},
 	}
-	factories := map[string]plugin.ServerFactory{
+	factories := map[string]plugin.NativeFactory{
 		"stub": func(_ map[string]string) (gridwellv1.GridwellServer, error) {
 			return &stubServer{}, nil
 		},
 	}
-	reg, err := plugin.LoadAllWithProviders(cfg, factories, nil)
+	reg, err := plugin.LoadAll(cfg, factories, nil)
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}

@@ -4,7 +4,7 @@
 
 # The parity oracle's single-node half: the CLI ships CrawlPair (two nodes,
 # one union frontier), while the seam tests (internal/parity,
-# internal/providerhost) crawl one endpoint to prove determinism and the
+# internal/pluginhost) crawl one endpoint to prove determinism and the
 # MaxGrids abort. One crawl engine serves both; the sugar stays.
 internal/parity/parity.go Crawl
 

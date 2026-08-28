@@ -96,7 +96,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 // Start constructs them here — no leaf (desktop, mobile) composes its
 // own copy (2026-08-27: mobile's copy had drifted — its remote factory
 // skipped the connections: config mode, so a phone ignored the yaml).
-var nativeFactories = map[string]plugin.ServerFactory{
+var nativeFactories = map[string]plugin.NativeFactory{
 	"local":  NativeLocalFactory,
 	"remote": NativeRemoteFactory,
 }
@@ -149,11 +149,11 @@ type Options struct {
 	// Cfg is the prepared config (BuildConfig + any caller adjustments:
 	// bind, static override, forced DisableShells).
 	Cfg *config.ServerConfig
-	// ProviderFactories, when non-nil, provides in-process constructors
+	// Factories, when non-nil, provides in-process constructors
 	// for provider entries whose Binary is empty (bundled binaries;
 	// mobile — iOS forbids fork/exec; tests). The native kinds need no
 	// such door: the node constructs them itself.
-	ProviderFactories map[string]plugin.ProviderFactory
+	Factories map[string]plugin.Factory
 	// StaticFS serves the web client at /; nil disables static files.
 	StaticFS fs.FS
 }
@@ -178,7 +178,7 @@ type Node struct {
 // nothing is left running.
 func Start(opts Options) (*Node, error) {
 	cfg := opts.Cfg
-	reg, err := plugin.LoadAllWithProviders(cfg, nativeFactories, opts.ProviderFactories)
+	reg, err := plugin.LoadAll(cfg, nativeFactories, opts.Factories)
 	if err != nil {
 		return nil, fmt.Errorf("load plugins: %w", err)
 	}

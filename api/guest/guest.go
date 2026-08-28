@@ -1,11 +1,11 @@
 // Package guest is called by a provider binary's main() to serve the
-// contentprovider.v1 service over go-plugin's managed subprocess
+// plugin.v1 service over go-plugin's managed subprocess
 // transport.
 //
 // Usage in a provider binary:
 //
 //	func main() {
-//	    guest.ServeProvider(myImpl)
+//	    guest.Serve(myImpl)
 //	}
 package guest
 
@@ -20,7 +20,7 @@ import (
 	"github.com/hashicorp/go-plugin"
 
 	gplug "github.com/josephburnett/gridwell/api/compose"
-	contentproviderv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
 // Config returns the config map the host handed this plugin at spawn (db_file,
@@ -64,7 +64,7 @@ func watchHost() {
 	}()
 }
 
-func ServeProvider(impl contentproviderv1.ContentProviderServer) {
+func Serve(impl pluginv1.PluginServer) {
 	watchHost()
 	logger := hclog.New(&hclog.LoggerOptions{
 		Level:      hclog.Error,
@@ -73,7 +73,7 @@ func ServeProvider(impl contentproviderv1.ContentProviderServer) {
 	})
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: gplug.HandshakeConfig,
-		Plugins:         gplug.ProviderPluginMap(impl),
+		Plugins:         gplug.PluginMap(impl),
 		GRPCServer:      plugin.DefaultGRPCServer,
 		Logger:          logger,
 	})

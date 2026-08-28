@@ -169,7 +169,7 @@ func OpenVerified(path, uuid, kind string) (*DB, error) {
 }
 
 // Entry is one provider listing row, as the engine needs it — a mirror
-// of the ContentProvider Entry without a proto dependency (this package
+// of the Plugin Entry without a proto dependency (this package
 // stays pure).
 type Entry struct {
 	Key          string

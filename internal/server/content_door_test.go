@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugin/proxytest"
-	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
 // The /content/ door crosses every seam at once: HTTP URL grammar → token
@@ -87,7 +87,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 		t.Fatal(err)
 	}
 
-	fsClient := newProviderClient(t, "fs", fsprovider.New(dir, nil))
+	fsClient := newProviderClient(t, "fs", fsplugin.New(dir, nil))
 
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
@@ -199,7 +199,7 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "cat.png"), img, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fsClient := newProviderClient(t, "fs", fsprovider.New(dir, nil))
+	fsClient := newProviderClient(t, "fs", fsplugin.New(dir, nil))
 
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -256,7 +256,7 @@ func TestContentDoorTransit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "remote.png"), img, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fsClient := newProviderClient(t, "fs", fsprovider.New(dir, nil))
+	fsClient := newProviderClient(t, "fs", fsplugin.New(dir, nil))
 	proxied, proxClose, err := plugin.ServeInProcess(proxytest.New(fsClient))
 	if err != nil {
 		t.Fatal(err)

@@ -17,13 +17,13 @@ import (
 // The host-death seam (issue #197): a SIGKILLed host must not orphan its
 // provider subprocesses. go-plugin gives the guest no host-death detection
 // in our configuration (the guest inherits the host's stdin and a dead
-// host is just a disconnected gRPC client), so guest.ServeProvider runs
+// host is just a disconnected gRPC client), so guest.Serve runs
 // its own watchdog on the pid the host hands over at spawn. This test
 // FAILS WITHOUT the watchdog: the provider survives its host indefinitely.
 //
 // Topology: the test re-execs ITSELF as an intermediate host
 // (TestHelperProviderHost, gated by an env flag) which spawns the real
-// provider binary via the production LoadProvider, prints the child pid,
+// provider binary via the production LoadPlugin, prints the child pid,
 // and blocks. The test then SIGKILLs the host — the exact harness-timeout
 // / crashed-sidecar shape that produced the observed orphans — and asserts
 // the provider exits within the watchdog bound.
@@ -34,7 +34,7 @@ func TestHelperProviderHost(t *testing.T) {
 	if os.Getenv("GRIDWELL_TEST_HOST") != "1" {
 		t.Skip("helper process body; run only via re-exec")
 	}
-	_, closer, err := compose.LoadProvider(os.Getenv("GRIDWELL_TEST_PROVIDER_BIN"), map[string]string{
+	_, closer, err := compose.LoadPlugin(os.Getenv("GRIDWELL_TEST_PROVIDER_BIN"), map[string]string{
 		"root": os.Getenv("GRIDWELL_TEST_PROVIDER_ROOT"),
 		"uuid": "hostdeath",
 		"kind": "fs",

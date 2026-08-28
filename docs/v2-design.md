@@ -55,13 +55,13 @@ No RPC is added or removed. Field-level deltas only:
   `status_detail`, transit qualification, the version rules) carries
   over with its meaning intact.
 
-### 2.2 ContentProvider (the plugin surface) — new proto
+### 2.2 Plugin (the plugin surface) — new proto
 
-`api/contentprovider/v1/provider.proto`. Everything is keyed by the
+`api/plugin/v1/plugin.proto`. Everything is keyed by the
 provider's own stable STRING KEYS; ids never appear. Sketch:
 
 ```proto
-service ContentProvider {
+service Plugin {
   rpc Info(InfoRequest) returns (InfoResponse);
   rpc List(ListRequest) returns (ListResponse);
   rpc ReadContent(ReadRequest) returns (stream Chunk);
@@ -121,8 +121,8 @@ Notes:
   today's local plugin). A provider cannot serve a shell in v2; noted
   as a possible later extension, not designed here.
 - Go authors implement the generated interface and
-  `guest.ServeProvider`; any other language speaks the service behind
-  the same go-plugin handshake. A `plugin.ProviderFactory` is the
+  `guest.Serve`; any other language speaks the service behind
+  the same go-plugin handshake. A `plugin.Factory` is the
   bundled-leaf shape (gridwell-all, mobile).
 
 ## 3. The databases
@@ -204,7 +204,7 @@ rule loudly.
    `stale` stamped; an answered GONE is never masked. Tees Watch/
    Subscribe to stay fresh. I12 becomes this component's unit tests.
 3. **The provider host** (evolves the loader). Same spawn/in-process
-   compose mechanics and identity injection; speaks ContentProvider;
+   compose mechanics and identity injection; speaks Plugin;
    caches `Info`.
 4. **The builtin transport** (absorbs the remote plugin). Per
    connection from yaml: lazy dial, self-heal, `status_detail` on the
@@ -259,7 +259,7 @@ The oracle comes first; every later stage is judged against it.
 1. **The parity harness** (§8.4) — built and green against TODAY's
    binaries before anything changes. This is the program's `make
    check`.
-2. **ContentProvider proto + provider host + layout engine + memory
+2. **Plugin proto + provider host + layout engine + memory
    DB**, landing fs first behind a config flag (`fs` runs as provider
    OR legacy plugin); parity crawl compares the two stacks serving the
    same home.

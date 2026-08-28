@@ -1,7 +1,7 @@
 package compose
 
 // The in-process gridwell.v1 shape: the node's NATIVE kinds (the local
-// store, the remote transport) and the providerhost adapters are served
+// store, the remote transport) and the pluginhost adapters are served
 // over a real gRPC loopback so the router holds one GridwellClient
 // whatever stands behind it. Enumeration of what ships is a leaf-binary
 // privilege (charter, 2026-08-15).
@@ -16,11 +16,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// Factory constructs an in-process gridwell.v1 server (a native kind)
+// NativeFactory constructs an in-process gridwell.v1 server (a native kind)
 // from its config map: db_file, uuid, kind, plus kind-specific keys —
 // the same vocabulary a provider binary reads from the spawn environment
 // (guest.Config).
-type Factory func(cfg map[string]string) (gridwellv1.GridwellServer, error)
+type NativeFactory func(cfg map[string]string) (gridwellv1.GridwellServer, error)
 
 // ServeInProcess starts a gRPC server in a goroutine on a loopback TCP
 // port and returns a client connected to it. closer stops the server and

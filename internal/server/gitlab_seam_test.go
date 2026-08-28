@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/api/compose"
-	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/layout"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/providerhost"
-	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
+	"github.com/josephburnett/gridwell/internal/pluginhost"
+	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
 	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
 
@@ -51,17 +51,17 @@ func gitlabTodo(id int64, created string) todos.Todo {
 
 // gitlabStackAt stands the provider up over an EXISTING memory DB path
 // (a restart reuses it) and returns the adapter client plus a closer.
-func gitlabStackAt(t *testing.T, memPath string, impl cpv1.ContentProviderServer) (gridwellv1.GridwellClient, func()) {
+func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (gridwellv1.GridwellClient, func()) {
 	t.Helper()
 	mem, err := layout.Open(memPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp, cpCloser, err := compose.ServeProviderInProcess(impl)
+	cp, cpCloser, err := compose.PluginInProcess(impl)
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, closer, err := plugin.ServeInProcess(providerhost.New(cp, mem))
+	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, mem))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	clock := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	now := func() time.Time { return clock }
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	client, closeStack := gitlabStackAt(t, memPath, gitlabprovider.New(gl, nil, gitlabprovider.Options{Now: now}))
+	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gl, nil, gitlabplugin.Options{Now: now}))
 
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
@@ -143,7 +143,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	// Todo 1 leaves GitLab entirely (target deleted): after the refresh
 	// window it reads as done — same id, where the user left it.
 	gl.pending = gl.pending[1:]
-	clock = clock.Add(gitlabprovider.DefaultRefresh + time.Second)
+	clock = clock.Add(gitlabplugin.DefaultRefresh + time.Second)
 	wk, err = client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: week.ChildGridId})
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +157,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	// GitLab no longer lists it. The NODE remembers: same tile, same id,
 	// same placement, last-seen label; its page says it is not in memory.
 	closeStack()
-	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabprovider.New(gl, nil, gitlabprovider.Options{Now: now}))
+	client2, closeStack2 := gitlabStackAt(t, memPath, gitlabplugin.New(gl, nil, gitlabplugin.Options{Now: now}))
 	t.Cleanup(closeStack2)
 	reg2 := plugin.NewRegistry()
 	reg2.Register("ug1", "gitlab", client2, nil)

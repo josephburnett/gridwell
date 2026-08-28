@@ -46,16 +46,16 @@
         "to": "gridwell"
       },
       {
-        "from": "../../gridwell-provider-fs",
-        "to": "gridwell-provider-fs"
+        "from": "../../gridwell-plugin-fs",
+        "to": "gridwell-plugin-fs"
       },
       {
-        "from": "../../gridwell-provider-proc",
-        "to": "gridwell-provider-proc"
+        "from": "../../gridwell-plugin-proc",
+        "to": "gridwell-plugin-proc"
       },
       {
-        "from": "../../gridwell-provider-gitlab",
-        "to": "gridwell-provider-gitlab"
+        "from": "../../gridwell-plugin-gitlab",
+        "to": "gridwell-plugin-gitlab"
       },
       {
         "from": "../../api/gridwell/v1/data.proto",

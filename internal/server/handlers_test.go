@@ -10,15 +10,15 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/compose"
-	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/layout"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/providerhost"
-	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
-	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
+	"github.com/josephburnett/gridwell/internal/pluginhost"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
+	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
 )
 
 // fsPluginUUID / procPluginUUID are the registry keys used by the
@@ -38,22 +38,22 @@ const (
 // attaches with the plugin's default config — lands there.
 // newProviderClient stands up the v2 provider stack the way the loader
 // does in production — the provider served in-process, fronted by the
-// node-side providerhost adapter over a fresh layout memory DB — and
+// node-side pluginhost adapter over a fresh layout memory DB — and
 // returns the adapter's client. The SHIPPED fs/proc stack: server tests
 // must exercise it, not a stand-in.
-func newProviderClient(t *testing.T, kind string, impl cpv1.ContentProviderServer) pb.GridwellClient {
+func newProviderClient(t *testing.T, kind string, impl pluginv1.PluginServer) pb.GridwellClient {
 	t.Helper()
 	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatalf("%s layout: %v", kind, err)
 	}
 	t.Cleanup(func() { _ = mem.Close() })
-	cp, cpCloser, err := compose.ServeProviderInProcess(impl)
+	cp, cpCloser, err := compose.PluginInProcess(impl)
 	if err != nil {
 		t.Fatalf("%s provider serve: %v", kind, err)
 	}
 	t.Cleanup(cpCloser)
-	client, closer, err := plugin.ServeInProcess(providerhost.New(cp, mem))
+	client, closer, err := plugin.ServeInProcess(pluginhost.New(cp, mem))
 	if err != nil {
 		t.Fatalf("%s adapter serve: %v", kind, err)
 	}
@@ -61,7 +61,7 @@ func newProviderClient(t *testing.T, kind string, impl cpv1.ContentProviderServe
 	return client
 }
 
-func registerProviderPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, impl cpv1.ContentProviderServer) {
+func registerProviderPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, impl pluginv1.PluginServer) {
 	t.Helper()
 	reg.Register(uuid, kind, newProviderClient(t, kind, impl), nil)
 }
@@ -78,10 +78,10 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	_, root = registerPrimaryLocaldb(t, reg, st)
 
 	fsRoot = t.TempDir()
-	registerProviderPlugin(t, reg, fsPluginUUID, "fs", fsprovider.New(fsRoot, nil))
+	registerProviderPlugin(t, reg, fsPluginUUID, "fs", fsplugin.New(fsRoot, nil))
 	reg.SetLabel(fsPluginUUID, "files")
 
-	registerProviderPlugin(t, reg, procPluginUUID, "proc", procprovider.New(t.TempDir(), 1, nil))
+	registerProviderPlugin(t, reg, procPluginUUID, "proc", procplugin.New(t.TempDir(), 1, nil))
 	reg.SetLabel(procPluginUUID, "processes")
 
 	srv := New(reg, Config{NodeID: "tnode"})

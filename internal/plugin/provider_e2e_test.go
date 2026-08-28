@@ -1,8 +1,8 @@
 package plugin_test
 
 // The v2 provider spawn path, end to end (docs/v2-design.md §4): a
-// separately-compiled gridwell-provider-fs binary spawned through
-// go-plugin, serving contentprovider.v1; the loader opens the NODE-owned
+// separately-compiled gridwell-plugin-fs binary spawned through
+// go-plugin, serving plugin.v1; the loader opens the NODE-owned
 // memory DB, wraps the adapter, and the registry client sees an ordinary
 // Gridwell plugin — placement persists in the node's file, and the
 // provider process holds no state at all.
@@ -25,9 +25,9 @@ import (
 // transport went unexercised.
 func buildProviderBinary(t *testing.T, kind string) string {
 	t.Helper()
-	out := filepath.Join(t.TempDir(), "gridwell-provider-"+kind)
+	out := filepath.Join(t.TempDir(), "gridwell-plugin-"+kind)
 	cmd := exec.Command("go", "build", "-o", out,
-		"github.com/josephburnett/gridwell/plugins/"+kind+"/cmd/gridwell-provider-"+kind)
+		"github.com/josephburnett/gridwell/plugins/"+kind+"/cmd/gridwell-plugin-"+kind)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build provider %s: %v\n%s", kind, err, b)
 	}
@@ -53,9 +53,9 @@ func TestSubprocessProvider_FS(t *testing.T) {
 		ID: "pfsuuid", Name: "files", Kind: "fs", Binary: bin,
 		Config: map[string]string{"root": root, "db_file": memPath},
 	}}}
-	reg, err := plugin.LoadAllWithProviders(cfg, nil, nil)
+	reg, err := plugin.LoadAll(cfg, nil, nil)
 	if err != nil {
-		t.Fatalf("LoadAllWithProviders: %v", err)
+		t.Fatalf("LoadAll: %v", err)
 	}
 	defer reg.Close()
 

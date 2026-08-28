@@ -13,7 +13,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/plugins/gitlab/gitlabapi"
-	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
+	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
 )
 
 // The real HTTP client against a PAGINATED fake GitLab (X-Next-Page, 100
@@ -77,7 +77,7 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	defer srv.Close()
 
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	client, closeStack := gitlabStackAt(t, memPath, gitlabprovider.New(gitlabapi.New(srv.URL, "tok", nil), nil, gitlabprovider.Options{Now: func() time.Time { return base }}))
+	client, closeStack := gitlabStackAt(t, memPath, gitlabplugin.New(gitlabapi.New(srv.URL, "tok", nil), nil, gitlabplugin.Options{Now: func() time.Time { return base }}))
 	defer closeStack()
 	ctx := context.Background()
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})

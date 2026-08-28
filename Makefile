@@ -1,9 +1,9 @@
 .PHONY: build bin bin-all plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-parity check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
-# Built plugin/provider binaries — the plugins target below and clean
+# Built plugin binaries — the plugins target below and clean
 # must agree; this is the one list.
-ALL_PLUGIN_BIN := ./gridwell-provider-fs ./gridwell-provider-proc ./gridwell-provider-gitlab ./gridwell-all
+ALL_PLUGIN_BIN := ./gridwell-plugin-fs ./gridwell-plugin-proc ./gridwell-plugin-gitlab ./gridwell-all
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 GOROOT := $(shell go env GOROOT)
@@ -21,15 +21,15 @@ export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 
 # `bin`, `plugins`, and `wasm` are phony so they always invoke `go build`. Go's
 # build cache makes this fast when nothing changed, but it guarantees
-# we never serve a stale binary or wasm artifact. Every provider is its own
+# we never serve a stale binary or wasm artifact. Every plugin is its own
 # separately-compiled go-plugin binary, laid out beside $(BIN) so the server
-# resolves them by `gridwell-provider-<kind>`.
+# resolves them by `gridwell-plugin-<kind>`.
 build: bin bin-all plugins wasm
 
 # CGO_ENABLED=0 makes the sidecar a fully static binary: modernc.org/sqlite is
 # pure Go, so nothing pulls cgo and the result has no libc-version coupling —
 # and since the web client (index.html, wasm, vendor) is EMBEDDED (web/embed.go),
-# the built gridwell + gridwell-provider-<kind> binaries are the whole distribution:
+# the built gridwell + gridwell-plugin-<kind> binaries are the whole distribution:
 # copy them anywhere and the browser client serves from the binary itself.
 # bin depends on wasm so the embed always carries the current client.
 bin: wasm
@@ -44,9 +44,9 @@ bin-all:
 # Phony so a source change always rebuilds (Go's build cache keeps it fast);
 # file-target rules would skip the build whenever the binary already existed.
 plugins:
-	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-provider-fs ./cmd/gridwell-provider-fs
-	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-provider-proc ./cmd/gridwell-provider-proc
-	cd plugins/gitlab && CGO_ENABLED=0 go build -o ../../gridwell-provider-gitlab ./cmd/gridwell-provider-gitlab
+	cd plugins/fs && CGO_ENABLED=0 go build -o ../../gridwell-plugin-fs ./cmd/gridwell-plugin-fs
+	cd plugins/proc && CGO_ENABLED=0 go build -o ../../gridwell-plugin-proc ./cmd/gridwell-plugin-proc
+	cd plugins/gitlab && CGO_ENABLED=0 go build -o ../../gridwell-plugin-gitlab ./cmd/gridwell-plugin-gitlab
 
 # The .gz sidecar rides along: the server serves it with
 # Content-Encoding: gzip when the client accepts it (staticOrSPA's
@@ -168,7 +168,7 @@ check-parity: build node-modules
 	cd $(DESKTOP) && GRIDWELL_SERVE_BIN=gridwell-all npm run test:e2e:web
 
 # check-federation is the SPAWN GATE (issue #58): the real binaries —
-# gridwell init/serve and the go-plugin provider subprocesses —
+# gridwell init/serve and the go-plugin subprocesses —
 # through a real ssh tunnel, one write/read crossing every hop. The in-process
 # seam tests cannot see go-plugin spawn: the pluginmeta sqlite-driver bug kept
 # every test green while every production spawn failed. Guarded by the

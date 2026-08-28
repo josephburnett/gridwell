@@ -1,9 +1,9 @@
 /gridwell
 /gridwell-plugin-local
 /gridwell-plugin-remote
-/gridwell-provider-fs
-/gridwell-provider-proc
-/gridwell-provider-gitlab
+/gridwell-plugin-fs
+/gridwell-plugin-proc
+/gridwell-plugin-gitlab
 /gridwell-all
 # pre-rename binary names, in case an old checkout left them behind
 /gridwell-plugin-localdb

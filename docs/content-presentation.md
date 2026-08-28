@@ -175,7 +175,7 @@ except this one is forever-data, not disposable), merges it into every
 
 ### D. Two services in the proto
 
-Formalize `ContentProvider` and `Gridwell` as separate services; nodes
+Formalize `Plugin` and `Gridwell` as separate services; nodes
 adapt providers via a built-in layout engine. This is C's end state
 with the split made wire-visible. Most invasive; nothing today forces
 it; only worth revisiting if B's subset hardens into a shape worth
@@ -227,7 +227,7 @@ program of work.
 - **Gridwell** — the node surface, unchanged for clients and
   federation: every node serves the full contract to browsers, the
   desktop, and other nodes.
-- **ContentProvider** — what plugins serve: list a context's entries
+- **Plugin** — what plugins serve: list a context's entries
   (stable keys, kinds, labels, child-context keys, declarations,
   optional placement *hints* used only at first sight), read/write/
   serve content by key, probe, watch, shells. No ids, no layout, no

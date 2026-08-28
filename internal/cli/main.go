@@ -12,7 +12,7 @@ import (
 // out-of-process); a bundled binary passes its compiled-in provider
 // loadout — and everything else — init, status, backup, the whole serve
 // wiring — is identical. Returns the process exit code.
-func Main(args []string, providers map[string]plugin.ProviderFactory) int {
+func Main(args []string, providers map[string]plugin.Factory) int {
 	if len(args) < 1 {
 		usage()
 		return 2

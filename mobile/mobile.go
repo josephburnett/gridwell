@@ -8,7 +8,7 @@
 // through the phase-1 cache when the tailnet is down.
 //
 // Mobile-shaped by decision (docs/offline-plan.md):
-//   - Providers load IN-PROCESS (node.Options.ProviderFactories): iOS forbids
+//   - Providers load IN-PROCESS (node.Options.Factories): iOS forbids
 //     fork/exec, so the go-plugin subprocess model cannot exist there.
 //     Same wire contract, same id discipline, no process boundary —
 //     promoted from the loader's test-only path to the supported mobile
@@ -35,13 +35,13 @@ import (
 	"strconv"
 	"sync"
 
-	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
-	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
-	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
-	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
+	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
+	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
 	"github.com/josephburnett/gridwell/web"
 )
 
@@ -88,10 +88,10 @@ func Start(home string) (string, error) {
 	cfg.Federation.Socket = ""
 	cfg.DisableShells = true
 	n, err := node.Start(node.Options{
-		ProviderFactories: inProcessProviderFactories(),
-		Home:              home,
-		Cfg:               cfg,
-		StaticFS:          web.FS,
+		Factories: inProcessFactories(),
+		Home:      home,
+		Cfg:       cfg,
+		StaticFS:  web.FS,
 	})
 	if err != nil {
 		return "", err
@@ -127,20 +127,20 @@ func Stop() {
 	origin = ""
 }
 
-// inProcessProviderFactories is the mobile provider registry: fs, proc
+// inProcessFactories is the mobile provider registry: fs, proc
 // and gitlab as v2 content providers, constructed exactly as their subprocess
-// mains (cmd/gridwell-provider-*) would, minus the process boundary.
-func inProcessProviderFactories() map[string]plugin.ProviderFactory {
-	return map[string]plugin.ProviderFactory{
-		"fs": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
-			return fsprovider.New(cfg["root"], nil), nil
+// mains (cmd/gridwell-plugin-*) would, minus the process boundary.
+func inProcessFactories() map[string]plugin.Factory {
+	return map[string]plugin.Factory{
+		"fs": func(cfg map[string]string) (pluginv1.PluginServer, error) {
+			return fsplugin.New(cfg["root"], nil), nil
 		},
-		"proc": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
+		"proc": func(cfg map[string]string) (pluginv1.PluginServer, error) {
 			pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
-			return procprovider.New("", pid, nil), nil
+			return procplugin.New("", pid, nil), nil
 		},
-		"gitlab": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
-			return gitlabprovider.FromConfig(cfg), nil
+		"gitlab": func(cfg map[string]string) (pluginv1.PluginServer, error) {
+			return gitlabplugin.FromConfig(cfg), nil
 		},
 	}
 }

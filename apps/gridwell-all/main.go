@@ -13,32 +13,32 @@ import (
 	"os"
 	"strconv"
 
-	cpv1 "github.com/josephburnett/gridwell/api/gen/contentprovider/v1"
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/internal/cli"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	fsprovider "github.com/josephburnett/gridwell/plugins/fs/provider"
-	gitlabprovider "github.com/josephburnett/gridwell/plugins/gitlab/provider"
-	procprovider "github.com/josephburnett/gridwell/plugins/proc/provider"
+	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
+	gitlabplugin "github.com/josephburnett/gridwell/plugins/gitlab/plugin"
+	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
 )
 
-func main() { os.Exit(cli.Main(os.Args[1:], providerFactories())) }
+func main() { os.Exit(cli.Main(os.Args[1:], pluginFactories())) }
 
-// providerFactories is this binary's loadout: each kind constructed
-// exactly as its subprocess main (cmd/gridwell-provider-*) would, minus
+// pluginFactories is this binary's loadout: each kind constructed
+// exactly as its subprocess main (cmd/gridwell-plugin-*) would, minus
 // the process boundary. The native store (kind local) and the builtin
 // transport (kind remote) are NODE code since the v2 fold — the serve
 // wiring supplies them; only real providers are enumerated here.
-func providerFactories() map[string]plugin.ProviderFactory {
-	return map[string]plugin.ProviderFactory{
-		"fs": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
-			return fsprovider.New(cfg["root"], nil), nil
+func pluginFactories() map[string]plugin.Factory {
+	return map[string]plugin.Factory{
+		"fs": func(cfg map[string]string) (pluginv1.PluginServer, error) {
+			return fsplugin.New(cfg["root"], nil), nil
 		},
-		"proc": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
+		"proc": func(cfg map[string]string) (pluginv1.PluginServer, error) {
 			pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
-			return procprovider.New("", pid, nil), nil
+			return procplugin.New("", pid, nil), nil
 		},
-		"gitlab": func(cfg map[string]string) (cpv1.ContentProviderServer, error) {
-			return gitlabprovider.FromConfig(cfg), nil
+		"gitlab": func(cfg map[string]string) (pluginv1.PluginServer, error) {
+			return gitlabplugin.FromConfig(cfg), nil
 		},
 	}
 }
