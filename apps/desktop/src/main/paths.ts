@@ -2,14 +2,15 @@ import { app } from 'electron';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-// Resolving the Go sidecar binary, the static (wasm) dir, and the DB path.
+// Resolving the Go sidecar binary, the static (wasm) dir override, and the
+// proto definition.
 //
 // Dev layout (running `electron .` from apps/desktop):
 //   <repo>/apps/desktop/dist/main/index.js   ← app path is apps/desktop
 //   <repo>/gridwell                          ← sidecar binary
 //   <repo>/web                               ← static assets
 //
-// Packaged layout (Phase 5): the sidecar + web are bundled as resources
+// Packaged layout: the sidecar + web are bundled as resources
 // under process.resourcesPath. We check that first, then fall back to the
 // dev tree, then to env overrides.
 

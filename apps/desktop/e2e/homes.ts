@@ -32,7 +32,8 @@ export function pluginUUIDs(home: string): string[] {
 }
 
 // killTmuxServers kills the gridwell-private tmux server for each plugin UUID.
-// Each localdb plugin owns a tmux server on socket "gridwell-<uuid>"; if a
+// Each `home` instance owns a tmux server on socket "gridwell-<id>"
+// (internal/node/nativelocal.go); if a
 // test crashes before deleting shell tiles those sessions linger and can
 // interfere with the next test. Best-effort: no-op if not running.
 export function killTmuxServers(uuids: string[]): void {

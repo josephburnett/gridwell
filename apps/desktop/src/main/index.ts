@@ -221,8 +221,8 @@ if (process.env.GRIDWELL_E2E !== '1' && !app.requestSingleInstanceLock()) {
 }
 
 // Keep the process alive while the sidecar runs even if all windows close;
-// on macOS the dock can reopen a window. (Window recreation is Phase 5
-// polish; for now quitting is fine on non-darwin.)
+// on macOS the dock can reopen a window. (Recreating the window from the
+// dock is not implemented; quitting is fine on non-darwin.)
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

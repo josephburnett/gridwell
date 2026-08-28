@@ -13,7 +13,7 @@ const DESKTOP_DIR = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(DESKTOP_DIR, '..', '..');
 
 // PluginSpec is one extra plugin to register via `gridwell init` beyond the
-// default localdb (see seedHome's extra param) — e.g. an fs plugin with no
+// default home (see seedHome's extra param) — e.g. an fs plugin with no
 // config.root, the rootless-launcher-tile case (issue #47).
 export interface PluginSpec {
   kind: string;
@@ -21,10 +21,10 @@ export interface PluginSpec {
   config?: Record<string, string>;
 }
 
-// seedHome creates a throwaway Gridwell home and registers one localdb plugin in
+// seedHome creates a throwaway Gridwell home and registers one `home` instance in
 // it via `gridwell init` — the same coordinated setup a real user runs. server.yaml
 // is mandatory (no fallback), so every launch points GRIDWELL_HOME at a home seeded
-// this way. `extra` registers additional plugins (in order, after the localdb) the
+// this way. `extra` registers additional plugins (in order, after the home) the
 // same way, for tests that need a second plugin present at boot. Returns the home
 // dir; callers remove it on teardown.
 export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
@@ -104,7 +104,7 @@ type Fixtures = {
   gw: GridwellDriver;
   // extraPlugins is a test option (set via test.use({ extraPlugins: [...] })
   // in a spec file, e.g. plugin-health.spec.ts): plugins seedHome registers
-  // beyond the default localdb, present from the very first launch.
+  // beyond the default home, present from the very first launch.
   extraPlugins: PluginSpec[];
   extraYaml: string;
 };
@@ -112,7 +112,7 @@ type Fixtures = {
 // The e2e fixture launches the SAME `electron .` entry that `make launch` uses
 // (apps/desktop/src/main/index.ts spawns the Go sidecar itself), so the whole
 // stack — renderer → wasm → Connect-RPC → server → SQLite — is exercised. Each
-// test gets a fresh temp home seeded with one localdb plugin; GRIDWELL_E2E=1
+// test gets a fresh temp home seeded with one `home` instance; GRIDWELL_E2E=1
 // turns on the renderer's read-only introspection hook.
 //
 // Isolation guarantee: GRIDWELL_HOME is a per-test mkdtemp. Electron's userData

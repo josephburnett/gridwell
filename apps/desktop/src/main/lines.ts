@@ -31,7 +31,7 @@ export interface ServingAddr {
 // banner without federation= is not a serve banner: the shell relay would
 // have nothing to dial, so it is null rather than a half-parsed address.
 // The server — not this spawner — owns the "where am I listening" fact,
-// because server.yaml `bind:` may override the sidecar's --bind-default
+// because server.yaml `web.bind` may override the sidecar's --bind-default
 // (one stable origin shared with a phone over e.g. Tailscale).
 // "already serving on" is the same banner re-emitted by a serve (or
 // `gridwell status`) that found the home's lock held: the address/auth are

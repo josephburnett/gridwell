@@ -34,7 +34,7 @@ type Fixtures = {
   window: Page;
   gw: GridwellDriver;
   // extraPlugins mirrors the Electron fixture's option: plugins seedHome
-  // registers beyond the default localdb (e.g. an fs plugin with a root).
+  // registers beyond the default home (e.g. an fs plugin with a root).
   extraPlugins: PluginSpec[];
 };
 

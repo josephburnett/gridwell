@@ -1,6 +1,6 @@
 // The gRPC glue for the shell transport: dials the sidecar's node export
-// (raw gRPC on the same h2c port every other caller uses) and opens the
-// bidirectional OpenShell stream. The proto definition is loaded at runtime
+// (the federation unix socket the serve banner announces — a 0600 socket,
+// never TCP, 2026-08-26) and opens the bidirectional OpenShell stream. The proto definition is loaded at runtime
 // from the repo's single source (api/gridwell/v1/data.proto — see
 // dataProtoPath in paths.ts); nothing here re-declares a message shape, so
 // the wire cannot drift from the one .proto.

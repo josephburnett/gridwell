@@ -42,7 +42,7 @@ export interface PaletteItem {
   index: number;
   // Plugin swatches (top row): click descends into the plugin, drag drops an
   // exit-well link. isPlugin distinguishes them from the primitive swatches;
-  // for a plugin, kind is the plugin kind (localdb/fs/proc/ssh), label/uuid
+  // for a plugin, kind is the plugin kind (home, fs, proc, gitlab, …), label/uuid
   // identify it, and rootGridID/status mirror the pluginhealth surface.
   isPlugin: boolean;
   kind: string;

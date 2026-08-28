@@ -40,7 +40,7 @@ test('resolves on the serving banner with the ANNOUNCED address, not the request
   child.stderr.write('gridwell: serving on 127.0');
   child.stderr.write('.0.1:9999 (static=/x plugins=1 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
-  assert.equal(sc.port, 9999, 'port comes from the banner (server.yaml bind: may override the request)');
+  assert.equal(sc.port, 9999, 'port comes from the banner (server.yaml web.bind may override the request)');
   assert.equal(sc.origin, 'http://127.0.0.1:9999');
   sc.stop();
   assert.ok(child.killed, 'stop() kills the child');

@@ -1,4 +1,4 @@
-// L3 integration harness for Phase 2. Boots a real Electron main process,
+// L3 integration harness for the registry. Boots a real Electron main process,
 // creates a window + WebviewRegistry, hosts a real WebContentsView on a
 // data: URL, then asserts that (a) capturePage yields non-empty JPEG bytes
 // and (b) a nav event fires. Run with:

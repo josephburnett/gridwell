@@ -1,4 +1,4 @@
-// L3 integration harness for the Phase 3 IPC contract. Unlike capture-
+// L3 integration harness for the IPC contract. Unlike capture-
 // harness (which calls the registry directly), this drives the *full* path
 // the wasm renderer uses: a real renderer page calls window.gridwell.* from
 // the preload bridge, which invokes ipcMain handlers, which drive the
