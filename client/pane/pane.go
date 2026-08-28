@@ -455,3 +455,18 @@ func (p *Pane) RelocateTo(dest *Pane, tileID string) {
 	p.TextMode = ""
 	p.TextScrollX, p.TextScrollY = 0, 0
 }
+
+// OtherPaneShows reports whether any leaf OTHER than paneID is descended
+// into tileID. It is the one guard on delete-on-ascent for an ephemeral
+// tile: splitting an ephemeral visit clones the descent, and the clone's
+// ascent (or its promotion onto a grid) must not delete the row the source
+// pane still shows (issue #111).
+func (t *Tree) OtherPaneShows(paneID, tileID string) bool {
+	found := false
+	t.Walk(func(p *Pane) {
+		if p.ID != paneID && p.TextFocus == tileID {
+			found = true
+		}
+	})
+	return found
+}

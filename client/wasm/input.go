@@ -1870,7 +1870,7 @@ func (a *App) startTextAscent(p *pane.Pane) {
 	// (issue #85): no freeze (pointless for a tile about to die, and a url
 	// freeze would bump the version out from under the delete), then the
 	// row goes away (for a shell, the plugin kills its tmux session too).
-	ephemeral := a.isEphemeralTile(p, &file) && !a.otherPaneShowsTile(p.ID, file.ID)
+	ephemeral := a.leavingEphemeral(p, &file)
 
 	// If we're ascending out of web content (a url tile or a serves_page
 	// tile), close the live view (if any).
@@ -1943,7 +1943,7 @@ func (a *App) exitTextInstant(p *pane.Pane, restoreStash bool) {
 		// The buffer/framing save the animated path performs — resolvable
 		// rows get it here too, so an instant pop never loses an edit.
 		a.saveTextBeforeAscent(p, t)
-		if a.isEphemeralTile(p, &t) && !a.otherPaneShowsTile(p.ID, t.ID) {
+		if a.leavingEphemeral(p, &t) {
 			ephemeral = true
 			defer a.deleteEphemeralTile(t.ID, t.Version)
 		}
@@ -2522,19 +2522,13 @@ func (a *App) isEphemeralTile(p *pane.Pane, t *rpc.Tile) bool {
 	return s != "" && t.GridID == s
 }
 
-// otherPaneShowsTile reports whether any pane OTHER than paneID is currently
-// descended into tileID. Delete-on-ascent must not fire while another pane
-// still shows the ephemeral visit — splitting an ephemeral descent clones the
-// view, and the clone's file-level ascent would otherwise delete the tile out
-// from under the source pane (found while building issue #111).
-func (a *App) otherPaneShowsTile(paneID, tileID string) bool {
-	found := false
-	a.tree.Walk(func(p *pane.Pane) {
-		if p.ID != paneID && p.TextFocus == tileID {
-			found = true
-		}
-	})
-	return found
+// leavingEphemeral is THE decision that a pane leaving tile t deletes it:
+// the tile is ephemeral AND no other pane still shows it (pane.OtherPaneShows
+// — a split clones the visit; issue #111). Every ascent-shaped path (the
+// animated ascent, the instant pop, promotion onto a grid) asks here, so no
+// path can forget the guard.
+func (a *App) leavingEphemeral(p *pane.Pane, t *rpc.Tile) bool {
+	return a.isEphemeralTile(p, t) && !a.tree.OtherPaneShows(p.ID, t.ID)
 }
 
 // deleteEphemeralTile removes an ascended-from ephemeral tile — gray means
@@ -2617,7 +2611,7 @@ func (a *App) openLinkBelow(paneID, url string) {
 	// The clone inherits the source's content descent (TextFocus), which a
 	// live view can't duplicate — same rule as commitSplit: ascend the file
 	// level so the visit descends from the containing grid. (The ephemeral
-	// delete-on-ascent is guarded by otherPaneShowsTile, so this ascent
+	// delete-on-ascent is guarded by leavingEphemeral, so this ascent
 	// never deletes the tile the SOURCE pane still shows.)
 	if newP.TextFocus != "" {
 		a.startTextAscent(newP)
@@ -2701,7 +2695,8 @@ func (a *App) promoteEphemeralURL(originPaneID string, destPane *pane.Pane, cell
 // finishPromote moves the live visit from the ephemeral row onto the
 // persistent tile just created: the view's final frame, title, and trail
 // freeze onto the NEW tile (never the row about to die); the ephemeral
-// row is deleted (gray means gone); the pane relocates to the new tile's
+// row is deleted (gray means gone) unless a split sibling still shows
+// it; the pane relocates to the new tile's
 // grid (pane.RelocateTo — the nav chain and the next ascent read the new
 // place, its ascent viewport being the destination pane's); and the page
 // goes live again on the new tile.
@@ -2711,8 +2706,13 @@ func (a *App) finishPromote(originPaneID, destPaneID, oldID string, oldVersion i
 	if !pane.StillDescended(op, oldID) || dp == nil {
 		return // moved on mid-flight: the tile stays where it was dropped
 	}
-	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID, version: created.Version})
-	a.deleteEphemeralTile(oldID, oldVersion)
+	a.closeURLStreamTo(op.ID, &freezeTarget{tileID: created.ID, gridID: created.GridID, version: created.Version}, true)
+	// The row dies only if no sibling pane still shows the visit (a split
+	// clone keeps it, and deletes it on ITS ascent) — the same guard every
+	// ascent applies, through the same door.
+	if old := a.cachedTileByID(oldID); old != nil && a.leavingEphemeral(op, old) {
+		a.deleteEphemeralTile(oldID, oldVersion)
+	}
 	op.RelocateTo(dp, created.ID)
 	// The ascent viewport is now the destination's: pop the visit's saved
 	// origin and push where the tile lives.

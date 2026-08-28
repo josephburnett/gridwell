@@ -19,7 +19,6 @@ import (
 // reached through a.urlViewFor(paneID) (nil = no live URL descent).
 type urlView struct {
 	tileID   string
-	objectID string
 	paneID   string
 	bounds   viewBounds
 	// anchor + path are the plugin-root grid id and the descent path to the
@@ -211,7 +210,7 @@ func (a *App) placeURLView(paneID string, t rpc.Tile, version int64) {
 	r := a.barAwarePaneRect(p)
 	b := contentViewBounds(r)
 	page := t.Kind != rpc.KindURL && t.ServesPage
-	a.local(p.ID).urlView = &urlView{tileID: t.ID, objectID: t.ObjectID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version, page: page}
+	a.local(p.ID).urlView = &urlView{tileID: t.ID, paneID: p.ID, bounds: b, anchor: p.Anchor, path: slices.Clone(p.Path), version: version, page: page}
 	// durable = the DESCENDED row survives ascent: false for an ephemeral
 	// visit, which gets no Freeze Page in the context menu (issue #240).
 	// A page view is never durable in this sense either: it carries no
@@ -248,12 +247,8 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 }
 
 // closeURLStreamTo is closeURLStream with the freeze redirected to target
-// (non-nil implies freeze).
-func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freezes ...bool) {
-	freeze := target != nil
-	if len(freezes) > 0 {
-		freeze = freezes[0]
-	}
+// (nil = the pane's own descended tile).
+func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool) {
 	pl, ok := a.localIf(paneID)
 	if !ok || pl.urlView == nil {
 		return

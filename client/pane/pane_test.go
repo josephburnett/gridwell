@@ -427,3 +427,19 @@ func TestRelocateToFollowsTheDestination(t *testing.T) {
 		t.Fatal("path must be a copy, not shared with the destination pane")
 	}
 }
+
+func TestOtherPaneShows(t *testing.T) {
+	tr, a, b := twoPaneTree(t)
+	tr.FindPane(a).TextFocus = "tile-1"
+	if tr.OtherPaneShows(a, "tile-1") {
+		t.Fatal("the pane's own descent is not another pane's")
+	}
+	tr.FindPane(b).TextFocus = "tile-1" // a split clones the descent
+	if !tr.OtherPaneShows(a, "tile-1") || !tr.OtherPaneShows(b, "tile-1") {
+		t.Fatal("each pane must see the other's clone of the same visit")
+	}
+	tr.FindPane(b).TextFocus = "tile-2"
+	if tr.OtherPaneShows(a, "tile-1") {
+		t.Fatal("a sibling on a different tile does not hold tile-1")
+	}
+}
