@@ -91,7 +91,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
-	srv := New(reg, Config{NodeID: "node1", Password: password})
+	srv := mustNew(t, reg, Config{NodeID: "node1", Password: password})
 	hs = httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 
@@ -175,17 +175,6 @@ func TestContentDoorTokenGate(t *testing.T) {
 	}
 }
 
-// TestContentDoorNoPassword: with no password the door still answers — under
-// the empty-password token, the same uniform grammar (the client always
-// learns the token from the handshake, so there is no special case).
-func TestContentDoorNoPassword(t *testing.T) {
-	hs, tileID, img := contentDoorServer(t, "")
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("")+"/"+tileID+"/", "")
-	if res.StatusCode != http.StatusOK || body != string(img) {
-		t.Fatalf("no-password GET = %d, %d bytes; want 200 with the image", res.StatusCode, len(body))
-	}
-}
-
 // TestContentDoorResolvesLeafLink: a localdb LINK to an fs image serves the
 // TARGET's bytes — the door inherits contentRoute, the one resolution
 // point, like every other content read.
@@ -209,9 +198,8 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	reg := plugin.NewRegistry()
 	_, rootA := registerPrimaryLocaldb(t, reg, st)
 	reg.Register("uf1", "fs", fsClient, nil)
-	srv := New(reg, Config{NodeID: "node1"})
-	hs := httptest.NewServer(srv.WebHandler())
-	t.Cleanup(hs.Close)
+	srv := mustNew(t, reg, Config{NodeID: "node1"})
+	hs := serveWeb(t, srv)
 
 	ctx := context.Background()
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
@@ -237,7 +225,7 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 		t.Fatalf("create link: %v", err)
 	}
 
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("")+"/"+link.ID+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+link.ID+"/", "")
 	if res.StatusCode != http.StatusOK || body != string(img) {
 		t.Fatalf("link GET = %d, %d bytes; want the target's %d image bytes", res.StatusCode, len(body), len(img))
 	}
@@ -266,9 +254,8 @@ func TestContentDoorTransit(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("ssh1", "remote", proxied, nil)
 	reg.SetTransit("ssh1", true) // the declaration the loader reads from Info in production
-	srv := New(reg, Config{NodeID: "node1"})
-	hs := httptest.NewServer(srv.WebHandler())
-	t.Cleanup(hs.Close)
+	srv := mustNew(t, reg, Config{NodeID: "node1"})
+	hs := serveWeb(t, srv)
 
 	ctx := context.Background()
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
@@ -285,7 +272,7 @@ func TestContentDoorTransit(t *testing.T) {
 			tid = tl.Id
 		}
 	}
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("")+"/ssh1/"+tid+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/ssh1/"+tid+"/", "")
 	if res.StatusCode != http.StatusOK || body != string(img) {
 		t.Fatalf("transit GET = %d, %d bytes; want the remote image's %d", res.StatusCode, len(body), len(img))
 	}
@@ -301,9 +288,8 @@ func TestContentDoorUnimplemented(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 	reg := plugin.NewRegistry()
 	_, root := registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, Config{NodeID: "node1"})
-	hs := httptest.NewServer(srv.WebHandler())
-	t.Cleanup(hs.Close)
+	srv := mustNew(t, reg, Config{NodeID: "node1"})
+	hs := serveWeb(t, srv)
 
 	cl := rpc.NewClient(hs.Client(), hs.URL)
 	txt, err := cl.CreateText(context.Background(), &rpc.CreateTextRequest{
@@ -312,7 +298,7 @@ func TestContentDoorUnimplemented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("")+"/"+txt.ID+"/", "")
+	res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+txt.ID+"/", "")
 	if res.StatusCode != http.StatusNotFound {
 		t.Errorf("localdb page GET = %d, want 404 (ServeContent unimplemented)", res.StatusCode)
 	}
@@ -325,7 +311,8 @@ func TestContentDoorUnimplemented(t *testing.T) {
 // unload flush uses (application/json unary, no Connect header), so the
 // last-pan-survives-quit path rests on a tested seam.
 func TestHandshakeCarriesTokensAndNodeView(t *testing.T) {
-	hs, _, _ := contentDoorServer(t, "")
+	hs, _, _ := contentDoorServer(t, testPassword)
+	withCookie(t, hs, testPassword) // ListPlugins and the beacon ride the gated mux
 	cl := rpc.NewClient(hs.Client(), hs.URL)
 	ctx := context.Background()
 
@@ -333,10 +320,10 @@ func TestHandshakeCarriesTokensAndNodeView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pl.ContentToken != ContentToken("") {
+	if pl.ContentToken != ContentToken(testPassword) {
 		t.Errorf("handshake content token = %q, want ContentToken(password)", pl.ContentToken)
 	}
-	if pl.ContentToken == AuthToken("") {
+	if pl.ContentToken == AuthToken(testPassword) {
 		t.Errorf("content token must never equal the auth token (domain separation)")
 	}
 	if pl.NodeRootViewZoom != 0 {

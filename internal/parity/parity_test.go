@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/parity"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
 // node is one in-process gridwell: a localdb plugin behind a real
@@ -49,7 +50,7 @@ func newNode(t *testing.T) *node {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register(uuid, "home", client, nil)
-	srv := server.New(reg, server.Config{})
+	srv := servertest.New(t, reg, server.Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

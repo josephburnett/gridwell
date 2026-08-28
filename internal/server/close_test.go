@@ -13,7 +13,7 @@ import (
 // called by anything — every mobile Start/Stop cycle leaked the
 // listener, its grpc server, and the client conn.
 func TestCloseTearsDownTheNodeGridListener(t *testing.T) {
-	srv := New(plugin.NewRegistry(), Config{NodeID: "tnode"})
+	srv := mustNew(t, plugin.NewRegistry(), Config{NodeID: "tnode"})
 	if _, err := srv.nodeClient.Info(context.Background(), &pb.InfoRequest{}); err != nil {
 		t.Fatalf("node grid unreachable before Close: %v", err)
 	}
@@ -25,5 +25,5 @@ func TestCloseTearsDownTheNodeGridListener(t *testing.T) {
 
 // A server without a node grid closes as a no-op.
 func TestCloseWithoutNodeGrid(t *testing.T) {
-	New(plugin.NewRegistry(), Config{}).Close()
+	mustNew(t, plugin.NewRegistry(), Config{}).Close()
 }

@@ -82,8 +82,9 @@ func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault st
 // address leads, printed only once both listeners are up; auth= is the
 // derived auth token (server.AuthToken — the cookie value; a password is
 // always configured), so the sidecar can authenticate its own window
-// without ever prompting — local stdout is same-trust as server.yaml,
-// which holds the password itself; federation= is LAST and runs to the
+// without ever prompting — local stdout is same-trust as the
+// <home>/web-password file the password is read from; federation= is
+// LAST and runs to the
 // closing paren: the node door's unix socket path (what the shell relay
 // dials), which may contain spaces.
 func servingBanner(addr, fedSocket, staticDir string, plugins int, password string) string {
@@ -190,8 +191,8 @@ func RunServeWith(args []string, providers map[string]plugin.Factory) int {
 		return 1
 	}
 
-	// DELETE AFTER 2026-09-16 with kindmigrate.go: the one-shot kind
-	// rename (localdb→local, ssh→remote).
+	// DELETE AFTER 2026-09-27 with kindmigrate.go: the one-shot kind
+	// rename (localdb/local→home, ssh→remote; node.RenamedKinds).
 	if err := migrateRenamedKinds(home, cfgPath); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1

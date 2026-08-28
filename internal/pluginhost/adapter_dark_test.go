@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
@@ -76,7 +77,7 @@ func TestProviderProcessDarkServesRememberedListing(t *testing.T) {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
-	srv := server.New(reg, server.Config{})
+	srv := servertest.New(t, reg, server.Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

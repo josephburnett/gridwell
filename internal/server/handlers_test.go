@@ -84,7 +84,7 @@ func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string
 	registerProviderPlugin(t, reg, procPluginUUID, "proc", procplugin.New(t.TempDir(), 1, nil))
 	reg.SetLabel(procPluginUUID, "processes")
 
-	srv := New(reg, Config{NodeID: "tnode"})
+	srv := mustNew(t, reg, Config{NodeID: "tnode"})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

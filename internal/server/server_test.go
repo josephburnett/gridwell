@@ -56,7 +56,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	reg := plugin.NewRegistry()
 	_, root := registerPrimaryLocaldb(t, reg, st)
 
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -159,7 +159,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, Config{StaticFS: os.DirFS(dir)})
+	srv := mustNew(t, reg, Config{StaticFS: os.DirFS(dir)})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 
@@ -173,7 +173,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		{"/wasm_exec.js", assetBody},
 	}
 	for _, tc := range tests {
-		resp, err := http.Get(hs.URL + tc.path)
+		resp, err := hs.Client().Get(hs.URL + tc.path)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.path, err)
 		}
@@ -189,7 +189,7 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 
 	// /rpc/ paths — the pre-Connect RPC namespace, no longer registered at
 	// all — must 404 rather than fall through to index.html.
-	resp, err := http.Get(hs.URL + "/rpc/Bogus")
+	resp, err := hs.Client().Get(hs.URL + "/rpc/Bogus")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestSubscribeFansInProxiedPlugin(t *testing.T) {
 	reg.Register(uuid, "remote", proxied, nil)
 	reg.SetTransit(uuid, true) // the declaration the loader reads from Info in production
 
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

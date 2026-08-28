@@ -24,6 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 	procplugin "github.com/josephburnett/gridwell/plugins/proc/plugin"
 )
 
@@ -83,7 +84,7 @@ func providerProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register(procUUID, "proc", client, nil)
-	srv := server.New(reg, server.Config{})
+	srv := servertest.New(t, reg, server.Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

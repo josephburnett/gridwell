@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/remote/dial/dialtest"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
 // This is the ssh plugin's REAL transport seam, in-process: a genuine
@@ -52,7 +53,7 @@ func remoteNode(t *testing.T) (string, gridwellv1.GridwellClient) {
 		reg.SetLabel(uuid, name)
 	}
 	direct, _ := reg.Get("ur1")
-	srv := server.New(reg, server.Config{NodeID: "rnode"})
+	srv := servertest.New(t, reg, server.Config{NodeID: "rnode"})
 	// The federation door is a unix socket (2026-08-26); the test sshd
 	// forwards direct-streamlocal to it, exactly like a real sshd.
 	sock := filepath.Join(t.TempDir(), "federation.sock")

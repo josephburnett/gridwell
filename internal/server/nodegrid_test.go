@@ -56,7 +56,7 @@ func nodeGridServerAt(t *testing.T, statePath string) (cl *rpc.Client, nodeRoot,
 	reg.Register(uuidB, "home", clientB, nil)
 	reg.SetLabel(uuidB, "work")
 
-	srv := New(reg, Config{NodeID: "node1", NodeStatePath: statePath})
+	srv := mustNew(t, reg, Config{NodeID: "node1", NodeStatePath: statePath})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), "node1/0", uuidA, rootA
@@ -204,7 +204,7 @@ func TestNodeGridViewportSurvivesRestart(t *testing.T) {
 		reg := plugin.NewRegistry()
 		uuidA, _ := registerPrimaryLocaldb(t, reg, st)
 		reg.SetLabel(uuidA, "personal")
-		srv := New(reg, Config{NodeID: "node1", NodeStatePath: statePath})
+		srv := mustNew(t, reg, Config{NodeID: "node1", NodeStatePath: statePath})
 		hs := httptest.NewServer(srv.Handler())
 		cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 		return cl, func() { hs.Close(); _ = st.Close() }

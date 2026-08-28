@@ -56,7 +56,7 @@ func listFor(t *testing.T, impl pb.GridwellServer) []rpc.PluginInfo {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register("fakeuux", "fakeparam", client, nil)
-	hs := httptest.NewServer(New(reg, Config{}).Handler())
+	hs := httptest.NewServer(mustNew(t, reg, Config{}).Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	pl, err := cl.ListPlugins(context.Background())

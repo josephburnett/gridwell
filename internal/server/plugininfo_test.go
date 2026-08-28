@@ -233,7 +233,7 @@ func TestListPluginsCachesInfo(t *testing.T) {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register("u-1", "test", client, nil)
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	h := newConnectHandler(srv)
 
 	for i := 0; i < 3; i++ {
@@ -257,7 +257,7 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register("u-1", "test", client, nil)
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	h := newConnectHandler(srv)
 
 	r1, err := h.ListPlugins(context.Background(), connect.NewRequest(&pb.ListPluginsRequest{}))
@@ -304,7 +304,7 @@ func TestListPluginsSurfacesInfoErrorOverTheWire(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("u-broken", "fs", client, nil)
 	reg.SetLabel("u-broken", "Broken")
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -355,7 +355,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
 	remoteReg.Register("rp1", "home", remoteClient, nil)
-	remoteSrv := New(remoteReg, Config{NodeID: "rnode"})
+	remoteSrv := mustNew(t, remoteReg, Config{NodeID: "rnode"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
 	remoteHTTP.Config.Protocols = NodeProtocols()
@@ -365,8 +365,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 
 	// LEAF stamping: the remote's own front door carries the schema on the
 	// plugin's grid.
-	remoteWeb := httptest.NewServer(remoteSrv.WebHandler()) // the browser door: a second listener
-	t.Cleanup(remoteWeb.Close)
+	remoteWeb := serveWeb(t, remoteSrv) // the browser door: a second listener
 	remoteCl := rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
 	rootBare, err := remoteStore.RootGridID(ctx)
 	if err != nil {
@@ -396,7 +395,7 @@ func TestCreateSchemasStampAndTransit(t *testing.T) {
 	localReg := plugin.NewRegistry()
 	localReg.Register("sshm", "remote", mountClient, nil)
 	localReg.SetTransit("sshm", true) // the declared transit (loader reads it from Info in production)
-	localSrv := New(localReg, Config{NodeID: "lnode"})
+	localSrv := mustNew(t, localReg, Config{NodeID: "lnode"})
 	localHTTP := httptest.NewServer(localSrv.Handler())
 	t.Cleanup(localHTTP.Close)
 	localCl := rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())

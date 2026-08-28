@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
 // nodeServer stands up a full Server (node id "node1", one in-process localdb
@@ -51,7 +52,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (gridwellv1.GridwellClient, 
 	reg := plugin.NewRegistry()
 	reg.Register("ur1", "home", direct, nil)
 	reg.SetLabel("ur1", "personal")
-	srv := server.New(reg, cfg)
+	srv := servertest.New(t, reg, cfg)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

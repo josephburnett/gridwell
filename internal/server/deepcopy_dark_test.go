@@ -128,7 +128,7 @@ func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA,
 	}
 	rootB = uuidB + "/" + bareRootB
 
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), dark, uuidA, rootA, uuidB, rootB

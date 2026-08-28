@@ -63,7 +63,7 @@ func twoPluginServer(t *testing.T) (cl *rpc.Client, uuidA, rootA, uuidB, rootB s
 	}
 	rootB = uuidB + "/" + bareRootB
 
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), uuidA, rootA, uuidB, rootB
@@ -486,7 +486,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	const fsUUID = "fs-src-uuid"
 	reg.Register(fsUUID, "fs", fsClient, nil)
 
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

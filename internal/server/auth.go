@@ -56,11 +56,9 @@ func AuthToken(password string) string {
 }
 
 // authWrap gates next (the browser mux) behind the configured password.
-// With no password configured it is a no-op — today's open behavior.
+// There is no open mode: New refuses an empty password, so this is the
+// only way onto the mux.
 func (s *Server) authWrap(next http.Handler) http.Handler {
-	if s.cfg.Password == "" {
-		return next
-	}
 	token := AuthToken(s.cfg.Password)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == authLoginPath {
@@ -116,7 +114,7 @@ func setAuthCookie(w http.ResponseWriter, token string) {
 // is the TOKEN LOGIN: the shells that own a webview's cookie jar but
 // cannot set a cookie from outside it (the mobile bind) load this URL
 // once and land home authenticated. The token is the banner's — same
-// trust as server.yaml, which holds the password itself.
+// trust as the <home>/web-password file the password is read from.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, token string) {
 	switch r.Method {
 	case http.MethodPost:

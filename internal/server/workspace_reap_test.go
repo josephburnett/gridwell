@@ -30,7 +30,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	_, root := registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

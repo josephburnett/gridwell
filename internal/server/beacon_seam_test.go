@@ -23,7 +23,7 @@ import (
 // envelope (flags byte + big-endian length + proto-JSON message), and a
 // silent protocol mismatch would discard the user's last paragraph on
 // every tab close while returning 200.
-func beaconTestServer(t *testing.T) (cl *rpc.Client, baseURL, root string) {
+func beaconTestServer(t *testing.T) (cl *rpc.Client, hs *httptest.Server, root string) {
 	t.Helper()
 	reg := plugin.NewRegistry()
 	st, err := store.Open(":memory:")
@@ -32,15 +32,17 @@ func beaconTestServer(t *testing.T) (cl *rpc.Client, baseURL, root string) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	_, root = registerPrimaryLocaldb(t, reg, st)
-	srv := New(reg, Config{})
-	hs := httptest.NewServer(srv.Handler())
+	srv := mustNew(t, reg, Config{})
+	hs = httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs.URL, root
+	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs, root
 }
 
-func postBeacon(t *testing.T, baseURL, path, contentType string, body []byte) *http.Response {
+// postBeacon posts through hs's client — navigator.sendBeacon is
+// same-origin and carries the auth cookie, so the test must too.
+func postBeacon(t *testing.T, hs *httptest.Server, path, contentType string, body []byte) *http.Response {
 	t.Helper()
-	res, err := http.Post(baseURL+path, contentType, bytes.NewReader(body))
+	res, err := hs.Client().Post(hs.URL+path, contentType, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("beacon POST %s: %v", path, err)
 	}
@@ -50,7 +52,7 @@ func postBeacon(t *testing.T, baseURL, path, contentType string, body []byte) *h
 }
 
 func TestWriteContentBeaconSeam(t *testing.T) {
-	cl, baseURL, root := beaconTestServer(t)
+	cl, hs, root := beaconTestServer(t)
 	ctx := context.Background()
 
 	tile, err := cl.CreateText(ctx, &rpc.CreateTextRequest{
@@ -64,7 +66,7 @@ func TestWriteContentBeaconSeam(t *testing.T) {
 	if path == "" || body == nil {
 		t.Fatal("WriteContentBeacon returned empty")
 	}
-	res := postBeacon(t, baseURL, path, rpc.BeaconStreamType, body)
+	res := postBeacon(t, hs, path, rpc.BeaconStreamType, body)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("beacon POST = %d, want 200", res.StatusCode)
 	}
@@ -82,7 +84,7 @@ func TestWriteContentBeaconSeam(t *testing.T) {
 	// answer, not the transport's: the POST itself still returns 200 with
 	// the error in the stream, which is why the pin asserts CONTENT.)
 	path, body = rpc.WriteContentBeacon(tile.ID, tile.Version, []byte("stale stomp"))
-	postBeacon(t, baseURL, path, rpc.BeaconStreamType, body)
+	postBeacon(t, hs, path, rpc.BeaconStreamType, body)
 	data, _, _, err = cl.ReadContent(ctx, tile.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +101,7 @@ func TestWriteContentBeaconSeam(t *testing.T) {
 }
 
 func TestSetURLStateBeaconSeam(t *testing.T) {
-	cl, baseURL, root := beaconTestServer(t)
+	cl, hs, root := beaconTestServer(t)
 	ctx := context.Background()
 
 	tile, err := cl.CreateURL(ctx, &rpc.CreateURLRequest{GridID: root, X: 3, Y: 0, W: 2, H: 2})
@@ -116,7 +118,7 @@ func TestSetURLStateBeaconSeam(t *testing.T) {
 		URL: "https://deep.example/page/40", Title: "page 40",
 		History: `["https://start.example","https://deep.example/page/40"]`,
 	})
-	res := postBeacon(t, baseURL, path, rpc.BeaconJSONType, body)
+	res := postBeacon(t, hs, path, rpc.BeaconJSONType, body)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("url-state beacon = %d, want 200", res.StatusCode)
 	}

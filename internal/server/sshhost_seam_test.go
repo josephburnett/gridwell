@@ -34,6 +34,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/remote"
 	"github.com/josephburnett/gridwell/internal/remote/dial"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
 // chainHarness wires remote node ⇐ sshhost plugin ⇐ local server.
@@ -79,7 +80,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 	t.Cleanup(remoteCloser)
 	remoteReg := plugin.NewRegistry()
 	remoteReg.Register("rp1", "home", remoteClient, nil)
-	remoteSrv := server.New(remoteReg, server.Config{NodeID: "rnodex"})
+	remoteSrv := servertest.New(t, remoteReg, server.Config{NodeID: "rnodex"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
 	remoteHTTP.Config.Handler = remoteSrv.FederationHandler()
 	remoteHTTP.Config.Protocols = server.NodeProtocols()
@@ -124,14 +125,13 @@ func newChainHarness(t *testing.T) *chainHarness {
 	localReg := plugin.NewRegistry()
 	localReg.Register("sshc", "remote", sshClient, nil)
 	localReg.SetTransit("sshc", true) // the declaration the loader reads from Info in production
-	localSrv := server.New(localReg, server.Config{NodeID: "lnodex"})
+	localSrv := servertest.New(t, localReg, server.Config{NodeID: "lnodex"})
 	localHTTP := httptest.NewServer(localSrv.Handler())
 	t.Cleanup(localHTTP.Close)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 	// The remote's WEB door is a second listener (2026-08-26: the browser
 	// surface no longer shares the federation handler).
-	remoteWeb := httptest.NewServer(remoteSrv.WebHandler())
-	t.Cleanup(remoteWeb.Close)
+	remoteWeb := servertest.Serve(t, remoteSrv)
 	h.remoteCl = rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
 
 	h.rootBare, err = remoteStore.RootGridID(ctx)

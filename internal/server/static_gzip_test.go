@@ -47,7 +47,7 @@ func gzipStaticServer(t *testing.T) (hs *httptest.Server, dir string, raw []byte
 		t.Fatal(err)
 	}
 
-	srv := New(nil, Config{StaticFS: os.DirFS(dir)})
+	srv := mustNew(t, nil, Config{StaticFS: os.DirFS(dir)})
 	hs = httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return hs, dir, raw
@@ -56,6 +56,7 @@ func gzipStaticServer(t *testing.T) (hs *httptest.Server, dir string, raw []byte
 func getEncoded(t *testing.T, url, acceptEncoding string) *http.Response {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: AuthToken(testPassword)})
 	if acceptEncoding != "" {
 		req.Header.Set("Accept-Encoding", acceptEncoding)
 	}
@@ -127,7 +128,7 @@ func TestStaticGzipSidecar(t *testing.T) {
 // instantiateStreaming requires — with no files on disk at all. This is
 // the "copy the binaries to another machine" contract.
 func TestEmbeddedWebClientServes(t *testing.T) {
-	srv := New(nil, Config{StaticFS: web.FS})
+	srv := mustNew(t, nil, Config{StaticFS: web.FS})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 

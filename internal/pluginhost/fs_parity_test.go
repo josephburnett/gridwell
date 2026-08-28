@@ -22,6 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/server"
+	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/plugins/fs/fssource"
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
@@ -77,7 +78,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register(fsUUID, "fs", client, nil)
-	srv := server.New(reg, server.Config{})
+	srv := servertest.New(t, reg, server.Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), prov

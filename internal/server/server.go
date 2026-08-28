@@ -7,9 +7,10 @@
 // browser-facing surface is pure Connect.
 //
 // Single-tenant, two doors (2026-08-26): WebHandler is the browser surface,
-// gated behind the server.yaml web.password (auth.go: one cookie derived
-// from the current password) and bindable to a network; FederationHandler
-// is the raw-gRPC node export, ungated and loopback-only by construction.
+// ALWAYS gated behind the password (the minted <home>/web-password file;
+// auth.go: one cookie derived from the current password) and bindable to
+// a network; FederationHandler is the raw-gRPC node export, ungated and
+// served only on the 0600 unix socket node.listenFederation opens.
 package server
 
 import (
@@ -47,8 +48,11 @@ type Config struct {
 	// restart — the landing page stays as you left it. Empty = in-memory
 	// only (tests).
 	NodeStatePath string
-	// Password, when non-empty, gates the browser surface (the mux) behind
-	// the login-page cookie — see auth.go. Empty = open (today's behavior).
+	// Password gates the browser surface (the mux) behind the login-page
+	// cookie — see auth.go. REQUIRED: New refuses an empty one. The web
+	// door is never open (owner decision 2026-08-26) — BuildConfig mints
+	// the password on first serve, so production never has an open path,
+	// and this refusal is what keeps a test from having one either.
 	Password string
 	// DisableShells refuses shell tiles node-wide: CreateTile(kind=shell)
 	// and OpenShell are denied for every plugin (local or mounted),
@@ -62,8 +66,9 @@ type Config struct {
 // Server is the wired-up HTTP server. It holds NO Gridwell state of its own —
 // no *store.Store anywhere. Every operation, data plane and infrastructure
 // alike (shell PTY tile metadata, the preview endpoint), is routed through the
-// plugin registry; the root plugin is the localdb instance whose grid is the
-// app root. Construct with New and mount via Server.Handler().
+// plugin registry; home (the first configured plugin) is where a client
+// lands. Construct with New and mount WebHandler (the browser door) and
+// FederationHandler (the node door) on their own listeners (node.Start).
 type Server struct {
 	cfg       Config
 	pluginReg *plugin.Registry
@@ -90,8 +95,12 @@ type Server struct {
 // New constructs a Server that routes everything through reg. With a NodeID
 // configured, the server also serves the NODE GRID — the plugin-list landing
 // page — as an in-process provider addressed like any plugin
-// ("<node_id>/0"); every operation is addressed by a qualified id.
-func New(reg *plugin.Registry, cfg Config) *Server {
+// ("<node_id>/0"); every operation is addressed by a qualified id. An
+// empty Password is refused: the browser door has no open mode.
+func New(reg *plugin.Registry, cfg Config) (*Server, error) {
+	if cfg.Password == "" {
+		return nil, errors.New("server: a web password is required (the browser door is never open)")
+	}
 	srv := &Server{
 		cfg:       cfg,
 		pluginReg: reg,
@@ -111,7 +120,7 @@ func New(reg *plugin.Registry, cfg Config) *Server {
 		srv.nodeClose = closer
 	}
 	srv.routes()
-	return srv
+	return srv, nil
 }
 
 // Close releases what New created: the node grid's in-process grpc

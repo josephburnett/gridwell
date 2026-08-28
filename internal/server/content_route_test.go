@@ -53,7 +53,7 @@ func twoPluginHTTPServer(t *testing.T) (cl *rpc.Client, baseURL, rootA, rootB st
 		t.Fatal(err)
 	}
 
-	srv := New(reg, Config{})
+	srv := mustNew(t, reg, Config{})
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs.URL, rootA, uuidB + "/" + bareRootB

@@ -40,7 +40,10 @@ func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string)
 	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte(spaMarker), 0o644); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
-	srv := New(reg, Config{StaticFS: os.DirFS(staticDir), Password: password})
+	srv, err := New(reg, Config{StaticFS: os.DirFS(staticDir), Password: password})
+	if err != nil {
+		t.Fatal(err)
+	}
 	hs := httptest.NewServer(srv.WebHandler())
 	t.Cleanup(hs.Close)
 	return hs, root
@@ -69,15 +72,14 @@ func get(t *testing.T, c *http.Client, url string, cookie string) (*http.Respons
 	return res, string(body)
 }
 
-func TestAuthDisabledStaysOpen(t *testing.T) {
-	hs, root := newAuthTestServer(t, "")
-	res, body := get(t, hs.Client(), hs.URL+"/", "")
-	if res.StatusCode != http.StatusOK || !strings.Contains(body, spaMarker) {
-		t.Fatalf("no-password GET / = %d %q, want 200 with the SPA", res.StatusCode, body)
-	}
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	if _, err := cl.GetGrid(context.Background(), root); err != nil {
-		t.Fatalf("no-password RPC should work: %v", err)
+// The browser door has no open mode (owner decision 2026-08-26): New
+// refuses an empty password. Before this, authWrap had a no-password
+// arm that production could never reach (BuildConfig always mints one)
+// — dead in the binary, but a standing shortcut for every test that
+// mounted the mux without a cookie.
+func TestNewRequiresAPassword(t *testing.T) {
+	if _, err := New(plugin.NewRegistry(), Config{}); err == nil {
+		t.Fatal("New accepted an empty password — the web door must never be open")
 	}
 }
 

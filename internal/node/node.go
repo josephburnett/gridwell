@@ -193,7 +193,7 @@ func Start(opts Options) (*Node, error) {
 		reg.Close()
 		return nil, fmt.Errorf("node id: %w", err)
 	}
-	srv := server.New(reg, server.Config{
+	srv, err := server.New(reg, server.Config{
 		StaticFS: opts.StaticFS,
 		NodeID:   nodeID,
 		// The landing page's viewport survives restarts in a small state
@@ -202,6 +202,10 @@ func Start(opts Options) (*Node, error) {
 		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
 	})
+	if err != nil {
+		reg.Close()
+		return nil, err
+	}
 	requestCtx, cancel := context.WithCancel(context.Background())
 	// Two doors, two listeners (owner decision 2026-08-26): the web door
 	// binds where config says (a tailnet address is fine — it is
