@@ -45,11 +45,14 @@ type nodeGrid struct {
 	info       func(ctx context.Context, uuid string) (*pb.InfoResponse, error)
 	invalidate func(uuid string)
 
-	// The node grid's own viewport — the landing page's framing. Held in
-	// memory and, when statePath is set, mirrored to a small JSON file so it
-	// survives a server restart (the landing page stays as you left it).
-	// The file is the durable copy; memory is the read cache — one writer
-	// (SetRootView), loaded once at construction.
+	// The node grid's own viewport — the landing page's framing — and the
+	// launcher placements. Held in memory and, when statePath is set,
+	// mirrored to a small JSON file so it survives a server restart (the
+	// landing page stays as you left it). The file is the durable copy;
+	// memory is the read cache — one writer (update), loaded once at
+	// construction. mu guards view for the whole write: update persists
+	// the NEW state before swapping it in, so memory is never ahead of
+	// the file (a failed write is an error, not a session-long phantom).
 	mu        sync.Mutex
 	view      nodeView
 	statePath string
@@ -237,22 +240,47 @@ func (n *nodeGrid) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Til
 // failed write surfaces as an error (the client shows it) rather than
 // silently downgrading durability.
 func (n *nodeGrid) SetRootView(_ context.Context, req *pb.SetRootViewRequest) (*pb.SetRootViewResponse, error) {
-	n.mu.Lock()
-	n.view.Cx, n.view.Cy, n.view.Zoom = req.Cx, req.Cy, req.Zoom
-	n.mu.Unlock()
-	if err := n.saveView(); err != nil {
+	if err := n.update(func(v *nodeView) { v.Cx, v.Cy, v.Zoom = req.Cx, req.Cy, req.Zoom }); err != nil {
 		return nil, err
 	}
 	return &pb.SetRootViewResponse{}, nil
 }
 
-// saveView mirrors the in-memory state to the state file (the durable
-// copy; memory is the read cache — one writer).
-func (n *nodeGrid) saveView() error {
+// update is the ONE writer of the node state: it applies mut to a copy of
+// the current state, persists the copy, and only then swaps it into
+// memory — so a write that fails to reach the file changes nothing the
+// next GetGrid/Info serves. Serialized under mu for its whole duration:
+// two writers cannot interleave a stale copy over a newer file.
+func (n *nodeGrid) update(mut func(v *nodeView)) error {
 	n.mu.Lock()
-	v := n.view
+	defer n.mu.Unlock()
+	next := n.view.clone()
+	mut(&next)
+	if err := n.persist(next); err != nil {
+		return err
+	}
+	n.view = next
+	return nil
+}
+
+// clone deep-copies the state (Tiles is a map; the copy must not alias
+// the live one, or a mutation-before-persist would leak into memory).
+func (v nodeView) clone() nodeView {
+	c := v
+	if v.Tiles != nil {
+		c.Tiles = make(map[string]nodeTilePos, len(v.Tiles))
+		for k, p := range v.Tiles {
+			c.Tiles[k] = p
+		}
+	}
+	return c
+}
+
+// persist writes v to the state file (the durable copy; memory is the
+// read cache). Called by update with mu held; the file write itself needs
+// no lock.
+func (n *nodeGrid) persist(v nodeView) error {
 	path := n.statePath
-	n.mu.Unlock()
 	if path == "" {
 		return nil
 	}
@@ -302,13 +330,12 @@ func (n *nodeGrid) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb
 	if h < 1 {
 		h = 1
 	}
-	n.mu.Lock()
-	if n.view.Tiles == nil {
-		n.view.Tiles = map[string]nodeTilePos{}
-	}
-	n.view.Tiles[req.TileId] = nodeTilePos{X: req.X, Y: req.Y, W: w, H: h}
-	n.mu.Unlock()
-	if err := n.saveView(); err != nil {
+	if err := n.update(func(v *nodeView) {
+		if v.Tiles == nil {
+			v.Tiles = map[string]nodeTilePos{}
+		}
+		v.Tiles[req.TileId] = nodeTilePos{X: req.X, Y: req.Y, W: w, H: h}
+	}); err != nil {
 		return nil, err
 	}
 	return n.GetTile(ctx, &pb.GetTileRequest{TileId: req.TileId})

@@ -9,20 +9,20 @@ import (
 	"time"
 )
 
-// saveView must be atomic (write-temp + rename): loadView discards an
+// persist must be atomic (write-temp + rename): loadView discards an
 // unparseable state file WHOLESALE, so a torn write loses every launcher
 // placement and the landing viewport at once. A crash mid-write can't be
 // triggered from a test, so the property is asserted through the
 // equivalent observable: a concurrent reader must never see a partial
 // file — under the old O_TRUNC WriteFile it reliably does.
-func TestSaveViewNeverTearsUnderAReader(t *testing.T) {
+func TestPersistNeverTearsUnderAReader(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "node-view.json")
 	n := &nodeGrid{statePath: path}
 	n.view.Tiles = map[string]nodeTilePos{}
 	for i := 0; i < 5000; i++ {
 		n.view.Tiles[fmt.Sprintf("plugin-%05d", i)] = nodeTilePos{X: int64(i), Y: int64(i)}
 	}
-	if err := n.saveView(); err != nil {
+	if err := n.persist(n.view); err != nil {
 		t.Fatal(err)
 	}
 
@@ -36,8 +36,8 @@ func TestSaveViewNeverTearsUnderAReader(t *testing.T) {
 				return
 			default:
 			}
-			if err := n.saveView(); err != nil {
-				t.Errorf("saveView: %v", err)
+			if err := n.persist(n.view); err != nil {
+				t.Errorf("persist: %v", err)
 				return
 			}
 		}
