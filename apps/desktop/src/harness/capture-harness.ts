@@ -70,6 +70,37 @@ app.whenReady().then(async () => {
   if (registry.has('pane1')) fail('pane still registered after remove');
   console.log(`freeze ok: ${freeze.jpegBase64.length} base64 chars, title=${JSON.stringify(freeze.title)}`);
 
+  // ── goBack walks the view's real navigation history ─────────────────────
+  // The bar's back button and the context menu's Back share ONE owner
+  // (registry.goBack); this pins it against Electron's navigationHistory
+  // on a real view: two loads, one goBack, the first url is current again.
+  const FIRST_URL = 'data:text/html,' + encodeURIComponent('<title>First</title>first');
+  const SECOND_URL = 'data:text/html,' + encodeURIComponent('<title>Second</title>second');
+  await registry.place('paneb', 'u1/46', 'obj-back', FIRST_URL, { x: 0, y: 0, width: 400, height: 300 });
+  const wcb = (
+    registry as unknown as { entries: Map<string, { view: { webContents: Electron.WebContents } }> }
+  ).entries.get('paneb')!.view.webContents;
+  const loaded = (url: string) =>
+    new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error(`no did-finish-load for ${url.slice(0, 40)}`)), 6000);
+      wcb.once('did-finish-load', () => {
+        clearTimeout(t);
+        resolve();
+      });
+    });
+  if (wcb.getURL() !== FIRST_URL) await loaded(FIRST_URL);
+  const second = loaded(SECOND_URL);
+  await wcb.loadURL(SECOND_URL);
+  await second;
+  if (wcb.getURL() !== SECOND_URL) fail(`second load did not land (url ${wcb.getURL().slice(0, 40)})`);
+  const back = loaded(FIRST_URL);
+  registry.goBack('paneb');
+  await back;
+  if (wcb.getURL() !== FIRST_URL) fail(`goBack did not return to the first url (url ${wcb.getURL().slice(0, 40)})`);
+  registry.goBack('paneb'); // at the start of the history: a no-op, never a throw
+  await registry.remove('paneb');
+  console.log('goBack ok: second → first, no-op at the start');
+
   // ── a view placed while an overlay is open starts parked ────────────────
   // PlaceArgs.hidden is the renderer's verdict for THIS frame (issue #33
   // mechanism A): a view placed while the palette is open must land at

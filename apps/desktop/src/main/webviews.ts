@@ -173,9 +173,7 @@ export class WebviewRegistry {
         openLink: (u) => void wc.loadURL(u),
         cut: () => wc.cut(),
         paste: () => wc.paste(),
-        back: () => {
-          if (nav.canGoBack()) nav.goBack();
-        },
+        back: () => this.goBack(paneId),
         forward: () => {
           if (nav.canGoForward()) nav.goForward();
         },
@@ -565,17 +563,14 @@ export class WebviewRegistry {
     }
   }
 
+  // goBack is THE back action for a live view — the bar's back button (IPC)
+  // and the context menu's Back both land here. A no-op at the start of the
+  // history.
   goBack(paneId: string): void {
     const e = this.entries.get(paneId);
     if (!e) return;
-    const wc = e.view.webContents;
-    // navigationHistory is the modern API; fall back to canGoBack/goBack.
-    const nav = (wc as unknown as { navigationHistory?: { canGoBack(): boolean; goBack(): void } }).navigationHistory;
-    if (nav) {
-      if (nav.canGoBack()) nav.goBack();
-    } else if ((wc as unknown as { canGoBack?: () => boolean }).canGoBack?.()) {
-      (wc as unknown as { goBack: () => void }).goBack();
-    }
+    const nav = e.view.webContents.navigationHistory;
+    if (nav.canGoBack()) nav.goBack();
   }
 
   // removeAll tears everything down (app quit / window close).
