@@ -24,17 +24,24 @@ type Source interface {
 type Memory struct {
 	mu    sync.Mutex
 	todos map[int64]*Todo
+	// doneComplete records that some walk reached the END of the done
+	// list. Only then does "a page of already-known done todos" prove
+	// every older one is known: a targeted week walk stops at the week
+	// boundary having absorbed one page past it, so until a walk has
+	// run to the end, a fully-known page proves nothing about the rest.
+	doneComplete bool
 }
 
 // NewMemory builds an empty memory.
 func NewMemory() *Memory { return &Memory{todos: map[int64]*Todo{}} }
 
 // Sync refreshes the memory from src. since = zero walks EVERYTHING
-// (the outset: every pending page, then done pages until one carries
-// nothing new — a page of already-known done todos means every older
-// one is known too, because done todos only enter at their own
-// position). A non-zero since is the TARGETED walk for one week: both
-// states stop as soon as a page reaches todos created before since.
+// (the outset: every pending page, then done pages to the end; once a
+// walk has reached the end, later walks stop at the first page that
+// carries nothing new — a page of already-known done todos then means
+// every older one is known too, because done todos only enter at their
+// own position). A non-zero since is the TARGETED walk for one week:
+// both states stop as soon as a page reaches todos created before since.
 //
 // Completion is DERIVED: a remembered pending todo that the pending
 // walk did not see — within the walk's coverage — is done, whether it
@@ -89,7 +96,16 @@ func (m *Memory) Sync(ctx context.Context, src Source, since time.Time) error {
 			return err
 		}
 		unknown := m.absorb(todos)
-		if !more || unknown == 0 {
+		if !more {
+			m.mu.Lock()
+			m.doneComplete = true
+			m.mu.Unlock()
+			break
+		}
+		m.mu.Lock()
+		complete := m.doneComplete
+		m.mu.Unlock()
+		if complete && unknown == 0 {
 			break
 		}
 		if since.IsZero() || !descending(todos) {

@@ -320,3 +320,44 @@ func TestMarkdownCarriesTheEssentials(t *testing.T) {
 		t.Error("the gone notice names the key")
 	}
 }
+
+// A targeted week walk absorbs one done page PAST the week boundary
+// (the page that proves the boundary was crossed). A later FULL walk
+// then found done page 1 fully known and stopped — "nothing unknown
+// means every older one is known" is only true once a walk has reached
+// the END of the done list, and no walk had.
+func TestSyncFullAfterTargetedWalksDoneToTheEnd(t *testing.T) {
+	week := at("2026-08-17T00:00:00Z")
+	src := &fakeSource{per: 2,
+		pending: []Todo{mk(1, "2026-08-18T10:00:00Z", StatePending)},
+		done: []Todo{
+			mk(9, "2026-08-19T10:00:00Z", StateDone), mk(8, "2026-08-18T12:00:00Z", StateDone), // in the week
+			mk(7, "2026-08-10T10:00:00Z", StateDone), mk(6, "2026-08-09T10:00:00Z", StateDone), // the page past the boundary
+			mk(5, "2026-07-01T10:00:00Z", StateDone), mk(4, "2026-06-01T10:00:00Z", StateDone), // never walked by the week
+		},
+	}
+	m := NewMemory()
+	if err := m.Sync(context.Background(), src, week); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(src.calls, " "); got != "pending/1 done/1 done/2" {
+		t.Fatalf("targeted calls = %s", got)
+	}
+	if n := len(m.All()); n != 5 {
+		t.Fatalf("after the week walk remembered %d, want 5", n)
+	}
+	src.calls = nil
+	if err := m.Sync(context.Background(), src, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(m.All()); n != 7 {
+		t.Errorf("after the full walk remembered %d, want 7 (calls %s)", n, strings.Join(src.calls, " "))
+	}
+	// Now the done list HAS been walked to its end: the next full walk
+	// may stop at the first fully-known page.
+	src.calls = nil
+	_ = m.Sync(context.Background(), src, time.Time{})
+	if got := strings.Join(src.calls, " "); got != "pending/1 done/1" {
+		t.Errorf("resync calls = %s", got)
+	}
+}
