@@ -9,6 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/workspace"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -81,75 +82,18 @@ func (a *App) barThemeFor(p *pane.Pane) (band, button string) {
 	return "#151b2e", colorFocusBorder
 }
 
-// navCrumb is one link of the COMPLETE nav chain (issue #245): the whole
-// path from the root in one breadcrumb. Each workspace frame contributes
-// its ORIGIN pane's descent chain in the outer tree it will restore, then
-// the pane tile itself as a boundary crumb; the current tree's
-// focused-pane chain ends it. Clicking any crumb GOES THERE — the last
-// crumb is where you are, so it does nothing.
-type navCrumb struct {
-	// paneTile marks a workspace boundary: wsLevel is the 1-based stack
-	// level, tileID the pane tile (preview square + rename target).
-	paneTile bool
-	wsLevel  int
-	tileID   string
-	// Chain crumbs: crumb is the descent-chain entry of the LIVE tree's
-	// focused pane (intermediate trees' chains are not shown) — a click
-	// ascends to it in place.
-	crumb pane.Crumb
-	// closeOnly: the leading ROOT crumb while inside a view (owner tweak
-	// 2026-08-04 on #245): its click CLOSES all views — pop to the
-	// session, never an in-tree ascent (mutating a far-away tree's state
-	// from the bar read badly; the session restores exactly as left).
-	closeOnly bool
-}
+// navCrumb is workspace.NavCrumb; navChain is the stack's NavChain for the
+// focused pane (the decision is pure and unit-tested there).
+type navCrumb = workspace.NavCrumb
 
-// navChain assembles the chain, outermost first: the ROOT crumb (click =
-// close all views), one boundary bar per open view, then the CURRENT
-// pane's full chain. The intermediate trees' tile crumbs are deliberately
-// NOT shown (owner tweak 2026-08-04 on #245): clicking them mutated a
-// far-away tree's state from the bar, and the last of them duplicated
-// "go to the previous view" — the boundary bars already say that.
 func (a *App) navChain() []navCrumb {
 	return a.navChainFor(a.tree.FocusedPane())
 }
 
 func (a *App) navChainFor(p *pane.Pane) []navCrumb {
-	var out []navCrumb
-	depth := a.ws.Depth()
-	if depth > 0 {
-		// The root crumb wears the session origin's ROOT face (namespace
-		// glyph) when it is known; a boot-restored frame has none and the
-		// crumb draws as the muted placeholder. Either way the click only
-		// closes views.
-		root := navCrumb{closeOnly: true}
-		if f := a.ws.At(1); f != nil && f.OuterTree != nil && f.OriginPane != "" {
-			if op := f.OuterTree.FindPane(f.OriginPane); op != nil {
-				if chain := pane.DescentChain(op); len(chain) > 0 {
-					root.crumb = chain[0]
-				}
-			}
-		}
-		out = append(out, root)
-		for k := 1; k <= depth; k++ {
-			f := a.ws.At(k)
-			if f == nil {
-				continue
-			}
-			out = append(out, navCrumb{paneTile: true, wsLevel: k, tileID: f.TileID})
-		}
-	}
-	if p != nil {
-		for _, c := range pane.DescentChain(p) {
-			out = append(out, navCrumb{crumb: c})
-		}
-	}
-	return out
+	return a.ws.NavChain(p)
 }
 
-// bottomBarSegments lays out the visible suffix of the chain (wsbar's
-// left-truncation), relative to the band's left edge: squares for chain
-// crumbs, the wide named bar for workspace boundaries.
 func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
 	return a.bottomBarSegmentsFor(a.tree.FocusedPane(), chain)
 }
@@ -161,7 +105,7 @@ func (a *App) bottomBarSegmentsFor(p *pane.Pane, chain []navCrumb) []wsbar.Segme
 	}
 	widths := make([]float64, len(chain))
 	for i, nc := range chain {
-		if nc.paneTile {
+		if nc.PaneTile {
 			widths[i] = wsbar.BoundaryW
 		} else {
 			widths[i] = wsbar.RowH
@@ -196,10 +140,10 @@ func (a *App) drawBottomBarFor(p *pane.Pane) {
 	for _, s := range segs {
 		shifted := s
 		shifted.X += bx
-		if nc := chain[s.Index]; nc.paneTile {
-			a.drawBoundaryCrumb(nc.wsLevel, shifted, top)
+		if nc := chain[s.Index]; nc.PaneTile {
+			a.drawBoundaryCrumb(nc.WsLevel, shifted, top)
 		} else {
-			a.drawChainCrumb(nc.crumb, shifted, top)
+			a.drawChainCrumb(nc.Crumb, shifted, top)
 		}
 	}
 	c.Set("fillStyle", button)
@@ -555,8 +499,8 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 			a.openRenameInput()
 			return true
 		}
-		if seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx); segOK && chain[seg.Index].paneTile {
-			a.openWorkspaceRenameInput(chain[seg.Index].wsLevel)
+		if seg, segOK := wsbar.At(a.bottomBarSegments(chain), sx-bx); segOK && chain[seg.Index].PaneTile {
+			a.openWorkspaceRenameInput(chain[seg.Index].WsLevel)
 			return true
 		}
 		return false
@@ -582,11 +526,11 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		return true
 	}
 	nc := chain[seg.Index]
-	if nc.paneTile || nc.closeOnly {
+	if nc.PaneTile || nc.CloseOnly {
 		// GO THERE: be inside view wsLevel — or, for the root crumb, back
 		// in the session (closeOnly: views close; the session's own state
 		// is never touched from the bar).
-		if n := a.ws.PopCountTo(nc.wsLevel); n > 0 {
+		if n := a.ws.PopCountTo(nc.WsLevel); n > 0 {
 			a.ascendWorkspaceLevels(n)
 		}
 		return true
@@ -605,7 +549,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 	}
 	// A current-chain crumb: ascend within the live tree.
 	if p := a.tree.FocusedPane(); p != nil {
-		a.ascendToChainCrumb(p, nc.crumb)
+		a.ascendToChainCrumb(p, nc.Crumb)
 	}
 	return true
 }
@@ -649,7 +593,7 @@ func (a *App) openWorkspaceRenameInput(level int) {
 	chain := a.navChain()
 	idx := -1
 	for i, nc := range chain {
-		if nc.paneTile && nc.wsLevel == level {
+		if nc.PaneTile && nc.WsLevel == level {
 			idx = i
 			break
 		}

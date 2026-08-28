@@ -748,21 +748,21 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
 		nc := chain[s.Index]
-		if nc.paneTile {
+		if nc.PaneTile {
 			e["kind"] = "pane"
-			e["level"] = nc.wsLevel
-			e["tileID"] = nc.tileID
+			e["level"] = nc.WsLevel
+			e["tileID"] = nc.TileID
 		} else {
 			e["kind"] = "chain"
 			e["level"] = a.ws.Depth() // chain crumbs are the live tree's
-			e["anchor"] = nc.crumb.Anchor
-			e["tileID"] = nc.crumb.TileID
-			e["text"] = nc.crumb.Text
-			if nc.crumb.Anchor != "" {
+			e["anchor"] = nc.Crumb.Anchor
+			e["tileID"] = nc.Crumb.TileID
+			e["text"] = nc.Crumb.Text
+			if nc.Crumb.Anchor != "" {
 				// The root crumb's face — the exact selector drawChainCrumb
 				// renders ("" = the globe), so a spec can pin crumb identity
 				// (#264) without reading pixels.
-				e["glyph"] = a.pluginGlyph(nc.crumb.Anchor)
+				e["glyph"] = a.pluginGlyph(nc.Crumb.Anchor)
 			}
 		}
 		out = append(out, e)
