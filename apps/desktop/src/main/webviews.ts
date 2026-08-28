@@ -217,8 +217,8 @@ export class WebviewRegistry {
   // viewBoundsFor is a test-only accessor that returns the view's actual
   // physical bounds as Electron last set them, revealing whether the view is
   // currently parked or at its intended (visible) position. Used by e2e to
-  // assert that place-while-hidden does NOT lift the view out of its parked
-  // position. Returns undefined if the pane has no entry.
+  // assert that a bounds change while hidden does NOT lift the view out of
+  // its parked position. Returns undefined if the pane has no entry.
   viewBoundsFor(paneId: string): { x: number; y: number; width: number; height: number } | undefined {
     const e = this.entries.get(paneId);
     if (!e) return undefined;
@@ -226,10 +226,15 @@ export class WebviewRegistry {
     return (e.view as unknown as { getBounds(): { x: number; y: number; width: number; height: number } }).getBounds();
   }
 
-  // place creates (or re-targets) the view for paneId. If a view already
-  // exists for the pane it's reused; a URL change re-navigates it. The view
-  // is added as a child of the window's contentView, so it paints above the
-  // root canvas renderer at the given bounds.
+  // place creates the view for paneId. The view is added as a child of the
+  // window's contentView, so it paints above the root canvas renderer at
+  // the given bounds. Bounds changes after placement arrive through
+  // setBounds (every frame, from syncURLViews). A place() for a pane that
+  // already holds a view is a renderer bug and is reported, never absorbed:
+  // the old reuse path was unreachable (url_stream_client.go returns early
+  // for the tile already live in the pane and closes any other view first)
+  // and half-implemented (it ignored durable/history/hidden and skipped the
+  // min-width zoom).
   async place(paneId: string, tileId: string, objectId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false): Promise<void> {
     const rounded = roundBounds(bounds);
     // ONE host-local session (owner decision 2026-07-26): every live url
@@ -237,133 +242,107 @@ export class WebviewRegistry {
     // partition — your own logins everywhere. The per-plugin partitions and
     // their hydrate/dehydrate choreography are gone.
     const partition = SESSION_PARTITION;
-    let e = this.entries.get(paneId);
-
-    if (e && e.objectId !== objectId) {
-      // A different tile in the same pane. The renderer closes the old
-      // stream FIRST (placeURLView → closeURLStream — the one path that
-      // persists a freeze), so reaching here means a view was replaced
-      // without its close: surface it, then tear the old view down so at
-      // least nothing leaks. The freeze that remove() returns has no
-      // caller to land in — which is exactly why this must be loud.
+    const stale = this.entries.get(paneId);
+    if (stale) {
+      // The renderer closes a pane's live view FIRST (placeURLView →
+      // closeURLStream — the one path that persists a freeze) and never
+      // re-places the tile already live there, so reaching here means a
+      // view was replaced without its close: surface it, then tear the old
+      // view down so at least nothing leaks. The freeze that remove()
+      // returns has no caller to land in — which is exactly why this must
+      // be loud.
       this.cb.onError?.({
         source: 'electron:webview',
-        message: `pane ${paneId}: live view replaced (${e.tileId} → ${tileId}) without a close; its final frame is lost`,
+        message: `pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`,
       });
       await this.remove(paneId).catch(() => {});
-      e = undefined;
     }
-
-    if (!e) {
-      const view = new WebContentsView({
-        webPreferences: {
-          partition,
-          contextIsolation: true,
-          nodeIntegration: false,
-          // Stacked levels keep their views RUNNING while parked
-          // off-screen (issue #249 — a hidden Zoom call keeps ringing);
-          // Chromium would otherwise throttle an occluded page's timers.
-          backgroundThrottling: false,
-          // Forwards a right-button press to main → renderer so pane gestures
-          // work over live content. Safe on arbitrary pages: it only listens
-          // for button 2 and uses ipcRenderer, nothing else.
-          preload: urlViewPreload,
-        },
-      });
-      // target=_blank / window.open / ctrl-click: everything Chromium would
-      // open as a new window or tab arrives here. Never spawn a detached
-      // BrowserWindow — instead hand the url to the renderer, which splits
-      // the pane and opens it as an EPHEMERAL visit in the lower half
-      // (issue #111): the link opens in real Chromium on the tile's
-      // persistent session (no popup bot-guard friction), in a pane you can
-      // read next to the page you came from, and it dies on ascent.
-      // openBelowUrl filters to web urls only (issue #232) — a non-web
-      // protocol opens nowhere, matching the session's openExternal deny.
-      view.webContents.setWindowOpenHandler(({ url: target }) => {
-        const below = openBelowUrl(target);
-        if (below) {
-          this.cb.onOpenBelow?.({ paneId, url: below });
-        }
-        return { action: 'deny' };
-      });
-      // F11 fullscreen: the canvas handles F11 via window.ts, but a focused
-      // live URL view owns OS keyboard focus, so that handler never sees the
-      // key. Mirror it here so fullscreen toggles no matter which view is
-      // focused.
-      // The content-zoom chord gets the same treatment as F11 (issue #170):
-      // intercepted here and relayed to the renderer, where the ONE zoom
-      // owner (applyContentZoom) updates the cache and persists — calling
-      // registry.setZoom directly from main would move the view but skip
-      // both.
-      view.webContents.on('before-input-event', (event, input) => {
-        if (input.type !== 'keyDown') return;
-        if (input.key === 'F11') {
-          this.toggleFullScreen();
-          event.preventDefault();
-          return;
-        }
-        const key = zoomChordKey(input);
-        if (key) {
-          this.zoomChordRelays++;
-          this.cb.onZoomKey?.({ paneId, key });
-          event.preventDefault();
-        }
-      });
-      // A plain right-click over live content must show a context menu (copy
-      // link, copy, back, …). Electron's WebContentsView has NO default menu —
-      // it only emits this event and leaves the menu to us. The injected
-      // preload already suppresses this event for a right-DRAG (a pane
-      // gesture), so reaching here means a genuine click.
-      view.webContents.on('context-menu', (_event, params) => this.showContextMenu(paneId, view, params));
-      // focused starts true: a pane only goes live by an action on the focused
-      // pane, so the control should appear immediately; syncURLViews corrects
-      // it on the next frame if focus has already moved.
-      // hidden starts from the renderer's verdict for THIS frame (PlaceArgs.hidden)
-      // so a view placed while the palette is open (or during a drag gesture)
-      // starts parked rather than landing on top of the canvas overlay.
-      // (It used to come from the last setHidden seen — a value that ranged
-      // over a Go map, so a parked stacked level could park a new view at
-      // random.) syncURLViews will call setHidden for this pane on
-      // the next draw() and reaffirm the correct state.
-      const startHidden = hidden;
-      e = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
-      this.entries.set(paneId, e);
-      this.win.contentView.addChildView(view);
-      view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
-      this.wireNav(paneId, e);
-      this.applyMinWidthZoom(e);
-      // A persisted back-stack revives with its history (issue #113); absent,
-      // invalid, or DISAGREEING with the tile's (user-editable) address falls
-      // back to a plain load of the address — reviveNavigation owns the
-      // tie-break and is unit-tested.
-      const nav = reviveNavigation(url, history);
-      if (nav.kind === 'restore') {
-        void view.webContents.navigationHistory.restore({ entries: nav.history.entries, index: nav.history.index });
-      } else {
-        void view.webContents.loadURL(url);
+    const view = new WebContentsView({
+      webPreferences: {
+        partition,
+        contextIsolation: true,
+        nodeIntegration: false,
+        // Stacked levels keep their views RUNNING while parked
+        // off-screen (issue #249 — a hidden Zoom call keeps ringing);
+        // Chromium would otherwise throttle an occluded page's timers.
+        backgroundThrottling: false,
+        // Forwards a right-button press to main → renderer so pane gestures
+        // work over live content. Safe on arbitrary pages: it only listens
+        // for button 2 and uses ipcRenderer, nothing else.
+        preload: urlViewPreload,
+      },
+    });
+    // target=_blank / window.open / ctrl-click: everything Chromium would
+    // open as a new window or tab arrives here. Never spawn a detached
+    // BrowserWindow — instead hand the url to the renderer, which splits
+    // the pane and opens it as an EPHEMERAL visit in the lower half
+    // (issue #111): the link opens in real Chromium on the tile's
+    // persistent session (no popup bot-guard friction), in a pane you can
+    // read next to the page you came from, and it dies on ascent.
+    // openBelowUrl filters to web urls only (issue #232) — a non-web
+    // protocol opens nowhere, matching the session's openExternal deny.
+    view.webContents.setWindowOpenHandler(({ url: target }) => {
+      const below = openBelowUrl(target);
+      if (below) {
+        this.cb.onOpenBelow?.({ paneId, url: below });
       }
-      return;
-    }
-
-    e.userZoom = contentZoom; // the persisted zoom rides every (re)place
-    // Reuse: update the stored bounds and, if visible, apply them immediately.
-    // When hidden (parked for a gesture/palette), only update e.bounds so that
-    // setHidden(false) will un-park to the NEW position — never call
-    // view.setBounds while hidden, because that would physically lift the view
-    // out of its parked position over the canvas overlay, and the next setHidden
-    // call would no-op (e.hidden is still true, nothing "changed"). This is the
-    // primary root cause of the "palette appears under a live URL view" bug:
-    // place() was re-asserting the view on top every time bounds changed.
-    e.tileId = tileId;
-    if (!boundsEqual(e.bounds, rounded)) {
-      e.bounds = rounded;
-      if (!e.hidden) {
-        e.view.setBounds(rounded);
+      return { action: 'deny' };
+    });
+    // F11 fullscreen: the canvas handles F11 via window.ts, but a focused
+    // live URL view owns OS keyboard focus, so that handler never sees the
+    // key. Mirror it here so fullscreen toggles no matter which view is
+    // focused.
+    // The content-zoom chord gets the same treatment as F11 (issue #170):
+    // intercepted here and relayed to the renderer, where the ONE zoom
+    // owner (applyContentZoom) updates the cache and persists — calling
+    // registry.setZoom directly from main would move the view but skip
+    // both.
+    view.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+      if (input.key === 'F11') {
+        this.toggleFullScreen();
+        event.preventDefault();
+        return;
       }
-    }
-    const current = e.view.webContents.getURL();
-    if (current !== url && url) {
-      void e.view.webContents.loadURL(url);
+      const key = zoomChordKey(input);
+      if (key) {
+        this.zoomChordRelays++;
+        this.cb.onZoomKey?.({ paneId, key });
+        event.preventDefault();
+      }
+    });
+    // A plain right-click over live content must show a context menu (copy
+    // link, copy, back, …). Electron's WebContentsView has NO default menu —
+    // it only emits this event and leaves the menu to us. The injected
+    // preload already suppresses this event for a right-DRAG (a pane
+    // gesture), so reaching here means a genuine click.
+    view.webContents.on('context-menu', (_event, params) => this.showContextMenu(paneId, view, params));
+    // focused starts true: a pane only goes live by an action on the focused
+    // pane, so the control should appear immediately; syncURLViews corrects
+    // it on the next frame if focus has already moved.
+    // hidden starts from the renderer's verdict for THIS frame (PlaceArgs.hidden)
+    // so a view placed while the palette is open (or during a drag gesture)
+    // starts parked rather than landing on top of the canvas overlay.
+    // (It used to come from the last setHidden seen — a value that ranged
+    // over a Go map, so a parked stacked level could park a new view at
+    // random.) syncURLViews will call setHidden for this pane on
+    // the next draw() and reaffirm the correct state.
+    const startHidden = hidden;
+    const e: Entry = { view, tileId, objectId, bounds: rounded, hidden: startHidden, focused: true, userZoom: contentZoom, lastUserClickMs: 0, durable, focusRecheck: null };
+    this.entries.set(paneId, e);
+    this.win.contentView.addChildView(view);
+    view.setBounds(startHidden ? parkedBounds(rounded.width, rounded.height) : rounded);
+    this.wireNav(paneId, e);
+    this.applyMinWidthZoom(e);
+    // A persisted back-stack revives with its history (issue #113); absent,
+    // invalid, or DISAGREEING with the tile's (user-editable) address falls
+    // back to a plain load of the address — reviveNavigation owns the
+    // tie-break and is unit-tested.
+    const nav = reviveNavigation(url, history);
+    if (nav.kind === 'restore') {
+      void view.webContents.navigationHistory.restore({ entries: nav.history.entries, index: nav.history.index });
+    } else {
+      void view.webContents.loadURL(url);
     }
   }
 
