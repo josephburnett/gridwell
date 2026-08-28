@@ -64,7 +64,10 @@ func gitlabNode(t *testing.T, gl *fakeGitLab) *rpc.Client {
 	t.Cleanup(closer)
 	reg := plugin.NewRegistry()
 	reg.Register(gitlabUUID, "gitlab", client, nil)
-	srv := server.New(reg, server.Config{})
+	srv, err := server.New(reg, server.Config{Password: "test-password"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
