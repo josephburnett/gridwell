@@ -754,7 +754,7 @@ func (a *App) thBar(_ js.Value, args []js.Value) any {
 			e["tileID"] = nc.tileID
 		} else {
 			e["kind"] = "chain"
-			e["level"] = nc.treeLevel
+			e["level"] = a.ws.Depth() // chain crumbs are the live tree's
 			e["anchor"] = nc.crumb.Anchor
 			e["tileID"] = nc.crumb.TileID
 			e["text"] = nc.crumb.Text

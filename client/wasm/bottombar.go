@@ -93,11 +93,10 @@ type navCrumb struct {
 	paneTile bool
 	wsLevel  int
 	tileID   string
-	// Chain crumbs: crumb is the descent-chain entry; treeLevel is the
-	// workspace depth at which its tree is CURRENT (0 = the session tree,
-	// Depth = the live tree) — a click pops to treeLevel, then ascends.
-	treeLevel int
-	crumb     pane.Crumb
+	// Chain crumbs: crumb is the descent-chain entry of the LIVE tree's
+	// focused pane (intermediate trees' chains are not shown) — a click
+	// ascends to it in place.
+	crumb pane.Crumb
 	// closeOnly: the leading ROOT crumb while inside a view (owner tweak
 	// 2026-08-04 on #245): its click CLOSES all views — pop to the
 	// session, never an in-tree ascent (mutating a far-away tree's state
@@ -123,7 +122,7 @@ func (a *App) navChainFor(p *pane.Pane) []navCrumb {
 		// glyph) when it is known; a boot-restored frame has none and the
 		// crumb draws as the muted placeholder. Either way the click only
 		// closes views.
-		root := navCrumb{treeLevel: 0, closeOnly: true}
+		root := navCrumb{closeOnly: true}
 		if f := a.ws.At(1); f != nil && f.OuterTree != nil && f.OriginPane != "" {
 			if op := f.OuterTree.FindPane(f.OriginPane); op != nil {
 				if chain := pane.DescentChain(op); len(chain) > 0 {
@@ -142,7 +141,7 @@ func (a *App) navChainFor(p *pane.Pane) []navCrumb {
 	}
 	if p != nil {
 		for _, c := range pane.DescentChain(p) {
-			out = append(out, navCrumb{treeLevel: depth, crumb: c})
+			out = append(out, navCrumb{crumb: c})
 		}
 	}
 	return out

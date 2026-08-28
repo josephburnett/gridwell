@@ -66,10 +66,9 @@ func urlLog(format string, args ...any) {
 }
 
 // contentViewBounds maps a pane's screen rect to the content-box rectangle a
-// hosted webview should occupy — the pane minus its border band, in CSS px.
-// The view fills the whole content box; the corner controls (ascend / back)
-// float on top as a small native overlay view (see webviews.ts), since a
-// canvas-drawn button can't paint above a native WebContentsView.
+// hosted webview should occupy — the pane minus its border band and the
+// bar band, in CSS px (liveContentBox). The view fills that box; the pane
+// carries no corner control (#214, #220 — the bar's crumb is the ascent).
 func contentViewBounds(r pane.Rect) viewBounds {
 	x, y, w, h := liveContentBox(r)
 	return viewBounds{X: x, Y: y, W: w, H: h}
@@ -394,8 +393,8 @@ func (a *App) syncURLViews() {
 		b := contentViewBounds(r)
 		v.bounds = b
 		bridgeSetBounds(paneID, b)
-		// The corner control belongs to the focused pane only — same rule the
-		// canvas applies to every other per-pane control (render.go drawPane).
+		// focused feeds main's focus-steal guard (webviews.ts): only the
+		// focused pane's view may take keyboard focus back after a park.
 		bridgeSetHidden(paneID, hidden, paneID == a.tree.Focus)
 	}
 }
