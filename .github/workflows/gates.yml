@@ -2,7 +2,10 @@
 # composition-parity suite (gridwell-all — every plugin in-process), the
 # federation spawn/direct/partition gates (self-contained sshd via
 # dialtest), and the full Electron e2e under xvfb. One retry per suite
-# is the CI face of the repo's vindicated-isolated flake discipline.
+# (PW_FLAGS=--retries=1) is the CI face of the repo's vindicated-isolated
+# flake discipline. Every gate here is a Makefile target — the Makefile
+# is the one recipe; this file only sequences them (test/boundary pins
+# that every check-* target is invoked from a workflow).
 name: gates
 on:
   push:
@@ -34,9 +37,9 @@ jobs:
       - name: resolve chromium path
         run: echo "GRIDWELL_WEB_CHROMIUM=$(cd apps/desktop && node -e "console.log(require('playwright-core').chromium.executablePath())")" >> "$GITHUB_ENV"
       - name: web gate
-        run: cd apps/desktop && npx playwright test --config playwright.web.config.ts --retries=1
+        run: make check-web PW_FLAGS=--retries=1
       - name: parity gate (gridwell-all, in-process plugins)
-        run: cd apps/desktop && GRIDWELL_SERVE_BIN=gridwell-all npx playwright test --config playwright.web.config.ts --retries=1
+        run: make check-parity PW_FLAGS=--retries=1
   electron-e2e:
     runs-on: ubuntu-latest
     env:
@@ -78,11 +81,11 @@ jobs:
       - name: build
         run: make build
       - name: electron harnesses
-        run: cd apps/desktop && xvfb-run -a npm run test:integration && xvfb-run -a npm run test:bridge
+        run: make check-electron
       - name: pre-e2e socket dir evidence
         run: ls -ldn /tmp/tmux-* 2>/dev/null || echo "no /tmp/tmux-* before e2e"
       - name: e2e
-        run: cd apps/desktop && npm run build && xvfb-run -a npx playwright test --retries=1
+        run: make check-e2e PW_FLAGS=--retries=1
         env:
           GRIDWELL_E2E_VERBOSE: "1"
       # Failure evidence: traces + error-context for every failed spec —

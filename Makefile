@@ -1,4 +1,4 @@
-.PHONY: build bin bin-all plugins wasm test test-cover fmt-check check check-electron check-e2e check-web check-parity check-federation serve init clean launch vendor dist node-modules
+.PHONY: build bin bin-all plugins wasm fmt-check proto-check check check-electron check-e2e check-web check-parity check-federation serve init clean launch vendor dist node-modules
 
 BIN := ./gridwell
 # Built plugin binaries — the plugins target below and clean
@@ -69,12 +69,6 @@ $(WASM_EXEC):
 		echo "wasm_exec.js not found in GOROOT"; exit 1; \
 	fi
 
-test:
-	go test ./...
-
-test-cover:
-	go test -cover ./...
-
 # fmt-check fails if any hand-written Go file isn't gofmt-clean (generated code
 # under api/gen is excluded — it's regenerated, not hand-edited). Kept as the
 # first check step so formatting drift can't accumulate the way it had: several
@@ -130,10 +124,19 @@ check: fmt-check proto-check wasm
 	cd $(DESKTOP) && npm run typecheck:e2e
 	cd $(DESKTOP) && npm test
 
+# The heavy gates below are the ONE recipe for each gate: CI
+# (.github/workflows/gates.yml) invokes these targets rather than
+# re-spelling them — the two copies drifted (retries, verbosity, a nested
+# xvfb-run around a script that already wraps one). PW_FLAGS passes extra
+# Playwright flags through to check-e2e / check-web / check-parity:
+#   make check-e2e PW_FLAGS=--retries=1     # CI's one-retry flake discipline
+PW_FLAGS ?=
+
 # check-electron runs the live-tile harnesses under a virtual display. Needed
 # only for phases that touch the URL/shell live path (and the final pass), since
 # they exercise the real Electron WebContentsView / PTY bridge. Requires xvfb +
-# a prior `make vendor` for node_modules.
+# a prior `make vendor` for node_modules. (The npm scripts wrap xvfb-run
+# themselves — do not wrap them again.)
 check-electron: node-modules
 	cd $(DESKTOP) && npm run test:integration && npm run test:bridge
 
@@ -147,7 +150,7 @@ check-electron: node-modules
 # check-electron, not part of the fast per-commit `check`. Requires xvfb + a
 # prior `make vendor` for node_modules + Playwright.
 check-e2e: build node-modules
-	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e
+	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e -- $(PW_FLAGS)
 
 # check-web drives the BROWSER-MODE client: `gridwell serve` + plain Chromium
 # (the system /usr/bin/chromium — no browser download, so the repo stays
@@ -157,16 +160,15 @@ check-e2e: build node-modules
 # Headless — no xvfb needed. Run for any change to client/caps,
 # client/touchgest, touch.go, or the browser-serving path.
 check-web: build node-modules
-	cd $(DESKTOP) && npm run test:e2e:web
+	cd $(DESKTOP) && npm run test:e2e:web -- $(PW_FLAGS)
 
 # check-parity is the COMPOSITION PARITY gate (docs/plugin.md): the same
 # browser suite against gridwell-all — every plugin IN-PROCESS through
 # the compose door. Identical behavior to check-web is the pin that the
-# door hides the process boundary. Also runs the structure lint
-# (test/boundary: arrows + api dependency budget).
+# door hides the process boundary. (The structure lint, test/boundary,
+# runs in `check` — it is not repeated here.)
 check-parity: build node-modules
-	cd test/boundary && go test -count=1 .
-	cd $(DESKTOP) && GRIDWELL_SERVE_BIN=gridwell-all npm run test:e2e:web
+	cd $(DESKTOP) && GRIDWELL_SERVE_BIN=gridwell-all npm run test:e2e:web -- $(PW_FLAGS)
 
 # check-federation is the SPAWN GATE (issue #58): the real binaries —
 # gridwell init/serve and the go-plugin subprocesses —
