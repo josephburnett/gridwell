@@ -66,8 +66,18 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		Kind:        ci.Kind,
 		DisplayName: ci.DisplayName,
 		Glyph:       ci.Glyph,
-		Watch:       ci.Watch,
-		Writable:    ci.Writable,
+		// Watch and Writable are the ADAPTER's declarations, not the
+		// plugin's: the node-facing Info describes the doors this
+		// adapter opens, and it has no Subscribe (a passed-through
+		// watch:true sent the server's watchPlugin into Unimplemented
+		// retries forever) and no WriteContent (a passed-through
+		// writable:true offered editing that was then refused). Both
+		// stay false until the adapter carries them — Subscribe over
+		// cp.Watch (ContextChanged → GridChanged by ContextID,
+		// EntryRemoved → TileRemoved by the id map) and WriteContent
+		// forwarding by key — at which point they follow ci again.
+		Watch:    false,
+		Writable: false,
 	}
 	for _, m := range ci.MenuEntries {
 		// CREATION entries (kind set) are STRIPPED until the node can
