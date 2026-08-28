@@ -199,8 +199,8 @@ To mount remote nodes, the remote just runs `gridwell serve`; its
 the connection's `addr` names — required, no default — reached through
 ssh's unix-socket forwarding.
 On the mounting machine, register the transport once — one `remote`
-entry owns the whole connection list (serve refuses a `connections:`
-key without it, and refuses two):
+entry owns the whole connection list (serve refuses a non-empty
+`connections:` list without it, and refuses two entries):
 
 ```sh
 gridwell init --kind remote --name far
