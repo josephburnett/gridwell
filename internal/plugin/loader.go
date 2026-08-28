@@ -10,6 +10,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -123,7 +124,29 @@ func loadNative(pc *config.PluginConfig, factory NativeFactory) (gridwellv1.Grid
 	if err != nil {
 		return nil, nil, err
 	}
-	return compose.ServeInProcess(impl)
+	client, stop, err := compose.ServeInProcess(impl)
+	if err != nil {
+		closeImpl(pc, impl)
+		return nil, nil, err
+	}
+	// The registry's closer owns the impl's lifecycle too, not only the
+	// loopback transport: a native kind holds real resources (the local
+	// store's DB, the remote's ssh sessions) and releases them in Close.
+	// Transport first, so no request is in flight when the resource goes.
+	return client, func() { stop(); closeImpl(pc, impl) }, nil
+}
+
+// closeImpl releases a native impl's own resources when it has any (an
+// io.Closer). A close failure at shutdown is reported, never fatal — the
+// process is exiting.
+func closeImpl(pc *config.PluginConfig, impl gridwellv1.GridwellServer) {
+	c, ok := impl.(io.Closer)
+	if !ok {
+		return
+	}
+	if err := c.Close(); err != nil {
+		log.Printf("gridwell: plugin %q (%s): close: %v", pc.Name, pc.ID, err)
+	}
 }
 
 // loadPlugin materializes one provider entry: the content process

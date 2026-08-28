@@ -84,8 +84,10 @@ func New(db *DB, dial Dialer, home string) *Server {
 		rootErr: map[string]string{}, hub: newEventHub()}
 }
 
-// Close tears down every live connection.
-func (s *Server) Close() {
+// Close tears down every live connection and closes the DB — the plugin
+// owns both (the loader's closer calls this: io.Closer is the native
+// lifecycle contract).
+func (s *Server) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for ns, lc := range s.live {
@@ -93,6 +95,7 @@ func (s *Server) Close() {
 		lc.closer()
 		delete(s.live, ns)
 	}
+	return s.db.Close()
 }
 
 // ── routing ──────────────────────────────────────────────────────────────────

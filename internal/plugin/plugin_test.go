@@ -156,3 +156,34 @@ func TestLoadAllFailsOnARefusedHandshake(t *testing.T) {
 		t.Fatalf("LoadAll = %v, want the plugin's own reason, naming it", err)
 	}
 }
+
+// closingStub is a native impl that owns a resource (as local.Plugin owns
+// its store and remote.Server its ssh sessions) and releases it in Close.
+type closingStub struct {
+	stubServer
+	closed bool
+}
+
+func (s *closingStub) Close() error { s.closed = true; return nil }
+
+// TestLoadAllClosesNativeImpls crosses the loader→registry seam for the
+// native lifecycle: the closer LoadAll registers must release the impl's
+// own resources, not just the loopback transport in front of it. Before
+// this, local.Plugin.Close and remote.Server.Close had zero production
+// callers — every serve exited with the store and ssh sessions never
+// closed.
+func TestLoadAllClosesNativeImpls(t *testing.T) {
+	impl := &closingStub{}
+	cfg := &config.ServerConfig{Plugins: []config.PluginConfig{{ID: "uuid-a", Name: "alpha", Kind: "stub"}}}
+	factories := map[string]plugin.NativeFactory{
+		"stub": func(_ map[string]string) (gridwellv1.GridwellServer, error) { return impl, nil },
+	}
+	reg, err := plugin.LoadAll(cfg, factories, nil)
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	reg.Close()
+	if !impl.closed {
+		t.Fatal("Registry.Close did not Close the native impl")
+	}
+}

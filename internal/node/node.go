@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/josephburnett/gridwell/api/idshape"
@@ -170,6 +171,8 @@ type Node struct {
 	webSrv        *http.Server
 	fedSrv        *http.Server
 	cancelRequest context.CancelFunc
+	closeOnce     sync.Once
+	closeErr      error
 }
 
 // Start assembles the node — plugins, identity, server — and LISTENS,
@@ -268,18 +271,23 @@ func (n *Node) ServeBackground() <-chan error {
 }
 
 // Close shuts the node down: in-flight requests get a bounded drain,
-// then the plugins close.
+// then the plugins close. Idempotent by contract — the CLI both defers
+// it (every exit path) and calls it explicitly (to report the error);
+// the second call is a no-op returning the first call's verdict.
 func (n *Node) Close() error {
-	n.cancelRequest()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := n.webSrv.Shutdown(ctx)
-	if n.FedLn != nil {
-		err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
-	}
-	n.srv.Close()
-	n.Reg.Close()
-	return err
+	n.closeOnce.Do(func() {
+		n.cancelRequest()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := n.webSrv.Shutdown(ctx)
+		if n.FedLn != nil {
+			err = errors.Join(err, n.fedSrv.Shutdown(ctx)) // Close unlinks the socket
+		}
+		n.srv.Close()
+		n.Reg.Close()
+		n.closeErr = err
+	})
+	return n.closeErr
 }
 
 // injectConnections carries server.yaml's connections: declarations to

@@ -111,7 +111,7 @@ func newChainHarness(t *testing.T) *chainHarness {
 		}
 		return remoteExport, func() {}, nil
 	}, "")
-	t.Cleanup(srv.Close)
+	t.Cleanup(func() { _ = srv.Close() })
 	sshClient, sshCloser, err := compose.ServeInProcess(srv)
 	if err != nil {
 		t.Fatal(err)
