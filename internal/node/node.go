@@ -39,12 +39,12 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no config at %s; run `gridwell init --kind local --name <name>` to create one", cfgPath)
+			return nil, fmt.Errorf("no config at %s; run `gridwell init --kind home --name <name>` to create one", cfgPath)
 		}
 		return nil, err
 	}
 	if len(cfg.Plugins) == 0 {
-		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind local --name <name>`", cfgPath)
+		return nil, fmt.Errorf("%s lists no plugins; run `gridwell init --kind home --name <name>`", cfgPath)
 	}
 	// The web door is never open (owner decision 2026-08-26): the password
 	// is the web-password file beside the config, minted here on first
@@ -116,6 +116,9 @@ func IsNative(kind string) bool {
 // both come through here, so a home initialized on any platform is
 // byte-compatible with every other.
 func Init(home, kind, name string, conf map[string]string) (id string, err error) {
+	if err := checkKind(kind); err != nil {
+		return "", err
+	}
 	id = idshape.NewShortID()
 	dbDir := config.DBDir(home, id)
 	if err := os.MkdirAll(dbDir, 0o755); err != nil {

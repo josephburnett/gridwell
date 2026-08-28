@@ -5,7 +5,8 @@ package cli
 // "localdb" → "home", "local" → "home" (the server's own DB is "home"),
 // "ssh" → "remote". Runs at serve boot: rewrites server.yaml kinds and
 // each affected plugin DB's identity stamp (pluginmeta.UpdateKind — ids
-// never change), then never matches again. Single-user migration window;
+// never change), then never matches again. The retired-name set is
+// node.RenamedKinds (init refuses those names; that part stays). Single-user migration window;
 // tracked for removal by the dated GitHub issue. After deletion the old
 // names are simply unknown kinds (no binary resolves), which is the
 // correct permanent behavior.
@@ -18,13 +19,8 @@ import (
 
 	"github.com/josephburnett/gridwell/api/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/node"
 )
-
-var renamedKinds = map[string]string{
-	"localdb": "home",
-	"local":   "home",
-	"ssh":     "remote",
-}
 
 // migrateRenamedKinds updates retired kind names in server.yaml and the
 // corresponding DB stamps. A missing config is not an error (serve says
@@ -44,7 +40,7 @@ func migrateRenamedKinds(home, cfgPath string) error {
 	changed := false
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
-		newKind, ok := renamedKinds[pc.Kind]
+		newKind, ok := node.RenamedKinds[pc.Kind]
 		if !ok {
 			continue
 		}
