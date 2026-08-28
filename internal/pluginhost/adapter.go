@@ -30,6 +30,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/layout"
 )
 
@@ -263,26 +264,46 @@ func (a *Adapter) sourceKind(ctx context.Context) (string, error) {
 	return ci.Kind, nil
 }
 
+// synthesized is one grid as the adapter derives it: the wire grid, the
+// merged rows (which carry the plugin keys), and the wire tiles, row i
+// ↔ tile i.
+type synthesized struct {
+	grid  *gridwellv1.Grid
+	rows  []layout.Tile
+	tiles []*gridwellv1.Tile
+}
+
 // grid fetches, merges, and builds one grid — GetGrid's core, shared
 // with GetTile so the two can never disagree.
 func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gridwellv1.Tile, error) {
-	key, err := a.mem.ContextKey(gid)
-	if errors.Is(err, layout.ErrNotFound) {
-		return nil, nil, status.Errorf(codes.NotFound, "provider: no grid %d", gid)
-	}
+	s, err := a.synthesize(ctx, gid)
 	if err != nil {
 		return nil, nil, err
+	}
+	return s.grid, s.tiles, nil
+}
+
+// synthesize is grid() keeping the merged rows: Search resolves a
+// plugin key to its tile through the rows, so a hit is the SAME tile a
+// GetGrid mints (never a parallel derivation).
+func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, error) {
+	key, err := a.mem.ContextKey(gid)
+	if errors.Is(err, layout.ErrNotFound) {
+		return nil, status.Errorf(codes.NotFound, "provider: no grid %d", gid)
+	}
+	if err != nil {
+		return nil, err
 	}
 	resp, facts, stale, err := a.listing(ctx, gid, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// A stale (remembered) listing must never retire rows — the source
 	// didn't answer; nothing is authoritatively absent.
 	authoritative := resp.Authoritative && !stale
 	tiles, err := a.mem.Merge(gid, engineEntries(facts), authoritative)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// A LIVE non-authoritative listing sweeps by arbitration: rows the
 	// listing didn't include are probed, and only a definitive GONE
@@ -301,7 +322,7 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 			pr, perr := a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: t.Key})
 			if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, layout.ErrNotFound) {
-					return nil, nil, rerr
+					return nil, rerr
 				}
 				continue // definitively gone: swept
 			}
@@ -311,11 +332,11 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 	}
 	kind, err := a.sourceKind(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	gridID := strconv.FormatInt(gid, 10)
 	g := &gridwellv1.Grid{Id: gridID, SourceKind: kind, SourceId: resp.SourceLabel, Stale: stale}
-	return g, buildTiles(gridID, tiles, facts), nil
+	return &synthesized{grid: g, rows: tiles, tiles: buildTiles(gridID, tiles, facts)}, nil
 }
 
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
@@ -354,6 +375,102 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 		}
 	}
 	return nil, status.Errorf(codes.NotFound, "provider: no tile %d", id)
+}
+
+// Search forwards the query to the plugin and turns each hit into a
+// PLACE the way the store's Search answers one: the tile, plus the
+// containing-well chain from the plugin root. The plugin names a key
+// and a context path; the adapter resolves both through the SAME grid
+// synthesis GetGrid runs — one synthesis per distinct context per
+// call — so a hit carries the id the memory DB minted, at the placement
+// the user left it. A hit the synthesis cannot place (the key is not in
+// its context's listing, a path step is not a well of the step before)
+// is dropped: a result is a promise you can go there. An `id:` locate
+// is refused: the memory DB keeps no parent index, and an empty or
+// root-anchored path would be a wrong place, not a missing one.
+func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
+	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
+		return nil, status.Error(codes.Unimplemented, "provider: locate by id is not supported (no parent index in the memory DB)")
+	}
+	resp, err := a.cp.Search(ctx, &pluginv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+	if err != nil {
+		return nil, err
+	}
+	grids := map[string]*synthesized{}
+	synth := func(key string) (*synthesized, error) {
+		if s, ok := grids[key]; ok {
+			return s, nil
+		}
+		gid, err := a.mem.ContextID(key)
+		if err != nil {
+			return nil, err
+		}
+		s, err := a.synthesize(ctx, gid)
+		if err != nil {
+			return nil, err
+		}
+		grids[key] = s
+		return s, nil
+	}
+	out := &gridwellv1.SearchResponse{}
+	for _, r := range resp.Results {
+		if r.Entry == nil || len(r.ContextPath) == 0 {
+			continue
+		}
+		var path []*gridwellv1.Tile
+		placed := true
+		for i := 1; i < len(r.ContextPath); i++ {
+			parent, err := synth(r.ContextPath[i-1])
+			if err != nil {
+				return nil, err
+			}
+			cgid, err := a.mem.ContextID(r.ContextPath[i])
+			if err != nil {
+				return nil, err
+			}
+			well := parent.tileOpening(strconv.FormatInt(cgid, 10))
+			if well == nil {
+				placed = false
+				break
+			}
+			path = append(path, well)
+		}
+		if !placed {
+			continue
+		}
+		leaf, err := synth(r.ContextPath[len(r.ContextPath)-1])
+		if err != nil {
+			return nil, err
+		}
+		tile := leaf.tileForKey(r.Entry.Key)
+		if tile == nil {
+			continue
+		}
+		out.Results = append(out.Results, &gridwellv1.SearchResult{Tile: tile, Path: path, Snippet: r.Snippet, Score: r.Score})
+	}
+	return out, nil
+}
+
+// tileForKey answers the wire tile minted for a plugin key, nil if the
+// synthesis holds none.
+func (s *synthesized) tileForKey(key string) *gridwellv1.Tile {
+	for i, row := range s.rows {
+		if row.Key == key {
+			return s.tiles[i]
+		}
+	}
+	return nil
+}
+
+// tileOpening answers the well tile whose descent is the grid, nil if
+// none.
+func (s *synthesized) tileOpening(childGridID string) *gridwellv1.Tile {
+	for _, t := range s.tiles {
+		if t.ChildGridId == childGridID {
+			return t
+		}
+	}
+	return nil
 }
 
 func (a *Adapter) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
