@@ -39,7 +39,7 @@ export type ShellDialer = (
   onEnd: (message: string, sessionGone: boolean) => void,
 ) => ShellStreamHandle;
 
-export interface ShellExit {
+interface ShellExit {
   paneId: string;
   message: string;
   sessionGone: boolean;
@@ -96,9 +96,5 @@ export class ShellStreams {
 
   closeAll(): void {
     for (const paneId of [...this.streams.keys()]) this.close(paneId);
-  }
-
-  paneIds(): string[] {
-    return [...this.streams.keys()];
   }
 }

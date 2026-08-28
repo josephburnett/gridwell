@@ -4,7 +4,10 @@
 // stream never reaching the renderer as the new stream's output.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ShellStreams, ShellDialer, ShellStreamHandle, ShellExit } from './shellstreams';
+import { ShellStreams, ShellDialer, ShellStreamHandle } from './shellstreams';
+
+// The exit event's shape, read off the constructor's onExit parameter.
+type ShellExit = Parameters<ConstructorParameters<typeof ShellStreams>[2]>[0];
 
 interface FakeStream {
   tileId: string;
@@ -52,7 +55,10 @@ test('open replaces an existing stream for the pane, closing the old one', () =>
   assert.equal(h.dialed.length, 2);
   assert.equal(h.dialed[0].closed, true);
   assert.equal(h.dialed[1].closed, false);
-  assert.deepEqual(h.streams.paneIds(), ['p1']);
+  // The pane's writes now go to the replacement, never the closed stream.
+  h.streams.write('p1', new Uint8Array([1]));
+  assert.equal(h.dialed[0].writes.length, 0);
+  assert.equal(h.dialed[1].writes.length, 1);
 });
 
 test('late bytes from a replaced stream never reach the renderer', () => {
@@ -73,7 +79,9 @@ test('exit fires exactly once, whatever raced', () => {
   h.dialed[0].emitEnd('', false); // grpc can fire error then end
   assert.equal(h.exits.length, 1);
   assert.equal(h.exits[0].message, 'boom');
-  assert.deepEqual(h.streams.paneIds(), []);
+  // The ended stream is gone: a write after the exit reaches nothing.
+  h.streams.write('p1', new Uint8Array([1]));
+  assert.equal(h.dialed[0].writes.length, 0);
 });
 
 test('a local close suppresses the exit report — this side asked', () => {
@@ -92,7 +100,9 @@ test("a replaced stream's late end never freezes the pane's NEW stream", () => {
   h.streams.open('p1', 'u/1', 80, 24); // re-attach (e.g. refresh gesture)
   old.emitEnd('', false); // the torn-down stream's end arrives late
   assert.equal(h.exits.length, 0);
-  assert.deepEqual(h.streams.paneIds(), ['p1']);
+  // …and the NEW stream is still the pane's: writes reach it.
+  h.streams.write('p1', new Uint8Array([1]));
+  assert.equal(h.dialed[1].writes.length, 1);
 });
 
 test('write and resize after close are silent no-ops', () => {

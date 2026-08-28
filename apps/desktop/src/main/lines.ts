@@ -11,7 +11,7 @@
 // auth, when present, is the web-UI auth token (server.AuthToken — the value
 // of the gridwell_auth cookie): the server prints it (the door always has a
 // password, so this window can authenticate without prompting.
-export interface ServingAddr {
+interface ServingAddr {
   host: string;
   port: number;
   federation: string;

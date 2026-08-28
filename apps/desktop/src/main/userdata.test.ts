@@ -3,17 +3,7 @@ import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
-import { e2eUserDataDir, applyUserDataOverride } from './userdata';
-
-test('e2eUserDataDir returns null when GRIDWELL_HOME is absent', () => {
-  assert.strictEqual(e2eUserDataDir({}), null);
-  assert.strictEqual(e2eUserDataDir({ OTHER: 'x' }), null);
-});
-
-test('e2eUserDataDir returns <home>/electron when GRIDWELL_HOME is set', () => {
-  const dir = e2eUserDataDir({ GRIDWELL_HOME: '/tmp/my-e2e-home' });
-  assert.strictEqual(dir, path.join('/tmp/my-e2e-home', 'electron'));
-});
+import { applyUserDataOverride } from './userdata';
 
 test('applyUserDataOverride is a no-op when GRIDWELL_HOME is absent', () => {
   const calls: Array<[string, string]> = [];

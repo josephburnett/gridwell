@@ -114,14 +114,14 @@ export function minWidthZoomFactor(width: number, minWidth: number): number {
 // UrlHistory is the persisted shape of a url tile's navigation back-stack
 // (issue #113): the entry list (pageState stripped — urls+titles only, so the
 // blob stays small and schema-stable) and the active index.
-export interface UrlHistory {
+interface UrlHistory {
   index: number;
   entries: { url: string; title: string }[];
 }
 
 // URL_HISTORY_CAP bounds how many entries a freeze persists. The newest
 // entries ending at the active index survive; the index is re-based.
-export const URL_HISTORY_CAP = 50;
+const URL_HISTORY_CAP = 50;
 
 // serializeHistory turns a live navigationHistory snapshot into the persisted
 // JSON, capped. Returns '' when there is nothing worth persisting (a single
@@ -190,7 +190,7 @@ export function composeZoom(minWidthZoom: number, userZoom: number): number {
 // button held before a press over a live URL view becomes a Gridwell pane
 // gesture rather than a plain right-click. Mirrors the canvas dragThreshold
 // (client/wasm/main.go) so the live-view and canvas feel identical.
-export const RIGHT_DRAG_THRESHOLD = 4;
+const RIGHT_DRAG_THRESHOLD = 4;
 
 // RIGHT_DRAG_TIME_MS is the minimum duration (ms) that a right-button press must
 // be held before a distance-exceeding move counts as a pane gesture. A quick
@@ -198,14 +198,14 @@ export const RIGHT_DRAG_THRESHOLD = 4;
 // is still classified as a click — so the native context menu fires. Mirrored
 // verbatim in urlview-preload.ts (can't import there; gesture-threshold.test.ts
 // drift-lints both copies).
-export const RIGHT_DRAG_TIME_MS = 200;
+const RIGHT_DRAG_TIME_MS = 200;
 
 // RIGHT_DRAG_FAR_THRESHOLD is the distance (CSS px) beyond which a right-drag
 // is unambiguous on its own — no trackpad tap drifts this far, so the time
 // gate no longer applies. A fast flick (large distance, short duration) used
 // to read as a click and pop the context menu instead of arming the pane
 // gesture (issue #119).
-export const RIGHT_DRAG_FAR_THRESHOLD = 24;
+const RIGHT_DRAG_FAR_THRESHOLD = 24;
 
 
 // classifyRightPress returns true (= drag) when the distance and time
@@ -218,8 +218,8 @@ export function classifyRightPress(
   dx: number,
   dy: number,
   durationMs: number,
-  distThreshold: number,
-  timeThresholdMs: number,
+  distThreshold: number = RIGHT_DRAG_THRESHOLD,
+  timeThresholdMs: number = RIGHT_DRAG_TIME_MS,
   farThreshold: number = RIGHT_DRAG_FAR_THRESHOLD,
 ): boolean {
   const d2 = dx * dx + dy * dy;
@@ -231,7 +231,7 @@ export function classifyRightPress(
 // itself cancelled (a redirect superseded by another navigation, window.stop(),
 // a same-document replace) — not a genuine failure. did-fail-load fires for
 // this constantly during ordinary navigation, so it must never surface.
-export const ERR_ABORTED = -3;
+const ERR_ABORTED = -3;
 
 // shouldSurfaceFailLoad decides whether a WebContents `did-fail-load` event is
 // a genuine, user-visible navigation failure (issue #46 point 3: the event was

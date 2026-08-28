@@ -5,10 +5,9 @@ import { sidecarBinary, staticDir } from './paths';
 import { dialAddr, makeLineSplitter, parseServingLine, windowOrigin } from './lines';
 
 export interface Sidecar {
-  // The announced port and window origin, read back from the serve banner —
-  // loopback by default, but server.yaml `web.bind` may pin another address
-  // (e.g. a Tailscale IP shared with a phone browser).
-  port: number;
+  // The window origin, read back from the serve banner — loopback by
+  // default, but server.yaml `web.bind` may pin another address (e.g. a
+  // Tailscale IP shared with a phone browser).
   origin: string;
   // dialAddr is the gRPC node-export target: the federation socket from
   // the banner (unix:<path>) — a 0600 socket since 2026-08-26, so a window
@@ -28,7 +27,7 @@ export interface Sidecar {
   stop: () => void;
 }
 
-export interface StartOptions {
+interface StartOptions {
   // Override the default bind port (otherwise a free ephemeral port is
   // chosen). Passed as --bind-default: an explicit `web.bind` in server.yaml
   // still wins — the server owns the listen-address decision.
@@ -138,7 +137,6 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
         settled = true;
         clearTimeout(timer);
         resolve({
-          port: served.port,
           origin: windowOrigin(served),
           dialAddr: dialAddr(served),
           auth: served.auth,

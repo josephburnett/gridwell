@@ -17,7 +17,7 @@
 
 // ContextParams is the subset of Electron's ContextMenuParams the menu needs,
 // plus the two navigation flags (which live on webContents, not the params).
-export interface ContextParams {
+interface ContextParams {
   // linkURL is the href of an <a> under the cursor, or '' if none.
   linkURL: string;
   // selectionText is the currently-selected text, or '' if none.
@@ -37,7 +37,7 @@ export interface ContextParams {
 // ContextActions are the effects the menu items invoke. Injected so the
 // template stays pure: webviews.ts wires these to clipboard + the view's
 // webContents; the unit test wires spies.
-export interface ContextActions {
+interface ContextActions {
   copyText(text: string): void;
   copyLink(url: string): void;
   openLink(url: string): void;
@@ -60,7 +60,7 @@ export interface ContextActions {
 // MenuItemConstructorOptions this builder emits — declared locally so the
 // module imports nothing from electron and can run under plain node/tsx in the
 // unit test. It is assignable to MenuItemConstructorOptions at the call site.
-export interface MenuTemplateItem {
+interface MenuTemplateItem {
   label?: string;
   type?: 'separator';
   enabled?: boolean;

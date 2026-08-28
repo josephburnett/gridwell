@@ -34,7 +34,6 @@ const api = {
   // mobile shell places url views without the shell relay). Electron
   // implements both.
   caps: { liveUrl: true, liveShell: true },
-  platform: process.platform,
 
   placeWebview(args: PlaceArgs): Promise<void> {
     return ipcRenderer.invoke(CH.place, args);
@@ -161,7 +160,5 @@ const api = {
     return () => ipcRenderer.removeListener(EV.error, h);
   },
 };
-
-export type GridwellBridge = typeof api;
 
 contextBridge.exposeInMainWorld('gridwell', api);

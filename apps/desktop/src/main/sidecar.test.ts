@@ -40,8 +40,7 @@ test('resolves on the serving banner with the ANNOUNCED address, not the request
   child.stderr.write('gridwell: serving on 127.0');
   child.stderr.write('.0.1:9999 (static=/x plugins=1 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
-  assert.equal(sc.port, 9999, 'port comes from the banner (server.yaml web.bind may override the request)');
-  assert.equal(sc.origin, 'http://127.0.0.1:9999');
+  assert.equal(sc.origin, 'http://127.0.0.1:9999', 'the origin comes from the banner (server.yaml web.bind may override the request)');
   sc.stop();
   assert.ok(child.killed, 'stop() kills the child');
   assert.deepEqual(child.signals, ['SIGTERM']);
@@ -134,7 +133,7 @@ test('first run: "no config" exits → gridwell init → one respawn → ready',
   children[2].stdout.write('gridwell: serving on 127.0.0.1:9999 (static=embedded plugins=1 federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
   assert.equal(sc.external, false);
-  assert.equal(sc.port, 9999);
+  assert.equal(sc.origin, 'http://127.0.0.1:9999');
 });
 
 test('first run retry is ONE-SHOT: a second no-config surfaces instead of looping', async () => {

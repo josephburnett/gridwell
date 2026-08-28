@@ -17,12 +17,9 @@ import {
   PARK_COORD,
   classifyRightPress,
   sanitizeUserAgent,
-  RIGHT_DRAG_THRESHOLD,
-  RIGHT_DRAG_TIME_MS,
   shouldSurfaceFailLoad,
   failLoadMessage,
   renderProcessGoneMessage,
-  ERR_ABORTED,
   rendererLogLine,
 } from './viewutil';
 
@@ -124,8 +121,8 @@ test('URL_MIN_LAYOUT_WIDTH pins the production zoom-to-fit threshold', () => {
 // gesture regardless of duration, and an intentional hold-and-drag exceeding
 // both small thresholds is a gesture too.
 test('classifyRightPress requires both distance and time to classify as drag', () => {
-  const dist = RIGHT_DRAG_THRESHOLD; // 4 px
-  const time = RIGHT_DRAG_TIME_MS; // 200 ms
+  const dist = 4; // px — viewutil's RIGHT_DRAG_THRESHOLD (drift-linted against the canvas)
+  const time = 200; // ms — viewutil's RIGHT_DRAG_TIME_MS
 
   // Neither condition met → click.
   assert.ok(!classifyRightPress(0, 0, 0, dist, time), 'zero movement, zero time → click');
@@ -173,12 +170,13 @@ test('classifyRightPress requires both distance and time to classify as drag', (
 // superseded navigation, and any subframe failure) while surfacing a genuine
 // main-frame failure.
 test('shouldSurfaceFailLoad ignores aborted navigations and subframe failures', () => {
-  // ERR_ABORTED on the main frame: the page/user cancelled it — not a failure.
-  assert.ok(!shouldSurfaceFailLoad(ERR_ABORTED, true));
+  // ERR_ABORTED (-3, Chromium's net error) on the main frame: the page/user
+  // cancelled it — not a failure.
+  assert.ok(!shouldSurfaceFailLoad(-3, true));
   // A real error code but on a subframe (ad iframe, tracking pixel): benign.
   assert.ok(!shouldSurfaceFailLoad(-105, false));
   // ERR_ABORTED on a subframe: still benign (both conditions independently disqualify).
-  assert.ok(!shouldSurfaceFailLoad(ERR_ABORTED, false));
+  assert.ok(!shouldSurfaceFailLoad(-3, false));
   // A genuine main-frame failure (e.g. ERR_CONNECTION_REFUSED = -102, or the
   // unreachable-port case the e2e drives) must surface.
   assert.ok(shouldSurfaceFailLoad(-102, true));
@@ -249,8 +247,8 @@ test('parseHistory validates and clamps; garbage falls back to null', () => {
 });
 
 test('classifyRightPress: a fast flick past the far threshold is a drag (#119)', () => {
-  const dist = RIGHT_DRAG_THRESHOLD;
-  const time = RIGHT_DRAG_TIME_MS;
+  const dist = 4;
+  const time = 200;
   // 30px up in 50ms: unambiguous drag even though the time gate fails.
   assert.equal(classifyRightPress(0, -30, 50, dist, time), true);
   // 10px in 50ms: past 4px but inside the far threshold and too fast — click.

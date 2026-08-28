@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { urlContextMenuTemplate, ContextParams, ContextActions } from './contextmenu';
+import { urlContextMenuTemplate } from './contextmenu';
+
+// The template's parameter shapes, read off the function: nothing outside
+// contextmenu.ts names them, so they are not exported.
+type ContextParams = Parameters<typeof urlContextMenuTemplate>[0];
+type ContextActions = Parameters<typeof urlContextMenuTemplate>[1];
 
 // A spy bag: each action records the argument it was called with so a test can
 // invoke an item's click() and assert the effect, exactly as the real menu does.

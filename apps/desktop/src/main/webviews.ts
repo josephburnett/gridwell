@@ -72,7 +72,7 @@ const FOCUS_RECHECK_MS = 120;
 // the renderer's bottom bar, outside every view's rect. The pure park/zoom
 // math stays in viewutil (parkedBounds, minWidthZoomFactor), unit-tested.
 
-export interface RegistryCallbacks {
+interface RegistryCallbacks {
   // onNav fires when a hosted view finishes a navigation (URL/title change),
   // so the renderer can update the cached tile address.
   onNav?: (ev: NavEvent) => void;

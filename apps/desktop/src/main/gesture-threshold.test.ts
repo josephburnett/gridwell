@@ -43,7 +43,7 @@ test('the drag threshold agrees across the canvas and both native copies', () =>
 
 // Drift-lint for the right-click time threshold. The "how long must the right
 // button be held before a distance-exceeding move becomes a pane gesture" value
-// lives in two places: viewutil.ts (exported, unit-tested) and urlview-preload.ts
+// lives in two places: viewutil.ts (classifyRightPress's default, unit-tested) and urlview-preload.ts
 // (inlined — the preload is sandboxed and cannot import from main). The single
 // owner is viewutil.ts; this test fails the build if the preload copy drifts.
 // The FAR threshold (#119) joined later and was left out of this lint —

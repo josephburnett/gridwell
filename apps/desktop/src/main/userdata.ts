@@ -10,8 +10,8 @@ import * as fs from 'node:fs';
 // sets GRIDWELL_HOME gets a private <home>/electron profile that never
 // touches the live app's profile or lock file.
 //
-// Pure function (no Electron import) so it can be exercised by npm test.
-export function e2eUserDataDir(env: Record<string, string | undefined>): string | null {
+// Pure function (no Electron import); exercised through applyUserDataOverride.
+function e2eUserDataDir(env: Record<string, string | undefined>): string | null {
   const home = env['GRIDWELL_HOME'];
   if (!home) return null;
   return path.join(home, 'electron');

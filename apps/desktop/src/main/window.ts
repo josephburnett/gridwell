@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 import { rendererLogLine } from './viewutil';
 
-export interface RootWindow {
+interface RootWindow {
   win: BrowserWindow;
 }
 
