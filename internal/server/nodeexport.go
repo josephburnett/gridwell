@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -76,25 +77,16 @@ type nodeExport struct {
 
 // statusErr converts a connect error back to a gRPC status error so codes
 // survive the hop (a *connect.Error returned through grpc-go would otherwise
-// collapse to Unknown).
+// collapse to Unknown). The code crosses through gwerr's one table — the
+// inverse of asConnectError — so a mounter reads exactly the code the far
+// plugin answered with.
 func statusErr(err error) error {
 	if err == nil {
 		return nil
 	}
 	var ce *connect.Error
 	if errors.As(err, &ce) {
-		switch ce.Code() {
-		case connect.CodeNotFound:
-			return status.Error(gcodes.NotFound, ce.Message())
-		case connect.CodeInvalidArgument:
-			return status.Error(gcodes.InvalidArgument, ce.Message())
-		case connect.CodeFailedPrecondition:
-			return status.Error(gcodes.FailedPrecondition, ce.Message())
-		case connect.CodePermissionDenied:
-			return status.Error(gcodes.PermissionDenied, ce.Message())
-		default:
-			return status.Error(gcodes.Internal, ce.Message())
-		}
+		return status.Error(gwerr.GRPCCode(ce.Code()), ce.Message())
 	}
 	return err
 }

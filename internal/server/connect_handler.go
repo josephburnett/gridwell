@@ -1029,25 +1029,17 @@ func isUnimplemented(err error) bool {
 // store paths, a raw store sentinel) to a Connect status code. Plugin errors
 // arrive as gRPC status errors — the plugins translate store sentinels into
 // codes (see local.errToStatus) so NotFound / InvalidArgument / overlap and
-// version conflicts survive the routing hop; a non-gRPC error falls through to
-// the same gwerr.ClassifyError categorization used by the raw-HTTP endpoints.
+// version conflicts survive the routing hop; the code crosses through
+// gwerr's one gRPC↔Connect table so EVERY code survives (a transport
+// failure two mounts away must still read as transport); a non-gRPC error
+// falls through to the same gwerr.ClassifyError categorization used by
+// the raw-HTTP endpoints.
 func asConnectError(err error) error {
 	if err == nil {
 		return nil
 	}
 	if st, ok := status.FromError(err); ok {
-		switch st.Code() {
-		case gcodes.NotFound:
-			return connect.NewError(connect.CodeNotFound, errors.New(st.Message()))
-		case gcodes.InvalidArgument:
-			return connect.NewError(connect.CodeInvalidArgument, errors.New(st.Message()))
-		case gcodes.FailedPrecondition:
-			return connect.NewError(connect.CodeFailedPrecondition, errors.New(st.Message()))
-		case gcodes.Unavailable:
-			return connect.NewError(connect.CodeUnavailable, errors.New(st.Message()))
-		default:
-			return connect.NewError(connect.CodeInternal, errors.New(st.Message()))
-		}
+		return connect.NewError(gwerr.ConnectCode(st.Code()), errors.New(st.Message()))
 	}
 	switch gwerr.ClassifyError(err) {
 	case gwerr.ClassNotFound:
