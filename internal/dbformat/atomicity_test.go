@@ -65,7 +65,8 @@ func (c *recConn) Close() error { return c.inner.Close() }
 
 func (c *recConn) Begin() (driver.Tx, error) {
 	c.record("BEGIN")
-	tx, err := c.inner.Begin() //nolint:staticcheck // fallback path is fine for a test double
+	//lint:ignore SA1019 the deprecated fallback path is fine for a test double
+	tx, err := c.inner.Begin()
 	if err != nil {
 		return nil, err
 	}
