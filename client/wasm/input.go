@@ -115,7 +115,7 @@ func (a *App) gestureInFlight() bool {
 func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	rects := a.layoutPanes()
 	for id, r := range rects {
-		if sx >= r.X && sy >= r.Y && sx < r.X+r.W && sy < r.Y+r.H {
+		if r.Contains(sx, sy) {
 			return a.tree.FindPane(id), r, true
 		}
 	}
@@ -782,30 +782,20 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		// Cross-namespace left-drag: the destination gains a LINK and the
 		// source stays put — there is no cross-plugin move (owner decision
 		// 2026-07-19). The ghost previewed this with the dashed chain badge.
-		targetX := t.originX + float64(dropX)*t.cellSize
-		targetY := t.originY + float64(dropY)*t.cellSize
 		if a.ghost != nil {
-			a.ghost.paneID = t.pane.ID
-			a.ghost.targetCellSize = t.cellSize
 			// The source was hidden for a would-be move; it stays — unhide it
 			// now so the world reads "source intact + link appearing".
 			a.ghost.hiddenTileID = ""
 			a.ghost.hiddenPaneID = ""
 		}
-		a.startSnap(targetX, targetY, snapMs)
+		a.landGhost(t.pane.ID, t.cellSize, t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
 		a.commitLinkDrop(d, t, dropX, dropY)
 		a.draw()
 		return nil
 	}
 
 	// DropMove: animate ghost to the snapped cell in the target grid's coords.
-	targetX := t.originX + float64(dropX)*t.cellSize
-	targetY := t.originY + float64(dropY)*t.cellSize
-	if a.ghost != nil {
-		a.ghost.paneID = t.pane.ID
-		a.ghost.targetCellSize = t.cellSize
-	}
-	a.startSnap(targetX, targetY, snapMs)
+	a.landGhost(t.pane.ID, t.cellSize, t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
 
 	dstGridID := t.gridID
 	srcGridID := d.srcGridID
@@ -892,6 +882,19 @@ func (a *App) occupiedForDrop(gridID string, x, y, w, h int64, excludeID string)
 
 // startSnap animates the active ghost from its current position to (toX, toY)
 // over the given duration. Replaces any prior animation.
+// landGhost is the one drop landing: the ghost now belongs to paneID
+// (drawn at that pane's cell size when cellSize > 0) and snaps to the
+// screen cell (toX, toY). Four drop commits once repeated these lines.
+func (a *App) landGhost(paneID string, cellSize, toX, toY float64) {
+	if a.ghost != nil {
+		a.ghost.paneID = paneID
+		if cellSize > 0 {
+			a.ghost.targetCellSize = cellSize
+		}
+	}
+	a.startSnap(toX, toY, snapMs)
+}
+
 func (a *App) startSnap(toX, toY, duration float64) {
 	if a.ghost == nil {
 		return
@@ -1818,17 +1821,9 @@ func (a *App) autoLiveOnDescent(paneID string, tile *rpc.Tile) {
 // anchor + path — rather than in the grid behind it. No-op when the saved
 // state carries no focus (an ordinary ascent).
 func (a *App) restoreStashedDescent(fp *pane.Pane, saved *paneState) {
-	if saved == nil || saved.TextFocus == "" {
+	if saved == nil || !saved.RestoreDescent(fp) {
 		return
 	}
-	if saved.Anchor != "" {
-		fp.Anchor = saved.Anchor
-		fp.Path = slices.Clone(saved.Path)
-	}
-	fp.TextFocus = saved.TextFocus
-	fp.TextMode = saved.TextMode
-	fp.TextScrollX = saved.TextScrollX
-	fp.TextScrollY = saved.TextScrollY
 	fp.TextZoom = a.textScaleFor(fp) // base × content zoom (issue #82)
 	a.refreshFileOverlay()
 	// Landing back on a stashed url/shell descent re-engages it (issue
@@ -2254,10 +2249,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 			return
 		}
 		targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
-		if a.ghost != nil {
-			a.ghost.paneID = destPane.ID
-		}
-		a.startSnap(targetX, targetY, snapMs)
+		a.landGhost(destPane.ID, 0, targetX, targetY)
 		a.createPluginLinkAtCell(destPane, d.item.plugin, dropX, dropY)
 		a.menu.Close()
 		return
@@ -2280,10 +2272,7 @@ func (a *App) commitTemplateDrop(d *dragState, sx, sy float64) {
 	// needs to be useful is asked for on the first DESCENT, so create is
 	// one experience everywhere: drop, descend, fill in).
 	targetX, targetY := dpscreen.CellToScreen(float64(dropX), float64(dropY))
-	if a.ghost != nil {
-		a.ghost.paneID = destPane.ID
-	}
-	a.startSnap(targetX, targetY, snapMs)
+	a.landGhost(destPane.ID, 0, targetX, targetY)
 
 	if d.item.entry != nil {
 		a.createEntryTileAtCell(destPane, *d.item.entry, dropX, dropY)
@@ -2491,23 +2480,15 @@ func (a *App) descendEphemeral(fp *pane.Pane, tile *rpc.Tile) {
 		return
 	}
 	// Stash the current descent (shell): restoreStashedDescent lands back on it.
-	savedAnchor := fp.Anchor
-	savedPath := slices.Clone(fp.Path)
-	savedFocus := fp.TextFocus
-	savedMode := fp.TextMode
-	savedScrollX := fp.TextScrollX
-	savedScrollY := fp.TextScrollY
+	var stash paneState
+	stash.StashDescent(fp)
 	fp.TextFocus = ""
 	fp.TextMode = ""
 	a.refreshFileOverlay()
 	a.startTextDescent(fp, tile, nil)
 	if top := a.local(fp.ID).PeekAscent(); top != nil {
-		top.Anchor = savedAnchor
-		top.Path = savedPath
-		top.TextFocus = savedFocus
-		top.TextMode = savedMode
-		top.TextScrollX = savedScrollX
-		top.TextScrollY = savedScrollY
+		stash.Cx, stash.Cy, stash.Zoom = top.Cx, top.Cy, top.Zoom
+		*top = stash
 	}
 }
 

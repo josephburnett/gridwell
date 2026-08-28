@@ -12,13 +12,19 @@
 // js-free.
 package panestate
 
+import (
+	"slices"
+
+	"github.com/josephburnett/gridwell/client/pane"
+)
+
 // Saved is one entry on the ascent stack: the parent viewport (Cx/Cy/Zoom) saved
 // just before a descent, plus — when the descent originated inside a text tile —
 // the text-descent context to reinstall on the matching ascent so a single
-// ascent lands back in the doc. Anchor/Path are set only for an embed descent
-// that re-anchored the pane onto another grid. Since #218 the one writer of
-// the text-descent fields is descendEphemeral's stack-a-visit-over-a-shell
-// stash (the #208 residual class); readers restore via restoreStashedDescent.
+// ascent lands back in the doc. Anchor/Path ride along when the stashed
+// descent lives on another grid. The one writer of the text-descent fields
+// is StashDescent (descendEphemeral's stack-a-visit-over-a-shell stash, the
+// #208 residual class) and the one reader is RestoreDescent.
 type Saved struct {
 	Cx          float64  `json:"cx"`
 	Cy          float64  `json:"cy"`
@@ -29,6 +35,38 @@ type Saved struct {
 	TextScrollY float64  `json:"text_scroll_y,omitempty"`
 	Anchor      string   `json:"anchor,omitempty"`
 	Path        []string `json:"path,omitempty"`
+}
+
+// StashDescent records p's current descent on s — anchor + path, text
+// focus/mode/scroll — so the ascent that pops s lands back on it. Together
+// with RestoreDescent this is THE list of stashed fields; the wasm never
+// copies them field by field (two hand-kept lists drifted once).
+func (s *Saved) StashDescent(p *pane.Pane) {
+	s.Anchor = p.Anchor
+	s.Path = slices.Clone(p.Path)
+	s.TextFocus = p.TextFocus
+	s.TextMode = p.TextMode
+	s.TextScrollX = p.TextScrollX
+	s.TextScrollY = p.TextScrollY
+}
+
+// RestoreDescent reinstalls a stashed descent on p and reports whether
+// there was one (an ordinary ascent's Saved carries no TextFocus). A stash
+// with an anchor re-anchors the pane; without one the pane keeps its grid.
+// TextZoom is the caller's (it is derived from the pane's zoom, not stashed).
+func (s *Saved) RestoreDescent(p *pane.Pane) bool {
+	if s.TextFocus == "" {
+		return false
+	}
+	if s.Anchor != "" {
+		p.Anchor = s.Anchor
+		p.Path = slices.Clone(s.Path)
+	}
+	p.TextFocus = s.TextFocus
+	p.TextMode = s.TextMode
+	p.TextScrollX = s.TextScrollX
+	p.TextScrollY = s.TextScrollY
+	return true
 }
 
 // State is the plain-data per-pane client state.
