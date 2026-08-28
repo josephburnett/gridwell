@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { VIEW } from './ipc';
 
 // Drift-lint for the drag threshold (ARCHITECTURE.md §8 seam #5). The "how far is
 // a drag, not a click" threshold is the SAME conceptual value in three places, in
@@ -20,11 +21,15 @@ import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url)); // apps/desktop/src/main
 const repoRoot = resolve(here, '../../../..');
 
-function literal(path: string, re: RegExp): number {
+function literalText(path: string, re: RegExp): string {
   const src = readFileSync(resolve(repoRoot, path), 'utf8');
   const m = src.match(re);
-  assert.ok(m, `no threshold literal found in ${path} (pattern ${re})`);
-  return parseFloat(m![1]);
+  assert.ok(m, `no literal found in ${path} (pattern ${re})`);
+  return m![1];
+}
+
+function literal(path: string, re: RegExp): number {
+  return parseFloat(literalText(path, re));
 }
 
 test('the drag threshold agrees across the canvas and both native copies', () => {
@@ -64,4 +69,27 @@ test('the right-drag time threshold agrees between viewutil and the preload', ()
     viewutil,
     'urlview-preload.ts RIGHT_DRAG_TIME_MS drifted from viewutil.ts (the owner); update both and keep them equal',
   );
+});
+
+// Drift-lint for the view→main IPC channel names. The preload sends on four
+// channels (VIEW_RIGHTDOWN, …) that main registers under ipc.ts VIEW.*; the
+// preload cannot import ipc.ts (sandboxed — see its header), so the names are
+// duplicated as string literals. A rename in ipc.ts compiles clean and the
+// handlers simply never fire: no right-drag gesture, no middle-click ascend,
+// no touch scroll over live content, and nothing says why. VIEW is the owner.
+test('the preload sends on the same VIEW channels ipc.ts declares', () => {
+  const preload = 'apps/desktop/src/preload/urlview-preload.ts';
+  const copies: Record<keyof typeof VIEW, string> = {
+    rightdown: literalText(preload, /VIEW_RIGHTDOWN\s*=\s*'([^']+)'/),
+    middledown: literalText(preload, /VIEW_MIDDLEDOWN\s*=\s*'([^']+)'/),
+    leftdown: literalText(preload, /VIEW_LEFTDOWN\s*=\s*'([^']+)'/),
+    touchscroll: literalText(preload, /VIEW_TOUCHSCROLL\s*=\s*'([^']+)'/),
+  };
+  for (const key of Object.keys(VIEW) as Array<keyof typeof VIEW>) {
+    assert.equal(
+      copies[key],
+      VIEW[key],
+      `urlview-preload.ts VIEW_${key.toUpperCase()} drifted from ipc.ts VIEW.${key} (the owner); the handler would never fire`,
+    );
+  }
 });
