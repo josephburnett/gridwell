@@ -16,10 +16,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            api/go.sum
-            plugins/*/go.sum
+          # Every module's go.sum keys the cache (test/boundary pins it):
+          # an enumerated list missed mobile, apps/*, internal/doctype and
+          # test/federation, whose dependency changes never invalidated it.
+          cache-dependency-path: '**/go.sum'
       - uses: actions/setup-node@v4
         with:
           node-version: 22

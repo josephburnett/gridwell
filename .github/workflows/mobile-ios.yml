@@ -6,7 +6,10 @@ name: mobile-ios
 on:
   push:
     branches: [main]
-    paths: ['mobile/**', 'api/**', 'go.mod', 'internal/**', 'plugins/**']
+    # Everything the bind compiles (test/boundary derives the list from
+    # `go list -deps` and pins it): client/ because the bind imports
+    # client/markdown, web/ because the server package embeds the wasm.
+    paths: ['mobile/**', 'api/**', 'go.mod', 'internal/**', 'plugins/**', 'client/**', 'web/**']
   workflow_dispatch:
 jobs:
   ios-canary:
