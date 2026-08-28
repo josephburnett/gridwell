@@ -7,12 +7,14 @@ package main
 import (
 	"strconv"
 
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/guest"
 	"github.com/josephburnett/gridwell/plugins/proc/plugin"
 )
 
 func main() {
-	cfg := guest.Config()
-	pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
-	guest.Serve(plugin.New("", pid, nil))
+	guest.Main(func(cfg map[string]string) (pluginv1.PluginServer, error) {
+		pid, _ := strconv.ParseInt(cfg["pid"], 10, 64)
+		return plugin.New("", pid, nil), nil
+	})
 }

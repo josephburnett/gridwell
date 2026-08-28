@@ -8,10 +8,13 @@
 package main
 
 import (
+	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/guest"
 	"github.com/josephburnett/gridwell/plugins/gitlab/plugin"
 )
 
 func main() {
-	guest.Serve(plugin.FromConfig(guest.Config()))
+	guest.Main(func(cfg map[string]string) (pluginv1.PluginServer, error) {
+		return plugin.FromConfig(cfg), nil
+	})
 }
