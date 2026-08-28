@@ -10,7 +10,6 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panestate"
 	"github.com/josephburnett/gridwell/client/textcursor"
@@ -530,16 +529,7 @@ func (a *App) fetchGridSync(id string) bool {
 	if _, ok := a.c.Grid(id); ok {
 		return true
 	}
-	resp, err := a.cl.GetGrid(context.Background(), id)
-	if err != nil {
-		a.gridLoadFailed[id] = true
-		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
-		return false
-	}
-	a.resolveErr("grid:" + id)
-	delete(a.gridLoadFailed, id)
-	a.c.PutGrid(resp.Grid, resp.Tiles)
-	return true
+	return a.loadGrid(id) == nil
 }
 
 // fetchBlobAndSetCursor pulls the file's bytes and, once they're in

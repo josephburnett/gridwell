@@ -175,9 +175,9 @@ type App struct {
 	touchTimerCb    js.Func
 	touchDownTarget js.Value
 
-	// gridLoadFailed records grids whose last fetch returned non-200, so
-	// the renderer can show a meaningful message and we don't retry in
-	// a tight loop.
+	// gridLoadFailed records grids whose last GetGrid failed (loadGrid is
+	// the one writer), so the renderer can say so and the URL walk does
+	// not retry in a tight loop.
 	gridLoadFailed map[string]bool
 
 	// gridInflight tracks grid ids with a pending GetGrid request so
@@ -907,12 +907,28 @@ func (a *App) resize() {
 	a.cctx.Call("setTransform", dpr, 0, 0, dpr, 0, 0)
 }
 
-// fetchGrid issues GetGrid and stores the result in the cache. Failures are
-// recorded so the renderer can surface them and we can avoid re-issuing the
-// same request inside a render loop. In-flight requests for the same grid
-// id are deduped: drawNodeWithPreview fires fetchGrid on every cache miss
-// every frame, so without the guard a single descent into a parent of
-// many wells would dogpile the server.
+// loadGrid is THE GetGrid→cache hop: one call, one failure flag, one error
+// key ("grid:<id>") surfaced and resolved through the strip. The async
+// renderer path (fetchGrid) and the synchronous URL walk (fetchGridSync)
+// both come here — they were two copies once, and two writers of
+// gridLoadFailed.
+func (a *App) loadGrid(id string) error {
+	resp, err := a.cl.GetGrid(context.Background(), id)
+	if err != nil {
+		a.gridLoadFailed[id] = true
+		a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
+		return err
+	}
+	a.resolveErr("grid:" + id)
+	delete(a.gridLoadFailed, id)
+	a.c.PutGrid(resp.Grid, resp.Tiles)
+	return nil
+}
+
+// fetchGrid loads a grid in the background. In-flight requests for the
+// same grid id are deduped: drawNodeWithPreview fires fetchGrid on every
+// cache miss every frame, so without the guard a single descent into a
+// parent of many wells would dogpile the server.
 func (a *App) fetchGrid(id string) {
 	if id == "" {
 		return
@@ -923,21 +939,15 @@ func (a *App) fetchGrid(id string) {
 	a.gridInflight[id] = true
 	// Clear any stale failure flag before attempting — a new fetch either
 	// succeeds (populates the cache) or fails (re-sets the flag). This
-	// prevents a previously-failed grid from staying locked out when an
-	// SSE GridChanged event fires and triggers a retry.
+	// prevents a previously-failed grid from staying locked out when a
+	// GridChanged event fires and triggers a retry.
 	delete(a.gridLoadFailed, id)
 	go func() {
 		defer delete(a.gridInflight, id)
-		resp, err := a.cl.GetGrid(context.Background(), id)
-		if err != nil {
-			a.gridLoadFailed[id] = true
-			a.reportErr(errsurface.Error, "grid:"+id, "grid unavailable: "+rpcErrText(err))
+		if a.loadGrid(id) != nil {
 			a.draw()
 			return
 		}
-		a.resolveErr("grid:" + id)
-		delete(a.gridLoadFailed, id)
-		a.c.PutGrid(resp.Grid, resp.Tiles)
 		// Coalesced repaint (scheduleFrame): fetch completions land in
 		// bursts — one draw() per completed child-grid read meant
 		// hundreds of full repaints while a big directory loaded (#265).
