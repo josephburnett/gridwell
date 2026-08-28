@@ -1,8 +1,8 @@
 package cli
 
 // resolvePluginBinaries: a bundled binary's in-process PLUGIN factory
-// must not swallow a PROVIDER entry's binary lookup — the two serve
-// different services (found 2026-08-23: gridwell-all + a provider home
+// must not swallow a PLUGIN entry's binary lookup — the two serve
+// different services (found 2026-08-23: gridwell-all + a plugin home
 // refused to boot).
 
 import (
@@ -15,11 +15,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// Every non-native kind is a provider (2026-08-27): a native kind (in
-// factories) stays in-process, a bundled provider factory keeps its
+// Every non-native kind is a plugin (2026-08-27): a native kind (in
+// factories) stays in-process, a bundled plugin factory keeps its
 // entry in-process, and everything else resolves gridwell-plugin-<kind>
 // — there is no plugin binary and no flag to get wrong.
-func TestNonNativeKindsResolveProviderBinaries(t *testing.T) {
+func TestNonNativeKindsResolvePluginBinaries(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "gridwell-plugin-fs"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -43,6 +43,6 @@ func TestNonNativeKindsResolveProviderBinaries(t *testing.T) {
 	}
 	missing := &config.ServerConfig{Plugins: []config.PluginConfig{{ID: "g1", Name: "todos", Kind: "gitlab"}}}
 	if err := resolvePluginBinaries(missing, nil); err == nil || !strings.Contains(err.Error(), "gridwell-plugin-gitlab") {
-		t.Fatalf("a missing provider binary must be named: %v", err)
+		t.Fatalf("a missing plugin binary must be named: %v", err)
 	}
 }

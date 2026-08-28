@@ -19,7 +19,7 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	if code := RunInit([]string{"--kind", "home", "--name", "home"}); code != 0 {
 		t.Fatalf("init exit = %d", code)
 	}
-	// A provider entry that has never served: no memory DB yet (2026-08-27:
+	// A plugin entry that has never served: no memory DB yet (2026-08-27:
 	// backup aborted on it). And the loose durable files a served home has.
 	if code := RunInit([]string{"--kind", "gitlab", "--name", "todos"}); code != 0 {
 		t.Fatalf("init gitlab exit = %d", code)
@@ -83,7 +83,7 @@ func TestBackupSnapshotsHome(t *testing.T) {
 		}
 	}
 	if len(cfg.Plugins) != 2 {
-		t.Errorf("backup config lists %d entries, want both (the provider without a DB must not abort)", len(cfg.Plugins))
+		t.Errorf("backup config lists %d entries, want both (the plugin without a DB must not abort)", len(cfg.Plugins))
 	}
 	_ = home
 }

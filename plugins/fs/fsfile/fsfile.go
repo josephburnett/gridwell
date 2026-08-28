@@ -1,6 +1,6 @@
 // Package fsfile is the PURE core of the fs projection: every derivation
 // from a filename or file bytes, with no database and no tile ids. It is
-// shared by the legacy fs plugin and the v2 fs content provider, so the
+// shared by the fs plugin, so the
 // two answer identically BY CONSTRUCTION — the migration parity gate
 // (docs/v2-design.md §8.4) leans on that.
 package fsfile

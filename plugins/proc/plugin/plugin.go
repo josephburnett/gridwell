@@ -1,4 +1,4 @@
-// Package provider is the v2 proc CONTENT PROVIDER (docs/v2-design.md
+// Package plugin is the v2 proc CONTENT PLUGIN (docs/v2-design.md
 // §5): the stateless projection of the process table. A context is a pid
 // (its grid lists that process's direct children); tile keys are pid
 // strings, plus "info:<pid>" for the @info metadata tile. Listings are
@@ -31,7 +31,7 @@ type Killer interface {
 const infoLabel = "@info"
 
 // infoKeyPrefix namespaces the metadata tiles' keys: "@info" appears in
-// EVERY grid, but provider keys must be globally unique.
+// EVERY grid, but plugin keys must be globally unique.
 const infoKeyPrefix = "info:"
 
 type sysKiller struct{}
@@ -101,7 +101,7 @@ func keyPID(key string) (int64, error) {
 	s := strings.TrimPrefix(key, infoKeyPrefix)
 	pid, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || pid <= 0 {
-		return 0, status.Errorf(codes.InvalidArgument, "proc provider: invalid key %q", key)
+		return 0, status.Errorf(codes.InvalidArgument, "proc plugin: invalid key %q", key)
 	}
 	return pid, nil
 }
@@ -184,7 +184,7 @@ func (p *Plugin) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*plugin
 		return nil, err
 	}
 	if kerr := p.killer.Kill(pid, syscall.SIGTERM); kerr != nil {
-		return nil, status.Errorf(codes.Internal, "proc provider: kill %d: %v", pid, kerr)
+		return nil, status.Errorf(codes.Internal, "proc plugin: kill %d: %v", pid, kerr)
 	}
 	return &pluginv1.DeleteResponse{}, nil
 }

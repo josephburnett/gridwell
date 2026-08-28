@@ -243,7 +243,7 @@ func drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64
 	}
 }
 
-// memoWrap is drawMarkdownText's wrap provider backed by a render cache:
+// memoWrap is drawMarkdownText's wrap plugin backed by a render cache:
 // re-wrapping a whole document every frame for every visible file tile
 // was O(doc × tiles) per frame (#265). Keyed by content id + version +
 // length + columns — the version bump (the one content door) invalidates

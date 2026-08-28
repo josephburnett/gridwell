@@ -1,4 +1,4 @@
-// Package gitlabapi is the thin HTTP half of the gitlab todos provider:
+// Package gitlabapi is the thin HTTP half of the gitlab todos plugin:
 // one pager over GET /api/v4/todos. It knows the wire (token header,
 // per_page, X-Next-Page) and nothing about weeks, memory, or tiles.
 package gitlabapi

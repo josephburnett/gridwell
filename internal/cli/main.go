@@ -8,11 +8,11 @@ import (
 )
 
 // Main is the shared CLI dispatch for every composed gridwell binary
-// (docs/plugin.md): the stock host passes nil (every provider
-// out-of-process); a bundled binary passes its compiled-in provider
+// (docs/plugin.md): the stock host passes nil (every plugin
+// out-of-process); a bundled binary passes its compiled-in plugin
 // loadout — and everything else — init, status, backup, the whole serve
 // wiring — is identical. Returns the process exit code.
-func Main(args []string, providers map[string]plugin.Factory) int {
+func Main(args []string, plugins map[string]plugin.Factory) int {
 	if len(args) < 1 {
 		usage()
 		return 2
@@ -23,7 +23,7 @@ func Main(args []string, providers map[string]plugin.Factory) int {
 	case "init":
 		return RunInit(rest)
 	case "serve":
-		return RunServeWith(rest, providers)
+		return RunServeWith(rest, plugins)
 	case "status":
 		return RunStatus(rest)
 	case "backup":

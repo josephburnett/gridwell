@@ -161,10 +161,10 @@ type PluginConfig struct {
 	Kind   string            `yaml:"kind"`
 	Binary string            `yaml:"binary,omitempty"`
 	Config map[string]string `yaml:"config,omitempty"`
-	// LegacyProvider is the retired `provider: true` marker (2026-08-27):
-	// every non-native kind IS a content provider now, so the flag says
+	// LegacyPluginFlag is the retired `provider: true` marker (2026-08-27):
+	// every non-native kind IS a plugin now, so the flag says
 	// nothing. Parsed only so a rewrite keeps the line; Load notes it.
-	LegacyProvider bool `yaml:"provider,omitempty"`
+	LegacyPluginFlag bool `yaml:"provider,omitempty"`
 }
 
 // Defaults holds the built-in values used when a field is absent from the
@@ -258,7 +258,7 @@ func Load(path string) (*ServerConfig, error) {
 	}
 	cfg.Web.BindSet = webBindSet || legacyBindSet
 	for _, pc := range cfg.Plugins {
-		if pc.LegacyProvider {
+		if pc.LegacyPluginFlag {
 			cfg.Deprecations = append(cfg.Deprecations, fmt.Sprintf("plugin %q: provider: true is implied for every non-native kind; drop the line", pc.Name))
 		}
 	}

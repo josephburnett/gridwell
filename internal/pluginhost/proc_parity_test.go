@@ -60,12 +60,12 @@ func writeProc(t *testing.T, root string, pid, ppid int64, name string) {
 	}
 }
 
-func providerProcNode(t *testing.T, procRoot string) *rpc.Client {
+func pluginProcNode(t *testing.T, procRoot string) *rpc.Client {
 	t.Helper()
-	return providerProcNodeAt(t, procRoot, filepath.Join(t.TempDir(), "mem.db"))
+	return pluginProcNodeAt(t, procRoot, filepath.Join(t.TempDir(), "mem.db"))
 }
 
-func providerProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
+func pluginProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 	t.Helper()
 	mem, err := layout.Open(memPath)
 	if err != nil {
@@ -90,11 +90,11 @@ func providerProcNodeAt(t *testing.T, procRoot, memPath string) *rpc.Client {
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 }
 
-// TestProcProviderSweepAndPlacement: place a child, kill another; the
+// TestProcPluginSweepAndPlacement: place a child, kill another; the
 // next read sweeps only the dead one and the placement persists.
-func TestProcProviderSweepAndPlacement(t *testing.T) {
+func TestProcPluginSweepAndPlacement(t *testing.T) {
 	procRoot := fakeProc(t)
-	v2 := providerProcNode(t, procRoot)
+	v2 := pluginProcNode(t, procRoot)
 	ctx := context.Background()
 	pl, err := v2.ListPlugins(ctx)
 	if err != nil {
@@ -154,7 +154,7 @@ func TestProcProviderSweepAndPlacement(t *testing.T) {
 func TestRetiredKeyStaysRetiredWithoutIdBurn(t *testing.T) {
 	procRoot := fakeProc(t)
 	memPath := filepath.Join(t.TempDir(), "mem.db")
-	v2 := providerProcNodeAt(t, procRoot, memPath)
+	v2 := pluginProcNodeAt(t, procRoot, memPath)
 	ctx := context.Background()
 
 	pl, err := v2.ListPlugins(ctx)

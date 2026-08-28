@@ -18,7 +18,7 @@ import (
 
 // NativeFactory constructs an in-process gridwell.v1 server (a native kind)
 // from its config map: db_file, uuid, kind, plus kind-specific keys —
-// the same vocabulary a provider binary reads from the spawn environment
+// the same vocabulary a plugin binary reads from the spawn environment
 // (guest.Config).
 type NativeFactory func(cfg map[string]string) (gridwellv1.GridwellServer, error)
 

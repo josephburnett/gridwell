@@ -15,11 +15,11 @@ type Source interface {
 	Page(ctx context.Context, state string, page int) (todos []Todo, more bool, err error)
 }
 
-// Memory is everything the provider has seen this process lifetime,
+// Memory is everything the plugin has seen this process lifetime,
 // keyed by todo id. It is the "plugin cache" of the design: a todo that
 // vanishes from GitLab keeps its record here and shows as done; nothing
 // is ever removed. Durable memory is the NODE's (the read-through
-// listing cache) — a provider is stateless by contract, so a restart
+// listing cache) — a plugin is stateless by contract, so a restart
 // re-walks GitLab and the node bridges the gap.
 type Memory struct {
 	mu    sync.Mutex

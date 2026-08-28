@@ -1,10 +1,10 @@
 // Package plugin — loader builds the registry from server config. Every
 // entry is one of two things: a NATIVE kind (local, remote — node code,
 // constructed by the factories the serve wiring supplies) or a CONTENT
-// PROVIDER (everything else — spawned as a gridwell-plugin-<kind>
+// PLUGIN (everything else — spawned as a gridwell-plugin-<kind>
 // subprocess, the third-party door, or compiled in through a
 // Factory: gridwell-all, mobile — iOS forbids fork/exec). The
-// gridwell.v1 subprocess door retired 2026-08-27; plugins are providers.
+// gridwell.v1 subprocess door retired 2026-08-27; plugins are plugins.
 package plugin
 
 import (
@@ -25,14 +25,14 @@ import (
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 )
 
-// Factory constructs an in-process v2 content provider from the
-// shared config vocabulary (the provider twin of NativeFactory).
+// Factory constructs an in-process plugin from the
+// shared config vocabulary (the plugin twin of NativeFactory).
 type Factory func(cfg map[string]string) (pluginv1.PluginServer, error)
 
 // LoadAll constructs a Registry from the server config. Each
 // entry becomes one Registry entry keyed by its ID. A kind present in
 // factories is NATIVE and constructs in-process; every other kind is a
-// content provider: a plugin.v1 subprocess (binary) or a
+// plugin: a plugin.v1 subprocess (binary) or a
 // pluginFactories constructor, fronted by the pluginhost adapter over
 // the NODE-owned memory DB at the entry's derived db path —
 // indistinguishable from a native kind above the registry.
@@ -102,7 +102,7 @@ func LoadAll(cfg *config.ServerConfig, natives map[string]NativeFactory, factori
 }
 
 // NativeFactory is compose.NativeFactory: an in-process constructor for a
-// NATIVE kind over the ONE config vocabulary providers share.
+// NATIVE kind over the ONE config vocabulary plugins share.
 type NativeFactory = compose.NativeFactory
 
 // ServeInProcess is compose.ServeInProcess — re-exported for the many
@@ -149,13 +149,13 @@ func closeImpl(pc *config.PluginConfig, impl gridwellv1.GridwellServer) {
 	}
 }
 
-// loadPlugin materializes one provider entry: the content process
+// loadPlugin materializes one plugin entry: the content process
 // (subprocess binary or in-process factory), the node-owned memory DB at
 // the entry's derived db path, and the adapter that joins them, served
 // back as an ordinary GridwellClient.
 func loadPlugin(pc *config.PluginConfig, pluginFactories map[string]Factory) (gridwellv1.GridwellClient, func(), error) {
-	// The provider's config: its own keys plus identity — but NOT
-	// db_file: a provider is stateless by contract, and the derived db
+	// The plugin's config: its own keys plus identity — but NOT
+	// db_file: a plugin is stateless by contract, and the derived db
 	// path is the NODE's memory DB, not the guest's to open.
 	cfg := make(map[string]string, len(pc.Config)+2)
 	for k, v := range pc.Config {
@@ -166,7 +166,7 @@ func loadPlugin(pc *config.PluginConfig, pluginFactories map[string]Factory) (gr
 	cfg["uuid"] = pc.ID
 	cfg["kind"] = pc.Kind
 	if memPath == "" {
-		return nil, nil, fmt.Errorf("provider %q: no derived db path (BuildConfig injects db_file)", pc.Name)
+		return nil, nil, fmt.Errorf("plugin %q: no derived db path (BuildConfig injects db_file)", pc.Name)
 	}
 
 	var cp pluginv1.PluginClient
@@ -181,7 +181,7 @@ func loadPlugin(pc *config.PluginConfig, pluginFactories map[string]Factory) (gr
 		}
 		cp, cpClose, err = compose.PluginInProcess(impl)
 	} else {
-		return nil, nil, fmt.Errorf("kind %q: no provider factory and no binary path (not a native kind either)", pc.Kind)
+		return nil, nil, fmt.Errorf("kind %q: no plugin factory and no binary path (not a native kind either)", pc.Kind)
 	}
 	if err != nil {
 		return nil, nil, err

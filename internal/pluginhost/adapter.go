@@ -1,6 +1,6 @@
 // Package pluginhost adapts a v2 Plugin to the full Gridwell
 // service (docs/v2-design.md §4): the node-side half of the split. The
-// adapter joins the provider's content answers (keys, kinds, labels,
+// adapter joins the plugin's content answers (keys, kinds, labels,
 // bytes) with the external's memory DB (ids, placement, framing — the
 // layout engine) and registers in the plugin registry like any plugin,
 // so the router, the client, and federation never know the difference.
@@ -8,9 +8,9 @@
 // This is THE seam of the v2 design — the one place two owners' facts
 // meet — which is why it stays thin: every merge decision lives in
 // internal/layout (pure, exhaustively unit-tested), every content
-// derivation lives in the provider, and the adapter only converts and
+// derivation lives in the plugin, and the adapter only converts and
 // forwards. Presentation verbs terminate here; content verbs pass
-// through; a provider outage degrades to the remembered listing (the
+// through; a plugin outage degrades to the remembered listing (the
 // read-through cache, tenet 6 — I12 as node machinery).
 package pluginhost
 
@@ -34,16 +34,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/layout"
 )
 
-// Adapter implements gridwellv1.GridwellServer over one provider + its
+// Adapter implements gridwellv1.GridwellServer over one plugin + its
 // memory DB.
 type Adapter struct {
 	gridwellv1.UnimplementedGridwellServer
 	cp  pluginv1.PluginClient
 	mem *layout.DB
 
-	// kind memoizes the provider's declared Kind after the first
-	// successful handshake. Identity-stable for the provider's lifetime
-	// — remembered so a DARK provider (crashed subprocess) degrades to
+	// kind memoizes the plugin's declared Kind after the first
+	// successful handshake. Identity-stable for the plugin's lifetime
+	// — remembered so a DARK plugin (crashed subprocess) degrades to
 	// the cached listing instead of failing every GetGrid on the Info
 	// call (tenet 6: the remembered answer, stamped stale).
 	kindMu sync.Mutex
@@ -55,7 +55,7 @@ func New(cp pluginv1.PluginClient, mem *layout.DB) *Adapter {
 	return &Adapter{cp: cp, mem: mem}
 }
 
-// Info translates the provider handshake, minting the root context's
+// Info translates the plugin handshake, minting the root context's
 // grid id and reading its persisted viewport from the memory DB.
 func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
@@ -254,8 +254,8 @@ func buildTiles(gridID string, tiles []layout.Tile, entries []*pluginv1.Entry) [
 	return out
 }
 
-// sourceKind answers the provider's declared Kind, from the memo when
-// the provider is unreachable — a read that already degraded to the
+// sourceKind answers the plugin's declared Kind, from the memo when
+// the plugin is unreachable — a read that already degraded to the
 // remembered listing must not fail on this identity-stable stamp.
 func (a *Adapter) sourceKind(ctx context.Context) (string, error) {
 	a.kindMu.Lock()
@@ -299,7 +299,7 @@ func (a *Adapter) grid(ctx context.Context, gid int64) (*gridwellv1.Grid, []*gri
 func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, error) {
 	key, err := a.mem.ContextKey(gid)
 	if errors.Is(err, layout.ErrNotFound) {
-		return nil, status.Errorf(codes.NotFound, "provider: no grid %d", gid)
+		return nil, status.Errorf(codes.NotFound, "plugin: no grid %d", gid)
 	}
 	if err != nil {
 		return nil, err
@@ -352,7 +352,7 @@ func (a *Adapter) synthesize(ctx context.Context, gid int64) (*synthesized, erro
 func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	gid, err := strconv.ParseInt(req.GridId, 10, 64)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "provider: invalid grid_id %q", req.GridId)
+		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid grid_id %q", req.GridId)
 	}
 	g, tiles, err := a.grid(ctx, gid)
 	if err != nil {
@@ -366,11 +366,11 @@ func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (
 func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile, error) {
 	id, err := strconv.ParseInt(tileID, 10, 64)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "provider: invalid tile_id %q", tileID)
+		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", tileID)
 	}
 	gid, _, tomb, err := a.mem.TileKey(id)
 	if errors.Is(err, layout.ErrNotFound) || tomb {
-		return nil, status.Errorf(codes.NotFound, "provider: no tile %d", id)
+		return nil, status.Errorf(codes.NotFound, "plugin: no tile %d", id)
 	}
 	if err != nil {
 		return nil, err
@@ -384,7 +384,7 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 			return t, nil
 		}
 	}
-	return nil, status.Errorf(codes.NotFound, "provider: no tile %d", id)
+	return nil, status.Errorf(codes.NotFound, "plugin: no tile %d", id)
 }
 
 // Search forwards the query to the plugin and turns each hit into a
@@ -400,7 +400,7 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 // root-anchored path would be a wrong place, not a missing one.
 func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
 	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
-		return nil, status.Error(codes.Unimplemented, "provider: locate by id is not supported (no parent index in the memory DB)")
+		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the memory DB)")
 	}
 	resp, err := a.cp.Search(ctx, &pluginv1.SearchRequest{Query: req.Query, Limit: req.Limit})
 	if err != nil {
@@ -491,15 +491,15 @@ func (a *Adapter) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (
 	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
-// key resolves a LIVE tile id to its provider key.
+// key resolves a LIVE tile id to its plugin key.
 func (a *Adapter) key(tileID string) (int64, string, error) {
 	id, err := strconv.ParseInt(tileID, 10, 64)
 	if err != nil {
-		return 0, "", status.Errorf(codes.InvalidArgument, "provider: invalid tile_id %q", tileID)
+		return 0, "", status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", tileID)
 	}
 	_, key, tomb, err := a.mem.TileKey(id)
 	if errors.Is(err, layout.ErrNotFound) || tomb {
-		return 0, "", status.Errorf(codes.NotFound, "provider: no tile %d", id)
+		return 0, "", status.Errorf(codes.NotFound, "plugin: no tile %d", id)
 	}
 	if err != nil {
 		return 0, "", err
@@ -520,7 +520,7 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 			return nil, kerr
 		}
 		if req.GridId != strconv.FormatInt(gid, 10) {
-			return nil, status.Errorf(codes.InvalidArgument, "provider: cross-grid placement not supported")
+			return nil, status.Errorf(codes.InvalidArgument, "plugin: cross-grid placement not supported")
 		}
 	}
 	if err := a.mem.Place(id, req.X, req.Y, req.W, req.H); err != nil {
@@ -530,8 +530,8 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 }
 
 // SetTile terminates the framing arms at the memory DB. Rename is
-// refused (a provider tile's name IS its source name); content arms
-// don't exist for provider tiles.
+// refused (a plugin tile's name IS its source name); content arms
+// don't exist for plugin tiles.
 func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	id, _, err := a.key(req.TileId)
 	if err != nil {
@@ -539,7 +539,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	}
 	switch {
 	case req.Rename != "":
-		return nil, status.Error(codes.InvalidArgument, "provider: tiles derive their names from the source")
+		return nil, status.Error(codes.InvalidArgument, "plugin: tiles derive their names from the source")
 	case req.ContentZoom != nil:
 		if err := a.mem.SetContentZoom(id, *req.ContentZoom); err != nil {
 			return nil, err
@@ -556,7 +556,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 				return nil, err
 			}
 		default:
-			return nil, status.Errorf(codes.InvalidArgument, "provider: unsupported SetTile kind %q", t.GetKind())
+			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
 	}
 	return a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: req.TileId})
@@ -566,7 +566,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 func (a *Adapter) SetRootView(_ context.Context, req *gridwellv1.SetRootViewRequest) (*gridwellv1.SetRootViewResponse, error) {
 	gid, err := strconv.ParseInt(req.RootGridId, 10, 64)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "provider: invalid root_grid_id %q", req.RootGridId)
+		return nil, status.Errorf(codes.InvalidArgument, "plugin: invalid root_grid_id %q", req.RootGridId)
 	}
 	if err := a.mem.SetRootView(gid, req.Cx, req.Cy, req.Zoom); err != nil {
 		return nil, err
@@ -591,7 +591,7 @@ func (a *Adapter) ReadContent(req *gridwellv1.ReadContentRequest, stream grpc.Se
 		if rerr != nil {
 			return rerr
 		}
-		// Provider content is not version-edited: version 0, the legacy
+		// Plugin content is not version-edited: version 0, the legacy
 		// fs/proc wire fact.
 		if serr := stream.Send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType}); serr != nil {
 			return serr
@@ -665,7 +665,7 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 	}
 }
 
-// DeleteTile deletes the SOURCE thing (the provider's verdict), then
+// DeleteTile deletes the SOURCE thing (the plugin's verdict), then
 // retires the row. Already-gone rows succeed — idempotent, like legacy.
 func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	id, err := strconv.ParseInt(req.TileId, 10, 64)
@@ -683,7 +683,7 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 		return nil, err
 	}
 	if err := a.mem.Retire(id); err != nil && !errors.Is(err, layout.ErrNotFound) {
-		return nil, fmt.Errorf("provider: source deleted but row not retired: %w", err)
+		return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
 	}
 	return &gridwellv1.DeleteTileResponse{}, nil
 }

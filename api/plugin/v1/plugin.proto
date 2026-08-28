@@ -1,19 +1,19 @@
 // plugin.proto is THE PLUGIN INTERFACE (docs/v2-design.md §2.2, where it
-// was designed as the "content provider" surface). A provider is STATELESS: it answers from its
+// was designed as the "content plugin" surface). A plugin is STATELESS: it answers from its
 // source (a directory tree, the process table, a mail account) in its own
 // stable string KEYS, and never sees ids, layout, or a database. The node
 // owns all of those: it mints numeric ids against keys, stores placement
 // and framing in the external's memory DB, and serves the full Gridwell
-// surface to clients — a provider is invisible on the federation wire.
+// surface to clients — a plugin is invisible on the federation wire.
 //
-// Key stability is the provider's one hard contract: a key names the same
+// Key stability is the plugin's one hard contract: a key names the same
 // logical thing forever (a path relative to the configured root, a
 // message-id, "pid:1234"). Changing the key scheme orphans every stored
 // reference, exactly as re-minting ids would.
 //
 // Unimplemented is always polite: Search = no results, ServeContent =
 // 404, Watch = no events, WriteContent = read-only, GetPreview = no
-// thumbnail, Delete = refused. A minimal provider is Info + List +
+// thumbnail, Delete = refused. A minimal plugin is Info + List +
 // ReadContent.
 syntax = "proto3";
 
@@ -28,18 +28,18 @@ message InfoResponse {
   string kind         = 1; // e.g. "fs", "proc", "mail"
   string display_name = 2;
   string glyph        = 3; // declared glyph vocabulary; "" = the generic globe
-  // root_context is the key of the provider's landing context ("" = the
-  // provider has no landing grid; its entries appear only through
+  // root_context is the key of the plugin's landing context ("" = the
+  // plugin has no landing grid; its entries appear only through
   // declarations/search).
   string root_context = 4;
-  // watch: the provider implements Watch (live change events).
+  // watch: the plugin implements Watch (live change events).
   bool watch = 5;
-  // writable: the provider accepts WriteContent on (some of) its
-  // entries. Presentation writes never reach a provider, so this is
+  // writable: the plugin accepts WriteContent on (some of) its
+  // entries. Presentation writes never reach a plugin, so this is
   // purely a content capability.
   bool writable = 6;
-  // menu_entries: the provider's declared (+) menu additions, stamped by
-  // the node onto every grid it serves for this provider (the #258
+  // menu_entries: the plugin's declared (+) menu additions, stamped by
+  // the node onto every grid it serves for this plugin (the #258
   // mechanism, keyed by context instead of grid id).
   repeated MenuEntry menu_entries = 7;
 }
@@ -69,7 +69,7 @@ message ListResponse {
   // key absent from it is GONE (a readable directory). false: absence
   // means "not seen this pass" (the process table); the node keeps
   // serving remembered entries until Probe answers GONE. The one sweep
-  // fact only the provider knows.
+  // fact only the plugin knows.
   bool authoritative = 2;
   // source_label is the human name of the backing source (the directory
   // path, the pid) — becomes Grid.source_id on the node surface.
@@ -77,7 +77,7 @@ message ListResponse {
 }
 
 message Entry {
-  string key   = 1; // stable, unique within the provider
+  string key   = 1; // stable, unique within the plugin
   string kind  = 2; // "well" | "text" | "url"
   string label = 3;
   // child_context: wells only — the context this entry opens into.
@@ -108,7 +108,7 @@ message PlacementHint {
 // ─── Content ───────────────────────────────────────────────────────────────
 
 // ReadContent streams an entry's content bytes. Chunk 1 carries
-// media_type; provider content is not version-edited (versions are a
+// media_type; plugin content is not version-edited (versions are a
 // node fact).
 message ReadContentRequest {
   string key = 1;
@@ -120,7 +120,7 @@ message ContentChunk {
 
 // WriteContent streams an entry's new content up (first message binds
 // the key). COMMIT AT CLOSE, like every Gridwell write: a broken stream
-// leaves the old value intact. Providers that are pure projections
+// leaves the old value intact. Plugins that are pure projections
 // leave it unimplemented.
 message WriteContentRequest {
   string key  = 1;
@@ -128,7 +128,7 @@ message WriteContentRequest {
 }
 message WriteContentResponse {}
 
-// ServeContent is the web-content door's provider half: GET-only,
+// ServeContent is the web-content door's plugin half: GET-only,
 // subpath "" is the entry's root page. Sandboxing happens at the node.
 message ServeContentRequest {
   string key     = 1;
@@ -164,7 +164,7 @@ message ProbeResponse {
   Presence presence = 1;
 }
 
-// Delete asks the provider to delete the SOURCE thing behind an entry
+// Delete asks the plugin to delete the SOURCE thing behind an entry
 // (trash the file, signal the process). The node handles the id/layout
 // side; presence catches up through List/Probe as usual.
 message DeleteRequest {
@@ -176,7 +176,7 @@ message DeleteResponse {}
 
 message SearchRequest {
   string query = 1;
-  int32  limit = 2; // 0 = provider default
+  int32  limit = 2; // 0 = plugin default
 }
 message SearchResult {
   Entry entry = 1;

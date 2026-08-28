@@ -8,7 +8,7 @@ package server
 // SAME way, so "the launcher" is one concept everywhere instead of a
 // client-side special case.
 //
-// The provider is a pure adapter over facts that already have owners: the
+// The plugin is a pure adapter over facts that already have owners: the
 // tile set comes from the registry (config order), each tile's child and
 // framing come from the plugin's Info handshake (root_grid_id, root_view_*),
 // and a framing writeback maps onto the plugin's own SetRootView. Nothing is
@@ -41,7 +41,7 @@ type nodeGrid struct {
 	reg *plugin.Registry
 	// info fetches a plugin's (cached) Info handshake; invalidate drops the
 	// cache entry after a framing writeback. Both provided by the Server so
-	// the provider shares the one Info cache instead of growing its own.
+	// the plugin shares the one Info cache instead of growing its own.
 	info       func(ctx context.Context, uuid string) (*pb.InfoResponse, error)
 	invalidate func(uuid string)
 

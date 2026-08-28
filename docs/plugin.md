@@ -85,8 +85,8 @@ loadout) and never what's behind it.
 ```
 plugins/fs/
   go.mod                     requires .../api ONLY
-  provider/ fsfile/ ...      the implementation
-  cmd/gridwell-plugin-fs/  main: guest.Serve(provider.New(...))
+  plugin/ fsfile/ ...      the implementation
+  cmd/gridwell-plugin-fs/  main: guest.Serve(plugin.New(...))
 ```
 `plugins/gitlab` (2026-08-25) is the first plugin written AGAINST the
 v2 door rather than ported to it: a stateless projection of a GitLab
@@ -111,7 +111,7 @@ todo the user has seen. Config:
 (2026-08-24: the legacy full-`gridwell.v1` fs/proc plugins retired with
 the v2 cutover. 2026-08-27: the `gridwell.v1` subprocess door itself —
 `guest.Serve`, `compose.Command`, the `provider: true` flag, the second
-init door — retired: a plugin IS a content provider, every non-native
+init door — retired: there is ONE kind of plugin, every non-native
 kind spawns `gridwell-plugin-<kind>`, and `home`/`remote` are the
 node's own kinds. This document's remaining "gridwell-plugin-*" wording
 is the 2026-08-15 plan as executed; the current door is
@@ -121,11 +121,11 @@ unchanged) and the tmux/shellsvc machinery its binary owns.
 
 ### The apps
 
-- `apps/gridwell`: server + api. ZERO provider imports — the host spawns
+- `apps/gridwell`: server + api. ZERO plugin imports — the host spawns
   `gridwell-plugin-*` binaries named by config/PATH. This is what dist
   ships today, minus the knowledge of who it ships with.
 - `apps/gridwell-all`: the bundled example — same server, the shipped
-  providers compiled in as `plugin.Factory` entries. Exists to
+  plugins compiled in as `plugin.Factory` entries. Exists to
   PROVE the door (check-parity runs the browser suite against it) and
   as the template for anyone composing their own.
 - `apps/mobile` (the Go bind in `mobile/` moves here or stays — leaf

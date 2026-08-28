@@ -120,6 +120,7 @@ check: fmt-check proto-check wasm
 	done
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	./scripts/check-tracked-binaries.sh
+	./scripts/check-vocabulary.sh
 	./scripts/check-deadcode.sh
 	./scripts/check-docpaths.sh
 	go tool staticcheck ./...

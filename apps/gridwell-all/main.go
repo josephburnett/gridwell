@@ -1,9 +1,9 @@
 // gridwell-all — the BUNDLED example binary (docs/plugin.md): the same
-// server, the same CLI, with the included content providers COMPILED IN
+// server, the same CLI, with the included plugins COMPILED IN
 // through the compose door. It exists to prove the door's contract — the
 // e2e parity gate runs the same suite against gridwell (all external)
 // and this binary (all in-process) and must see identical behavior — and
-// as the template for composing your own binary: import your providers,
+// as the template for composing your own binary: import your plugins,
 // hand Main their factories, done. Enumeration of what ships is a
 // LEAF-BINARY privilege; this is one of the two leaves (mobile is the
 // other).

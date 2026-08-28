@@ -334,7 +334,7 @@ func (a *App) thLocalPaneIds(js.Value, []js.Value) any {
 }
 
 // thShellVisitURL fires the focused shell's url-click path (what xterm's link
-// provider activate callback does) so an e2e can exercise the shell→ephemeral-
+// plugin activate callback does) so an e2e can exercise the shell→ephemeral-
 // url descent without hit-testing a terminal cell. e2e-only; mutates state.
 func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 	if len(args) >= 1 && args[0].Type() == js.TypeString {

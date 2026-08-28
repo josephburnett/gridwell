@@ -405,9 +405,9 @@ func (a *App) openShellStream(p *pane.Pane, tileID string) {
 		cb.Invoke(links)
 		return nil
 	})
-	provider := js.Global().Get("Object").New()
-	provider.Set("provideLinks", conn.onLinkProvide)
-	term.Call("registerLinkProvider", provider)
+	links := js.Global().Get("Object").New()
+	links.Set("provideLinks", conn.onLinkProvide)
+	term.Call("registerLinkProvider", links)
 
 	// OSC 5522: the gridwell-open browser shim ($BROWSER in every session,
 	// internal/tmux) hands back a url a terminal app tried to open — emacs

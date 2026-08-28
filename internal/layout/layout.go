@@ -1,9 +1,9 @@
 // Package layout is the node's presentation engine (docs/v2-design.md
 // §4.1) — THE seam of the v2 design, so it is a pure, headless package:
-// given a provider's listing (stable keys, no ids, no placement) and the
+// given a plugin's listing (stable keys, no ids, no placement) and the
 // external's memory DB, it resolves keys to minted numeric ids, overlays
 // the user's stored arrangement, places first-sighted entries (the
-// provider's hint, else the first free cell), and retires entries an
+// plugin's hint, else the first free cell), and retires entries an
 // authoritative listing no longer contains.
 //
 // Identity rules (tenet 7):
@@ -12,7 +12,7 @@
 //     recreated under the same name is a NEW thing with a fresh id
 //     (exactly the legacy fs reconcile's delete-then-reinsert identity),
 //     enforced by a partial unique index on LIVE rows only;
-//   - placement/framing writes are unversioned (provider tiles serve
+//   - placement/framing writes are unversioned (plugin tiles serve
 //     version 0 on the wire — carried over verbatim from the retired
 //     legacy fs/proc plugins so the migration changed nothing).
 package layout
@@ -168,7 +168,7 @@ func OpenVerified(path, uuid, kind string) (*DB, error) {
 	return d, nil
 }
 
-// Entry is one provider listing row, as the engine needs it — a mirror
+// Entry is one plugin listing row, as the engine needs it — a mirror
 // of the Plugin Entry without a proto dependency (this package
 // stays pure).
 type Entry struct {
@@ -180,10 +180,10 @@ type Entry struct {
 	Hint *Hint
 }
 
-// Hint is a provider's suggested first placement.
+// Hint is a plugin's suggested first placement.
 type Hint struct{ X, Y, W, H int64 }
 
-// Tile is one merged row: the provider's content facts joined with the
+// Tile is one merged row: the plugin's content facts joined with the
 // user's stored arrangement.
 type Tile struct {
 	ID          int64
@@ -223,7 +223,7 @@ func (d *DB) ContextID(key string) (int64, error) {
 	return res.LastInsertId()
 }
 
-// ContextKey resolves a minted grid id back to the provider's context key.
+// ContextKey resolves a minted grid id back to the plugin's context key.
 func (d *DB) ContextKey(gridID int64) (string, error) {
 	var key string
 	err := d.db.QueryRow(`SELECT key FROM contexts WHERE grid_id = ?`, gridID).Scan(&key)
@@ -254,7 +254,7 @@ func (d *DB) RetiredKeys(gridID int64) (map[string]bool, error) {
 	return out, rows.Err()
 }
 
-// TileKey resolves a minted tile id to its (grid id, provider key).
+// TileKey resolves a minted tile id to its (grid id, plugin key).
 // Retired rows still resolve — a dangling reference stays interpretable;
 // the caller decides what retirement means (reads: gone).
 func (d *DB) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, err error) {
@@ -267,7 +267,7 @@ func (d *DB) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, e
 	return gridID, key, tomb != 0, err
 }
 
-// Merge joins one provider listing with the stored arrangement,
+// Merge joins one plugin listing with the stored arrangement,
 // transactionally: known live keys keep their rows; new keys mint ids
 // and take their first placement (hint, else first free cell); and when
 // the listing is authoritative, live keys absent from it retire. The
@@ -443,7 +443,7 @@ func (d *DB) liveOnly(tileID int64) error {
 }
 
 // Place is the placement writeback: (x, y, w, h), same grid always
-// (cross-grid placement never existed for provider tiles). Unversioned.
+// (cross-grid placement never existed for plugin tiles). Unversioned.
 func (d *DB) Place(tileID, x, y, w, h int64) error {
 	if err := d.liveOnly(tileID); err != nil {
 		return err
@@ -502,7 +502,7 @@ func (d *DB) SetRootView(gridID int64, cx, cy, zoom float64) error {
 }
 
 // CacheListing remembers a context's last good listing — an opaque blob
-// the caller (the provider adapter) serializes; the engine never
+// the caller (the plugin adapter) serializes; the engine never
 // interprets it.
 func (d *DB) CacheListing(gridID int64, blob []byte, authoritative bool) error {
 	auth := 0
@@ -530,7 +530,7 @@ func (d *DB) CachedListing(gridID int64) (blob []byte, authoritative, ok bool, e
 }
 
 // Retire tombstones one tile row directly — the delete-gesture path
-// (the provider deletes the source; the row retires without waiting for
+// (the plugin deletes the source; the row retires without waiting for
 // the next authoritative listing).
 func (d *DB) Retire(tileID int64) error {
 	if err := d.liveOnly(tileID); err != nil {

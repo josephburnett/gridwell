@@ -23,8 +23,8 @@ import (
 	fsplugin "github.com/josephburnett/gridwell/plugins/fs/plugin"
 )
 
-// darkableCP forwards to a live provider until dark is set — then every
-// unary call answers Unavailable, exactly what a crashed provider
+// darkableCP forwards to a live plugin until dark is set — then every
+// unary call answers Unavailable, exactly what a crashed plugin
 // SUBPROCESS looks like to the adapter (distinct from the dark-SOURCE
 // case, where the process answers and only the directory read fails).
 type darkableCP struct {
@@ -34,30 +34,30 @@ type darkableCP struct {
 
 func (d *darkableCP) Info(ctx context.Context, req *pluginv1.InfoRequest, opts ...grpc.CallOption) (*pluginv1.InfoResponse, error) {
 	if d.dark.Load() {
-		return nil, status.Error(codes.Unavailable, "provider process dark")
+		return nil, status.Error(codes.Unavailable, "plugin process dark")
 	}
 	return d.PluginClient.Info(ctx, req, opts...)
 }
 
 func (d *darkableCP) List(ctx context.Context, req *pluginv1.ListRequest, opts ...grpc.CallOption) (*pluginv1.ListResponse, error) {
 	if d.dark.Load() {
-		return nil, status.Error(codes.Unavailable, "provider process dark")
+		return nil, status.Error(codes.Unavailable, "plugin process dark")
 	}
 	return d.PluginClient.List(ctx, req, opts...)
 }
 
 func (d *darkableCP) Probe(ctx context.Context, req *pluginv1.ProbeRequest, opts ...grpc.CallOption) (*pluginv1.ProbeResponse, error) {
 	if d.dark.Load() {
-		return nil, status.Error(codes.Unavailable, "provider process dark")
+		return nil, status.Error(codes.Unavailable, "plugin process dark")
 	}
 	return d.PluginClient.Probe(ctx, req, opts...)
 }
 
-// A crashed provider process must degrade exactly like a dark source:
+// A crashed plugin process must degrade exactly like a dark source:
 // the remembered listing, stamped stale. Before the fix, grid() served
 // the cache from List but then failed the whole read on the trailing
 // Info call — the tenet-6 promise never fired for the process-dark case.
-func TestProviderProcessDarkServesRememberedListing(t *testing.T) {
+func TestPluginProcessDarkServesRememberedListing(t *testing.T) {
 	root := seedTree(t)
 	mem, err := layout.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
@@ -99,7 +99,7 @@ func TestProviderProcessDarkServesRememberedListing(t *testing.T) {
 	dc.dark.Store(true)
 	after, err := cl.GetGrid(ctx, rootGrid)
 	if err != nil {
-		t.Fatalf("process-dark provider surfaced as an error instead of the remembered answer: %v", err)
+		t.Fatalf("process-dark plugin surfaced as an error instead of the remembered answer: %v", err)
 	}
 	if !after.Grid.Stale {
 		t.Fatal("remembered answer not stamped stale")
@@ -117,6 +117,6 @@ func TestProviderProcessDarkServesRememberedListing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if healed.Grid.Stale {
-		t.Fatal("healed provider still stamped stale")
+		t.Fatal("healed plugin still stamped stale")
 	}
 }

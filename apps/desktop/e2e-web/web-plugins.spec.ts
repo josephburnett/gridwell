@@ -5,12 +5,12 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-// Every shipped provider kind, crawled through the browser client: proc
+// Every shipped plugin kind, crawled through the browser client: proc
 // (a live process tree) and gitlab (todos against a fake GitLab API).
 // This spec is what makes `make check-parity` mean what it says — the
 // composition-parity gate runs the SAME suite against `gridwell` (each
-// provider a spawned gridwell-plugin-<kind> subprocess) and against
-// `gridwell-all` (every provider in-process through the compose door),
+// plugin a spawned gridwell-plugin-<kind> subprocess) and against
+// `gridwell-all` (every plugin in-process through the compose door),
 // and until this spec the suite only ever seeded fs, so proc and gitlab
 // were never crossed in either composition. test/boundary pins that
 // every kind in apps/gridwell-all's loadout is seeded by some web spec.
@@ -32,7 +32,7 @@ const TODO = {
 };
 const TOKEN = 'glpat-e2e-fake';
 
-// fakeGitLab answers the ONE endpoint the provider pages, and refuses a
+// fakeGitLab answers the ONE endpoint the plugin pages, and refuses a
 // wrong token the way GitLab does (401) — so a seeded token_file that
 // did not reach the plugin is a visible failure, not an empty grid.
 function fakeGitLab(): Promise<http.Server> {
@@ -55,11 +55,11 @@ function fakeGitLab(): Promise<http.Server> {
 
 test.use({
   // The seeded plugins need the fake API's port, so the option is a
-  // fixture here: stand the fake up, seed both providers against it.
+  // fixture here: stand the fake up, seed both plugins against it.
   extraPlugins: async ({}, use) => {
     const api = await fakeGitLab();
     const port = (api.address() as net.AddressInfo).port;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-web-providers-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gridwell-web-plugins-'));
     const tokenFile = path.join(dir, 'token');
     fs.writeFileSync(tokenFile, TOKEN + '\n', { mode: 0o600 });
     await use([
@@ -106,6 +106,6 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   expect(todo, `the todo tile is labeled by author and ref; have ${JSON.stringify(todos.map((t) => t.altText))}`).toBeTruthy();
 
   // ReadContent is the todo's markdown — served through the node exactly
-  // like any text tile (the oracle is the RPC, not the provider).
+  // like any text tile (the oracle is the RPC, not the plugin).
   expect(await gw.getTileContent(todo!.id)).toContain('please **review**');
 });

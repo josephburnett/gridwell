@@ -108,7 +108,7 @@ func TestHintSeedsFirstSightOnly(t *testing.T) {
 	if e.X != 10 || e.Y != 2 || e.W != 2 {
 		t.Fatalf("hint not honored at first sight: %+v", e)
 	}
-	// The user moves it; the provider's hint changes; the USER wins.
+	// The user moves it; the plugin's hint changes; the USER wins.
 	if err := d.Place(e.ID, 0, 0, 1, 1); err != nil {
 		t.Fatal(err)
 	}

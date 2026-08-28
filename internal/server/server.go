@@ -94,7 +94,7 @@ type Server struct {
 
 // New constructs a Server that routes everything through reg. With a NodeID
 // configured, the server also serves the NODE GRID — the plugin-list landing
-// page — as an in-process provider addressed like any plugin
+// page — as an in-process plugin addressed like any plugin
 // ("<node_id>/0"); every operation is addressed by a qualified id. An
 // empty Password is refused: the browser door has no open mode.
 func New(reg *plugin.Registry, cfg Config) (*Server, error) {
@@ -131,7 +131,7 @@ func (s *Server) Close() {
 	}
 }
 
-// routeClient resolves a plugin uuid to its client: the node grid provider
+// routeClient resolves a plugin uuid to its client: the node grid plugin
 // for the node's own uuid, else the registry. The ONE routing lookup — the
 // Connect handler, the shell WS bridge, the session endpoint, and the preview
 // endpoint all resolve through here so the node grid is addressable

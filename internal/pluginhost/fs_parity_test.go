@@ -1,6 +1,6 @@
 package pluginhost_test
 
-// The v2 fs stack (fs provider + adapter + layout engine) through a full
+// The v2 fs stack (fs plugin + adapter + layout engine) through a full
 // server: placement and framing persist, sweeps remove only the dead,
 // the read-through cache answers when the source goes dark, and a
 // retired id never returns. (Until the 2026-08 cutover these behaviors
@@ -84,7 +84,7 @@ func pluginNodeAt(t *testing.T, root, memPath string) (*rpc.Client, *fsplugin.Pl
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), prov
 }
 
-func TestProviderServesRememberedListingWhenSourceDark(t *testing.T) {
+func TestPluginServesRememberedListingWhenSourceDark(t *testing.T) {
 	// The v2 read-through cache (tenet 6): after one good read, a source
 	// that stops answering serves the remembered listing, stamped stale,
 	// and retires nothing.
@@ -184,11 +184,11 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	}
 }
 
-// TestFSProviderPlacementAndFramingPersist: the user drags notes.md and
+// TestFSPluginPlacementAndFramingPersist: the user drags notes.md and
 // frames the sub well; a later read serves both back verbatim, and a
 // file that arrives afterwards lands in an empty cell, never on top of
 // the placed tile ("things stay as you left them").
-func TestFSProviderPlacementAndFramingPersist(t *testing.T) {
+func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 	root := seedTree(t)
 	v2, _ := pluginNode(t, root)
 	ctx := context.Background()
@@ -241,9 +241,9 @@ func TestFSProviderPlacementAndFramingPersist(t *testing.T) {
 	}
 }
 
-// TestFSProviderSweepRemovesOnlyTheDead: a file deleted on disk is swept
+// TestFSPluginSweepRemovesOnlyTheDead: a file deleted on disk is swept
 // on the next read; every surviving tile keeps its id and placement.
-func TestFSProviderSweepRemovesOnlyTheDead(t *testing.T) {
+func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	root := seedTree(t)
 	v2, _ := pluginNode(t, root)
 	ctx := context.Background()

@@ -1,7 +1,7 @@
 package compose
 
-// The v2 content-provider half of the compose sugar (docs/v2-design.md):
-// a provider binary serves plugin.v1 instead of gridwell.v1;
+// The v2 content-plugin half of the compose sugar (docs/v2-design.md):
+// a plugin binary serves plugin.v1 instead of gridwell.v1;
 // this helper is the in-process shape — a real gRPC loopback, so the
 // caller holds the same client interface a subprocess dial would give.
 
@@ -22,7 +22,7 @@ import (
 )
 
 // ConfigEnvVar is the environment variable the host uses to hand a
-// provider its config map (JSON) at spawn — guest.Config reads it.
+// plugin its config map (JSON) at spawn — guest.Config reads it.
 const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
 
 // HostPIDEnvVar carries the spawning host's pid to the guest, which
@@ -30,40 +30,40 @@ const ConfigEnvVar = "GRIDWELL_PLUGIN_CONFIG"
 // go-plugin gives the guest no host-death detection in our configuration.
 const HostPIDEnvVar = "GRIDWELL_HOST_PID"
 
-// PluginName is the go-plugin dispatch key for the provider
+// PluginName is the go-plugin dispatch key for the plugin
 // service.
-const PluginName = "gridwell-provider"
+const PluginName = "gridwell-plugin"
 
-// providerGRPCPlugin bridges go-plugin's transport and the
+// pluginGRPCPlugin bridges go-plugin's transport and the
 // Plugin service.
-type providerGRPCPlugin struct {
+type pluginGRPCPlugin struct {
 	plugin.Plugin
 	Impl pluginv1.PluginServer
 }
 
-func (p *providerGRPCPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
+func (p *pluginGRPCPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
 	pluginv1.RegisterPluginServer(s, p.Impl)
 	return nil
 }
 
-func (p *providerGRPCPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+func (p *pluginGRPCPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return pluginv1.NewPluginClient(c), nil
 }
 
-// PluginMap is the plugin map for provider binaries — impl set on
+// PluginMap is the plugin map for plugin binaries — impl set on
 // the guest side, nil on the host side.
 func PluginMap(impl pluginv1.PluginServer) map[string]plugin.Plugin {
 	return map[string]plugin.Plugin{
-		PluginName: &providerGRPCPlugin{Impl: impl},
+		PluginName: &pluginGRPCPlugin{Impl: impl},
 	}
 }
 
-// LoadPlugin spawns a provider binary and hands back the connected
+// LoadPlugin spawns a plugin binary and hands back the connected
 // client: the config map rides the spawn environment (guest.Config), the
 // host pid rides with it for the guest's host-death watchdog.
 func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient, func(), error) {
 	logger := hclog.New(&hclog.LoggerOptions{
-		Name:   "provider-host",
+		Name:   "plugin-host",
 		Output: hclog.DefaultOutput,
 		Level:  hclog.Error,
 	})
@@ -73,7 +73,7 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 	if len(cfg) > 0 {
 		blob, err := json.Marshal(cfg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("provider %q: marshal config: %w", binaryPath, err)
+			return nil, nil, fmt.Errorf("plugin %q: marshal config: %w", binaryPath, err)
 		}
 		cmd.Env = append(cmd.Env, ConfigEnvVar+"="+string(blob))
 	}
@@ -91,28 +91,28 @@ func LoadPlugin(binaryPath string, cfg map[string]string) (pluginv1.PluginClient
 	rpcClient, err := client.Client()
 	if err != nil {
 		client.Kill()
-		return nil, nil, fmt.Errorf("provider dial %q: %w", binaryPath, err)
+		return nil, nil, fmt.Errorf("plugin dial %q: %w", binaryPath, err)
 	}
 	raw, err := rpcClient.Dispense(PluginName)
 	if err != nil {
 		client.Kill()
-		return nil, nil, fmt.Errorf("provider dispense %q: %w", binaryPath, err)
+		return nil, nil, fmt.Errorf("plugin dispense %q: %w", binaryPath, err)
 	}
 	cp, ok := raw.(pluginv1.PluginClient)
 	if !ok {
 		client.Kill()
-		return nil, nil, fmt.Errorf("provider %q: unexpected type %T", binaryPath, raw)
+		return nil, nil, fmt.Errorf("plugin %q: unexpected type %T", binaryPath, raw)
 	}
 	return cp, client.Kill, nil
 }
 
 // PluginInProcess serves a Plugin implementation over a
-// loopback gRPC server and returns the connected client — the provider
+// loopback gRPC server and returns the connected client — the plugin
 // twin of ServeInProcess.
 func PluginInProcess(impl pluginv1.PluginServer) (pluginv1.PluginClient, func(), error) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, nil, fmt.Errorf("in-process provider listen: %w", err)
+		return nil, nil, fmt.Errorf("in-process plugin listen: %w", err)
 	}
 
 	srv := grpc.NewServer()
@@ -123,7 +123,7 @@ func PluginInProcess(impl pluginv1.PluginServer) (pluginv1.PluginClient, func(),
 	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		srv.Stop()
-		return nil, nil, fmt.Errorf("in-process provider dial %s: %w", addr, err)
+		return nil, nil, fmt.Errorf("in-process plugin dial %s: %w", addr, err)
 	}
 
 	closer := func() {

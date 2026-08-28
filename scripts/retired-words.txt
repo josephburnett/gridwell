@@ -1,0 +1,9 @@
+# Retired words (scripts/check-vocabulary.sh): "<word> [<allowed hit regex>]".
+# A hit is "path:line:text"; the regex must match it from the start.
+#
+# "provider" — one word: plugin (owner decision 2026-08-27). Allowed: the
+# two design records that coined it (history, not guidance); xterm's own
+# "link provider" API; the retired `provider: true` yaml key, which the
+# config must still recognize to print its deprecation.
+provider docs/v2-design\.md|docs/content-presentation\.md|.*[Ll]ink [Pp]rovider|.*registerLinkProvider|.*provider: true|.*yaml:"provider
+providers docs/v2-design\.md|docs/content-presentation\.md

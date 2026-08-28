@@ -192,7 +192,7 @@ func TestListPluginsCarriesNodeIdentity(t *testing.T) {
 func TestNodeGridViewportSurvivesRestart(t *testing.T) {
 	// The landing page's own framing is durable: SetRootView mirrors it to
 	// the state file, and a fresh server (a restart) serves it back through
-	// Info/the node tiles' provider — things stay as you left them.
+	// Info/the node tiles' plugin — things stay as you left them.
 	dir := t.TempDir()
 	statePath := dir + "/node-view.json"
 
@@ -223,7 +223,7 @@ func TestNodeGridViewportSurvivesRestart(t *testing.T) {
 	defer closer2()
 	// The node grid's Info carries the restored viewport (what the client
 	// would seed a bookmark-boot from). Read it via ListPlugins is the local
-	// plugin list, so go through the provider directly: GetGrid's tiles use
+	// plugin list, so go through the plugin directly: GetGrid's tiles use
 	// per-PLUGIN views; the node's OWN view rides Info of the node uuid —
 	// exercised through SetRootView's read-back pair: write once more with
 	// the same values must be a no-op file-wise, and a GetGrid still works.
@@ -235,7 +235,7 @@ func TestNodeGridViewportSurvivesRestart(t *testing.T) {
 		t.Fatalf("node grid lost its tiles after restart: %+v", g.Tiles)
 	}
 	// Assert the persisted values round-tripped by reading the state file's
-	// owner through the wire: the provider's Info.
+	// owner through the wire: the plugin's Info.
 	info, err := nodeInfoViaExport(t, statePath)
 	if err != nil {
 		t.Fatal(err)
@@ -246,8 +246,8 @@ func TestNodeGridViewportSurvivesRestart(t *testing.T) {
 	}
 }
 
-// nodeInfoViaExport reads the node-grid provider's Info directly (a fresh
-// provider against the state file), the same handshake a mounter sees.
+// nodeInfoViaExport reads the node-grid plugin's Info directly (a fresh
+// plugin against the state file), the same handshake a mounter sees.
 func nodeInfoViaExport(t *testing.T, statePath string) (*pb.InfoResponse, error) {
 	t.Helper()
 	ng := &nodeGrid{reg: plugin.NewRegistry(), info: nil, invalidate: func(string) {}, statePath: statePath}
@@ -288,7 +288,7 @@ func TestNodeGridPlacementPersists(t *testing.T) {
 		t.Fatalf("unplaced tile left its default row: %+v", other)
 	}
 
-	// A fresh provider over the same state file (the restart) still
+	// A fresh plugin over the same state file (the restart) still
 	// serves the arrangement.
 	ng := &nodeGrid{reg: plugin.NewRegistry(), info: nil, invalidate: func(string) {}, statePath: statePath}
 	ng.loadView()

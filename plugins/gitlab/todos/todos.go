@@ -1,8 +1,8 @@
-// Package todos is the PURE half of the gitlab todos provider: the todo
+// Package todos is the PURE half of the gitlab todos plugin: the todo
 // record, the week calendar, the memory of every todo seen, and the
-// derivations (entries, labels, placement hints) the provider answers
+// derivations (entries, labels, placement hints) the plugin answers
 // with. No network, no gRPC — everything here is unit-tested against
-// fakes, and the provider package only wires it to the wire.
+// fakes, and the plugin package only wires it to the wire.
 package todos
 
 import (
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Todo is the subset of GitLab's todo object the provider uses
+// Todo is the subset of GitLab's todo object the plugin uses
 // (docs.gitlab.com/api/todos). Only the fields that survive every
 // target_type are read from the nested target — Commit and Project
 // targets carry no iid, for instance.
@@ -23,7 +23,7 @@ type Todo struct {
 	TargetURL  string `json:"target_url"`
 	Body       string `json:"body"`
 	// State is "pending" or "done" — GitLab's word, and the ONE fact
-	// the provider re-derives locally (see Memory.Sync): a todo absent
+	// the plugin re-derives locally (see Memory.Sync): a todo absent
 	// from the pending set is done, whatever GitLab says about it.
 	State     string    `json:"state"`
 	CreatedAt time.Time `json:"created_at"`
@@ -126,11 +126,11 @@ func (t *Todo) Label() string {
 	return b.String()
 }
 
-// Key is the todo's provider key — stable forever, GitLab's own id.
+// Key is the todo's plugin key — stable forever, GitLab's own id.
 func (t *Todo) Key() string { return KeyPrefix + strconv.FormatInt(t.ID, 10) }
 
 // KeyPrefix namespaces todo keys; WeekPrefix namespaces week contexts;
-// RootContext is the provider's landing grid.
+// RootContext is the plugin's landing grid.
 const (
 	KeyPrefix   = "todo:"
 	WeekPrefix  = "week:"

@@ -1096,7 +1096,7 @@ func (a *App) ascendPortal(p *pane.Pane) {
 	// The portal's containing tile: the link well in the frame's leaf grid
 	// whose child is the pane's current anchor. When it resolves, the ascent
 	// writes the pane's framing back onto it (the SAME face-#3 writeback a
-	// normal well ascent does — for a node-grid tile the provider maps it
+	// normal well ascent does — for a node-grid tile the plugin maps it
 	// onto the plugin's SetRootView) and animates onto its footprint.
 	well := a.portalWellForFrame(p, f)
 	if well != nil {
@@ -1136,7 +1136,7 @@ func (a *App) persistPluginRootView(p *pane.Pane) {
 		return
 	}
 	// The NODE GRID's own viewport (2026-08-13) writes through the same
-	// core: its provider implements SetRootView like any plugin root, and
+	// core: its plugin implements SetRootView like any plugin root, and
 	// the handshake copy reconciles like a PluginInfo's.
 	if p.Anchor != "" && p.Anchor == a.nodeGrid {
 		a.persistRootViewCore(p, a.nodeRootViewCx, a.nodeRootViewCy, a.nodeRootViewZoom,

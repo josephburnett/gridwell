@@ -103,7 +103,7 @@ arrangement you care about is the pane tile.
 ## Plugins and federation
 
 Every space is a plugin. `home` is the node's own store and holds your
-content. `fs`, `proc`, and `gitlab` are content providers — separate
+content. `fs`, `proc`, and `gitlab` are plugins — separate
 binaries that answer in their own stable keys (a path, a pid, a todo)
 while the node mints the ids and keeps the layout — honest views of a
 world Gridwell doesn't own (files and processes come and go, but their

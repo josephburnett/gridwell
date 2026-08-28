@@ -8,7 +8,7 @@
 // through the phase-1 cache when the tailnet is down.
 //
 // Mobile-shaped by decision (docs/offline-plan.md):
-//   - Providers load IN-PROCESS (node.Options.Factories): iOS forbids
+//   - Plugins load IN-PROCESS (node.Options.Factories): iOS forbids
 //     fork/exec, so the go-plugin subprocess model cannot exist there.
 //     Same wire contract, same id discipline, no process boundary —
 //     promoted from the loader's test-only path to the supported mobile

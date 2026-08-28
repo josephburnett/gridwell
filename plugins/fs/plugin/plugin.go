@@ -1,4 +1,4 @@
-// Package provider is the v2 fs CONTENT PROVIDER (docs/v2-design.md §5):
+// Package plugin is the v2 fs CONTENT PLUGIN (docs/v2-design.md §5):
 // the stateless projection of a directory tree. Keys are slash-relative
 // paths under the configured root ("." is the root context); every
 // derivation and byte-level answer comes from plugins/fs/fsfile, SHARED
@@ -89,13 +89,13 @@ func (p *Plugin) SetReadDir(f func(dir string) ([]fssource.Entry, error)) {
 }
 
 // abs resolves a relative key under the root, refusing escapes. Keys are
-// node-supplied (from this provider's own earlier answers), so an escape
+// node-supplied (from this plugin's own earlier answers), so an escape
 // is a bug or an attack either way — refuse loudly.
 func (p *Plugin) abs(key string) (string, error) {
 	clean := path.Clean("/" + key) // "/" + forces the cleanup to anchor
 	full := filepath.Join(p.root, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
 	if !fsfile.UnderRoot(p.root, full) {
-		return "", status.Errorf(codes.InvalidArgument, "fs provider: key %q escapes the root", key)
+		return "", status.Errorf(codes.InvalidArgument, "fs plugin: key %q escapes the root", key)
 	}
 	return full, nil
 }
@@ -152,7 +152,7 @@ func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.L
 		if errors.Is(readErr, iofs.ErrNotExist) {
 			return &pluginv1.ListResponse{Authoritative: true, SourceLabel: dir}, nil
 		}
-		return nil, status.Errorf(codes.Unavailable, "fs provider: read %s: %v", dir, readErr)
+		return nil, status.Errorf(codes.Unavailable, "fs plugin: read %s: %v", dir, readErr)
 	}
 	resp := &pluginv1.ListResponse{Authoritative: true, SourceLabel: dir}
 	for _, e := range entries {
@@ -189,7 +189,7 @@ func (p *Plugin) ReadContent(req *pluginv1.ReadContentRequest, stream pluginv1.P
 	return stream.Send(&pluginv1.ContentChunk{Data: data, MediaType: mediaType})
 }
 
-// serveStream adapts the provider chunk stream to fsfile's sender (the
+// serveStream adapts the plugin chunk stream to fsfile's sender (the
 // two services' chunk shapes match field-for-field).
 type serveStream struct {
 	s pluginv1.Plugin_ServeContentServer
@@ -205,7 +205,7 @@ func (p *Plugin) ServeContent(req *pluginv1.ServeContentRequest, stream pluginv1
 		return err
 	}
 	if fi, statErr := os.Lstat(filepath.Join(dir, name)); statErr == nil && fi.IsDir() {
-		return status.Error(codes.NotFound, "fs provider: directories serve no page")
+		return status.Error(codes.NotFound, "fs plugin: directories serve no page")
 	}
 	return fsfile.ServeFile(serveStream{stream}, dir, name, req.Subpath)
 }
@@ -247,11 +247,11 @@ func (p *Plugin) Delete(_ context.Context, req *pluginv1.DeleteRequest) (*plugin
 	}
 	if info.IsDir() {
 		if err := p.host.RemoveAll(full); err != nil {
-			return nil, status.Errorf(codes.Internal, "fs provider: remove %s: %v", full, err)
+			return nil, status.Errorf(codes.Internal, "fs plugin: remove %s: %v", full, err)
 		}
 	} else {
 		if err := p.host.Remove(full); err != nil {
-			return nil, status.Errorf(codes.Internal, "fs provider: remove %s: %v", full, err)
+			return nil, status.Errorf(codes.Internal, "fs plugin: remove %s: %v", full, err)
 		}
 	}
 	return &pluginv1.DeleteResponse{}, nil

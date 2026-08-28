@@ -11,7 +11,7 @@ import (
 
 // TestEveryBundledKindIsCrawledByTheWebSuite pins that the composition
 // parity gate (`make check-parity`, docs/plugin.md) exercises EVERY
-// provider kind gridwell-all bundles: each key of pluginFactories() in
+// plugin kind gridwell-all bundles: each key of pluginFactories() in
 // apps/gridwell-all/main.go must be seeded (`kind: '<k>'`) by some spec
 // under apps/desktop/e2e-web. Before this pin the suite only ever seeded
 // fs, so "parity" for proc and gitlab was a gate that ran no test — the

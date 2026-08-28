@@ -81,7 +81,7 @@ func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) err
 
 	// Snapshot every DB first; write server.yaml last, so a completed
 	// backup (one whose server.yaml exists) always has all its DBs. A
-	// native kind's DB must exist (init created it); a provider's is the
+	// native kind's DB must exist (init created it); a plugin's is the
 	// node's memory DB, minted at first serve — absent means never served,
 	// not lost (durable-but-forgettable by contract).
 	for i := range cfg.Plugins {

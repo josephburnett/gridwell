@@ -4,7 +4,7 @@
 // assembly, and the lifecycle. Extracted (offline-plan phase 2) so the
 // CLI and the mobile bind (mobile/) share ONE serve wiring instead of
 // drifting copies: the CLI adds flags, the serve lock, the banner and
-// signal handling around it; mobile adds its bundled provider factories
+// signal handling around it; mobile adds its bundled plugin factories
 // and auto-init. Neither reimplements the middle.
 package node
 
@@ -71,14 +71,14 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 		// A NATIVE kind's DB must already exist: it is created once by
 		// init. serve never creates one — otherwise a changed id (whose
 		// derived path doesn't exist) would silently spawn a fresh, empty
-		// store instead of failing. A PROVIDER's derived path is the
+		// store instead of failing. A PLUGIN's derived path is the
 		// NODE-owned memory DB (docs/v2-design.md §3.2), durable-but-
 		// FORGETTABLE by contract — creating it empty is the defined
 		// recovery from losing it, so serve creates it freely
 		// (layout.OpenVerified stamps identity at creation).
 		if !IsNative(pc.Kind) {
 			if err := os.MkdirAll(filepath.Dir(dbFile), 0o755); err != nil {
-				return nil, fmt.Errorf("provider %q (%s): db dir: %w", pc.Name, pc.ID, err)
+				return nil, fmt.Errorf("plugin %q (%s): db dir: %w", pc.Name, pc.ID, err)
 			}
 			continue
 		}
@@ -91,7 +91,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 
 // nativeFactories are the kinds the NODE itself implements over
 // gridwell.v1 — the local store and the remote transport — the only
-// kinds that are not content providers (docs/content-presentation.md
+// kinds that are not content plugins (docs/content-presentation.md
 // §9). The ONE owner of that distinction and of their construction:
 // init creates a DB for exactly these, serve spawns nothing for them,
 // Start constructs them here — no leaf (desktop, mobile) composes its
@@ -109,7 +109,7 @@ func IsNative(kind string) bool {
 }
 
 // Init registers one entry in a home: mint the durable id, create a
-// NATIVE kind's DB with its identity stamped (pluginmeta) — a provider
+// NATIVE kind's DB with its identity stamped (pluginmeta) — a plugin
 // gets no DB here; its node-owned memory DB is minted at first serve —
 // append the server.yaml entry, and ensure the node's own id. The one
 // init door: the CLI's `gridwell init` and mobile's first-run auto-init
@@ -154,7 +154,7 @@ type Options struct {
 	// bind, static override, forced DisableShells).
 	Cfg *config.ServerConfig
 	// Factories, when non-nil, provides in-process constructors
-	// for provider entries whose Binary is empty (bundled binaries;
+	// for plugin entries whose Binary is empty (bundled binaries;
 	// mobile — iOS forbids fork/exec; tests). The native kinds need no
 	// such door: the node constructs them itself.
 	Factories map[string]plugin.Factory

@@ -19,12 +19,12 @@ import (
 	"github.com/josephburnett/gridwell/plugins/gitlab/todos"
 )
 
-// The gitlab todos provider through the WHOLE shipped stack — fake
+// The gitlab todos plugin through the WHOLE shipped stack — fake
 // GitLab → plugin → adapter → server → ReadContent — pinning
 // the three promises the design makes at the seam where they are kept:
-// the provider's hints become the first arrangement and the user's
+// the plugin's hints become the first arrangement and the user's
 // moves win from then on; a todo that leaves GitLab flips to done
-// without moving or changing identity; and a provider RESTART (empty
+// without moving or changing identity; and a plugin RESTART (empty
 // memory) does not lose the tile — the node remembers it.
 
 type fakeGitLab struct {
@@ -51,7 +51,7 @@ func gitlabTodo(id int64, created string) todos.Todo {
 	return t
 }
 
-// gitlabStackAt stands the provider up over an EXISTING memory DB path
+// gitlabStackAt stands the plugin up over an EXISTING memory DB path
 // (a restart reuses it) and returns the adapter client plus a closer.
 func gitlabStackAt(t *testing.T, memPath string, impl pluginv1.PluginServer) (gridwellv1.GridwellClient, func()) {
 	t.Helper()

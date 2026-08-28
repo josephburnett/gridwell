@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-tracked-binaries: no build output may be committed. Twice a
-# rename of the binaries (localdb→plugin 0b81bb2, provider→plugin f999236)
+# rename of the binaries (localdb→plugin 0b81bb2, plugin→plugin f999236)
 # swapped the .gitignore names in the same commit that left the OLD names
 # on disk, and `git add -A` swept ~60 MB of ELF into history. The ignore
 # list is a guess about names; this gate is the fact: a tracked file that

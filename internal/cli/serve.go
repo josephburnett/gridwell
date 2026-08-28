@@ -112,7 +112,7 @@ func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return node.BuildConfig(home, cfgPath)
 }
 
-// resolveBinary finds a provider binary (gridwell-plugin-<kind>): via
+// resolveBinary finds a plugin binary (gridwell-plugin-<kind>): via
 // GRIDWELL_PLUGIN_DIR, then beside the running gridwell executable (how
 // `make` lays them out), then on PATH.
 func resolveBinary(name string) (string, error) {
@@ -143,10 +143,10 @@ func isExecutable(path string) bool {
 }
 
 // resolvePluginBinaries fills each entry's binary: the node's NATIVE
-// kinds run in-process; a kind with a bundled provider factory runs
+// kinds run in-process; a kind with a bundled plugin factory runs
 // in-process too; every other kind spawns gridwell-plugin-<kind>
 // (server.yaml may pin an explicit binary: path instead).
-func resolvePluginBinaries(cfg *config.ServerConfig, providers map[string]plugin.Factory) error {
+func resolvePluginBinaries(cfg *config.ServerConfig, plugins map[string]plugin.Factory) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
 		if pc.Binary != "" {
@@ -155,7 +155,7 @@ func resolvePluginBinaries(cfg *config.ServerConfig, providers map[string]plugin
 		if node.IsNative(pc.Kind) {
 			continue
 		}
-		if _, bundled := providers[pc.Kind]; bundled {
+		if _, bundled := plugins[pc.Kind]; bundled {
 			continue
 		}
 		bin, err := resolveBinary("gridwell-plugin-" + pc.Kind)
@@ -175,11 +175,11 @@ func resolvePluginBinaries(cfg *config.ServerConfig, providers map[string]plugin
 // web.bind pins it, e.g. to a Tailscale IP for phone access). SIGINT/SIGTERM
 // trigger graceful shutdown.
 //
-// providers is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
-// kinds present in it load in-process; every other provider spawns
+// plugins is the BUNDLED-binary door (a leaf composer, docs/plugin.md):
+// kinds present in it load in-process; every other plugin spawns
 // out-of-process. The stock host passes nil. The native kinds (local,
 // remote) are the node's own on every path.
-func RunServeWith(args []string, providers map[string]plugin.Factory) int {
+func RunServeWith(args []string, plugins map[string]plugin.Factory) int {
 	home, err := config.Home()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
@@ -231,9 +231,9 @@ func RunServeWith(args []string, providers map[string]plugin.Factory) int {
 	}
 	defer lock.Release()
 
-	// Resolve each provider's binary (server.yaml may pin an explicit path
+	// Resolve each plugin's binary (server.yaml may pin an explicit path
 	// instead); native and bundled kinds stay in-process (node.IsNative).
-	if err := resolvePluginBinaries(cfg, providers); err != nil {
+	if err := resolvePluginBinaries(cfg, plugins); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		return 1
 	}
@@ -246,7 +246,7 @@ func RunServeWith(args []string, providers map[string]plugin.Factory) int {
 	n, err := node.Start(node.Options{
 		Home:      home,
 		Cfg:       cfg,
-		Factories: providers,
+		Factories: plugins,
 		// The embedded web client by default — the binary is self-contained
 		// (web.FS); server.yaml static:/--static is the dev override that
 		// serves a checkout from disk instead.

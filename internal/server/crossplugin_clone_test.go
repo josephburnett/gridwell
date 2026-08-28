@@ -478,7 +478,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	fsClient := newProviderClient(t, "fs", fsplugin.New(dir, nil))
+	fsClient := newPluginClient(t, "fs", fsplugin.New(dir, nil))
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("fs info: %v", err)
