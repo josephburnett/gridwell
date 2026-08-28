@@ -127,5 +127,7 @@ func (r *Registry) Close() {
 	}
 	r.clients = make(map[string]gridwellv1.GridwellClient)
 	r.kinds = make(map[string]string)
+	r.labels = make(map[string]string)
+	r.transit = make(map[string]bool)
 	r.order = nil
 }

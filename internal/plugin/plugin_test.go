@@ -207,3 +207,17 @@ func TestLoadAllFailsOnARefusingFactory(t *testing.T) {
 		t.Fatalf("LoadAll = %v, want the factory's reason, naming the plugin", err)
 	}
 }
+
+// Close is terminal for the clients, and must be for every per-plugin fact:
+// labels and transit verdicts survived it, so a re-Register after Close
+// inherited a stale transit-ness.
+func TestRegistry_CloseForgetsEveryFact(t *testing.T) {
+	reg := plugin.NewRegistry()
+	reg.Register("p1", "fs", nil, nil)
+	reg.SetLabel("p1", "files")
+	reg.SetTransit("p1", true)
+	reg.Close()
+	if reg.Label("p1") != "" || reg.Transit("p1") {
+		t.Fatalf("after Close: label=%q transit=%v, want nothing remembered", reg.Label("p1"), reg.Transit("p1"))
+	}
+}
